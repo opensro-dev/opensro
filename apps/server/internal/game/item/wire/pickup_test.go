@@ -6,9 +6,8 @@ import (
 	"testing"
 )
 
-// The client's CPSMission_OnPickupAnim_0x35C7 reads a 4-byte gid at
-// client 0x007780FF then a 1-byte heading at client 0x0077810D, so the
-// payload is exactly five bytes in that order.
+// sub_7780f0 reads a 4-byte gid @0x007780ff then a 1-byte heading
+// @0x0077810d, so the payload is exactly five bytes in that order.
 func TestPickupAnimEncodesGidThenHeading(t *testing.T) {
 	got := PickupAnim{Gid: 100007, Heading: 0x40}.Encode()
 
@@ -45,8 +44,7 @@ func TestDecodePickupAnimRejectsWrongLength(t *testing.T) {
 	}
 }
 
-// The client's CPSMission_OnEntityDespawn36AB performs a single 4-byte
-// read at client 0x0077731C and nothing else.
+// sub_777310 performs a single 4-byte read @0x0077731c and nothing else.
 func TestObjectDespawnIsBareGid(t *testing.T) {
 	got := ObjectDespawn{Gid: 300001}.Encode()
 

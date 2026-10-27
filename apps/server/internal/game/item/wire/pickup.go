@@ -53,8 +53,8 @@ func DecodePickupAnim(payload []byte) (PickupAnim, error) {
 //
 // The client's CPSMission_OnEntityDespawn36AB handler performs exactly
 // one 4-byte read (at client 0x0077731C), resolves
-// the gid through CEntityManager_ResolveGidObjectOrAssert and tail-jumps the
-// resolved object's vtable +0x4c despawn slot. There is no second field.
+// the gid through GidObjectRegistry_FindEntityByGid_Assert and tail-jumps
+// the resolved object's vtable +0x4c despawn slot. There is no second field.
 type ObjectDespawn struct {
 	Gid uint32
 }

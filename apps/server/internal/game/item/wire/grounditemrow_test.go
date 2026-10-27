@@ -161,7 +161,7 @@ func TestEquipmentRowCarriesTheDiscardByte(t *testing.T) {
 TestCodenameRowCarriesTheOwnerLabel
 
 The 0x400/0x480 band carries the owner label CIItem_ParseGroundSpawn
-(client 86E5D8) reads: empty without an owner (u16 0), the trader's alias for
+(86E5D8) reads: empty without an owner (u16 0), the trader's alias for
 dropped trade goods. The registry's codename never reaches the wire.
 ================
 */

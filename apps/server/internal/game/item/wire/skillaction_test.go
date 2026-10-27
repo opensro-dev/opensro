@@ -7,9 +7,8 @@ import (
 )
 
 // Goldens for the three unique wire layouts of the 0x72CD skill-action
-// family: the flag-0x00/0x01 in-place bodies of the client's
-// CGInterface_ExecuteSelectedActionAtTarget and the flag-0x02
-// ground-location body of its CNavigationDeadreckon_OnArrivalOrActionFlush.
+// family: sub_6fcd50's flag-0x00/0x01 in-place bodies and sub_878100's
+// flag-0x02 ground-location body.
 func TestSkillActionGoldens(t *testing.T) {
 	noTarget := SkillAction{ActionId: 0x00001234}
 	got := noTarget.Encode()

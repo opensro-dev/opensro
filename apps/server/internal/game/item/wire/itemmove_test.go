@@ -6,9 +6,8 @@ import (
 	"testing"
 )
 
-// The CSOItem body the client's CSOItem_Deserialize writes: refObjId,
-// plus, variance, durability, magic-option count. Same shape the 0x31DB
-// equipment rows use.
+// The CSOItem body sub_78c830 writes: refObjId, plus, variance, durability,
+// magic-option count. Same shape the 0x31DB equipment rows use.
 func TestItemBodyLayout(t *testing.T) {
 	got := ItemBody{RefObjID: 11459, Durability: 100}.Encode()
 
@@ -35,23 +34,20 @@ func TestItemMoveResultEncodings(t *testing.T) {
 		want []byte
 	}{
 		{
-			// Client ItemMoveResponse_Deserialize case 0 at client 0x00759AC5:
-			// [src][dst][qty u16], then the sub-move count at
-			// client 0x00759AEA.
+			// sub_759a30 case 0 @0x00759ac5: [src][dst][qty u16], then the
+			// sub-move count @0x00759aea.
 			name: "type 0 bag move",
 			got:  EncodeInventoryMoveResult(13, 14, 1, nil),
 			want: []byte{0x01, 0x00, 13, 14, 1, 0, 0x00},
 		},
 		{
-			// Client ItemMoveResponse_Deserialize case 7 at client 0x00759C8C:
-			// [src].
+			// sub_759a30 case 7 @0x00759c8c: [src].
 			name: "type 7 ground drop",
 			got:  EncodeGroundDropResult(13),
 			want: []byte{0x01, 0x07, 13},
 		},
 		{
-			// Client ItemMoveResponse_Deserialize case 0xA at client 0x00759FBD:
-			// [amount u32].
+			// sub_759a30 case 0xa @0x00759fbd: [amount u32].
 			name: "type 0x0A gold drop",
 			got:  EncodeGoldDropResult(8800),
 			want: []byte{0x01, 0x0A, 0x60, 0x22, 0x00, 0x00},
@@ -218,10 +214,8 @@ func TestIsGoldPickupOnlyForSentinelSlot(t *testing.T) {
 	}
 }
 
-// Client ItemMoveRequest_Serialize at client 0x00697F8E writes the
-// sub-move count and then five bytes per row; client
-// ItemMoveResponse_Deserialize at client 0x00759B04 reads the same five
-// back.
+// sub_697e80 @0x00697f8e writes the sub-move count and then five bytes per
+// row; sub_759a30 @0x00759b04 reads the same five back.
 func TestInventoryMoveResultCarriesSubMoveRows(t *testing.T) {
 	subMoves := []SubMove{
 		{MovementType: MoveTypeInventory, SourceSlot: 13, DestSlot: 14, Quantity: 20},
@@ -255,19 +249,19 @@ func TestItemMoveRequestEncodings(t *testing.T) {
 		want    []byte
 	}{
 		{
-			// client ItemMoveRequest_Serialize @0x00697f7c
+			// sub_697e80 @0x00697f7c
 			name:    "type 0 bag move",
 			request: ItemMoveRequest{MovementType: MoveTypeInventory, SourceSlot: 13, DestSlot: 14, Quantity: 1},
 			want:    []byte{0x00, 13, 14, 1, 0},
 		},
 		{
-			// client ItemMoveRequest_Serialize @0x006980d0
+			// sub_697e80 @0x006980d0
 			name:    "type 7 ground drop",
 			request: ItemMoveRequest{MovementType: MoveTypeGroundDrop, SourceSlot: 13},
 			want:    []byte{0x07, 13},
 		},
 		{
-			// client ItemMoveRequest_Serialize @0x006984cb
+			// sub_697e80 @0x006984cb
 			name:    "type 0x0A gold drop",
 			request: ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: 8800},
 			want:    []byte{0x0A, 0x60, 0x22, 0x00, 0x00},
@@ -295,9 +289,8 @@ func TestItemMoveRequestEncodings(t *testing.T) {
 	}
 }
 
-// The serializer clamps at its head (client 0x00697EB5) before the amount
-// is ever written, so an over-ceiling request goes out clamped rather
-// than truncated.
+// The serializer clamps at its head (@0x00697eb5) before the amount is ever
+// written, so an over-ceiling request goes out clamped rather than truncated.
 func TestGoldDropRequestClampsAtTheNativeCeiling(t *testing.T) {
 	request := ItemMoveRequest{MovementType: MoveTypeGoldDrop, GoldAmount: MaxGold + 1000}
 
@@ -359,8 +352,7 @@ func TestItemMoveRequestSubMoveCountIsOptional(t *testing.T) {
 TestGoldGroupItemBodyCarriesU32Quantity
 
 The v1.150 client reads a u32 amount for the gold-heap group (TID3 5) and a
-u16 stack count for every other ETC group (client CSOItem_Deserialize).
-An SD token
+u16 stack count for every other ETC group (CSOItem 78C830). An SD token
 (TID 3/3/5/1) belongs to that group, so a u16 body ended the session on pickup
 with "Truncated inventory item".
 ================

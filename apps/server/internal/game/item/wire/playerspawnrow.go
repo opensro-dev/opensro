@@ -9,30 +9,23 @@ import (
 // Peer character-appearance spawn row (the CICUser object row).
 //
 // This is the payload the client's remote-player spawn chain parses:
-// The client's CPSMission_OnLevelUpEffect0x30D7 single mode (or a
-// client's CPSMission_OnAck0x3417 object-list chunk) resolves the leading
-// refObjId through the client's CIGIDObject_ResolveRefObj, classifies it
-// CICUser at the client's GIDObject_SelectRuntimeClassAndSpawn user leaf
-// (client 0x008514B2: char && tid1==4 && tid2==0x20 -> the client's
-// CLASS_CICUSER class id (client 0xCF0108), constructs through the registered
-// factory CICUser_Constructor / the chained
-// CICUser_Constructor_Then_CICharactor_Constructor, then parses the row
-// body through vtable+0x64, the client's
-// CICUser_DeserializeAppearanceSpawnData:
+// 0x30D7 sub_7772f0 single mode (or an 0x3417 object-list chunk) resolves the
+// leading refObjId through sub_850c60, classifies it CICUser at the
+// sub_851420 user leaf (@0x008514b2: char && tid1==4 && tid2==0x20 ->
+// CLASS_CICUSER 0xcf0108), constructs through the registered factory
+// sub_8696c0 / ctor sub_869370, then parses the row body through vtable+0x64
+// sub_86afb0 CICUser_DeserializeFull:
 //
-//	vt+0x58 CICUser_DeserializeSpawnTail       (the two lead bytes)
-//	the equipped-item loop                    (client 0x0086B00A..0x0086B07C)
-//	the avatar/costume loop                   (client 0x0086B0C7..0x0086B12D)
-//	the optional transform skin               (client 0x0086B14F..0x0086B1FC)
-//	vt+0x5c CICPlayer_DeserializeSpawnData    (base
-//	                                           CICharactor_DeserializeSpawnData + the
+//	vt+0x58 sub_869110 CICUser_BindRecords   (the two lead bytes)
+//	the equipped-item loop                    (@0x0086b00a..0x0086b07c)
+//	the avatar/costume loop                   (@0x0086b0c7..0x0086b12d)
+//	the optional transform skin               (@0x0086b14f..0x0086b1fc)
+//	vt+0x5c sub_869df0 DeserializeSpawnState  (base sub_85fb20 + the
 //	                                           name/job/ride/non-local tail)
-//	vt+0x68 base CICharactor_DeserializeSpawnSubState appear byte
-//	                                           (single-object mode only)
+//	vt+0x68 base sub_851590 appear byte       (single-object mode only)
 //
 // Every field and gate below cites the client instruction that reads it
-// (CICUser_DeserializeAppearanceSpawnData, CICPlayer_DeserializeSpawnData,
-// CICharactor_DeserializeSpawnData, CICUser_DeserializeSpawnTail).
+// (sub_86afb0, sub_869df0, sub_85fb20, sub_869110).
 
 // Item TID-word classifiers the row layout depends on. These are 1:1 Go
 // ports of the client's pure bitfield classifiers - the row SHAPE (which
@@ -40,19 +33,17 @@ import (
 // so the ports carry the same per-branch native addresses.
 
 // IsAvatarBandTid reports whether an equip-band item rides the avatar loop's
-// conditional discard byte: the client's
-// CICUser_DeserializeAppearanceSpawnData at client
-// client 0x0086B0C7..0x0086B12D reads one u8
+// conditional discard byte: sub_86afb0 @0x0086b0c7..0x0086b12d reads one u8
 // and applies the avatar visual only when the item is equippable equipment
 // AND its (typeBits & 0x780) group is 0x680 (the avatar/costume group).
 func IsAvatarBandTid(typeFlags uint16) bool {
 	return IsEquipmentBand(typeFlags) && typeFlags&0x780 == 0x680
 }
 
-// IsTwoHandGripTid ports the client's ItemTID_IsTraderSuit
-// (client 5931B0): bit1 clear (client 0x005931B5), then the
-// fully-specified TID (&0x1c)==0x0c, (&0x60)==0x20, (&0x780)==0x380,
-// (&0xf800)==0x800 (client 0x005931B7..0x005931E5).
+// IsTwoHandGripTid ports sub_5931b0 / ItemTid_IsTwoHandGripTid @0x005931b0:
+// bit1 clear (@0x005931b5), then the fully-specified TID
+// (&0x1c)==0x0c, (&0x60)==0x20, (&0x780)==0x380, (&0xf800)==0x800
+// (@0x005931b7..0x005931e5).
 func IsTwoHandGripTid(typeFlags uint16) bool {
 	if typeFlags&0x02 != 0 {
 		return false
@@ -63,10 +54,9 @@ func IsTwoHandGripTid(typeFlags uint16) bool {
 		typeFlags&0xf800 == 0x800
 }
 
-// IsJobUniformTid ports the client's ItemTID_IsThiefSuit (client 5931F0):
-// bit1 clear (client 0x005931F5), then (&0x1c)==0x0c, (&0x60)==0x20,
-// (&0x780)==0x380, (&0xf800)==0x1000 (client
-// client 0x005931F7..0x0059322C).
+// IsJobUniformTid ports sub_5931f0 / ItemTid_IsJobUniformTid: bit1 clear
+// (@0x005931f5), then (&0x1c)==0x0c, (&0x60)==0x20, (&0x780)==0x380,
+// (&0xf800)==0x1000 (@0x005931f7..0x0059322c).
 func IsJobUniformTid(typeFlags uint16) bool {
 	if typeFlags&0x02 != 0 {
 		return false
@@ -77,10 +67,9 @@ func IsJobUniformTid(typeFlags uint16) bool {
 		typeFlags&0xf800 == 0x1000
 }
 
-// IsBodyProtectorGroupTid ports the client's ItemTID_IsShield
-// (client 5932C0): bit1 clear (client 0x005932C5), the 0x200 group gate
-// (client 0x005932C7..0x005932E9), subclass (tid>>0xb) 1 or 2 (client
-// client 0x005932EB..0x00593300).
+// IsBodyProtectorGroupTid ports sub_5932c0: bit1 clear (@0x005932c5), the
+// 0x200 group gate (@0x005932c7..0x005932e9), subclass (tid>>0xb) 1 or 2
+// (@0x005932eb..0x00593300).
 func IsBodyProtectorGroupTid(typeFlags uint16) bool {
 	if typeFlags&0x02 != 0 {
 		return false
@@ -103,17 +92,15 @@ var interfaceEquipmentSlotSubtype = map[uint16]int{
 	6: 5,
 }
 
-// InterfaceEquipmentSlotForTid ports the client's
-// ItemRecord_GetEquipSlotIndex (client 868A80): the visual
+// InterfaceEquipmentSlotForTid ports sub_868a80 /
+// CItemTypeBits_ToInterfaceEquipmentSlot @0x00868a80: the visual
 // avatar/equipment slot (0..8) an item TID word maps to, or -1. Slot 8 is
-// the slot the weapon hold-type classification reads back (the client's
-// CICUser_DeserializeAppearanceSpawnData at client 0x0086B08C via the
-// client's CCObjCharacter_GetEquipVisualSlotItem).
+// the slot the weapon hold-type classification reads back (sub_86afb0
+// @0x0086b08c via sub_8e8270).
 func InterfaceEquipmentSlotForTid(typeFlags uint16) int {
 	bit1 := typeFlags >> 1 & 1
 
-	// Client 0x868AA8..0x868AE4: the wearable-gear category whose +0x780
-	// nibble is
+	// @0x868aa8..0x868ae4: the wearable-gear category whose +0x780 nibble is
 	// a real body slot and whose subtype (tid>>0xb) is in [1,6].
 	if bit1 == 0 && typeFlags&0x1c == 0x0c && typeFlags&0x60 == 0x20 {
 		nibble := typeFlags >> 7 & 0xf
@@ -127,39 +114,36 @@ func InterfaceEquipmentSlotForTid(typeFlags uint16) int {
 		}
 	}
 
-	// Client 0x868B1B..0x868B46: the 0x300 group -> slot 6.
+	// @0x868b1b..0x868b46: the 0x300 group -> slot 6.
 	if bit1 == 0 && typeFlags&0x1c == 0x0c && typeFlags&0x60 == 0x20 &&
 		typeFlags&0x780 == 0x300 {
 		return 6
 	}
 
-	// Client 0x868B52: the body/protector group (the client's
-	// ItemTID_IsShield) -> slot 7.
+	// @0x868b52: the body/protector group (sub_5932c0) -> slot 7.
 	if IsBodyProtectorGroupTid(typeFlags) {
 		return 7
 	}
 
-	// Client 0x868B5F..0x868B88: the 0x380 group -> slot 8.
+	// @0x868b5f..0x868b88: the 0x380 group -> slot 8.
 	if bit1 == 0 && typeFlags&0x1c == 0x0c && typeFlags&0x60 == 0x20 &&
 		typeFlags&0x780 == 0x380 {
 		return 8
 	}
 
-	// Client 0x868B8E: no interface slot.
+	// @0x868b8e: no interface slot.
 	return -1
 }
 
-// WeaponHoldTypeForTid ports the client's ItemRecord_GetJobSuitClass
-// (client 868D00) for a resolved TID word. refObjID 0 is the
-// "none / unarmed" code 4 (client 0x868D06); the record-resolve edge
-// (client 0x868D13) is the caller's - the server passes the itemdata
-// word it already holds.
+// WeaponHoldTypeForTid ports sub_868d00 / Item_ClassifyWeaponHoldType
+// @0x00868d00 for a resolved TID word. refObjID 0 is the "none / unarmed"
+// code 4 (@0x868d06); the record-resolve edge (@0x868d13) is the caller's -
+// the server passes the itemdata word it already holds.
 func WeaponHoldTypeForTid(refObjID uint32, typeFlags uint16) uint8 {
 	if refObjID == 0 {
 		return 4
 	}
-	// Client 0x868D27..0x868D53: the specific 0x380/0x1800 family is
-	// code 3.
+	// @0x868d27..0x868d53: the specific 0x380/0x1800 family is code 3.
 	if typeFlags&0x02 == 0 &&
 		typeFlags&0x1c == 0x0c &&
 		typeFlags&0x60 == 0x20 &&
@@ -167,13 +151,11 @@ func WeaponHoldTypeForTid(refObjID uint32, typeFlags uint16) uint8 {
 		typeFlags&0xf800 == 0x1800 {
 		return 3
 	}
-	// Client 0x868D61: the two-hand-grip predicate short-circuits to
-	// code 1.
+	// @0x868d61: the two-hand-grip predicate short-circuits to code 1.
 	if IsTwoHandGripTid(typeFlags) {
 		return 1
 	}
-	// Client 0x868D73..0x868D7A: `(!isJobUniform)*2 + 2` - job uniform 2,
-	// else 4.
+	// @0x868d73..0x868d7a: `(!isJobUniform)*2 + 2` - job uniform 2, else 4.
 	if IsJobUniformTid(typeFlags) {
 		return 2
 	}
@@ -188,8 +170,7 @@ type PlayerEquipItem struct {
 	RefObjID  uint32
 	TypeFlags uint16
 	// OptLevel is the per-item enhancement level; on the wire only for
-	// equip-band items (the client's CICUser_DeserializeAppearanceSpawnData
-	// at client 0x0086B05C reads it after the slot map).
+	// equip-band items (sub_86afb0 @0x0086b05c reads it after the slot map).
 	OptLevel uint8
 }
 
@@ -197,84 +178,69 @@ type PlayerEquipItem struct {
 //
 // It rides either the single-object spawn 0x30D7 or an object-list chunk
 // 0x3417; the single-object path additionally reads the one-byte appear flag
-// through the entity's vtable +0x68 (base
-// CICharactor_DeserializeSpawnSubState) that the list path
+// through the entity's vtable +0x68 (base sub_851590) that the list path
 // skips, so callers select it with WithAppearTail (the GroundItemRow
 // convention).
 type PlayerSpawnRow struct {
-	// RefObjID is the character-model RefObjData id (the client's
-	// CIGIDObject_ResolveRefObj target; its TID word must classify CICUser
-	// at the client's GIDObject_SelectRuntimeClassAndSpawn leaf).
+	// RefObjID is the character-model RefObjData id (the sub_850c60 resolve
+	// target; its TID word must classify CICUser at the sub_851420 leaf).
 	RefObjID uint32
-	// BodyShapeByte rides the vt+0x58 CICUser_DeserializeSpawnTail lead
-	// byte into CICUser +0x758 (the harness mirror names it
-	// packedBodyShape758).
+	// BodyShapeByte rides the vt+0x58 sub_869110 lead byte into CICUser
+	// +0x758 (the harness mirror names it packedBodyShape758).
 	BodyShapeByte uint8
-	// VisualFlags is the second vt+0x58 byte. CICUser_DeserializeSpawnTail
-	// stages it in the shared client data_cf0100 cell and
-	// CICUser_DeserializeAppearanceSpawnData applies it through the
-	// client's CICUser_SetGMFlags to CICUser+0x779 after deserialization.
-	// It is not a disposable zero byte.
+	// VisualFlags is the second vt+0x58 byte. sub_869110 stages it in the
+	// shared data_cf0100 cell and sub_86afb0 applies it through sub_868740 to
+	// CICUser+0x779 after deserialization. It is not a disposable zero byte.
 	VisualFlags uint8
 	// Skin is the transform the player wears (RefObjID 0: none).
 	Skin TransformSkin
-	// Equipment is the worn set for the client's 0x0086B00A equip loop,
-	// in wire
+	// Equipment is the worn set for the @0x0086b00a equip loop, in wire
 	// order; later slot-8 items overwrite earlier ones in the client's
 	// visual table, so order is contract.
 	Equipment []PlayerEquipItem
-	// Avatars is the avatar/costume set for the client's 0x0086B0C7 loop.
+	// Avatars is the avatar/costume set for the @0x0086b0c7 loop.
 	Avatars []PlayerEquipItem
 	Gid     uint32
-	// Position is the client's CIGIDObject_DeserializeSpawnData base
-	// block (gid/region/xyz/heading); the same heading word also rides
-	// the packed-movement tail (mode-0 arm of the client's
-	// MovementPayload_ReadFromStream, output+0x0a).
+	// Position is the sub_852f80 base block (gid/region/xyz/heading); the
+	// same heading word also rides the packed-movement tail (mode-0 arm of
+	// sub_776170, output+0x0a).
 	Position
-	// WalkSpeed/RunSpeed feed CICharactor +0x24c/+0x250 (the client's
-	// CICharactor_DeserializeSpawnData at client
-	// client 0x0085FB8F/0x0085FB9A); ScaleDenom feeds +0x4d8, an IEEE-754 FLOAT
-	// on the wire (fld dword at client 0x0085FBA5) the client turns into
+	// WalkSpeed/RunSpeed feed CICharactor +0x24c/+0x250 (sub_85fb20
+	// @0x0085fb8f/@0x0085fb9a); ScaleDenom feeds +0x4d8, an IEEE-754 FLOAT
+	// on the wire (fld dword @0x0085fba5) the client turns into
 	// 100.0/denom at +0x4dc.
 	WalkSpeed  float32
 	RunSpeed   float32
 	ScaleDenom float32
-	// SpawnSkills is the active effect list the client's
-	// CICharactor_DeserializeSpawnData reads after the scale
+	// SpawnSkills is the active effect list 85FB20 reads after the scale
 	// (g_aSpawnBuffSkillIds): the peer's buffs, so a player who comes into
 	// view already buffed shows them.
 	SpawnSkills []SpawnSkillEntry
-	// Name is the display name the client's CICPlayer_DeserializeSpawnData
-	// reads at client 0x00869E77 (the client's
-	// CMsgStreamBuffer_ReadAsciiString wire shape: u16 length + `length`
-	// single bytes) into CICUser +0x108.
+	// Name is the display name sub_869df0 reads at @0x00869e77 (sub_4b1710
+	// wire shape: u16 length + `length` single bytes) into CICUser +0x108.
 	Name string
-	// JobType/JobGrade land in +0x782/+0x783 (client
-	// client 0x00869F89/0x00869F97).
+	// JobType/JobGrade land in +0x782/+0x783 (@0x00869f89/@0x00869f97).
 	JobType  uint8
 	JobGrade uint8
 	PVPState uint8
 	// Nil means no active event. Team zero is a real team, not the default.
 	EventTeam *uint8
-	// GuildName rides the client's 0x0086A0CC wire string into CICUser
-	// +0x7a8. Natively +0x7bc - the "guild-present gate" the BindGuild
-	// leg tests at client 0x0086A242 - is that embedded wstring's SIZE
-	// field (+0x7a8+0x14; the client's
-	// CICUser_Constructor_Then_CICharactor_Constructor zeroes it and
-	// seeds capacity 7 at +0x7c0), so a NON-EMPTY name is what arms the
-	// client's CICPlayer_BindCompanionOwner at client 0x0086A261; an
-	// empty name keeps the leg unreached - the native no-guild
-	// presentation, not a shortcut.
+	// GuildName rides the @0x0086a0cc wire string into CICUser +0x7a8.
+	// Natively +0x7bc - the "guild-present gate" the BindGuild leg tests
+	// at @0x0086a242 - is that embedded wstring's SIZE field (+0x7a8+0x14;
+	// the sub_869370 ctor zeroes it and seeds capacity 7 at +0x7c0), so a
+	// NON-EMPTY name is what arms sub_869810 CICUser_BindGuild at
+	// @0x0086a261; an empty name keeps the leg unreached - the native
+	// no-guild presentation, not a shortcut.
 	GuildName string
 	// GuildID / GuildGrantName / the three crest params ride the
-	// client's 0x0086A12D guild-member sub-block (member-class-4 rows
-	// only - the weaponHoldType gate below): u32 guild id, grant name,
-	// then the dwords var_88/var_84/var_8c the client forwards to
-	// BindGuild (client 0x0086A24A..0x0086A261) as crestParamA/B/C - the
-	// crest icon filename params the client's
-	// CGuildCrestManager_UpdateCharacterCrests formats as
-	// G{prefix}_{guildId}_{crestParamA}.crb (client 0x833E42) and
-	// A{prefix}_{crestParamB}_{crestParamC}.crb (client 0x833E75). B/C are the
+	// @0x0086a12d guild-member sub-block (member-class-4 rows only - the
+	// weaponHoldType gate below): u32 guild id, grant name, then the
+	// dwords var_88/var_84/var_8c the client forwards to BindGuild
+	// (@0x0086a24a..0x0086a261) as crestParamA/B/C - the crest icon
+	// filename params sub_833d40 formats as
+	// G{prefix}_{guildId}_{crestParamA}.crb (@0x833e42) and
+	// A{prefix}_{crestParamB}_{crestParamC}.crb (@0x833e75). B/C are the
 	// alliance crest plane (the client globals data_ced398/data_ced394 on
 	// the 0x32C4 path, default 0): the guild's union id and emblem.
 	GuildID        uint32
@@ -283,9 +249,8 @@ type PlayerSpawnRow struct {
 	CrestParamB    uint32
 	CrestParamC    uint32
 	// FortSiegeAuthority is the guild sub-block's trailing team byte: the
-	// client reads it in CICPlayer_DeserializeSpawnData at client
-	// 0x0086A1B2 and stores it via the client's
-	// CICPlayer_SetFortressWarOfficerTitle into CICPlayer+0x7e0 (the
+	// client reads it at sub_869df0 @0x0086a1b2 and stores it via
+	// sub_869940 CICUser_SetGuildWarJobTitle into CICPlayer+0x7e0 (the
 	// six-mark gate needs it in {1,2}). Values are a bit-for-bit match
 	// to the client's lookup_table_869bcc: 0 None, 1 Commander,
 	// 2 DeputyCommander,
@@ -298,26 +263,19 @@ type PlayerSpawnRow struct {
 	// StallDecoration is that stall's booth item reference (zero: default).
 	StallDecoration uint32
 	// WithAppearTail selects the 0x30D7 single-object form, which appends
-	// the appear byte the drop-in presentation reads (vt+0x68, the
-	// client's CICharactor_DeserializeSpawnSubState).
+	// the appear byte the drop-in presentation reads (vt+0x68 sub_851590).
 	WithAppearTail bool
 	AppearFlag     uint8
 }
 
-// spawnTitleModeStall is +0x461's stall value (client 0x0086A26D in
-// CICPlayer_DeserializeSpawnData; the client's
-// CICharactor_ResumeSpawnMovement reads the same byte).
+// spawnTitleModeStall is +0x461's stall value (86A26D, 858310).
 const spawnTitleModeStall uint8 = 4
 
 // weaponHoldType computes the hold-type code the client's vt+0xac write
-// stores at +0x4f5 after the equip loop: the client's
-// CICUser_DeserializeAppearanceSpawnData at client 0x0086B08C reads the
-// visual slot-8 entry back (the client's
-// CCObjCharacter_GetEquipVisualSlotItem) and classifies it via the
-// client's ItemRecord_GetJobSuitClass. The member-class vcall (vt+0xa8,
-// MONOMORPHIC CICharactor_GetActiveJobClass reading +0x4f5) then gates
-// the guild-member sub-block in CICPlayer_DeserializeSpawnData at
-// client 0x0086A12D on the
+// stores at +0x4f5 after the equip loop: sub_86afb0 @0x0086b08c reads the
+// visual slot-8 entry back (sub_8e8270) and classifies it via sub_868d00.
+// The member-class vcall (vt+0xa8, MONOMORPHIC sub_856920 reading +0x4f5)
+// then gates the guild-member sub-block at sub_869df0 @0x0086a12d on the
 // value 4 - so the EMITTER must derive the same code from the same worn set
 // or the sub-block desyncs the stream.
 //
@@ -331,8 +289,7 @@ func (p PlayerSpawnRow) weaponHoldType() uint8 {
 			continue
 		}
 		// Later writes overwrite earlier ones in the client's +0x44 visual
-		// table (the client's CICharactor_SetEquipSlotVisual), so the LAST
-		// slot-8 item wins.
+		// table (sub_868580), so the LAST slot-8 item wins.
 		if InterfaceEquipmentSlotForTid(item.TypeFlags) == 8 {
 			slot8Ref = item.RefObjID
 			slot8Tid = item.TypeFlags
@@ -341,8 +298,7 @@ func (p PlayerSpawnRow) weaponHoldType() uint8 {
 	return WeaponHoldTypeForTid(slot8Ref, slot8Tid)
 }
 
-// wireString appends the client's CMsgStreamBuffer_ReadAsciiString wire
-// shape:
+// wireString appends the sub_4b1710 CMsgStreamBuffer_ReadWString wire shape:
 // u16 length + `length` single bytes (the client widens each byte to a
 // wchar). Callers keep peer names in the single-byte range; a multi-byte
 // UTF-8 name would widen byte-per-byte, which is the same honest limit the
@@ -358,19 +314,15 @@ func wireString(w *Writer, value string) {
 func (p PlayerSpawnRow) Encode() []byte {
 	w := NewWriter(128)
 
-	// The client's CIGIDObject_ResolveRefObj target: the character-model
-	// RefObjData id.
+	// sub_850c60 resolve target: the character-model RefObjData id.
 	w.U32(p.RefObjID)
 
-	// vt+0x58, the client's CICUser_DeserializeSpawnTail at client
-	// client 0x00869110: the +0x758 body byte, then the complete visual-flags
-	// byte later applied to CICUser+0x779 by
-	// CICUser_DeserializeAppearanceSpawnData.
+	// vt+0x58 sub_869110 @0x00869110: the +0x758 body byte, then the complete
+	// visual-flags byte later applied to CICUser+0x779 by sub_86afb0.
 	w.U8(p.BodyShapeByte)
 	w.U8(p.VisualFlags)
 
-	// Equip loop header (client 0x0086AFEE/0x0086AFFC): one discarded
-	// byte + the
+	// Equip loop header (@0x0086afee/@0x0086affc): one discarded byte + the
 	// equipped count. The count is a u8; the worn set is the 13-slot
 	// equipment band in practice, so the clamp is defensive - it keeps
 	// the count and the emitted bodies agreeing no matter what a caller
@@ -384,16 +336,14 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.U8(uint8(len(equipment)))
 	for _, item := range equipment {
 		w.U32(item.RefObjID)
-		// Client 0x0086B02D..0x0086B05C: the optLevel byte exists only
-		// for
+		// @0x0086b02d..0x0086b05c: the optLevel byte exists only for
 		// equip-band items (bit1 clear, 0x1c==0xc, 0x60==0x20).
 		if IsEquipmentBand(item.TypeFlags) {
 			w.U8(item.OptLevel)
 		}
 	}
 
-	// Avatar loop header (client 0x0086B0AB/0x0086B0B9): discarded byte
-	// + count.
+	// Avatar loop header (@0x0086b0ab/@0x0086b0b9): discarded byte + count.
 	// Same defensive u8-count clamp as the equip loop (worn avatars are
 	// <=4 in practice).
 	avatars := p.Avatars
@@ -405,14 +355,14 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.U8(uint8(len(avatars)))
 	for _, item := range avatars {
 		w.U32(item.RefObjID)
-		// Client 0x0086B0C7..0x0086B12D: one discarded byte only for the
+		// @0x0086b0c7..0x0086b12d: one discarded byte only for the
 		// avatar-band (equip-band && (0x780)==0x680) items.
 		if IsAvatarBandTid(item.TypeFlags) {
 			w.U8(0)
 		}
 	}
 
-	// Transform skin (client 0x0086B14F): u8 present, then the skin block
+	// Transform skin (@0x0086b14f): u8 present, then the skin block
 	// (the skin block the server writes), applied through
 	// CICharactor_ApplyTransformationSkin (86B265).
 	if p.Skin.RefObjID != 0 {
@@ -421,10 +371,8 @@ func (p PlayerSpawnRow) Encode() []byte {
 		w.U8(0)
 	}
 
-	// vt+0x5c CICPlayer_DeserializeSpawnData -> base
-	// CICharactor_DeserializeSpawnData -> base
-	// CIGIDObject_DeserializeSpawnData: gid, region, xyz floats, heading
-	// word (the RegisterGID block).
+	// vt+0x5c sub_869df0 -> base sub_85fb20 -> base sub_852f80: gid, region,
+	// xyz floats, heading word (the RegisterGID block).
 	w.U32(p.Gid)
 	w.U16(p.RegionID)
 	w.F32(p.X)
@@ -432,8 +380,7 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.F32(p.Z)
 	w.U16(p.Heading)
 
-	// The client's MovementPayload_ReadFromStream packed movement
-	// (readSecondFlag=1): mode 0 = no in-flight
+	// sub_776170 packed movement (readSecondFlag=1): mode 0 = no in-flight
 	// destination at spawn (peer movement rides the 0x30E3 tick broadcast),
 	// store-only +0x255 second flag 0, then the mode-0 arm's rotation flag
 	// + packed heading word (output+0x0e/+0x0a).
@@ -442,13 +389,11 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.U8(0)
 	w.U16(p.Heading)
 
-	// CICharactor_DeserializeSpawnData scalar rows: +0x263/+0x264/+0x460
-	// state bytes, initialized to 0 like the NPC create row. Client
-	// 0x0085FFA1 (in CICharactor_OnSpawnInitialize) promotes +460 through
-	// the body setter; the peer visibility owner replays nonzero runtime
-	// body state after spawn. Next are walk/run speeds, the FLOAT scale
-	// denominator (fld dword at client 0x0085FBA5), then the active
-	// effect list.
+	// sub_85fb20 scalar rows: +0x263/+0x264/+0x460 state bytes, initialized
+	// to 0 like the NPC create row. 85FFA1 promotes +460 through the body
+	// setter; the peer visibility owner replays nonzero runtime body state
+	// after spawn. Next are walk/run speeds, the FLOAT scale
+	// denominator (@0x0085fba5 fld dword), then the active effect list.
 	w.U8(0)
 	w.U8(0)
 	w.U8(0)
@@ -457,28 +402,26 @@ func (p PlayerSpawnRow) Encode() []byte {
 	w.F32(p.ScaleDenom)
 	writeSpawnSkills(w, p.SpawnSkills)
 
-	// CICPlayer_DeserializeSpawnData at client 0x00869E77: display name
-	// -> +0x108 (the client's CMsgStreamBuffer_ReadAsciiString). The
-	// local-player-only +0x1898 label read (client 0x00869ECE) never
-	// rides a remote row.
+	// sub_869df0 @0x00869e77: display name -> +0x108 (sub_4b1710). The
+	// local-player-only +0x1898 label read (@0x00869ece) never rides a
+	// remote row.
 	wireString(w, p.Name)
 
-	// Client 0x00869F89/0x00869F97: job type/grade -> +0x782/+0x783. The
-	// local-player job exp/contribution/reward trio (client 0x00869FAC)
-	// never rides a remote row.
+	// @0x00869f89/@0x00869f97: job type/grade -> +0x782/+0x783. The
+	// local-player job exp/contribution/reward trio (@0x00869fac) never
+	// rides a remote row.
 	w.U8(p.JobType)
 	w.U8(p.JobGrade)
 
-	// Client 0x0086A018..0x0086A036: +0x4f4 appearance byte, ride state
-	// (0 = not riding; the client's CICharactor_SetMountedActionState
-	// returns !=1 so no mount ref follows), +0x781 byte.
+	// @0x0086a018..0x0086a036: +0x4f4 appearance byte, ride state (0 = not
+	// riding; sub_8582e0 returns !=1 so no mount ref follows), +0x781 byte.
 	w.U8(p.PVPState)
 	w.U8(0)
 	w.U8(0)
 
-	// Non-local block (client 0x0086A067..0x0086A317), always on a peer
-	// row: +0x784, title mode (+0x461: 4 = a stall, whose title block
-	// follows the guild sub-block at client 0x0086A26D), +0x4f6.
+	// Non-local block (@0x0086a067..0x0086a317), always on a peer row:
+	// +0x784, title mode (+0x461: 4 = a stall, whose title block follows
+	// the guild sub-block @0x0086a26d), +0x4f6.
 	w.U8(0)
 	if p.StallTitle != "" {
 		w.U8(spawnTitleModeStall)
@@ -487,36 +430,32 @@ func (p PlayerSpawnRow) Encode() []byte {
 	}
 	w.U8(0)
 
-	// Client 0x0086A0CC: guild name -> +0x7a8. Natively +0x7bc is this
-	// embedded wstring's size field, so a non-empty name arms the
-	// client's CICPlayer_BindCompanionOwner BindGuild leg at client
-	// client 0x0086A242; empty keeps it unreached (no guild).
+	// @0x0086a0cc: guild name -> +0x7a8. Natively +0x7bc is this embedded
+	// wstring's size field, so a non-empty name arms the sub_869810
+	// BindGuild leg @0x0086a242; empty keeps it unreached (no guild).
 	wireString(w, p.GuildName)
 
-	// Client 0x0086A12D: the guild-member sub-block rides ONLY when the
-	// client's member-class vcall reads 4 off +0x4f5 - the weapon hold
-	// type the equip loop just derived. Replicated field-for-field from
-	// the same worn set (see weaponHoldType).
+	// @0x0086a12d: the guild-member sub-block rides ONLY when the client's
+	// member-class vcall reads 4 off +0x4f5 - the weapon hold type the
+	// equip loop just derived. Replicated field-for-field from the same
+	// worn set (see weaponHoldType).
 	if p.weaponHoldType() == 4 {
 		w.U32(p.GuildID)                // guild id -> BindGuild arg 2
 		wireString(w, p.GuildGrantName) // grant/rank name (empty -> +0x78c untouched)
 		w.U32(p.CrestParamA)            // var_88 -> BindGuild crestParamA
 		w.U32(p.CrestParamB)            // var_84 -> BindGuild crestParamB
 		w.U32(p.CrestParamC)            // var_8c -> BindGuild crestParamC
-		w.U8(p.FortSiegeAuthority)      // team byte -> client CICPlayer_SetFortressWarOfficerTitle +0x7e0
+		w.U8(p.FortSiegeAuthority)      // team byte -> sub_869940 +0x7e0 (0 clears +0x7c4)
 	}
 
-	// Client 0x0086A26D: a stall's [wstr title][u32 decoration] ->
-	// +0x75C/+0x754.
+	// @0x0086a26d: a stall's [wstr title][u32 decoration] -> +0x75C/+0x754.
 	if p.StallTitle != "" {
 		w.WStr(p.StallTitle).U32(p.StallDecoration)
 	}
 
-	// Client 0x0086A2FF: action-progress seconds -> +0x780 (the client's
-	// CICPlayer_SetInteractionState).
+	// @0x0086a2ff: action-progress seconds -> +0x780 (sub_8686a0).
 	w.U8(0)
-	// Client 0x0086A33C -> +7E1: inactive event team, matching local
-	// EnterWorld.
+	// 86A33C -> +7E1: inactive event team, matching local EnterWorld.
 	// The server writes FF when neither event manager has a team.
 	team := uint8(0xff)
 	if p.EventTeam != nil {
@@ -524,9 +463,8 @@ func (p PlayerSpawnRow) Encode() []byte {
 	}
 	w.U8(team)
 
-	// vt+0x68 base, the client's CICharactor_DeserializeSpawnSubState
-	// appear byte (single-object mode only); 1 is the drop-in
-	// presentation, the grounditem registry convention.
+	// vt+0x68 base sub_851590 appear byte (single-object mode only); 1 is
+	// the drop-in presentation, the grounditem registry convention.
 	if p.WithAppearTail {
 		w.U8(p.AppearFlag)
 	}
@@ -564,7 +502,7 @@ func DecodePlayerSpawnRowWithSkills(payload []byte, tidByRef map[uint32]uint16, 
 	if out.BodyShapeByte, err = r.U8(); err != nil {
 		return out, err
 	}
-	if _, err = r.U8(); err != nil { // client cf0100 scratch byte
+	if _, err = r.U8(); err != nil { // cf0100 scratch byte
 		return out, err
 	}
 

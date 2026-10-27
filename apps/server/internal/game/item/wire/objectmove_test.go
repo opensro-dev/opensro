@@ -23,9 +23,8 @@ func testPosition() Position {
 	return Position{RegionID: 0x6B4F, X: 1205, Y: 80, Z: 396, Heading: 0x8000}
 }
 
-// The client's CPSMission_OnEntitySpeedMode0x30E3 reads region (2 B at
-// client 0x00775CC1), then x/y/z/heading as one 14-byte block (at client
-// 0x00775CCF), then the gid (4 B at client 0x00775CDD). The gid is LAST.
+// sub_775cb0 reads region (2 B @0x00775cc1), then x/y/z/heading as one 14-byte
+// block (@0x00775ccf), then the gid (4 B @0x00775cdd). The gid is LAST.
 func TestObjectSourceMovePutsGidLast(t *testing.T) {
 	got := ObjectSourceMove{Position: testPosition(), Gid: 200007}.Encode()
 
@@ -45,9 +44,8 @@ func TestObjectSourceMovePutsGidLast(t *testing.T) {
 	}
 }
 
-// asm.asm, client 0x00775B62 inside the client's
-// CPSMission_OnEntityMoveUpdate0xB2F5: the correction carries the same
-// six fields with the gid FIRST.
+// asm.asm @0x00775b62 (sub_775b50): the correction carries the same six fields
+// with the gid FIRST.
 func TestObjectSourceCorrectionPutsGidFirst(t *testing.T) {
 	got := ObjectSourceCorrection{Gid: 200007, Position: testPosition()}.Encode()
 
@@ -119,9 +117,7 @@ func TestObjectCorrectionRoundTrips(t *testing.T) {
 	}
 }
 
-// asm.asm, client 0x00777B62 inside the client's
-// CPSMission_OnEntityStateUpdate0x3122: [u32 gid][u8 stateType]
-// [u8 value].
+// asm.asm @0x00777b62 (sub_777b60): [u32 gid][u8 stateType][u8 value].
 func TestObjectStateRefreshLayout(t *testing.T) {
 	cases := []struct {
 		name    string

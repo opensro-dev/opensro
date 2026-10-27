@@ -33,7 +33,7 @@ type SkillAction struct {
 	// HasTarget is true for the flag-0x01 body (a target gid follows).
 	HasTarget bool
 	// TargetGid is the selected target entity id when HasTarget is true
-	// (CGInterface_GetSelectedTarget → stack slot consumed by AppendBytes).
+	// (CGInterface_GetSelectedTargetGid → stack slot consumed by AppendBytes).
 	TargetGid uint32
 	// HasGroundTarget is true for the flag-0x02 ground-location body
 	// (the client's CNavigationDeadreckon_OnArrivalOrActionFlush second

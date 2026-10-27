@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// The 0x343C block layout, byte for byte against the read order of
-// the client's CPSMission_OnBaseStats0x343C.
+// The 0x343C block layout, byte for byte against sub_75be90's read order.
 // THE load-bearing assertion is the offset of the STR/INT words: the
 // handler applies +0x20/+0x22 to the live player words, while the
 // +0x14/+0x16 pair that reads like STR/INT is staged and dropped. A layout
@@ -30,10 +29,10 @@ func TestBaseStatsEncodesStatWordsAtTheAppliedOffsets(t *testing.T) {
 		t.Fatalf("maxMP at +0x1c = %d, want 5678", got)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x20:]); got != 111 {
-		t.Fatalf("STR at +0x20 = %d, want 111 (the word client CICPlayer_SetStrengthWord applies)", got)
+		t.Fatalf("STR at +0x20 = %d, want 111 (the word sub_8629f0 applies)", got)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x22:]); got != 222 {
-		t.Fatalf("INT at +0x22 = %d, want 222 (the word client CICPlayer_SetIntellectWord applies)", got)
+		t.Fatalf("INT at +0x22 = %d, want 222 (the word sub_862a00 applies)", got)
 	}
 	// The lookalike staging pair must stay zero: filling it was the
 	// old active-probe trap.
