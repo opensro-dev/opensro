@@ -30,6 +30,7 @@ class FakeRun:
 		self.defect = defect
 		self.native_manifest = native_manifest
 		self.calls = []
+		self.shards = {}
 
 	def __call__(self, argv, env):
 		self.calls.append((argv, env))
@@ -37,6 +38,8 @@ class FakeRun:
 		if "import_vsro_alexandria" in tool:
 			(self.staging / "stage1" / "extracted" / "Alexandria_extracted").mkdir(parents=True)
 		elif "build_alexandria_variant" in tool:
+			# The bundle step projects what this step's settings produced.
+			self.shards = {flag: env.get(flag) for flag in variant_build.SHARD_FILES}
 			textdata = self.staging / "variant" / variant_build.TEXTDATA_DIR
 			textdata.mkdir(parents=True)
 			(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
@@ -50,6 +53,10 @@ class FakeRun:
 					json.dumps({"format": variant_build.OVERLAY_FORMAT}), encoding="utf-8")
 			if self.defect != "no-cap110":
 				(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
+			for flag, shard in variant_build.SHARD_FILES.items():
+				asked = self.shards.get(flag) == "on"
+				if asked and self.defect != "drop-shard" or not asked and self.defect == "extra-shard":
+					(textdata / shard).write_text("rows", encoding="utf-8")
 			(self.staging / "server-data.srogz").write_bytes(b"archive")
 			if self.defect == "touch-native":
 				self.native_manifest.write_bytes(b"rewritten")
@@ -67,8 +74,9 @@ class VariantBuildTests(unittest.TestCase):
 		self.manifest.write_bytes(b"native manifest")
 		self.native = [self.archive, self.manifest]
 
-	def build(self, run):
-		return variant_build.build(base_vsro(), self.staging, "variant-1", self.native, run=run)
+	def build(self, run, env=None):
+		return variant_build.build(base_vsro(), self.staging, "variant-1", self.native, run=run,
+			env={} if env is None else env)
 
 	def test_the_four_steps_run_in_order_against_the_variant(self):
 		run = FakeRun(self.staging)
@@ -114,6 +122,25 @@ class VariantBuildTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "is not empty"):
 			self.build(run)
 		self.assertEqual(run.calls, [])
+
+	def test_the_variant_step_receives_the_settings_normalized(self):
+		run = FakeRun(self.staging)
+		self.build(run, env={"SRO_CAP110_ITEMS": "1"})
+		step = run.calls[1][1]
+		self.assertEqual(step["SRO_CAP110_ITEMS"], "on")
+		self.assertEqual(step["SRO_CAP110_SKILLS"], "off")
+		self.assertTrue((self.staging / "server-data" / "textdata" / "itemdata_110000.txt").is_file())
+		self.assertFalse((self.staging / "server-data" / "textdata" / "skilldata_110000.txt").exists())
+
+	def test_a_shard_the_settings_did_not_ask_for_is_refused(self):
+		run = FakeRun(self.staging, defect="extra-shard")
+		with self.assertRaisesRegex(ValueError, "disagrees with SRO_CAP110_ITEMS=off"):
+			self.build(run)
+
+	def test_a_missing_shard_the_settings_asked_for_is_refused(self):
+		run = FakeRun(self.staging, defect="drop-shard")
+		with self.assertRaisesRegex(ValueError, "disagrees with SRO_CAP110_ITEMS=on"):
+			self.build(run, env={"SRO_CAP110_ITEMS": "on"})
 
 	def test_a_native_bundle_with_an_overlay_is_refused(self):
 		native_data = Path(self.root.name) / "native-data"

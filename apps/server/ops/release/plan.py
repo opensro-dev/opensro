@@ -24,18 +24,12 @@ INPUTS = {
 		"pnpm-workspace.yaml", ".npmrc",
 		"apps/server/ops/release",
 		# The Alexandria variant's tools (#1745): a variant candidate is
-		# client data too, so a change to any of them supersedes it.
-		"scripts/build_alexandria_variant.py", "scripts/import_vsro_alexandria.py",
-		"scripts/import_vsro_item_glow.py", "scripts/import_vsro_optional_teleport.py",
-		"scripts/vsro_archive_pins.json",
-		"scripts/alexandria_map_tables.py", "scripts/alexandria_npcs.py",
-		"scripts/alexandria_npc_services.py", "scripts/alexandria_shop_d10.py",
-		"scripts/alexandria_shop_supplies.py",
-		"scripts/cap110_items.py", "scripts/cap110_item_import.py",
-		"scripts/cap110_monsters.py", "scripts/cap110_monster_loot.py",
-		"scripts/cap110_rewards.py", "scripts/cap110_skills.py",
-		"scripts/cap110_skill_database.py", "scripts/cap110_skill_effects.py",
-		"scripts/cap110_skill_import.py",
+		# client data too, so a change to any of them supersedes it. The
+		# family is named by pattern, not by listing its files: a new
+		# alexandria_*, cap110_* or import_vsro_* tool is an input the
+		# day it lands (test_plan.py pins the coverage).
+		"scripts/build_alexandria_variant.py", "scripts/vsro_archive_pins.json",
+		"scripts/alexandria_*.py", "scripts/cap110_*.py", "scripts/import_vsro_*.py",
 	],
 	"server": ["apps/server"],
 }

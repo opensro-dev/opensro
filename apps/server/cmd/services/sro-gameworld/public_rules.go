@@ -68,6 +68,11 @@ var unlistedSettings = map[string]string{
 	// rule players meet (their client is offered the same world either
 	// way).
 	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	// Build-time inputs (#1745): the variant build's import tools read
+	// them when the server data is built; the GameWorld reads neither,
+	// so there is no running rule for the page to state.
+	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",

@@ -15,7 +15,7 @@ package enterworld
 ================
 SkillParameter
 
-By-value slots for the native setv/getv dictionary consumed by 40DCE0/40DFF0.
+By-value slots for the native setv/getv dictionary the server consumes.
 These identities are separate from skill IDs and displayed character stats.
 ================
 */
@@ -37,63 +37,63 @@ const (
 	ParameterHolyPower
 	ParameterDaggerHit
 	ParameterDualHit
-	// Abnormal-status modifiers read by 590680 through getv: poison damage
+	// Abnormal-status modifiers read by the server's status roll through getv: poison damage
 	// (RPDU, +500), poison duration (RPTU, +504) and trap damage (TRAA, +53C).
 	ParameterPoisonDamage
 	ParameterPoisonDuration
 	ParameterTrapDamage
-	// MP Decrease keys. SkillAction_Instant 5868F1/58695F and
-	// CastLifecycle_ProcessPersistent 58327A/5832E6/583352 look these up in the
+	// MP Decrease keys. The instant action and the persistent cast
+	// lifecycle look these up in the
 	// caster's modifier map and scale prepared MP cost (+0x14), not damage.
 	// WIMD +0x4E4, BDMD +0x554 (0x42444D44), HLMD +0x55C (0x484C4D44).
 	ParameterWizardMPDecrease
 	ParameterBardMPDecrease
 	ParameterHealerMPDecrease
-	// Area range keys. CastLifecycle_ProcessPersistent 583657 adds these
+	// Area range keys. The persistent cast lifecycle adds these
 	// caster getv values to the efr radius: MUER +0x544, DSER +0x54C.
 	ParameterMusicRange
 	ParameterDanceRange
 	// Reach keys. The command actor adds the caster's value to the action
-	// range (4ADAB8 / 4AE87E): CBRA +0x50C, WIRU +0x4E8.
+	// range: CBRA +0x50C, WIRU +0x4E8.
 	ParameterCrossbowRange
 	ParameterWizardRange
 	// DGAA +0x524: added to the physical attack point of a strike whose
-	// command was issued in stealth (40E4B9, hit flag 8 from 58EDD7).
+	// command was issued in stealth (hit flag 8).
 	ParameterStealthStrike
 	// Stealth keys a hide reads through getv. STDU +0x518 adds milliseconds
-	// to the effect's duration (5833C8, and the B5ED/hit-data rider); STSP
-	// +0x514 adds a percentage back onto the hide's speed cut (596626).
+	// to the effect's duration (and the B5ED/hit-data rider); STSP
+	// +0x514 adds a percentage back onto the hide's speed cut.
 	ParameterStealthDuration
 	ParameterStealthSpeed
-	// Bless keys. CastLifecycle_ProcessPersistent 58381F/583844 copies the
+	// Bless keys. The persistent cast lifecycle copies the
 	// caster's HLBP (+0x56C) into a recipient's context +0x34, else its HLSM
-	// (+0x570) into +0x38; 59520C adds them to defp's physical and magical.
+	// (+0x570) into +0x38; the defense installer adds them to defp's physical and magical.
 	ParameterBlessPhysical
 	ParameterBlessMagical
 	// Charity's keys for the stat blessings: HLFS +0x564, HLMI +0x568.
 	ParameterBlessStrength
 	ParameterBlessIntellect
-	// HLRU +0x558: SkillCombat_ApplySkillEffectsToTargets 59425E adds the
+	// HLRU +0x558: the server's effect application adds the
 	// caster's value to both percent words of a heal (Faith).
 	ParameterHealRecoveryUp
 	// DTDR +0x52C extends a linked effect by a percentage of its base
-	// duration (5833EB..583450), independent of DTAT's damage scaling.
+	// duration, independent of DTAT's damage scaling.
 	ParameterDotDuration
 	// RPBU +0x508 adds milliseconds to the coating, not its poison victim.
 	ParameterPoisonCoatingDuration
 	// MUCR +0x548: the Bard's music keep addend. A row that reads getv MUCR
-	// adds the caster's value to its skc keep chance (5A160A); see
+	// adds the caster's value to its skc keep chance; see
 	// action.damageKeepPercent. DSER (ParameterDanceRange) is the dance
-	// addend at 5A162E.
+	// addend.
 	ParameterMusicCutResist
-	// DSCR +0x550: indexed by 587630 and authored by the dances and Screen
+	// DSCR +0x550: indexed by the server's parameter index and authored by the dances and Screen
 	// Dance, but no native code reads it (whole-image scan); it changes
 	// nothing and stays a known key only so those rows admit.
 	ParameterDanceCutResist
 	// The Warlock's Blood Increase keys. BSHP (getv slot +0x534) is added to
-	// a life steal's base (Formulae_CalculateSkillHeal 40F750, Life Drain);
-	// SAAA (+0x538) to a fixed hit's amount (Formulae_CalculateFixedSkillDamage
-	// 40F5F0, Soul Chaos).
+	// a life steal's base (the server's heal formula, Life Drain);
+	// SAAA (+0x538) to a fixed hit's amount (its fixed-damage formula,
+	// Soul Chaos).
 	ParameterLifeStealPower
 	ParameterFixedDamagePower
 	SkillParameterCount
@@ -229,28 +229,28 @@ type SkillPassiveParameters struct {
 	Pinned bool
 	Mask   SkillParameterMask
 	Values SkillParameterValues
-	// Reat is reat {mask, value} (+0x2FC): 595542..59568F adds value to the
+	// Reat is reat {mask, value} (+0x2FC): the server adds value to the
 	// keeper's flat status reduction 0x91+i for each mask bit i (0..5).
 	Reat SkillPassiveReat
-	// Real is real {status mask, flat, grade} (+0x300): 59DF20 files the flat
+	// Real is real {status mask, flat, grade} (+0x300): the server files the flat
 	// under the grade in each masked status's resistance bucket.
 	Real SkillPassiveReal
-	// Br is br {lane mask, value}: 594AC0 (0x595DFD..0x595EFA) adds value to
+	// Br is br {lane mask, value}: the server adds value to
 	// the flat block-rate parameter of each lane the normalized mask selects;
 	// see combat.BlockRateWrites.
 	Br SkillPassiveBlockRate
 	// HitRate, Evasion, MaxHP and MaxMP are hr (+0x24C), er (+0x27C), hpi
 	// (+0x2AC) and mpi (+0x2B0), each {flat, percent}. A learned passive is
-	// a standing skill instance, so 594AC0 installs them on the keeper as
+	// a standing skill instance, so the server installs them on the keeper as
 	// it does a buff's: word 0 flat and word 1 percent on parameters 11, 9,
-	// 3 and 4 (0x59583F, 0x595883, 0x595481, 0x5954DF). The bow, lightning,
+	// 3 and 4. The bow, lightning,
 	// spear and water mastery passives author one each.
 	HitRate, Evasion, MaxHP, MaxMP SkillFlatRate
-	// Dru is dru {word 0, word 1} (+0x3E4): 595A97 adds word 0 to
+	// Dru is dru {word 0, word 1} (+0x3E4): the server adds word 0 to
 	// parameters 0x80 and 0x81 and word 1 to 0x82 and 0x83 (the fire mastery
 	// passive).
 	Dru [2]uint32
-	// CriticalEvasion is dcri (+0x42C): 594AC0 0x595DCA adds it to the
+	// CriticalEvasion is dcri (+0x42C): the server adds it to the
 	// defender's evade-critical keeper 0x39 (the Warrior's shield passive).
 	CriticalEvasion uint32
 	// IncomingReduction marks odar (+0x270) in a passive (the Rogue's
@@ -282,7 +282,7 @@ type SkillPassiveReal struct{ Mask, Flat, Grade uint32 }
 ================
 SkillPassiveBlockRate
 
-A passive block-rate addend. Mask is already normalized by the 587630 lane
+A passive block-rate addend. Mask is already normalized by the server's lane
 rule, the same form the timed br buff stores.
 ================
 */
@@ -300,8 +300,8 @@ Chinese maximum-HP, maximum-MP, parry and attack-rate passives (a duplicate
 block is malformed). Refuse the whole program if any operation lacks
 execution.
 
-Any one consumed block pins the program: none of the cited installers for
-reat (595542..59568F), real (59DF20), br (0x595DFD) or hpi (595481) reads a
+Any one consumed block pins the program: none of the native installers for
+reat, real, br or hpi reads a
 setv.
 Protection is reat + real + reqi and Blockade br + reqi; a program holding
 only its reqi gate has nothing to install and stays unpinned.

@@ -366,7 +366,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	var activeCOSRows []Packet
 	var activeCOSRide *Packet
 	for _, cos := range character.Companions() {
-		// CCOSManager_RestoreLoadedActors (4FA430) admits a record into a built
+		// The server's loaded-actor restore admits a record into a built
 		// world only when its alive and summoned bits are both set. A corpse stays
 		// on its summoner item; login and every re-entry (rebirth, return scroll,
 		// portal, GM warp) serialize the same rule.
@@ -688,7 +688,7 @@ func (c *refItemCollector) addStatic() {
 ================
 refItemCollector.finish
 
-Completes each row from its itemdata record. Native 59edb0 follows the
+Completes each row from its itemdata record. The server follows the
 item's associated character before deciding between riding and transport
 tutorials, so the summoned type word is resolved, never inferred from names.
 ================
