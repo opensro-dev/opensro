@@ -75,9 +75,11 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 	if player.ID == attacker.ID {
 		return combatTarget{}, false
 	}
-	snapshot := rt.characterSnapshot(division, player)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) ||
-		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(attacker) {
+	snapshot := rt.characterSnapshotAdmitted(division, player, func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			domain.CharacterWorldInstance(live) == domain.CharacterWorldInstance(attacker)
+	})
+	if snapshot == nil {
 		return combatTarget{}, false
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
@@ -99,14 +101,23 @@ relations, not its life.
 */
 func (rt *Runtime) resolveCOSTarget(division string, attacker *enterworld.Character, gid uint32, now int64) (combatTarget, bool) {
 	owner := rt.characterByCosGID(division, gid)
-	snapshot := rt.characterSnapshot(division, owner)
-	if snapshot == nil || snapshot.ID == attacker.ID || snapshot.DeletePending ||
-		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(attacker) {
+	snapshot := rt.characterSnapshotAdmitted(division, owner, func(live *enterworld.Character) bool {
+		if live.ID == attacker.ID || live.DeletePending ||
+			domain.CharacterWorldInstance(live) != domain.CharacterWorldInstance(attacker) {
+			return false
+		}
+		pet := live.CompanionByGID(gid)
+		return pet != nil && pet.Summoned && pet.CurrentHP != 0 &&
+			(pet.NativeBodyStatus < mercenaryBodyHiddenFirst || pet.NativeBodyStatus > mercenaryBodyHiddenLast)
+	})
+	if snapshot == nil {
 		return combatTarget{}, false
 	}
+	// Admission judged the companion's summons, life and form on the
+	// live record in the same door pass that detached this copy, so
+	// the copy's companion carries the same verdict.
 	pet := snapshot.CompanionByGID(gid)
-	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 ||
-		pet.NativeBodyStatus >= mercenaryBodyHiddenFirst && pet.NativeBodyStatus <= mercenaryBodyHiddenLast {
+	if pet == nil {
 		return combatTarget{}, false
 	}
 	ref, found := rt.cosReference(pet)

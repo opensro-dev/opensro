@@ -126,38 +126,60 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 		if player == nil {
 			continue
 		}
-		snapshot := rt.characterSnapshot(q.division, player)
-		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
-			continue
-		}
-		// 5A1AD0 excludes a mounted player (5A1B51..5D reads the ride and
-		// skips the rider); the ride itself is a candidate below.
-		if ridingCOS(snapshot) == 0 {
-			radius, ok := rt.deps.CharacterBodyRadius(snapshot)
+		// One door pass weighs the gates on the live record and
+		// detaches a copy only for a player the strike may still take:
+		// dead and deletion-pending players, riders and out-of-range
+		// players never pay for their whole record (#1820 part C).
+		// Companion gids ride out as values; resolveCOSTarget re-judges
+		// each companion's summons and form on its owner itself.
+		var snapshot *enterworld.Character
+		var radius float64
+		var petGIDs []uint32
+		rt.deps.Read(q.division, func() {
+			if player.DeletePending || !enterworld.CharacterAlive(player) {
+				return
+			}
+			for _, pet := range player.Companions() {
+				if pet != nil {
+					petGIDs = append(petGIDs, pet.GID)
+				}
+			}
+			// 5A1AD0 excludes a mounted player (5A1B51..5D reads the
+			// ride and skips the rider); the ride itself is a
+			// candidate below.
+			if ridingCOS(player) != 0 {
+				return
+			}
+			bodyRadius, ok := rt.deps.CharacterBodyRadius(player)
 			if !ok {
-				continue
+				// The old walk dropped an unmeasurable player whole,
+				// companions included; keep that verdict.
+				petGIDs = nil
+				return
 			}
 			limit := q.reach
 			if !q.nearest {
-				limit += radius
+				limit += bodyRadius
 			}
-			if distance <= limit {
-				// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
-				if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) == 0 {
-					out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,
-						at: present.Spawn}, distance: distance, radius: radius})
-				}
+			if distance > limit {
+				return
+			}
+			radius = bodyRadius
+			snapshot = player.Snapshot()
+		})
+		if snapshot != nil {
+			// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
+			if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) == 0 {
+				out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,
+					at: present.Spawn}, distance: distance, radius: radius})
 			}
 		}
 		// The present player's companions are candidates through their
 		// owner (5A1AD0's mode 3 on the COS), a ridden transport included:
 		// enumerated from the owner's record, not companionTargets, whose
 		// mounted filter serves the pet strike lane.
-		for _, pet := range snapshot.Companions() {
-			if pet == nil || !pet.Summoned {
-				continue
-			}
-			target, ok := rt.resolveCOSTarget(q.division, q.caster, pet.GID, q.now)
+		for _, gid := range petGIDs {
+			target, ok := rt.resolveCOSTarget(q.division, q.caster, gid, q.now)
 			if !ok || !worldgeom.SamePlane(target.at.RegionID, q.center.RegionID) {
 				continue
 			}

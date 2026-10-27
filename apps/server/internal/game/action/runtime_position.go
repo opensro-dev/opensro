@@ -48,6 +48,43 @@ func (rt *Runtime) characterSnapshot(
 
 /*
 ==================
+characterSnapshotAdmitted
+
+characterSnapshotAdmitted copies mutable character state while the
+authority read door is held, but only when admit accepts the live
+record: a rejected target never pays for its detached copy (#1820
+part C). admit reads record fields only - it opens no door, the same
+contract every read-door visitor already honours - so its verdict
+weighs the same inputs characterSnapshot's copy would carry. The
+copy's only normalizations (stat points, mission mask) feed neither
+the life, deletion, world-instance nor companion facts admission
+reads, and an admitted record detaches exactly as characterSnapshot
+detaches it: same door, same publication lock, same copy.
+==================
+*/
+func (rt *Runtime) characterSnapshotAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		if admit != nil && !admit(character) {
+			return
+		}
+		snapshot = character.Snapshot()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterLifeState
 
 The life facts a refused monster strike revalidates - alive, deletion
