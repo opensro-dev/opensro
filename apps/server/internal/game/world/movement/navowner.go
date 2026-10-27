@@ -638,7 +638,7 @@ func (v *WaterValidator) sectorObjectNavProbes(sectorX, sectorZ int) []sectorObj
 // terrainOutlineEntry finds the first object the terrain walker enters on
 // the chord after tMin: an OUTLINE edge crossed from outside whose flags
 // carry neither side-block bit 0x01 nor 0x10 (the same admission client-next
-// ports as terrainOwnerPath, 404510 -> 403FB0 -> 428300). The entered cell is
+// ports as terrainOwnerPath (client 404510 -> 403FB0 -> 428300). The entered cell is
 // the edge's source cell; the object's own walk then owns the chord.
 /*
 ================

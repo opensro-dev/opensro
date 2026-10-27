@@ -88,8 +88,8 @@ func broadcastObservedMotion(hub *transport.Hub, division string, exceptSession 
 // S->C 0x324B play push {u32 gid, u8 action} to the acting session AND the
 // division peers. The sender gets its own copy because the native client
 // does NOT animate locally on send - the emote only plays when the push
-// comes back (sub_695420's emote arms emit the packet and return; the only
-// SetMotionState path is the inbound sub_778190).
+// comes back (client sub_695420's emote arms emit the packet and return; the only
+// SetMotionState path is the inbound client sub_778190).
 //
 // No state persists and nothing mutates: motion state 7 is a transient
 // one-shot animation on every client (the same state the idle-fidget timer
