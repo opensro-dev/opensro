@@ -111,15 +111,12 @@ func TestDivisionOperationLocksReleaseOnRecoveredTickPanic(t *testing.T) {
 	unlockSeed := rt.lockDivision(testDivision)
 	unlockSeed()
 
-	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, pendingProjectileCast{
-		divisionID:    testDivision,
-		characterName: character.Name,
-		ownerKey:      simulation.WorldKey(testDivision, character.Name),
-		characterID:   character.ID,
-		token:         1,
-		releaseAtMs:   100,
-		cast:          wire.SkillAction{ActionId: 1, TargetGid: 999},
-	})
+	seeded := newPendingProjectileCast(testDivision, character.Name)
+	seeded.characterID = character.ID
+	seeded.token = 1
+	seeded.releaseAtMs = 100
+	seeded.cast = wire.SkillAction{ActionId: 1, TargetGid: 999}
+	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, seeded)
 
 	hook := rt.TickHook()
 	panicked := false

@@ -49,12 +49,9 @@ func benchSnapshotRuntime(finalizes, commands, projectiles int) *Runtime {
 	rt := NewRuntime(&enterworld.Deps{}, nil)
 	for i := 0; i < finalizes; i++ {
 		name := fmt.Sprintf("char%05d", i)
-		rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-			divisionID:       testDivision,
-			characterName:    name,
-			ownerKey:         simulation.WorldKey(testDivision, name),
-			presentationOnly: i%2 == 0,
-		})
+		entry := newPendingSkillFinalize(testDivision, name)
+		entry.presentationOnly = i%2 == 0
+		rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 	}
 	if rt.currentSkillCommands == nil {
 		rt.currentSkillCommands = make(map[string]currentSkillCommand)
@@ -64,11 +61,7 @@ func benchSnapshotRuntime(finalizes, commands, projectiles int) *Runtime {
 	}
 	for i := 0; i < projectiles; i++ {
 		name := fmt.Sprintf("archer%05d", i)
-		rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, pendingProjectileCast{
-			divisionID:    testDivision,
-			characterName: name,
-			ownerKey:      simulation.WorldKey(testDivision, name),
-		})
+		rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, newPendingProjectileCast(testDivision, name))
 	}
 	return rt
 }
@@ -242,15 +235,11 @@ func TestOpenSkillCastOwnerSnapshotMatchesRecomputedKeys(t *testing.T) {
 	// as the recomputed one did.
 	finals := []string{"Alice", "alice", "Bob"}
 	for i, name := range finals {
-		rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-			divisionID: testDivision, characterName: name,
-			ownerKey: simulation.WorldKey(testDivision, name), presentationOnly: i == 2,
-		})
+		entry := newPendingSkillFinalize(testDivision, name)
+		entry.presentationOnly = i == 2
+		rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 	}
-	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, pendingProjectileCast{
-		divisionID: testDivision, characterName: "Carol",
-		ownerKey: simulation.WorldKey(testDivision, "Carol"),
-	})
+	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, newPendingProjectileCast(testDivision, "Carol"))
 	if rt.currentSkillCommands == nil {
 		rt.currentSkillCommands = make(map[string]currentSkillCommand)
 	}

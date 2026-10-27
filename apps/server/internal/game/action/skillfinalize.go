@@ -55,6 +55,24 @@ type pendingSkillFinalize struct {
 
 /*
 ================
+newPendingSkillFinalize
+
+newPendingSkillFinalize starts one delayed control for an owner. The
+cached ownerKey is derived here, from the division and character the
+caller names, so no literal at a queue site can leave the key empty and
+strand the cast outside the tick's owner scans (#1820 D).
+================
+*/
+func newPendingSkillFinalize(divisionID, characterName string) pendingSkillFinalize {
+	return pendingSkillFinalize{
+		divisionID:    divisionID,
+		characterName: characterName,
+		ownerKey:      simulation.WorldKey(divisionID, characterName),
+	}
+}
+
+/*
+================
 queueSkillFinalize
 
 Retain control order until the simulation clock reaches the due time.
@@ -71,14 +89,11 @@ func (rt *Runtime) queueSkillFinalize(
 		panic("cast control requires a source GID")
 	}
 	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		sourceGID:     sourceGID,
-		divisionID:    divisionID,
-		characterName: characterName,
-		ownerKey:      simulation.WorldKey(divisionID, characterName),
-		dueAtMs:       dueAtMs,
-		frame:         frame,
-	})
+	entry := newPendingSkillFinalize(divisionID, characterName)
+	entry.sourceGID = sourceGID
+	entry.dueAtMs = dueAtMs
+	entry.frame = frame
+	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 	rt.pendingSkillFinalizesMu.Unlock()
 }
 
@@ -102,15 +117,12 @@ func (rt *Runtime) queueSkillCastClose(divisionID, characterName string, sourceG
 		panic("cast control requires a source GID")
 	}
 	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		sourceGID:     sourceGID,
-		divisionID:    divisionID,
-		characterName: characterName,
-		ownerKey:      simulation.WorldKey(divisionID, characterName),
-		dueAtMs:       closeAtMs,
-		frame:         wire.SkillCastFinalizeFrame(token),
-		chainBracket:  skill.ChainNext != 0,
-	})
+	entry := newPendingSkillFinalize(divisionID, characterName)
+	entry.sourceGID = sourceGID
+	entry.dueAtMs = closeAtMs
+	entry.frame = wire.SkillCastFinalizeFrame(token)
+	entry.chainBracket = skill.ChainNext != 0
+	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 	rt.pendingSkillFinalizesMu.Unlock()
 }
 
@@ -129,10 +141,12 @@ func (rt *Runtime) queueDetachedCastClose(divisionID, characterName string, sour
 		panic("action: detached cast close has no source")
 	}
 	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		divisionID: divisionID, characterName: characterName, ownerKey: simulation.WorldKey(divisionID, characterName),
-		sourceGID: sourceGID, dueAtMs: closeAtMs, frame: wire.SkillCastFinalizeFrame(token), presentationOnly: true,
-	})
+	entry := newPendingSkillFinalize(divisionID, characterName)
+	entry.sourceGID = sourceGID
+	entry.dueAtMs = closeAtMs
+	entry.frame = wire.SkillCastFinalizeFrame(token)
+	entry.presentationOnly = true
+	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 	rt.pendingSkillFinalizesMu.Unlock()
 }
 
@@ -179,7 +193,10 @@ func (rt *Runtime) clearSkillFinalizes(divisionID, characterName string) {
 	for _, pending := range rt.pendingMonsterCasts {
 		if !pending.selfEffect && simulation.WorldKey(pending.division, pending.characterName) == ownerKey {
 			name := monsterCastOwner(pending.instance.Gid)
-			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{sourceGID: pending.instance.Gid, divisionID: pending.division, characterName: name, ownerKey: simulation.WorldKey(pending.division, name), frame: wire.SkillCastFinalizeFrame(pending.token)})
+			entry := newPendingSkillFinalize(pending.division, name)
+			entry.sourceGID = pending.instance.Gid
+			entry.frame = wire.SkillCastFinalizeFrame(pending.token)
+			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, entry)
 		} else {
 			monsters = append(monsters, pending)
 		}
