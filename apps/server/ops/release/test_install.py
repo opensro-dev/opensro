@@ -114,6 +114,60 @@ if __name__ == "__main__":
 
 
 # ================
+# StalldumpAccessTests
+#
+# The watcher (opensro-monitor) must reach dumps inside the GameWorld's
+# mode-700 authority; install grants exactly the traversal, the
+# directory read and the inheritance that make that work.
+# ================
+@unittest.skipIf(os.name == "nt", "POSIX ACL grants are verified on Linux")
+class StalldumpAccessTests(unittest.TestCase):
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		self.directory = tempfile.TemporaryDirectory()
+		self.addCleanup(self.directory.cleanup)
+		self.root = Path(self.directory.name)
+		self.calls = []
+
+	# ================
+	# record
+	# ================
+	def record(self, arguments, check=False):
+		self.calls.append(list(arguments))
+
+	# ================
+	# test_grants_traverse_read_and_inheritance
+	# ================
+	def test_grants_traverse_read_and_inheritance(self):
+		authority = self.root / "authority"
+		dumps = authority / "stall-dumps"
+		dumps.mkdir(parents=True)
+		authority.chmod(0o700)
+		dumps.chmod(0o750)
+		dump = dumps / "tick-stall-20261018T000000Z.txt"
+		dump.write_text("tick stall dump\n", encoding="utf-8")
+		install.stalldump_access(dumps, "opensro-monitor", run=self.record)
+		self.assertIn(["setfacl", "-m", "u:opensro-monitor:--x", str(authority)], self.calls)
+		self.assertIn(["setfacl", "-m", "u:opensro-monitor:r-x", str(dumps)], self.calls)
+		self.assertIn(["setfacl", "-d", "-m", "u:opensro-monitor:r--", str(dumps)], self.calls)
+		self.assertIn(["setfacl", "-m", "u:opensro-monitor:r--", str(dump)], self.calls)
+		for call in self.calls:
+			self.assertNotEqual(call[-1], str(self.root.parent), "world-traversable ancestors are left alone")
+
+	# ================
+	# test_missing_directory_is_skipped
+	#
+	# The GameWorld creates the directory on first start; an install
+	# before that must not fail or invent shard state.
+	# ================
+	def test_missing_directory_is_skipped(self):
+		install.stalldump_access(self.root / "authority" / "stall-dumps", "opensro-monitor", run=self.record)
+		self.assertEqual(self.calls, [])
+
+
+# ================
 # AuthorizedKeysTests
 # ================
 class AuthorizedKeysTests(unittest.TestCase):
