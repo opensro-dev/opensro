@@ -22,8 +22,12 @@ root, from the installed release controls, unless named otherwise.
    Without this step 2 has no `quic_host.py` to run, and the staging
    rehearsal (step 1) rehearses with the old `deploy.py`, proving
    nothing about the posture — the old one may not know the four keys
-   at all. Steps 2-3 run from the installed directory
-   (`/usr/local/lib/opensro-release-controls`).
+   at all. Each install lands in a directory named by its commit
+   (`install_version`); steps 2-3 run from the live one:
+
+   ```
+   cd /usr/local/lib/opensro-release-controls/$(python3 -c 'import json;print(json.load(open("/var/lib/opensro-release/installed-controls.json"))["commit"])')
+   ```
 
 1. **Preconditions.** #1822 merged (the client's default is on; without
    it this whole block is inert) and the staging rehearsal green with
@@ -104,8 +108,8 @@ root, from the installed release controls, unless named otherwise.
    the redirect and proves only the listener; if one must run locally,
    it needs `-wt-addr` at the bind and does not count here):
    - `sro-wtprobe -health -url https://play.opensro.online`
-   - With a fresh ticket (passed through `-ticket-env`, default
-     `defaultTicketEnv`): `sro-wtprobe -measure -transport wt` and
+   - With a fresh ticket (read from `SRO_WT_PROBE_TICKET`, or the
+     variable `-ticket-env` names): `sro-wtprobe -measure -transport wt` and
      `-transport ws` against `https://play.opensro.online`. The client
      derives its WebTransport URL from the socket's authority
      (`https://play.opensro.online/shards/global-official/transport/wt`,
