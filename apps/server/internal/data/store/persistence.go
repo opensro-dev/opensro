@@ -8,6 +8,7 @@ persistence.go - durable authority commits, write health and backups
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"sort"
@@ -37,7 +38,7 @@ commitLocked for a caller that acts on the outcome.
 */
 func (s *Store) commitCheckedLocked(label string) error {
 	s.noteGoldLocked(label)
-	if err := s.commitOnceLocked(); err != nil {
+	if err := s.commitOnceLocked(label); err != nil {
 		s.recordWriteFailureLocked(label, err)
 		return err
 	}
@@ -50,9 +51,26 @@ func (s *Store) commitCheckedLocked(label string) error {
 /*
 ================
 commitOnceLocked
+
+One timed attempt: the phases commitTxLocked measures and the total are
+recorded under label (lock_timing.go), success or not.
 ================
 */
-func (s *Store) commitOnceLocked() error {
+func (s *Store) commitOnceLocked(label string) error {
+	var phases commitPhaseDurations
+	start := time.Now()
+	err := s.commitTxLocked(&phases)
+	phases[commitPhaseTotal] = time.Since(start)
+	s.commits.record(label, phases)
+	return err
+}
+
+/*
+================
+commitTxLocked
+================
+*/
+func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	if s.commitFail != nil {
 		return s.commitFail
 	}
@@ -71,6 +89,7 @@ func (s *Store) commitOnceLocked() error {
 		}
 	}
 
+	begun := time.Now()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -97,7 +116,7 @@ func (s *Store) commitOnceLocked() error {
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
-				if err := upsertCharacterTx(tx, divisionID, c); err != nil {
+				if err := upsertTimedTx(tx, divisionID, c, &phases[commitPhaseEncode]); err != nil {
 					return err
 				}
 			}
@@ -114,7 +133,7 @@ func (s *Store) commitOnceLocked() error {
 			if !known {
 				return fmt.Errorf("dirty character %q has no division binding", c.Name)
 			}
-			if err := upsertCharacterTx(tx, divisionID, c); err != nil {
+			if err := upsertTimedTx(tx, divisionID, c, &phases[commitPhaseEncode]); err != nil {
 				return err
 			}
 		}
@@ -226,7 +245,14 @@ func (s *Store) commitOnceLocked() error {
 	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
+	phases[commitPhaseStatements] = time.Since(begun) - phases[commitPhaseEncode]
+	committing := time.Now()
+	if s.beforeSQLiteCommit != nil {
+		s.beforeSQLiteCommit()
+	}
+	err = tx.Commit()
+	phases[commitPhaseSQLite] = time.Since(committing)
+	if err != nil {
 		return err
 	}
 	// The whole dirty set is written: rows a deferred door left are on disk.
@@ -365,4 +391,21 @@ func (s *Store) DivisionIDs() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+/*
+================
+upsertTimedTx
+
+upsertCharacterTx for the commit: the encoding's time is added to encode.
+================
+*/
+func upsertTimedTx(tx *sql.Tx, division string, c *domain.Character, encode *time.Duration) error {
+	start := time.Now()
+	record, err := encodeCharacter(division, c)
+	*encode += time.Since(start)
+	if err != nil {
+		return err
+	}
+	return writeCharacterTx(tx, division, c, record)
 }
