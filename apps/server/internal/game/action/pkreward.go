@@ -30,6 +30,7 @@ package action
 import (
 	"math"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -159,6 +160,14 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
+		// Diagnostic (BR-261015-0844-66A1): suited job kills in the
+		// field left no trace in the live log, so whether classification
+		// yields job kills there at all was unanswerable. This line and
+		// mostwanted.go's counted line bracket the count: this without
+		// a count means the stranger test refused the pair.
+		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
+			"killerJob": enterworld.DressedJob(killer), "victimJob": enterworld.DressedJob(victim),
+			"strangers": kill.mostWantedStrangers}).Info("job kill classified")
 		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
 			after.notices = append(after.notices, notice)
 		}
