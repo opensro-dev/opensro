@@ -48,7 +48,7 @@ approach and Trace goal on that floor.
 ================
 */
 func RegionIDFromSeedLocal(seedRegionID uint16, localX, localZ, regionSize float64) uint16 {
-	if worldgeom.IsDungeonRegion(seedRegionID) {
+	if PlaneKindOf(seedRegionID) == PlaneCave {
 		return seedRegionID
 	}
 	seedX := SectorX(seedRegionID)

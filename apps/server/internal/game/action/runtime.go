@@ -524,6 +524,16 @@ type Runtime struct {
 		monsterCodename string,
 		rarity uint8,
 	) ([]wire.Frame, bool)
+	// UpdateQuestTeleport reports a successful 0x7495 teleport use to
+	// the quest lane (the used-a-teleport event: the use kind and the
+	// gate's gid), raised once the move has landed, before the success
+	// answer; its frames join the traveller's answer. Nil raises
+	// nothing.
+	UpdateQuestTeleport func(
+		character *enterworld.Character,
+		kind uint8,
+		npcGID uint32,
+	) []wire.Frame
 	// NoteQuestKillSite reports where a monster a quest may care about
 	// fell, in the killer's world, before UpdateQuestKill runs: a quest
 	// instance raises its exit gate beside its boss (questgate.go). Nil

@@ -404,6 +404,24 @@ func portalFailure(code byte) OpResult {
 
 /*
 ================
+questTeleportFrames
+
+A successful 0x7495 use raises the quest lane's used-a-teleport event
+(native event 0x26: the use kind and the gate's gid) once the move has
+landed and before the success answer; the native use handler fires it
+in the success tail every kind shares. The lane answers with any
+frames the event earns. No seam wired, no event.
+================
+*/
+func (rt *Runtime) questTeleportFrames(c *enterworld.Character, kind uint8, gid uint32) []wire.Frame {
+	if rt.UpdateQuestTeleport == nil {
+		return nil
+	}
+	return rt.UpdateQuestTeleport(c, kind, gid)
+}
+
+/*
+================
 error
 ================
 */
@@ -537,7 +555,8 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	// (the reference server's teleport use handler).
 	var collected int64
 	settled := func() { rt.collectFortressTax(division, npc, collected) }
-	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled}, func() (int64, OpResult, bool) {
+	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled,
+		arrived: func() []wire.Frame { return rt.questTeleportFrames(c, 2, gid) }}, func() (int64, OpResult, bool) {
 		mask := uint32(0)
 		if rt.QuestTravelBlocks != nil {
 			mask = rt.QuestTravelBlocks(c)
@@ -577,6 +596,10 @@ type gateTravel struct {
 	world       instance.ID
 	reason      string
 	settled     func()
+	// arrived runs with settled, once the move can no longer roll
+	// back; its frames join the traveller's answer (a 0x7495 use
+	// raises its quest event there). Nil stays silent.
+	arrived func() []wire.Frame
 }
 
 /*
@@ -586,7 +609,8 @@ commitGateTravel
 Moves the character through a gate to destination: admit runs inside the
 character transaction and answers the fee to charge, or the refusal to
 send. A move into another world transfers the population session; a
-failed transfer or re-entry rolls the move and the fee back. The caller
+failed transfer or re-entry rolls the move and the fee back. settled
+and arrived run only once the move can no longer roll back. The caller
 holds the division lock.
 ================
 */
@@ -677,7 +701,11 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	if travel.settled != nil {
 		travel.settled()
 	}
-	return OpResult{Frames: append(missionReentryFrames(packets), corpses...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
+	var arrived []wire.Frame
+	if travel.arrived != nil {
+		arrived = travel.arrived()
+	}
+	return OpResult{Frames: append(append(missionReentryFrames(packets), corpses...), arrived...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
 }
 
 /*

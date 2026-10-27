@@ -247,8 +247,8 @@ func (l *Lane) WorldBound(s *transport.Session, guildID int64) {
 ================
 WarStart
 
-The start of the war running now or next (MainProcess +0x42438, set from
-the shard's war edges), in shard time.
+The start of the war running now or next, in shard time (the reference
+server stamps it from the shard's war edges).
 ================
 */
 func (l *Lane) WarStart(nowMs int64) time.Time {
