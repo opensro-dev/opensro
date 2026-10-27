@@ -43,6 +43,15 @@ ledger scripts/checks/go-test-budget.txt names it. `--long`
 without -short, so the sweeps run; neither tier needs a hosted CI.
 SRO_GO_GATES=label,label runs only the named steps (CI spreads the gate
 over parallel runners); an unknown label is an error, never a silent pass.
+Changed scope. `--changed` (check:server:changed) is the pre-push form: the
+Go packages the branch changes since its merge base with origin/main,
+committed or not. It runs gofmt, a whole-module `go build`, vet and
+golangci-lint on those packages, their tests plus internal/gates (the
+architecture boundaries any package change can break), the race detector on
+the ones in the race list, and tidy only when go.mod or go.sum changed. It
+leaves govulncheck and the release contract to the full gate, and never
+reads or writes a pass stamp: a scoped pass is no evidence for the full one.
+It is not a heavy run, so it needs no machine-wide slot.
 
 On Windows every Go command runs with the C compiler's own directory first
 on PATH. Git for Windows ships older copies of the MinGW runtime DLLs in
@@ -143,78 +152,83 @@ const tierArgs = longTier ? [] : [ "-short" ];
 testKeys.push( `=tier ${longTier ? "long" : "short"}` );
 const testArgs = [ "test", `-p=${packageParallelism}`, ...tierArgs, ...(testCache ? [] : [ "-count=1" ]), "./..." ];
 const budgetLedger = readBudgetLedger();
-const steps = selectSteps( longTier ? "tests (long tier),race" : process.env.SRO_GO_GATES, [
-	{
-		label: "tidy",
-		command: "go",
-		args: [ "mod", "tidy", "-diff" ],
-		select: isModuleGo,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "tidy (lint tool)",
-		command: "go",
-		args: [ "-C", path.dirname( lintModfile ), "mod", "tidy", "-diff" ],
-		select: isLintTool,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "gofmt",
-		command: "gofmt",
-		args: [ "-l", "cmd", "internal" ],
-		accept: ( output ) => output.trim().length === 0,
-		select: isFormatted,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "vet",
-		command: "go",
-		args: [ "vet", "./..." ],
-		select: isModuleGo,
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: "golangci-lint",
-		command: "go",
-		args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "./..." ],
-		select: ( file ) => isModuleGo( file ) || isLintTool( file ) || file === "apps/server/.golangci.yml",
-		keys: [ toolchain, stepEnvironment ]
-	},
-	{
-		label: longTier ? "tests (long tier)" : "tests",
-		command: "go",
-		args: testArgs,
-		accept: longTier ? undefined : withinTestBudget,
-		select: () => true,
-		keys: [ ...testKeys, `=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
-	},
-	{
-		label: "race",
-		command: "go",
-		args: [ "test", "-race", ...tierArgs, ...(testCache ? [] : [ "-count=1" ]), ...racePackages ],
-		select: () => true,
-		keys: testKeys
-	},
-	{
-		// Only production code is scanned; the result also moves with the
-		// vulnerability database, so its modification time is a key.
-		label: "govulncheck",
-		command: "go",
-		args: [ "tool", "govulncheck", "./..." ],
-		select: isScannedGo,
-		keys: [ `=vulndb ${vulnerabilityDatabase}`, toolchain, stepEnvironment ]
-	},
-	{
-		// The compiled release protocol and schema must be what
-		// compatibility.json declares; release preparation checks the same.
-		label: "release contract",
-		command: "go",
-		args: [ "run", "./cmd/operations/sro-release-contract" ],
-		accept: matchesDeclaredServerContract,
-		select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
-		keys: [ toolchain, stepEnvironment ]
-	}
-] );
+const changedScope = process.argv.includes( "--changed" ) || process.env.SRO_GO_SCOPE === "changed";
+if ( changedScope && longTier ) throw new Error( "--changed and --long do not combine: the long tier is a full run" );
+const steps = selectSteps(
+	longTier ? "tests (long tier),race" : process.env.SRO_GO_GATES,
+	scopeSteps( [
+		{
+			label: "tidy",
+			command: "go",
+			args: [ "mod", "tidy", "-diff" ],
+			select: isModuleGo,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "tidy (lint tool)",
+			command: "go",
+			args: [ "-C", path.dirname( lintModfile ), "mod", "tidy", "-diff" ],
+			select: isLintTool,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "gofmt",
+			command: "gofmt",
+			args: [ "-l", "cmd", "internal" ],
+			accept: ( output ) => output.trim().length === 0,
+			select: isFormatted,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "vet",
+			command: "go",
+			args: [ "vet", "./..." ],
+			select: isModuleGo,
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: "golangci-lint",
+			command: "go",
+			args: [ "tool", `-modfile=${lintModfile}`, "golangci-lint", "run", "./..." ],
+			select: ( file ) => isModuleGo( file ) || isLintTool( file ) || file === "apps/server/.golangci.yml",
+			keys: [ toolchain, stepEnvironment ]
+		},
+		{
+			label: longTier ? "tests (long tier)" : "tests",
+			command: "go",
+			args: testArgs,
+			accept: longTier ? undefined : withinTestBudget,
+			select: () => true,
+			keys: [ ...testKeys, `=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
+		},
+		{
+			label: "race",
+			command: "go",
+			args: [ "test", "-race", ...tierArgs, ...(testCache ? [] : [ "-count=1" ]), ...racePackages ],
+			select: () => true,
+			keys: testKeys
+		},
+		{
+			// Only production code is scanned; the result also moves with the
+			// vulnerability database, so its modification time is a key.
+			label: "govulncheck",
+			command: "go",
+			args: [ "tool", "govulncheck", "./..." ],
+			select: isScannedGo,
+			keys: [ `=vulndb ${vulnerabilityDatabase}`, toolchain, stepEnvironment ]
+		},
+		{
+			// The compiled release protocol and schema must be what
+			// compatibility.json declares; release preparation checks the same.
+			label: "release contract",
+			command: "go",
+			args: [ "run", "./cmd/operations/sro-release-contract" ],
+			accept: matchesDeclaredServerContract,
+			select: ( file ) => isModuleGo( file ) || file === "apps/server/ops/release/compatibility.json",
+			keys: [ toolchain, stepEnvironment ]
+		}
+	] )
+);
 
 // The test step runs alone first: its per-package times are what the budget
 // measures, and racing it against the race step (most of the gate's time)
@@ -295,6 +309,99 @@ function readBudgetLedger() {
 
 /*
 ================
+changedGoPackages
+
+The module's packages (as ./dir) that hold a .go file changed since the
+merge base with origin/main, committed, staged, unstaged or untracked, and
+whether go.mod, go.sum or the lint tool module changed.
+================
+*/
+function changedGoPackages() {
+	const git = ( args ) => {
+		const result = spawnSync( "git", args, { cwd: rebuildRoot, encoding: "utf8" } );
+		if ( result.status !== 0 ) throw new Error( `git ${args.join( " " )}: ${result.stderr.trim()}` );
+		return result.stdout.split( "\n" ).map( ( line ) => line.trim() ).filter( Boolean );
+	};
+	const [base] = git( [ "merge-base", "HEAD", "origin/main" ] );
+	const files = new Set( [
+		...git( [ "diff", "--name-only", base, "--", "apps/server" ] ),
+		...git( [ "ls-files", "--others", "--exclude-standard", "--", "apps/server" ] )
+	] );
+	const packages = new Set();
+	for ( const file of files ) {
+		if ( !file.endsWith( ".go" ) ) continue;
+		try {
+			statSync( path.join( rebuildRoot, file ) );
+		} catch {
+			continue; // deleted: its package's other files still count if changed
+		}
+		packages.add( "./" + path.posix.dirname( file.slice( "apps/server/".length ) ) );
+	}
+	return {
+		base,
+		packages: [ ...packages ].sort(),
+		goMod: files.has( "apps/server/go.mod" ) || files.has( "apps/server/go.sum" ),
+		lintTool: [ ...files ].some( isLintTool )
+	};
+}
+
+/*
+================
+scopeSteps
+
+The full step list, or under --changed its pre-push form (see the header):
+the package-wide steps narrowed to the changed packages, a whole-module
+build added first, and the steps the scope leaves to the full gate dropped.
+================
+*/
+function scopeSteps( steps ) {
+	if ( !changedScope ) return steps;
+	const changed = changedGoPackages();
+	console.log(
+		`server gates: changed scope since ${changed.base.slice( 0, 9 )}: ${changed.packages.length} packages`
+	);
+	if ( changed.packages.length === 0 ) return [];
+	const testPackages = [ ...new Set( [ ...changed.packages, "./internal/gates" ] ) ];
+	const raced = racePackages.filter( ( pkg ) => changed.packages.includes( pkg ) );
+	const scoped = [ { label: "build", command: "go", args: [ "build", "./..." ], select: () => true, keys: [] } ];
+	for ( const step of steps ) {
+		switch ( step.label ) {
+			case "tidy":
+				if ( changed.goMod ) scoped.push( step );
+				break;
+			case "tidy (lint tool)":
+				if ( changed.lintTool ) scoped.push( step );
+				break;
+			case "vet":
+				scoped.push( { ...step, args: [ "vet", ...changed.packages ] } );
+				break;
+			case "golangci-lint":
+				// Serialized: another session's lint run holds the cache lock.
+				scoped.push( {
+					...step,
+					args: [ ...step.args.slice( 0, -1 ), "--allow-serial-runners", ...changed.packages ]
+				} );
+				break;
+			case "tests":
+				scoped.push( { ...step, args: [ ...step.args.slice( 0, -1 ), ...testPackages ] } );
+				break;
+			case "race":
+				if ( raced.length ) {
+					scoped.push( { ...step, args: [ ...step.args.slice( 0, -racePackages.length ), ...raced ] } );
+				}
+				break;
+			case "gofmt":
+				scoped.push( step );
+				break;
+			default:
+				break; // govulncheck and the release contract: the full gate's
+		}
+	}
+	return scoped;
+}
+
+/*
+================
 selectSteps
 
 The steps a comma-separated label list names, in gate order; every step
@@ -324,6 +431,7 @@ stamp.
 async function wave( name, steps ) {
 	const waveStarted = performance.now();
 	const results = await Promise.all( steps.map( async ( step ) => {
+		if ( changedScope ) return runStep( step.label, step.command, step.args, step.accept );
 		const stampName = `server-${step.label.replace( /[^a-z0-9]+/gi, "-" )}`;
 		const key = fingerprintOf( moduleFiles, step.select, step.keys );
 		if ( findPass( stampName, key ) ) {

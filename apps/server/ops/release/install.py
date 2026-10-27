@@ -191,6 +191,7 @@ def monitor(version, config):
 		stalldump_settings = {"dir": config["stall_dumps"], "state": str(stalldump / "watch.json"),
 			"webhook": str(webhook), "label": config["shard"]}
 		install_file("/etc/opensro-release/stalldump.json", (json.dumps(stalldump_settings, indent=2) + "\n").encode())
+		stalldump_access(config["stall_dumps"], name)
 	for name in ("opensro-monitor.service", "opensro-monitor.timer", "opensro-stalldump.service", "opensro-stalldump.timer"):
 		body = (version / name).read_text().replace("@RELEASE_MODULES@", str(version))
 		install_file(Path("/etc/systemd/system") / name, body.encode())
@@ -198,6 +199,35 @@ def monitor(version, config):
 	subprocess.run(["systemctl", "enable", "--now", "opensro-monitor.timer"], check=True)
 	if "stall_dumps" in config:
 		subprocess.run(["systemctl", "enable", "--now", "opensro-stalldump.timer"], check=True)
+
+
+# ================
+# stalldump_access
+#
+# The stall-dump watch runs as opensro-monitor and reads the dumps the
+# GameWorld (user sro) writes under the shard authority. The authority is
+# mode 700, so without an explicit grant the watch cannot even traverse
+# it and every timer run dies with PermissionError - the failure this
+# step exists to prevent (seen live 2026-10-27: a named ACL entry for
+# the watcher sat under a zeroed mask, which a chmod to 700 produces).
+# The grant is the minimum the watch needs: traverse-only on each
+# existing ancestor that is not world-traversable, read on the dumps
+# directory, and a default ACL so dumps written later inherit read
+# access. Rewriting the entry also restores its mask. A directory that
+# does not exist yet (the GameWorld creates it on first start) is
+# skipped; the next control install completes the grant.
+# ================
+def stalldump_access(directory, user, run=subprocess.run):
+	directory = Path(directory)
+	if not directory.exists():
+		return
+	for ancestor in directory.parents:
+		if ancestor.exists() and not ancestor.stat().st_mode & 0o001:
+			run(["setfacl", "-m", "u:" + user + ":--x", str(ancestor)], check=True)
+	run(["setfacl", "-m", "u:" + user + ":r-x", str(directory)], check=True)
+	run(["setfacl", "-d", "-m", "u:" + user + ":r--", str(directory)], check=True)
+	for dump in sorted(directory.glob("tick-stall-*.txt")):
+		run(["setfacl", "-m", "u:" + user + ":r--", str(dump)], check=True)
 
 
 # ================
