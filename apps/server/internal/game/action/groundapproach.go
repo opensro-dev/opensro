@@ -44,13 +44,33 @@ func (rt *Runtime) RetireGroundApproach(divisionID, characterName string, revisi
 /*
 ================
 retireGroundApproaches
+
+The division lane is cached across consecutive stops of one division
+(#1820 D): after a stalled tick the queue can hold thousands of stops,
+and re-taking the lane (and the maintenance read gate inside it) for each
+one multiplied both the lock churn and the chances to be descheduled
+mid-drain. Range order is untouched, so stops retire in exactly the old
+sequence; only the redundant lane acquisitions between neighbours of
+the same division are gone.
 ================
 */
 func (rt *Runtime) retireGroundApproaches() {
+	division := ""
+	var unlock func()
+	release := func() {
+		if unlock != nil {
+			unlock()
+			unlock = nil
+		}
+	}
+	defer release()
 	rt.groundApproachStops.Range(func(key, value any) bool {
 		stop := value.(groundApproachStop)
-		unlock := rt.lockDivision(stop.division)
-		defer unlock()
+		if stop.division != division {
+			release()
+			unlock = rt.lockDivision(stop.division)
+			division = stop.division
+		}
 		// Forget and a newer terminal event may replace the queued owner while
 		// this drain waits for the action door. Never consume their replacement.
 		if !rt.groundApproachStops.CompareAndDelete(key, value) {

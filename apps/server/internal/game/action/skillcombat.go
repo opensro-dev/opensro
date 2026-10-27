@@ -36,8 +36,14 @@ type pendingSkillFinalize struct {
 	sourceGID     uint32
 	divisionID    string
 	characterName string
-	dueAtMs       int64
-	frame         wire.Frame
+	// ownerKey is simulation.WorldKey(divisionID, characterName), computed
+	// once at queue time: the tick's owner scans (snapshot, drain, chain
+	// brackets) walk this queue every tick and re-keying per entry per tick
+	// was pure allocation churn (#1820 D). The two fields above never
+	// change after queueing, so the cached key cannot go stale.
+	ownerKey string
+	dueAtMs  int64
+	frame    wire.Frame
 	// Presentation-only closes retain session ownership without blocking commands.
 	presentationOnly bool
 	// chainBracket marks the mode-2 close of a chain ROOT. The v1.150 client
@@ -682,6 +688,7 @@ func (rt *Runtime) queueSkillFinalize(
 		sourceGID:     sourceGID,
 		divisionID:    divisionID,
 		characterName: characterName,
+		ownerKey:      simulation.WorldKey(divisionID, characterName),
 		dueAtMs:       dueAtMs,
 		frame:         frame,
 	})
@@ -712,6 +719,7 @@ func (rt *Runtime) queueSkillCastClose(divisionID, characterName string, sourceG
 		sourceGID:     sourceGID,
 		divisionID:    divisionID,
 		characterName: characterName,
+		ownerKey:      simulation.WorldKey(divisionID, characterName),
 		dueAtMs:       closeAtMs,
 		frame:         wire.SkillCastFinalizeFrame(token),
 		chainBracket:  skill.ChainNext != 0,
@@ -735,8 +743,8 @@ func (rt *Runtime) queueDetachedCastClose(divisionID, characterName string, sour
 	}
 	rt.pendingSkillFinalizesMu.Lock()
 	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		divisionID: divisionID, characterName: characterName, sourceGID: sourceGID,
-		dueAtMs: closeAtMs, frame: wire.SkillCastFinalizeFrame(token), presentationOnly: true,
+		divisionID: divisionID, characterName: characterName, ownerKey: simulation.WorldKey(divisionID, characterName),
+		sourceGID: sourceGID, dueAtMs: closeAtMs, frame: wire.SkillCastFinalizeFrame(token), presentationOnly: true,
 	})
 	rt.pendingSkillFinalizesMu.Unlock()
 }
@@ -756,7 +764,7 @@ func (rt *Runtime) extendChainBracket(divisionID, characterName string, closeAtM
 	owner := simulation.WorldKey(divisionID, characterName)
 	for i := range rt.pendingSkillFinalizes {
 		pending := &rt.pendingSkillFinalizes[i]
-		if pending.chainBracket && simulation.WorldKey(pending.divisionID, pending.characterName) == owner {
+		if pending.chainBracket && pending.ownerKey == owner {
 			pending.dueAtMs = max(pending.dueAtMs, closeAtMs)
 		}
 	}
@@ -806,7 +814,7 @@ func (rt *Runtime) castingInstanceOpenLocked(ownerKey string) bool {
 		return true
 	}
 	for _, pending := range rt.pendingProjectileCasts {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) == ownerKey {
+		if pending.ownerKey == ownerKey {
 			return true
 		}
 	}
@@ -829,7 +837,7 @@ func (rt *Runtime) hasOpenSkillCast(divisionID, characterName string) bool {
 		return true
 	}
 	for _, pending := range rt.pendingSkillFinalizes {
-		if !pending.presentationOnly && simulation.WorldKey(pending.divisionID, pending.characterName) == ownerKey {
+		if !pending.presentationOnly && pending.ownerKey == ownerKey {
 			return true
 		}
 	}
@@ -857,7 +865,8 @@ func (rt *Runtime) clearSkillFinalizes(divisionID, characterName string) {
 	monsters := rt.pendingMonsterCasts[:0]
 	for _, pending := range rt.pendingMonsterCasts {
 		if !pending.selfEffect && simulation.WorldKey(pending.division, pending.characterName) == ownerKey {
-			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{sourceGID: pending.instance.Gid, divisionID: pending.division, characterName: monsterCastOwner(pending.instance.Gid), frame: wire.SkillCastFinalizeFrame(pending.token)})
+			name := monsterCastOwner(pending.instance.Gid)
+			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{sourceGID: pending.instance.Gid, divisionID: pending.division, characterName: name, ownerKey: simulation.WorldKey(pending.division, name), frame: wire.SkillCastFinalizeFrame(pending.token)})
 		} else {
 			monsters = append(monsters, pending)
 		}
@@ -865,14 +874,14 @@ func (rt *Runtime) clearSkillFinalizes(divisionID, characterName string) {
 	rt.pendingMonsterCasts = monsters
 	projectiles := rt.pendingProjectileCasts[:0]
 	for _, pending := range rt.pendingProjectileCasts {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) != ownerKey {
+		if pending.ownerKey != ownerKey {
 			projectiles = append(projectiles, pending)
 		}
 	}
 	rt.pendingProjectileCasts = projectiles
 	kept := rt.pendingSkillFinalizes[:0]
 	for _, pending := range rt.pendingSkillFinalizes {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) != ownerKey {
+		if pending.ownerKey != ownerKey {
 			kept = append(kept, pending)
 		}
 	}
@@ -898,17 +907,17 @@ func (rt *Runtime) openSkillCastOwnerSnapshot() map[string]bool {
 	rt.pendingSkillFinalizesMu.Lock()
 	defer rt.pendingSkillFinalizesMu.Unlock()
 
-	owners := make(map[string]bool, len(rt.pendingSkillFinalizes))
+	owners := make(map[string]bool, len(rt.pendingSkillFinalizes)+len(rt.currentSkillCommands)+len(rt.pendingProjectileCasts))
 	for _, pending := range rt.pendingSkillFinalizes {
 		if !pending.presentationOnly {
-			owners[simulation.WorldKey(pending.divisionID, pending.characterName)] = false
+			owners[pending.ownerKey] = false
 		}
 	}
 	for owner := range rt.currentSkillCommands {
 		owners[owner] = true
 	}
 	for _, pending := range rt.pendingProjectileCasts {
-		owners[simulation.WorldKey(pending.divisionID, pending.characterName)] = true
+		owners[pending.ownerKey] = true
 	}
 	return owners
 }
@@ -950,7 +959,7 @@ func (rt *Runtime) drainSelectedSkillFinalizes(nowMs int64, monstersOnly bool) [
 			kept = append(kept, pending)
 			continue
 		}
-		_, held := chains[simulation.WorldKey(pending.divisionID, pending.characterName)]
+		_, held := chains[pending.ownerKey]
 		if pending.dueAtMs > nowMs || (pending.chainBracket && held) {
 			kept = append(kept, pending)
 			continue

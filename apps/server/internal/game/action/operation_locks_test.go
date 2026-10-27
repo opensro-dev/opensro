@@ -114,6 +114,7 @@ func TestDivisionOperationLocksReleaseOnRecoveredTickPanic(t *testing.T) {
 	rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, pendingProjectileCast{
 		divisionID:    testDivision,
 		characterName: character.Name,
+		ownerKey:      simulation.WorldKey(testDivision, character.Name),
 		characterID:   character.ID,
 		token:         1,
 		releaseAtMs:   100,
