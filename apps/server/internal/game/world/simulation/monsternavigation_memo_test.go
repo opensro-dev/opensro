@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -64,6 +65,51 @@ func TestRouteMemoStationaryTargetSearchesOnce(t *testing.T) {
 	}
 	if got := ops.Navigation.Snapshot()["plan.chase.memo"]; got != 3 {
 		t.Fatalf("plan.chase.memo = %d, want 3", got)
+	}
+}
+
+// The failure record also keys the retained nav owner (design deviation
+// 1: the wired cave route starts from the owner's cell). A retry from the
+// same pose and goal under a different owner must search again - here the
+// wait itself drops the owner, which is exactly the production cave flow:
+// the record made under the deck owner never hits, one real search
+// re-records under the unresolved owner, and only then does the memo hit.
+func TestRouteMemoOwnerIsPartOfTheKey(t *testing.T) {
+	ops, instance, mover := routedFixture(t, monster.MoverChasing)
+	goal := mover.Pose
+	goal.X += 120
+	deck := worldgeom.NavOwner{Kind: worldgeom.NavOwnerObject, Object: worldgeom.NavObjectCell{Surface: 0x5B87, Object: 4, Cell: 2}}
+	rest := mover.Pose
+	mover.AdoptNavigation(monster.NewNavigationPath(rest, rest, rest, 0,
+		func(float64, monster.Pose) (float64, bool) { return 20, true }).
+		WithOwners([]worldgeom.NavOwnerSpan{{From: 0, To: 1, Owner: deck}}))
+	calls := 0
+	ops.PlanRoute = func(_ monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
+		calls++
+		return monster.UnresolvedNavigationRoute(to, monster.NavigationRouteBlocked)
+	}
+	ops.RouteMemo = func(from, goal monster.Pose) bool { return true }
+	ops.Navigation = &NavigationMetrics{}
+
+	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000)
+	if calls != 1 {
+		t.Fatalf("first failure: calls=%d, want 1", calls)
+	}
+	if _, owner, _, failed := mover.RouteFailure(); !failed || owner != deck {
+		t.Fatalf("recorded owner = %+v (failed %v), want the deck owner", owner, failed)
+	}
+	// Same pose, same goal, owner now unresolved: not a memo hit.
+	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 11000)
+	if calls != 2 {
+		t.Fatalf("retry under a different owner: calls=%d, want 2 (the owner is part of the key)", calls)
+	}
+	if _, owner, _, _ := mover.RouteFailure(); owner != (worldgeom.NavOwner{}) {
+		t.Fatalf("re-recorded owner = %+v, want unresolved", owner)
+	}
+	// The re-recorded failure answers the next retry.
+	mover, _ = ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 12000)
+	if calls != 2 || ops.Navigation.Snapshot()["plan.chase.memo"] != 1 {
+		t.Fatalf("third retry: calls=%d memo=%d, want 2/1", calls, ops.Navigation.Snapshot()["plan.chase.memo"])
 	}
 }
 
