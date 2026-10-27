@@ -18,7 +18,11 @@ import (
 TestTickHookTimesEveryStepByName
 
 A clock that advances past the slow threshold on every read makes each
-step slow, so the report lists every timed step in tick order.
+step slow, so the report lists every timed step in tick order. Each
+step's wait for the publication gate is timed first, under its own name
+(tickPublicationGate, #1820 E); advancePendingPickups is the exception -
+it takes the gate per pickup itself (publishPendingPickup), so no gate
+wait precedes it.
 ================
 */
 func TestTickHookTimesEveryStepByName(t *testing.T) {
@@ -31,11 +35,24 @@ func TestTickHookTimesEveryStepByName(t *testing.T) {
 	}
 	rt.Steps.Slow = func(name string, _ time.Duration) { names = append(names, name) }
 	rt.TickHook()(1_000_000)
-	if len(names) < 41 || names[0] != "retireGroundApproaches" || names[1] != "advanceResidentRegions" || names[len(names)-1] != "drainAnnouncements" {
+	if len(names) == 0 || names[0] != "tickPublicationGate" {
+		t.Fatalf("timed steps = %v", names)
+	}
+	var steps []string
+	for i, name := range names {
+		if name == "tickPublicationGate" {
+			continue
+		}
+		if name != "advancePendingPickups" && (i == 0 || names[i-1] != "tickPublicationGate") {
+			t.Fatalf("step %s was not preceded by its gate wait: %v", name, names)
+		}
+		steps = append(steps, name)
+	}
+	if len(steps) < 41 || steps[0] != "retireGroundApproaches" || steps[1] != "advanceResidentRegions" || steps[len(steps)-1] != "drainAnnouncements" {
 		t.Fatalf("timed steps = %v", names)
 	}
 	seen := map[string]bool{}
-	for _, name := range names {
+	for _, name := range steps {
 		if seen[name] {
 			t.Fatalf("step %s timed twice", name)
 		}

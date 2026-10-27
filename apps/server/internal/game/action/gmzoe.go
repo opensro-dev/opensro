@@ -41,7 +41,7 @@ func (rt *Runtime) KillGMZoe(division, name string, refObjID uint32, count uint8
 	if rt == nil || rt.deps == nil || rt.Monsters == nil {
 		return false
 	}
-	unlockPublication := rt.LockPublication(division)
+	unlockPublication := rt.LockPublication(division, "gmZoe")
 	defer unlockPublication()
 	unlock := rt.lockDivision(division)
 	defer unlock()

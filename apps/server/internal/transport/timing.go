@@ -236,6 +236,7 @@ type timingStats struct {
 	commit   TickCommitStats
 	slow     map[string]*SlowHookStats
 	slowDiv  map[string]*SlowHookStats
+	pubHolds map[string]*SlowHookStats
 }
 
 /*
@@ -345,12 +346,36 @@ func (h *Hub) RecordSlowStep(name string, elapsed time.Duration) {
 
 /*
 ================
+RecordPublicationHold
+
+One publication-gate hold at or above the slow threshold, under the
+label of the holder that kept it (action's LockPublication callers: an
+entry bootstrap, a request op, ...). It lands in publication_holds
+beside slow_hooks, so a tick step that merely waited on the gate can be
+told from the work that kept it - the wait itself is timed as the
+tickPublicationGate slow step.
+================
+*/
+func (h *Hub) RecordPublicationHold(label string, elapsed time.Duration) {
+	t := &h.metrics.timing
+	at, tick := time.Now(), h.tickCount()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureSlow()
+	countSlow(t.pubHolds, []SlowHook{{Name: label, Elapsed: elapsed}}, at, tick)
+}
+
+/*
+================
 timingStats.ensureSlow
 ================
 */
 func (t *timingStats) ensureSlow() {
 	if t.slow == nil {
 		t.slow, t.slowDiv = make(map[string]*SlowHookStats), make(map[string]*SlowHookStats)
+	}
+	if t.pubHolds == nil {
+		t.pubHolds = make(map[string]*SlowHookStats)
 	}
 }
 
@@ -394,5 +419,9 @@ func (t *timingStats) snapshotInto(m *Metrics) {
 	m.SlowDivisions = make(map[string]SlowHookStats, len(t.slowDiv))
 	for name, stats := range t.slowDiv {
 		m.SlowDivisions[name] = *stats
+	}
+	m.PublicationHolds = make(map[string]SlowHookStats, len(t.pubHolds))
+	for label, stats := range t.pubHolds {
+		m.PublicationHolds[label] = *stats
 	}
 }

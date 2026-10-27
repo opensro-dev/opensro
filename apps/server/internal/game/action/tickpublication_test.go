@@ -12,10 +12,13 @@ around its snapshot) is either wholly before or wholly after them (#713).
 package action
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -29,7 +32,7 @@ every batch keeps its order.
 */
 func TestSealTickPrivateCapturesUnderTheGate(t *testing.T) {
 	rt := &Runtime{}
-	rt.LockPublication("d")()
+	rt.LockPublication("d", "test")()
 	lane := rt.operations.lane("d", &rt.maintenance)
 	var captured []uint32
 	var delivered [][]wire.Frame
@@ -89,7 +92,7 @@ handlers and entry bootstraps are never left waiting on a finished tick.
 func TestTickHooksReleaseThePublicationGate(t *testing.T) {
 	rt, clock, _, _ := newCombatTestRuntime(t, 1)
 	// The tick takes every known lane; this one stands for any division.
-	rt.LockPublication("d")()
+	rt.LockPublication("d", "test")()
 	lane := rt.operations.lane("d", &rt.maintenance)
 	now := clock.Now().UnixMilli()
 	rt.MonsterActionTickHook()(now)
@@ -98,4 +101,52 @@ func TestTickHooksReleaseThePublicationGate(t *testing.T) {
 		t.Fatal("a tick hook kept the publication gate")
 	}
 	lane.publication.Unlock()
+}
+
+/*
+================
+TestTickHookTimesThePublicationGateWait
+
+While another holder keeps the publication gate, the tick cannot start a
+step; that wait is reported as its own slow step (tickPublicationGate),
+not charged to the step that was about to run (#1820 E).
+================
+*/
+func TestTickHookTimesThePublicationGateWait(t *testing.T) {
+	rt, clock, _, _ := newCombatTestRuntime(t, 1)
+	var mu sync.Mutex
+	var steps []string
+	rt.Steps.Slow = func(name string, elapsed time.Duration) {
+		mu.Lock()
+		steps = append(steps, name)
+		mu.Unlock()
+	}
+	unlock := rt.LockPublication(testDivision, "test")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rt.TickHook()(clock.Now().UnixMilli())
+	}()
+	wait.Consistently(t, 500*time.Millisecond, "the tick waits on the publication gate", func() bool {
+		select {
+		case <-done:
+			return false
+		default:
+			return true
+		}
+	})
+	unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tick did not finish after the gate was released")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, name := range steps {
+		if name == "tickPublicationGate" {
+			return
+		}
+	}
+	t.Fatalf("slow steps = %v, want tickPublicationGate among them", steps)
 }
