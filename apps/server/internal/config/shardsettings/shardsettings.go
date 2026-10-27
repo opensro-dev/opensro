@@ -156,6 +156,9 @@ var Settings = []Setting{
 	// the new ticket's end later (#1624, port-only, not native; "off"
 	// refuses a second ticket while one runs).
 	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
+	// Owner, 2026-10-27: the name-change scroll (#1689, port-only, not
+	// native; "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_NAME_CHANGE_SCROLL", NomadVar: "name_change_scroll", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).

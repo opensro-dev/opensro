@@ -226,3 +226,79 @@ test("world incidents carry the admitted region and a 401 transport-token refusa
 	const finalState = session.step( 16000 );
 	assert.equal( finalState === null || finalState.phase === "disconnected", true );
 });
+
+test("a refused entry files its incident with the entering character", async t => {
+	/** @type {any} */
+	let socket;
+	const reports = [];
+	class Socket {
+		static OPEN = 1;
+		readyState = 1;
+		bufferedAmount = 0;
+		/** @type {(( event: { data: ArrayBuffer; } ) => void) | undefined} */
+		onmessage;
+		constructor() {
+			socket = this;
+		}
+		send() {}
+		close() {}
+		receive( op, payload ) {
+			const bytes = new Uint8Array( payload.length + 2 );
+			new DataView( bytes.buffer ).setUint16( 0, op, true );
+			bytes.set( payload, 2 );
+			this.onmessage?.( { data: bytes.buffer } );
+		}
+	}
+	const descriptor = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
+	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true } );
+	t.after( () => {
+		if ( descriptor ) Object.defineProperty( globalThis, "WebSocket", descriptor );
+		else Reflect.deleteProperty( globalThis, "WebSocket" );
+	} );
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( body );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( url.endsWith( "/title/login" ) ? response : { ok: true, token: "fixture-ticket" } );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( command );
+	session.step( 0 );
+	await settle();
+	session.step( 1 );
+	session.command( { kind: "enter-world", character: "fixture" } );
+	await settle();
+	session.step( 2 );
+	defined( socket ).onopen();
+	const welcome = new Uint8Array( 27 );
+	welcome[0] = 2;
+	welcome[10] = 16;
+	welcome.fill( 7, 11 );
+	defined( socket ).receive( 2, welcome );
+	session.step( 3 );
+	await settle();
+	// The EnterWorld result refuses the entry (its first byte is not 1):
+	// the session bounces back to character select with the name cleared
+	// from the published state (#1855).
+	defined( socket ).receive( 7, new Uint8Array( 9 ) );
+	const bounced = session.step( 4 );
+	await settle();
+	assert.equal( bounced?.phase, "character-select" );
+	assert.equal( bounced?.character, undefined );
+	assert.match( String( bounced?.error ), /EnterWorld rejected/ );
+	session.command( {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "world_entry_rejected",
+		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0"
+	} );
+	session.step( 5 );
+	await settle();
+	// The world files its own failure incident as well; the frontend's
+	// rejection report is the one triage matches by character (#1855).
+	const rejection = reports.find( report => report.code === "world_entry_rejected" );
+	assert.equal( rejection?.character, "fixture" );
+});

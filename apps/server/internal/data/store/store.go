@@ -213,6 +213,11 @@ type Store struct {
 	camps       map[string]map[int64]domain.TrainingCampRecord
 	campMembers map[string]map[int64][]domain.TrainingCampMemberRecord
 
+	// nameReservations is the held-name plane (the name_reservations
+	// table): division -> lower-cased name -> the reservation row. The
+	// dirty unit is one row, written inside the rename transaction.
+	nameReservations map[string]map[string]NameReservation
+
 	charDivision map[*domain.Character]string
 	changes      changeSet
 	ground       groundState
@@ -473,6 +478,10 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.campMembers = loaded.campMembers
 	if s.campMembers == nil {
 		s.campMembers = map[string]map[int64][]domain.TrainingCampMemberRecord{}
+	}
+	s.nameReservations = loaded.nameReservations
+	if s.nameReservations == nil {
+		s.nameReservations = map[string]map[string]NameReservation{}
 	}
 	s.meta = loaded.meta
 	if s.meta.NextCharID == nil {

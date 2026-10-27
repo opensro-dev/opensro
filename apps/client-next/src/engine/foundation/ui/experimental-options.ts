@@ -176,9 +176,11 @@ export interface ExperimentalOptions {
 	// (70C550). Off unless turned on.
 	readonly transportAutoPotion: boolean;
 	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
-	// first and fall back to the WebSocket when the path fails. Off unless
-	// turned on: the WebSocket stays the default until #1450's
-	// measurements say otherwise. Applies from the next connect.
+	// first and fall back to the WebSocket when the path fails. On unless
+	// turned off (#1451 step 3): WebTransport is the
+	// default connect and the one bounded attempt remembers a failed QUIC
+	// path for the session, so off stays one setting away for anyone whose
+	// path cannot carry it. Applies from the next connect.
 	readonly webTransport: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
 	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
@@ -363,7 +365,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -417,7 +419,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),
-		webTransport: enabled( "webTransport" ),
+		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
@@ -433,18 +435,26 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 	};
 }
 
-// Where the preferences are kept (the platform saves them).
-export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+// Where the preferences are kept (the platform saves them). The key's
+// version bumped with the WebTransport default flip (#1451 step 3): a
+// record saved under the previous key carries the old explicit default
+// for that row, so it migrates on read without its webTransport value
+// and the new default reaches every saved profile. A choice stored
+// under the current key is kept as written.
+export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
+export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
 
 /*
 ================
 storedExperimentalOptions
 
 The saved preferences from storage, or the defaults when there are none or
-they cannot be read. The platform owns saving them; an owner that must act
-before the platform starts (the asset worker's texture variant) reads them
-here. Throws only for a stored value that is not JSON, which the platform
-reports.
+they cannot be read. A record found only under the previous key migrates
+without its webTransport value (see the key above); the platform's next
+save writes the current key and retires the old one. The platform owns
+saving them; an owner that must act before the platform starts (the asset
+worker's texture variant) reads them here. Throws only for a stored value
+that is not JSON, which the platform reports.
 ================
 */
 export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | undefined ): {
@@ -452,7 +462,20 @@ export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | u
 	readonly raw: unknown;
 } {
 	const stored = storage?.getItem( EXPERIMENTAL_STORAGE_KEY ) ?? null;
-	const raw = stored === null ? null : JSON.parse( stored );
+	if ( stored !== null ) {
+		const raw: unknown = JSON.parse( stored );
+		return { options: experimentalOptions( raw ), raw };
+	}
+	const previous = storage?.getItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY ) ?? null;
+	if ( previous === null ) {
+		return { options: experimentalOptions(), raw: null };
+	}
+	const parsed: unknown = JSON.parse( previous );
+	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
+		return { options: experimentalOptions( parsed ), raw: parsed };
+	}
+	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
+	delete raw.webTransport;
 	return { options: experimentalOptions( raw ), raw };
 }
 
