@@ -47,8 +47,8 @@ const (
 	gradeTitan        = 5
 	gradeElite        = 6
 	gradeSeven        = 7
-	// largeMonsterDamageFactor is the double 1.5 (0xB45D78), and
-	// gradeSevenDamageFactor the double 1.7999999523 (0xB45F80).
+	// largeMonsterDamageFactor is the reference server's damage-scale
+	// double 1.5, and gradeSevenDamageFactor its double 1.7999999523.
 	largeMonsterDamageFactor = 1.5
 	gradeSevenDamageFactor   = 1.7999999523162842
 )

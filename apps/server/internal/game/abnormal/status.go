@@ -52,7 +52,7 @@ const (
 // SlotCount is the block's fixed slot array (the server initialises 0x20 slots).
 const SlotCount = 32
 
-// Bit is g_adwAbnormalStatusBit (C63EC8): identity except slots 2 and 3,
+// Bit is the server's abnormal-status bit table: identity except slots 2 and 3,
 // which swap so burn is mask bit 3 and electric shock mask bit 2.
 /*
 ================

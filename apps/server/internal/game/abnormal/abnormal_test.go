@@ -264,7 +264,7 @@ TestBitsSwapBurnAndShock
 */
 func TestBitsSwapBurnAndShock(t *testing.T) {
 	if Burn.Bit() != 8 || ElectricShock.Bit() != 4 || Stun.Bit() != 0x4000 || TimeBomb.Bit() != 0x1000000 {
-		t.Fatal("g_adwAbnormalStatusBit mapping lost")
+		t.Fatal("abnormal status bit mapping lost")
 	}
 	if Freeze.Category() != 1 || Burn.Category() != 1 || Bleeding.Category() != 2 || Dark.Category() != 2 {
 		t.Fatal("category mismatch with the native status category table")
@@ -597,9 +597,9 @@ func TestGradesFollowClientMask(t *testing.T) {
 ==================
 TestBurnTableAbsorptionAndDuration
 
-Vectors carried over from the former monster.Burn port: C63C94 level
-damage absorbed by magical parry (param 8), and the 750 ms-per-level
-lifetime ending strictly after its deadline.
+Vectors carried over from the former monster.Burn port: the server's burn
+rate table's level damage absorbed by magical parry (param 8), and the
+750 ms-per-level lifetime ending strictly after its deadline.
 ==================
 */
 func TestBurnTableAbsorptionAndDuration(t *testing.T) {

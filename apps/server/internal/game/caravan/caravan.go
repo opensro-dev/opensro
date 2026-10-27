@@ -54,7 +54,7 @@ const (
 	traderJob = 1
 )
 
-// tierThresholds is g_dwTradeTierThresholds (C826C0); index 5 caps.
+// tierThresholds is the server's trade tier threshold table; index 5 caps.
 var tierThresholds = [...]uint32{0, 408, 918, 1428, 2142, math.MaxUint32}
 
 /*

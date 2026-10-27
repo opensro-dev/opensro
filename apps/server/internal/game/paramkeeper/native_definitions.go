@@ -2,8 +2,8 @@
 
 package paramkeeper
 
-// NativeDefinition is the CParam definition table the native loader (4B3960)
-// reads from C64110: every parameter the server keeps, 20-byte records of
+// NativeDefinition is the CParam definition table the native loader reads
+// from its definition table: every parameter the server keeps, 20-byte records of
 // id, minimum, maximum, fallback base and ignore sentinel.
 func NativeDefinition(id uint16) (Definition, bool) {
 	switch id {

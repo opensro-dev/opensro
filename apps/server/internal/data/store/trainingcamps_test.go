@@ -431,7 +431,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	}
 
 	// Student 1 (joinLevel=10) graduates voluntarily with satisfaction 4 (Very Satisfied):
-	// Master honor = 40-10 = 30, camp evaluation = +5 (0x00ADE9A4[4]), GraduateCount = 1, Rank = 1 (ranking 1 <= 5).
+	// Master honor = 40-10 = 30, camp evaluation = +5 (the reference server's satisfaction ladder -3, -1, 1, 3, 5 at index 4), GraduateCount = 1, Rank = 1 (ranking 1 <= 5).
 	grad1 := s.TrainingCamps().Graduate(testDivision, student1.ID, 4, now0+10_000)
 	if grad1.Refusal != domain.TrainingCampGraduateAccepted || !grad1.AwardedExp ||
 		grad1.Camp.GraduateCount != 1 || grad1.Camp.EvaluationPoints != 5 || grad1.Camp.EvaluationRank != 1 ||
