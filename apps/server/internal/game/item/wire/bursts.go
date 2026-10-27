@@ -11,8 +11,9 @@ import "opensro.online/server/internal/domain"
 //
 // THE PICKUP-DESPAWN TIMING CONTRACT (bug B, closed as verified-native):
 // the 0x36AB despawn rides the SAME burst as the 0x35C7 scoop trigger and the
-// 0xB06D grant. That is the native trigger - retail-family SR_GameServer
-// sub_526090 sends the anim inline in its success tail and the despawn rides
+// 0xB06D grant. That is the native trigger - the retail-family server's
+// pickup executor sends the anim inline in its success tail and the
+// despawn rides
 // the item's world-removal in the same grant window. The 0.5-1s of visible
 // linger after the scoop is the CLIENT's own dissolve: CIItem despawn
 // (sub_86e980) arms a fixed 1.5s CIDecoDisappear fade (data_bd5144 = 1.5f,
@@ -73,9 +74,9 @@ func ProgressionPrivateFrames(frames []Frame) []Frame {
 	return private
 }
 
-// Every pickup outcome ends with the 0xB2CD release. Native
-// CGCharAutoCommandActor_OnActionFinish (v1.188 4AD390) sends B074 only
-// after the queued pickup action ran its item move and despawn, so the
+// Every pickup outcome ends with the 0xB2CD release. The server's
+// auto-command finish sends B074 only after the queued pickup action ran
+// its item move and despawn, so the
 // client keeps the drop claimed until the outcome has been applied. A
 // release sent first let a pickup-key press between it and the despawn ask
 // again for the drop the same burst had just granted.
@@ -109,8 +110,8 @@ func PickupApproachArmFrame() Frame {
 // A gold heap is always consumed whole, so the despawn is unconditional. The
 // 0xFE result already prints UIIT_MSG_STATE_GAIN_GOLD for the whole heap
 // (client CPSMission_ApplyInventoryOperation), so a solo credit refreshes
-// the balance silently (server 4EAD12 pushes notify 0). notify is set only
-// when a party split credited this recipient (CParty_DistributeGold).
+// the balance silently (the server's gold credit pushes notify 0). notify
+// is set only when a party split credited this recipient.
 func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemGid uint32, notify bool) []Frame {
 	return []Frame{
 		{Opcode: OpPickupAnim, Payload: anim.Encode()},

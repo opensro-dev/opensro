@@ -3,7 +3,7 @@ package wire
 import "fmt"
 
 // Client 776600 is registered as B5ED in v1.150. The research server's
-// analogous 59AFF0 uses a different opcode. This packet is private to the
+// analogous packet uses a different opcode. This packet is private to the
 // source character; GID names the subject, not the effect's owning character.
 const OpSourceEffect uint16 = 0xB5ED
 

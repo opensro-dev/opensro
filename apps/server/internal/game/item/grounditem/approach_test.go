@@ -104,8 +104,8 @@ func TestPlanApproachExecutesWithinRange(t *testing.T) {
 	}
 }
 
-// The measured native range: SR_GameServer sub_526090's single global float
-// 10.0, compared inclusively. A gap just past it walks.
+// The measured native range: the server pickup executor's single global
+// float 10.0, compared inclusively. A gap just past it walks.
 func TestExecuteRangeIsTheMeasuredTenUnits(t *testing.T) {
 	if ExecuteRange != 10.0 {
 		t.Fatalf("ExecuteRange = %v, want the measured 10.0", ExecuteRange)

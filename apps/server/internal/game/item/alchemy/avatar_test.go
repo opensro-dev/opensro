@@ -3,8 +3,8 @@
 
 avatar_test.go - the smith's avatar magic option grant
 
-Expectations follow CBless_AvatarItemWithNPC (505810/5079C0) and the
-v1.150 magicoption rows for avatar parts: STR is 1..1, HP 150..150.
+Expectations follow the native avatar bless and the v1.150
+magicoption rows for avatar parts: STR is 1..1, HP 150..150.
 
 ===========================================================================
 */

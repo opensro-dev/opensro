@@ -3,11 +3,11 @@
 
 stall.go - the street stalls of every division
 
-Package stall owns who keeps a stall, what lies on it and who is looking
-(CStallManager / CFleaMarket in the GameServer). A stall has ten slots
-(CFleaMarket 472E20 refuses slot >= 10), a title and a greeting of at
-most 64 characters (471D90, 472E20 cases 5 and 6), an open flag (case
-4: visitors may buy only while it is open) and a mode byte (case 3, < 3).
+Package stall owns who keeps a stall, what lies on it and who is
+looking (the server's stall registry). A stall has ten slots (a create
+or modify naming slot >= 10 is refused), a title and a greeting of at
+most 64 characters (modify cases 5 and 6), an open flag (case 4:
+visitors may buy only while it is open) and a mode byte (case 3, < 3).
 A slot names one bag slot of the owner, the quantity on offer and its
 price; the items stay in the owner's bag until a buyer takes them, so a
 sale re-reads the bag. Stalls opened while the stall network is chosen
@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	// Slots is CFleaMarket's slot count (472E20: slot < 0xA).
+	// Slots is the server flea market's slot count (slot < 0xA).
 	Slots = 10
-	// TextLimit is the title and greeting cap (471D90, 472E20).
+	// TextLimit is the title and greeting cap in the server's stall reads.
 	TextLimit = 64
-	// ModeLimit bounds the mode byte (472E20 case 3: < 3).
+	// ModeLimit bounds the mode byte (the modify action's case 3: < 3).
 	ModeLimit = 3
 )
 
@@ -220,7 +220,7 @@ func (r *Registry) Visiting(divisionID, name string) (string, bool) {
 Participants
 
 Everyone at the stall a player keeps or stands at, owner first
-(CFleaMarket's participant list, server 473C60); false when the player is
+(the native stall's participant list); false when the player is
 at no stall.
 ================
 */

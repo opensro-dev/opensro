@@ -9,6 +9,7 @@ input supersedes it. A branch commit is never an implicit production release.
 ===========================================================================
 """
 
+from fnmatch import fnmatchcase
 from pathlib import Path
 import subprocess
 import tempfile
@@ -93,6 +94,62 @@ class PlanTests(unittest.TestCase):
 		with self.assertRaises(subprocess.CalledProcessError):
 			require_current("client", branch, self.root)
 
+	# ================
+	# test_a_variant_tool_change_invalidates_the_client_candidate
+	#
+	# The variant tools are client inputs by family pattern (#1745): a
+	# tool the list never named (alexandria_shop_d11.py, from #1792)
+	# supersedes a client candidate the day it changes.
+	# ================
+	def test_a_variant_tool_change_invalidates_the_client_candidate(self):
+		for name in ("scripts/alexandria_shop_d11.py", "scripts/cap110_items.py",
+			"scripts/import_vsro_item_glow.py", "scripts/build_alexandria_variant.py",
+			"scripts/vsro_archive_pins.json"):
+			with self.subTest(path=name):
+				previous = git(["rev-parse", "HEAD"], self.root)
+				self.commit(name, "variant tool change in " + name)
+				with self.assertRaisesRegex(ValueError, "superseded"):
+					require_current("client", previous, self.root)
+				require_current("server", previous, self.root)
+
+
+
+# ================
+# VariantInputTests
+#
+# Every variant tool on disk is a client input (#1745). The family is
+# defined here once, by the same shape the INPUTS patterns name; a new
+# family member that no pattern covers fails this test instead of
+# silently superseding nothing.
+# ================
+class VariantInputTests(unittest.TestCase):
+	# ================
+	# variant_family
+	# ================
+	def variant_family(self):
+		scripts = Path(__file__).resolve().parents[4] / "scripts"
+		family = []
+		for path in sorted(scripts.iterdir()):
+			name = path.name
+			if name in ("build_alexandria_variant.py", "vsro_archive_pins.json"):
+				family.append(name)
+			elif path.suffix == ".py" and name.startswith(("alexandria_", "cap110_", "import_vsro_")):
+				family.append(name)
+		return family
+
+	# ================
+	# test_every_variant_tool_is_a_client_input
+	# ================
+	def test_every_variant_tool_is_a_client_input(self):
+		family = self.variant_family()
+		self.assertIn("build_alexandria_variant.py", family)
+		self.assertIn("vsro_archive_pins.json", family)
+		inputs = plan.INPUTS["client"]
+		for name in family:
+			candidate = "scripts/" + name
+			self.assertTrue(
+				any(fnmatchcase(candidate, entry) for entry in inputs),
+				f"{candidate} is a variant tool but no client input covers it")
 
 
 # build_plan reads the compatibility contract at this path under the checkout

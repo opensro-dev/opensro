@@ -83,7 +83,7 @@ func TestBootstrapRehydratesCosBeforeObjectListAndRideAfterFinalize(t *testing.T
 		t.Fatalf("B4B5 length = %d, want %d", len(gotRide), len(wantRide))
 	}
 	for index, want := range wantRide {
-		if gotRide[index] != int(want) {
+		if gotRide[index] != want {
 			t.Fatalf("B4B5[%d] = 0x%02X, want 0x%02X", index, gotRide[index], want)
 		}
 	}

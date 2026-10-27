@@ -7,7 +7,7 @@ import (
 )
 
 // ----------------------------------------------------------------------------
-// Test 1: Zero RecordID rejection in GetSplitEligibility (0x004B9D40)
+// Test 1: Zero RecordID rejection in GetSplitEligibility
 // ----------------------------------------------------------------------------
 func TestGetSplitEligibilityZeroRecordIDRejection(t *testing.T) {
 	inv := New([]Item{
@@ -24,7 +24,7 @@ func TestGetSplitEligibilityZeroRecordIDRejection(t *testing.T) {
 		Quantity: 5,
 	}
 
-	// Target item has RecordID == 0 -> native 004B9D40 MUST reject!
+	// Target item has RecordID == 0 -> the native check MUST reject!
 	eligible := inv.GetSplitEligibility(13, incoming, 50)
 	if eligible != 0 {
 		t.Fatalf("expected 0 eligible for zero RecordID, got %d", eligible)
@@ -39,7 +39,7 @@ func TestGetSplitEligibilityZeroRecordIDRejection(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Test 2: SplitItem with unpersisted identity and sequential allocation (0x004B9C60)
+// Test 2: SplitItem with unpersisted identity and sequential allocation
 // ----------------------------------------------------------------------------
 func TestSplitItemIdentityAndRollback(t *testing.T) {
 	inv := New([]Item{
@@ -93,7 +93,7 @@ func TestSplitItemIdentityAndRollback(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Test 3: ReconcileCosParamEntries native semantics (0x004BA940)
+// Test 3: ReconcileCosParamEntries native semantics
 // ----------------------------------------------------------------------------
 func TestReconcileCosParamEntriesNativeSemantics(t *testing.T) {
 	inv := New([]Item{

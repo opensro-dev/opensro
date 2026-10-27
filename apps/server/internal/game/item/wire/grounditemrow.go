@@ -46,14 +46,14 @@ func IsMonsterCapsule(typeFlags uint16) bool {
 }
 
 // IsCosSummoner is the client's 550170 (TID 3.2.1, the pet flutes and
-// scrolls). Its body is the RefObjID and CGItemCOSSummoner's record
-// (492D40): u8 1 when no pet was ever made from it, else the pet's state,
+// scrolls). Its body is the RefObjID and the native summoner record:
+// u8 1 when no pet was ever made from it, else the pet's state,
 // RefObj, name and timers, which this server does not keep per item.
 func IsCosSummoner(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x40 && typeFlags&0x780 == 0x80
 }
 
-// cosSummonerNoRecord is 492D40's byte for a summoner without a pet.
+// cosSummonerNoRecord is the native byte for a summoner without a pet.
 const cosSummonerNoRecord = 1
 
 // UsesIndexedMagicParams is the exact sub_550870 predicate. Gacha result
@@ -102,9 +102,9 @@ const (
 )
 
 // IsGoldHeap reports a gold heap (TID 3.3.5.0, ITEM_ETC_GOLD_*): the gold
-// band without the shop tokens, which v1.188 excludes the same way in
-// CGItem_IsGold (483159..483163) and CInstanceItem_Serialize_Helper
-// (42FE3B..42FE45). Native v1.150 data has no tokens, so the two agree there.
+// band without the shop tokens, which v1.188 excludes the same way in its
+// gold test and its instance serializer. Native v1.150 data has no tokens,
+// so the two agree there.
 func IsGoldHeap(typeFlags uint16) bool {
 	return IsGoldBand(typeFlags) && typeFlags&tid4Mask != shopTokenTID
 }
@@ -123,7 +123,7 @@ type GroundItemRow struct {
 	// Codename is the registry's own bookkeeping; it is not on the wire.
 	Codename string
 	// OwnerLabel is the IsCodenameBand string: a trade goods drop's original
-	// job alias (the goods record's owner, 490930), empty otherwise.
+	// job alias (the goods record's owner), empty otherwise.
 	OwnerLabel string
 	// GoldAmount is only carried by IsGoldBand rows.
 	GoldAmount uint32

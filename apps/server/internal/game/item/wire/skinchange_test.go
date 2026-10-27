@@ -30,8 +30,8 @@ func TestSkinChangeBody(t *testing.T) {
 	if !bytes.Equal(got, concat(u32le(0x01020304), u32le(1933))) {
 		t.Fatalf("0x323A body %x", got)
 	}
-	// 4F0320 / 4DD6B0: a player skin adds the record byte and only the
-	// worn slots that hold an item.
+	// The server's duplicate-skin fill: a player skin adds the record byte
+	// and only the worn slots that hold an item.
 	player := SkinChange{GID: 7, Skin: TransformSkin{RefObjID: 1907, Player: true, Shape: 4, Equipment: [9]uint32{0, 3643, 0, 0, 0, 0, 107}}}.Encode()
 	if want := concat(u32le(7), u32le(1907), []byte{4, 2}, u32le(3643), u32le(107)); !bytes.Equal(player, want) {
 		t.Fatalf("player skin %x, want %x", player, want)

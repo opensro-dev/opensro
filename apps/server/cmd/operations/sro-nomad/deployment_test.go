@@ -423,33 +423,43 @@ func TestValidateWebTransportPostureRefusesHalfPostures(t *testing.T) {
 			TransportURL: "https://localhost/transport/ws",
 		},
 	}
+	on := func(wtAddr string, publicPort int) webTransportPosture {
+		return webTransportPosture{Public: true, WTAddr: wtAddr, PublicPort: publicPort}
+	}
+	other := func(url string) []shardDeployment {
+		return []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: url}}}
+	}
 	for name, tt := range map[string]struct {
 		certificate *transport.Certificate
-		public      bool
-		wtAddr      string
+		posture     webTransportPosture
 		shards      []shardDeployment
 		wantErr     string
 	}{
-		"off without a bind":           {nil, false, "", []shardDeployment{game}, ""},
-		"off with a bind":              {nil, false, "203.0.113.7:443", []shardDeployment{game}, "SRO_WEBTRANSPORT_PUBLIC is off"},
-		"on without a pair":            {nil, true, "203.0.113.7:443", []shardDeployment{game}, "no production TLS pair"},
-		"on without a bind":            {certificate, true, "", []shardDeployment{game}, "-transport-wt-addr is required"},
-		"on with a malformed bind":     {certificate, true, "garbage", []shardDeployment{game}, "must be a host:port"},
-		"on with an anonymous bind":    {certificate, true, ":443", []shardDeployment{game}, "must be a host:port"},
-		"on with an impossible port":   {certificate, true, "203.0.113.7:99999", []shardDeployment{game}, "invalid port"},
-		"on with a matching posture":   {certificate, true, "203.0.113.7:443", []shardDeployment{game}, ""},
-		"advertised port must match":   {certificate, true, "203.0.113.7:8443", []shardDeployment{game}, "advertises WebTransport on port 443"},
-		"advertised route must be WT":  {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "https://localhost/"}}}, "must end /transport/ws"},
-		"advertised URL must be https": {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "http://localhost/transport/ws"}}}, "absolute HTTPS URL"},
-		"certificate must cover host":  {certificate, true, "203.0.113.7:443", []shardDeployment{{Definition: shard.Definition{ID: "global-official", TransportURL: "https://play.example.com/transport/ws"}}}, "does not cover"},
+		"off without a bind":              {nil, webTransportPosture{}, []shardDeployment{game}, ""},
+		"off with a bind":                 {nil, webTransportPosture{WTAddr: "203.0.113.7:443"}, []shardDeployment{game}, "SRO_WEBTRANSPORT_PUBLIC is off"},
+		"off with a public port":          {nil, webTransportPosture{PublicPort: 443}, []shardDeployment{game}, "-transport-wt-public-port 443 names a public port"},
+		"on without a pair":               {nil, on("203.0.113.7:443", 0), []shardDeployment{game}, "no production TLS pair"},
+		"on without a bind":               {certificate, on("", 0), []shardDeployment{game}, "-transport-wt-addr is required"},
+		"on with a malformed bind":        {certificate, on("garbage", 0), []shardDeployment{game}, "must be a host:port"},
+		"on with an anonymous bind":       {certificate, on(":443", 0), []shardDeployment{game}, "must be a host:port"},
+		"on with an impossible port":      {certificate, on("203.0.113.7:99999", 0), []shardDeployment{game}, "invalid port"},
+		"on with an impossible public":    {certificate, on("203.0.113.7:18443", 70000), []shardDeployment{game}, "-transport-wt-public-port 70000 is not a port"},
+		"on with a matching posture":      {certificate, on("203.0.113.7:443", 0), []shardDeployment{game}, ""},
+		"redirected public port matches":  {certificate, on("[::]:18443", 443), []shardDeployment{game}, ""},
+		"redirected to the IPv4 wildcard": {certificate, on("0.0.0.0:18443", 443), []shardDeployment{game}, ""},
+		"redirected to one address":       {certificate, on("203.0.113.7:18443", 443), []shardDeployment{game}, "must bind an unspecified host"},
+		"redirected to loopback":          {certificate, on("127.0.0.1:18443", 443), []shardDeployment{game}, "must bind an unspecified host"},
+		"redirected to a hostname":        {certificate, on("localhost:18443", 443), []shardDeployment{game}, "must bind an unspecified host"},
+		"no redirect keeps any host":      {certificate, on("203.0.113.7:443", 443), []shardDeployment{game}, ""},
+		"advertised port must match":      {certificate, on("203.0.113.7:8443", 0), []shardDeployment{game}, "advertises WebTransport on port 443, but clients reach port 8443"},
+		"redirect must reach advertised":  {certificate, on("[::]:18443", 8443), []shardDeployment{game}, "clients reach port 8443"},
+		"high bind needs the redirect":    {certificate, on("203.0.113.7:18443", 0), []shardDeployment{game}, "clients reach port 18443"},
+		"advertised route must be WT":     {certificate, on("203.0.113.7:443", 0), other("https://localhost/"), "must end /transport/ws"},
+		"advertised URL must be https":    {certificate, on("203.0.113.7:443", 0), other("http://localhost/transport/ws"), "absolute HTTPS URL"},
+		"certificate must cover host":     {certificate, on("203.0.113.7:443", 0), other("https://play.example.com/transport/ws"), "does not cover"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := validateWebTransportPosture(
-				tt.certificate,
-				tt.public,
-				tt.wtAddr,
-				tt.shards,
-			)
+			err := validateWebTransportPosture(tt.certificate, tt.posture, tt.shards)
 			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("posture error = %v, want nil", err)
