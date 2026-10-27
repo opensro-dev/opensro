@@ -1053,9 +1053,22 @@ variable "cpu" {
   default = 6000
 }
 
+# The live shard keeps about 560 MB of heap and 970 MB of runtime memory
+# (2026-10-28, #1943). At 1024 the soft limit below (768MiB) sat under
+# that: the collector ran about once a second, its assists and write
+# barriers landing on the tick, with RSS 800 MB of a 1024 MB cgroup.
+# 3072 gives a 2304MiB soft limit and room for GOGC below to work.
 variable "memory_mb" {
   type    = number
-  default = 1024
+  default = 3072
+}
+
+# GOGC for the GameWorld (owner decision 2026-10-28, #1943): 200 lets
+# the heap grow to three times the live set between collections, half
+# as many cycles as Go's default 100, still bounded by GOMEMLIMIT.
+variable "gogc" {
+  type    = string
+  default = "200"
 }
 
 # sro-nomad replaces __SHARD_ID__ with the validated catalog ID before
@@ -1167,6 +1180,7 @@ job "sro-gameworld-__SHARD_ID__" {
         # references): the collector then ran almost without pause and took
         # 82% of 3.6 cores with one player online.
         GOMEMLIMIT                              = "${floor(var.memory_mb * 3 / 4)}MiB"
+        GOGC                                    = var.gogc
         SRO_SHARD_CATALOG_PATH                  = var.catalog_path
         SRO_SHARD_ID                            = var.shard_id
         SRO_AGENT_URL_REQUIRE                   = "1"
