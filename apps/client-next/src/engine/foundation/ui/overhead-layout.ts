@@ -5,6 +5,8 @@ overhead-layout.ts - the rows stacked over a character's name
 
 The guild or companion-owner row, the vitals (quick status), the fortress
 mark and crest, and a stall's title; speech rises above the highest row.
+withoutBoardPass is the same stack with the /id byte clear: only the stall
+title and speech board remain.
 
 ===========================================================================
 */
@@ -23,6 +25,8 @@ const COMPANION_OWNER_Y = -20;
 // 854B95..854C02's tid-word gates: low byte 0xC6 and band 5 (server's
 // MercenaryBand): every guild soldier reference carries this one word.
 const GUILD_SOLDIER_TID_WORD = 0x29c6;
+// The stall title (the +0x464 board) rides this far above the highest row.
+const STALL_TITLE_RISE = 20;
 
 /*
 ================
@@ -156,7 +160,7 @@ export function overheadLayout(
 			null;
 	// 751430 / 86A26D: a stall's title rides above the rest (SetOverheadStallTitle, 0xFFFEB5FF).
 	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ? entity.titleText : "",
-		stallY = statusY - (stallText ? 20 : 0);
+		stallY = statusY - (stallText ? STALL_TITLE_RISE : 0);
 	return {
 		fortressCrest,
 		guildText,
@@ -167,6 +171,36 @@ export function overheadLayout(
 		speechY: stallY,
 		fortressMark,
 		stallText,
+		stallY
+	};
+}
+
+export type OverheadLayout = ReturnType<typeof overheadLayout>;
+
+/*
+================
+withoutBoardPass
+
+The overhead stack while the /id byte (0xCCB5D8) is clear. 85F5DC branches
+past both the name board and the kind-4 overhead pass (vtable+0x3C at
+85F5FD), so no guild row, fortress mark or crest, companion-owner row or
+quick-status gauge draws, and none of them lifts the board anchor (+0x4E4;
+86B350, 855C40 and 85F660 each subtract their row). The +0x464 board (stall
+title or speech) is past the branch at 85F609 and still draws, from the
+unlifted anchor.
+================
+*/
+export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
+	const stallY = layout.stallText ? -STALL_TITLE_RISE : 0;
+	return {
+		...layout,
+		fortressCrest: null,
+		guildText: "",
+		guildY: 0,
+		status: null,
+		statusY: 0,
+		fortressMark: null,
+		speechY: stallY,
 		stallY
 	};
 }
