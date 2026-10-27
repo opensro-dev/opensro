@@ -794,9 +794,15 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 				var after jobKillPayout
 				if !rt.deps.Update(killer, "player-abnormal-kill", func() bool {
 					actor, public, after = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
-					return len(actor) != 0 || len(public) != 0
+					// The pay is unconditional once the door holds the
+					// killer: its bookkeeping (a counted Most Wanted kill
+					// among it) has no refusal of its own, and an empty
+					// frame list is not one - a counted kill whose side
+					// produced no frames still commits, notices included.
+					return true
 				}) {
-					// Nothing of the killer's side committed: no notice.
+					// The door itself refused (no live killer record):
+					// nothing of the killer's side committed, no notice.
 					after.notices = nil
 				}
 				out.sources = append(out.sources, privateFrames{killer.ID, actor})
