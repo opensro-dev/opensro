@@ -4,14 +4,8 @@
 apps/server/internal/agent/api/agentapi.go 6
 apps/server/internal/agent/publicstats/views.go 1
 apps/server/internal/agent/server/client_incident_test.go 2
-apps/server/internal/data/store/character_lifecycle.go 4
-apps/server/internal/data/store/db_write.go 1
-apps/server/internal/data/store/guildlevel_test.go 1
 apps/server/internal/domain/letter.go 1
 apps/server/internal/domain/quickslot.go 2
-apps/server/internal/game/combat/durability.go 1
-apps/server/internal/game/combat/formula.go 4
-apps/server/internal/game/combat/stats.go 2
 apps/server/internal/game/enterworld/pk_entry_test.go 1
 apps/server/internal/game/enterworld/register.go 2
 apps/server/internal/game/enterworld/response.go 6
