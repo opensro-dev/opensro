@@ -147,6 +147,67 @@ func TestLegShapersDoNotShareDraws(t *testing.T) {
 
 /*
 ================
+TestLegShapersDeriveDownAndSessions
+
+The seed derivation below a leg's up stream (#1821): the down
+direction draws from the run seed through the direction salt, so one
+leg's up and down streams differ while two identically seeded legs
+reproduce their down streams draw for draw. Each UDP session stirs
+the leg's down seed with its creation order, so same-order sessions
+on two legs reproduce and neighbouring sessions differ.
+================
+*/
+func TestLegShapersDeriveDownAndSessions(t *testing.T) {
+	values := flagValues{
+		upDelay: 30 * time.Millisecond, upJitter: 10 * time.Millisecond, upLoss: 25,
+		downDelay: 30 * time.Millisecond, downJitter: 10 * time.Millisecond, downLoss: 25,
+		seed: 99,
+	}
+	seed := drawSeed(values)
+	up, downCfg, downSeed := legShapers(values, seed, udpLegSalt)
+	_, downCfgB, downSeedB := legShapers(values, seed, udpLegSalt)
+	if downSeed != downSeedB || downCfg != downCfgB {
+		t.Fatalf("down derivation differs across identical legs: seed %d vs %d", downSeed, downSeedB)
+	}
+
+	// identical reports whether two shapers draw the same 200
+	// admissions and delays in lockstep.
+	identical := func(a, b *shaper) bool {
+		for i := 0; i < 200; i++ {
+			admittedA, delayA := a.pass()
+			admittedB, delayB := b.pass()
+			if admittedA != admittedB || delayA != delayB {
+				return false
+			}
+		}
+		return true
+	}
+
+	// The leg's single down stream (the TCP leg's shape) reproduces
+	// across legs and never equals the leg's up stream.
+	if !identical(newShaper(downCfg, downSeed), newShaper(downCfgB, downSeedB)) {
+		t.Fatal("identically seeded legs drew different down streams")
+	}
+	if identical(up, newShaper(downCfg, downSeed)) {
+		t.Fatal("the down stream equals the up stream: the direction salt is missing")
+	}
+
+	// Sessions minted in the same order on two identically seeded legs
+	// reproduce draw for draw; neighbouring sessions on one leg differ.
+	legA := &udpLeg{downCfg: downCfg, downSeed: downSeed}
+	legB := &udpLeg{downCfg: downCfgB, downSeed: downSeedB}
+	firstA, secondA := legA.sessionDownShaper(), legA.sessionDownShaper()
+	firstB, secondB := legB.sessionDownShaper(), legB.sessionDownShaper()
+	if !identical(firstA, firstB) || !identical(secondA, secondB) {
+		t.Fatal("same-order sessions on identically seeded legs drew differently")
+	}
+	if identical(firstA, secondA) {
+		t.Fatal("sessions 1 and 2 drew identically: the creation-order stir is missing")
+	}
+}
+
+/*
+================
 emissionLog
 ================
 */
