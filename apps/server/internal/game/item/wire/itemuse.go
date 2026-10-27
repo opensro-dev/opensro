@@ -86,7 +86,7 @@ const OpItemUseVisual uint16 = 0x3449
 EncodeItemUseSuccess
 
 EncodeItemUseSuccess builds the successful v1.150 0xB5BD body parsed by
-sub_755e40:
+the client's CPSMission_OnItemUseResponse0xB5BD:
 
 	[01][u8 slot][u16 remaining quantity][u16 type word]
 
@@ -105,7 +105,8 @@ func EncodeItemUseSuccess(slot uint8, remaining uint16, typeWord uint16) []byte 
 ==================
 EncodeItemUseError
 
-EncodeItemUseError builds the failure arm parsed by sub_755e40:
+EncodeItemUseError builds the failure arm parsed by the client's
+CPSMission_OnItemUseResponse0xB5BD:
 
 	[02][u8 notice code]
 
