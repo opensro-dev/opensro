@@ -388,6 +388,7 @@ export function startRuntime(
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
 					setFreeCamera: free => world.setFreeCamera( free ),
+					setFreeCameraSpeed: speed => world.setFreeCameraSpeed( speed ),
 					setCameraCollision: collision => world.setCameraCollision( collision ),
 					setCameraWaypoints: keyframes => world.setCameraWaypoints( keyframes ),
 					setCameraPlaying: playing => world.setCameraPlaying( playing ),
@@ -424,13 +425,29 @@ export function startRuntime(
 		const arrowsHeld = new Set<"up" | "left" | "right">();
 		/*
 		================
+		textFieldFocused
+
+		A key typed into a text field is the field's (the chat edit's focus
+		test of 69016F, and the arrow keys' guard).
+		================
+		*/
+		function textFieldFocused() {
+			const focus = document.activeElement;
+			return focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement;
+		}
+		/*
+		================
 		arrowInput
 
 		Game_OnKeyDown 0x680A30 / Game_OnKeyUp 0x688290: Up walks the facing,
 		Left and Right turn it; Down is not a movement key. A press typed into
-		a text field is the field's. The worker owns the walk and the wire
-		(arrow-keys.ts); the main-thread mover predicts the Up arrow's start
-		and stop.
+		a text field is the field's. While the free-camera byte stands the
+		three presses do nothing (680ACF, 680B27, 680B5F test +0x3CE): the
+		arrows fly the camera instead. Releases still go through, so a walk
+		begun before /camera ends (natively the release is skipped too,
+		6883AC; the port lets it end rather than strand a walk). The worker
+		owns the walk and the wire (arrow-keys.ts); the main-thread mover
+		predicts the Up arrow's start and stop.
 		================
 		*/
 		function arrowInput( event: RawInput ) {
@@ -473,8 +490,7 @@ export function startRuntime(
 				return;
 			}
 			if ( !game?.localGid || !game.pose ) return;
-			const focus = document.activeElement;
-			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return;
+			if ( textFieldFocused() || world.freeCamera() ) return;
 			arrowsHeld.add( key );
 			predicted(
 				key,
@@ -598,6 +614,13 @@ export function startRuntime(
 		// The display stopped asking for frames while the document stays visible.
 		let starved = false;
 		const world = own( createWorldStream( assets, renderer, new URL( "/", import.meta.url ).href, random ) );
+		// The free camera's per-frame poll (68FE50): held keys, the chat
+		// focus gate, and the yaw/pitch the fly writes back.
+		world.setFreeCameraInput( {
+			held: vk => input.keyHeld( vk ),
+			typing: textFieldFocused,
+			turn: ( yaw, pitch ) => input.setCameraAngles( yaw, pitch )
+		} );
 		const navigation = own(
 			createNavigationStream(
 				assets,
@@ -971,8 +994,10 @@ export function startRuntime(
 							followedRoom,
 							presentation.gameplay()?.navigationBlock
 						) === true;
+				// 68FE62: while +0x3CE stands every frame zeroes the selection
+				// decal's shown and ground fields (+0x100, +0x130).
 				renderer.setSelectionDecal(
-					frontendState.phase !== "world" || !decal ?
+					frontendState.phase !== "world" || !decal || world.freeCamera() ?
 						null :
 						decal.kind === "ground" ?
 						{ pose: decal.pose, slot: 0 } :
@@ -1091,11 +1116,15 @@ export function startRuntime(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
 						null,
+					// The third-person yaw lock lives in 68F830, which the
+					// free-camera byte skips: no player yaw while it stands.
 					input.camera(
-						cameraFollow?.yaw ??
-							(presentation.gameplay()?.pose ?
-								nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
-								undefined)
+						world.freeCamera() ?
+							undefined :
+							cameraFollow?.yaw ??
+								(presentation.gameplay()?.pose ?
+									nativeHeadingYaw( presentation.gameplay()!.pose!.angle ) :
+									undefined)
 					),
 					cameraFollow,
 					presentation.gameplay()?.navigationBlock,

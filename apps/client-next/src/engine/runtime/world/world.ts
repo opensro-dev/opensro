@@ -4,7 +4,8 @@
 world.ts - region admission and the follow camera presentation
 
 Owns the world asset transaction: which region bundle is loading, the
-camera it draws from, and the scripted cameras. The drawn zoom distance
+camera it draws from, the scripted cameras, and the GM free camera's
+flight around a held target (free-camera.ts). The drawn zoom distance
 glides to the native wheel distance (camera-zoom-ease.ts).
 
 ===========================================================================
@@ -31,6 +32,15 @@ import {
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { sampleCameraWaypoints } from "@/engine/foundation/ui/camera-waypoints";
+import { followCameraQuery } from "@/engine/foundation/rendering/follow-camera";
+import {
+	createFreeCamera,
+	FREE_CAMERA_DEFAULT_SPEED,
+	FREE_CAMERA_MAX_DELTA_SECONDS,
+	freeCameraView,
+	stepFreeCamera,
+	type FreeCameraInput
+} from "@/engine/foundation/rendering/free-camera";
 
 type Transaction =
 	| { phase: "idle"; }
@@ -68,8 +78,16 @@ export function createWorldStream(
 	let fieldOfView = initialCameraFieldOfView();
 	// The interface's free-camera byte (CGInterface +0x3CE): while it
 	// stands, ApplyCameraOrbit (68FAD0) and UpdateCameraOrbitTarget
-	// (68F830) return early, so the world keeps the last applied camera.
+	// (68F830) return early and 68FE50 flies the camera instead: the
+	// target is held and the eye orbits it (free-camera.ts). The fly
+	// reads the /cs speed (+0x7B0, seeded 100), the display thread's
+	// held keys, and the frame delta, kept by the step's timestamps.
 	let freeCamera = false;
+	const fly = createFreeCamera();
+	let flySpeed = FREE_CAMERA_DEFAULT_SPEED;
+	let flyInput: FreeCameraInput | null = null;
+	let flyRegion: number | undefined;
+	let lastStepMs: number | null = null, frameSeconds = 0;
 	// The interface track's port copy (CGInterface +0x3FC) and its play
 	// byte (+0x3CD): the console owns the store and forwards both; the
 	// stepper below owns the track clock (+0xE8) it advances while the
@@ -246,8 +264,8 @@ export function createWorldStream(
 	instead of updateCamera and reports that it drove the camera.
 	TimedValue_Advance clamps the clock to the last record's time and
 	the 6900F8 tail clears the play byte once the clock reaches it, the
-	final pose staying applied (lastCamera holds it for the free-camera
-	hold, as the tail copies the camera back to +0x42C). The native
+	final pose staying applied (the free camera's held target is then
+	the track's, as the tail copies the camera back to +0x42C). The native
 	delta is a smoothed frame delta times a rate the trimmed binary
 	does not resolve to a constant; the port steps by the step's own
 	timestamp delta, never backwards. An empty track cannot be playing
@@ -286,6 +304,10 @@ export function createWorldStream(
 		};
 		lastCamera = spec;
 		renderer.setWorldCamera( spec );
+		// 690119: every played frame copies the applied target to
+		// +0x42C, so a fly that follows starts from the track's pose.
+		fly.target = null;
+		fly.eye = null;
 		if ( waypointClockSeconds >= endSeconds ) {
 			waypointPlaying = false;
 			waypointLastStepMs = null;
@@ -322,11 +344,65 @@ export function createWorldStream(
 			far: 3500
 		};
 		if ( freeCamera ) {
-			// 68FAD0 applies nothing while +0x3CE stands: the camera keeps
-			// its last eye and target however far the player walks.
-			if ( lastCamera ) renderer.setWorldCamera( lastCamera );
+			flyCamera( lastCamera ?? spec, camera );
 			return;
 		}
+		lastCamera = spec;
+		renderer.setWorldCamera( spec );
+	}
+	/*
+	================
+	flyCamera
+
+	68FE50's free-camera arm. The held target (+0x42C) is seeded from
+	the last applied camera: the follow's lifted target, which 68F830
+	saves to +0x42C every frame (68FA7A), or a played track's target.
+	The renderer lifts the follow target, so the seed recomputes that
+	lift (followCameraQuery) with the requested distance; natively the
+	lift reads the last clamped distance, so a camera pulled in by a
+	wall seeds a slightly different height (an accepted difference).
+	The fly is skipped while a text field has focus (69016F compares
+	the chat edit with the focus window): the fades and the target
+	hold. The eye is rebuilt every frame from the held target and the
+	live yaw, pitch and drawn distance (A1BB00): the wheel writes
+	App+0x37C directly (67B67A) and the drag App+0x370/+0x374
+	(67CE08/67CE3A) while the byte stands.
+	================
+	*/
+	function flyCamera( seed: import("@/engine/contracts/scene").WorldCamera, camera: CameraInput | undefined ) {
+		if ( !fly.target ) {
+			const target = seed.follow ? followCameraQuery( seed, null ).target : seed.target;
+			fly.target = [ target[0], target[1], target[2] ];
+			fly.eye = null;
+			flyRegion = seed.originRegion;
+		}
+		let yaw = camera?.yaw ?? initialCameraYaw(), pitch = camera?.pitch ?? initialCameraPitch();
+		const distance = camera?.distance ?? 80;
+		if ( flyInput && !flyInput.typing() ) {
+			fly.eye ??= freeCameraView( fly.target, yaw, pitch, fly.roll, distance ).eye;
+			const turned = stepFreeCamera( fly, {
+				keys: flyInput,
+				deltaSeconds: frameSeconds,
+				speed: flySpeed,
+				yaw,
+				pitch
+			} );
+			if ( turned.yaw !== yaw || turned.pitch !== pitch ) flyInput.turn( turned.yaw, turned.pitch );
+			yaw = turned.yaw;
+			pitch = turned.pitch;
+		}
+		const view = freeCameraView( fly.target, yaw, pitch, fly.roll, distance );
+		fly.eye = view.eye;
+		const spec: import("@/engine/contracts/scene").WorldCamera = {
+			dungeonBlock,
+			originRegion: flyRegion,
+			eye: view.eye,
+			target: [ fly.target[0], fly.target[1], fly.target[2] ],
+			up: view.up,
+			fov: fieldOfView,
+			near: 1,
+			far: 3500
+		};
 		lastCamera = spec;
 		renderer.setWorldCamera( spec );
 	}
@@ -519,15 +595,52 @@ export function createWorldStream(
 		================
 		setFreeCamera
 
-		690C40 case 0x14 (/camera): while the byte stands the camera stays
-		where it was; clearing it re-aims (UpdateCameraOrbitTarget), which
-		the next step's live follow spec does on its own. The native off
-		path also zeroes App+0x378; the port recomputes its eye and target
-		every step, so no such residue exists to clear.
+		690C40 case 0x14 (/camera): while the byte stands 68FE50 flies the
+		camera around a held target (flyCamera); clearing it re-aims
+		(UpdateCameraOrbitTarget), which the next step's live follow spec
+		does on its own. The off path zeroes the roll (6913DB fldz /
+		App+0x378); the fades are left as they are, natively too. The
+		next flight seeds its target afresh from the last applied camera.
 		================
 		*/
 		setFreeCamera( free: boolean ) {
-			if ( !disposed ) freeCamera = free;
+			if ( disposed ) return;
+			freeCamera = free;
+			fly.target = null;
+			fly.eye = null;
+			if ( !free ) fly.roll = 0;
+		},
+		/*
+		================
+		freeCamera
+
+		Whether the free-camera byte stands: the display thread reads it
+		for the keys and the selection ring the byte suppresses.
+		================
+		*/
+		freeCamera: () => freeCamera,
+		/*
+		================
+		setFreeCameraSpeed
+
+		690C40 case 136 (/cs) writes +0x7B0 at 691666, the per-second
+		scale of both fly translations (6902AD, 69040B).
+		================
+		*/
+		setFreeCameraSpeed( speed: number ) {
+			if ( !disposed ) flySpeed = speed;
+		},
+		/*
+		================
+		setFreeCameraInput
+
+		The display thread's held keys, chat focus and yaw/pitch sink the
+		fly reads (free-camera.ts FreeCameraInput); null flies nothing and
+		leaves the live orbit around the held target.
+		================
+		*/
+		setFreeCameraInput( input: FreeCameraInput | null ) {
+			if ( !disposed ) flyInput = input;
 		},
 		/*
 		================
@@ -554,8 +667,8 @@ export function createWorldStream(
 		setCameraPlaying
 
 		690C40 ids 131-133 write the play byte (+0x3CD): while it stands
-		the stepper drives the camera from the track (#1716 PR2); the
-		follow stays frozen either way while the free-camera byte stands.
+		the stepper drives the camera from the track (#1716 PR2); once it
+		stops, a standing free-camera byte flies from the track's target.
 		================
 		*/
 		setCameraPlaying( playing: boolean ) {
@@ -603,6 +716,12 @@ export function createWorldStream(
 		) {
 			dungeonBlock = block;
 			if ( disposed ) return;
+			// g_fDeltaTimeSeconds_Move: the frame delta, capped at 3 s
+			// (A0F533), the only clock the fly reads.
+			frameSeconds = lastStepMs === null ?
+				0 :
+				Math.min( FREE_CAMERA_MAX_DELTA_SECONDS, Math.max( 0, (nowMs - lastStepMs) / 1000 ) );
+			lastStepMs = nowMs;
 			const offset = scripts.step( nowMs, events );
 			// The drawn distance glides to the native wheel distance (camera-zoom-ease.ts).
 			const drawn = camera ? { ...camera, distance: zoomEase.step( camera.distance, nowMs ) } : camera;

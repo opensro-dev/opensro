@@ -153,6 +153,7 @@ dispose
 	globalThis.__runtimeOwners.platform.setMovementDump = () => {};
 	globalThis.__runtimeOwners.platform.setAssetDump = () => {};
 	globalThis.__runtimeOwners.simulation.delivery = () => new Promise( () => {} );
+	globalThis.__runtimeOwners.world.setFreeCameraInput = () => {};
 	for ( const name of Object.keys( factories ) ) {
 		const owner = globalThis.__runtimeOwners[name];
 		Object.defineProperty( globalThis.__runtimeOwners, name, {
@@ -220,6 +221,7 @@ dispose
 	owners.platform.setMovementDump = () => {};
 	owners.platform.setAssetDump = () => {};
 	owners.simulation.delivery = () => new Promise( () => {} );
+	owners.world.setFreeCameraInput = () => {};
 	globalThis.__runtimeOwners = owners;
 	globalThis.location = { search: "", origin: "http://localhost" };
 	globalThis.requestAnimationFrame = () => 1;
@@ -653,6 +655,7 @@ dispose
 	owners.platform.setMovementDump = () => {};
 	owners.platform.setAssetDump = () => {};
 	owners.simulation.delivery = () => new Promise( () => {} );
+	owners.world.setFreeCameraInput = () => {};
 	owners.world.setFieldOfView = degrees => fov.push( degrees );
 	globalThis.__runtimeOwners = owners;
 	globalThis.__runtimeCalls = [];

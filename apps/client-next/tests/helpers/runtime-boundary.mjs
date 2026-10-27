@@ -170,6 +170,9 @@ presentUpdate
 		} ]
 	} );
 	owners.world.step = () => {};
+	// The free camera's poll is installed at startup; the byte stays clear.
+	owners.world.setFreeCameraInput = () => {};
+	owners.world.freeCamera = () => false;
 	owners.renderer.setWorldClock = () => {};
 	owners.renderer.setWeather = () => {};
 	owners.world.pumpCameraScripts = () => {};

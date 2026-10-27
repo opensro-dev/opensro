@@ -190,26 +190,34 @@ test("playback drives the camera along the track and ends on the last pose", () 
 
 /*
 ================
-test("stop freezes on the last applied pose while the free camera stands")
+test("after stop the free camera holds the track's target while the player walks")
 ================
 */
-test("stop freezes on the last applied pose while the free camera stands", () => {
+test("after stop the free camera holds the track's target while the player walks", () => {
 	const { world, cameras } = playbackFixture();
+	// A flight already seeded from the follow before the track plays.
 	world.setFreeCamera( true );
+	world.step( POSE, undefined, undefined, undefined, 0 );
 	world.setCameraPlaying( true );
 	world.step( POSE, undefined, undefined, undefined, 0 );
 	world.step( POSE, undefined, undefined, undefined, 500 );
-	assert.deepEqual( cameras[1].eye, [ 4.375, 0, 0 ] );
-	// /cwstop: the byte clears and the camera keeps its last eye however
-	// far the player walks (the free-camera hold re-applies lastCamera).
+	assert.deepEqual( cameras[2].eye, [ 4.375, 0, 0 ] );
+	const played = cameras[2].target;
+	// /cwstop: the byte clears and 68FE50 flies from +0x42C, which every
+	// played frame wrote (690119): the track's last target replaces the
+	// follow's and stays put however far the player walks, the eye
+	// orbiting it.
 	world.setCameraPlaying( false );
 	world.step( { ...POSE, x: 900 }, undefined, undefined, undefined, 1000 );
-	assert.equal( cameras.length, 3 );
-	assert.deepEqual( cameras[2].eye, [ 4.375, 0, 0 ] );
+	assert.equal( cameras.length, 4 );
+	assert.deepEqual( cameras[3].target, played );
+	assert.equal( cameras[3].follow, undefined, "the follow stays off while the free camera stands" );
+	world.step( { ...POSE, x: 1900 }, undefined, undefined, undefined, 1100 );
+	assert.deepEqual( cameras[4].target, played );
 	// Playing again restarts the clock at the first record.
 	world.setCameraPlaying( true );
 	world.step( POSE, undefined, undefined, undefined, 1500 );
-	assert.deepEqual( cameras[3].eye, [ 0, 0, 0 ] );
+	assert.deepEqual( cameras[5].eye, [ 0, 0, 0 ] );
 });
 
 /*

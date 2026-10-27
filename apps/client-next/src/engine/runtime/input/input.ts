@@ -47,6 +47,8 @@ export function createInput(
 	let dropKey = DEFAULT_DROP_KEY, dropHeld = false, blindKey = DEFAULT_BLIND_KEY, blindHeld = false;
 	// Either Alt key, as GetKeyState(VK_MENU) reads it (6FCD50).
 	let altLeft = false, altRight = false;
+	// Every virtual key held now, for the free camera's per-frame poll.
+	const held = new Set<number>();
 	let sight: SightMode = 0, mouseMode: 0 | 1 = 0;
 	// The interface's zoom byte (CGInterface +0x3CF), set by its constructor:
 	// while it stands the wheel clamps distance to the 150 rail (67CC3C).
@@ -116,6 +118,21 @@ export function createInput(
 		},
 		/*
 		================
+		setCameraAngles
+
+		The free camera's nudges (68FE50 writes App+0x374 and App+0x370
+		directly): kept after the free camera ends, unclamped until the
+		next drag applies its rails.
+		================
+		*/
+		setCameraAngles( nextYaw: number, nextPitch: number ) {
+			if ( !Number.isFinite( nextYaw ) || !Number.isFinite( nextPitch ) ) return;
+			yaw = nextYaw;
+			pitch = nextPitch;
+		},
+		keyHeld: ( vk: number ) => held.has( vk ),
+		/*
+		================
 		accept
 		================
 		*/
@@ -132,6 +149,12 @@ export function createInput(
 				return;
 			}
 			if ( event.kind === "key" || event.kind === "release" ) onKey( event );
+			if ( event.kind === "release" ) held.clear();
+			else if ( event.kind === "key" ) {
+				const vk = virtualKey( event.code );
+				if ( vk && event.down ) held.add( vk );
+				else if ( vk ) held.delete( vk );
+			}
 			// Platform capture has already filtered UI-owned events. Camera
 			// response belongs to this display-thread owner, not worker ticks.
 			if ( event.kind === "pointer" ) {

@@ -71,7 +71,7 @@ The production HUD with the three camera sinks recorded.
 function cameraUiFixture( t, gm = true ) {
 	/** @type {any[]} */
 	const sent = [];
-	const rail = [], free = [], cursor = [], modes = [], collision = [];
+	const rail = [], free = [], cursor = [], modes = [], collision = [], speeds = [];
 	const f = uiFixture(
 		message => {
 			if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -85,6 +85,7 @@ function cameraUiFixture( t, gm = true ) {
 		{
 			setCameraZoomRail: value => rail.push( value ),
 			setFreeCamera: value => free.push( value ),
+			setFreeCameraSpeed: value => speeds.push( value ),
 			setCameraCollision: value => collision.push( value ),
 			setCursorVisible: value => cursor.push( value ),
 			setRenderMode: ( mode, enabled ) => modes.push( [ mode, enabled ] )
@@ -121,7 +122,7 @@ function cameraUiFixture( t, gm = true ) {
 	draw();
 	f.ui.event( { kind: "key", code: "Backquote", shift: true } );
 	draw();
-	return { ...f, sent, rail, free, cursor, modes, collision, typeLine };
+	return { ...f, sent, rail, free, cursor, modes, collision, speeds, typeLine };
 }
 
 /*
@@ -153,6 +154,23 @@ test("the GM console flips the camera bytes and reports only /camera", t => {
 	f.typeLine( "/colon" );
 	assert.deepEqual( f.collision, [ false, true ] );
 	assert.deepEqual( f.sent, [], "a camera row reached the server" );
+});
+
+/*
+================
+test("/cs forwards its clamped speed to the free camera")
+================
+*/
+test("/cs forwards its clamped speed to the free camera", t => {
+	const f = cameraUiFixture( t );
+	// 690C40 case 136 writes +0x7B0 (691666), the scale of the fly's
+	// translation; a malformed line writes nothing.
+	f.typeLine( "/cs 250" );
+	f.typeLine( "/cs 99999" );
+	f.typeLine( "/cs" );
+	f.typeLine( "/cs 1 2" );
+	assert.deepEqual( f.speeds, [ 250, 500 ] );
+	assert.deepEqual( f.sent, [], "/cs reached the server" );
 });
 
 /*
@@ -369,22 +387,26 @@ function cameraWorldFixture( t ) {
 
 /*
 ================
-test("the free camera holds its last eye and target until it re-aims")
+test("the free camera holds its target until it re-aims")
 ================
 */
-test("the free camera holds its last eye and target until it re-aims", t => {
+test("the free camera holds its target until it re-aims", t => {
 	const f = cameraWorldFixture( t );
 	const home = { regionId: 1, x: 10, y: 0, z: 20, angle: 0 };
 	const away = { regionId: 1, x: 110, y: 5, z: 220, angle: 0 };
 	const standing = f.draw( home );
 	assert.deepEqual( standing.target, [ 10, 0, 20 ] );
 	f.stream.setFreeCamera( true );
-	// 68FAD0 applies nothing while +0x3CE stands: walking away moves
-	// neither the eye nor the target.
-	const frozen = f.draw( away );
-	assert.deepEqual( frozen.eye, standing.eye );
-	assert.deepEqual( frozen.target, standing.target );
-	assert.deepEqual( frozen.follow, standing.follow );
+	// 68F830 and 68FAD0 apply nothing while +0x3CE stands: walking away
+	// leaves the held target (the follow's lifted one, 68FA7A) and the
+	// eye orbiting it where they were (free-camera.test.mjs flies it).
+	const held = f.draw( away );
+	const again = f.draw( away );
+	assert.equal( held.follow, undefined );
+	assert.deepEqual( again.target, held.target );
+	assert.deepEqual( again.eye, held.eye );
+	assert.equal( held.target[0], 10 );
+	assert.equal( held.target[2], 20 );
 	// Clearing the byte re-aims: the next step follows the player again.
 	f.stream.setFreeCamera( false );
 	const reaimed = f.draw( away );

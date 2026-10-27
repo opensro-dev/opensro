@@ -58,6 +58,13 @@ export interface InputOwner {
 	zoomRail( value: boolean ): void;
 	sight( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	camera( playerYaw?: number ): CameraInput;
+	// The free camera's write-back (68FE50 writes App+0x374/+0x370): the
+	// nudged yaw and pitch replace the kept ones, unclamped; the drag
+	// keeps its pitch rails on its next move, as 67CDAF clamps natively.
+	setCameraAngles( yaw: number, pitch: number ): void;
+	// Whether a native virtual key is held now (the input manager's poll,
+	// A15AA0); a focus release lets every key go.
+	keyHeld( vk: number ): boolean;
 	accept( event: RawInput ): void;
 	drain(): InputBatch | null;
 	error(): string | null;
