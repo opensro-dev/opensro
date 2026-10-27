@@ -27,11 +27,10 @@ const (
 func u16le(v uint16) []byte { b := make([]byte, 2); binary.LittleEndian.PutUint16(b, v); return b }
 func u32le(v uint32) []byte { b := make([]byte, 4); binary.LittleEndian.PutUint32(b, v); return b }
 
-// TestInterfaceEquipmentSlotForTid pins the client's
-// ItemRecord_GetEquipSlotIndex port on real shipped
+// TestInterfaceEquipmentSlotForTid pins the sub_868a80 port on real shipped
 // words plus the synthetic slot-8 family word (no TID *.*.7.* row exists in
 // the v1.150 itemdata - the family itself is real, see the classifier's
-// client 0x868B5F arm).
+// @0x868b5f arm).
 func TestInterfaceEquipmentSlotForTid(t *testing.T) {
 	cases := []struct {
 		tid  uint16
@@ -40,10 +39,10 @@ func TestInterfaceEquipmentSlotForTid(t *testing.T) {
 		{tidChClothesBA, 1},            // subtype 3 -> body (jump_table_868b90[3])
 		{tidChClothesLA, 4},            // subtype 4 -> leg
 		{tidChClothesFA, 5},            // subtype 6 -> foot
-		{tidChBlade, 6},                // 0x780==0x300 gear at client 0x868B1B
-		{PackTypeFlags(3, 1, 4, 2), 7}, // shield family -> client ItemTID_IsShield protector group
-		{PackTypeFlags(3, 1, 7, 1), 8}, // 0x780==0x380 family at client 0x868B5F
-		{tidEtcGold, -1},               // ETC band: no interface slot at client 0x868B8E
+		{tidChBlade, 6},                // 0x780==0x300 gear @0x868b1b
+		{PackTypeFlags(3, 1, 4, 2), 7}, // shield family -> sub_5932c0 protector group
+		{PackTypeFlags(3, 1, 7, 1), 8}, // 0x780==0x380 family @0x868b5f
+		{tidEtcGold, -1},               // ETC band: no interface slot @0x868b8e
 	}
 	for _, c := range cases {
 		if got := InterfaceEquipmentSlotForTid(c.tid); got != c.slot {
@@ -52,8 +51,7 @@ func TestInterfaceEquipmentSlotForTid(t *testing.T) {
 	}
 }
 
-// TestWeaponHoldTypeForTid pins the client's ItemRecord_GetJobSuitClass
-// port arm for arm. The
+// TestWeaponHoldTypeForTid pins the sub_868d00 port arm for arm. The
 // TID *.*.7.* words are synthetic classifier pins (the family is absent from
 // the shipped v1.150 itemdata, so live rows always classify 4).
 func TestWeaponHoldTypeForTid(t *testing.T) {
@@ -63,10 +61,10 @@ func TestWeaponHoldTypeForTid(t *testing.T) {
 		tid  uint16
 		want uint8
 	}{
-		{"unarmed refObjId 0 (client 0x868D06)", 0, 0, 4},
-		{"0x380/0x1800 family (client 0x868D27)", 9001, PackTypeFlags(3, 1, 7, 3), 3},
-		{"trader suit via the client's ItemTID_IsTraderSuit call (client 0x868D61)", 9002, PackTypeFlags(3, 1, 7, 1), 1},
-		{"thief suit via the client's ItemTID_IsThiefSuit call (client 0x868D73)", 9003, PackTypeFlags(3, 1, 7, 2), 2},
+		{"unarmed refObjId 0 @0x868d06", 0, 0, 4},
+		{"0x380/0x1800 family @0x868d27", 9001, PackTypeFlags(3, 1, 7, 3), 3},
+		{"two-hand grip sub_5931b0 @0x868d61", 9002, PackTypeFlags(3, 1, 7, 1), 1},
+		{"job uniform sub_5931f0 @0x868d73", 9003, PackTypeFlags(3, 1, 7, 2), 2},
 		{"plain blade misses every arm", 107, tidChBlade, 4},
 	}
 	for _, c := range cases {
@@ -99,29 +97,28 @@ func TestPlayerSpawnRowEncodeUnarmedGolden(t *testing.T) {
 	row := testRow()
 
 	want := concat(
-		u32le(1907),   // client CIGIDObject_ResolveRefObj target
-		[]byte{4, 0},  // client CICUser_DeserializeSpawnTail: +0x758 body shape + client cf0100 scratch
-		[]byte{0, 0},  // equip loop: discard + count 0 (client 0x0086AFEE)
-		[]byte{0, 0},  // avatar loop: discard + count 0 (client 0x0086B0AB)
-		[]byte{0},     // no transform skin (client 0x0086B14F)
-		u32le(100042), // gid (client CIGIDObject_DeserializeSpawnData)
+		u32le(1907),   // sub_850c60 resolve target
+		[]byte{4, 0},  // sub_869110: +0x758 body shape + cf0100 scratch
+		[]byte{0, 0},  // equip loop: discard + count 0 (@0x0086afee)
+		[]byte{0, 0},  // avatar loop: discard + count 0 (@0x0086b0ab)
+		[]byte{0},     // no transform skin (@0x0086b14f)
+		u32le(100042), // gid (sub_852f80)
 		u16le(25000),  // region
 		f32le(1616), f32le(20), f32le(1650),
 		u16le(0x1234),        // heading word
-		[]byte{0, 0},         // client MovementPayload_ReadFromStream mode 0 + second flag
+		[]byte{0, 0},         // sub_776170 mode 0 + second flag
 		[]byte{0},            // rotation flag (mode-0 arm)
 		u16le(0x1234),        // packed heading word
 		[]byte{0, 0, 0},      // +0x263/+0x264/+0x460
 		f32le(20), f32le(50), // walk/run (+0x24c/+0x250)
-		f32le(100),                // scale denominator FLOAT (client 0x0085FBA5)
+		f32le(100),                // scale denominator FLOAT (@0x0085fba5)
 		[]byte{0},                 // mastery count
-		u16le(5), []byte("PeerA"), // display name (client CMsgStreamBuffer_ReadAsciiString)
+		u16le(5), []byte("PeerA"), // display name (sub_4b1710)
 		[]byte{0, 0},    // job type/grade (+0x782/+0x783)
 		[]byte{0, 0, 0}, // +0x4f4 / ride state / +0x781
 		[]byte{0, 0, 0}, // non-local +0x784 / title mode / +0x4f6
 		u16le(0),        // guild name empty
-		// hold type 4 (unarmed) -> the client's 0x0086A12D guild-member
-		// sub-block:
+		// hold type 4 (unarmed) -> the @0x0086a12d guild-member sub-block:
 		u32le(0),                     // guild id
 		u16le(0),                     // grant name empty
 		u32le(0), u32le(0), u32le(0), // war dwords
@@ -138,8 +135,8 @@ func TestPlayerSpawnRowEncodeUnarmedGolden(t *testing.T) {
 }
 
 // TestPlayerSpawnRowEquipLoopOptLevelGate: equip-band items carry the
-// client 0x0086B05C optLevel byte, non-equip-band items (the ETC gold
-// word) do not - the same predicate on both sides or the stream desyncs.
+// @0x0086b05c optLevel byte, non-equip-band items (the ETC gold word) do
+// not - the same predicate on both sides or the stream desyncs.
 func TestPlayerSpawnRowEquipLoopOptLevelGate(t *testing.T) {
 	row := testRow()
 	row.Equipment = []PlayerEquipItem{
@@ -178,9 +175,8 @@ func TestPlayerSpawnRowEquipLoopOptLevelGate(t *testing.T) {
 
 // TestPlayerSpawnRowGuildBlockHoldTypeGate: a slot-8 item whose hold type is
 // not 4 (the synthetic two-hand-grip classifier word) removes the
-// guild-member sub-block, exactly like the client's member-class vcall
-// gate (client 0x0086A12D) - and the row still decodes to completion
-// (no desync).
+// guild-member sub-block, exactly like the client's member-class vcall gate
+// @0x0086a12d - and the row still decodes to completion (no desync).
 func TestPlayerSpawnRowGuildBlockHoldTypeGate(t *testing.T) {
 	gripTid := PackTypeFlags(3, 1, 7, 1)
 
@@ -210,12 +206,11 @@ func TestPlayerSpawnRowGuildBlockHoldTypeGate(t *testing.T) {
 }
 
 // TestPlayerSpawnRowGuildBlockGolden pins the guild-armed tail byte for
-// byte: a non-empty guild name at client 0x0086A0CC (which IS the +0x7bc
+// byte: a non-empty guild name at @0x0086a0cc (which IS the +0x7bc
 // BindGuild gate - the +0x7a8 wstring's size field) followed by the
-// client's 0x0086A12D member sub-block carrying the guild id and the
-// three crest dwords the client forwards to its
-// CICPlayer_BindCompanionOwner BindGuild as crestParamA/B/C
-// (var_88/var_84/var_8c order at client 0x0086A24A..0x0086A261).
+// @0x0086a12d member sub-block carrying the guild id and the three crest
+// dwords the client forwards to sub_869810 BindGuild as crestParamA/B/C
+// (var_88/var_84/var_8c order @0x0086a24a..0x0086a261).
 func TestPlayerSpawnRowGuildBlockGolden(t *testing.T) {
 	row := testRow()
 	row.GuildName = "Nine"
@@ -224,11 +219,9 @@ func TestPlayerSpawnRowGuildBlockGolden(t *testing.T) {
 	row.CrestParamA = 3
 	row.CrestParamB = 0
 	row.CrestParamC = 0
-	// The trailing team byte of the sub-block: the client's
-	// CICPlayer_DeserializeSpawnData at client 0x0086A1B2 -> its
-	// CICPlayer_SetFortressWarOfficerTitle -> CICPlayer+0x7e0
-	// (FortSiegeAuthority; 1 = Commander, one of the two values the
-	// six-mark gate accepts).
+	// The trailing team byte of the sub-block: sub_869df0 @0x0086a1b2 ->
+	// sub_869940 -> CICPlayer+0x7e0 (FortSiegeAuthority; 1 = Commander,
+	// one of the two values the six-mark gate accepts).
 	row.FortSiegeAuthority = 1
 
 	payload := row.Encode()
@@ -241,7 +234,7 @@ func TestPlayerSpawnRowGuildBlockGolden(t *testing.T) {
 		u16le(5), []byte("Chief"), // grant name -> +0x78c
 		u32le(3),           // var_88 -> crestParamA (G-crest filename param)
 		u32le(0), u32le(0), // var_84/var_8c -> crestParamB/C (alliance, 0)
-		[]byte{1},       // team byte -> client CICPlayer_SetFortressWarOfficerTitle +0x7e0 (Commander)
+		[]byte{1},       // team byte -> sub_869940 +0x7e0 (Commander)
 		[]byte{0, 0xff}, // action progress + inactive event team
 		[]byte{1},       // appear byte
 	)

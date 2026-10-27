@@ -285,8 +285,9 @@ const (
 	// (01:6d). PINNED in v1.150: the drop-confirm dialog, the client's
 	// CGInterface_RequestItemGroundDrop at client 0x0068D430, opens ONLY
 	// for an inventory-bag source (kind 0x46, client 0x0068D49D); an
-	// equipment source (kind 0x47) routes to
-	// CGInterface_ShowSystemNotice(gi, 1, 0x6d) @0x0068d606 and abandons
+	// equipment source (kind 0x47) hits the notice arm inside
+	// CGInterface_RequestItemGroundDrop itself (client 0x0068D606, raising
+	// CGInterface_ShowSystemNotification category 01) and abandons
 	// without ever composing the type-0x07 packet. So a stock client cannot
 	// drop a worn item; a modified client can, and the server must refuse
 	// it here (LANE-4, levelup wave; GROK-V4 seq 76, COORD sign-off seq 93).
@@ -318,7 +319,7 @@ const (
 )
 
 // Values for StateChannelMove. One shared motion enum: the client routes
-// the value through sub_858450 / CICharactor_SetRunWalkMode, whose mode
+// the value through CICharactor_ApplyMovementMode (client 0x858450), whose mode
 // table handles exactly 0 (stand, motion state 3), 2 (walk, speed channel
 // 0), 3 (run, speed channel 1) and 4 (sit, motion state 6); the paired
 // CIFActionTabPanel_SetMotionStateIcon (client 58BBC0) jump table

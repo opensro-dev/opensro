@@ -34,8 +34,9 @@ func IsEquipmentBand(typeFlags uint16) bool {
 }
 
 // IsEtcBand reports the ordinary ETC/item family parsed by the
-// CSOItem_ParseFromStream non-gold branch. Its inventory body carries a u16
-// stack count, followed by the small subtype-specific tails below.
+// CSOItem_Deserialize non-gold branch (client 0x78C830). Its inventory body
+// carries a u16 stack count, followed by the small subtype-specific tails
+// below.
 func IsEtcBand(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x60
 }

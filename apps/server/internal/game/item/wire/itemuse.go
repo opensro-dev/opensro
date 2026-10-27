@@ -13,7 +13,7 @@ package wire
 ItemUseRequest
 
 ItemUseRequest is the v1.150 0x75BD body composed by
-sub_6961b0_CGInterface_ExecuteSelectedInteractionAction:
+CIFInventory_ExecuteItemAction (client 0x6961B0):
 
 	[u8 inventory wire slot][u16 RefItem type word, little-endian]
 

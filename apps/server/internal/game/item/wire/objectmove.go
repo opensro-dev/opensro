@@ -15,11 +15,9 @@ type Position struct {
 
 // ObjectSourceMove is the 0x30E3 remote-entity source move.
 //
-// The client's CPSMission_OnEntitySpeedMode0x30E3 handler reads the
-// payload in three steps: at client 0x00775CC1 a 2-byte region, at
-// client 0x00775CCF a single 14-byte block covering x/y/z and the
-// heading, then at client 0x00775CDD the 4-byte gid. The gid therefore
-// arrives LAST.
+// Handler sub_775cb0 reads the payload in three steps: @0x00775cc1 a 2-byte
+// region, @0x00775ccf a single 14-byte block covering x/y/z and the heading,
+// then @0x00775cdd the 4-byte gid. The gid therefore arrives LAST.
 //
 // ObjectSourceCorrection (0xB2F5) carries the same six fields in the mirror
 // order with the gid FIRST, and both encode to 20 bytes. Transposing them is
@@ -71,9 +69,8 @@ func DecodeObjectSourceMove(payload []byte) (ObjectSourceMove, error) {
 // lenient (strict=0) sibling of the 0xB738 move ack. It hard-stops the
 // entity's PathCtl and repositions it.
 //
-// Layout is asm-pinned at asm.asm, client 0x00775B62 inside the client's
-// CPSMission_OnEntityMoveUpdate0xB2F5: the gid comes FIRST here, the
-// mirror image of 0x30E3.
+// Layout is asm-pinned at asm.asm @0x00775b62 (sub_775b50): the gid comes
+// FIRST here, the mirror image of 0x30E3.
 type ObjectSourceCorrection struct {
 	Gid uint32
 	Position
@@ -115,8 +112,7 @@ func DecodeObjectSourceCorrection(payload []byte) (ObjectSourceCorrection, error
 }
 
 // ObjectStateRefresh is the 0x3122 discrete state channel update
-// (the client's CPSMission_OnEntityStateUpdate0x3122 handler,
-// asm-pinned at asm.asm, client 0x00777B62).
+// (handler sub_777b60, asm-pinned at asm.asm @0x00777b62).
 type ObjectStateRefresh struct {
 	Gid uint32
 	// StateType selects the channel; see the StateChannel* constants.
