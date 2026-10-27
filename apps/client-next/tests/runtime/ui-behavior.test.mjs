@@ -5881,6 +5881,39 @@ test("chat rows and world whisper selection prepare the same draft without sendi
 	}
 });
 
+test("a skill tab switch returns to the mastery last selected on that tab", () => {
+	const f = uiFixture( () => {} );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			progression: {
+				level: 10,
+				skillPoints: 10,
+				masteries: [ 257, 258, 259, 273, 274 ].map( id => ({ id, level: 1 }) )
+			}
+		};
+		for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyS" } );
+		f.ui.step( f.state, 1300 );
+		const selected = time => {
+			const scene = f.ui.step( f.state, time );
+			return scene?.controls.find( c => c.id.startsWith( "skill-mastery:" ) && c.selected )?.id;
+		};
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		f.ui.event( { kind: "activate", id: "skill-mastery:258" } );
+		assert.equal( selected( 1400 ), "skill-mastery:258" );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		assert.equal( selected( 1500 ), "skill-mastery:273", "an unvisited tab opens on its first mastery" );
+		f.ui.event( { kind: "activate", id: "skill-mastery:274" } );
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		assert.equal( selected( 1600 ), "skill-mastery:258", "the weapon tab returns to its own last mastery" );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		assert.equal( selected( 1700 ), "skill-mastery:274", "the force tab returns to its own last mastery" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("learned skill icons and shortcut bars share casting and cooldown admission", () => {
 	const sent = [], f = uiFixture( command => sent.push( command ) );
 	try {
