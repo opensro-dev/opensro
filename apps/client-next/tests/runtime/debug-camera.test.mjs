@@ -441,6 +441,11 @@ Holds W for one second in 100 ms steps from a free camera seeded at the
 standing follow, and returns the camera the last step drew.
 ================
 */
+/**
+ * @param {any} f
+ * @param {any} pose
+ * @param {object | null} [keys]
+ */
 function flyForward( f, pose, keys = { forward: true } ) {
 	f.stream.setFreeCamera( true );
 	let camera = f.draw( pose, 1000 );

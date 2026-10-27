@@ -33,6 +33,7 @@ const NO_KEYS = {
 	rollPositive: false,
 	rollNegative: false
 };
+/** @type {{ eye: [number, number, number], target: [number, number, number] }} */
 const CAMERA = { eye: [ 40, 30, 90 ], target: [ 10, 0, 20 ] };
 const FRAME_SECONDS = .05;
 
@@ -168,7 +169,7 @@ test("roll turns the up vector about the view and leaves the eye")
 ================
 */
 test("roll turns the up vector about the view and leaves the eye", () => {
-	const level = seedFreeCamera( CAMERA ), rolled = { ...level, target: [ ...level.target ], roll: .5 };
+	const level = seedFreeCamera( CAMERA ), rolled = { ...level, roll: .5 };
 	const a = freeCameraEye( level ), b = freeCameraEye( rolled );
 	near( b.eye, a.eye, "roll leaves the eye" );
 	const view = level.target.map( ( v, i ) => v - a.eye[i] );

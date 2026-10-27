@@ -457,10 +457,12 @@ export function startRuntime(
 
 		The free-fly arm's keys for this frame (690146 reads them with
 		CCursorManager_IsKeyDown), or null while a text field has focus:
-		native returns before the keys when the chat edit holds focus.
+		native returns before the keys when the chat edit holds focus. The
+		arm only runs while the byte stands, so nothing is read otherwise.
 		================
 		*/
 		function freeCameraKeys(): FreeCameraKeys | null {
+			if ( !freeCameraOn ) return null;
 			const focus = document.activeElement;
 			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return null;
 			const held = ( code: string ) => freeCameraHeld.has( code );
