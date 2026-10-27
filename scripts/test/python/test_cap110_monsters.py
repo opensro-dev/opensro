@@ -23,6 +23,30 @@ def skill(identity, code, original=0):
 
 
 # ================
+# utf16
+# ================
+def utf16(rows):
+	return b"\xff\xfe" + ("\r\n".join("\t".join(row) for row in rows) + "\r\n").encode("utf-16-le")
+
+
+# ================
+# archive_bytes
+# ================
+def archive_bytes(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	root = builder.folder([])
+	server = builder.folder([])
+	silkroad = builder.folder([])
+	textdata = builder.folder([])
+	builder.blocks[root] = [(1, b"server_dep", server, 0)]
+	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
+	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
+	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	return builder.build()
+
+
+# ================
 # Cap110MonstersTest
 # ================
 class Cap110MonstersTest(unittest.TestCase):
@@ -354,6 +378,91 @@ class Cap110MonstersTest(unittest.TestCase):
 		self.assertNotIn("MOB_TQ_SOLDIER\tc", scrubbed)
 		self.assertIn("MOB_TQ_SOLDIER\td", scrubbed)
 		self.assertEqual(monsters.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
+
+	# ================
+	# test_family_off_rebuild_reaps_what_the_first_build_enrolled
+	#
+	# Build level: the first enabled build writes the new family's
+	# characterinfo and name rows and must enrol them in the marker the
+	# same build (the pre-existing text is the native copy, so nothing
+	# about them is discoverable later); a rebuild with the family off
+	# then reaps exactly those rows and shrinks both marker lists.
+	# ================
+	def test_family_off_rebuild_reaps_what_the_first_build_enrolled(self):
+		import os
+		from unittest import mock
+
+		def later_monster(code, symbol, level):
+			row = self.later_row(code, 0, level)
+			row[5] = symbol
+			return row
+
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			vsro, native, output, source = base / "vsro", base / "native", base / "output", base / "source"
+			text_root = output / monsters.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			vsro.mkdir()
+			native.mkdir()
+			source.mkdir()
+			native_char = ["0"] * 104
+			native_char[1], native_char[2] = "100", "MOB_NATIVE"
+			(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
+			(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+			(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+			(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
+			(text_root / "skilleffect.txt").write_bytes(utf16([
+				["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
+			media = {
+				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+				"characterdata_6000.txt": utf16([
+					later_monster("MOB_SD_FIELD", "UIO_OBJ_MOB_SD_FIELD", 105),
+					later_monster("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95)]),
+				"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+				"skilldata_6000.txt": utf16([]),
+				"textdata_object.txt": utf16([
+					["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
+					["2", "UIO_OBJ_MOB_TQ_SOLDIER", "x", "x", "Tomb soldier", "t", "x", "a", "b", "c"]]),
+				"skilleffect.txt": utf16([
+					["#section", "characterinfo"],
+					["MOB_SD_FIELD"] + ["0"] * 12,
+					["MOB_TQ_SOLDIER"] + ["0"] * 12,
+					["#section", "skillaniset"]]),
+			}
+			(vsro / "Media.pk2").write_bytes(archive_bytes(media))
+			(source / "summary.json").write_text(
+				json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
+			(source / "all-spawns.json").write_text(json.dumps(
+				[self.nest_fixture(1, "MOB_SD_FIELD"), self.nest_fixture(2, "MOB_TQ_SOLDIER")]), encoding="utf-8")
+			(source / "Tab_RefNest.json").write_text(json.dumps(
+				[{"dwNestID": 1, "nChampionGenPercentage": 0}, {"dwNestID": 2, "nChampionGenPercentage": 0}]), encoding="utf-8")
+			(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
+			(source / "Tab_RefHive.json").write_text(json.dumps(
+				[{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
+			for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-assignments",
+				"vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
+				(source / (name + ".json")).write_text("[]", encoding="utf-8")
+			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_TEMPLE": ""}
+			marker = output / monsters.MARKER
+			with mock.patch.object(loot, "stage_field_equipment", return_value=0):
+				with mock.patch.dict(os.environ, {**env, "SRO_CAP110_QINSHI": "on"}):
+					first = monsters.add_monsters(vsro, native, output, source)
+				self.assertEqual(first["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
+				enrolled = json.loads(marker.read_text(encoding="utf-8"))
+				self.assertEqual(enrolled["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
+				self.assertIn("UIO_OBJ_MOB_TQ_SOLDIER", enrolled["nameSymbols"])
+				self.assertTrue((text_root / monsters.QINSHI_FILE).exists())
+				with mock.patch.dict(os.environ, {**env, "SRO_CAP110_QINSHI": ""}):
+					second = monsters.add_monsters(vsro, native, output, source)
+			self.assertEqual(second["characterInfo"], ["MOB_SD_FIELD"])
+			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", second["nameSymbols"])
+			effect_text = (text_root / "skilleffect.txt").read_bytes().decode("utf-16")
+			self.assertEqual(monsters.characterinfo_codenames(effect_text), {"MOB_NATIVE", "MOB_SD_FIELD"})
+			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
+			self.assertIn("UIO_OBJ_MOB_SD_FIELD", names)
+			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", names)
+			self.assertFalse((text_root / monsters.QINSHI_FILE).exists())
+			self.assertTrue((text_root / monsters.POPULATION_FILE).exists())
 
 	# ================
 	# test_new_family_species_do_not_rekey_published_identities

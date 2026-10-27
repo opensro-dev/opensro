@@ -577,13 +577,17 @@ def add_monsters(vsro_root, native, output, source_root=None):
 		from cap110_monster_loot import stage_field_equipment
 		loot_count = stage_field_equipment(text_root, source_root)
 		summary = {"enabled": True, "characters": {c: int(r[1]) for c, r in refs.items()}, "skills": {r[3]: int(r[1]) for r in added}, "nests": len(population["Rows"]), "regions": sorted({r["RegionID"] for r in population["Rows"]}),
-			"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
-			# Owned rows are this build's set, not a union with the prior
-			# marker's: a family switched off must shrink both lists so the
-			# next off-path knows exactly what to reap. animationBases stays
-			# a union - it is the reap list for shared effect vocabulary,
-			# which only the full-off path removes.
-			"characterInfo": sorted(owned_info),
+		"animationBases": sorted(set(prior.get("animationBases", [])) | {base for rows in selected.values() for base, _ in rows}),
+		# Owned rows are this build's set, not a union with the prior
+		# marker's: a family switched off must shrink both lists so the
+		# next off-path knows exactly what to reap. The rows this build
+		# itself writes (info) enrol in the same build - on a first
+		# enabled build the pre-existing text is the native copy, so
+		# owned_info alone would record none of them and a later off
+		# build could never reap them. animationBases stays a union -
+		# it is the reap list for shared effect vocabulary, which only
+		# the full-off path removes.
+		"characterInfo": sorted(owned_info | {r[0] for r in info}),
 			"nameSymbols": sorted(({r[1] for r in characters.translation_rows(base_text) if len(r) > 1}
 				| {r[1] for r in texts}) & {r[5] for r in refs.values()})}
 		summary["equipmentLootRows"] = loot_count
