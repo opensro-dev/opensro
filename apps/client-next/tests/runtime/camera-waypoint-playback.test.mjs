@@ -37,6 +37,20 @@ const TRACK = [ keyframe( 0, 0 ), keyframe( 1, 10 ), keyframe( 2, 20 ) ];
 
 /*
 ================
+sampleAt
+
+The sample at time on a non-empty track, which always has one; the empty
+track's null is asserted by its own test.
+================
+*/
+function sampleAt( track, time ) {
+	const sample = waypoints.sampleCameraWaypoints( track, time );
+	assert.ok( sample );
+	return sample;
+}
+
+/*
+================
 test("an empty or single-record track samples its only pose or null")
 ================
 */
@@ -44,8 +58,8 @@ test("an empty or single-record track samples its only pose or null", () => {
 	assert.equal( waypoints.sampleCameraWaypoints( [], 0 ), null );
 	assert.equal( waypoints.sampleCameraWaypoints( [], 5 ), null );
 	const single = [ keyframe( 3, 7, 8, 9 ) ];
-	assert.deepEqual( waypoints.sampleCameraWaypoints( single, 0 ).position, { x: 7, y: 8, z: 9 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( single, 99 ).position, { x: 7, y: 8, z: 9 } );
+	assert.deepEqual( sampleAt( single, 0 ).position, { x: 7, y: 8, z: 9 } );
+	assert.deepEqual( sampleAt( single, 99 ).position, { x: 7, y: 8, z: 9 } );
 });
 
 /*
@@ -54,12 +68,12 @@ test("sampling clamps outside the ends and lands on records exactly")
 ================
 */
 test("sampling clamps outside the ends and lands on records exactly", () => {
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, -2 ).position, { x: 0, y: 0, z: 0 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, 0 ).position, { x: 0, y: 0, z: 0 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, 1 ).position, { x: 10, y: 0, z: 0 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, 2 ).position, { x: 20, y: 0, z: 0 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, 42 ).position, { x: 20, y: 0, z: 0 } );
-	assert.deepEqual( waypoints.sampleCameraWaypoints( TRACK, 1 ).orientation, IDENTITY );
+	assert.deepEqual( sampleAt( TRACK, -2 ).position, { x: 0, y: 0, z: 0 } );
+	assert.deepEqual( sampleAt( TRACK, 0 ).position, { x: 0, y: 0, z: 0 } );
+	assert.deepEqual( sampleAt( TRACK, 1 ).position, { x: 10, y: 0, z: 0 } );
+	assert.deepEqual( sampleAt( TRACK, 2 ).position, { x: 20, y: 0, z: 0 } );
+	assert.deepEqual( sampleAt( TRACK, 42 ).position, { x: 20, y: 0, z: 0 } );
+	assert.deepEqual( sampleAt( TRACK, 1 ).orientation, IDENTITY );
 });
 
 /*
@@ -71,13 +85,13 @@ test("a mid-segment sample runs the four-point curve, not a lerp", () => {
 	// Segment 0 clamps P0 to the first record: P0..P3 = 0, 0, 10, 20 at
 	// u = 0.5 gives 0.5 * (0 + 10*0.5 + 20*0.25 - 10*0.125) = 4.375,
 	// where a lerp would give 5.
-	const mid = waypoints.sampleCameraWaypoints( TRACK, 0.5 );
+	const mid = sampleAt( TRACK, 0.5 );
 	assert.equal( mid.position.x, 4.375 );
 	assert.equal( mid.position.y, 0 );
 	assert.equal( mid.position.z, 0 );
 	// Segment 1 has all four records: 10, 20 with neighbours 0 and 20
 	// clamped only at the far end - P0..P3 = 0, 10, 20, 20 at u = 0.5.
-	assert.equal( waypoints.sampleCameraWaypoints( TRACK, 1.5 ).position.x, 15.625 );
+	assert.equal( sampleAt( TRACK, 1.5 ).position.x, 15.625 );
 });
 
 /*
@@ -92,11 +106,23 @@ test("the sampled orientation stays a unit quaternion", () => {
 		keyframe( 2, 0, 0, 0, { x: 0, y: 0, z: 0, w: -1 } )
 	];
 	for ( const t of [ 0.25, 0.5, 0.75, 1.25, 1.5 ] ) {
-		const o = waypoints.sampleCameraWaypoints( turned, t ).orientation;
+		const o = sampleAt( turned, t ).orientation;
 		const length = Math.hypot( o.x, o.y, o.z, o.w );
 		assert.ok( Math.abs( length - 1 ) < 1e-9, `t=${t} length ${length}` );
 	}
 });
+
+/*
+================
+unexpectedPlaybackWork
+
+Playback never loads assets; reaching one of these is a test failure.
+================
+*/
+/** @returns {never} */
+function unexpectedPlaybackWork() {
+	throw new Error( "camera playback reached the asset owner" );
+}
 
 /*
 ================
@@ -107,13 +133,25 @@ A world stream whose renderer only records the cameras it is given.
 */
 function playbackFixture() {
 	const cameras = [];
+	/** @type {import("../../src/engine/contracts/assets.ts").AssetOwner} */
+	const assets = {
+		available: () => 0,
+		take: () => null,
+		progress: unexpectedPlaybackWork,
+		health: unexpectedPlaybackWork,
+		textureFeatures: unexpectedPlaybackWork,
+		install: unexpectedPlaybackWork,
+		dispose: unexpectedPlaybackWork,
+		request: unexpectedPlaybackWork,
+		cancel() {}
+	};
 	const world = createWorldStream(
-		{ available: () => 0 },
-		{
+		assets,
+		/** @type {any} The stream only publishes cameras and retires the world in this fixture. */ ({
 			setWorldCamera: camera => cameras.push( camera ),
 			cancelWorldUpdate() {},
 			setWorld() {}
-		},
+		}),
 		"http://localhost",
 		createPresentationRandom( 1 )
 	);
