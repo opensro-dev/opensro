@@ -197,7 +197,7 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 		}
 		if !advertisedTransportBase(endpoint.Path) {
 			return fmt.Errorf(
-				"shard %q advertised transport URL %q must be the transport base (https://host or https://host/route); "+
+				"shard %q advertised transport URL %q must be the transport base, the origin alone (https://host); "+
 					"clients append %s and the other transport paths themselves",
 				game.Definition.ID,
 				advertised,
@@ -240,22 +240,22 @@ func validateWebTransportPosture(certificate *transport.Certificate, posture web
 ================
 advertisedTransportBase
 
-Whether an advertised URL path is the transport base: the origin, or an
-origin plus a route that names no transport path. Every consumer appends
-the socket, WebTransport, cert-hash and references paths to this base
-(the browser client, sro-wtprobe), so the advertised URL is never the
-socket itself.
+Whether an advertised URL path is the public transport base: the origin
+alone. Every consumer appends the socket, WebTransport, cert-hash and
+references paths to the advertised URL (the browser client,
+sro-wtprobe), and under the public posture WebTransport is dialled on
+the GameWorld's own UDP listener, which serves only the root
+/transport/wt. A route base (https://host/route) would pass the TCP
+paths through an edge but send WebTransport to /route/transport/wt,
+which nothing serves, so every browser would fall back to the socket.
 
-Transition (#1447 follow-up): a base that already ends with the socket
-path is still accepted for one release, so a host catalogue written in
-the old socket form keeps deploying; clients from #1886 on normalise it.
-Remove the tolerance once no host catalogue holds the socket form.
+Transition (#1447 follow-up): the root socket path, /transport/ws, is
+still accepted for one release, so a host catalogue written in the old
+socket form keeps deploying; clients from #1886 on normalise it. Remove
+the tolerance once no host catalogue holds the socket form.
 ================
 */
 func advertisedTransportBase(path string) bool {
 	path = strings.TrimSuffix(path, "/")
-	if strings.HasSuffix(path, transport.PathWS) {
-		return true
-	}
-	return !strings.Contains(path+"/", "/transport/")
+	return path == "" || path == transport.PathWS
 }
