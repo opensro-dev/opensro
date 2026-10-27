@@ -4,8 +4,6 @@
 apps/server/internal/agent/api/agentapi.go 6
 apps/server/internal/agent/publicstats/views.go 1
 apps/server/internal/agent/server/client_incident_test.go 2
-apps/server/internal/domain/letter.go 1
-apps/server/internal/domain/quickslot.go 2
 apps/server/internal/game/enterworld/bootstrap.go 1
 apps/server/internal/game/enterworld/cosrecord.go 1
 apps/server/internal/game/enterworld/defaultskills.go 1
@@ -116,5 +114,4 @@ apps/server/internal/game/item/wire/targetrelease.go 3
 apps/server/internal/game/item/wire/tradeowner_test.go 1
 apps/server/internal/game/item/wire/visualflags.go 2
 apps/server/internal/game/item/wire/withdrawal.go 2
-apps/server/internal/game/siege/lane_test.go 1
 apps/server/internal/transport/ratelimit.go 2
