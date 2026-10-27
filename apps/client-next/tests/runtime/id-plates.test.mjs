@@ -132,11 +132,13 @@ test("without the kind-4 pass no row lifts the stall title or speech", () => {
 		y: 0,
 		z: 0
 	};
-	const game = {
-		localGid: 1,
-		vitals: [ { gid: 2, hp: 50, maxHp: 100, mp: 50, maxMp: 100 } ],
-		social: { members: [] }
-	};
+	// Only the fields overheadLayout reads; the rest of the state is absent.
+	const game =
+		/** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ (/** @type {unknown} */ ({
+			localGid: 1,
+			vitals: [ { gid: 2, hp: 50, maxHp: 100, mp: 50, maxMp: 100 } ],
+			social: { members: [] }
+		}));
 	const options = defaultGameOptions();
 	const stall = {
 		...local,
@@ -252,31 +254,38 @@ async function presenterFixture() {
 		setCharacterActors() {}
 	};
 	const presenter = createCharacterPresentation(
-		assets,
-		renderer,
+		/** @type {Parameters<typeof createCharacterPresentation>[0]} */ (/** @type {unknown} */ (assets)),
+		/** @type {Parameters<typeof createCharacterPresentation>[1]} */ (/** @type {unknown} */ (renderer)),
 		"http://localhost",
 		() => {},
 		createPresentationRandom( 1 )
 	);
-	const entities = [ 1, 2 ].map( gid => ({
-		gid,
-		refObjId: gid,
-		kind: gid === 1 ? "local-player" : "monster",
-		appearanceState: [ 1, 0, 0 ],
-		regionId: 257,
-		x: gid * 10,
-		y: 0,
-		z: 0,
-		heading: 0,
-		movementMode: 0
-	}) );
-	const game = {
+	const entities =
+		/** @type {import("../../src/engine/contracts/world.ts").EntityState[]} */ (/** @type {unknown} */ ([ 1, 2 ]
+			.map( gid => ({
+				gid,
+				refObjId: gid,
+				kind: gid === 1 ? "local-player" : "monster",
+				appearanceState: [ 1, 0, 0 ],
+				regionId: 257,
+				x: gid * 10,
+				y: 0,
+				z: 0,
+				heading: 0,
+				movementMode: 0
+			}) )));
+	// Only the fields the presenter reads. exchange() replaces casts per hit
+	// on this plain object; the presenter sees it through game.
+	const state = {
 		localGid: 1,
 		pose: { regionId: 257, x: 10, y: 0, z: 0, angle: 0 },
 		inventory: [],
 		vitals: [],
-		casts: []
+		casts: /** @type {unknown[]} */ ([])
 	};
+	const game = /** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ (
+		/** @type {unknown} */ (state)
+	);
 	for ( let i = 0; i < 30; i++ ) presenter.step( entities, game, i * .01, i * 10 );
 	assert.equal( presenter.error(), null );
 	/*
@@ -288,7 +297,7 @@ async function presenterFixture() {
 	================
 	*/
 	function exchange( at ) {
-		game.casts = [ 1, 2 ].map( caster => ({
+		state.casts = [ 1, 2 ].map( caster => ({
 			token: caster + at * 10,
 			caster,
 			target: 3 - caster,
