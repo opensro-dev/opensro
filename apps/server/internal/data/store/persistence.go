@@ -58,9 +58,9 @@ recorded under label (lock_timing.go), success or not.
 */
 func (s *Store) commitOnceLocked(label string) error {
 	var phases commitPhaseDurations
-	start := time.Now()
+	start := s.mu.now()
 	err := s.commitTxLocked(&phases)
-	phases[commitPhaseTotal] = time.Since(start)
+	phases[commitPhaseTotal] = s.mu.now().Sub(start)
 	s.commits.record(label, phases)
 	return err
 }
@@ -89,7 +89,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		}
 	}
 
-	begun := time.Now()
+	begun := s.mu.now()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
-				if err := upsertTimedTx(tx, divisionID, c, &phases[commitPhaseEncode]); err != nil {
+				if err := upsertTimedTx(tx, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
 					return err
 				}
 			}
@@ -133,7 +133,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 			if !known {
 				return fmt.Errorf("dirty character %q has no division binding", c.Name)
 			}
-			if err := upsertTimedTx(tx, divisionID, c, &phases[commitPhaseEncode]); err != nil {
+			if err := upsertTimedTx(tx, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
 				return err
 			}
 		}
@@ -245,13 +245,13 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
 		return err
 	}
-	phases[commitPhaseStatements] = time.Since(begun) - phases[commitPhaseEncode]
-	committing := time.Now()
+	phases[commitPhaseStatements] = s.mu.now().Sub(begun) - phases[commitPhaseEncode]
+	committing := s.mu.now()
 	if s.beforeSQLiteCommit != nil {
 		s.beforeSQLiteCommit()
 	}
 	err = tx.Commit()
-	phases[commitPhaseSQLite] = time.Since(committing)
+	phases[commitPhaseSQLite] = s.mu.now().Sub(committing)
 	if err != nil {
 		return err
 	}
@@ -400,10 +400,10 @@ upsertTimedTx
 upsertCharacterTx for the commit: the encoding's time is added to encode.
 ================
 */
-func upsertTimedTx(tx *sql.Tx, division string, c *domain.Character, encode *time.Duration) error {
-	start := time.Now()
+func upsertTimedTx(tx *sql.Tx, division string, c *domain.Character, now func() time.Time, encode *time.Duration) error {
+	start := now()
 	record, err := encodeCharacter(division, c)
-	*encode += time.Since(start)
+	*encode += now().Sub(start)
 	if err != nil {
 		return err
 	}

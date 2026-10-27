@@ -36,7 +36,9 @@ infrastructure and never knows game lanes; its worldsession subpackage is the
 outer adapter that joins transport to simulation. Agent API is an outer adapter
 over auth, domain, store, and the dependency-free readiness gate. The
 privatepath leaf is shared only by the two packages that own service-private
-files: store and transport.
+files: store and transport. The latency leaf (fixed-bucket histograms) is
+shared by the same two: transport times handlers and ticks with it, store its
+authority lock.
 ================================================================================
 */
 
@@ -84,12 +86,15 @@ func TestCorePackageBoundaries(t *testing.T) {
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/security/workload", nil, true)
 	checkPackageImports(t, root, modulePath, "internal/platform/readiness", nil, false)
+	checkPackageImports(t, root, modulePath, "internal/platform/latency", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/data/store", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/domain/charactervitals": true,
+		modulePath + "/internal/platform/latency":       true,
 		modulePath + "/internal/platform/privatepath":   true,
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/transport", map[string]bool{
+		modulePath + "/internal/platform/latency":     true,
 		modulePath + "/internal/platform/privatepath": true,
 	}, true)
 	checkPackageImports(t, root, modulePath, "internal/agent/api", map[string]bool{

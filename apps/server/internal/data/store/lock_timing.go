@@ -40,16 +40,32 @@ import (
 timedRWMutex
 
 The store's lock: a sync.RWMutex that records each reader's wait and each
-writer's wait and hold. heldSince is written by the writer that holds the
-lock, so it needs no lock of its own.
+writer's wait and hold, and how many readers are waiting right now.
+heldSince is written by the writer that holds the lock, so it needs no
+lock of its own. clock is nil in production (time.Now); a test sets it
+before any door runs, to drive the durations without sleeping.
 ================
 */
 type timedRWMutex struct {
-	mu        sync.RWMutex
-	heldSince time.Time
-	readWait  latency.Live
-	writeWait latency.Live
-	writeHold latency.Live
+	mu             sync.RWMutex
+	clock          func() time.Time
+	heldSince      time.Time
+	readersWaiting atomic.Int64
+	readWait       latency.Live
+	writeWait      latency.Live
+	writeHold      latency.Live
+}
+
+/*
+================
+timedRWMutex.now
+================
+*/
+func (m *timedRWMutex) now() time.Time {
+	if m.clock != nil {
+		return m.clock()
+	}
+	return time.Now()
 }
 
 /*
@@ -58,9 +74,9 @@ timedRWMutex.Lock
 ================
 */
 func (m *timedRWMutex) Lock() {
-	start := time.Now()
+	start := m.now()
 	m.mu.Lock()
-	m.heldSince = time.Now()
+	m.heldSince = m.now()
 	m.writeWait.Add(m.heldSince.Sub(start))
 }
 
@@ -70,7 +86,7 @@ timedRWMutex.Unlock
 ================
 */
 func (m *timedRWMutex) Unlock() {
-	held := time.Since(m.heldSince)
+	held := m.now().Sub(m.heldSince)
 	m.mu.Unlock()
 	m.writeHold.Add(held)
 }
@@ -81,9 +97,11 @@ timedRWMutex.RLock
 ================
 */
 func (m *timedRWMutex) RLock() {
-	start := time.Now()
+	start := m.now()
+	m.readersWaiting.Add(1)
 	m.mu.RLock()
-	m.readWait.Add(time.Since(start))
+	m.readersWaiting.Add(-1)
+	m.readWait.Add(m.now().Sub(start))
 }
 
 /*
@@ -167,11 +185,14 @@ The snapshot served on /transport/metrics as store_lock.
 ================
 */
 type LockTiming struct {
-	ReadWaitMs    latency.Histogram            `json:"read_wait_ms"`
-	WriteWaitMs   latency.Histogram            `json:"write_wait_ms"`
-	WriteHoldMs   latency.Histogram            `json:"write_hold_ms"`
-	CommitMs      map[string]latency.Histogram `json:"commit_ms"`
-	LongestCommit *LongestCommit               `json:"longest_commit,omitempty"`
+	// ReadersWaiting is the readers blocked on the lock when the snapshot
+	// was read.
+	ReadersWaiting int64                        `json:"readers_waiting"`
+	ReadWaitMs     latency.Histogram            `json:"read_wait_ms"`
+	WriteWaitMs    latency.Histogram            `json:"write_wait_ms"`
+	WriteHoldMs    latency.Histogram            `json:"write_hold_ms"`
+	CommitMs       map[string]latency.Histogram `json:"commit_ms"`
+	LongestCommit  *LongestCommit               `json:"longest_commit,omitempty"`
 }
 
 /*
@@ -184,11 +205,12 @@ never waits behind the commit it is measuring.
 */
 func (s *Store) LockTiming() LockTiming {
 	out := LockTiming{
-		ReadWaitMs:    s.mu.readWait.Snapshot(),
-		WriteWaitMs:   s.mu.writeWait.Snapshot(),
-		WriteHoldMs:   s.mu.writeHold.Snapshot(),
-		CommitMs:      make(map[string]latency.Histogram, commitPhases),
-		LongestCommit: s.commits.longest.Load(),
+		ReadersWaiting: s.mu.readersWaiting.Load(),
+		ReadWaitMs:     s.mu.readWait.Snapshot(),
+		WriteWaitMs:    s.mu.writeWait.Snapshot(),
+		WriteHoldMs:    s.mu.writeHold.Snapshot(),
+		CommitMs:       make(map[string]latency.Histogram, commitPhases),
+		LongestCommit:  s.commits.longest.Load(),
 	}
 	for i, name := range commitPhaseNames {
 		out.CommitMs[name] = s.commits.phases[i].Snapshot()
