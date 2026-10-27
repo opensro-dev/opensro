@@ -382,10 +382,18 @@ The release controls carry the posture in `/etc/opensro-release/config.json`:
 
 ```json
 "webtransport_public": "on",
-"transport_wt_addr": "203.0.113.7:443",
+"transport_wt_addr": "[::]:18443",
 "transport_cert_file": "/etc/opensro-tls/fullchain.pem",
 "transport_key_file": "/etc/opensro-tls/privkey.pem"
 ```
+
+The GameWorld runs unprivileged, so it binds a high port on the dual-stack
+wildcard `[::]` and the host redirects public UDP 443 to it (`quic_host.py`,
+installed with the release controls; see the release README). `deploy.py`
+refuses any other bind host (loopback, one address, the IPv4-only
+`0.0.0.0`) and any port below 1024, and passes
+`-transport-wt-public-port 443`, so the advertised port still matches what
+clients dial.
 
 `deploy.py` passes the switch through the deployer environment (it becomes
 the `webtransport_public` job variable and the GameWorld's
@@ -399,7 +407,10 @@ rehearsal validates the whole posture from the staged release before any
 window.
 
 The certificate is a publicly trusted pair for `play.opensro.online` at the
-configured paths (an ACME client such as certbot renews it there); renewal
+configured paths (an ACME client such as certbot renews it there), readable
+by the GameWorld's task user `sro`: `deploy.py` checks that with
+`runuser -u sro -- test -r` before any token, and a pair that still fails at
+boot disables WebTransport only, leaving WebSocket up (#1861); renewal
 takes effect on the next deploy, because the leaf fingerprint is part of the
 jobspec and a new fingerprint rolls the GameWorld. The transport metrics
 expose `certificate_seconds_remaining` for renewal alerting. The UDP socket

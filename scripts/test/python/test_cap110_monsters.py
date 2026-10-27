@@ -23,6 +23,30 @@ def skill(identity, code, original=0):
 
 
 # ================
+# utf16
+# ================
+def utf16(rows):
+	return b"\xff\xfe" + ("\r\n".join("\t".join(row) for row in rows) + "\r\n").encode("utf-16-le")
+
+
+# ================
+# archive_bytes
+# ================
+def archive_bytes(files):
+	from test_client_preparation import ArchiveBuilder
+	builder = ArchiveBuilder()
+	root = builder.folder([])
+	server = builder.folder([])
+	silkroad = builder.folder([])
+	textdata = builder.folder([])
+	builder.blocks[root] = [(1, b"server_dep", server, 0)]
+	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
+	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
+	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	return builder.build()
+
+
+# ================
 # Cap110MonstersTest
 # ================
 class Cap110MonstersTest(unittest.TestCase):
@@ -179,6 +203,337 @@ class Cap110MonstersTest(unittest.TestCase):
 			Path(root, "all-spawns.json").write_text(json.dumps(rows), encoding="utf-8")
 			self.assertEqual(monsters.outdoor_regions(root), {(57, 74)})
 			self.assertEqual(monsters.outdoor_regions(root, True), {(57, 74), (29631 & 255, 29631 >> 8)})
+
+	# ================
+	# test_family_claims_from_spawns
+	# ================
+	def family_claims(self, spawns, families):
+		claims = {}
+		for family in families:
+			for code in monsters.family_codes(spawns, family):
+				claims.setdefault(code, []).append(family)
+		return claims
+
+	# ================
+	# later_row
+	# ================
+	def later_row(self, code, grade, level):
+		row = ["0"] * 104
+		row[2], row[15], row[57] = code, str(grade), str(level)
+		return row
+
+	# ================
+	# test_qinshi_family_admits_its_window_and_prefixes
+	# ================
+	def test_qinshi_family_admits_its_window_and_prefixes(self):
+		later = {}
+		for code, grade, level in [("MOB_TQ_SOLDIER", 0, 81), ("MOB_TQ_LOW", 0, 80), ("MOB_TQ_TOP", 3, 110),
+			("MOB_TQ_HIGH", 0, 111), ("MOB_TQ_CHAMPION", 1, 95), ("MOB_QT_TQ_MIRROR", 6, 100), ("MOB_QT_GHOST", 8, 91)]:
+			later[code] = self.later_row(code, grade, level)
+		spawns = [{"codename": code, "game_world_id": 1, "service": 1} for code in later]
+		spawns.append({"codename": "MOB_TQ_INACTIVE", "game_world_id": 1, "service": 0})
+		later["MOB_TQ_INACTIVE"] = self.later_row("MOB_TQ_INACTIVE", 0, 90)
+		claims = self.family_claims(spawns, (monsters.QINSHI_FAMILY,))
+		refs = monsters.select_references(later, claims)
+		self.assertEqual(set(refs), {"MOB_TQ_SOLDIER", "MOB_TQ_TOP", "MOB_QT_TQ_MIRROR", "MOB_QT_GHOST"})
+
+	# ================
+	# test_temple_family_claims_only_its_worlds_and_window
+	# ================
+	def test_temple_family_claims_only_its_worlds_and_window(self):
+		later = {}
+		for code, grade, level in [("MOB_GOD_LOW", 0, 34), ("MOB_GOD_BAND", 1, 35), ("MOB_GOD_TOP", 8, 109),
+			("MOB_GOD_OVER", 0, 110), ("MOB_GOD_OUTWORLD", 0, 60), ("MOB_GOD_RARE2", 2, 60), ("MOB_GOD_FIELD", 0, 60)]:
+			later[code] = self.later_row(code, grade, level)
+		spawns = [{"codename": "MOB_GOD_LOW", "game_world_id": 63, "service": 1},
+			{"codename": "MOB_GOD_BAND", "game_world_id": 63, "service": 1},
+			{"codename": "MOB_GOD_TOP", "game_world_id": 84, "service": 1},
+			{"codename": "MOB_GOD_OVER", "game_world_id": 70, "service": 1},
+			{"codename": "MOB_GOD_OUTWORLD", "game_world_id": 62, "service": 1},
+			{"codename": "MOB_GOD_RARE2", "game_world_id": 70, "service": 1},
+			{"codename": "MOB_GOD_FIELD", "game_world_id": 1, "service": 1},
+			{"codename": "MOB_SD_FIELD", "game_world_id": 63, "service": 1}]
+		later["MOB_SD_FIELD"] = self.later_row("MOB_SD_FIELD", 0, 60)
+		claims = self.family_claims(spawns, (monsters.TEMPLE_FAMILY,))
+		refs = monsters.select_references(later, claims)
+		self.assertEqual(set(refs), {"MOB_GOD_BAND", "MOB_GOD_TOP"})
+
+	# ================
+	# test_family_tables_match_the_agreed_rows
+	# ================
+	def test_family_tables_match_the_agreed_rows(self):
+		by_name = {family["Name"]: family for family in monsters.FAMILIES}
+		self.assertEqual(monsters.FAMILIES[0]["Name"], "field")
+		qinshi = by_name["qinshi"]
+		self.assertEqual((qinshi["Flag"], qinshi["File"], qinshi["Worlds"], qinshi["MinLevel"], qinshi["MaxLevel"], qinshi["Grades"]),
+			("SRO_CAP110_QINSHI", "cap110-qinshi.txt", (1,), 81, 110, (0, 3, 6, 8)))
+		temple = by_name["temple"]
+		self.assertEqual((temple["Flag"], temple["File"], temple["MinLevel"], temple["MaxLevel"], temple["Grades"]),
+			("SRO_CAP110_TEMPLE", "cap110-temple.txt", 35, 109, (0, 1, 3, 6, 8)))
+		self.assertEqual((temple["Worlds"][0], temple["Worlds"][-1], len(temple["Worlds"])), (63, 84, 22))
+		flags = {family["Flag"] for family in monsters.FAMILIES}
+		self.assertEqual(len(flags), len(monsters.FAMILIES))
+
+	# ================
+	# test_family_projection_matches_legacy_field_and_pharaoh_outputs
+	# ================
+	def test_family_projection_matches_legacy_field_and_pharaoh_outputs(self):
+		later = {}
+		for code, grade, level in [("MOB_SD_FIELD", 0, 105), ("MOB_SD_TOMB", 6, 104), ("MOB_SD_LOW", 0, 99)]:
+			later[code] = self.later_row(code, grade, level)
+		def spawn(nest, code, world):
+			return {"nest_id": nest, "codename": code, "game_world_id": world, "service": 1, "region_id_unsigned": 100,
+				"tactics_id": 1, "hive_id": 1, "x": 1.0, "y": 0.0, "z": 2.0, "radius": 400, "generate_radius": 300,
+				"max_total_count": 4, "delay_min": 6, "delay_max": 8, "respawn": 1, "direction_unsigned": 0,
+				"champion_percent": 0, "nest_flag": 0, "hive_flag": 0, "spawn_type": 0}
+		spawns = [spawn(1, "MOB_SD_FIELD", 1), spawn(2, "MOB_SD_TOMB", 57), spawn(3, "MOB_SD_LOW", 1)]
+		legacy = monsters.select_field_references(later, {"MOB_SD_FIELD", "MOB_SD_TOMB", "MOB_SD_LOW"}, {"MOB_SD_TOMB"})
+		claims = self.family_claims(spawns, (monsters.FIELD_FAMILY, monsters.TOMB_FAMILY))
+		self.assertEqual(monsters.select_references(later, claims), legacy)
+		tactics = {1: {"dwTacticsID": 1, "dwObjID": 7, "btAIQoS": 0, "nMaxStamina": 0, "btMaxStaminaVariance": 0,
+			"nSightRange": 130, "btAggressType": 0, "AggressData": 0, "btChangeTarget": 2, "btHelpRequestTo": 0,
+			"btHelpResponseTo": 0, "btBattleStyle": 0, "BattleStyleData": 0, "btDiversionBasis": 0, "btDiversionKeepBasis": 0,
+			"btKeepDistance": 0, "KeepDistanceData": 0, "btTraceType": 0, "btTraceBoundary": 0, "TraceData": 0,
+			"btHomingType": 0, "HomingData": 0, "btAggressTypeOnHoming": 0, "btFleeType": 0, "dwChampionTacticsID": 0,
+			"AdditionOptionFlag": 0, **{f"DiversionBasisData{i}": 0 for i in range(1, 9)},
+			**{f"DiversionKeepBasisData{i}": 0 for i in range(1, 9)}}}
+		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
+		refs = {"MOB_SD_FIELD": 1, "MOB_SD_TOMB": 2, "MOB_SD_LOW": 3}
+		general_field = monsters.project_population(spawns, refs, tactics, hives, monsters.FIELD_FAMILY["Worlds"],
+			codes=monsters.family_codes(spawns, monsters.FIELD_FAMILY))
+		self.assertEqual(general_field, monsters.project_population(spawns, refs, tactics, hives))
+		general_tomb = monsters.project_population(spawns, refs, tactics, hives, monsters.TOMB_FAMILY["Worlds"],
+			strict=True, codes=monsters.family_codes(spawns, monsters.TOMB_FAMILY))
+		self.assertEqual(general_tomb, monsters.project_population(spawns, refs, tactics, hives, monsters.TOMB_WORLDS, strict=True))
+
+	# ================
+	# test_qinshi_strict_projection_skips_other_families_but_refuses_its_own
+	# ================
+	def test_qinshi_strict_projection_skips_other_families_but_refuses_its_own(self):
+		def spawn(nest, code):
+			return {"nest_id": nest, "codename": code, "game_world_id": 1, "service": 1, "region_id_unsigned": 32772,
+				"tactics_id": 1, "hive_id": 1, "x": 1.0, "y": 0.0, "z": 2.0, "radius": 400, "generate_radius": 300,
+				"max_total_count": 4, "delay_min": 6, "delay_max": 8, "respawn": 1, "direction_unsigned": 0,
+				"champion_percent": 0, "nest_flag": 0, "hive_flag": 0, "spawn_type": 0}
+		tactics = {1: {"dwTacticsID": 1, "dwObjID": 7, "btAIQoS": 0, "nMaxStamina": 0, "btMaxStaminaVariance": 0,
+			"nSightRange": 130, "btAggressType": 0, "AggressData": 0, "btChangeTarget": 2, "btHelpRequestTo": 0,
+			"btHelpResponseTo": 0, "btBattleStyle": 0, "BattleStyleData": 0, "btDiversionBasis": 0, "btDiversionKeepBasis": 0,
+			"btKeepDistance": 0, "KeepDistanceData": 0, "btTraceType": 0, "btTraceBoundary": 0, "TraceData": 0,
+			"btHomingType": 0, "HomingData": 0, "btAggressTypeOnHoming": 0, "btFleeType": 0, "dwChampionTacticsID": 0,
+			"AdditionOptionFlag": 0, **{f"DiversionBasisData{i}": 0 for i in range(1, 9)},
+			**{f"DiversionKeepBasisData{i}": 0 for i in range(1, 9)}}}
+		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
+		spawns = [spawn(1, "MOB_SD_FIELD"), spawn(2, "MOB_TQ_SOLDIER")]
+		codes = monsters.family_codes(spawns, monsters.QINSHI_FAMILY)
+		self.assertEqual(codes, {"MOB_TQ_SOLDIER"})
+		rows = monsters.project_population(spawns, {"MOB_TQ_SOLDIER": 1}, tactics, hives,
+			monsters.QINSHI_FAMILY["Worlds"], strict=True, codes=codes)
+		self.assertEqual([(r["NestID"], r["WorldID"]) for r in rows["Rows"]], [(2, 1)])
+		with self.assertRaisesRegex(ValueError, "MOB_TQ_SOLDIER"):
+			monsters.project_population(spawns, {}, tactics, hives,
+				monsters.QINSHI_FAMILY["Worlds"], strict=True, codes=codes)
+
+	# ================
+	# test_family_switches_require_the_field_flag
+	# ================
+	def test_family_switches_require_the_field_flag(self):
+		import os
+		from unittest import mock
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			for flag in ("SRO_CAP110_QINSHI", "SRO_CAP110_TEMPLE", "SRO_PHARAOH_TOMB"):
+				with self.subTest(flag=flag), mock.patch.dict(os.environ, {flag: "on", "SRO_CAP110_MONSTERS": ""}):
+					with self.assertRaisesRegex(ValueError, "requires SRO_CAP110_MONSTERS"):
+						monsters.add_monsters(base / "vsro", base / "native", base / "output")
+
+	# ================
+	# test_shipped_flags_at_their_defaults_do_not_gate_the_families
+	#
+	# Today's default build: the shipped tomb switch is on (its registry
+	# default) and every cap-110 switch is off. The families ride none of
+	# the shipped switches, so the run is the plain off path.
+	# ================
+	def test_shipped_flags_at_their_defaults_do_not_gate_the_families(self):
+		import os
+		from unittest import mock
+		env = {"SRO_QINSHI_TOMB": "on", "SRO_PHARAOH_TOMB": "",
+			"SRO_CAP110_MONSTERS": "", "SRO_CAP110_QINSHI": "", "SRO_CAP110_TEMPLE": ""}
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			with mock.patch.dict(os.environ, env):
+				self.assertEqual(monsters.add_monsters(base / "vsro", base / "native", base / "output"),
+					{"enabled": False})
+
+	# ================
+	# test_disabled_family_rows_are_the_stale_ones
+	# ================
+	def test_disabled_family_rows_are_the_stale_ones(self):
+		rows = [["1", "UIO_OBJ_MOB_SD_FIELD"], ["2", "UIO_OBJ_MOB_TQ_SOLDIER"], ["3"]]
+		self.assertEqual(monsters.drop_symboled_rows(rows, {"UIO_OBJ_MOB_TQ_SOLDIER"}),
+			[["1", "UIO_OBJ_MOB_SD_FIELD"], ["3"]])
+		text = ("#section\tskill\r\nMOB_SD_FIELD\ta\r\n#section\tcharacterinfo\r\n"
+			"MOB_SD_FIELD\tb\r\nMOB_TQ_SOLDIER\tc\r\n#section\tother\r\nMOB_TQ_SOLDIER\td\r\n")
+		scrubbed = monsters.drop_characterinfo_rows(text, {"MOB_TQ_SOLDIER"})
+		self.assertIn("MOB_SD_FIELD\tb", scrubbed)
+		self.assertNotIn("MOB_TQ_SOLDIER\tc", scrubbed)
+		self.assertIn("MOB_TQ_SOLDIER\td", scrubbed)
+		self.assertEqual(monsters.characterinfo_codenames(scrubbed), {"MOB_SD_FIELD"})
+
+	# ================
+	# test_family_off_rebuild_reaps_what_the_first_build_enrolled
+	#
+	# Build level: the first enabled build writes the new family's
+	# characterinfo and name rows and must enrol them in the marker the
+	# same build (the pre-existing text is the native copy, so nothing
+	# about them is discoverable later); a rebuild with the family off
+	# then reaps exactly those rows and shrinks both marker lists.
+	# ================
+	def test_family_off_rebuild_reaps_what_the_first_build_enrolled(self):
+		import os
+		from unittest import mock
+
+		def later_monster(code, symbol, level):
+			row = self.later_row(code, 0, level)
+			row[5] = symbol
+			return row
+
+		with tempfile.TemporaryDirectory() as root:
+			base = Path(root)
+			vsro, native, output, source = base / "vsro", base / "native", base / "output", base / "source"
+			text_root = output / monsters.TEXT_ROOT
+			text_root.mkdir(parents=True)
+			vsro.mkdir()
+			native.mkdir()
+			source.mkdir()
+			native_char = ["0"] * 104
+			native_char[1], native_char[2] = "100", "MOB_NATIVE"
+			(text_root / "characterdata_5000.txt").write_bytes(utf16([native_char]))
+			(text_root / "skilldata.txt").write_bytes(utf16([["skilldata_5000.txt"]]))
+			(text_root / "skilldata_5000.txt").write_bytes(utf16([]))
+			(text_root / "textdataname.txt").write_bytes(utf16([["1", "UIO_OBJ_MOB_NATIVE", "Native"]]))
+			(text_root / "skilleffect.txt").write_bytes(utf16([
+				["#section", "characterinfo"], ["MOB_NATIVE"] + ["0"] * 12, ["#section", "skillaniset"]]))
+			media = {
+				"characterdata.txt": utf16([["characterdata_6000.txt"]]),
+				"characterdata_6000.txt": utf16([
+					later_monster("MOB_SD_FIELD", "UIO_OBJ_MOB_SD_FIELD", 105),
+					later_monster("MOB_TQ_SOLDIER", "UIO_OBJ_MOB_TQ_SOLDIER", 95)]),
+				"skilldata.txt": utf16([["skilldata_6000.txt"]]),
+				"skilldata_6000.txt": utf16([]),
+				"textdata_object.txt": utf16([
+					["1", "UIO_OBJ_MOB_SD_FIELD", "x", "x", "Field monster", "f", "x", "a", "b", "c"],
+					["2", "UIO_OBJ_MOB_TQ_SOLDIER", "x", "x", "Tomb soldier", "t", "x", "a", "b", "c"]]),
+				"skilleffect.txt": utf16([
+					["#section", "characterinfo"],
+					["MOB_SD_FIELD"] + ["0"] * 12,
+					["MOB_TQ_SOLDIER"] + ["0"] * 12,
+					["#section", "skillaniset"]]),
+			}
+			(vsro / "Media.pk2").write_bytes(archive_bytes(media))
+			(source / "summary.json").write_text(
+				json.dumps({"backup_sha256": monsters.SOURCE_BACKUP_SHA256}), encoding="utf-8")
+			(source / "all-spawns.json").write_text(json.dumps(
+				[self.nest_fixture(1, "MOB_SD_FIELD"), self.nest_fixture(2, "MOB_TQ_SOLDIER")]), encoding="utf-8")
+			(source / "Tab_RefNest.json").write_text(json.dumps(
+				[{"dwNestID": 1, "nChampionGenPercentage": 0}, {"dwNestID": 2, "nChampionGenPercentage": 0}]), encoding="utf-8")
+			(source / "Tab_RefTactics.json").write_text(json.dumps([self.tactics_fixture()[1]]), encoding="utf-8")
+			(source / "Tab_RefHive.json").write_text(json.dumps(
+				[{"dwHiveID": 1, "dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}]), encoding="utf-8")
+			for name in ("vsro-outdoor-monster-skills", "vsro-outdoor-drop-assignments",
+				"vsro-outdoor-drop-classes", "vsro-outdoor-rare-classes"):
+				(source / (name + ".json")).write_text("[]", encoding="utf-8")
+			env = {"SRO_CAP110_MONSTERS": "on", "SRO_PHARAOH_TOMB": "", "SRO_CAP110_TEMPLE": ""}
+			marker = output / monsters.MARKER
+			with mock.patch.object(loot, "stage_field_equipment", return_value=0):
+				with mock.patch.dict(os.environ, {**env, "SRO_CAP110_QINSHI": "on"}):
+					first = monsters.add_monsters(vsro, native, output, source)
+				self.assertEqual(first["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
+				enrolled = json.loads(marker.read_text(encoding="utf-8"))
+				self.assertEqual(enrolled["characterInfo"], ["MOB_SD_FIELD", "MOB_TQ_SOLDIER"])
+				self.assertIn("UIO_OBJ_MOB_TQ_SOLDIER", enrolled["nameSymbols"])
+				self.assertTrue((text_root / monsters.QINSHI_FILE).exists())
+				with mock.patch.dict(os.environ, {**env, "SRO_CAP110_QINSHI": ""}):
+					second = monsters.add_monsters(vsro, native, output, source)
+			self.assertEqual(second["characterInfo"], ["MOB_SD_FIELD"])
+			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", second["nameSymbols"])
+			effect_text = (text_root / "skilleffect.txt").read_bytes().decode("utf-16")
+			self.assertEqual(monsters.characterinfo_codenames(effect_text), {"MOB_NATIVE", "MOB_SD_FIELD"})
+			names = (text_root / "textdataname.txt").read_bytes().decode("utf-16")
+			self.assertIn("UIO_OBJ_MOB_SD_FIELD", names)
+			self.assertNotIn("UIO_OBJ_MOB_TQ_SOLDIER", names)
+			self.assertFalse((text_root / monsters.QINSHI_FILE).exists())
+			self.assertTrue((text_root / monsters.POPULATION_FILE).exists())
+
+	# ================
+	# test_new_family_species_do_not_rekey_published_identities
+	# ================
+	def test_new_family_species_do_not_rekey_published_identities(self):
+		previous = {"MOB_SD_FIELD": 120001, "MOB_TQ_SOLDIER": 120002}
+		got = monsters.allocate_identities({100}, ["MOB_GOD_NEW", "MOB_SD_FIELD", "MOB_TQ_SOLDIER"], previous)
+		self.assertEqual(got["MOB_SD_FIELD"], 120001)
+		self.assertEqual(got["MOB_TQ_SOLDIER"], 120002)
+		self.assertNotIn(got["MOB_GOD_NEW"], set(previous.values()))
+		self.assertGreater(got["MOB_GOD_NEW"], 120002)
+
+	# ================
+	# nest_fixture
+	# ================
+	def nest_fixture(self, nest, code, world=1, spawn_type=0):
+		return {"nest_id": nest, "codename": code, "game_world_id": world, "service": 1, "region_id_unsigned": 100,
+			"tactics_id": 1, "hive_id": 1, "x": 1.0, "y": 0.0, "z": 2.0, "radius": 400, "generate_radius": 300,
+			"max_total_count": 4, "delay_min": 6, "delay_max": 8, "respawn": 1, "direction_unsigned": 0,
+			"champion_percent": 0, "nest_flag": 0, "hive_flag": 0, "spawn_type": spawn_type}
+
+	# ================
+	# tactics_fixture
+	# ================
+	def tactics_fixture(self):
+		return {1: {"dwTacticsID": 1, "dwObjID": 7, "btAIQoS": 0, "nMaxStamina": 0, "btMaxStaminaVariance": 0,
+			"nSightRange": 130, "btAggressType": 0, "AggressData": 0, "btChangeTarget": 2, "btHelpRequestTo": 0,
+			"btHelpResponseTo": 0, "btBattleStyle": 0, "BattleStyleData": 0, "btDiversionBasis": 0, "btDiversionKeepBasis": 0,
+			"btKeepDistance": 0, "KeepDistanceData": 0, "btTraceType": 0, "btTraceBoundary": 0, "TraceData": 0,
+			"btHomingType": 0, "HomingData": 0, "btAggressTypeOnHoming": 0, "btFleeType": 0, "dwChampionTacticsID": 0,
+			"AdditionOptionFlag": 0, **{f"DiversionBasisData{i}": 0 for i in range(1, 9)},
+			**{f"DiversionKeepBasisData{i}": 0 for i in range(1, 9)}}}
+
+	# ================
+	# test_temple_projection_carries_spawn_type
+	# ================
+	def test_temple_projection_carries_spawn_type(self):
+		spawns = [self.nest_fixture(1, "MOB_GOD_SOLDIER", 70), self.nest_fixture(2, "MOB_GOD_CAPTAIN", 70, spawn_type=1)]
+		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
+		refs = {"MOB_GOD_SOLDIER": 1, "MOB_GOD_CAPTAIN": 2}
+		rows = monsters.project_population(spawns, refs, self.tactics_fixture(), hives,
+			monsters.TEMPLE_FAMILY["Worlds"], carry_spawn_type=True)["Rows"]
+		self.assertNotIn("SpawnType", rows[0])
+		self.assertEqual(rows[1]["SpawnType"], 1)
+		with self.assertRaisesRegex(ValueError, "unsupported field spawn flags"):
+			monsters.project_population(spawns, refs, self.tactics_fixture(), hives, monsters.TEMPLE_FAMILY["Worlds"])
+
+	# ================
+	# test_strict_codes_answer_for_the_window_only
+	# ================
+	def test_strict_codes_answer_for_the_window_only(self):
+		later = {"MOB_TQ_TRAP": self.later_row("MOB_TQ_TRAP", 0, 30),
+			"MOB_TQ_SOLDIER": self.later_row("MOB_TQ_SOLDIER", 0, 95)}
+		codes = {"MOB_TQ_TRAP", "MOB_TQ_SOLDIER", "MOB_TQ_ABSENT"}
+		strict = monsters.family_strict_codes(monsters.QINSHI_FAMILY, codes, later)
+		self.assertEqual(strict, {"MOB_TQ_SOLDIER"})
+		spawns = [self.nest_fixture(1, "MOB_TQ_TRAP"), self.nest_fixture(2, "MOB_TQ_SOLDIER")]
+		hives = {1: {"dwOverwriteMaxTotalCount": 0, "btKeepMonsterCountType": 0}}
+		rows = monsters.project_population(spawns, {"MOB_TQ_SOLDIER": 1}, self.tactics_fixture(), hives,
+			(1,), strict=True, codes=strict)["Rows"]
+		self.assertEqual([r["Codename"] for r in rows], ["MOB_TQ_SOLDIER"])
+		with self.assertRaisesRegex(ValueError, "MOB_TQ_SOLDIER"):
+			monsters.project_population(spawns, {}, self.tactics_fixture(), hives,
+				(1,), strict=True, codes=strict)
+
+	# ================
+	# test_claimed_species_without_a_later_row_refuses_by_name
+	# ================
+	def test_claimed_species_without_a_later_row_refuses_by_name(self):
+		with self.assertRaisesRegex(ValueError, "MOB_TQ_GHOST"):
+			monsters.select_references({}, {"MOB_TQ_GHOST": [monsters.QINSHI_FAMILY]})
 
 	# ================
 	# test_equipment_classes_keep_native_lower_levels
