@@ -71,7 +71,7 @@ type SkillCastSuccess struct {
 	// client's f08a48 instance map and the finalize must echo it.
 	InstanceToken uint32
 	// OwnerOrTargetGid is the 4 bytes the plan mislabeled "dur f32": a u32
-	// GID, stored to SkillEffectObj+0xcc by an integer mov (sub_8e0440
+	// GID, stored to the skill-effect object's +0xcc by an integer mov (sub_8e0440
 	// @0x8e0493/97, no fld/fstp) and consumed by
 	// GidObjectRegistry_FindCharacterByGid (sub_8d9740), read on the
 	// local-echo path REGARDLESS of steeringFlags. Single-target result

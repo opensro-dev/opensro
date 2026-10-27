@@ -15,20 +15,22 @@ type OpponentCandidate struct {
 	GID      uint32
 	Eligible bool
 	Distance float64
-	// ActorDistance is CAITactics_DistanceBetweenActors (53D7A0) from the
-	// struck monster, which 5473C0's sight test reads.
+	// ActorDistance is the reference server's actor-distance computation
+	// from the struck monster, which its opponent record's sight test reads.
 	ActorDistance float32
 }
 
-// gradeUnique is CGObjMob_GetBaseGrade's unique grade (vtable +0x12C).
+// gradeUnique is the reference server mob's base-grade unique grade
+// (vtable +0x12C).
 const gradeUnique = 3
 
 /*
 ==================
 IgnoresDistantHate
 
-5473C0's first branch (5473F7..547486): a unique whose live walk and run
-speeds are both at most zero takes no hate from an attacker beyond its
+The first branch of the reference server's opponent-damage record: a
+unique whose live walk and run speeds are both at most zero takes no hate
+from an attacker beyond its
 tactics SightRange (the row's +0x14, without the body radius). That
 attacker's record loses its aggression, and nothing else is credited: no
 damage, no hit, not the damage since the last summon (+0xB0).
@@ -63,8 +65,9 @@ func ZeroOpponentAggression(records *[2]Opponent, attacker uint32) {
 	}
 }
 
-// RecordOpponentHit is 5473C0's record update followed by 548090/545680's
-// selection. The caller supplies current entity resolution and distance;
+// RecordOpponentHit is the reference server's opponent-record update
+// followed by its change-target policy and opponent selection. The caller
+// supplies current entity resolution and distance;
 // this value operation owns neither entity lookup nor movement publication.
 func RecordOpponentHit(records *[2]Opponent, policy uint8, attacker uint32, damage uint32, aggression, percent int32, now, cadence uint32, candidates [3]OpponentCandidate) uint32 {
 	slot := 2
@@ -92,7 +95,8 @@ func RecordOpponentHit(records *[2]Opponent, policy uint8, attacker uint32, dama
 	switch policy {
 	case 1:
 		if primary != attacker {
-			// 53FFE0 changes the primary identity/time, not the score bytes.
+			// The native primary switch changes the primary identity/time,
+			// not the score bytes.
 			records[0].GID, records[0].LastHitMs = attacker, now
 		}
 		return attacker

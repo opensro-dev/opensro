@@ -3,7 +3,8 @@
 
 cossummoner.go - persistent summoner item bodies
 
-492D20/492D40 distinguish absent, summoned, dormant and dead records. The
+The reference server's summoner item serialization distinguishes absent,
+summoned, dormant and dead records. The
 item subtype selects attack or pickup companions; pickup records add rental
 time. Statistics remain server authority and never come from this wire view.
 

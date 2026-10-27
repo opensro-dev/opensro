@@ -112,8 +112,9 @@ func TestSightAcquisitionRespectsTheSquadLimit(t *testing.T) {
 ================
 TestFixedQueryUniqueSwitchesToSecondaryOpponentInReach
 
-548340: with the target beyond body radius + 15 and the secondary opponent
-inside it, Uruchi's tactics retarget the secondary; an ordinary row, a
+The native secondary-opponent switch: with the target beyond body radius
++ 15 and the secondary opponent inside it, Uruchi's tactics retarget the
+secondary; an ordinary row, a
 secondary out of reach, or a target in reach keep the target.
 ================
 */

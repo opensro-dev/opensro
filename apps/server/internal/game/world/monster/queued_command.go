@@ -5,8 +5,9 @@ import (
 	"fmt"
 )
 
-// AICommandKind is the uint16 opcode at CMsgStreamBuffer +10, dispatched by
-// 53FE30. It is server-internal; these values are not client wire opcodes.
+// AICommandKind is the uint16 opcode at the message buffer's +10, dispatched
+// by the reference server's pending-AI-message processing. It is
+// server-internal; these values are not client wire opcodes.
 type AICommandKind uint16
 
 const (
@@ -18,7 +19,8 @@ const (
 
 // AICommand retains a detached, comparable payload. Duration is an unsigned
 // state duration, not an absolute deadline or skill ID. Command 4's target is
-// only a lookup prerequisite; 540500 scans around the receiving actor.
+// only a lookup prerequisite; the native scan runs around the receiving
+// actor.
 type AICommand struct {
 	Kind      AICommandKind
 	Help      HelpEvent
@@ -81,8 +83,9 @@ func (b CommandInbox) Pending() (HelpEvent, bool) {
 	return b.command.Help, b.pending && b.command.Kind == AICommandHelp
 }
 
-// 558B90: zero disables expiry; elapsed subtraction wraps at uint32 and the
-// comparison is strict. Keep this separate from signed wall-clock deadlines.
+// The native state-deadline check: zero disables expiry; elapsed
+// subtraction wraps at uint32 and the comparison is strict. Keep this
+// separate from signed wall-clock deadlines.
 func NativeStateDurationExpired(started, duration, now uint32) bool {
 	return duration != 0 && now-started > duration
 }

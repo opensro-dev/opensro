@@ -81,7 +81,8 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			continue
 		}
 		ref := s.template.Refs[entry.RefObjID]
-		// 597024 consumes one heading draw per tuple, including zero counts.
+		// The native summon consumes one heading draw per tuple, including
+		// zero counts.
 		headingFraction := float32(float64(monster.SummonRandomWord(s.random())) / 32767)
 		heading := float64(float32(float64(headingFraction) * 6.2831854820251465))
 		count := min(monster.SummonRandomWord(s.random())%(entry.Maximum-entry.Minimum+1)+entry.Minimum, 50)
@@ -90,7 +91,8 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			if s.counter >= domain.MaxMonsterGIDCounter {
 				break
 			}
-			// 531240: 70/101 outer third, 20/101 middle, 11/101 inner;
+			// The banded spawn-radius draw: 70/101 outer third, 20/101
+			// middle, 11/101 inner;
 			// then a uniform radius within that third and a uniform angle.
 			third := float64(float32(radius / 3))
 			roll := monster.SummonRandomWord(s.random()) % 101

@@ -103,8 +103,8 @@ assignedDropMisses
 The rolls that make every assigned reward of the combat fixture's monster
 miss. Assigned rewards roll before gold (reference server), and the fixture monster
 (MOB_CH_MANGNYANG) carries its own characterdata materials: a constant
-32767 keeps each count at its minimum and lands each million roll at 741823,
-above every authored chance, so its consumption is measured, not assumed.
+32767 keeps each count at its minimum and lands each million roll above
+every authored chance, so its consumption is measured, not assumed.
 ================
 */
 func assignedDropMisses() []uint32 {

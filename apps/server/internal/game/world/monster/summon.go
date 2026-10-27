@@ -3,9 +3,9 @@
 
 summon.go - unique monster summon policy and health-band selection
 
-Implements the SR_GameServer 0x0053f780 unique-encounter summon dispatch
-(561F20 health-band selection and 562120 random-set selection) and 596E50
-nine-tuple ssou entry layout.
+Implements the reference server's unique-encounter summon dispatch (its
+health-band selection and random-set selection) and the nine-tuple ssou
+entry layout.
 
 ===========================================================================
 */
@@ -16,8 +16,8 @@ package monster
 ================
 SummonEntry
 
-One of the nine ssou tuples consumed by GameServer 596E50: reference,
-low-nibble grade, inclusive minimum/maximum count.
+One of the nine ssou tuples consumed by the reference server's summon
+skill: reference, low-nibble grade, inclusive minimum/maximum count.
 ================
 */
 type SummonEntry struct {

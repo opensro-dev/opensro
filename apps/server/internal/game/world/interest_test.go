@@ -12,7 +12,8 @@ func TestInterestBlockSelectsNative320UnitGrid(t *testing.T) {
 		{319.999, 319.999, 600, 582},
 		{320, 0, 601, 582},
 		{1919.9, 1919.9, 605, 587},
-		// 53AD30 never sees an unfolded local; the continuous grid folds 1920 into
+		// The reference server's grid fold never sees an unfolded local; the
+		// continuous grid folds 1920 into
 		// the next region's first block, exactly like NormalizeOutdoor would.
 		{1920, 640, 606, 584},
 	} {

@@ -41,8 +41,8 @@ func TestFrozenHomingNativeVectors(t *testing.T) {
 	}
 	for i, c := range corpus.Cases {
 		if c.Op == "help" {
-			// Executed native 548950 -> 541D70 -> 541FD0 never produces a
-			// negative band. Enabling data bytes alone must not invent calls.
+			// The executed native help chain never produces a negative
+			// band. Enabling data bytes alone must not invent calls.
 			if c.Expected.Requests != 0 || c.Expected.Latch != 0 || c.Expected.Result != 1 {
 				t.Fatalf("native automatic help %d: %+v", i, c.Expected)
 			}

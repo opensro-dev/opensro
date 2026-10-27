@@ -52,7 +52,7 @@ func (m MoverState) MovementGoal() Pose {
 // WithOwners returns a copy of the path carrying the surface owners the
 // movement authority walked along from -> rest (world/navowner.go). The next
 // plan starts from the owner under the mover instead of re-guessing it from
-// height (native QueryMovement walks from the stored source cell, 0x98B300).
+// height (the server's movement query walks from the stored source cell).
 func (p *NavigationPath) WithOwners(spans []worldgeom.NavOwnerSpan) *NavigationPath {
 	if p == nil {
 		return nil
