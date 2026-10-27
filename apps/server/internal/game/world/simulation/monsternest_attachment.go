@@ -2,7 +2,8 @@ package simulation
 
 import "opensro.online/server/internal/game/world/monster"
 
-// detachNestLocked is 53FD40 -> CNest v10 (560D00). Releasing the nest
+// detachNestLocked is the retail server's release-command path to its nest
+// detach (nest vtable slot 10). Releasing the nest
 // slot does not remove the actor, movement, controller, or authored tactics.
 // Caller holds the population lock; a later death cannot release it twice.
 func (s *MonsterState) detachNestLocked(state *divisionMonsterState, gid uint32, now int64) bool {
@@ -21,7 +22,7 @@ func (s *MonsterState) detachNestLocked(state *divisionMonsterState, gid uint32,
 	return true
 }
 
-// 53FEE4..53FEFF compares only the indoor bit, detaches, and returns before
+// The retail server's detach test compares only the indoor bit, detaches, and returns before
 // activity, queued commands, and OnTick. Preserve that ordering even if the
 // planned detachment loses admission to a concurrent actor update.
 func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor monster.Instance, mover monster.MoverState, now int64) bool {

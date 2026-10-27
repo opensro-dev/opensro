@@ -99,3 +99,11 @@ Actions 0xF0 and above are port-only and never select an emote clip.
 - Live acceptance of the Execute III sweep with several victims, Blood Hunt's
   bonus on surviving prey and its splash, and Bloodscent at full stacks; their
   visuals were checked on the client and their signals by server tests.
+
+
+## Functional verification
+
+All three books of each wolf row have recorded functional coverage, including
+Execute sweeps, Blood Hunt damage on surviving prey and splash onto nearby
+bleeding enemies. See [the pet skill acceptance matrix](ALL-PET-SKILL-ACCEPTANCE.md)
+for case evidence and the limits of rank and visual coverage.

@@ -26,7 +26,7 @@ type NpcDef struct {
 	ObjectID uint32
 	RefObjID uint32
 	// FortressID is the fortress whose tax this object charges and collects
-	// (CGObj_BindFortressFromReference 486140 resolves the reference row's
+	// (the retail server binds the fortress from the reference row's
 	// column 55 codename at spawn); zero binds nothing. A gate also carries
 	// it in Teleport for the browser's fortress gate flag.
 	FortressID uint32
@@ -48,7 +48,7 @@ type NpcDef struct {
 	// from a second codename allowlist.
 	TalkFlags uint32
 	// Services is the NPC's service option set (npcservice.go), which
-	// handlers check (CGObj_HasService 484DF0) and TalkFlags projects.
+	// handlers check (the retail server's service test) and TalkFlags projects.
 	Services NpcServices
 	// AuthoredSpawn distinguishes npcpos.txt world coordinates from the
 	// synthetic anchor used by the old fixture.
@@ -119,7 +119,7 @@ var defaultNpcRoster = [...]NpcDef{
 		NameStrID: "SN_NPC_EU_SMITH",
 		Name:      "Weapon Trader Balbardo",
 		Patrol:    true,
-		// The fixture smith talks; DefaultNpcRoster adds 4C6350's services.
+		// The fixture smith talks; DefaultNpcRoster adds the retail server's services.
 		Services: NpcServices(0).With(NpcServiceShop, NpcServiceTalk),
 		// Media v1.150:
 		// refshopgroup GROUP_STORE_EU_SMITH -> NPC_EU_SMITH;

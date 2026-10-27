@@ -16,6 +16,7 @@ package action
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -112,12 +113,31 @@ gate from admission through receipt enqueue. Their operation releases the
 division/store locks before sending: a queue failure may synchronously run
 cleanup that takes the division lock again. Never acquire this gate inside
 an operation, transport callback, or cleanup hook.
+
+The label names the holder for the gate-hold report: every caller passes
+its own ("enterWorld", "requestOp", ...), so a stall can be attributed
+to the kind of work that kept the gate. With a sink wired
+(rt.PublicationHold), a hold at or above simulation.SlowHookThreshold is
+reported under its label after the gate is released; shorter holds and
+unwired runtimes take the bare release, exactly as before.
 ================
 */
-func (rt *Runtime) LockPublication(divisionID string) func() {
+func (rt *Runtime) LockPublication(divisionID, label string) func() {
 	lane := rt.operations.lane(divisionID, &rt.maintenance)
 	lane.publication.Lock()
-	return lane.releasePublication
+	sink := rt.PublicationHold
+	if sink == nil {
+		return lane.releasePublication
+	}
+	acquired := time.Now()
+	release := lane.releasePublication
+	return func() {
+		held := time.Since(acquired)
+		release()
+		if held >= simulation.SlowHookThreshold {
+			sink(label, held)
+		}
+	}
 }
 
 /*
@@ -142,7 +162,7 @@ func (rt *Runtime) lockTickPublication() func() {
 	sort.Strings(ids)
 	releases := make([]func(), 0, len(ids))
 	for _, id := range ids {
-		releases = append(releases, rt.LockPublication(id))
+		releases = append(releases, rt.LockPublication(id, "tick"))
 	}
 	return func() {
 		for i := len(releases) - 1; i >= 0; i-- {

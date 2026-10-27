@@ -135,7 +135,11 @@ type Runtime struct {
 	Pending         *grounditem.PendingTracker
 	Worlds          *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
-	Steps             simulation.StepTimer
+	Steps simulation.StepTimer
+	// PublicationHold receives publication-gate holds at or above the
+	// slow threshold, labelled by their holder (wired to the transport
+	// metrics, transport.RecordPublicationHold).
+	PublicationHold   func(label string, elapsed time.Duration)
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)

@@ -171,7 +171,8 @@ type Deps struct {
 	ResolveDivisionID func(requestDivisionID string) string
 	// LockPublication orders bootstrap snapshots with action/tick inventory
 	// receipts. The returned release runs only after the full batch is queued.
-	LockPublication func(divisionID string) func()
+	// The label names this holder class for the gate-hold report.
+	LockPublication func(divisionID, label string) func()
 	// FriendConsent receives a ConsentAnswerLength 0x3012 body: the native
 	// client's friend-request answer shares the opcode with the port's
 	// empty game-ready (RegisterGameReady). Nil drops consents.

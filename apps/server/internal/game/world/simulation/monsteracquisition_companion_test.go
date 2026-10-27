@@ -18,8 +18,9 @@ import (
 ================
 TestAcquisitionWeighsOwnersCompanions
 
-5464E0: the nearest of a candidate player and its strikeable companions
-is the target; a tie keeps the player, the fellow band and an ineligible
+The retail server's nearest-owner-or-companion selector: the nearest of a
+candidate player and its strikeable companions is the target; a tie keeps
+the player, the fellow band and an ineligible
 body status are never chosen, and a companion without its owner among
 the candidates is never acquired.
 ================
@@ -119,10 +120,10 @@ func TestAggressiveMonsterChasesTheNearerPet(t *testing.T) {
 ================
 TestDungeonAcquisitionRunsSelector2
 
-5405B0 -> 531180 -> 538B30 -> 540790 -> 5464E0: dungeon regions use the
-same selector dispatch as outdoor regions, weighing companions with their
-owner, enforcing Fear's source exclusion (5299E0) and first-attack
-protection, and ranking by 3D distance (53D7A0).
+The retail server's candidate collection, entity gather, dungeon query
+and nearest-selector chain: dungeon regions use the same selector dispatch
+as outdoor regions, weighing companions with their owner, enforcing Fear's
+source exclusion and first-attack protection, and ranking by 3D distance.
 ================
 */
 func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
@@ -174,10 +175,10 @@ func TestDungeonAcquisitionRunsSelector2(t *testing.T) {
 ================
 TestMountedOwnerRedirectsCompanionTargetToOwner
 
-5478F0 (547A2C..547A57), 547AD0 (547BD5..547C00) and 547C70
-(547EAA..547F02): when the selector or parent-opponent fallback chooses a
-COS whose owner answers CGObjPC_IsMountedOnCOS (4DDCA0) == 1, the combat
-target is swapped to the owner.
+The retail server's tactics acquisition selectors, its fixed-query
+fallback and its idle wander: when the selector or parent-opponent
+fallback chooses a COS whose owner answers the server's mounted check
+== 1, the combat target is swapped to the owner.
 ================
 */
 func TestMountedOwnerRedirectsCompanionTargetToOwner(t *testing.T) {
@@ -220,9 +221,10 @@ func TestMountedOwnerRedirectsCompanionTargetToOwner(t *testing.T) {
 ================
 TestAggressiveMonsterSwapsNearerPetToMountedOwner
 
-When a session has a mounted COS (4DDCA0), an aggressive monster whose
+When a session has a mounted COS, an aggressive monster whose
 selector picks the session's nearer companion swaps its combat target to
-the mounted owner before SetCombatTarget (5478F0 / 547AD0).
+the mounted owner before its target is set (the retail server's tactics
+acquisition selectors).
 ================
 */
 func TestAggressiveMonsterSwapsNearerPetToMountedOwner(t *testing.T) {

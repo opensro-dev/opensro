@@ -51,7 +51,7 @@ type divisionMonsterState struct {
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline
-	// lifetimes holds the CGObjMob tick timers (monsterlifetime.go).
+	// lifetimes holds the native monster tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
 	// byRegion indexes generated spawn regions for nest/lifecycle queries
 	// and non-mover interest fallback. Movers own their live spatial index.
@@ -63,8 +63,8 @@ type divisionMonsterState struct {
 	aiTimers       map[uint32]*monster.AITimeManager
 	storedAITimers map[uint32]monster.StoredAITimers
 	sparseMapPeaks [3]int
-	// nests is the per-world CAIHive nest timer table (+1C, 0x20-byte
-	// entries) plus CNest +30, keyed by catalog nest index. Every template
+	// nests is the per-world hive nest timer table (+1C, 0x20-byte
+	// entries) plus nest +30, keyed by catalog nest index. Every template
 	// nest has an entry; lifecycle is independent of transient entity gids.
 	nests    map[int]*nestRuntime
 	gidNests map[uint32]int
@@ -128,11 +128,12 @@ type MonsterSpawnGroundResolver func(regionID uint16, x, authoredY, z float64) (
 ==================
 MonsterSpawnCollisionTest
 
-MonsterSpawnCollisionTest is the navmesh move test creation 5F6EB0 runs
-from the nest centre to a generated candidate (region manager vtable +0x30).
+MonsterSpawnCollisionTest is the navmesh move test the retail server's
+monster factory runs from the nest centre to a generated candidate
+(region manager vtable +0x30).
 Result carries the native bits (monster.NavResultClipped / NavResultBlocked;
 zero admits the candidate). Rest is where the walk came to rest, on the
-surface it walked: 5F6EB0 creates the monster at that written position.
+surface it walked: the factory creates the monster at that written position.
 ==================
 */
 type MonsterSpawnCollisionTest func(from, to Spawn) MonsterSpawnMove
@@ -268,16 +269,15 @@ func (s *MonsterState) ReferenceByCodename(code string) (monster.MonsterRef, boo
 ================
 division
 
-Opens a division the way the shard boots. SR_ShardManager 65BD60 runs
+Opens a division the way the shard boots. The retail shard manager runs
 _GameWorldInitialize, then walks every RefGameWorld and opens the first
-layer (65C200 -> world vtable +0x18) of each record whose type byte (+0x20)
-is zero; the GameServer builds that layer when the job arrives (5F7BD0 ->
-CGameWorld_AllocateLayer). INS_DEFAULT and the INS_FORT_* siege worlds are
-the shipped type-0 rows. One process plays both roles here, so the
-division owner opens them directly, in authored row order. The catalogue
-is the shipped rows plus any port-only worlds registered behind their
-switches (instance.Definitions); with none registered this opens exactly
-the shipped type-0 rows.
+layer (world vtable +0x18) of each record whose type byte (+0x20) is zero;
+the retail game server builds that layer when the job arrives. INS_DEFAULT
+and the INS_FORT_* siege worlds are the shipped type-0 rows. One process
+plays both roles here, so the division owner opens them directly, in
+authored row order. The catalogue is the shipped rows plus any port-only
+worlds registered behind their switches (instance.Definitions); with none
+registered this opens exactly the shipped type-0 rows.
 ================
 */
 func (s *MonsterState) division(divisionID string) *divisionMonsterState {

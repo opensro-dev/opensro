@@ -23,7 +23,7 @@ type pendingMonsterSummon struct {
 }
 
 // BeginSummon reserves the action immediately. Its world factory runs only at
-// the casting boundary (586700 -> 593540 -> 596E50), never at cast admission.
+// the casting boundary (the retail server's unique-summon chain), never at cast admission.
 func (s *MonsterState) BeginSummon(divisionID string, expected monster.Instance, skill monster.SummonSkill, nowMs, releaseAtMs, endsAtMs int64, actionRanges map[uint32]float64) ([]monster.Instance, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,8 +51,8 @@ func (s *MonsterState) BeginSummon(divisionID string, expected monster.Instance,
 		return nil, false
 	}
 	parent.SummonActionUntilMs = endsAtMs
-	// 59B755 returns from starting the action, then 59B787 dispatches event
-	// 4; 558FE5 -> 562540 consumes ssou damage NOW, not at release/recovery.
+	// The retail server returns from starting the action, then dispatches event
+	// 4; its effect consumer consumes ssou damage NOW, not at release/recovery.
 	parent.DamageSinceSummon = 0
 	parent.LastSummonCommandMs = uint32(nowMs)
 	if endsAtMs == nowMs {
@@ -108,7 +108,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 				continue
 			}
 			s.counter++
-			// Native 5977xx passes no CNest to CMonster_SpawnInstance. The
+			// Native summoning passes no nest to the monster factory. The
 			// authored tactics must not turn this generated pose into a home nest.
 			child := monster.Instance{Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, SummonerGID: parent.Gid, NestDetached: true,
 				GMSpawned: parent.GMSpawned,
@@ -131,7 +131,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			childMover := monster.NewSpawnMover(child, nowMs)
 			childMover.Activity = monster.NewActivityCadence(uint32(nowMs), s.randomWord())
 			childMover.Pose.Heading = HeadingWordFromRadians(heading)
-			// 5977DF..5977FF -> 5591B0: actual CSNM 11, mode 2 producer.
+			// The retail server's unique-summon tail: actual CSNM 11, mode 2 producer.
 			// The summon provenance alone is not the CTactics control binding.
 			if err := childMover.BindController(monster.ControlSummoned, parent.Gid); err != nil {
 				panic(err)
@@ -173,7 +173,8 @@ func clearExpiredSummonAction(instance *monster.Instance, nowMs int64) bool {
 	return true
 }
 
-// RejectSummonCommand applies 558F70(-1) -> 562540's unique-selector effect.
+// RejectSummonCommand applies the retail server's completion path (-1) and
+// its unique-selector effect.
 // It creates no children/action reservation and preserves target and motion.
 // Ordinary selectors do not own this accumulator transition.
 func (s *MonsterState) RejectSummonCommand(divisionID string, gid uint32, nowMs int64) {

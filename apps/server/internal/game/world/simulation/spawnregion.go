@@ -3,7 +3,7 @@
 
 spawnregion.go - native generated-position admission to available regions
 
-Monster nests and companions share the 530A00 region clamp before their
+Monster nests and companions share the native region clamp before their
 independent collision test. Region availability is not cell walkability.
 
 ===========================================================================
@@ -25,7 +25,7 @@ const (
 ================
 ClampGeneratedSpawnRegion
 
-530A00's mode-zero arm, called by 5F6F57. The eight candidates are around
+The clamp's mode-zero arm, called by the monster factory. The eight candidates are around
 the generated position, not the origin; each uses the original separation.
 Preserve x87 float stores and first-match order. Exhaustion falls back to
 the admitted origin; the native diagnostic dump is not a gameplay effect.

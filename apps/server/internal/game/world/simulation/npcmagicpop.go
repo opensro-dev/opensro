@@ -44,7 +44,7 @@ type worldNpcLookups struct {
 ================
 magicPopPlacements
 
-Tab_RefNest placements of NPC_CH_GACHA_MACHINE in the v1.188 server's nest
+Tab_RefNest placements of NPC_CH_GACHA_MACHINE in the later retail server's nest
 table, restricted to the towns that exist in v1.150: Jangan (25000), Donwhang
 (26265), Hotan (23687) and Samarkand (27244). The fifth later placement, region
 23088, is a town the v1.150 world has no NPC in, so it is left out. Every

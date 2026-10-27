@@ -218,6 +218,9 @@ export function createCharacterPresentation(
 	const auxiliaryActors = auxiliary.auxiliaryActors;
 	const appearances = new Map<number, PresentationAppearance>();
 	let hideSilkCos = false;
+	// The GM console's /id byte (0xCCB5D8, ships standing): 8D5856 spawns a
+	// hit's damage number only while it stands (setDamageNumbers).
+	let damageNumbers = true;
 	// The per-actor phase borrows these owners for the presenter's lifetime.
 	const actorPresentation = createActorPresentation( {
 		activeSkin,
@@ -644,6 +647,7 @@ export function createCharacterPresentation(
 				effects,
 				effectDetail,
 				bloodEnabled,
+				damageNumbers,
 				resources,
 				renderer,
 				feedback,
@@ -905,6 +909,18 @@ export function createCharacterPresentation(
 		*/
 		options( value: import("@/engine/foundation/gameplay/game-options").GameOptions ) {
 			hideSilkCos = value.hideSilkCos;
+		},
+		/*
+		================
+		setDamageNumbers
+
+		The GM console's /id byte (0xCCB5D8, case 137). 8D5856 tests it after
+		the distance gate, so while it is clear a hit spawns no damage number
+		(nor 8D4DD0's blocking sound); numbers already floating finish.
+		================
+		*/
+		setDamageNumbers( shown: boolean ) {
+			damageNumbers = shown;
 		},
 		// 856480 sets a global bit on admission; 85FA80 clears it on removal.
 		// It is not a count: a surviving actor cannot re-enable a cleared bit.

@@ -21,7 +21,7 @@ import (
 const (
 	// RefGameWorld +0x20: zero marks a world the shard opens at boot.
 	permanentWorldType = 0
-	// 65C200: the first layer a world hands out; zero is its controller.
+	// The first layer a world hands out; zero is its controller.
 	firstResidentLayer = 1
 	// INS_DEFAULT, the field every character starts in.
 	defaultWorldDefinition instance.DefinitionID = 1
@@ -74,10 +74,10 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 ================
 OpenInstanceLayer
 
-5F7440 (CGameWorldMgr_OpenWorldLayer) -> 5EC530 (CGameWorld_HasAvailableLayerSlot)
--> 5EB830 (CGameWorld_AllocateLayer): opens the first unallocated layer slot in
-1..LayerLimit on an instance world (NativeType != 0). Permanent worlds
-(NativeType == 0) and full worlds refuse.
+The retail server's world-layer open (its layer-slot check, then its layer
+allocation) opens the first unallocated layer slot in 1..LayerLimit on an
+instance world (NativeType != 0). Permanent worlds (NativeType == 0) and
+full worlds refuse.
 ================
 */
 func (s *MonsterState) OpenInstanceLayer(division string, defID instance.DefinitionID) (instance.Lease, bool) {
@@ -243,7 +243,7 @@ func (s *MonsterState) PopulationLease(division string, id instance.ID) (instanc
 ================
 CheckPopulationTransfer
 
-CGameWorld_CheckTransfer (5EC5B0): the non-mutating door a teleport asks
+The retail server's transfer check: the non-mutating door a teleport asks
 before it moves a PC into another world. Nothing is reserved.
 ================
 */
@@ -400,7 +400,8 @@ populationInterestGIDs
 
 The spawn index owns nest/lifecycle queries. Visibility instead queries the
 mover's live region bounds: a pursuing actor can leave its spawn region ring.
-Filter exact live blocks before any archived actor read (native 53AC20).
+Filter exact live blocks before any archived actor read (the retail
+server's neighbour-block resolution).
 Caller holds MonsterState.mu.
 
 A mover whose segment spans regions is listed in each; the index marks

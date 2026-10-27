@@ -23,12 +23,12 @@ type Vitals struct {
 type VitalsSourceFlags uint16
 
 const (
-	// GameServer 59358F: skill damage uses cause 4; 0x400 requests extra
+	// The retail server gives skill damage cause 4; 0x400 requests extra
 	// source-less damage text in client 77A080 -> 8E2840.
 	VitalsSourceCombatDamage VitalsSourceFlags = 0x0004
-	// 5A09BB / 4A8767 carries the skill recovery cause into the vitals update.
+	// The retail server carries the skill recovery cause into the vitals update.
 	VitalsSourceSkillRecovery VitalsSourceFlags = 0x0040
-	// GameServer 4E2BEE: ordinary four-second HP/MP recovery.
+	// The retail server: ordinary four-second HP/MP recovery.
 	VitalsSourceNaturalRecovery VitalsSourceFlags = 0x0010
 )
 

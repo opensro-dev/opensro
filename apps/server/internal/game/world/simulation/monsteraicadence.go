@@ -5,7 +5,7 @@ import "opensro.online/server/internal/game/world/monster"
 // AI cadence belongs to MonsterState, independently of mover snapshots. A
 // rejected/stale movement commit must not rewind a consumed scan deadline.
 // Timers survive idle/wander/combat transitions and disappear with their GID.
-// This is a Go simulation adapter to the bounded v1.188 timer model, not an
+// This is a Go simulation adapter to the bounded retail-server timer model, not an
 // activation of a native C++ replacement or a claim of v1.150 equivalence.
 func (s *MonsterState) checkAITimer(divisionID string, gid uint32, id monster.AITimerID, nowMs int64) bool {
 	s.mu.Lock()
@@ -55,7 +55,7 @@ func (s *MonsterState) aiTimersLocked(state *divisionMonsterState, instance mons
 	if timers == nil {
 		timers = monster.NewAITimeManager()
 		next := func() uint32 { return monster.SummonRandomWord(s.random()) }
-		// 53F6DC..53F70D: first-bank setup includes discarded CRT draws.
+		// First-bank setup includes discarded CRT draws.
 		timers.SetTimer(0, 300, 0, uint32(nowMs), false, next)
 		timers.SetTimer(6, 1500, 0, uint32(nowMs), false, next)
 		timers.SetTimer(7, 30, 0, uint32(nowMs), false, next)
@@ -69,7 +69,8 @@ func (ops *MonsterMoverOps) acquisitionReady(divisionID string, instance monster
 	return ops.Monsters.checkAITimer(divisionID, instance.Gid, monster.TimerIDAcquisition, nowMs)
 }
 
-// FOLLOW OnEnter (55A930 -> 540D00) replaces Timer 0 with 100ms. CommitMover
+// FOLLOW OnEnter replaces Timer 0 with 100ms (the retail server's timer
+// setter). CommitMover
 // calls this with s.mu held, after rejecting stale/dead plans. Replans within
 // FOLLOW preserve the existing deadline. Timer 0's first-bank setter ignores
 // the timestamp argument; its immediate flag and discarded RNG draw remain.

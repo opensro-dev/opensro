@@ -86,8 +86,8 @@ func TestEarthGhostHomeBoundaryAndPolicyModes(t *testing.T) {
 ==================
 TestEarthGhostDistantHomeRegionAbandonsOnlyBoundedTrace
 
-545E50 continues trace boundary 0/2 before 430CE0 tests whether home lies
-within the adjacent regions (545ECC); TraceEnabled owns that gate here, so
+The trace check continues trace boundary 0/2 before testing whether home
+lies within the adjacent regions; TraceEnabled owns that gate here, so
 only a bounded row abandons. The return leg beyond the population cannot
 commit, so assert the decision rather than the committed target.
 ==================
@@ -122,8 +122,9 @@ func TestEarthGhostDistantHomeRegionAbandonsOnlyBoundedTrace(t *testing.T) {
 	}
 }
 
-// 53FD04 installs 549460 instead of 548BE0 for dungeon actors. It steers to
-// the slot point and never applies 548CF1's moving-target center extension.
+// The installer puts the region-routed pursuit in for dungeon actors. It
+// steers to the slot point and never applies the moving-target center
+// extension.
 /*
 ================
 TestDungeonApproachKeepsSlotPointForMovingTarget
