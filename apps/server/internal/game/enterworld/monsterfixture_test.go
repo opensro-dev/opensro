@@ -20,7 +20,7 @@ import (
 // the bootstrap bracket packets) and requires the checked-in file to match
 // byte for byte; the client parity harness reads
 // the SAME file and drives the payloads through the client's REAL
-// sub_77bd30 -> sub_77bdc0 -> sub_77bfb0 -> sub_777370 group chain.
+// client 77BD30 -> 77BDC0 -> 77BFB0 -> 777370 group chain.
 // Either side drifting fails its own gate; neither re-implements the other.
 //
 // Two explicit web-port decisions the fixture makes loud on change:
@@ -136,7 +136,7 @@ func buildMonsterFixture() monsterSpawnFixture {
 			"The normal region-scoped population object-list bracket for one authored",
 			"MOB_CH_MANGNYANG: 0x30CB {byListSub=1, u16 count} start, 0x3417 create row(s)",
 			"(shared bionic tail + rarity u8, NO HP), empty 0x330A finalize. Consumed by the",
-			"harness monsterServerRowsParity test through the REAL 77bd30/77bdc0/77bfb0/777370 chain.",
+			"harness monsterServerRowsParity test through the REAL client 77bd30/77bdc0/77bfb0/777370 chain.",
 			"refObjSnapshot here carries the fixture row only: the full 178-type roster (A8 CLOSED by",
 			"RZ seq234) joins the fixture when scoped population emission lands with Q2.",
 			"Regenerate: UPDATE_MONSTER_SPAWN_FIXTURE=1 go test ./internal/game/enterworld -run TestMonsterSpawnFixturePinned",
@@ -197,7 +197,7 @@ func rowsToPackets(rows []Packet) []monsterFixturePacket {
 
 // buildMonsterScopedFixture drives the REAL scoped emitters end to end:
 // the ring login bracket (S1), the eviction shapes incl. the 1-row and
-// 2-row despawn brackets that guard the sub_712620 span bug (S2), the
+// 2-row despawn brackets that guard the client 712620 span bug (S2), the
 // move-while-scoped goal + glide (S3), and same-gid re-enter across
 // brackets (S4).
 func buildMonsterScopedFixture() monsterScopedFixture {
@@ -246,7 +246,7 @@ func buildMonsterScopedFixture() monsterScopedFixture {
 	// S2: eviction shapes. The live emitter uses the 0x36AB single for a
 	// lone exit and the byListSub=2 bracket for bulk; the 1-row bracket
 	// shape is ALSO pinned (generic builder output) because 1- and 2-row
-	// spans are exactly what the sub_712620 bug dropped.
+	// spans are exactly what the client 712620 bug dropped.
 	despawnSingle := wire.ObjectDespawn{Gid: gidA1}
 	s2 := monsterScopedScenario{
 		Name: "S2-eviction-shapes",
@@ -322,7 +322,7 @@ func buildMonsterScopedFixture() monsterScopedFixture {
 			"GENERATED + PINNED by internal/game/enterworld/monsterfixture_test.go (TestMonsterScopedFixturePinned).",
 			"Q2 scoped-emission scenarios for the harness (WIP seq395 S1-S4 + seq419 S5): ring login",
 			"bracket, eviction shapes (0x36AB single + byListSub=2 brackets at 1 and 2 rows - the exact",
-			"spans the sub_712620 bug dropped), 0xB738 goal + 0x30E3 glide for a scoped gid, same-gid",
+			"spans the client 712620 bug dropped), 0xB738 goal + 0x30E3 glide for a scoped gid, same-gid",
 			"re-enter, and mid-motion scope-exit (goal in flight then despawn before arrival).",
 			"Live emitter shape: single for one exit, bracket for bulk (flagged in S2).",
 			"ROLE (binding, board seq437): monsters spawn at SHIPPED v1.150 npcpos COORDINATES, scoped",

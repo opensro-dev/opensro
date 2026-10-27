@@ -9,7 +9,7 @@ itemClass counts three classes per degree (a degree-8 sword is class 22,
 23 or 24), so degree = (class - 1) / 3 + 1; on a sealed piece (rarity 2)
 the class within its degree is the seal, Star, Moon, Sun - the client's
 CSOItem_CalculateTierGroup (ItemClass - 1) % 3, named by
-ItemTooltip_AppendRareGrade (558FF0).
+the client's ItemTooltip_AppendRareGrade (558FF0).
 
 ===========================================================================
 */

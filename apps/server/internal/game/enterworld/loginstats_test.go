@@ -32,10 +32,10 @@ func TestBuildLoginStatBlockPlacesStatsOnTheAppliedWords(t *testing.T) {
 		t.Fatalf("block = %d bytes, want 0x%02X", len(payload), wire.BaseStatsSize)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x20:]); got != 77 {
-		t.Fatalf("STR at +0x20 = %d, want 77 (the word sub_8629f0 applies)", got)
+		t.Fatalf("STR at +0x20 = %d, want 77 (the word client 8629F0 applies)", got)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x22:]); got != 88 {
-		t.Fatalf("INT at +0x22 = %d, want 88 (the word sub_862a00 applies)", got)
+		t.Fatalf("INT at +0x22 = %d, want 88 (the word client 862A00 applies)", got)
 	}
 	if got := binary.LittleEndian.Uint32(payload[0x00:]); got != 10 {
 		t.Fatalf("physical attack minimum at +0x00 = %d, want the derived display field", got)

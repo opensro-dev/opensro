@@ -400,7 +400,7 @@ type itemdataRecordColumn struct {
 // the historical unsuffixed "requiredLevel" for slot 1.
 var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 7 is RefObjCommon CashItem, natively bit 0 of the type word
-	// (808AD0). The port keeps that bit clear (equiproster.go), so the
+	// (client 808AD0). The port keeps that bit clear (equiproster.go), so the
 	// client reads it here: CIFItemSlot_DispatchActivation 567290 refuses a
 	// quick sell when ItemTid_IsMallItem 550130 holds.
 	{7, "cashItem", "int"},
@@ -409,7 +409,7 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow
 	// (19): 0 keeps an item off the exchange table (exchange.go).
 	{16, "canTrade", "int"},
-	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
+	// Client 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
 	// before merchant sale. Shop membership is not a sale permission.
 	{17, "canSell", "int"},
 	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
@@ -426,7 +426,7 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	{24, "canUse", "int"},
 	{26, "price", "int"},
 	// Native RefItemData+0xb4/+0xb8. These are consumed independently by
-	// sub_789630: CostRepair prices missing durability points; CostRevive is
+	// Client 789630: CostRepair prices missing durability points; CostRevive is
 	// the extra charge when current durability is zero.
 	{27, "repairCostB4", "int"},
 	{28, "reviveCostB8", "int"},
@@ -508,7 +508,7 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// params are NOT interleaved with their labels: Param1 is +0x29C, Param2
 	// is +0x2A0 and Param3 is +0x2A4. Itemdata pairs them as (Param, Desc)
 	// columns, which is why Param3 is column 122 rather than 120.
-	// sub_6E6E00 kind 3 reads Param1 as SECONDS and Param2 as a millisecond
+	// Client 6E6E00 kind 3 reads Param1 as SECONDS and Param2 as a millisecond
 	// limit, but the column's unit is per item family - minutes for a COS
 	// summoner (ITEM_COS_P_EXTENSION_1D carries 1440), milliseconds for a
 	// recall scroll (30000 against the 30-second retail return), seconds for
@@ -523,8 +523,8 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// read the EXP and skill-EXP bonus percentages from Param4 and Param5.
 	{124, "itemParam4_2a8", "int"},
 	{126, "itemParam5_2ac", "int"},
-	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
-	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
+	// Client 80BFAC/80BFBC store the two tokens after the 20 (value,label)
+	// pairs. Client 8093C0 returns CItemData+8, hence record offsets 51C/51D.
 	{158, "maxMagicOptions51c", "byte"},
 	{159, "avatarAttachment51d", "byte"},
 }
@@ -819,7 +819,7 @@ func buildItemNativeFields(fields []string) NativeFields {
 			}
 		}
 	}
-	// CItemData_ParseTextRow 80BEC4..80BF2E scans all twenty description
+	// The client's CItemData_ParseTextRow 80BEC4..80BF2E scans all twenty description
 	// pairs; the last COOLTIME declaration wins. The UI reads its group
 	// and duration independently of the consumable family.
 	for column := 119; column < len(fields) && column < 159; column += 2 {
@@ -830,7 +830,7 @@ func buildItemNativeFields(fields []string) NativeFields {
 		group, err := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(raw), "0x"), 16, 32)
 		duration, valid := textdataInt(fields[column-1])
 		if err == nil && valid && duration >= 0 && duration <= 0x7fffffff {
-			// 80BF23 stores AL after the base-16 parse. Bound the low byte
+			// Client 80BF23 stores AL after the base-16 parse. Bound the low byte
 			// explicitly instead of relying on a narrowing integer conversion.
 			values["useCooldownGroup524"] = float64(group & itemCooldownGroupMask)
 			values["useCooldownDuration528"] = float64(duration)
