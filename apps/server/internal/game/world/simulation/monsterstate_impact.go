@@ -115,7 +115,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 		if instance.SummonActionUntilMs != 0 {
 			instance.SummonActionUntilMs = 0
 			// Command completion already cleared the selected skill. The
-			// 562540 null-active branch does not consume subsequent damage
+			// effect consumer's null-active branch does not consume subsequent damage
 			// when a later impact cancels the pending summon execution.
 		}
 		mover, ok := state.movers.lookup(gid)

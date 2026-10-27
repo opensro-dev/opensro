@@ -130,7 +130,7 @@ func (ops *MonsterMoverOps) startChaseLeg(
 	// The pursuit endpoint travels actor-to-target center distance along the
 	// approach direction while the target moves. AutoCommand's two-unit inset
 	// is insufficient when a running target advances five units per tick.
-	// Outdoor only: dungeon actors run 549460, which has no such branch
+	// Outdoor only: dungeon actors run the region-routed pursuit, which has no such branch
 	// (tactics_plane.go).
 	if targetGuidance.TargetMoving() && ordinarySquadApproach(instance) && pursuitAt(live.RegionID).ExtendsTowardMovingTarget() {
 		goal = NormalizeSpawnFrame(target.Pose)

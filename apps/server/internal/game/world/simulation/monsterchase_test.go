@@ -316,7 +316,7 @@ func TestOrdinarySquadApproachAdmitsCaravanBanditsAndSummonedMonsters(t *testing
 		"summoned monster":            summoned,
 	} {
 		if !ordinarySquadApproach(actor) {
-			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114 0x00548BE0)", name)
+			t.Fatalf("%s excluded from ordinarySquadApproach (+0x114)", name)
 		}
 	}
 	for name, actor := range map[string]monster.Instance{

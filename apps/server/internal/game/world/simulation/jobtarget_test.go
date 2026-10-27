@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-jobtarget_test.go - a job monster passes over its own side (529110)
+jobtarget_test.go - a job monster passes over its own side (JobTargetRefused)
 
 ===========================================================================
 */
