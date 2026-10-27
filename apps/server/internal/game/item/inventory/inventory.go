@@ -322,9 +322,10 @@ func (inv *Inventory) Move(sourceSlot, destSlot uint8) (MoveResult, *Fault) {
 	return out, nil
 }
 
-// TransferLeg names which native sub_756a60 leg an applied type-0x00 transfer
-// took. The values match the reference fixture's log strings so server logs
-// line up across the two implementations.
+// TransferLeg names which leg of the client's CPSMission_MergeOrSwapItems
+// an applied type-0x00 transfer took. The values match the reference
+// fixture's log strings so server logs line up across the two
+// implementations.
 type TransferLeg string
 
 const (
@@ -367,7 +368,7 @@ type TransferResult struct {
 
 // Transfer applies a type-0x00 item operation with the full native routing:
 // the equip gates on both directions, then the merge/split/swap legs of
-// sub_756a60 / CNetProcessInner_TransferSlotStack.
+// the client's CPSMission_MergeOrSwapItems.
 //
 // quantity is the wire quantity field. It only drives the SPLIT leg - the
 // native merge ignores it and combines the full counts - and a whole-stack
@@ -386,9 +387,10 @@ type TransferResult struct {
 //     (EquipSocketForTypeFlags) and the clothes/hard exclusivity
 //     (ClothesHardExclusivityConflict, bug C).
 //   - a source in 0..12 with an OCCUPIED destination is an equip too: the
-//     swap seats the occupant in the vacated socket (sub_756a60's full swap
-//     writes BOTH records), so the occupant faces the same socket-class and
-//     exclusivity gates against the vacated slot. Without this the measured
+//     swap seats the occupant in the vacated socket (the full swap of
+//     client CPSMission_MergeOrSwapItems writes BOTH records), so the
+//     occupant faces the same socket-class and exclusivity gates against
+//     the vacated slot. Without this the measured
 //     back door put a chest piece in the weapon socket.
 //
 // DEVIATION: sourceSlot == destSlot is refused. The native client cannot
@@ -412,7 +414,8 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 
 	// Forward equip gates: the source item is moving INTO a socket. The
 	// requirement checks bracket the exclusivity scan in the native
-	// full-mask order (sub_789c60: level/stats/gender -> 0x080 -> country).
+	// full-mask order (client CSOItem_Query_789C60: level/stats/gender ->
+	// 0x080 -> country).
 	if inv.equipmentSlot(destSlot) {
 		socket, equipable := EquipSocketForTypeFlags(inv.items[sourceIndex].TypeFlags)
 		if !equipable {
@@ -694,9 +697,10 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
 	}
 	// A WORN item cannot be ground-dropped. The retail drop-confirm dialog
-	// (sub_68d430 @0x0068d430) opens only for a bag source and routes an
-	// equipment source to notice 01:6d @0x0068d606 without composing the
-	// type-0x07 packet, so a stock client never reaches here from a socket;
+	// (client CGInterface_RequestItemGroundDrop) opens only for a bag
+	// source and routes an equipment source to notice 01:6d without
+	// composing the type-0x07 packet, so a stock client never reaches
+	// here from a socket;
 	// a modified client can, and it would unequip-by-dropping the worn row.
 	// This gate touches only the type-0x07 drop path (Drop's sole callers):
 	// the equip/unequip plane is type-0x00 (Transfer) and pickup is Grant,

@@ -7,8 +7,10 @@ import (
 )
 
 // SaleUnitPrice implements the zero-tax v1.150 sale/restore price shared by
-// 5983A0 and 5980F0. +C4 is the signed sellPrice reference field. 78B4A0
-// substitutes one gold for equipment with exhausted repair permission.
+// the client's CIFInventory_OpenSellConfirmModal and
+// CIFInventory_OpenRepurchaseConfirmModal. +C4 is the signed sellPrice
+// reference field. CSOItem_CheckEquipBindings78B4A0 substitutes one gold
+// for equipment with exhausted repair permission.
 // This does not claim fortress tax exemption or x87 taxed-price parity.
 func SaleUnitPrice(ref *enterworld.ItemRef, magic []uint64, source enterworld.MagicOptionSource) (uint64, bool) {
 	price, _, ok := salePriceBasis(ref, magic, source)
@@ -16,9 +18,9 @@ func SaleUnitPrice(ref *enterworld.ItemRef, magic []uint64, source enterworld.Ma
 }
 
 // Tax and repair policy apply to a unit before stack multiplication in v1.150.
-// Retention is at least the untaxed base (5980F0; the server's NPC sale
-// range), not necessarily the credited sale amount. Repair exhaustion
-// overrides tax.
+// Retention is at least the untaxed base (client
+// CIFInventory_OpenRepurchaseConfirmModal; the server's NPC sale range),
+// not necessarily the credited sale amount. Repair exhaustion overrides tax.
 func SalePrices(ref *enterworld.ItemRef, magic []uint64, source enterworld.MagicOptionSource, tax Tax) (credit, restore uint64, ok bool) {
 	base, exhausted, valid := salePriceBasis(ref, magic, source)
 	if !valid {
@@ -47,7 +49,7 @@ func salePriceBasis(ref *enterworld.ItemRef, magic []uint64, source enterworld.M
 			m, found := source.MagicOptionByParamID(uint32(uint16(encoded)))
 			if !found || m == nil {
 				continue
-			} // Native 78B527 skips an absent definition.
+			} // client CSOItem_CheckEquipBindings78B4A0 skips an absent definition.
 			if m.OptionName == "MATTR_NOT_REPARABLE" && strings.Contains(m.ParamName, "-") ||
 				m.OptionName == "MATTR_REPAIR" && uint32(encoded>>32) <= 1 {
 				return 1, true, true

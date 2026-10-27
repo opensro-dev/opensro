@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// 86B14F..86B265: a transformed player's spawn row carries flag 1 and the
+// Client 0x0086B14F..0x0086B265: a transformed player's spawn row carries
+// flag 1 and the
 // skin RefObj right after the avatar loop, then the gid block as before.
 // A zero skin keeps the single 0 byte.
 func TestPlayerSpawnRowCarriesTheTransformSkin(t *testing.T) {
@@ -24,7 +25,8 @@ func TestPlayerSpawnRowCarriesTheTransformSkin(t *testing.T) {
 	}
 }
 
-// 7641D0 reads u32 gid then u32 skin.
+// The client's CPSMission_OnCharacterSkinChangeSuccess0x323A reads u32
+// gid then u32 skin.
 func TestSkinChangeBody(t *testing.T) {
 	got := SkinChange{GID: 0x01020304, Skin: TransformSkin{RefObjID: 1933}}.Encode()
 	if !bytes.Equal(got, concat(u32le(0x01020304), u32le(1933))) {
@@ -38,7 +40,8 @@ func TestSkinChangeBody(t *testing.T) {
 	}
 }
 
-// 78C830 reads them back: band 0x40 bodies are the RefObjID plus the group's
+// The client's CSOItem_Deserialize reads them back: band 0x40 bodies are
+// the RefObjID plus the group's
 // own tail - the mask's monster, a pet summoner's record byte - never the
 // 18-byte equipment body the reference server serializes.
 func TestBand40ItemBodies(t *testing.T) {

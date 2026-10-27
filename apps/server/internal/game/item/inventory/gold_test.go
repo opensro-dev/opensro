@@ -6,8 +6,9 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// The native clamp: sub_697e80 @0x00697eb5 on the way out, sub_759a30
-// @0x0075a2c0 on the way in, both with the ceiling 0x5F5E100.
+// The native clamp: client ItemMoveRequest_Serialize on the way out,
+// ItemMoveResponse_Deserialize on the way in, both with the ceiling
+// 0x5F5E100.
 func TestGoldClampMatchesTheNativeCeiling(t *testing.T) {
 	if wire.MaxGold != 100000000 {
 		t.Fatalf("MaxGold = %d, want 100000000 (0x5F5E100)", wire.MaxGold)

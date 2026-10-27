@@ -60,7 +60,7 @@ const (
 	PaymentGold uint8 = 1
 	// PaymentGuildPoint is Guild Points (GROUP_STORE_*_GUILD packages;
 	// the server's purchase checks, client 689BBA
-	// UIIT_MSG_GUILD_STORE_BUY_LIMIT and 689CA4 UIIT_MSG_GUILD_LACK_GP).
+	// UIIT_MSG_GUILD_STORE_BUY_LIMIT and client 689CA4 UIIT_MSG_GUILD_LACK_GP).
 	PaymentGuildPoint uint8 = 8
 	// PaymentHonor is Training Camp honor (GROUP_STORE_*_HONOR packages;
 	// client 689CDE UIIT_MSG_TC_LACK_HONOR_POINT).

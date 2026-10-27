@@ -235,9 +235,8 @@ func (w *Writer) Payload() []byte {
 // The two opcodes scale by different divisors, so this is the only supported
 // way to move a heading between them: 0x35C7 divides the byte by 255.0
 // (client CPSMission_OnPickupAnim_0x35C7 at 0x00778150); 0x30E3 divides
-// the word by 65535.0 (client CPSMission_OnEntitySpeedMode0x30E3
-// at client 0x00775d25). Round-tripping through this helper keeps the
-// resulting yaw equal.
+// the word by 65535.0 (client CPSMission_OnEntitySpeedMode0x30E3 at 0x00775d25).
+// Round-tripping through this helper keeps the resulting yaw equal.
 func HeadingByteFromAngle(angle uint16) uint8 {
 	return uint8(math.Round(float64(angle)/65535.0*255.0)) & 0xFF
 }
