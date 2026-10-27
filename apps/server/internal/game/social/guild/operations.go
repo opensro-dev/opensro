@@ -23,7 +23,8 @@ const (
 	NoticeContentsMaxBytes = domain.GuildNoticeBodyBytes
 	// PermMaskNoticeEdit / PermMaskKick / PermMaskInvite are the
 	// permMask bits the client arms the matching buttons on (invite:
-	// mask & 0x1, sub_5e1e80 @0x005e2047). The mask is the ONLY
+	// mask & 0x1, client CIFGuildMember_RefreshButtons). The mask is
+	// the ONLY
 	// evidenced check: the client never grade-gates these buttons, so
 	// grade 0 (leader) gets NO implicit bypass here - a leader holds
 	// the bits because the create door granted the full mask (a

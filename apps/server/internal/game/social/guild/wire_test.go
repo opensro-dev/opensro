@@ -53,7 +53,8 @@ func createPayload(selectedTargetGid uint32, name string) []byte {
 }
 
 // TestDecodeGpDonateRequest pins the structured 0x740F decoder
-// {u32 amount} (the sub_700a90 composer shape - the last opcode to
+// {u32 amount} (the NetClient_Send740F composer shape - the last
+// opcode to
 // leave the old string-detail refuse table when its mutator landed).
 func TestDecodeGpDonateRequest(t *testing.T) {
 	t.Parallel()
@@ -74,10 +75,12 @@ func TestDecodeGpDonateRequest(t *testing.T) {
 
 // TestEncodeGpDonateFrames pins the three donate frames byte-for-byte
 // against hand-rolled oracles: the 0xB40F ack {u8 1}{u32 amount} (the
-// display-only echo the sub_766ad0 guide line formats), the subOp-5
+// display-only echo the client CNetProcess_OnResponse0xB40F guide
+// line formats), the subOp-5
 // &0x08 guild-GP delta and the subOp-6 &0x08 donated-GP delta (the
-// exclusive single-bit masks in the pinned layouts - fold sub_762040
-// slot 4 @0x005e4954 / slot 5 + sub_5e9d20 &0x08).
+// exclusive single-bit masks in the pinned layouts - client
+// CPSMission_OnGuildUpdate0x3B29 slot 4 / slot 5 +
+// CIFGuildMember_OnMemberUpdated &0x08).
 func TestEncodeGpDonateFrames(t *testing.T) {
 	t.Parallel()
 	jidLE := []byte{0x0D, 0x0C, 0x0B, 0x0A}
@@ -99,13 +102,14 @@ func TestEncodeGpDonateFrames(t *testing.T) {
 }
 
 // TestDecodeBreakRequest pins the structured 0x766E decoder - the
-// leave body shape (the sub_7006f0 composer writes exactly 4 bytes
+// leave body shape (the NetClient_SendSelectedTarget766E composer
+// writes exactly 4 bytes
 // from the +0x620 slot).
 func TestDecodeBreakRequest(t *testing.T) {
 	t.Parallel()
 	ok, err := DecodeBreakRequest(invitePayload(0x00C40007))
 	if err != nil || ok.SelectedTargetGid != 0x00C40007 {
-		t.Fatalf("break decode = %+v (%v), want gid 0x00C40007", ok, err)
+		t.Fatalf("break decode = %+v (%v), want gid 0x%08X", ok, err, 0x00C40007)
 	}
 	for name, malformed := range map[string][]byte{
 		"nil":      nil,
@@ -119,7 +123,8 @@ func TestDecodeBreakRequest(t *testing.T) {
 }
 
 // TestDecodeNameGrantRequest pins the structured 0x72BC decoder
-// {u32 targetJid}{u16-len ANSI name} (the sub_700870 composer shape).
+// {u32 targetJid}{u16-len ANSI name} (the NetClient_SendIDAndText72BC
+// composer shape).
 func TestDecodeNameGrantRequest(t *testing.T) {
 	t.Parallel()
 	ok, err := DecodeNameGrantRequest(nameGrantPayload(7, "Cale"))
@@ -139,7 +144,7 @@ func TestDecodeNameGrantRequest(t *testing.T) {
 }
 
 // TestDecodePositionGrantRequest pins the structured 0x765F decoder
-// {u32 targetJid}{u8 position} (the sub_7009c0 composer shape).
+// {u32 targetJid}{u8 position} (the NetClient_Send765F composer shape).
 func TestDecodePositionGrantRequest(t *testing.T) {
 	t.Parallel()
 	ok, err := DecodePositionGrantRequest(positionGrantPayload(9, 2))
@@ -158,9 +163,10 @@ func TestDecodePositionGrantRequest(t *testing.T) {
 }
 
 // TestEncodeBreakFrames pins the break answer bytes: the 0xB66E success
-// body is exactly {01} (the sub_75c730 result-1 arm), and the subOp-1
-// dissolve announce is exactly {01} too - the client's break arm (fold
-// sub_762040 case 1 @0x007620e1) reads ZERO wire fields beyond the
+// body is exactly {01} (the client CPSMission_OnGuildDisbandResponse0xB66E
+// result-1 arm), and the subOp-1 dissolve announce is exactly {01}
+// too - the client's break arm (client CPSMission_OnGuildUpdate0x3B29
+// case 1) reads ZERO wire fields beyond the
 // subOp byte, so ANY trailing byte would be an invented field.
 func TestEncodeBreakFrames(t *testing.T) {
 	t.Parallel()
@@ -177,8 +183,9 @@ func TestEncodeBreakFrames(t *testing.T) {
 // TWICE (the client reads two dwords into one local - the first is
 // discarded; wire.go carries the DECISION), and the subOp-6 deltas
 // carry the exclusive single-bit masks 0x20/0x40 in the pinned
-// {u8 6}{u32 jid}{u8 mask}{field} layout (fold sub_762040 case 6
-// @0x007626e3 + the sub_5e9d20 mask arms).
+// {u8 6}{u32 jid}{u8 mask}{field} layout (client
+// CPSMission_OnGuildUpdate0x3B29 case 6 + the
+// CIFGuildMember_OnMemberUpdated mask arms).
 func TestEncodeGrantFrames(t *testing.T) {
 	t.Parallel()
 	jid := uint32(0x0A0B0C0D)
@@ -224,7 +231,7 @@ func TestDecodeCreateRequest(t *testing.T) {
 		t.Fatalf("well-formed create decode error: %v", err)
 	}
 	if ok.SelectedTargetGid != 0x00C40001 || ok.Name != "NightWatch" {
-		t.Errorf("decoded = %+v, want gid 0x00C40001 name NightWatch", ok)
+		t.Errorf("decoded = %+v, want gid 0x%08X name NightWatch", ok, 0x00C40001)
 	}
 
 	empty, err := DecodeCreateRequest(createPayload(7, ""))

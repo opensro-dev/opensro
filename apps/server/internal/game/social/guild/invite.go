@@ -2,8 +2,9 @@ package guild
 
 // The guild INVITE HANDSHAKE (backlog T55): 0x73AD holds a pending
 // invite and prompts the target with 0x3393 {u8 5, u32 inviterRef}
-// (the sub_7644e0 guild arm); membership commits ONLY on the target's
-// 0x3393 {01 01} accept (sub_6971b0 case 0xc) through the ATOMIC
+// (the client CPSMission_OnConfirmBoxPrompt0x3393 guild arm);
+// membership commits ONLY on the target's 0x3393 {01 01} accept
+// (CGInterface_OnMsgBoxResult case 0xc) through the ATOMIC
 // AddGuildMemberAs door, then the joiner gets the full 0x32C4 block and
 // every sitting online member the 0x3B29 subOp-2 join row. The party
 // lane owns the single 0x3393 hub registration and routes replies here
@@ -186,7 +187,8 @@ func findGuildCharacterByName(deps Dependencies, divisionID, name string) *enter
 
 // handleInvite applies one 0x73AD proposal: the actor must be a guild
 // member holding the invite permission bit (PermMaskInvite - the client
-// arms the Invite command button on mask & 0x1, sub_5e1e80 @0x005e2047;
+// arms the Invite command button on mask & 0x1 (client
+// CIFGuildMember_RefreshButtons);
 // mask-only like every other guild permission, no grade bypass), the
 // target must resolve by world gid within the actor's division, be
 // someone else, not delete-pending, ONLINE (the prompt needs a live
@@ -244,9 +246,8 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 		return
 	}
 	if target.ID == actor.ID {
-		// The client refuses a self-target before composing
-		// (@0x00700ba7) - a frame that carries one anyway is a desync
-		// or forged.
+		// The client refuses a self-target before composing - a frame
+		// that carries one anyway is a desync or forged.
 		log.Debugf("guild: 0x73AD (invite) refused for %s: cannot invite yourself", actor.Name)
 		return
 	}
