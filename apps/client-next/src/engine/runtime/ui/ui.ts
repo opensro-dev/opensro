@@ -3720,6 +3720,14 @@ export function createUi(
 			dirty = true;
 			return;
 		}
+		// 5DA1B0 case 0x10: the return point row sends 0x7495 type 1.
+		if ( id === "npc-return-point" ) {
+			const conversation = view.gameplay?.npcConversation;
+			if ( conversation && conversation.phase === "menu" ) {
+				sendGameplay( { kind: "travel-gate", gid: conversation.gid, type: 1, target: 0 } );
+			}
+			return;
+		}
 		if ( id.startsWith( "npc-reverse-return:" ) ) {
 			const conversation = view.gameplay?.npcConversation;
 			if ( conversation && conversation.phase === "menu" ) {
@@ -16127,6 +16135,7 @@ export function createUi(
 							target.name :
 							"",
 						canRecall: !!(capabilities & 0x40),
+						canReturnPoint: !!(capabilities & 0x100),
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						// 5D9100: the TC manager's +0x20 (set by any camp record)

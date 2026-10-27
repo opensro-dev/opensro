@@ -113,7 +113,9 @@ scroll (INFERENCE, see the file header). The guides' bit is their service
 ================
 */
 func (rt *Runtime) reverseReturnCapability(npc simulation.NpcDef, c *enterworld.Character) uint32 {
-	if npc.TalkFlags&simulation.NpcTalkFlagTeleport == 0 {
+	// The Bandit Den gate offers only its return-point row (0x100) and
+	// is a gate all the same.
+	if npc.TalkFlags&(simulation.NpcTalkFlagTeleport|simulation.NpcTalkFlagResurrectPoint) == 0 {
 		return 0
 	}
 	if _, _, held := rt.reverseReturnScrollRow(c); !held {

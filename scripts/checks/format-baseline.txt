@@ -81,7 +81,6 @@ apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
 apps/client-next/src/engine/foundation/gameplay/target-notices.ts
 apps/client-next/src/engine/foundation/gameplay/training.ts
-apps/client-next/src/engine/foundation/gameplay/travel.ts
 apps/client-next/src/engine/foundation/gameplay/vitals.ts
 apps/client-next/src/engine/foundation/gameplay/weather.ts
 apps/client-next/src/engine/foundation/gameplay/whisper-block.ts

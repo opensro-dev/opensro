@@ -50,6 +50,10 @@ type portalDestination struct {
 	// a fortress gate, 2 a fortress's revival gate.
 	gateKind uint8
 	recall   bool
+	// returnPoint is CanGotoResurrectPos (column 11): the reference
+	// server's teleport row reader gives the object service 9, the talk row
+	// that sends the player to their return point (0x7495 type 1).
+	returnPoint bool
 	// world is GenWorldID, the RefGameWorld the gate spawn lies in.
 	world instance.DefinitionID
 	spawn simulation.Spawn
@@ -250,6 +254,10 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if e != nil || recall > 1 {
 			return nil, fmt.Errorf("teleportdata recall eligibility at row %d", i+1)
 		}
+		returnPoint, e := number(r[11])
+		if e != nil || returnPoint > 1 {
+			return nil, fmt.Errorf("teleportdata return point eligibility at row %d", i+1)
+		}
 		world, e := strconv.ParseUint(r[12], 10, 16)
 		if e != nil {
 			return nil, fmt.Errorf("teleportdata world at row %d", i+1)
@@ -258,7 +266,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, fmt.Errorf("teleportdata row %d names unknown world %d", i+1, world)
 		}
 		c.destinations[id] = portalDestination{id: id, ref: ref, code: r[2], building: buildings[ref],
-			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, world: instance.DefinitionID(world),
+			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, returnPoint: returnPoint == 1, world: instance.DefinitionID(world),
 			spawn: simulation.Spawn{RegionID: uint16(region), X: xyz[0], Y: xyz[1], Z: xyz[2]}}
 		if ref != 0 {
 			if _, exists := c.sources[ref]; exists {
@@ -414,12 +422,26 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 			}
 		}
 	}
+	// The reference server gives a teleport's object service 8 as its
+	// first link attaches, so a source with no link (the Bandit Den gate)
+	// offers no destination row.
+	linked := map[uint32]bool{}
+	for key := range catalog.links {
+		linked[key[0]] = true
+	}
 	for i := range rt.NpcRoster {
 		if id, ok := catalog.sources[rt.NpcRoster[i].RefObjID]; ok {
-			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | simulation.NpcTalkFlagTeleport
-			rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
+			rt.NpcRoster[i].TalkFlags &^= simulation.NpcTalkFlagRecallPoint | simulation.NpcTalkFlagTeleport | simulation.NpcTalkFlagResurrectPoint
+			if linked[id] {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagTeleport
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
+			}
 			rt.NpcRoster[i].RebirthPoint = simulation.Spawn{}
 			destination := catalog.destinations[id]
+			if destination.returnPoint {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagResurrectPoint
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceResurrectPoint)
+			}
 			if destination.recall && destination.spawn.RegionID != 0 && destination.spawn.RegionID&0x8000 == 0 {
 				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagRecallPoint
 				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceRecallPoint)
@@ -454,6 +476,12 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 			return portalFailure(2)
 		}
 		return rt.handleReverseReturn(division, c, gid, choice)
+	}
+	if e == nil && kind == gateTownReturn {
+		if r.Done() != nil {
+			return portalFailure(2)
+		}
+		return rt.handleGateTownReturn(division, c, gid)
 	}
 	if e != nil || kind != 2 {
 		return portalFailure(0x0f)

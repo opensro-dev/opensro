@@ -5500,6 +5500,34 @@ test("academy master can submit the shared notice editor without guild membershi
 	}
 });
 
+test("the Bandit Den gate's return point row sends 0x7495 type 1 and nothing else", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		// Capability 0x100 alone, as the server grants the den gate (row 0x10).
+		f.state.gameplay = {
+			...f.state.gameplay,
+			pose: { ...f.state.gameplay.pose, regionId: 24758 },
+			target: 17,
+			targetCapabilities: 0x100,
+			npcConversation: { phase: "menu", gid: 17 }
+		};
+		f.state.entities.push( { ...f.state.entities[0], gid: 17, refObjId: 2197, kind: "teleport", name: "Bandit Den" } );
+		let output, now = 0;
+		const draw = () => {
+			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
+		};
+		draw();
+		const ids = defined( output ).controls.map( c => c.id );
+		assert.ok( ids.includes( "npc-return-point" ) );
+		assert.ok( !ids.includes( "npc-portal-open" ) && !ids.includes( "npc-recall-designate" ) );
+		f.ui.event( { kind: "activate", id: "npc-return-point" } );
+		draw();
+		assert.deepEqual( sent.splice( 0 ), [ { kind: "travel-gate", gid: 17, type: 1, target: 0 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("recall menu has independent capability, modal cancel and stale-target protection", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

@@ -147,6 +147,15 @@ test("gate request branches encode native target widths instead of guessing a co
 		assert.deepEqual( [ ...gateRequest( { kind, gid: 7, type, target: 9 } ).payload ], [ 7, 0, 0, 0, type, 9 ] );
 	}
 	assert.throws( () => gateRequest( { kind: "travel-instance", gid: 7, target: 256 } ) );
+	// Row 0x10's return point: 6FEF10 writes no target after type 1.
+	assert.deepEqual( [ ...gateRequest( { kind: "travel-gate", gid: 7, type: 1, target: 0 } ).payload ], [
+		7,
+		0,
+		0,
+		0,
+		1
+	] );
+	assert.throws( () => gateRequest( { kind: "travel-gate", gid: 7, type: 1, target: 1 } ) );
 });
 test("same-region reset publishes its mode after reset, survives rebootstrap, and never inherits remote death", () => {
 	for ( const opcode of [ 0x3369, 0x366a ] ) {
