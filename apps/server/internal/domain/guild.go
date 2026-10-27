@@ -26,7 +26,7 @@ type GuildRecord struct {
 	CrestParam     uint32 `json:"crestParam"`
 	Byte10         uint8  `json:"byte10"`
 	// WarCompensation is the gold guild wars owe the guild (v1.188 guild
-	// +0x8C, paid to the master at a guild manager, 5C72A0 / 5C7330).
+	// +0x8C, paid to the master at a guild manager, by the server's compensation handlers).
 	WarCompensation int64 `json:"warCompensation,omitempty"`
 	// Vote is the open master release vote (guildvote.go), or nil.
 	Vote *GuildVote `json:"vote,omitempty"`
@@ -34,7 +34,7 @@ type GuildRecord struct {
 	// the level (GuildStorageCapacity), never the record.
 	Storage *AccountStorage `json:"storage,omitempty"`
 	// FoundedAtMs is when the guild was created (unix ms), the native
-	// _Guild.FoundationDate column (v1.188 CInstanceGuild_RegisterSchema_84B050
+	// _Guild.FoundationDate column (the reference server's guild schema
 	// registers it; SRO_VT_SHARD keeps it as smalldatetime, and _AllianceCreate
 	// stamps a union's with GetDate()). The guild-create procedure is not in
 	// the shard backup; that it stamps creation time as the union one does
@@ -72,7 +72,7 @@ type GuildMemberRecord struct {
 // GuildLeaderGrade is the master's member grade; GuildFortressRoleCommander
 // is the fortress role the master alone holds. The retail
 // _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a master
-// handover moves it (v1.188 5C46E0, _Guild_Delegate_Master). The client's
+// handover moves it (the v1.188 master handover, _Guild_Delegate_Master). The client's
 // fortress windows gate on the role (827DB0), the server on the grade.
 const (
 	GuildLeaderGrade           uint8 = 0

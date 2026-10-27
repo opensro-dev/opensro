@@ -72,9 +72,10 @@ func (rt *Runtime) clearCompoundJob(key compoundKey) {
 ================
 compoundClock
 
-Native 52ADB1 checks the counter before incrementing it. Execution resets
-it to zero in 50A565, then the same update increments it to one. Never run
-more than one callback per host update. 4AB690 retains elapsed debt after
+Natively the counter is checked before it is incremented. Execution resets
+it to zero when the craft completes, then the same update increments it to
+one. Never run more than one callback per host update. The native timer
+retains elapsed debt after
 subtracting the one-second period; it does not discard overdue time.
 ================
 */

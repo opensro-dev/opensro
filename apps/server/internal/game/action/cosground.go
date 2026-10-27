@@ -126,7 +126,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 				copy := q
 				session.pickup = &copy
 				session.pickupCommand = attempt.command
-				// Entering PICKITEM is a state change (53FF30).
+				// Entering PICKITEM is a state change.
 				resetPetStuck(session)
 				session.pickupDeadline = now.UnixMilli() + cosPickupApproachTimeoutMs
 				result = OpResult{}
@@ -217,18 +217,18 @@ type petPickupAt struct {
 sharePetPickup
 
 A pet's pickup runs the party's item share as the owner's own pickup does:
-CPlayer_ExecuteGroundPickup (526090) serves move type 0x11 as it serves 6,
-and CPlayer_SelectPartyLootRecipient (525DC0) picks the recipient by the
-party's rotation. Non-alchemy quest items (ItemTID_IsQuestItem 42FDC0 in
-CCOS_SelectPickupRecipient 4D554B..4D5585 and 4D5755..4D5782) also route to
-the owner's player bag (0x1C -> CPlayer_GrantGroundPickup 4D5143) and update
+The reference server's ground pickup serves move type 0x11 as it serves 6,
+and its party loot selection picks the recipient by the
+party's rotation. Non-alchemy quest items (the reference server's pet pickup
+recipient selection) also route to
+the owner's player bag (0x1C -> the player's ground-pickup grant) and update
 quest inventory rather than entering the pet container. When the rotation
 names another member, the drop is a personal quest item, or the heap is
 gold the party splits, the grant is the player pickup's (the recipient's
 inventory, the gold shares), played by the pet. Otherwise the pet keeps
 its own pickup into its bag, which the v1.150 client defines: its pickup
 result table (77DD10) reports a full pet bag (B4). Trade goods never
-share (525DC0's first branch). The rotation is asked once, here, after the
+share (the party loot selection's first branch). The rotation is asked once, here, after the
 pet path's own admissions: a live, unmounted pet with its container, a live
 owner, and a drop the owner may take (its own, unreserved, or reserved to a
 member the party shares with).
@@ -274,9 +274,9 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 			_, hasFreeSlot = bagOf(recipient).FirstFreeBagSlot()
 		})
 		if !hasFreeSlot {
-			// 4D570C..4D5718: CCOS_SelectPickupRecipient probes
-			// CGStorage_FindFirstEmptySlot(0x0D) on the rotated party recipient
-			// and spills to CCOSManager_FindPickupPetActor (4FC320) at 4D571B
+			// The reference server's pet pickup recipient selection probes
+			// the first empty slot (0x0D) of the rotated party recipient's bag
+			// and spills to that recipient's pickup pet
 			// whenever no empty slot exists (al == 0xFF), without attempting a
 			// partial-stack merge in the recipient's player bag.
 			return rt.grantPeerCosPickup(division, c, recipient, item, actor, p), true
@@ -288,7 +288,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 	if isPickupFault(result, wire.ErrCodeStorageFull) {
 		if !p.command {
 			if recipient != c {
-				// 526343..5263B2: CPlayer_ExecuteGroundPickup on 0x706D routes
+				// The reference server's ground pickup on 0x706D routes
 				// 0xB06D [2, 0x07] to the full recipient and 0xB06D [2, 0xDA] to
 				// the picker (without player OpActionState on move type 0x11).
 				return OpResult{
@@ -301,8 +301,8 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		if recipient != c {
 			return rt.grantPeerCosPickup(division, c, recipient, item, actor, p), true
 		}
-		// 4D5418..4D5447: when the owner's player bag is full on a personal
-		// quest drop (4D5755), an item-share party emits 0x189C (3 s retry
+		// Natively, when the owner's player bag is full on a personal
+		// quest drop, an item-share party emits 0x189C (3 s retry
 		// backoff); solo or non-item-share emits 0x18B5 (owner bag full).
 		if rt.inSharedLootParty(division, c, now.UnixMilli()) {
 			return failureResult(cosPickupRetryBackoff), true
@@ -316,8 +316,8 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 ================
 withoutActionState
 
-A pet pickup executes on the companion actor (4D4F60), never the player's
-CGCharAutoCommandActor (4AD390), so it never releases the player's 0xB2CD latch.
+A pet pickup executes on the companion actor, never the player's
+auto-command actor, so it never releases the player's 0xB2CD latch.
 ================
 */
 func withoutActionState(frames []wire.Frame) []wire.Frame {
@@ -334,7 +334,7 @@ func withoutActionState(frames []wire.Frame) []wire.Frame {
 ================
 findPickupPetGID
 
-CCOSManager_FindPickupPetActor (4FC320): returns the GID of the character's
+The reference server's pickup-pet lookup: returns the GID of the character's
 live, unmounted summoned pickup pet (band 4, vtable +0x43C == 1), or 0.
 Must run inside the character authority door.
 ================
@@ -362,9 +362,9 @@ func (rt *Runtime) findPickupPetGID(c *enterworld.Character) uint32 {
 ================
 grantPeerCosPickup
 
-CCOS_SelectPickupRecipient (4D5715..4D5744) and CCOS_ExecuteGroundPickup
-(4D5143, 4D52B6..4D54C6): when the rotated party member's player bag is full,
-redirect the pickup to that member's summoned pickup pet (4FC320). If the
+The reference server's pet pickup recipient selection and pet ground pickup:
+when the rotated party member's player bag is full,
+redirect the pickup to that member's summoned pickup pet. If the
 member has no pickup pet, answer the picker's owner with 0x9C; if the member's
 pickup pet bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
 to the member and 0x9C for the picker pet to the picker's owner.

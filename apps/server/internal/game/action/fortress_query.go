@@ -5,7 +5,7 @@ fortress_query.go - fortress manager tax, dates and aide entry admission
 
 The existing siege lane owns dates and the fortress authority owns the
 applications. 754A40 requires the v1.150 dates and guild list, not the
-v1.188 6322A0 compact dates and 61D980 attack-present flag.
+reference server's compact dates and attack-present flag.
 
 ===========================================================================
 */
@@ -28,8 +28,8 @@ const fortressMaxApplicants = 255
 ================
 fortressServiceQuery
 
-519E60 checks the selected NPC's service. Case 9 deliberately returns
-without a response after admission (51A0FF..51A11C).
+The reference server checks the selected NPC's service. Case 9 deliberately returns
+without a response after admission.
 ================
 */
 func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character, request siege.Interaction) OpResult {
@@ -104,7 +104,7 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 ================
 fortressTaxService
 
-62F4E0 permits the admitted manager query. 62F640 checks range, period,
+The reference server permits the admitted manager query, then checks range, period,
 fortress, unchanged ratio, ownership and master in that order.
 ================
 */

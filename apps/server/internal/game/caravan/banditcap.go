@@ -3,8 +3,8 @@
 
 banditcap.go - the shard's cap on bandits per ambush (port-only, not native)
 
-Caravan_SpawnBandits (60BF30) spawns as many bandits as the cargo's star
-rating gives (Caravan_CalculateBanditSpawnCount 60C460): one per 306 of
+The server's caravan ambush spawns as many bandits as the cargo's star
+rating gives (its bandit spawn count): one per 306 of
 cargo value, one more on half the draws, doubled on 2%, with no ceiling.
 A full load at high level draws dozens. The owner approved a cap as a
 server setting (2026-10-13, 16; 2026-10-14, 8). The same function spawns

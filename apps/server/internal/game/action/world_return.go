@@ -28,7 +28,7 @@ advanceResidentRegions
 advanceResidentRegions is the population owner's live-region update, not
 an AOI query. Sample the interpolated position under the character store
 door. Neither a future goal nor a presentation snapshot can save a
-return location. Native 4858E0 -> 4E6FE0 runs after assigning the live pose.
+return location. Natively the movement step makes that call after assigning the live pose.
 ================
 */
 func (rt *Runtime) advanceResidentRegions(nowMs int64) {

@@ -127,7 +127,7 @@ func TestShippedDanceRefusedUntilSelector(t *testing.T) {
 		if param("mate") != 10 {
 			t.Fatalf("walk in left dru %v", param("mate"))
 		}
-		// 584D95: a member two sectors away fails 430CE0, which is the keep
+		// Reference server: a member two sectors away fails the sector adjacency, which is the keep
 		// path, so distance is never read and the child stays.
 		rt.Worlds.Update(simulation.WorldKey(testDivision, mate.Name),
 			func() simulation.WorldState { return simulation.SeedWorldState(mate) },
@@ -279,7 +279,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 	rt.Worlds.Update(simulation.WorldKey(testDivision, mate.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(mate) },
 		func(w *simulation.WorldState) { w.Spawn.X = origin.X; w.SpawnSet = true })
-	// The caster's slot-6 weapon adds mwhh's term (411080) to every heal.
+	// The caster's slot-6 weapon adds mwhh's weapon term to every heal.
 	stats, _, err := rt.playerCombatStats(testDivision, c)
 	if err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 		t.Fatal("fixture weapon adds no heal term")
 	}
 	// First update: the set holds only the caster (select bit 0); the
-	// heal (584E5B) runs before the join walk, so the caster is healed and
+	// heal runs before the join walk, so the caster is healed and
 	// the mate joins after it.
 	casterBefore, mateBefore := *c.CurrentHP, *mate.CurrentHP
 	rt.TickHook()(clock.NowMs())
@@ -309,7 +309,7 @@ func TestShippedRecoveryAuraHealsLowestRatio(t *testing.T) {
 		t.Fatalf("lowest ratio mate %d want %d, caster %d", *mate.CurrentHP, min(maxHP, mateBefore+gain), *c.CurrentHP)
 	}
 
-	// 59FF80 retires every unprotected row at death, a party aura included:
+	// The reference server retires every unprotected row at death, a party aura included:
 	// the dead mate loses its child, the dead caster its aura and the set.
 	auraOn := func(name string) bool {
 		for _, effect := range rt.effects.Snapshot(testDivision, name) {
@@ -434,7 +434,7 @@ func TestRootedCasterRefusesTeleport(t *testing.T) {
 ================
 TestRootedWizardTeleportStillTravels
 
-58E010 refuses only tele and tel3 while rooted. The Wizard's Teleport is
+The reference server refuses only tele and tel3 while rooted. The Wizard's Teleport is
 tel2, so a rooted Wizard can still blink out of a bind.
 ================
 */
@@ -535,7 +535,7 @@ func shippedReqnArmourRow(t *testing.T) enterworld.SkillRow {
 ==================
 TestSkillEquipmentWeaponKinds
 
-58D6AA: without reqi the primary weapon's TID4 must be one of the two
+Reference server: without reqi the primary weapon's TID4 must be one of the two
 kinds, bare hand counting as 1; a broken weapon is 0x300F whatever the
 kind; TID4 16 needs a siege fortress this port never has.
 ==================
@@ -571,7 +571,7 @@ func TestSkillEquipmentWeaponKinds(t *testing.T) {
 	}
 }
 
-// 58D8F0 order: a cooling skill with the wrong weapon reports 0x3005, not
+// The reference server's order: a cooling skill with the wrong weapon reports 0x3005, not
 // 0x300D; command admission (0x37) carries no target check.
 /*
 ================
@@ -628,7 +628,7 @@ func TestShippedReqiPairsRecordedOnce(t *testing.T) {
 	t.Fatal("no shipped (6,7 6,8 6,9) row")
 }
 
-// 58DAEF: freeze, sleep or stun refuses 0x3009; nmf lets the skill through;
+// Reference server: freeze, sleep or stun refuses 0x3009; nmf lets the skill through;
 // burn is not in 0x4041.
 /*
 ================
@@ -661,12 +661,12 @@ func TestSkillAdmissionDisabledCaster(t *testing.T) {
 /*
 ===============================================================================
 
-CASTER-STATE GATES (58DB22..58DF20)
+CASTER-STATE GATES
 
 ===============================================================================
 */
 
-// 58DB22: only a buff whose row carries rpkt (CSkillManager+0x1F8) blocks,
+// Reference server: only a buff whose row carries rpkt (skill manager +0x1F8) blocks,
 // and it blocks only rows that carry rpkt themselves.
 /*
 ================
@@ -707,7 +707,7 @@ func TestSkillAdmissionRpktGate(t *testing.T) {
 	}
 }
 
-// 58DB38: a monster strictly inside five times the efr kind-3 word refuses
+// Reference server: a monster strictly inside five times the efr kind-3 word refuses
 // 0x3038; one outside it never does (the inverted rule refused far monsters).
 /*
 ================
@@ -753,7 +753,7 @@ func TestSkillAdmissionQestMonsterArm(t *testing.T) {
 	}
 }
 
-// 58DE1E: berserk refuses both words first; word 1 needs the refobj a
+// Reference server: berserk refuses both words first; word 1 needs the refobj a
 // transform scroll puts in the command (never a target's level); word 2
 // refuses a rider or a job suit.
 /*
@@ -809,7 +809,7 @@ func TestSkillAdmissionMschWords(t *testing.T) {
 	}
 }
 
-// CGItem_IsJobSuit: TID 3/1/7 with TID4 1..3, in slot 8 only.
+// The job suit test: TID 3/1/7 with TID4 1..3, in slot 8 only.
 /*
 ================
 TestWearsJobSuit
@@ -838,7 +838,7 @@ func TestWearsJobSuit(t *testing.T) {
 	}
 }
 
-// 58DF20: berserk blocks every hide row but a trap; stealth and
+// Reference server: berserk blocks every hide row but a trap; stealth and
 // invisibility are refused in battle (state+0xD), never for being hidden
 // already or for holding a hide buff.
 /*
@@ -893,7 +893,7 @@ func TestSkillAdmissionHideWords(t *testing.T) {
 /*
 ===============================================================================
 
-LINE OF SIGHT (58E490)
+LINE OF SIGHT
 
 ===============================================================================
 */
@@ -949,7 +949,7 @@ func TestSkillAdmissionLineOfSight(t *testing.T) {
 	}
 }
 
-// 58DF8C: reqc bit 2 admits at or below 30 % HP only; 58E0BF refuses ao/pw
+// Reference server: reqc bit 2 admits at or below 30 % HP only; it refuses ao/pw
 // to a rider as well as a seated caster.
 /*
 ================

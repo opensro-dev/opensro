@@ -4,7 +4,7 @@
 skillfield.go - buff fields: efr kind 3 skill objects that hold recipients
 
 A field skill (Harmony therapy) does not install on its caster. The release
-plants a stationary skill object; every pass of 48CEA0 hands each eligible
+plants a stationary skill object; every pass of the native skill object tick hands each eligible
 character standing in it an instance of the same skill and retires the
 instance of one that has left. The registry (world/skillobject) owns the
 object's lifetime and its tracked set; this file owns recipient selection
@@ -29,8 +29,8 @@ import (
 ================
 plantSkillField
 
-The release half of a field cast (CastLifecycle_ProcessPersistent reads
-+0x294 at 583C33): the object stands where the caster stands. Runs inside
+The release half of a field cast (the native persistent cast reads
++0x294): the object stands where the caster stands. Runs inside
 the caster's door; the first recipient pass follows one scan period later.
 ================
 */
@@ -54,12 +54,12 @@ func (rt *Runtime) plantSkillField(division string, c *enterworld.Character, ski
 ================
 advanceSkillField
 
-One pass of 48CEA0 for object mode 2. The caller holds the division lock.
+One pass of the native skill object tick for object mode 2. The caller holds the division lock.
 
 Tracked recipients first: one that no longer exists is dropped; one outside
 the radius has its instance of the skill retired and is dropped; one inside
 whose instance has ended is dropped so the scan below admits it again.
-Then the admission scan (48D690): while the set is under MaxTargets, an
+Then the admission scan: while the set is under MaxTargets, an
 eligible character in the radius that holds no instance of the skill gets
 one with the row's own duration, and joins the set.
 
@@ -121,10 +121,10 @@ func (rt *Runtime) advanceSkillField(object skillobject.Object, owner *enterworl
 ================
 fieldCandidates
 
-The characters 48CEA0 hands to admission, in identity order. Selector bits
-(efr +0x14, 48D1CB..48D3FF): 1 admits the owner, 4 the owner's party, and
+The characters the native tick hands to admission, in identity order. Selector bits
+(efr +0x14): 1 admits the owner, 4 the owner's party, and
 2 every other entity the skill may not strike
-(CSkillManager_IsHostileTargetEligible refuses it); a hostile one needs bit
+(the native hostile-target check refuses it); a hostile one needs bit
 8, which a buff field never sets. worldPlayerEnemy stands in for the
 hostility check. Inferred: only characters are candidates; the native
 collector also returns monsters, but no monster holds a player buff in this
@@ -173,7 +173,7 @@ func (rt *Runtime) fieldCandidates(object skillobject.Object, owner *enterworld.
 ================
 fieldInstance
 
-CSkillManager_FindActiveBuffBySkillID: the recipient's live instance of the
+The native active-buff lookup: the recipient's live instance of the
 field's skill, whoever installed it.
 ================
 */

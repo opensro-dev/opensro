@@ -297,7 +297,7 @@ type FriendDeleteOutcome struct {
 	TargetRemoved bool
 }
 
-// Delete refusal codes (v1.188 CMessengerMgr delete 5D77D0, shown by the
+// Delete refusal codes (the reference server's friend delete, shown by the
 // v1.150 client's 0xB5DB handler 75CE90 as notice 0x13/code).
 const (
 	friendDeleteErrRequest   uint8 = 0x02

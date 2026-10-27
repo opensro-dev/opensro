@@ -3,12 +3,12 @@
 
 equipmentreqi.go - effects that end when their equipment is gone
 
-CSkillManager_ReevaluateEquipmentRequirements (59F0E0) runs after an item
-move that touches an equipment slot (50F1F0) and when an item breaks
-(CGObjPC_OffsetItemDurability; this port does not wear items yet). Every
+The reference server re-evaluates equipment requirements after an item
+move that touches an equipment slot and when an item breaks
+(durability offset; this port does not wear items yet). Every
 self-applied instance (context mode 1) whose reqi list the new equipment
 no longer meets is retired - except any SKILL_CH_FIRE_SHIELD_ row, which
-the native exempts by name (59F397). Instances cast on someone else are
+the native exempts by name. Instances cast on someone else are
 never re-checked.
 
 A party aura's child is installed in mode 1 too, but its reqi (the Bard's
@@ -28,7 +28,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 )
 
-// retireUnmetEquipmentEffects is 59F0E0 for c's committed equipment. The
+// retireUnmetEquipmentEffects is the reference server's re-evaluation for c's committed equipment. The
 // caller holds c's door and publishes the returned effects.
 func (rt *Runtime) retireUnmetEquipmentEffects(division string, c *enterworld.Character) []statuseffect.Effect {
 	skills := rt.deps.SkillData()

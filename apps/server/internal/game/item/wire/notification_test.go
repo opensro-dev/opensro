@@ -50,3 +50,10 @@ func TestBreakNotificationFrameUsesItsOwnChannel(t *testing.T) {
 		t.Fatalf("break notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
 	}
 }
+
+func TestRenameNotificationFrameUsesItsOwnChannel(t *testing.T) {
+	f := RenameNotificationFrame("A")
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, []byte{RenameNoticeChannel, 1, 0, 65, 0}) {
+		t.Fatalf("rename notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
+	}
+}

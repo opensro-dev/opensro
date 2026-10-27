@@ -25,7 +25,7 @@ const cosFollowIntervalMs = 100
 releasePetFormation
 
 Leaving FOLLOW, dying, dismissal and session retirement share the reservation
-owner. The remembered index survives a release, as at 5554B0.
+owner. The remembered index survives a release, as in the reference server.
 ================
 */
 func (rt *Runtime) releasePetFormation(key petOwnerKey, state *petSession) {
@@ -45,8 +45,8 @@ func (rt *Runtime) releasePetFormation(key petOwnerKey, state *petSession) {
 ================
 advanceOwnerFormation
 
-55A930 arms timer 0 on FOLLOW entry. 55A960 gates the callback at 100 ms;
-549F80 checks timer 3 separately. Keep the existing native timer arithmetic.
+The reference server arms timer 0 on FOLLOW entry and gates the callback at 100 ms;
+its formation follow checks timer 3 separately. Keep the existing native timer arithmetic.
 ================
 */
 func (rt *Runtime) advanceOwnerFormation(step petCombatStep) []simulation.Frame {
@@ -109,7 +109,7 @@ func (rt *Runtime) advanceOwnerFormation(step petCombatStep) []simulation.Frame 
 ================
 setCompanionFollowSpeed
 
-548A30 compares projected authored speed before installing source zero. The
+The reference server compares projected authored speed before installing source zero. The
 existing parameter owner retains status factors and feeds late peer spawns.
 ================
 */
@@ -138,7 +138,7 @@ func (rt *Runtime) setCompanionFollowSpeed(step petCombatStep, factor float32) [
 ================
 advanceCompanionBattleFollowTimer
 
-559FB0 arms the movement callback timer on BATTLE entry. Retain that slot
+The reference server arms the movement callback timer on BATTLE entry. Retain that slot
 across FOLLOW re-entry instead of replacing the native timer bank.
 ================
 */

@@ -7,7 +7,8 @@ Two keeper contributions a defender owns: parameter 0x39 (the evcr magic
 option and the Warrior's shield-mastery passive dcri) shrinks the
 attacker's critical chance, and odar's incoming reductions (Earth Barrier,
 the Rogue's bow-absorb passive) shrink the damage it takes. Both buffs and
-passives install them through 594AC0, so the writes have one owner here.
+passives install them through the server's skill-parameter installer, so
+the writes have one owner here.
 
 ===========================================================================
 */
@@ -27,9 +28,9 @@ const criticalEvasionParameter = 0x39
 ================
 EvadedCriticalRate
 
-SkillCombat_CalculateHitOutcome 58EB64..58EBAF: the attacker's critical
-byte over (1 + the defender's parameter 0x39 / 100), truncated to a byte,
-as the block chance is cut by the attacker's 0x38 (BlockChance).
+The reference server's hit-outcome routine, critical step: the attacker's
+critical byte over (1 + the defender's parameter 0x39 / 100), truncated to a
+byte, as the block chance is cut by the attacker's 0x38 (BlockChance).
 ================
 */
 func EvadedCriticalRate(rate uint8, defender Stats) uint8 {
@@ -41,8 +42,8 @@ func EvadedCriticalRate(rate uint8, defender Stats) uint8 {
 ================
 CriticalEvasionWrite
 
-594AC0 0x595DCA..0x595DF4: dcri adds its word to parameter 0x39's flat
-channel.
+The skill-parameter installer's dcri branch: dcri adds its word to parameter
+0x39's flat channel.
 ================
 */
 func CriticalEvasionWrite(value uint32, source uint32) paramkeeper.Write {
@@ -53,9 +54,9 @@ func CriticalEvasionWrite(value uint32, source uint32) paramkeeper.Write {
 ================
 IncomingReductionWrites
 
-596004: odar {bits, word} lowers each incoming-damage keeper its bits
-select (physical 4 / magical 8, crossed with basic 1 / skill 2:
-0xAE..0xB1) by word percent, on the percent-product channel.
+The installer's odar branch: odar {bits, word} lowers each incoming-damage
+keeper its bits select (physical 4 / magical 8, crossed with basic 1 / skill
+2: 0xAE..0xB1) by word percent, on the percent-product channel.
 ================
 */
 func IncomingReductionWrites(bits, word uint32, source uint32) []paramkeeper.Write {

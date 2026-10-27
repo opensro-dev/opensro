@@ -62,7 +62,7 @@ func (rt *Runtime) handleCosCommand(divisionID string, character *enterworld.Cha
 		return rt.handleCosFollowCommand(divisionID, character, command.CosGid)
 	}
 	if command.Tag == wire.CosCommandAttackTag {
-		// 4D2200 serves the attack order for every owned COS: a mounted
+		// The reference server serves the attack order for every owned COS: a mounted
 		// vehicle with the +0x210 capability carries its rider into battle
 		// (below), an attack pet fights on its own AI (petcombat.go).
 		if pet, ref := rt.commandCOSSnapshot(divisionID, character, command.CosGid); pet != nil && ref.TidWord>>11 == attackPetBand {
@@ -108,7 +108,7 @@ func (rt *Runtime) handleCosCommand(divisionID string, character *enterworld.Cha
 		return rt.changeCosRide(divisionID, character, snapshot, true)
 
 	case wire.CosCommandAttackTag:
-		// CGObjCOS_DispatchOwnedCommand (4D2200) case 1 validates the target and
+		// The reference server's owned-COS command case 1 validates the target and
 		// posts AI event 0x19 to the vehicle's own controller (+0x188 slot
 		// 0x1C): the order belongs to the COS, never to its rider. A ride or
 		// transport vehicle has no attack skill, so nothing strikes. The client

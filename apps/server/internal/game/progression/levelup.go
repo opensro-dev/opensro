@@ -12,8 +12,8 @@ effects without acquiring a second character lock.
 
 package progression
 
-// Native server 4E5250 completes the level transition before SP and EXP.
-// Its upward branch at 4E5065 invokes reduced recovery and level presentation.
+// The native server completes the level transition before SP and EXP.
+// Its upward branch invokes reduced recovery and level presentation.
 // The v1.150 consumers are independent: 777670 presents the level effect,
 // 75BE90 installs maxima, 77A080 installs current gauges, and 779620 walks EXP.
 // This port sends the completed maxima and recovery inside that transition
@@ -53,8 +53,8 @@ const LevelCap int64 = 90
 const (
 	StatPointsPerLevel int64 = 3
 	autoStatPerLevel   int64 = 1
-	// DeathPenaltyProtectedMaxLevel is the v1.188 GameServer gate at
-	// CGObjPC_ApplyDeathPenalties 0x004e6a31..0x004e6a35: level <= 10
+	// DeathPenaltyProtectedMaxLevel is the v1.188 GameServer death-penalty
+	// gate: level <= 10
 	// returns without touching experience.
 	DeathPenaltyProtectedMaxLevel int64 = 10
 )
@@ -209,9 +209,9 @@ func (rt *Runtime) GrantExperience(character *enterworld.Character, expDelta, sk
 GrantUnscaledExperience
 
 GrantUnscaledExperience applies an unscaled experience grant (such as the
-fixed Academy graduation reward at CTrainingCampMgr_OnGraduateDBSuccess
-0x005DFC30 @ 0x005DFC69: push 0x1E8480, which invokes vtable+0x170
-CGObjPC_ApplyExpDelta 0x004E5250 directly without server rate scaling)
+fixed Academy graduation reward, which the server's graduation handler
+pays as 0x1E8480 through the player's experience-delta routine
+directly, without server rate scaling)
 inside one commit-door closure.
 ==================
 */
@@ -315,7 +315,7 @@ func (rt *Runtime) ApplyDeathPenalty(character *enterworld.Character, penalty pk
 ==================
 deathPenaltyLoss
 
-4E6A3E..4E6B74: loss = trunc(ExpRequired * percent) with the float32
+The server's death-penalty loss: loss = trunc(ExpRequired * percent) with the float32
 percent constant, cap = leveldata column 5 * factor (halved and truncated
 for a thief killer). A cap below one is raised to one, and a loss below
 one logs the native CLAMP error and loses nothing; the result is
@@ -338,7 +338,7 @@ func deathPenaltyLoss(levels enterworld.LevelDataSource, level int64, penalty pk
 	loss := int64(math.Trunc(float64(required) * float64(rule.Percent)))
 	limit := basis * rule.CapFactor
 	if penalty.SpecialWorld {
-		// 4E6E09: signed dword product, multiplied by widened 0.2f, then truncated.
+		// Signed dword product, multiplied by widened 0.2f, then truncated.
 		const siegeCapScale = float64(float32(0.2))
 		limit = int64(math.Trunc(float64(int32(limit)) * siegeCapScale))
 	}
@@ -395,8 +395,8 @@ func (rt *Runtime) applyDeathPenalty(character *enterworld.Character, penalty pk
 ================
 applyJobDeathPenalty
 
-CGObjPC_ApplyJobDeathPenalty (4E6820): the job experience
-Formulae_CalculateDeathExpLoss (410370) gives,
+The server's job death penalty: the job experience
+its death EXP loss formula gives,
 trunc(GoldMin(level) * 10 * 0.125) * 3, then the EXP of leveldata column
 5 of the lower of the two levels times six, less its 0x101 share. No
 level protects a job death.
@@ -656,7 +656,7 @@ func (rt *Runtime) commitExperience(
 	// transaction (quest rewards use this seam).
 	character.Experience = next.Experience
 	character.SkillExp = next.SkillExp
-	// 4E5710 keeps the requested loss, not what the level walk applied:
+	// The server keeps the requested loss, not what the level walk applied:
 	// resurrection returns a percent of what the death took.
 	if expDelta < 0 {
 		character.LastExpLoss = -expDelta

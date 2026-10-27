@@ -4,7 +4,7 @@
 skillcost_percent_test.go - the percent part of an HP or MP cost
 
 The native cost code divides before it multiplies (fild vital, fild
-percent, fdiv 100.0, fmulp; 58E1D6, 58E214, 583170), so the percent part is
+percent, fdiv 100.0, fmulp), so the percent part is
 vital * (percent / 100), truncated. That is not (vital * percent) / 100:
 0.41 is not exact in binary.
 

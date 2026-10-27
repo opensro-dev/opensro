@@ -6,7 +6,7 @@ import (
 )
 
 // PartyApplicant is derived from the current authoritative character snapshot.
-// Native 5A1890 selects trained masteries; 5BF62E/5BF64A publish them and
+// Natively the server selects trained masteries and publishes them and the
 // active job class. The latter is not job membership (client CICUser+782).
 type PartyApplicant struct {
 	Primary, Secondary uint32
@@ -37,7 +37,7 @@ func activePartyJob(character *domain.Character) uint8 {
 	return 4
 }
 
-// 63C010, GameServer 5BF240 and ShardManager 44F7F0: the same
+// 63C010 and the reference server's game and shard managers: the same
 // job/purpose matrix gates registration, modification and join admission.
 // Native automatic search remains an unrestricted local purpose filter.
 func partyPurposeAllowed(job, purpose uint8) bool {

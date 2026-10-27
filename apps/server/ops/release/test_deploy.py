@@ -41,6 +41,26 @@ class DeployTests(unittest.TestCase):
 				{"SRO_BUG_REPORT_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
 
 	# ================
+	# test_staff_webhook_comes_from_the_staff_file
+	#
+	# The GameWorld's ops alerts page the channel deploy.py already
+	# announces staff events through; nothing configured passes nothing.
+	# ================
+	def test_staff_webhook_comes_from_the_staff_file(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "discord-webhook"
+			self.assertEqual(deploy.staff_environment({}), {})
+			config = {"staff_webhook": str(path)}
+			self.assertEqual(deploy.staff_environment(config), {})
+			path.write_text("\n")
+			self.assertEqual(deploy.staff_environment(config), {})
+			path.write_text("https://discord.com/api/webhooks/1/abc\n")
+			self.assertEqual(deploy.staff_environment(config),
+				{"SRO_STAFF_DISCORD_WEBHOOK": "https://discord.com/api/webhooks/1/abc"})
+		self.assertIn("SRO_STAFF_DISCORD_WEBHOOK", deploy.DEPLOYMENT_VARIABLES,
+			"a shard setting must never name the staff webhook")
+
+	# ================
 	# test_shard_settings_refuse_a_malformed_profile
 	#
 	# The deployment's beta values come only from shard-settings.json (#606):
@@ -136,6 +156,34 @@ class DeployTests(unittest.TestCase):
 			with self.assertRaisesRegex(RuntimeError, "host is not ready"):
 				deploy.deployer(full, "")
 			run.assert_not_called()
+
+	# ================
+	# test_public_webtransport_pair_must_be_readable_by_the_task_user
+	#
+	# The deploy runs as root; the GameWorld as deploy.TASK_USER. A pair only
+	# root can read is refused before any token, naming the file and the fix.
+	# ================
+	def test_public_webtransport_pair_must_be_readable_by_the_task_user(self):
+		config = {"transport_cert_file": "/etc/opensro-tls/fullchain.pem",
+			"transport_key_file": " /etc/opensro-tls/privkey.pem "}
+		on = {"SRO_WEBTRANSPORT_PUBLIC": "on"}
+		calls = []
+		def readable(command, check):
+			calls.append(command)
+			return subprocess.CompletedProcess(command, 0)
+		deploy.require_pair_readable(config, on, run_as=readable)
+		self.assertEqual(calls, [
+			["runuser", "-u", deploy.TASK_USER, "--", "test", "-r", "/etc/opensro-tls/fullchain.pem"],
+			["runuser", "-u", deploy.TASK_USER, "--", "test", "-r", "/etc/opensro-tls/privkey.pem"]])
+		def key_unreadable(command, check):
+			return subprocess.CompletedProcess(command, 1 if command[-1].endswith("privkey.pem") else 0)
+		with self.assertRaisesRegex(RuntimeError, "transport_key_file /etc/opensro-tls/privkey.pem is not readable by sro.*0640"):
+			deploy.require_pair_readable(config, on, run_as=key_unreadable)
+		# Off or absent: nothing to read, nothing asked.
+		calls.clear()
+		deploy.require_pair_readable({}, {}, run_as=readable)
+		deploy.require_pair_readable(config, {"SRO_WEBTRANSPORT_PUBLIC": "off"}, run_as=readable)
+		self.assertEqual(calls, [])
 
 	# ================
 	# test_preflight_and_token_lifecycle

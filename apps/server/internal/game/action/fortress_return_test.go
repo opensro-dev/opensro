@@ -11,7 +11,7 @@ import (
 ================
 TestFortressReturnTakesTheOccupiersHome
 
-51A5B0: a member of the guild occupying Jangan returns to its revival gate
+Natively a member of the guild occupying Jangan returns to its revival gate
 and the action window hears the 600 s cooldown (0x3792 [2][5]); a second
 return is refused "not yet" (0xB025 [2][8]), and a PC without an occupied
 fortress is refused 7.

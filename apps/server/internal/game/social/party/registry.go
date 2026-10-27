@@ -145,7 +145,7 @@ func (r *Registry) SetPendingInviteAt(divisionID, targetName string, invite Pend
 }
 
 // ExpirePendingInvites retires only records still owned by this lane. Native
-// 46F1E0 expires after, not at, 30 seconds. Replacement starts a fresh clock;
+// expires after, not at, 30 seconds. Replacement starts a fresh clock;
 // accepted/dropped invitations are absent and cannot expire a second time.
 /*
 ================

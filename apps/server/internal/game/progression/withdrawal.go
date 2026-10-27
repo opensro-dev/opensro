@@ -59,7 +59,7 @@ func (rt *Runtime) HandleMasteryWithdrawal(division string, c *enterworld.Charac
 ================
 handleWithdrawal
 
-5169D0/516BB0 explicitly whitelist the potion identities. Mall and Old Woman
+The server's withdrawal handlers explicitly whitelist the potion identities. Mall and Old Woman
 restoration use flags 6: consume potions, return all SP, charge no gold.
 They do not use the ordinary expendable-item acknowledgement.
 ================

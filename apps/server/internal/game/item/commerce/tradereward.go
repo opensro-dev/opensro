@@ -3,8 +3,9 @@
 
 tradereward.go - native trade gold, job experience and weekly contributions
 
-5BD180/5BD510 split rewards among nearby dressed party members. Float32
-stores follow the disassembly; keep arithmetic between stores in float64.
+The reference server splits trade gold and job experience among nearby
+dressed party members. Float32 stores follow the disassembly; keep
+arithmetic between stores in float64.
 
 ===========================================================================
 */
@@ -48,7 +49,8 @@ type TradeRewardDistribution struct{ Actor, Hunter, Thief TradeReward }
 ================
 TradeJobExperience
 
-410520 spills the profit-times-job multiplier to float32 before CRT_ftol.
+The reference server spills the profit-times-job multiplier to float32
+before its CRT float-to-int conversion.
 ================
 */
 func TradeJobExperience(job uint8, profit int64, oneStar bool) int64 {
@@ -76,7 +78,8 @@ func TradeJobExperience(job uint8, profit int64, oneStar bool) int64 {
 ================
 DistributeTradeReward
 
-Callers count members using 5BCFF0's role, alive, world and range predicates.
+Callers count members using the reference server's role, alive, world and
+range predicates.
 Zero-profit origin sales take the ordinary gold path and award no job EXP.
 ================
 */
@@ -117,7 +120,8 @@ func DistributeTradeReward(in TradeRewardInput) TradeRewardDistribution {
 ================
 AddWeeklyTradeReward
 
-60E0A0 sign-extends both words. Above two billion the native diagnostic arm
+The reference server's weekly accumulation sign-extends both words. Above
+two billion the native diagnostic arm
 reuses the sum as its lower bound, then adds the delta again; preserve that
 observable behavior rather than assuming the misleading old "Clamped" name.
 ================

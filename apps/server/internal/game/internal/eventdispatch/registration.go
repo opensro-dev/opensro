@@ -2,7 +2,7 @@ package eventdispatch
 
 // Receiver owns retained handler entries. Registry owns only associations.
 // A receiver must outlive external registries referencing its handlers, as in
-// native 63D070/63C4A0/63CF70. Clear during an active dispatch is not supported.
+// the native event registry. Clear during an active dispatch is not supported.
 type Receiver struct {
 	// Native registry keys are receiver pointer values. The host supplies their
 	// ordering identity; gameplay GIDs must not silently substitute for it.
@@ -100,7 +100,7 @@ func (h *Handler) Unregister() {
 	h.registry.Detach(h, true)
 }
 
-// 63C400 removes just the first matching association, then returns.
+// The native removal drops just the first matching association, then returns.
 func (g *Registry) RemoveFirstPhaseZeroEvent12() {
 	for _, a := range g.entries {
 		if a.handler.Phase == 0 && a.handler.EventKey == 12 {

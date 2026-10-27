@@ -3,11 +3,11 @@
 
 branches.go - offers whose reply chooses how the quest is done
 
-Rahid 2 (CQNO_RM_OLDWOMAN_2, talk 89E670) offers _01 with three replies:
+Rahid 2 (CQNO_RM_OLDWOMAN_2, its talk handler) offers _01 with three replies:
 collect 200 Rocky Feathers (_02), wait two game months (_06) or refuse.
 The reply picks the record's branch for good: its own not-achieved,
 completion and achieved-now lines, its reward, and for a waiting branch an
-online-minute countdown (89E050) that replaces the objective.
+online-minute countdown (the quest's minute pulse) that replaces the objective.
 
 ===========================================================================
 */
@@ -39,13 +39,13 @@ type OfferBranch struct {
 	CompletePromptSymbol string
 	AchievedNowSymbol    string
 	// WaitMinutes, when set, replaces the objective: the branch is achieved
-	// after this many admitted online minutes (89E670 sets 0x708).
+	// after this many admitted online minutes (the talk handler sets 0x708).
 	WaitMinutes uint16
 	// NoReward pays nothing (v1.150 popup: "[Option 2] Wait 2 months None").
 	NoReward bool
 	// EndsQuests are ended when the quest is accepted with this reply:
-	// CQNO_CA_THIEF_5 (8C6180) closes the follow-up the reply turned away
-	// from (+0x18C, then SetQuestState 5). Resolved by loadEndedQuests.
+	// CQNO_CA_THIEF_5's talk handler closes the follow-up the reply turned away
+	// from (+0x18C, then sets quest state 5). Resolved by loadEndedQuests.
 	EndsQuests   []string
 	endsQuestIDs []uint32
 }

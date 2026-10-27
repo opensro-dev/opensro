@@ -130,7 +130,7 @@ func TestQinShiTombPortalsAndWalkIns(t *testing.T) {
 		}
 	}
 
-	// Verify Floor 6 center -> North wing trigger portal radius fallback (CAction_OperatePortal 0x005f0d40).
+	// Verify Floor 6 center -> North wing trigger portal radius fallback (the native portal operation).
 	rt := &Runtime{}
 	atPortal := simulation.Spawn{RegionID: 0x8002, X: -131, Y: 1890, Z: 2535}
 	if got := rt.walkInZoneAt(atPortal); got != "GATE_JINSI_06X01_06" {
@@ -382,7 +382,7 @@ func placeOutsideTombDoor(rt *Runtime, c *enterworld.Character) {
 ================
 TestWalkingIntoTheTombDoorLevels
 
-4EF480 at the tomb's own door: a level-69 player is refused by the
+The reference server's NPC teleport command at the tomb's own door: a level-69 player is refused by the
 door link's level condition (the teleport answer's 0x15) and stays; a
 level-70 player arrives on Floor 1 (region 0x8007) with nothing charged.
 ================

@@ -4,13 +4,13 @@
 resurrectionscroll.go - the resurrection scroll: a dead player revives itself
 
 ITEM_MALL_RESURRECTION_60P/100P_SCROLL and four quest rewards share type
-3/3/13/6. CGItemExpendable_UseSpecialConsumable (v1.188 49C2B0) sends type
-4 = 6 to CGItemExpendable_CheckPlayerReturnCondition (49FF20) with the
+3/3/13/6. The native special-consumable use (v1.188) sends type
+4 = 6 to the native return-condition check with the
 item's Param1..3 (RefItemData +0x2A0/+0x2C0/+0x2E0 on the server):
 
   - a living player is refused with 0x1887 (v1.150 notice 391,
     UIIT_MSG_STRGERR_ONLY_THE_DEAD_CAN_USE_RESURRECT_SCROLL);
-  - otherwise the player revives where the corpse lies (4DF290 arg 1, the
+  - otherwise the player revives where the corpse lies (the in-place revival, the
     same revival a resurrection skill commits: reviveWhereDead);
   - the EXP refund is Param3 percent of the recorded loss, rounded up;
   - HP and MP are both Param1 when it is set, else Param2 percent of their
@@ -28,10 +28,10 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// errCodeOnlyDeadResurrect is the low byte of 49FF20's 0x1887.
+// errCodeOnlyDeadResurrect is the low byte of the native 0x1887.
 const errCodeOnlyDeadResurrect uint8 = 0x87
 
-// resurrectionScrollRoundUp is 49FFEC's float constant: a fraction above
+// resurrectionScrollRoundUp is the native float constant: a fraction above
 // it rounds the refund up.
 const resurrectionScrollRoundUp = float32(9.99999997e-07)
 
@@ -39,7 +39,7 @@ const resurrectionScrollRoundUp = float32(9.99999997e-07)
 ==================
 resurrectionScrollExp
 
-49FF43..49FFFC: |loss| (read before the revival clears it) times
+Natively |loss| (read before the revival clears it) times
 Param3/100, stored as float32 and halved for a murderer (state+0xC is 2);
 the product is a float32 truncated by fistp, plus one when the float32
 remainder exceeds resurrectionScrollRoundUp. Unlike the skill's refund
@@ -67,7 +67,7 @@ func resurrectionScrollExp(lastLoss int64, percent uint32, murderer bool) int64 
 ==================
 resurrectionScrollVitals
 
-4A0000..4A0060: Param1 > 0 sets both HP and MP to it; otherwise Param2 > 0
+Natively Param1 > 0 sets both HP and MP to it; otherwise Param2 > 0
 gives each Param2/100 (a float32) of its maximum, truncated.
 ==================
 */
@@ -130,7 +130,7 @@ func (rt *Runtime) useResurrectionScroll(character *enterworld.Character, use sk
 ==================
 resurrectWithScroll
 
-The scroll's effect (49FF20), shared by the bag item and a premium limited
+The scroll's effect, shared by the bag item and a premium limited
 use (countjob.go), which consumes nothing. A living player is refused with
 0x1887 in *result.
 ==================

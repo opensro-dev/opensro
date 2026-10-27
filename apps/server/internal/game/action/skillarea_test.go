@@ -96,7 +96,7 @@ func TestAreaFalloffAndFatalRewardOwnership(t *testing.T) {
 		if kills != wantKills {
 			t.Fatalf("kill credits %d", kills)
 		}
-		// 4A9C80: every killed victim publishes LIFE dead, or the client keeps
+		// Reference server: every killed victim publishes LIFE dead, or the client keeps
 		// moving its corpse through the death animation.
 		dead := map[uint32]bool{}
 		for _, frame := range result.Frames {
@@ -217,7 +217,7 @@ TestAreaVictimDropsFollowTheirOwnDeath
 
 The client knows a drop by the death it follows (it holds both until the
 killing hit plays), so each victim's LIFE dead frame is followed directly by
-its own drops, as the native death credit publishes them (4C42F0). Each
+its own drops, as the native death credit publishes them. Each
 victim's gold lands at its own pose, which names the dropper.
 ================
 */

@@ -5,9 +5,9 @@ globalchat.go - the Global Chatting item: one message to the whole shard
 
 CIFWholeChat (client CIFGlobalChatItem_OnSend 6D1EE0) sends the item's use
 with its message: 0x75BD {u8 slot, u16 type word, u16 count + UTF-16LE
-text} (CGInterface_SendGlobalChatItemUse 693C90). CGItemExpendable_UseItem
-(v1.188 49B9F0) case 4 refuses a chat-restricted player
-(CGObjPC_CheckAndReportSessionRestriction, result 2), otherwise relays the
+text} (CGInterface_SendGlobalChatItemUse 693C90). The reference server's
+item use case 4 refuses a chat-restricted player
+(its session restriction check, result 2), otherwise relays the
 line to the shard manager as a type 6 chat {name, message} and reports
 success, which spends one item. The shard sends it to every player.
 
@@ -25,7 +25,7 @@ import (
 	"opensro.online/server/internal/game/social/chatfeed"
 )
 
-// globalChatRestricted is 49B9F0's result 2 for a restricted player; the
+// globalChatRestricted is the native result 2 for a restricted player; the
 // restriction notice has already told them why.
 const globalChatRestricted uint8 = 2
 
@@ -74,7 +74,7 @@ func decodeGlobalChatMessage(tail []byte) (string, bool) {
 ================
 useGlobalChatting
 
-49B9F0 case 4. The author's line follows its own 0xB5BD success; the
+The native item use case 4. The author's line follows its own 0xB5BD success; the
 shard's copies go out once the use has committed. Natively the shard
 manager relays the line asynchronously, so it never precedes the answer.
 The line and the website transcript carry the author's display name

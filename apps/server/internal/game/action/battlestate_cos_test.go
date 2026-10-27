@@ -19,7 +19,7 @@ import (
 ==================
 TestMonsterHitOnThePetPutsTheOwnerInBattle
 
-52A1E0 -> 4E1DF0: the owner enters battle when a monster strikes the pet,
+The owner enters battle when a monster strikes the pet,
 publishing channel 8 once; a second hit only restarts the countdown.
 ==================
 */

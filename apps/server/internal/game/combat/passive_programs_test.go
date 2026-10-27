@@ -5,7 +5,7 @@ passive_programs_test.go - setv-less passive programs on the keeper
 
 The authored Blockade (br), Protection (reat + real) and Chinese sword
 passive (br under a shield reqi) rows contribute through learnedPassives
-and learnedStatusResistance only while their reqi walk passes (59F0E0).
+and learnedStatusResistance only while their reqi walk passes.
 
 ===========================================================================
 */
@@ -71,7 +71,7 @@ TestBlockadeRaisesEveryBlockLaneOnlyWithAOneHandSword
 
 SKILL_EU_WARRIOR_SHIELDP_BLOCK_A_08: br 15 9, reqi 6 7. With a one-hand
 sword in slot 6 each of the four block-rate lanes gains flat 9 under the
-skill's own source (594AC0 at 0x595DFD); a two-hand sword fails the walk
+skill's own source (the installer's br case); a two-hand sword fails the walk
 and contributes nothing, and so does a broken sword.
 ================
 */
@@ -150,8 +150,8 @@ TestProtectionResistsOnlyWithADualAxe
 
 SKILL_EU_WARRIOR_DUALP_ABNORMAL_A_07: reat 63 100, real 0x17FAFC0 50 9,
 reqi 6 9. With a dual axe the six flat status reductions 0x91..0x96 gain
-100 (595542..59568F) and every masked status's bucket holds flat 50 at
-grade 9 (59DF20); without it, nothing.
+100 (the reat case) and every masked status's bucket holds flat 50 at
+grade 9 (the real case); without it, nothing.
 ================
 */
 func TestProtectionResistsOnlyWithADualAxe(t *testing.T) {
@@ -207,7 +207,7 @@ func TestProtectionResistsOnlyWithADualAxe(t *testing.T) {
 TestChineseFlatRatePassivesRaiseTheirParameters
 
 SKILL_CH_SPEAR_PASSIVE_A_09 (Cheolsam Force) is hpi 2826 0 with no reqi:
-59F0E0 installs it through 594AC0, whose hpi case (595481) adds flat 2826
+the reqi walk installs it through the effect installer, whose hpi case adds flat 2826
 to maximum HP. The Cold Force mpi, Pacheon hr and Lightning er passives
 are the same flat/percent blocks on Params 4, 11 and 9.
 ================

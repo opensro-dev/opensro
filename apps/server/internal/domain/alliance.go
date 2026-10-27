@@ -3,17 +3,16 @@
 
 alliance.go - the persisted guild unions
 
-A union (CAlliance) is up to eight guilds in fixed slots, the leading
-guild in slot 0 (CAlliance_SetGuildSlot 5B8C70 bounds the index to 8;
-CAlliance_GetMasterGuildID 5B9260 reads slot 0). It is cross-guild
-state, so it lives in the authority store's alliances table, reached
-through AllianceStore.
+A union is up to eight guilds in fixed slots, the leading guild in slot 0
+(the reference server's slot setter bounds the index to 8, and its
+leading-guild lookup reads slot 0). It is cross-guild state, so it lives in
+the authority store's alliances table, reached through AllianceStore.
 
 ===========================================================================
 */
 package domain
 
-// AllianceSlots is the CAlliance guild slot count (5B8C70: index < 8).
+// AllianceSlots is the union's guild slot count (the slot setter: index < 8).
 const AllianceSlots = 8
 
 /*

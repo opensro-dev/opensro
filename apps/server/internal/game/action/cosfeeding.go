@@ -47,7 +47,7 @@ type petFeedUse struct {
 ================
 applyPetFeed
 
-49D240/49D77C: only the owner's live attack pet accepts HGP food below 99%.
+Natively only the owner's live attack pet accepts HGP food below 99%.
 The later server reads Param1 at +2A0 (v1.150 +29C). It is a percentage
 of 10000, and recovery saturates at 10000. The native
 food arm does not start the HP/MP item reuse timer.

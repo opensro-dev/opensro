@@ -16,11 +16,10 @@ package domain
 // in the authority store's training_camps / training_camp_members tables
 // (the guilds/guild_members pattern), reached through the TrainingCampStore
 // door below. EVIDENCE(v1.188, logic): the retail GameServer persists camps
-// in the _TRAININGCAMP / _TRAININGCAMPMEMBER DB tables (SR_GameServer dump
-// @0x00848bd1 / @0x008495f1 CDBRecord table binds) with honor-rank and
-// buff-status satellites (@0x0084a201 / @0x0084a761) - the satellites are
-// deliberately NOT modeled here (honor/buff mechanics are outside the
-// invite lane).
+// in the _TRAININGCAMP / _TRAININGCAMPMEMBER DB tables (the server's DB
+// record table binds) with honor-rank and buff-status satellites - the
+// satellites are deliberately NOT modeled here (honor/buff mechanics are
+// outside the invite lane).
 //
 // Deliberately NO Character FK (unlike GuildID): the camp seed resolves
 // through CampOfCharacter at enter-world, so a second character-schema key
@@ -86,9 +85,9 @@ type TrainingCampAdmissionResult struct {
 }
 
 // TrainingCampOpening is the policy input for opening a camp at the NPC
-// (v1.188 4E4680 -> 5DFCC0): the master's level floor and the gold fee the
-// opening burns. The gameplay package supplies both; the store applies them
-// with the debit and the new rows under one lock.
+// (the v1.188 camp opening check and its manager): the master's level floor
+// and the gold fee the opening burns. The gameplay package supplies both;
+// the store applies them with the debit and the new rows under one lock.
 type TrainingCampOpening struct {
 	MasterCharID int64
 	MinLevel     int64
@@ -105,7 +104,7 @@ const (
 	// TrainingCampOpenUnavailable: no such live character, or one pending
 	// deletion. No answer names it.
 	TrainingCampOpenUnavailable
-	// TrainingCampOpenDead: 4E4680's IsAlive test (0x6807).
+	// TrainingCampOpenDead: the opening check's IsAlive test (0x6807).
 	TrainingCampOpenDead
 	// TrainingCampOpenLevel: below the level floor (0x6809).
 	TrainingCampOpenLevel
@@ -136,12 +135,9 @@ type TrainingCampRankChange struct {
 }
 
 // TrainingCampDisbandRefusal is why DisbandCamp refused
-// (v1.188 CGObjPC_HandleAcademyDisband7471 0x00519120 ->
-// TrainingCamp_ValidateDisband 0x004E4780 ->
-// TrainingCamp_SubmitDisband 0x005DF140 @ 0x005191F3 ->
-// CTrainingCampManager_SetCampDeletedAndDisband 0x005DE920 ->
-// CTrainingCamp_OnDisbandCancelBuffs 0x005DDAF0 ->
-// CGObjPC_SetTrainingCampLeaveTimestamp 0x004E4950 @ 0x005DDBAC).
+// (the v1.188 0x7471 disband handler validates the request, submits it to
+// the camp manager, which marks the camp deleted, cancels the camp buffs
+// and stamps each member's leave time).
 type TrainingCampDisbandRefusal uint8
 
 const (
@@ -163,8 +159,8 @@ type TrainingCampDisbandResult struct {
 }
 
 // TrainingCampLeaveRefusal is why LeaveCamp refused
-// (v1.188 CGObjPC_HandleAcademyLeave7474 0x00519510 ->
-// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
+// (the v1.188 0x7474 leave handler, through the camp's shared leave-or-ban
+// command).
 type TrainingCampLeaveRefusal uint8
 
 const (
@@ -185,8 +181,8 @@ type TrainingCampLeaveResult struct {
 }
 
 // TrainingCampKickRefusal is why KickMember refused
-// (v1.188 CGObjPC_HandleAcademyKick7473 0x005193A0 ->
-// TrainingCamp_SubmitLeaveOrBanCommand_5DEEB0 0x005DEEB0).
+// (the v1.188 0x7473 kick handler, through the camp's shared leave-or-ban
+// command).
 type TrainingCampKickRefusal uint8
 
 const (
@@ -208,8 +204,7 @@ type TrainingCampKickResult struct {
 }
 
 // TrainingCampGraduateRefusal is why Graduate or CompulsoryGraduate refused
-// (v1.188 CGObjPC_HandleAcademyGraduate7475 0x00519600 /
-// CGObjPC_HandleAcademyCompulsoryGraduate7476 0x00519770).
+// (the v1.188 0x7475 graduate and 0x7476 compulsory graduate handlers).
 type TrainingCampGraduateRefusal uint8
 
 const (
@@ -244,8 +239,8 @@ type TrainingCampGraduateResult struct {
 }
 
 // TrainingCampHonorRanking is one row of the Top-50 division Honor Ranking
-// table (0xB2D0, v1.188 CTrainingCamp_WriteHonorRankEntry_5DD1C0 0x005DD1C0 /
-// CTrainingCampMgr_SendHonorRankList_B478 0x005DF010).
+// table (0xB2D0, as the v1.188 camp manager's honor rank list writes each
+// entry).
 type TrainingCampHonorRanking struct {
 	Ranking       uint32
 	Rank          uint8

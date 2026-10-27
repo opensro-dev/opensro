@@ -563,7 +563,7 @@ TestHandleChatSuitedSenderSpeaksUnderJobAlias
 
 While the author is dressed in a job suit, every composed chat line
 carries the job alias instead of the character name (native
-CGObjPC_GetNickName 4DDC50). Deliveries still route by character name,
+the job alias getter). Deliveries still route by character name,
 and an author who owns an alias but is not wearing the suit speaks
 under the character name.
 ================

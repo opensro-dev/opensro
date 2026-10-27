@@ -44,7 +44,7 @@ func (s *memoryStore) SaveAlliance(_ string, record domain.AllianceRecord, prese
 ================
 TestUnionFillsEightSlots
 
-5B8C70: the founder takes slot 0, joiners the next free slots, and a
+Natively the founder takes slot 0, joiners the next free slots, and a
 ninth guild is refused.
 ================
 */

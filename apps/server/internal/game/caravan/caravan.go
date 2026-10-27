@@ -5,7 +5,7 @@ caravan.go - trade caravans and the bandit ambushes they draw
 
 Package caravan owns the server's caravan registry and the native rules
 that decide when and how strongly a loaded trade transport is ambushed
-(SR_GameServer CaravanManager 60C5A0 / 60C684, Caravan_* 60BC80..60C6C0).
+(the reference server's caravan manager and caravan rules).
 A caravan is registered when its trader summons a transport, moves cargo
 or registers as a trader; every one to two minutes its timer fires, the
 trader and vehicle are validated, and in a battlefield region bandits
@@ -29,32 +29,32 @@ const (
 	timerSpreadMs = 60000
 	// randomMaximum is CRT RAND_MAX.
 	randomMaximum = 32767
-	// tradeStarDivisor and the tier thresholds are sub_60C6C0's defaults
+	// tradeStarDivisor and the tier thresholds are the server's caravan defaults
 	// (TRADE_MON_FACTOR, TRADESCALE1..5_AMOUNT_MAX); no refdata row
 	// overrides them in our data.
 	tradeStarDivisor = 306
-	// cargoUnitFactor and cargoSlotFactor are 60C1F0's constants.
+	// cargoUnitFactor and cargoSlotFactor are the cargo value's constants.
 	cargoUnitFactor = 348.0
 	cargoSlotFactor = 40.0
-	// specialGoodsFactor is 60C160's float for 3.3.8.2 cargo.
+	// specialGoodsFactor is the star rating's float for 3.3.8.2 cargo.
 	specialGoodsFactor = 1.5499999523162842
-	// cargoLevelMin and cargoLevelMax clamp the trader's max level (60C1F0).
+	// cargoLevelMin and cargoLevelMax clamp the trader's max level, as the cargo value does.
 	cargoLevelMin = 20
 	cargoLevelMax = 140
-	// banditLevelFloor and banditLevelOffset are 60C4B0's constants.
+	// banditLevelFloor and banditLevelOffset are the bandit level's constants.
 	banditLevelFloor  = 16
 	banditLevelOffset = 4
-	// thiefTacticsBase and hunterTacticsBase: 60BF30 picks 2001.. for a
+	// thiefTacticsBase and hunterTacticsBase: the bandit spawn picks 2001.. for a
 	// trader's thieves, 2011.. for everyone else's hunters.
 	thiefTacticsBase  = 2001
 	hunterTacticsBase = 2011
 	// percentRare is the 2% (rand%100 < 2) every doubling and champion uses.
 	percentRare = 2
-	// traderJob is CGObjPC job state 1.
+	// traderJob is the player's job state 1.
 	traderJob = 1
 )
 
-// tierThresholds is g_dwTradeTierThresholds (C826C0); index 5 caps.
+// tierThresholds is the server's trade tier threshold table; index 5 caps.
 var tierThresholds = [...]uint32{0, 408, 918, 1428, 2142, math.MaxUint32}
 
 /*
@@ -112,7 +112,7 @@ func key(division, character string) string {
 ================
 Register
 
-60C5A0: an existing caravan is kept with its running timer; a new one
+The caravan manager: an existing caravan is kept with its running timer; a new one
 starts a fresh timer.
 ================
 */
@@ -151,7 +151,7 @@ func (r *Registry) Len() int {
 ================
 Due
 
-60BC80 per caravan: the elapsed time grows until it reaches the drawn
+The caravan timer, per caravan: the elapsed time grows until it reaches the drawn
 delay; then the timer restarts and the caravan is returned to be fired.
 The caller validates each one outside its own lock and removes the
 invalid ones (Remove). Caravans are visited in key order, so a tick is
@@ -231,7 +231,7 @@ func percentDraw(roll Roll) (bool, error) {
 ================
 CargoCapacity
 
-Caravan_GetCOSSlotCapacity (4D2DA0): rarity 1 holds 40, rarity 2 holds 30;
+The server's transport slot capacity: rarity 1 holds 40, rarity 2 holds 30;
 any other rarity logs and falls back to the vehicle's inventory size.
 ================
 */
@@ -249,7 +249,7 @@ func CargoCapacity(rarity uint8, inventory uint16) uint16 {
 ================
 CargoValue
 
-Caravan_CalculateCargoValue (60C1F0): goods count x 348 over the base
+The server's cargo value: goods count x 348 over the base
 death EXP of the trader's clamped max level, scaled by capacity / 40.
 Zero when nothing is carried; otherwise at least 1.
 ================
@@ -273,7 +273,7 @@ func CargoValue(goods uint32, capacity uint16, baseDeathExp int64) uint32 {
 ================
 CargoLevel
 
-60C1F0 clamps the trader's max level into 20..140 before the EXP basis.
+The cargo value clamps the trader's max level into 20..140 before the EXP basis.
 ================
 */
 func CargoLevel(maxLevel int64) int64 {
@@ -284,7 +284,7 @@ func CargoLevel(maxLevel int64) int64 {
 ================
 BaseDeathExp
 
-CRefData_CalculateBaseDeathExp (4111F0): trunc(GoldMin(level) x 10 x
+The server's base death EXP: trunc(GoldMin(level) x 10 x
 0.125), from the drop-gold table.
 ================
 */
@@ -296,8 +296,8 @@ func BaseDeathExp(goldMinimum int64) int64 {
 ================
 StarRating
 
-Caravan_CalculateStarRating (60C160). specialGoods is cargo holding
-3.3.8.2 goods (CGObjCOS_HasTradeGoodsTid4_2).
+The server's star rating. specialGoods is cargo holding
+3.3.8.2 goods (the transport's TID4 2 goods test).
 ================
 */
 func StarRating(value uint32, specialGoods bool) uint32 {
@@ -317,7 +317,7 @@ func StarRating(value uint32, specialGoods bool) uint32 {
 ================
 DifficultyTier
 
-Caravan_GetTradeDifficultyTier (60C330): the first threshold the value
+The server's trade difficulty tier: the first threshold the value
 does not exceed, capped at 5.
 ================
 */
@@ -336,7 +336,7 @@ func DifficultyTier(value uint32) uint8 {
 ================
 SpawnCount
 
-Caravan_CalculateBanditSpawnCount (60C460): the stars (at least 1), one
+The server's bandit spawn count: the stars (at least 1), one
 more on a float draw of at least 0.5, doubled on a 2% draw.
 ================
 */
@@ -366,7 +366,7 @@ func SpawnCount(stars uint32, roll Roll) (int, error) {
 ================
 BanditLevel
 
-Caravan_CalculateBanditLevel (60C4B0): the tier (at least 1, doubled on a
+The server's bandit level: the tier (at least 1, doubled on a
 2% draw) on top of the trader's level or best mastery less 4 (at least 16),
 plus 0..3 from a float draw.
 ================
@@ -398,7 +398,7 @@ func BanditLevel(tier uint8, level, mastery uint8, roll Roll) (int, error) {
 ================
 TacticsID
 
-60BF30: an odd draw picks rand & 3, an even one 3; thieves (a trader's
+The bandit spawn: an odd draw picks rand & 3, an even one 3; thieves (a trader's
 ambush) start at 2001, hunters at 2011.
 ================
 */
@@ -436,7 +436,7 @@ func Thieves(job uint8) bool {
 ================
 HeadingRadians
 
-60BF30's per-bandit angle: float32(float32(rand/32767) x 2PI).
+The bandit spawn's per-bandit angle: float32(float32(rand/32767) x 2PI).
 ================
 */
 func HeadingRadians(roll Roll) (float32, error) {
@@ -451,7 +451,7 @@ func HeadingRadians(roll Roll) (float32, error) {
 ================
 ChampionRarity
 
-60BF30: a 2% draw spawns the bandit as a champion (rarity nibble 1).
+The bandit spawn: a 2% draw spawns the bandit as a champion (rarity nibble 1).
 ================
 */
 func ChampionRarity(roll Roll) (uint8, error) {

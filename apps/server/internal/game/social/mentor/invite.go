@@ -83,8 +83,8 @@ type InviteRuntime struct {
 	pendingByTarget map[string]PendingInvite
 
 	// PeerPending reports another lane's unanswered proposal for a
-	// player. A player holds one at a time (TransactionMgr_InsertUnique
-	// 46F420), so this lane then refuses. The type-9 prompt is a plain
+	// player. A player holds one at a time (the native transaction
+	// manager), so this lane then refuses. The type-9 prompt is a plain
 	// message box outside the client's prompt-retire leg (@0x00764625),
 	// which is why a reply is only routable while one lane holds a
 	// pending. wiring.go points it at the party registry and the other
@@ -124,8 +124,8 @@ func NewInviteRuntime(deps Dependencies, presence Presence) *InviteRuntime {
 	}
 }
 
-// inviteAnswerWindowMs is the transaction timeout (Transaction_Construct
-// 46C6C0 stores 30 s); 46F1E0 expires a proposal after it, not at it.
+// inviteAnswerWindowMs is the transaction timeout (the native
+// transaction stores 30 s); natively a proposal expires after it, not at it.
 const inviteAnswerWindowMs = 30 * 1000
 
 /*
@@ -510,7 +510,7 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: target %s is offline", actor.Name, target.Name)
 		return
 	}
-	// One unanswered proposal per player (46F420). Native fails this one
+	// One unanswered proposal per player (as natively). Native fails this one
 	// on 0xB472 {2, 2}; no v1.150 carrier is pinned, so it stays silent.
 	if r.HasPendingInvite(divisionID, target.Name) || r.PeerPending != nil && r.PeerPending(divisionID, target.Name) {
 		log.Debugf("mentor: 0x76B1 (invite) refused for %s: %s already has a proposal waiting", actor.Name, target.Name)

@@ -2,7 +2,8 @@ package monster
 
 import "math"
 
-// FollowMotion is the decision made by ordinary CTactics callback 549AC0.
+// FollowMotion is the decision made by the reference server's ordinary
+// tactics follow callback.
 // State completion, retaining an existing movement, and issuing a movement
 // are different results. The caller owns the timer and state transaction.
 type FollowMotion struct {
@@ -20,8 +21,9 @@ func nativePlanarLength(x, z float32) float32 {
 	return float32(math.Sqrt(float64(float32(float64(x)*float64(x) + float64(z)*float64(z)))))
 }
 
-// 545450 spills the dot product, both lengths, their product and quotient
-// before ACOS. In particular, this is an unsigned angle, not atan2.
+// The reference server's vector angle spills the dot product, both lengths,
+// their product and quotient before ACOS. In particular, this is an
+// unsigned angle, not atan2.
 func nativeVectorAngle(ax, az, bx, bz float32) float32 {
 	dot := float32(float64(ax)*float64(bx) + float64(az)*float64(bz))
 	denom := float32(float64(nativePlanarLength(ax, az)) * float64(nativePlanarLength(bx, bz)))
@@ -29,8 +31,9 @@ func nativeVectorAngle(ax, az, bx, bz float32) float32 {
 	return float32(math.Acos(math.Max(-1, math.Min(1, float64(q)))))
 }
 
-// 53DAD0 negates the input and takes its unsigned angle from +X. 54AB10
-// builds directions at the bin CENTERS (5, 15, ...355 degrees), clockwise.
+// The reference server's angle bucket negates the input and takes its
+// unsigned angle from +X. Its direction table builds directions at the bin
+// CENTERS (5, 15, ...355 degrees), clockwise.
 func nativeFormationDirection(x, z float32) (float32, float32) {
 	degrees := float32(float64(nativeVectorAngle(1, 0, -x, -z)) * 57.29577951308232)
 	bin := int(float64(degrees) / 10)

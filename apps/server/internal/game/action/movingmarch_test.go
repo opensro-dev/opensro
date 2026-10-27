@@ -5,7 +5,7 @@ movingmarch_test.go - a bard dance never holds the caster in place
 
 Reported: after Moving March (SKILL_EU_BARD_SPEEDUPA_MSPEED_A_01) the bard
 could still act but could not walk. The movement lane refuses a ground
-command while CGObjChar_IsAttackLocked (4AAB40) holds, and the client holds
+command while the character's attack lock holds, and the client holds
 its moves while the action count (0xB2CD) is non-zero.
 
 ===========================================================================

@@ -3,10 +3,10 @@
 
 fortress_persist.go - fortress structures across a restart
 
-The siege tick persists its fortress every thirty seconds (600F60 slot 0,
-CSiegeFortress_PersistState), and a structure's row is rewritten once its
+The siege tick persists its fortress every thirty seconds (natively the
+siege tick's slot 0), and a structure's row is rewritten once its
 hit points have moved by 500 or its state changed
-(CGObjSiegeStruct_PublishChangedVitals 4CFB60, 0x1F4). After a restart the
+(the native vitals publication, 0x1F4). After a restart the
 first tick that finds every fortress world's structures standing puts each
 zone's stored occupant, hit points and state back on it. A row's RefObjID
 is the zone's occupant: 0 is a vacant zone (a demolished structure), any

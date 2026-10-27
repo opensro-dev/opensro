@@ -15,7 +15,7 @@ TestFaithWorksOnlyInARobeWithAStaff
 
 SKILL_EU_CLERIC_PRAISEP_HEAL_A_01: setv HLRU 2, reat 32 20, real
 0x1618600 50 1, reqi 9 0 + reqi 6 15 under reqn. Without the robe and
-staff it adds nothing (59F0E0); with them HLRU is 2, parameter 0x96
+staff it adds nothing (the passive toggle); with them HLRU is 2, parameter 0x96
 (reat bit 5) gains 20 and every curse-line status bucket holds flat 50
 at grade 1 - and no weakening-line bucket does.
 ==================

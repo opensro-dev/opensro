@@ -3,8 +3,8 @@
 
 premiumpackage_test.go - the Gold Time packages on the shipped data
 
-Expectations follow 49F590's entry kinds and CUsedItemLimit (654080,
-653C30, 653A40) over the v1.150 itemdata and skilldata rows.
+Expectations follow the native param-job entry kinds and used-item limits
+over the v1.150 itemdata and skilldata rows.
 
 ===========================================================================
 */

@@ -14,7 +14,7 @@ import (
 ================
 TestStructuresTakeOnlyBasicAttacksDuringTheWar
 
-52BF90: outside the war a structure refuses everything; during it only the
+Natively outside the war a structure refuses everything; during it only the
 weapon's basic attack lands, and never from the guild holding the fortress.
 ================
 */
@@ -68,7 +68,7 @@ func TestStructuresTakeOnlyBasicAttacksDuringTheWar(t *testing.T) {
 ================
 TestAnOpenGateCannotBeStruck
 
-52C121..52C141: during the war a gate whose state word a pulley set
+Natively during the war a gate whose state word a pulley set
 refuses every attacker 0x3042; shut (word 0), it takes the basic attack.
 ================
 */

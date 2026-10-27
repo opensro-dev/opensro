@@ -101,7 +101,7 @@ func (a *Authority) Find(division string, first, second int64) (domain.GuildWarR
 ================
 ValidTerms
 
-5C6B60 compares the packed fields without normalizing them; minutes stop
+The reference server compares the packed fields without normalizing them; minutes stop
 at 50, matching the six ten-minute options in client 618A60.
 ================
 */
@@ -114,7 +114,7 @@ func ValidTerms(terms domain.GuildWarTerms) bool {
 ================
 Deadline
 
-435A10 adds the native duration fields to the current wall clock.
+The reference server adds the native duration fields to the current wall clock.
 ================
 */
 func Deadline(period uint32, nowMs int64) int64 {
@@ -142,7 +142,7 @@ func ScoreLimit(index uint8) uint32 {
 ================
 KillScore
 
-5C7000 scores victim level minus actual striker level, using the COS level
+The reference server scores victim level minus actual striker level, using the COS level
 when the striker is a companion. The result is a byte on the shard wire.
 ================
 */
@@ -210,7 +210,7 @@ func (a *Authority) endLocked(id uint32, winner int64) (uint8, error) {
 ================
 Combat
 
-43C320 checks the deadline, then lets the scoring side's reached score
+The reference server checks the deadline, then lets the scoring side's reached score
 limit override that result. A deadline tie at a kill awards guild B.
 ================
 */
@@ -257,7 +257,7 @@ func (a *Authority) Combat(combat domain.GuildWarCombat, nowMs int64) (domain.Gu
 ================
 Expired
 
-438430 explicitly leaves tied expired wars running.
+The reference server explicitly leaves tied expired wars running.
 ================
 */
 func (a *Authority) Expired(nowMs int64) []domain.GuildWarRecord {
@@ -274,7 +274,7 @@ func (a *Authority) Expired(nowMs int64) []domain.GuildWarRecord {
 ================
 RemainingSeconds
 
-5CFD30 serializes the caller's remaining seconds, not a packed date.
+The reference server serializes the caller's remaining seconds, not a packed date.
 The unlimited sentinel is 0x7FFFFFFF; an overdue tied war carries a signed
 negative duration in the uint32 wire field until a later kill settles it.
 ================

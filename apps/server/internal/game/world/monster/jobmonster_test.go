@@ -13,8 +13,8 @@ import "testing"
 ================
 TestJobMonsterRefusesItsOwnSide
 
-529110: a thief monster refuses job states 2 and 4 (4E59E0), a hunter
-monster 1, 3 and 4 (4E59C0); 4 is a player without a suit. An ordinary
+The native validation: a thief monster refuses job states 2 and 4, a
+hunter monster 1, 3 and 4; 4 is a player without a suit. An ordinary
 monster refuses nobody.
 ================
 */

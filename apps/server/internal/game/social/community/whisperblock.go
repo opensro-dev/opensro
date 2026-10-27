@@ -27,13 +27,13 @@ func refusedWhisperBlock(reason string) WhisperBlockOutcome {
 
 // HandleWhisperBlock applies one decoded 0x766F request to the bound
 // character and composes the 0xB66F ack. Register follows the RETAIL
-// rule order of the in-memory ADD gate sub_4356f0 (v1.188 GameServer
-// dump, wire codes via its caller sub_518db0's remap): the duplicate
-// walk {1,1} (sub_435db0 == 2 @00435762 -> wire 1 @00518ef5), the 0x14
-// cap {1,3} (@00435782 -> wire 3 @00518eff), the self-name compare
-// {1,2} (CompareStringA against the owner's own CharName @00435820 ->
-// internal 3 -> wire 2 @00518f09), the sub_7312f0 quote scan {1,4}
-// (@00435867 -> internal 4 -> wire 4 @00518f13, the client's no-op
+// rule order of the reference server's in-memory ADD gate (v1.188 GameServer
+// dump, wire codes via its caller's remap): the duplicate
+// walk {1,1} (internal 2 -> wire 1), the 0x14
+// cap {1,3} (-> wire 3), the self-name compare
+// {1,2} (CompareStringA against the owner's own CharName ->
+// internal 3 -> wire 2), the quote scan {1,4}
+// (-> internal 4 -> wire 4, the client's no-op
 // arm), then target existence {1,2} (retail enforces it in the SQL
 // proc AFTER the enqueue, so it comes last), then persist + {1,0,name}.
 // Cancel removes ({2,0,name}, echoing the STORED casing); a miss acks
@@ -109,11 +109,11 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 				return false
 			}
 			if strings.EqualFold(request.Name, character.Name) {
-				// SELF-BLOCK, sub_4356f0's third gate: the requested
+				// SELF-BLOCK, the reference ADD gate's third gate: the requested
 				// name against the owner's OWN CharName (the +0xec
-				// vcall on *(mgr+0x14) @004357fb, CompareStringA
-				// @00435820); equal -> internal 3 -> wire 2 ("User
-				// does not exist.", sub_518db0 @00518f09). Retail
+				// vcall on *(mgr+0x14), then CompareStringA);
+				// equal -> internal 3 -> wire 2 ("User
+				// does not exist."). Retail
 				// compares case-SENSITIVELY (flags 0) - we fold on
 				// purpose: names are CI-unique (idx_characters_name on
 				// name_lower) and every other name path folds, so
@@ -126,14 +126,14 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 				return false
 			}
 			if strings.ContainsAny(request.Name, `'"`) {
-				// QUOTE SCAN, sub_4356f0's fourth gate: sub_7312f0
-				// @007312f0 walks the name with CharNextA and returns 1
-				// on 0x27 '\'' ("quotation" @00731459) or 0x22 '"'
-				// ("dbl quotation" @00731483) - SQL-injection armor for
-				// the "{?=CALL %s (%d, '%s')}" job string @0044e1d4.
-				// The hit lands internal 4 @00435887 -> wire 4
-				// (@00518f13), the client's no-op arm - an ack IS sent,
-				// not silence. sub_7312f0 also substring-scans a
+				// QUOTE SCAN, the reference ADD gate's fourth gate: its text
+				// scan walks the name with CharNextA and returns 1
+				// on 0x27 '\'' ("quotation") or 0x22 '"'
+				// ("dbl quotation") - SQL-injection armor for
+				// the "{?=CALL %s (%d, '%s')}" job string.
+				// The hit lands internal 4 -> wire 4
+				// (the client's no-op arm) - an ack IS sent,
+				// not silence. The scan also substring-scans a
 				// config-loaded ban-word vector; no such config exists
 				// here, so only the quote half is ported.
 				outcome.Refusal = fmt.Sprintf("%q carries a quote character", request.Name)
@@ -159,13 +159,13 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 				// confidence, recorded 2026-07-29 so a future
 				// evidence-finder can overturn it cheaply. Evidence: the
 				// v1.188 GameServer lands a remove miss on wire result 2
-				// via TWO independent paths (the SQL remap sub_435cd0
-				// @00435cd0 maps SQL 1 "not on list" -> 2; the
-				// synchronous path sub_435ae0 miss -> 3, then sub_518db0
-				// @00518eb0 computes (result != 3)*2+2 -> 2). That
+				// via TWO independent paths (the SQL remap
+				// maps SQL 1 "not on list" -> 2; the
+				// synchronous path's miss -> 3, then the caller
+				// computes (result != 3)*2+2 -> 2). That
 				// binary emits opcode 0xb30d, not our 0xb66f, so the
 				// evidence is version-skewed - but its ADD-side remap
-				// (sub_435930) reproduces exactly the result semantics
+				// (its add remap) reproduces exactly the result semantics
 				// the v1.150 client's sub_771550 decodes (1 duplicate /
 				// 2 no-such-user / 3 list-full), so the result-code
 				// contract survived the renumbering. The v1.150 client

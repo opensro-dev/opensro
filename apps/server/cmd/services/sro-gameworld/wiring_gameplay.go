@@ -12,6 +12,7 @@ identity rather than resolving characters while another owner holds a lock.
 package main
 
 import (
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -230,11 +231,43 @@ func newGameplayPlane(
 	if len(mallExtra) > 0 {
 		log.Infof("mall: %d extra Item Mall goods from %s", len(mallExtra), commerce.EnvMallExtraGoods)
 	}
+	// SRO_NAME_CHANGE_SCROLL (port-only, not native, #1689): the mall
+	// sells the name-change scroll and the action runtime serves its use.
+	items.NameChangeScroll = action.NameChangeScrollFromEnv()
+	if items.NameChangeScroll {
+		mallExtra = append(mallExtra, commerce.MallExtraGood{
+			Tab: action.NameChangeMallTab, Package: action.NameChangeMallPackage,
+			Item: action.NameChangeScrollItem, Silk: action.NameChangePriceSilk,
+		})
+		log.Infof("mall: name change scroll listed at %d silk (%s, port-only, not native)", action.NameChangePriceSilk, action.EnvNameChangeScroll)
+	}
 	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	items.StatRecallWindows = commerce.StatRecallListed(mallExtra)
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
+	// #1689 (port-only): the name-change scroll's queue door. The store's
+	// refusal vocabulary is translated at this boundary so the gameplay
+	// packages never import the store.
+	deps.QueueRename = func(divisionID string, character *enterworld.Character, name string, nowMs int64) (enterworld.RenameQueueOutcome, error) {
+		err := authorityStore.QueueCharacterRename(divisionID, character, name, nowMs)
+		switch {
+		case err == nil:
+			return enterworld.RenameQueued, nil
+		case errors.Is(err, store.ErrCharacterNameInvalid):
+			return enterworld.RenameRefusedInvalidName, nil
+		case errors.Is(err, store.ErrCharacterNameConflict):
+			return enterworld.RenameRefusedNameTaken, nil
+		case errors.Is(err, store.ErrNameReserved):
+			return enterworld.RenameRefusedNameReserved, nil
+		case errors.Is(err, store.ErrRenamePending):
+			return enterworld.RenameRefusedAlreadyQueued, nil
+		case errors.Is(err, store.ErrRenameCooldown):
+			return enterworld.RenameRefusedCooldown, nil
+		default:
+			return enterworld.RenameRefusedInvalidName, err
+		}
+	}
 	deps.ReconcileSceneObjects = items.ReconcileScene
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
@@ -497,7 +530,7 @@ func connectInvitationLanes(
 	parties.AddConsentArm(instanceInvites)
 
 	// A player holds one unanswered proposal at a time, whatever its
-	// lane (TransactionMgr_InsertUnique 46F420): every lane refuses to
+	// lane (the server's unique transaction insert): every lane refuses to
 	// propose while another's proposal waits.
 	partyPending := parties.Registry().HasPendingInviteFor
 	guildInvites.PeerPending = func(divisionID, name string) bool {

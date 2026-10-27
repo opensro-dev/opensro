@@ -51,7 +51,7 @@ func (rt *Runtime) SpawnQuestMonster(division string, c *enterworld.Character, r
 ================
 useQuestTrap
 
-49C2B0 -> 59B8D0 creates the indirect skill at its owner. The item debit
+Natively the special consumable begins the indirect skill at its owner. The item debit
 follows successful world-object admission inside the existing character door.
 ================
 */
@@ -208,7 +208,7 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 ================
 advanceSkillObject
 
-48D690 checks the monster AI's first opponent (+BC), not its summoner or
+Natively the monster AI's first opponent (+BC) is checked, not its summoner or
 loot owner. A matching trap retires before the quest handler rolls capture.
 ================
 */
@@ -258,7 +258,7 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 		if !exists || target.CurrentHP == 0 || !known || !skill.CombatTrap.Pinned {
 			return nil
 		}
-		// Only a monster triggers (48D690 reads its AI's first opponent); the
+		// Only a monster triggers (natively its AI's first opponent is read); the
 		// explosion strikes players too (combatTrapVictims).
 		primary := combatTarget{gid: target.Gid, monster: &target, at: rt.monsterSpawn(object.Division, target.Gid, nowMs)}
 		return rt.explodeCombatTrap(object, c, snapshot, skill, primary, lease, nowMs)

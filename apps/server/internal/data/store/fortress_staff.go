@@ -3,7 +3,7 @@
 
 fortress_staff.go - atomic fortress employment and payment
 
-632100 tests gold before guild points. Database completion 623DF9 sets the
+The server's staff hire tests gold before guild points. Database completion sets the
 staff flags and charges 3000 GP and 30000 gold before acknowledging.
 
 ===========================================================================

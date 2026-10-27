@@ -143,10 +143,11 @@ func compileProperties(c propertyCatalog) (propertyCatalog, error) {
 ================
 EquipmentMagic
 
-7276A0: normal equipment enters at rand%%101 <= 30; rare equipment always
-enters. Four six-way draws bound the number of slots. Duplicate choices spend
-a slot; they do not select again. A failed gate discards special equipment
-(725720), while the ordinary producer retains the item without blues.
+In the reference server, normal equipment enters at rand%%101 <= 30; rare
+equipment always enters. Four six-way draws bound the number of slots.
+Duplicate choices spend a slot; they do not select again. A failed gate
+discards special equipment, while the ordinary producer retains the item
+without blues.
 ================
 */
 func EquipmentMagic(code string, roll func() (uint32, error)) ([]uint64, bool, error) {

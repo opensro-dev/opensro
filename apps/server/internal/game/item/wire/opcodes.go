@@ -31,8 +31,9 @@ const (
 	// Parser sub_759a30, handler sub_75a3d0.
 	OpItemMoveResponse uint16 = 0xB06D
 	// OpTargetInteract is the multiplexed target/action request. A CIItem click
-	// serializes the pickup execute in sub_698740; sub_693190's one-byte form
-	// is a throttled cancel/recovery command, not an execute heartbeat.
+	// serializes the pickup execute in sub_698740; the one-byte form of
+	// CGInterface_CancelSkillForKeyboardMove (0x693190) is a throttled
+	// cancel/recovery command, not an execute heartbeat.
 	OpTargetInteract uint16 = 0x72CD
 	// OpItemUseRequest is the selected inventory-item use request composed by
 	// sub_6961b0. The common potion body is [u8 slot][u16 type word].

@@ -4,10 +4,10 @@
 portal_world.go - teleports that cross into another game world
 
 A teleport destination names its RefGameWorld (teleportdata GenWorldID).
-CGObjPC_HandleTeleportUseRequest0x705A_Body (4F2B50) sends a teleport into
+The native teleport request sends a teleport into
 a siege world through the fortress entry rules, asks the destination world
-whether it takes the PC (CGameWorld_CheckTransfer 5EC5B0), then moves the
-PC into layer 1 (CGameWorld_SelectResidentLayerOne 5ECF90) through the PC's
+whether it takes the PC (the world's transfer check), then moves the
+PC into layer 1 through the PC's
 world teleport (vtable +0x378). Refusals are the 0x1Cxx teleport errors;
 the wire carries their low byte (portalNotice, category 13).
 
@@ -43,7 +43,7 @@ const (
 	// 0x1C1E UIIT_MSG_FORT_ETC_ERR_CANT_ENTER_5MINBEFORE: attackers wait five
 	// minutes after a temporary capture.
 	portalFortressCaptureWait byte = 0x1e
-	// 4F2B50 enters every world on layer 1.
+	// Natively every world is entered on layer 1.
 	portalWorldLayer = 1
 )
 
@@ -103,8 +103,8 @@ type travelPoint struct {
 ================
 portalTransferError
 
-CGameWorldMgr_TransferStatusToTeleportError (5F9950) for the statuses
-CheckTransfer can answer.
+The native transfer-status-to-teleport-error map for the statuses the
+transfer check can answer.
 ================
 */
 func portalTransferError(status instance.Status) byte {
@@ -134,7 +134,7 @@ func portalWorld(destination portalDestination) instance.ID {
 ================
 portalWorldAdmission
 
-The world half of 4F2B50: the destination's world and layer, after the
+The world half of the native teleport request: the destination's world and layer, after the
 fortress entry rules for a siege world and the destination world's
 transfer check. Runs under the division lock, outside the character
 update, because the fortress head count reads other characters.
@@ -167,13 +167,13 @@ func (rt *Runtime) portalWorldAdmission(division string, c *enterworld.Character
 ================
 fortressEntry
 
-4F2B50's siege branch. The destination gate's own building decides the
-rule: a fortress gate (TypeId_IsFortressGate 4F8820) takes anyone not in a
-job suit while no war runs (CSiegeFortressMgr_CheckWarEntry 61D3D0 returns
-before its war checks when MainProcess_IsMode42425 is clear); every other
+The native teleport's siege branch. The destination gate's own building decides the
+rule: a fortress gate takes anyone not in a
+job suit while no war runs (the native war-entry check returns
+before its war checks when the server's war mode is clear); every other
 portal of the fortress takes only the owning guild
-(CSiegeFortressMgr_IsGuildOwner 6353F0) or an allied one (IsGuildAllied
-635440, fortress_allies.go).
+(the native owner test) or an allied one (the allied test,
+fortress_allies.go).
 ================
 */
 func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, destination portalDestination, world instance.Definition) byte {
@@ -208,9 +208,9 @@ func (rt *Runtime) fortressEntry(division string, c *enterworld.Character, desti
 ================
 fortressWarEntry
 
-CSiegeFortressMgr_CheckWarEntry (61D3D0) past its war-mode test. The
+The native war-entry check past its war-mode test. The
 occupying guild needs no application; everyone else must have applied.
-Defenders (the holder, CSiegeFortress_GetHolderGuild 61D280: a temporary
+Defenders (the holder: a temporary
 holder while one exists) may bring half of MaxEntrance; attackers the
 whole of it, or half once the fortress is occupied, and only after the
 post-capture wait. Each side counts the PCs already in the world's layer

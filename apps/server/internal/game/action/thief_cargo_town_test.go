@@ -4,9 +4,9 @@
 thief_cargo_town_test.go - a thief's transport stays out of towns (#721)
 
 A thief in job mode with a summoned transport may not cross from a
-battlefield region into a protected one (v1.188 4D2C20; 0x3058 kind 1,
+battlefield region into a protected one (v1.188; 0x3058 kind 1,
 category 0x11 code 1), and may not summon a transport in a protected
-region (49BD8A..49BDCA; item use error 149, "Cannot recall transport in
+region (item use error 149, "Cannot recall transport in
 the Thieves' Den"). Thief town (region 0x60B6) is one protected region:
 walking inside it is never refused, summoning there is.
 

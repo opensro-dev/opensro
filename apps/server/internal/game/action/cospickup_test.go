@@ -144,8 +144,8 @@ func TestCosPickupFullBagUsesNativeDisableClassWithoutConsumingDrop(t *testing.T
 ================
 TestCosPickupPersonalQuestFullPlayerBagUsesB5SoloAnd9CInSharedParty
 
-CCOS_ExecuteGroundPickup (4D5418..4D5447): when a personal quest drop routes
-to the owner's player bag (4D5755) and that bag is full (0x1807), solo or
+The native COS ground pickup: when a personal quest drop routes
+to the owner's player bag and that bag is full (0x1807), solo or
 non-item-share parties emit 0xB5 (owner bag full, disabling auto-pickup) while
 an item-share party emits 0x9C (3 s retry backoff).
 ================
@@ -245,7 +245,7 @@ func TestCosPickupCommandRetiresOnLifecycleFailure(t *testing.T) {
 				now = 1000 + cosPickupApproachTimeoutMs
 			case "relocate":
 				// The owner travelled: the pet is placed beside them and leaves
-				// PICKITEM, whose exit (55AD60) answers the pending pickup.
+				// PICKITEM, whose exit answers the pending pickup.
 				rt.relocateReturningPet(testDivision, c, pose)
 			}
 			for _, batch := range rt.TickHook()(now) {

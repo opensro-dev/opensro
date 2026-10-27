@@ -60,23 +60,24 @@ const (
 	// 1..255). The server loads the monsters and kills them for rewards.
 	SubZoe uint8 = 0x0C
 	// SubSetTime: /SETTIME hour - subcmd + u8 hour 0..23 (509CF0 clamps;
-	// 51DE90 case 8 relays it to the shard manager as SetGameTime).
+	// the server's GM handler, case 8, relays it to the shard manager as
+	// SetGameTime).
 	SubSetTime uint8 = 0x0A
-	// SubWorldStatus: /WORLDSTATUS - subcmd alone (51DE90 case 3).
+	// SubWorldStatus: /WORLDSTATUS - subcmd alone (GM handler case 3).
 	SubWorldStatus uint8 = 0x04
-	// SubBan: /BAN - subcmd + ANSI name (51DE90 case 0xA).
+	// SubBan: /BAN - subcmd + ANSI name (GM handler case 0xA).
 	SubBan uint8 = 0x0D
 	// SubRecallGuild: /RECALLGUILD - subcmd + ANSI guild name (case 0xE).
 	SubRecallGuild uint8 = 0x12
 	// SubGoTown: /GOTOWN - subcmd alone. The server answers it in
-	// CGObjPC_MsgHandler_SpecialCommand (v1.188 51DE90) case 1.
+	// v1.188 per-player GM special-command handler, case 1.
 	SubGoTown uint8 = 0x02
-	// SubToTown: /TOTOWN - subcmd + ANSI name (51DE90 case 2).
+	// SubToTown: /TOTOWN - subcmd + ANSI name (GM handler case 2).
 	SubToTown uint8 = 0x03
-	// SubMoveToUser: /MOVETOUSER - subcmd + ANSI name (51DE90 case 7).
+	// SubMoveToUser: /MOVETOUSER - subcmd + ANSI name (GM handler case 7).
 	SubMoveToUser uint8 = 0x08
-	// SubRecallUser: /RECALLUSER - subcmd + ANSI name (51DE90 case 0xD,
-	// relayed to CGame_ProcessGMCommand 4154D0).
+	// SubRecallUser: /RECALLUSER - subcmd + ANSI name (GM handler case
+	// 0xD, relayed to the shard's GM command processor).
 	SubRecallUser uint8 = 0x11
 	// SubFindUser: /FINDUSER (@0x00509ee5 var_4bc = 1) - subcmd + ANSI name.
 	SubFindUser uint8 = 0x01
@@ -90,17 +91,22 @@ const (
 	SubResetQ  uint8 = 0x1C
 	SubCompQ   uint8 = 0x1D
 	SubRemoveQ uint8 = 0x1E
-	// SubOpenWorld: /INSTANCE worldId layerId (50B56C..50B627 / 51FCBD..51FD1C).
+	// SubOpenWorld: /INSTANCE worldId layerId (client 50B56C..50B627; the server's
+	// GM handler opens the world).
 	SubOpenWorld uint8 = 0x13
-	// SubMoveToNPC: /movetonpc codename (50C982..50CA57 / 520013 -> 520350).
+	// SubMoveToNPC: /movetonpc codename (client 50C982..50CA57; the
+	// server's GM handler moves to the NPC).
 	SubMoveToNPC uint8 = 0x1F
 	// SubSiegeStructure: /SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE
-	// (50C2FD..50C66B / 51FC78 -> 51A4F0).
+	// (client 50C2FD..50C66B; the server's GM handler forwards to its siege
+	// structure command).
 	SubSiegeStructure uint8 = 0x20
 	// SubSiegePeriod: /SIEGE STARTWAR|ENDWAR|STARTTAX|ENDTAX|STARTREQ|ENDREQ
-	// (50C1DF..50C2DC / 520028..5200FA -> 62EE90).
+	// (client 50C1DF..50C2DC; the server's GM handler relays to the fortress
+	// manager's shard message).
 	SubSiegePeriod uint8 = 0x21
-	// SubFlagWorld: /flagworld n (50C88F..50C971 / 51FE18..51FEA8).
+	// SubFlagWorld: /flagworld n (client 50C88F..50C971; the server's GM
+	// handler sets the flag).
 	SubFlagWorld uint8 = 0x30
 	// SubGrantSilk is the port's /SILK name amount (operator tooling, not
 	// native): subcmd, u16 len + ANSI name, u32 amount. The native table
@@ -112,7 +118,8 @@ const (
 )
 
 // Siege structure sub-actions for SubSiegeStructure (0x20) and period codes for
-// SubSiegePeriod (0x21), pinned from 50C1DF..50C66B and 51A4F0 / 520028.
+// SubSiegePeriod (0x21), pinned from client
+// 50C1DF..50C66B and the server's siege command and period relay.
 const (
 	SiegeActionBuild   uint8 = 0x0A
 	SiegeActionUpgrade uint8 = 0x0B
@@ -147,7 +154,7 @@ type Request struct {
 	RefObjID    uint32
 	Amount      uint8
 	Destination wire.Position
-	// MonsterType is /LOADMONSTER's requested type byte (server 520A89 &0xF).
+	// MonsterType is /LOADMONSTER's requested type byte (the server masks it &0xF).
 	MonsterType uint8
 	// TargetGID is /MOBKILL's selected monster object id.
 	TargetGID uint32

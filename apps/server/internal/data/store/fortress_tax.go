@@ -22,9 +22,9 @@ import (
 ================
 CollectFortressTax
 
-62F7C0 admits the current holder's master; 62347E credits the query amount.
+The server's tax request admits the current holder's master; its completion credits the query amount.
 The recovered _SiegeFortressTaxCollect refuses over-treasury requests;
-626180 maps its failure to code 2. Refuse signed balance overflow as the
+The server maps its failure to code 2. Refuse signed balance overflow as the
 SQL BIGINT addition would, without consuming any treasury.
 ================
 */

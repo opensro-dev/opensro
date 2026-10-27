@@ -6,14 +6,14 @@ fortress_construction.go - the fortress guild places a barricade
 0x71E1 action 0x0A, sent by the fortress map window's confirm
 (CIFFortressMap_OnConfirmMsgBox 65CD80 -> 703160) as {0x0A, fortress,
 zone}: the one 0x71E1 request without a target GID. The v1.188 server
-(CSiegeFortressMgr_HandleStructureConstruction 6341B0) admits it at the
-selected aide (519E60 case 0xA: service 0x19 in range), checks the zone
-and queues QUERY_SIEGE_STRUCT_ADD (CSiegeFortress_RequestStructAdd 6226B0);
-the 0x13 result (6232C0) spawns the zone's structure and answers
+admits it at the
+selected aide (service 0x19 in range), checks the zone
+and queues QUERY_SIEGE_STRUCT_ADD;
+the 0x13 result spawns the zone's structure and answers
 {0x0A, 1, fortress, zone}.
 
 Only barricades are built this way: the zone's authored structure must be
-TypeID 1/2/5/6 (TID_IsBarricadeStructure 489170).
+TypeID 1/2/5/6 (the native barricade test).
 
 ===========================================================================
 */
@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	// Low bytes of 6341B0's and 634350's refusals.
+	// Low bytes of the native construction and upgrade refusals.
 	fortressErrConstructNoReference uint8 = 0x1e // 0x281E
 	fortressErrConstructKind        uint8 = 0x1f // 0x281F
 	fortressErrConstructFortress    uint8 = 0x20 // 0x2820
@@ -63,17 +63,17 @@ func (rt *Runtime) fortressConstructionRequest(division string, c *enterworld.Ch
 ================
 fortressConstruct
 
-519E60's aide admission, then 6341B0 in its refusal order: an unknown
+The native aide admission, then the construction handler in its refusal order: an unknown
 zone (3), a zone whose structure has no reference (0x281E), a structure
 that is not a barricade (0x281F), a zone of another fortress (0x2820).
-Natively there is no holder, role or war check here: 519E60's aide
-admission is the only gate, and the add charges nothing (6226B0's
+Natively there is no holder, role or war check here: the aide
+admission is the only gate, and the add charges nothing (the add's
 reference +0x19C is MaxHP, not a price).
 INFERENCE: a zone that already holds a structure refuses as the request
 that could not be queued (2): the add's database row is keyed by zone,
 so a second one cannot be inserted. The barricade stands at full hit
 points at once: its build time (reference +0x3B8, Param3, characterdata
-column 112, read through 61E000's timer) is 0 in every v1.150 barricade
+column 112, read through the native construction timer) is 0 in every v1.150 barricade
 row. Its row is stored at once, and the reply names fortress and zone.
 ================
 */
@@ -93,8 +93,8 @@ func (rt *Runtime) fortressConstruct(division string, c *enterworld.Character, r
 ================
 fortressConstructOnZone
 
-CSiegeFortressMgr_HandleStructureConstruction (6341B0): shared by the 0x71E1
-aide completion and the GM /SIEGE STRUCT_BUILD command (51A4F0 case 0x0A).
+The native structure construction: shared by the 0x71E1
+aide completion and the GM /SIEGE STRUCT_BUILD command (case 0x0A).
 ================
 */
 func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Character, request siege.Interaction) OpResult {
@@ -120,7 +120,7 @@ func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Charac
 		if !rt.Monsters.SetStructureOccupant(division, world, zone, ref.RefObjID, rt.Now().UnixMilli()) {
 			return fortressRefusal(request.Action, fortressErrUnknown)
 		}
-		// 6226B0 queues the add with CGObjPC_GetGuildID(actor) as the owner.
+		// Natively the add is queued with the actor's guild id as the owner.
 		var guild int64
 		if c.GuildID != nil {
 			guild = *c.GuildID
@@ -139,10 +139,9 @@ func (rt *Runtime) fortressConstructOnZone(division string, c *enterworld.Charac
 ================
 SiegeStructureGM
 
-/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE (sub 0x20, 51DE90
-0x0051FBDC..0x0051FC44 -> CGObjPC_OnCommandSiegeStructure 0x0051A4F0):
-dispatches to 6341B0 (build), 634350 (upgrade), 634950 (repair), or 634E30
-(gate).
+/SIEGE STRUCT_BUILD|STRUCT_UPGRADE|STRUCT_REPAIR|GATE (sub 0x20, through the
+reference server's siege structure command) dispatches to build, upgrade,
+repair, or gate.
 ================
 */
 func (rt *Runtime) SiegeStructureGM(division, name string, action uint8, fortressID, eventStructID uint32, param uint8) bool {
@@ -187,7 +186,7 @@ func (rt *Runtime) SiegeStructureGM(division, name string, action uint8, fortres
 		pushGM(res.Frames)
 		return len(res.Frames) == 2 && len(res.Frames[1].Payload) >= 2 && res.Frames[1].Payload[1] == 1
 	case siege.ActionGate:
-		// 634E30 (CSiegeFortressMgr_HandleGmGateCommand): resolves the gate by
+		// The native GM gate command: resolves the gate by
 		// eventStructID directly; returns false without a 0xB1E1 refusal packet
 		// when missing, wrong fortress, destroyed, or unchanged.
 		foundFortress, world, gate, found := rt.structureByZone(division, eventStructID)
@@ -213,8 +212,8 @@ func (rt *Runtime) SiegeStructureGM(division, name string, action uint8, fortres
 ================
 SiegePeriodGM
 
-/SIEGE STARTWAR|ENDWAR|STARTTAX|ENDTAX|STARTREQ|ENDREQ (sub 0x21, 51DE90 case
-0x1A -> 520028..5200FA -> CSiegeFortressMgr_OnShardMessage 62EE90): toggles the
+/SIEGE STARTWAR|ENDWAR|STARTTAX|ENDTAX|STARTREQ|ENDREQ (sub 0x21, case 0x1A,
+through the native fortress manager's shard message): toggles the
 fortress period bit and broadcasts the corresponding 0x3887 edge to the
 division.
 ================

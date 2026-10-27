@@ -15,13 +15,13 @@ Owner's rule: Discord Wave lowers the hostility (dtnt) of up to 4 monsters
 around the target so that they let go of whom they were attacking.
 
 Inferred, recorded deliberately:
-  - efr select 16 is the non-character objects of 58A020 (monsters), the
+    - efr select 16 is the non-character objects of the around-source selector (monsters), the
     word the Warrior's taunts select their victims with; shape 2 centres
     the area on the selected target, measured as offense areas measure it
-    (caster and candidate body radii, server 58ab6d..58ac23).
+        (caster and candidate body radii, as the reference server measures them).
   - mwdt is the magical weapon term of the pwtt/mwtt, pwdt/mwdt, mwhh/mwmh
     family (tooltip "Weapon Magical Attack Power <v>% Reflect"); like
-    mwhh/mwmh it adds 411080's term to the amount, here dtnt's flat cut.
+        mwhh/mwmh it adds the reference server's weapon magical term to the amount, here dtnt's flat cut.
   - the cut applies to the record of each monster's current target, the
     monster's own "target" of the description, whoever that is.
 
@@ -101,10 +101,10 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 		}
 		return OpResult{DiagnosticRefusal: "discord-commit-refused"}
 	}
-	// SkillCombat_ApplyResultRecipients (593D62..593E7B): with dtnt the hate
+	// The reference server's result recipients: with dtnt the hate
 	// event's source is the cast's target, and its amounts are negative: the
 	// flat word plus the weapon term, and the percent word. It runs the
-	// ordinary ledger update (5473C0), which clamps at zero.
+	// ordinary ledger update, which clamps at zero.
 	decrease := simulation.HostilityEvent{Attacker: cast.TargetGid, Aggression: -int32(cut), Percent: -int32(skill.Threat.DecreasePercent)}
 	for _, victim := range rt.discordVictims(division, snapshot, view, to, skill.Threat.Area, now) {
 		rt.recordSkillHostility(division, victim.Gid, []simulation.HostilityEvent{decrease}, now)
@@ -125,7 +125,7 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 ================
 threatDecreaseCut
 
-dtnt's flat word plus the mwdt weapon term (593DFE..593E49): the hate the
+dtnt's flat word plus the mwdt weapon term (reference server): the hate the
 event takes away before its percent word.
 ================
 */

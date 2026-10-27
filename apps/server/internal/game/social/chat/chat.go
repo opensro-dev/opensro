@@ -107,7 +107,7 @@ senderDisplayName
 
 The name a composed chat line carries for its author: the job alias
 while the author is dressed in a job suit, the character name otherwise
-(native CGObjPC_GetNickName 4DDC50 - the same identity the party roster
+(natively the player's nickname - the same identity the party roster
 writes via enterworld.PartyMemberName). Presence, party, stall and
 guild routing keep keying on the character name; only the payload's
 author field changes.
@@ -183,7 +183,7 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 	}
 }
 
-// handleAllChat is the shared All/GM arm (the v1.188 sub_4b1750 shape:
+// handleAllChat is the shared All/GM arm (the v1.188 chat handler's shape:
 // requested types 1 and 3 land in one arm). The BROADCAST type byte is
 // server-forced: 3 for a privileged speaker (vt+0x53c()==1 in the dump;
 // our GMPrivilege flag - the same bit the client reads into
@@ -214,7 +214,7 @@ func handleAllChat(request Request, sender *enterworld.Character, global bool) O
 // division character, consult the TARGET's blocked-whisperer list, and
 // deliver the 0x3667 type-2 line - or don't.
 //
-// THE PRIVACY RULE (v1.188 sub_4b1750, deliberate): a blocked whisper
+// THE PRIVACY RULE (v1.188 chat handler, deliberate): a blocked whisper
 // acks SUCCESS to the sender and delivers NOTHING - the sender cannot
 // distinguish blocked from delivered. There is no GM bypass.
 //
@@ -310,7 +310,7 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 handleStallChat
 
 Stall chat (type 9) reaches everyone at the sender's stall
-(CFleaMarket_BroadcastChat 473BF0: [9][name][message]); a player at no
+(the native stall chat broadcast: [9][name][message]); a player at no
 stall acks ChatErrNoStall. Native sends the author its own line too and
 the client drops it by name (753760); the author is left out here, as in
 the party arm.
@@ -382,7 +382,7 @@ func handleGuildChat(deps Dependencies, divisionID string, sender *enterworld.Ch
 ================
 handleUnionChat
 
-Union chat (type 0x0B, CGObjPC_OnChatRequest 4B1750 case 0xA): a
+Union chat (type 0x0B, the native chat request's case 0xA): a
 guildless sender acks ChatErrNoGuild (0x0B), a guild outside a union
 ChatErrNoUnion (0x0C), a member without the union chat right 0x0E
 (UIIT_MSG_GUILD_UNION_CHAT_LIMIT); otherwise the line reaches the

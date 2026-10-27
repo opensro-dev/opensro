@@ -14,7 +14,7 @@ func testGraph(t *testing.T) *Graph {
 		t.Fatal(err)
 	}
 	// Actual player links: 1 -> 21 -> 5; 50 -> 21 through channel 3.
-	// Source: 4E3317, 4E3331, 4E33E1 via EBX/EDI/stack channel.
+	// Source: the player graph builder's links, via EBX/EDI/stack channel.
 	for _, link := range []struct {
 		source, target uint16
 		channel        Channel
@@ -82,7 +82,7 @@ func TestIgnoredDependencyValuePreservesPriorTargetEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	graphValue(t, g, 1, 0)
-	// 4B3130 routes through 4B3000, whose zero sentinel is a no-op.
+	// The native write routes through the element insert, whose zero sentinel is a no-op.
 	// It does not turn propagation into RemoveModifier. Preserve this quirk.
 	graphValue(t, g, 21, 30)
 	graphValue(t, g, 5, 30)

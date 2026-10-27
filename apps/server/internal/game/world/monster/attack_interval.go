@@ -1,6 +1,7 @@
 package monster
 
-// NextAttackInterval is the strategy setter 5619E0. randValue is a native
+// NextAttackInterval is the reference server's strategy attack-interval
+// setter. randValue is a native
 // CRT rand sample (0..32767), not an already uniform window remainder.
 func NextAttackInterval(previous, cooldown, randValue uint32) uint32 {
 	window := (previous * 2) / 10

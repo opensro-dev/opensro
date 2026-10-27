@@ -74,7 +74,7 @@ const (
 	ChatTypeWhisper uint8 = 2
 	// ChatTypeGM: no prefix with the CICPlayer+0x1890 bit-0 GM mark set.
 	// The server FORCES the broadcast type byte to 3 for a privileged
-	// speaker (v1.188 sub_4b1750's vt+0x53c()==1 arm - the SHAPE we
+	// speaker (the v1.188 chat request handler's vt+0x53c()==1 arm - the SHAPE we
 	// port; the client renders it with the case-3 pink 0xffffaec3).
 	ChatTypeGM uint8 = 3
 	// ChatTypeParty: the '#' prefix (@0x006aed6d writes 4).
@@ -117,7 +117,7 @@ const (
 	ChatErrNoGuild uint8 = 0x0B
 	ChatErrNoUnion uint8 = 0x0C
 	// ChatErrNoStall: a stall line from a player at no stall (server
-	// CGObjPC_OnChatRequest 4B1750 type 9); the client shows no text.
+	// the reference server's chat request, type 9); the client shows no text.
 	ChatErrNoStall uint8 = 5
 )
 
@@ -150,7 +150,7 @@ type Request struct {
 // sub_694490), and the client's ack handler pops its pending
 // outgoing-chat record keyed on {chatType, second} (sub_753290
 // @0x0075331e) - so the only correct server posture is accept-and-echo.
-// A v1.188 mapper read sub_4b1750 as "abort if second >= 0xFF"; that
+// A v1.188 mapper read the reference chat handler as "abort if second >= 0xFF"; that
 // sense would refuse EVERY retail frame, so the branch must be the
 // opposite arm (or a forward-queue index check with no v1.150
 // equivalent). Rejected.
@@ -292,7 +292,7 @@ func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, messa
 	return chatType, string(name), string(utf16.Decode(units)), true
 }
 
-// writeSizedWideString appends the sub_5e2ba0 sized-wide layout: u16
+// writeSizedWideString appends the native sized-wide layout: u16
 // wide-char count + count*2 UTF-16LE bytes.
 func writeSizedWideString(writer *wire.Writer, units []uint16) {
 	writer.U16(uint16(len(units)))

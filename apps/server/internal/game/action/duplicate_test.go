@@ -40,7 +40,7 @@ func castDuplicate(rt *Runtime, c, target *enterworld.Character) OpResult {
 ==================
 TestDuplicateCopiesTheAllysLook
 
-4F0040 / 4F0320: the Rogue takes the ally's model, record byte and worn
+Natively the Rogue takes the ally's model, record byte and worn
 sword; observers get a player skin in 0x323A; the speeds stay the
 Rogue's own; the next skill cast (skc 2) ends it.
 ==================
@@ -112,7 +112,7 @@ func TestSableDuplicateCopiesAnEnemyPlayer(t *testing.T) {
 ==================
 TestDuplicateRefusesSomePlayers
 
-58D1D3: above the level word, a GM, a murderer and a rider are refused.
+Natively a player above the level word, a GM, a murderer and a rider are refused.
 ==================
 */
 func TestDuplicateRefusesSomePlayers(t *testing.T) {

@@ -62,7 +62,7 @@ func globalChatRequest(ref *enterworld.ItemRef, message string) []byte {
 ================
 TestGlobalChattingSendsTheLineToTheWholeShard
 
-49B9F0 case 4: the item is spent, the author sees its own success, the item
+The native item use case 4: the item is spent, the author sees its own success, the item
 visual, then the type 6 line, and every other player in the shard receives the same line.
 ================
 */
@@ -73,7 +73,7 @@ func TestGlobalChattingSendsTheLineToTheWholeShard(t *testing.T) {
 	rt.PushShardPeerFrames = func(_, name string, frames []wire.Frame) { except, shard = name, frames }
 	rt.PublicChat = chatfeed.New()
 	result := rt.HandleItemUse(testDivision, c, globalChatRequest(ref, "Hello, Silk Road"))
-	// 510980: the success and the item visual, then the shard's relayed line.
+	// The success and the item visual, then the shard's relayed line.
 	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual, chat.OpChatBroadcast)
 	want := chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, c.Name, "Hello, Silk Road")
 	if !bytes.Equal(result.Frames[3].Payload, want) {

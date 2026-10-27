@@ -8,8 +8,8 @@ entry (CICPlayer+0x1848, written by the entry parser 8675F0), so natively a
 QSP_*_EXINVENTORY reward waits for the next login, teleport or resurrection.
 Players read that as a lost reward. With SRO_INSTANT_INVENTORY_EXPANSION on,
 the turn-in presents the slots at once and announces the new capacity with
-the v1.188 message 0x3092 [u8 kind][u8 capacity] (4E73D0 case 0x11, after
-CGStorage_SetCapacity 4B7D80), which the port client applies live. Off (the
+the v1.188 message 0x3092 [u8 kind][u8 capacity] (sent after the server
+sets the storage capacity), which the port client applies live. Off (the
 default) keeps the native wait. The owner approved it on for the beta.
 
 ===========================================================================
@@ -26,7 +26,7 @@ import (
 // EnvInstantInventoryExpansion turns the immediate bag growth on ("on", "1", "true").
 const EnvInstantInventoryExpansion = "SRO_INSTANT_INVENTORY_EXPANSION"
 
-// OpStorageCapacity is the v1.188 capacity announce (4E73D0 case 0x11).
+// OpStorageCapacity is the v1.188 capacity announce.
 const OpStorageCapacity uint16 = 0x3092
 
 // storageCapacityInventory is 0x3092's kind byte for the bag; 2 is the chest.

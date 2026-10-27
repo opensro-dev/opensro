@@ -109,7 +109,7 @@ func TestShippedPetPotionHealsThePetNotThePlayer(t *testing.T) {
 	if c.ActiveCOS.CurrentHP != petRef.MaxHP || *c.CurrentHP != playerHP {
 		t.Fatalf("pet HP %d want %d player HP %d", c.ActiveCOS.CurrentHP, petRef.MaxHP, *c.CurrentHP)
 	}
-	// 49D50F: the sparkle (0x3449) plays on the pet, not its owner (BUG-079).
+	// Reference server: the sparkle (0x3449) plays on the pet, not its owner (BUG-079).
 	for _, frames := range [][]wire.Frame{result.Frames, result.Broadcast} {
 		visual, ok := findFrame(frames, wire.OpItemUseVisual)
 		if !ok || binary.LittleEndian.Uint32(visual.Payload) != c.ActiveCOS.GID {
@@ -172,7 +172,7 @@ func TestShippedPetCureHitsThePetBlock(t *testing.T) {
 	if block := rt.playerAbnormal(testDivision, c.Name); block == nil || !block.Has(abnormal.Stun) {
 		t.Fatal("pet cure cleared the player")
 	}
-	// A COS has no 0x36C7 (4A5C60 is player-only); its mask rides 33A6.
+	// A COS has no 0x36C7 (the reference server sends it to players only); its mask rides 33A6.
 	if saw(result.Frames, 0x36C7) || !hasPetMask(result.Broadcast, c.ActiveCOS.GID) {
 		t.Fatal("pet cure publication", result.Frames, result.Broadcast)
 	}

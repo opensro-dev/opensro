@@ -7,11 +7,11 @@ Opening a stall outside a job suit first stops a walking host (its walk
 settles where it stands and its pending command ends), as the original
 does; the stall shows nearby (0x30DF) and on the spawn row of
 everyone who comes into view (the title block 86A26D reads). A visitor
-within 100 units (516270: Vec3_Length <= 100) sees its greeting, offers and
+within 100 units (length <= 100) sees its greeting, offers and
 visitors; while the stall is open for business (the owner's 0x71A8 kind 5)
-a visitor buys a slot (CFleaMarket 472700: 0x3C2E closed, 0x3C10 empty
+a visitor buys a slot (natively 0x3C2E closed, 0x3C10 empty
 slot, 0x3C11 short of gold, 0x3C12 full bag). The owner edits only while it
-is closed, apart from the mode, the open flag and the greeting (472E20).
+is closed, apart from the mode, the open flag and the greeting.
 The sale moves the slot's count out of the owner's bag into the buyer's
 first empty bag slot and the price the other way, in one transaction, as
 the buyer's client places it (5A3870).
@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	// stallVisitReach is 516270's Vec3_Length <= 100.
+	// stallVisitReach is the native length <= 100.
 	stallVisitReach = 100
 	// stallErrNotHost is 0x3C2A: the target keeps no stall.
 	stallErrNotHost uint8 = 0x2A
@@ -116,7 +116,7 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 	if err := rt.Stalls.Open(division, c.Name, title, decoration); err != nil {
 		return prependOpResult(halted, refuse(wire.StallErrHasStall))
 	}
-	// CGObjPC_SetStallState (515EAA) writes the interaction state 4.
+	// Natively setting the stall state writes the interaction state 4.
 	rt.endStorageInteraction(division, c.Name)
 	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, decoration)}
 	rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{opened})
@@ -173,7 +173,7 @@ func (rt *Runtime) haltForStall(division string, c *enterworld.Character, now in
 ================
 stallPlaceRefusal
 
-515F10's state tests: a living world, not riding, no job suit.
+The native stall create's state tests: a living world, not riding, no job suit.
 ================
 */
 func (rt *Runtime) stallPlaceRefusal(division string, c *enterworld.Character) uint8 {
@@ -414,7 +414,7 @@ func (rt *Runtime) HandleStallEdit(division string, c *enterworld.Character, pay
 	if !ok {
 		return refuse(stallErrNotHost)
 	}
-	// 472E20: an open stall takes only the mode, the open flag and the
+	// Natively an open stall takes only the mode, the open flag and the
 	// greeting.
 	if current.Open && kind != wire.StallEditMode && kind != wire.StallEditOpen && kind != wire.StallEditGreeting {
 		return refuse(wire.StallErrHostState)
@@ -671,7 +671,7 @@ func (rt *Runtime) stallOfferable(division string, c *enterworld.Character, bagS
 ================
 stallCountRefusal
 
-472E20: a count of at least one, no more than the bag stack holds.
+Natively a count of at least one, no more than the bag stack holds.
 ================
 */
 func (rt *Runtime) stallCountRefusal(division string, c *enterworld.Character, bagSlot uint8, count uint16) uint8 {

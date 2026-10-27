@@ -120,6 +120,9 @@ export interface NpcTalkInput {
 	readonly canTalk?: boolean;
 	readonly prompt?: string;
 	readonly canRecall?: boolean;
+	// canReturnPoint is row 0x10 (capability 0x100, the Bandit Den gate):
+	// "Teleport to return point", 0x7495 type 1.
+	readonly canReturnPoint?: boolean;
 	readonly canStorage?: boolean;
 	// canAcademyOpen is 5D9100's row 0x2D under capability 4: a campless
 	// player of level 60 or more may open an Academy.
@@ -221,6 +224,10 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						[]),
 					...(input.canRecall ?
 						[ { id: "npc-recall-designate", label: copy( "UIIT_CTL_RECALL_POSITION" ) } ] :
+						[]),
+					// 5D9100 tests 0x40, then 0x100, then 0x80.
+					...(input.canReturnPoint ?
+						[ { id: "npc-return-point", label: copy( "UIIT_CTL_TELEPORT_TO_RESURRECT_POS" ) } ] :
 						[]),
 					...(input.canPortal ?
 						[ { id: "npc-portal-open", label: copy( "UIIT_CTL_TELEPORT_TARGET" ) } ] :

@@ -10,9 +10,9 @@ Stars. A caravan's tier (1-5 stars) is its cargo's gold value, the sum of
 count x each good's reference price (the quotation basis at its home
 town; what was actually paid is not stored), against 5M/10M/20M/35M/50M:
 under 10M is 1 star, 10M 2, 20M 3, 35M 4, 50M and up 5. Natively the tier
-is cargo "units" (count x 348 over the level's gold basis, 60C1F0/60C330),
+is cargo "units" (count x 348 over the level's gold basis),
 which barely moves with what the goods are worth. The tier drives the
-bandit count (Caravan_CalculateBanditSpawnCount 60C460, still capped by
+bandit count (the native caravan bandit count, still capped by
 SRO_CARAVAN_BANDIT_CAP), the 1-star trader EXP rate and the client's
 TRADESCALE combo, published at world entry so both sides agree.
 

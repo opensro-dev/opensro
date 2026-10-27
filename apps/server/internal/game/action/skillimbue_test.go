@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// burnSlot is the target's burn slot (4A46F0); the zero slot when none.
+// burnSlot is the target's burn slot; the zero slot when none.
 /*
 ================
 burnSlot
@@ -530,7 +530,7 @@ func TestColdImbueAddsDamageAndChills(t *testing.T) {
 TestLightningImbueChainsTheHit
 
 SKILL_CH_LIGHTNING_GIGONGTA_A_01 carries efr 1 6 35 2 80 24. A basic
-attack with no area of its own selects its victims with it (586E1B): the
+attack with no area of its own selects its victims with it (natively): the
 primary keeps the whole hit, the chained victim (flag 1) loses the physical
 lane and takes only the imbue damage at 20 % (80 % reduction), on every
 impact. The es rider rolls on the victims.

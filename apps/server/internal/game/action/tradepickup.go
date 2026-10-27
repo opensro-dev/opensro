@@ -3,12 +3,12 @@
 
 tradepickup.go - picking trade goods up off the ground
 
-Trade goods never go to the bag. CPlayer_SelectPartyLootRecipient (525DC0)
+Trade goods never go to the bag. The reference server's party loot selection
 takes them out of the party's item share and admits them by the picker's
 job: a trader only their own goods, a thief anyone's but their own, and
 nobody else. The picker needs a summoned trade transport, and the goods go
 into it as a type 0x11 (COS pickup) move answered for the
-transport (CPlayer_ExecuteGroundPickup 526090).
+transport (the native ground pickup).
 
 ===========================================================================
 */
@@ -22,7 +22,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// 525DC0's refusals; v1.150 shows the low byte as a category 1 notice.
+// The native party loot selection's refusals; v1.150 shows the low byte as a category 1 notice.
 const (
 	// tradePickupErrNoCart is 0x1861, UIIT_MSG_STRGERR_DONT_HAVE_ANY_TRADECART_TO_PICK_SPECIALTY.
 	tradePickupErrNoCart uint8 = 0x61
@@ -35,19 +35,19 @@ const (
 	tradePickupErrOwnGoods uint8 = 0x6F
 	// tradePickupErrTeleporting is 0x186E, UIIT_MSG_STRGERR_CANT_PICK_ITEM_
 	// WHILE_TELEPORT_WORK: a player picking goods while a teleport is
-	// pending (526090: the picker's GetTeleportState 4DDC90 is not zero).
+	// pending (natively the picker's teleport state is not zero).
 	tradePickupErrTeleporting uint8 = 0x6E
 )
 
-// 525DC0 also compares a vector's length with 1000.0 (refusal 4), but builds
-// that vector from fldz (525E52..525E78): it is always zero, so the test
+// The native selection also compares a vector's length with 1000.0 (refusal 4), but builds
+// that vector from fldz: it is always zero, so the test
 // never refuses. The port keeps no distance limit, as the original does.
 
 /*
 ================
 isPickupTradeGoods
 
-525DC0 asks CGObj_IsTradeGoods (482DE0), which in v1.188 is any 3.3.8
+The native selection asks the trade goods test, which in v1.188 is any 3.3.8
 item. INFERENCE: v1.150 also files its event food (3.3.8.0) and fortress
 manuals (3.3.8.8) under 3.3.8; only 3.3.8.1 and 3.3.8.2 are trade goods
 (ITEM_ETC_TRADE_*), so only those take the trade branch.
@@ -62,8 +62,8 @@ func isPickupTradeGoods(flags uint16) bool {
 ================
 tradePickupRefusal
 
-525DC0's job test, by the job state (CGObjPC_GetJobState): the goods'
-owner is the buyer's job alias (CGItem_OwnerNameMatchesPlayer).
+The native selection's job test, by the job state: the goods'
+owner is the buyer's job alias.
 ================
 */
 func tradePickupRefusal(c *enterworld.Character, owner string) uint8 {
@@ -96,7 +96,7 @@ applies to the transport's bag. The picker's own animation plays it.
 */
 func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 	c, item, division := g.picker, g.item, g.division
-	// 526090 refuses a player's goods pickup while any teleport is pending,
+	// The native ground pickup refuses a player's goods pickup while any teleport is pending,
 	// before the job test: the Thief Den scroll's mode 2 cast leaves the
 	// thief free to move, but not to load goods.
 	if c.NativeTeleportMode != 0 {
@@ -158,7 +158,7 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 		return true
 	})
 	if len(result.Broadcast) > 0 {
-		// 4E9676: goods loaded into a vehicle make it a caravan.
+		// Natively goods loaded into a vehicle make it a caravan.
 		rt.registerCaravan(division, c)
 	}
 	return result

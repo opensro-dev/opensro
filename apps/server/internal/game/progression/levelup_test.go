@@ -490,7 +490,7 @@ func TestOrdinaryDeathPenaltyUsesRetailTwoPercentAndCanDelevel(t *testing.T) {
 	if *character.Level != 10 || *character.Experience != 23500-697 {
 		t.Fatalf("post-death level/exp = %d/%d, want 10/%d", *character.Level, *character.Experience, 23500-697)
 	}
-	// 4E5710 records the loss that resurrection later returns a share of.
+	// The server records the loss that resurrection later returns a share of.
 	if character.LastExpLoss != 697 {
 		t.Fatalf("recorded loss = %d, want 697", character.LastExpLoss)
 	}
