@@ -43,6 +43,7 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
 	game.items.UpdateQuestInventory = quests.InventoryUpdater()
 	game.items.UpdateQuestKill = quests.KillUpdater()
+	game.items.UpdateQuestTeleport = quests.TeleportUpdater()
 	game.items.NoteQuestKillSite = quests.NoteKillSite
 	quests.SpawnExitGate = func(world instance.ID, fell simulation.Spawn) bool {
 		_, ok := game.items.SpawnQuestExitGate(world, fell)

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -135,6 +136,64 @@ func TestGateTownReturnMovesToTheAppointedPoint(t *testing.T) {
 	}
 	if *c.Gold != gold {
 		t.Fatal("the return point row charged a fee")
+	}
+}
+
+/*
+================
+TestGateTownReturnAppliesTownHead
+
+The linkless gate's return-point row is a town teleport (case 1 runs
+the shared town routine): a grey traveller's hostility settles in both
+directions and its abnormal state clears on the row, and the player
+still lands at the appointed point.
+================
+*/
+func TestGateTownReturnAppliesTownHead(t *testing.T) {
+	rt, c := gateTownReturnFixture(t)
+	peer := rebirthTestCharacter(20, 100)
+	peer.Name = "GateReturnPeer"
+	peer.ID = c.ID + 1000
+	deps := rt.deps.(*enterworld.Deps)
+	fixtureCharacters(deps.Characters)[testDivision] = append(fixtureCharacters(deps.Characters)[testDivision], peer)
+	gidC := enterworld.ObjectIDForCharacter(c)
+	gidPeer := enterworld.ObjectIDForCharacter(peer)
+	c.Aggressions = map[uint32]uint32{gidPeer: playerAggressionTicks}
+	peer.Aggressions = map[uint32]uint32{gidC: playerAggressionTicks}
+	if c.PVPState() != 1 || peer.PVPState() != 1 {
+		t.Fatal("fixture is not mutually grey")
+	}
+	record := abnormal.Record{Status: abnormal.Panic, Grade: 1, DurationMs: 60000, SourceGID: gidC, Param34: 50}
+	rt.applyPlayerAbnormalInDoor(testDivision, c, false, []abnormal.Record{record}, rt.Now().UnixMilli())
+	if block := rt.playerAbnormal(testDivision, c.Name); block == nil || block.Mask == 0 {
+		t.Fatal("abnormal fixture did not take")
+	}
+	var peerFrames []wire.Frame
+	rt.PushCharacterFrames = func(_, name string, f []wire.Frame) {
+		if name == peer.Name {
+			peerFrames = append(peerFrames, f...)
+		}
+	}
+	rt.PushDivisionPeerFrames = func(_, _ string, f []wire.Frame) {}
+	want := rt.appointedRebirth(testDivision, c)
+	out := sendGateTownReturn(rt, c)
+	if len(out.Frames) == 0 || out.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("type 1 did not re-enter: %+v", out)
+	}
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.RegionID != want.spawn.RegionID || got.X != want.spawn.X {
+		t.Fatalf("landed at %+v, want %+v", got, want.spawn)
+	}
+	if len(c.Aggressions) != 0 || c.PVPState() != 0 {
+		t.Fatalf("hostility survives the gate town return: %v state %d", c.Aggressions, c.PVPState())
+	}
+	if len(peer.Aggressions) != 0 || peer.PVPState() != 0 {
+		t.Fatalf("reciprocal record survives the gate town return: %v state %d", peer.Aggressions, peer.PVPState())
+	}
+	if len(peerFrames) == 0 || peerFrames[0].Opcode != wire.OpObjectStateRefresh {
+		t.Fatalf("listed opponent was not told its state cleared: %+v", peerFrames)
+	}
+	if block := rt.playerAbnormal(testDivision, c.Name); block != nil && block.Mask != 0 {
+		t.Fatalf("abnormal mask %#x survives the gate town return", block.Mask)
 	}
 }
 
