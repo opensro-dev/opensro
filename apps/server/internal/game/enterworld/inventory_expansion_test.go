@@ -223,3 +223,69 @@ func TestHandleEnterWorldStampsLastLoginWithoutInventoryExpansion(t *testing.T) 
 		t.Fatalf("LastLoginAtMs = %d after re-entry, want unchanged 12345", character.LastLoginAtMs)
 	}
 }
+
+/*
+================
+TestReentryPacketsBuildThroughTheDeferredDoor
+
+A teleport re-entry is built on the tick, so the bootstrap's own
+writes (the seed and the encoded inventory adoption) ride the deferred
+door and join the tick's batched commit (#1820). Login builds through
+the immediate door, as it always has: only ReentryPackets swaps its
+projection's door.
+================
+*/
+func TestReentryPacketsBuildThroughTheDeferredDoor(t *testing.T) {
+	doors := func(deps *Deps) (immediate, deferred *[]string) {
+		seenImmediate, seenDeferred := []string{}, []string{}
+		deps.MutateCharacter = func(_ *Character, label string, fn func()) {
+			seenImmediate = append(seenImmediate, label)
+			fn()
+		}
+		deps.MutateCharacterDeferred = func(_ *Character, label string, fn func()) {
+			seenDeferred = append(seenDeferred, label)
+			fn()
+		}
+		return &seenImmediate, &seenDeferred
+	}
+	contains := func(labels []string, want string) bool {
+		for _, label := range labels {
+			if label == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	reentryCharacter := chinaSpearman()
+	reentryCharacter.InventoryExpansion = 10
+	reentryDeps := testDeps(reentryCharacter)
+	immediate, deferred := doors(reentryDeps)
+	if _, ok := reentryDeps.ReentryPackets(DefaultDivisionID, reentryCharacter.Name); !ok {
+		t.Fatal("re-entry refused")
+	}
+	if len(*immediate) != 0 {
+		t.Fatalf("re-entry built through the immediate door: %v", *immediate)
+	}
+	if !contains(*deferred, "inventory-expansion") {
+		t.Fatalf("re-entry deferred writes = %v, want the inventory adoption among them", *deferred)
+	}
+	if reentryCharacter.InventoryCapacity() != 55 || reentryCharacter.InventoryExpansion != 0 {
+		t.Fatalf("re-entry adoption = %d (+%d), want 55 (+0)", reentryCharacter.InventoryCapacity(), reentryCharacter.InventoryExpansion)
+	}
+
+	loginCharacter := chinaSpearman()
+	loginCharacter.InventoryExpansion = 10
+	loginDeps := testDeps(loginCharacter)
+	immediate, deferred = doors(loginDeps)
+	payload := transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(t, DefaultDivisionID, loginCharacter.Name))
+	if outcome := HandleEnterWorld(loginDeps, payload); !outcome.OK {
+		t.Fatalf("login refused: %+v", outcome.Result)
+	}
+	if len(*deferred) != 0 {
+		t.Fatalf("login built through the deferred door: %v", *deferred)
+	}
+	if !contains(*immediate, "inventory-expansion") {
+		t.Fatalf("login immediate writes = %v, want the inventory adoption among them", *immediate)
+	}
+}
