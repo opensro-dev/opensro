@@ -39,11 +39,11 @@ type PeerAppearance struct {
 	Walk, Run   float32
 	ActionSpeed float32
 	// RefObjID is the character-model RefObjData id (character.ModelRef,
-	// the same record the local player resolves through sub_850c60).
+	// the same record the local player resolves through client sub_850c60).
 	RefObjID uint32
 	// Name is the character name (-> CICUser +0x108 via sub_4b1710).
 	Name string
-	// BodyShapeByte rides the sub_869110 lead byte into +0x758.
+	// BodyShapeByte rides the client sub_869110 lead byte into +0x758.
 	BodyShapeByte uint8
 	// JobType/JobGrade are a dressed job player's job and grade (+0x782 /
 	// +0x783); zero outside job mode.
@@ -53,21 +53,21 @@ type PeerAppearance struct {
 	// Skin is the transform the player wears (RefObjID 0: none).
 	Skin wire.TransformSkin
 	// Equipment is the WORN set (equipment-band inventory slots), in slot
-	// order, for the sub_86afb0 equip loop.
+	// order, for the client sub_86afb0 equip loop.
 	Equipment []wire.PlayerEquipItem
 	// Avatars are the worn avatar dresses (the avatar inventory, socket
-	// order) for the @0x0086b0c7 avatar loop. Without them a peer who comes
+	// order) for the client @0x0086b0c7 avatar loop. Without them a peer who comes
 	// into view is drawn without its dress.
 	Avatars []wire.PlayerEquipItem
 	// GuildName/GuildID/GuildGrantName/CrestParam are the guild half of
-	// the sub_869df0 non-local tail, resolved from the store's guild door
+	// the client sub_869df0 non-local tail, resolved from the store's guild door
 	// (the same rows the 0x32C4 seed encodes) for guild members and left
 	// zero otherwise. A NON-EMPTY GuildName is what arms the client's
-	// sub_869810 BindGuild leg (@0x0086a242 tests the +0x7a8 wstring's
+	// client sub_869810 BindGuild leg (@0x0086a242 tests the +0x7a8 wstring's
 	// size field at +0x7bc), so crests and banner labels can resolve for
 	// peers at all; CrestParam is the wire crestParamA - the
 	// G{prefix}_{guildId}_{crestParamA}.crb filename parameter
-	// (sub_833d40 @0x833e42). AllianceID/AllianceCrest are params B/C: the
+	// (client sub_833d40 @0x833e42). AllianceID/AllianceCrest are params B/C: the
 	// peer guild's union and its emblem (the A{prefix}_{B}_{C}.crb file),
 	// zero outside a union.
 	GuildName      string
@@ -86,7 +86,7 @@ type PeerAppearance struct {
 	// 0x32C4 member loop carries at +0x5c for the local player. The
 	// six-mark fortress-war gate needs it in {1 Commander, 2 Deputy}.
 	FortSiegeAuthority uint8
-	// SpawnSkills is the peer's active effect list (85FB20), so a buff the
+	// SpawnSkills is the peer's active effect list (client 85FB20), so a buff the
 	// peer already had shows when it comes into view.
 	SpawnSkills []wire.SpawnSkillEntry
 }

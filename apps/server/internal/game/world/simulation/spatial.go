@@ -106,8 +106,8 @@ func WorldDistance2D(a, b Spawn) float64 {
 // plane (headingWordToward, monstertick.go) and the NPC patrol
 // (ComputeNpcPatrolState, npc.go).
 //
-// Native 8791A0 yields MODEL yaw (zero faces -Z). Before serialization,
-// 853550 subtracts pi/2; spawn decoder 852F80 calls 8535A0 to add it back.
+// The client's 8791A0 yields MODEL yaw (zero faces -Z). Before serialization,
+// client 853550 subtracts pi/2; spawn decoder 852F80 calls 8535A0 to add it back.
 // Therefore the wire bearing is atan2(dz,dx), not atan2(dx,-dz).
 // Keep the existing server rounding policy; client serialization truncates.
 func headingWordFromDelta(dx, dz float64) uint16 {

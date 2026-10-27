@@ -154,7 +154,7 @@ func (r *Registry) Create(object Object) (Object, error) {
 	r.nextGID++
 	object.Spawn.GID = r.nextGID
 	if object.Program.Combat {
-		// 86C70F identifies the planter's decoration by this same object ID.
+		// client 86C70F identifies the planter's decoration by this same object ID.
 		object.OwnerEffect = object.Spawn.GID
 	}
 	object.Spawn.SkillID = object.Program.SkillID

@@ -130,13 +130,13 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 }
 
 // loadNpcStoreGroupIndex projects the exact native lookup chain used by
-// sub_7d3b70 -> sub_5d5be0:
+// client sub_7d3b70 -> sub_5d5be0:
 //
 //	NPC codename -> refshopgroup group -> store -> tab group -> tab rows.
 //
 // The menu row's storeGroupId0c is characterRefId24 (the NPC RefObjID), not
 // refshopgroup column 2. The retail server reads the same field as
-// [record+0x24], and sub_7d3b70 proves that field is the lookup's character
+// [record+0x24], and client sub_7d3b70 proves that field is the lookup's character
 // RefObjID. The largest authored tab and tab-group ids come back with the
 // index: the Jangan alchemy shop (npcjanganshop.go) numbers its
 // synthesized tabs and group above them.
@@ -164,7 +164,7 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) (ma
 	}
 	tabsByGroup := make(map[string][]NpcTalkStoreTab)
 	groupMeta := make(map[string]NpcTalkStoreTab)
-	// 5D5BE0 creates one conversation row per refshoptabgroup, not per
+	// client 5D5BE0 creates one conversation row per refshoptabgroup, not per
 	// refshoptab. Preserve that parent identity through the browser adapter.
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "refshoptabgroup.txt")) {
 		if len(cols) >= 5 && strings.TrimSpace(cols[0]) == "1" {
@@ -379,7 +379,7 @@ func readNpcTabbed(path string) [][]string {
 	return rows
 }
 
-// 8762E0/852F80: fixed city structures have independent identities and box
+// client 8762E0/852F80: fixed city structures have independent identities and box
 // picking; their visible architecture is already in the map. Never fabricate
 // a character model or use teleportdata's arrival point as the source position.
 func AppendTeleportGates(dir string, roster []NpcDef) ([]NpcDef, error) {
