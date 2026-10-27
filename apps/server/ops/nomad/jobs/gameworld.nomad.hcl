@@ -168,10 +168,11 @@ variable "beta_mastery" {
 
 # Port-only, not native: 110 raises the stopping level on the installed
 # v1.150 curve. Off keeps cap 90; expansion content is enabled separately.
-# Owner, 2026-10-24: 110 for the next release.
+# Owner, 2026-10-27: the default is the native 90 (the non-native rule: the
+# off value is native); the cap-110 expansion names 110 when it ships (#1751).
 variable "level_cap" {
   type    = string
-  default = "110"
+  default = "90"
 }
 
 # Port-only, not native: optional database-authored Alexandria field content.
