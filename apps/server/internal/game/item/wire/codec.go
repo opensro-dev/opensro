@@ -23,7 +23,7 @@ var ErrInvalidLength = errors.New("wire: byte length cannot be negative")
 var ErrTrailingBytes = errors.New("wire: payload has unconsumed trailing bytes")
 
 // degreesToRadians is the exact constant the client multiplies by when it
-// turns a wire heading into a yaw (client CPSMission_OnPickupAnim_0x35C7
+// turns a wire heading into a yaw (CPSMission_OnPickupAnim_0x35C7
 // at 0x00778150, CPSMission_OnEntitySpeedMode0x30E3 at 0x00775d25).
 // Reproduced bit-for-bit rather than using math.Pi/180 so the Go side
 // agrees with the client on the last mantissa bits.
