@@ -19,7 +19,8 @@ const skillObjectRowBytes = 30
 SkillObjectSpawn
 
 48CE60 writes the skill followed by 484FB0's object header. Client 86C440
-reads the same row; 86C420 consumes the single-spawn appearance tail.
+reads the same row; the client's CISkillObj_DeserializeSpawnSubState
+(client 86C420) consumes the single-spawn appearance tail.
 ================
 */
 type SkillObjectSpawn struct {

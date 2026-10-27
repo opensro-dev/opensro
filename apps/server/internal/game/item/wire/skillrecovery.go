@@ -1,7 +1,7 @@
 package wire
 
-// Native 8E0440 consumes owner GID and steering byte even with no target
-// rows. Zero steering is a complete self-cast body, not an empty attack.
+// The client's CIDecoSkill_ReadCastPayload (8E0440) consumes owner GID
+// and steering byte even with no target rows. Zero steering is a complete self-cast body, not an empty attack.
 func SkillCastSelfFrame(cast SkillCastSuccess) Frame {
 	cast.OwnerOrTargetGid = cast.CasterGid
 	return Frame{Opcode: OpSkillCastResult, Payload: cast.writePrefix(NewWriter(19)).U8(0).Payload()}
