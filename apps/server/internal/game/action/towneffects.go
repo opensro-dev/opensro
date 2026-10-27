@@ -13,11 +13,12 @@ and abnormal head. applyTownTeleportHead is that head, in the native
 order: PvP first, then the abnormal clear.
 
 Hostility follows the native branches on the character's PvP state
-(domain PVPState): state 1 erases this character from every aggression
-list in the division that names it (records are one-sided), clears its
-own list, and so resets its state; state 2 (the durable penalty) clears
-only its own list and keeps the state. State frames go out for every
-character whose state changed.
+(domain PVPState): state 1 walks the character's own aggression list,
+erases this character from each listed opponent's list (records are
+one-sided, so an attacker the character never listed keeps its record
+until it expires), clears its own list, and so resets its state;
+state 2 (the durable penalty) clears only its own list and keeps the
+state. State frames go out for every character whose state changed.
 
 Call it only for a town teleport proper (return scroll completion,
 rebirth to the appointed point, GM town moves, a gate's return-point
@@ -52,14 +53,26 @@ func (rt *Runtime) applyTownTeleportHead(division string, c *enterworld.Characte
 	}
 	switch c.PVPState() {
 	case 1:
-		// Hostility records are one-sided: an attacker retains a target
-		// that never retained it back. Erasing only the records this
-		// character holds would leave those standing, so scan the
-		// division and erase this character from every list that names
-		// it, publishing each state that changes.
+		// The routine walks this character's own hostile list: for
+		// each listed opponent it erases this character from the
+		// opponent's list and publishes any state that changes.
+		// Hostility records are one-sided (an attacker holds a target
+		// that never retained it back), and a record this character
+		// never listed is not its town trip to erase: it stands until
+		// it expires.
 		self := enterworld.ObjectIDForCharacter(c)
-		for _, other := range rt.deps.CharactersForDivision(division) {
-			if other == nil || other == c {
+		for opponentID := range c.Aggressions {
+			if opponentID == self {
+				continue
+			}
+			var other *enterworld.Character
+			for _, candidate := range rt.deps.CharactersForDivision(division) {
+				if candidate != nil && enterworld.ObjectIDForCharacter(candidate) == opponentID {
+					other = candidate
+					break
+				}
+			}
+			if other == nil {
 				continue
 			}
 			if _, ok := other.Aggressions[self]; !ok {

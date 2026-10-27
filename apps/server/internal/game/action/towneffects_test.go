@@ -113,15 +113,17 @@ func TestTownTeleportHeadPenaltyClearsOwnListOnly(t *testing.T) {
 
 /*
 ================
-TestTownTeleportHeadErasesOneSidedRecords
+TestTownTeleportHeadLeavesOneSidedRecords
 
 Aggression records are one-sided: the attacker retains a target that
-never retained it back. The state-1 head erases the teleporting
-character from every list in the division that names it, not only from
-the lists of the characters it attacked itself.
+never retained it back. The state-1 head walks the teleporting
+character's own list, so a record held by an attacker the character
+never listed is not the town trip's to erase: it stands, and the
+attacker stays grey, until it expires. A listed opponent's reciprocal
+record is erased and published.
 ================
 */
-func TestTownTeleportHeadErasesOneSidedRecords(t *testing.T) {
+func TestTownTeleportHeadLeavesOneSidedRecords(t *testing.T) {
 	target := rebirthTestCharacter(20, 100)
 	attacker := rebirthTestCharacter(20, 100)
 	attacker.Name = "TownHeadAttacker"
@@ -138,29 +140,41 @@ func TestTownTeleportHeadErasesOneSidedRecords(t *testing.T) {
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
 	rt.Now = clock.Now
 	gidTarget := enterworld.ObjectIDForCharacter(target)
-	// The target is grey through the third character; the attacker holds
-	// the only record naming the target and is grey through it alone.
-	target.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(other): playerAggressionTicks}
+	gidOther := enterworld.ObjectIDForCharacter(other)
+	// The target is grey through the third character, who holds the
+	// reciprocal record; the attacker holds a record naming the
+	// target and is grey through it alone.
+	target.Aggressions = map[uint32]uint32{gidOther: playerAggressionTicks}
+	other.Aggressions = map[uint32]uint32{gidTarget: playerAggressionTicks}
 	attacker.Aggressions = map[uint32]uint32{gidTarget: playerAggressionTicks}
-	if target.PVPState() != 1 || attacker.PVPState() != 1 {
-		t.Fatal("fixture is not grey on both sides")
+	if target.PVPState() != 1 || attacker.PVPState() != 1 || other.PVPState() != 1 {
+		t.Fatal("fixture is not grey on all sides")
 	}
-	var attackerFrames []wire.Frame
+	var attackerFrames, otherFrames []wire.Frame
 	rt.PushCharacterFrames = func(_, name string, f []wire.Frame) {
 		if name == attacker.Name {
 			attackerFrames = append(attackerFrames, f...)
 		}
+		if name == other.Name {
+			otherFrames = append(otherFrames, f...)
+		}
 	}
 	rt.PushDivisionPeerFrames = func(_, _ string, f []wire.Frame) {}
 	rt.applyTownTeleportHead(testDivision, target)
-	if len(attacker.Aggressions) != 0 || attacker.PVPState() != 0 {
-		t.Fatalf("one-sided record survives: %v state %d", attacker.Aggressions, attacker.PVPState())
-	}
-	if len(attackerFrames) == 0 || attackerFrames[0].Opcode != wire.OpObjectStateRefresh {
-		t.Fatalf("attacker was not told its state cleared: %+v", attackerFrames)
-	}
 	if len(target.Aggressions) != 0 || target.PVPState() != 0 {
 		t.Fatalf("target survives: %v state %d", target.Aggressions, target.PVPState())
+	}
+	if len(other.Aggressions) != 0 || other.PVPState() != 0 {
+		t.Fatalf("listed opponent's reciprocal record survives: %v state %d", other.Aggressions, other.PVPState())
+	}
+	if len(otherFrames) == 0 || otherFrames[0].Opcode != wire.OpObjectStateRefresh {
+		t.Fatalf("listed opponent was not told its state cleared: %+v", otherFrames)
+	}
+	if _, ok := attacker.Aggressions[gidTarget]; !ok || attacker.PVPState() != 1 {
+		t.Fatalf("one-sided record erased: %v state %d", attacker.Aggressions, attacker.PVPState())
+	}
+	if len(attackerFrames) != 0 {
+		t.Fatalf("unlisted attacker was published a state change: %+v", attackerFrames)
 	}
 }
 
@@ -169,8 +183,8 @@ func TestTownTeleportHeadErasesOneSidedRecords(t *testing.T) {
 TestPresentPointRebirthAppliesTownHead
 
 The head runs before either arm of the native routine: a present-point
-rebirth settles hostility (including the one-sided record another
-character holds) exactly as an appointed-point arrival does.
+rebirth settles hostility (the character's own list, and the listed
+peer's reciprocal record) exactly as an appointed-point arrival does.
 ================
 */
 func TestPresentPointRebirthAppliesTownHead(t *testing.T) {
@@ -199,7 +213,7 @@ func TestPresentPointRebirthAppliesTownHead(t *testing.T) {
 		t.Fatalf("hostility survives a present-point rebirth: %v state %d", c.Aggressions, c.PVPState())
 	}
 	if _, ok := peer.Aggressions[gidC]; ok || peer.PVPState() != 0 {
-		t.Fatalf("one-sided record survives a present-point rebirth: %v state %d", peer.Aggressions, peer.PVPState())
+		t.Fatalf("reciprocal record survives a present-point rebirth: %v state %d", peer.Aggressions, peer.PVPState())
 	}
 	found := false
 	for _, frame := range out.Frames {
