@@ -177,7 +177,7 @@ export interface ExperimentalOptions {
 	readonly transportAutoPotion: boolean;
 	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
 	// first and fall back to the WebSocket when the path fails. On unless
-	// turned off (owner 2026-10-27, #1451 step 3): WebTransport is the
+	// turned off (#1451 step 3): WebTransport is the
 	// default connect and the one bounded attempt remembers a failed QUIC
 	// path for the session, so off stays one setting away for anyone whose
 	// path cannot carry it. Applies from the next connect.

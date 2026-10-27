@@ -113,7 +113,7 @@ const OFF = Object.freeze( {
 	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
-	// On by default (owner 2026-10-27, #1451 step 3): WebTransport is the
+	// On by default (#1451 step 3): WebTransport is the
 	// default connect and the WebSocket the fallback; off is one setting.
 	webTransport: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
