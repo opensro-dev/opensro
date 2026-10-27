@@ -28,6 +28,9 @@ func (rt *Runtime) NoteKillSite(character *enterworld.Character, codename string
 	if character == nil {
 		return
 	}
+	rt.noteRahid6BossSite(character, codename, fell)
+	rt.noteEasteu21BossSite(character, codename, fell)
+	rt.noteGoria7BossSite(character, codename, fell)
 	rt.noteIvy3BossSite(character, codename, fell)
 }
 

@@ -21,15 +21,16 @@ layer opens, 20 to 100 from the entry point; it speaks its threat
 clock warns with ten and five minutes left, at twenty minutes the
 lancer is gone, and ten seconds later the layer returns everyone.
 Its death is party business: every resident doing the quest is
-credited with the proof item, the room hears the death line, and
-the party is returned - the native handler returns them on the
-spot, with a sixty-second backstop timer for anyone it missed.
+credited with the proof item, the room hears the death line, the
+exit gate rises beside the lancer, and sixty seconds later the
+party is returned - the native handler moves nobody itself; its
+event timer does.
 A member whose party standing breaks, or who does not belong to
 the hunt, is sent out with the instance-condition line.
 
 The proof item's native source is the hunt itself: the native
-death handler teleports the party out the moment the lancer
-falls, the delivery mission waits on the item, and no other
+death handler grants nothing when the lancer falls, the
+delivery mission waits on the item, and no other
 handler grants it - so the kill credit hands it to each credited
 resident who lacks it, the way IVY 3's sign credit works. The
 entry point (region 26991, the native item-use destination) is
@@ -84,6 +85,10 @@ const (
 	goria7WarnSecondMs = 900_000
 	goria7BossLeavesMs = 1_200_000
 	goria7LayerEndMs   = 1_210_000
+
+	// The kill leaves the room a 60,000 ms grace (the death
+	// handler's event timer, 0xEA60) before the party is returned.
+	goria7KillGraceMs = 60_000
 
 	// The native entry hands the layer a 1,260,000 ms lifetime
 	// and a 60,000 ms entry window. The invitation deadline

@@ -198,6 +198,10 @@ type easteu21Layer struct {
 	credited    bool
 	graceEnd    int64
 	ended       bool
+	// bossSite is where the boss fell (NoteKillSite); the exit gate
+	// stands beside it.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -635,6 +639,9 @@ func (rt *Runtime) easteu21Leave(event InstanceEvent) {
 		return
 	}
 	rt.easteu21ForgetLayer(event.World)
+	if rt.RemoveExitGates != nil {
+		rt.RemoveExitGates(event.World)
+	}
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -774,6 +781,29 @@ func (rt *Runtime) noteEasteu21Kill(c *enterworld.Character, codename string) {
 
 /*
 ================
+noteEasteu21BossSite
+
+Where Kerberos fell in its layer (NoteKillSite, just before the kill
+note): the exit gate rises beside it. Records only.
+================
+*/
+func (rt *Runtime) noteEasteu21BossSite(c *enterworld.Character, codename string, fell simulation.Spawn) {
+	if codename != easteu21BossCodename || c.World == nil || c.World.InstanceReturn == nil {
+		return
+	}
+	world := instance.ID(domain.CharacterWorldInstance(c))
+	if world.Definition() != easteu21Definition {
+		return
+	}
+	rt.easteu21.mu.Lock()
+	if layer := rt.easteu21.layers[world]; layer != nil && !layer.killed && !layer.bossSiteKnown {
+		layer.bossSite, layer.bossSiteKnown = fell, true
+	}
+	rt.easteu21.mu.Unlock()
+}
+
+/*
+================
 easteu21Update
 
 The encounter clock. One pass per layer tick; elapsed time comes
@@ -902,12 +932,22 @@ easteu21FinishKill
 Kerberos is down. Its death line goes to the room; then every
 resident doing the quest is credited with the kill and their Call
 is spent - the whole party, the dead included, exactly the native
-kill evaluator - and the room's sixty-second grace starts.
+kill evaluator - the exit gate rises beside it, and the room's
+sixty-second grace starts.
 ================
 */
 func (rt *Runtime) easteu21FinishKill(event InstanceEvent, layer *easteu21Layer, now int64) {
 	rt.easteu21Push(layer, easteu21SymBossDeath)
 	layer.graceEnd = now + easteu21KillGraceMs
+	// The reference handler raises the exit gate beside Kerberos, then
+	// sets the sixty-second event timer: the gate lets the room leave
+	// early, the timer still returns whoever stays.
+	rt.easteu21.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.easteu21.mu.Unlock()
+	if known && rt.SpawnExitGate != nil {
+		rt.SpawnExitGate(event.World, site)
+	}
 	def, ok := rt.Defs.ByCodename(easteu21QuestCodename)
 	if ok {
 		for _, name := range easteu21ResidentNames(layer) {
@@ -984,6 +1024,9 @@ func (rt *Runtime) easteu21EndLayer(event InstanceEvent, layer *easteu21Layer) {
 		}
 	}
 	rt.easteu21ForgetLayer(event.World)
+	if rt.RemoveExitGates != nil {
+		rt.RemoveExitGates(event.World)
+	}
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}

@@ -90,7 +90,14 @@ const (
 	// the programme ends the layer itself, on the kill or the farewell.
 	rahid6LayerEndSlackMs = 8_490
 	rahid6LayerLifetimeMs = rahid6SpawnDelayMs + 5*rahid6ConvoStepMs +
-		rahid6BattleMs + 2*rahid6WarningStepMs + rahid6LayerEndSlackMs
+		rahid6BattleMs + 2*rahid6WarningStepMs + rahid6KillGraceMs + rahid6LayerEndSlackMs
+
+	// The kill leaves the room a 60,000 ms grace: the reference death
+	// handler raises the exit gate and sets its event timer to the
+	// elapsed time plus 0xEA60, and the timer's expiry returns the
+	// party. The deadline above makes room for a kill in the last
+	// moment of the battle.
+	rahid6KillGraceMs = 60_000
 
 	// Tahomet appears 20 to 100 from the party: the native polar
 	// random placement, the quest-spawn radius pair.
@@ -228,7 +235,12 @@ type rahid6Layer struct {
 	warnings  int
 	killed    bool
 	credited  bool
+	graceEnd  int64
 	ended     bool
+	// bossSite is where the boss fell (NoteKillSite); the exit gate
+	// stands beside it.
+	bossSite      simulation.Spawn
+	bossSiteKnown bool
 }
 
 /*
@@ -649,6 +661,9 @@ func (rt *Runtime) rahid6Leave(event InstanceEvent) {
 		return
 	}
 	rt.rahid6ForgetLayer(event.World)
+	if rt.RemoveExitGates != nil {
+		rt.RemoveExitGates(event.World)
+	}
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
@@ -761,6 +776,29 @@ func (rt *Runtime) noteRahid6Kill(c *enterworld.Character, codename string) {
 
 /*
 ================
+noteRahid6BossSite
+
+Where Tahomet fell in its layer (NoteKillSite, just before the kill
+note): the exit gate rises beside it. Records only.
+================
+*/
+func (rt *Runtime) noteRahid6BossSite(c *enterworld.Character, codename string, fell simulation.Spawn) {
+	if codename != rahid6TahometCodename || c.World == nil || c.World.InstanceReturn == nil {
+		return
+	}
+	world := instance.ID(domain.CharacterWorldInstance(c))
+	if world.Definition() != rahid6Definition {
+		return
+	}
+	rt.rahid6.mu.Lock()
+	if layer := rt.rahid6.layers[world]; layer != nil && !layer.killed && !layer.bossSiteKnown {
+		layer.bossSite, layer.bossSiteKnown = fell, true
+	}
+	rt.rahid6.mu.Unlock()
+}
+
+/*
+================
 rahid6Update
 
 The encounter clock. One pass per layer tick; elapsed time comes
@@ -782,11 +820,17 @@ func (rt *Runtime) rahid6Update(event InstanceEvent) {
 	if ended {
 		return
 	}
+	now := rt.rahid6Now()
 	if killed {
-		rt.rahid6FinishKill(event, layer)
+		rt.rahid6FinishKill(event, layer, now)
 		return
 	}
-	now := rt.rahid6Now()
+	if layer.killed {
+		if now >= layer.graceEnd {
+			rt.rahid6EndLayer(event, layer)
+		}
+		return
+	}
 	if layer.spawnedMs == 0 {
 		if now-layer.openedMs >= rahid6SpawnDelayMs {
 			layer.spawnedMs = now
@@ -865,18 +909,28 @@ Tahomet is down. His surrender line goes to the room; then every
 resident doing the quest trades the bundle for the necklace - the
 whole party, the dead included, exactly the native kill evaluator -
 and a resident who lost the bundle hears why there is no necklace.
-The meeting then returns everyone and closes.
+The exit gate rises beside him and the room's sixty-second grace
+starts; the update returns whoever is still inside when it runs out.
 ================
 */
-func (rt *Runtime) rahid6FinishKill(event InstanceEvent, layer *rahid6Layer) {
+func (rt *Runtime) rahid6FinishKill(event InstanceEvent, layer *rahid6Layer, now int64) {
 	rt.rahid6Push(layer, rahid6SymSurrender)
+	layer.graceEnd = now + rahid6KillGraceMs
+	// The reference handler raises the exit gate beside Tahomet, then
+	// sets the sixty-second event timer: the gate lets the room leave
+	// early, the timer still returns whoever stays.
+	rt.rahid6.mu.Lock()
+	site, known := layer.bossSite, layer.bossSiteKnown
+	rt.rahid6.mu.Unlock()
+	if known && rt.SpawnExitGate != nil {
+		rt.SpawnExitGate(event.World, site)
+	}
 	def, ok := rt.Defs.ByCodename(rahid6QuestCodename)
 	if ok {
 		for _, name := range rahid6ResidentNames(layer) {
 			rt.rahid6CreditKill(event.Division, name, def)
 		}
 	}
-	rt.rahid6EndLayer(event, layer)
 }
 
 /*
@@ -949,6 +1003,9 @@ func (rt *Runtime) rahid6EndLayer(event InstanceEvent, layer *rahid6Layer) {
 		}
 	}
 	rt.rahid6ForgetLayer(event.World)
+	if rt.RemoveExitGates != nil {
+		rt.RemoveExitGates(event.World)
+	}
 	if rt.InstanceClose != nil && lease.ID != 0 {
 		rt.InstanceClose(lease)
 	}
