@@ -54,15 +54,15 @@ TestDecodeCosMountRequestPinsTheClientBytes
 ================
 */
 func TestDecodeCosMountRequestPinsTheClientBytes(t *testing.T) {
-	// The exact frame the client-side harness proves the REAL sub_695420
-	// mount arm builds (actionPaneEmitChainParity: COS gid 0x00C05001 ->
-	// [01 50 C0 00 0B]).
+	// The exact frame the client-side harness proves the REAL
+	// CGInterface_ExecuteActionCommand mount arm builds
+	// (actionPaneEmitChainParity: the fixture COS gid -> [01 50 C0 00 0B]).
 	request, err := DecodeCosMountRequest([]byte{0x01, 0x50, 0xC0, 0x00, 0x0B})
 	if err != nil {
 		t.Fatalf("the client fixture frame refused: %v", err)
 	}
 	if request.CosGid != 0x00C05001 {
-		t.Errorf("cosGid = 0x%08X, want 0x00C05001 (u32 little-endian before the tag)", request.CosGid)
+		t.Errorf("cosGid = 0x%08X, want the fixture COS gid (u32 little-endian before the tag)", request.CosGid)
 	}
 }
 
@@ -97,9 +97,9 @@ func TestDecodeCosCommandPinsMountedAttackBytes(t *testing.T) {
 ================
 TestDecodeCosCommandPinsSteerAndStopBytes
 
-The vehicle's stop (tag 0x03, SendAngleUpdatePacket 0x8777B0) and steer
-(tag 0x04, SendSteeringUpdate 0x877540) carry one little-endian heading
-word after the tag, and nothing else.
+The vehicle's stop (tag 0x03, client SendAngleUpdatePacket 0x8777B0) and
+steer (tag 0x04, client SendSteeringUpdate 0x877540) carry one
+little-endian heading word after the tag, and nothing else.
 ================
 */
 func TestDecodeCosCommandPinsSteerAndStopBytes(t *testing.T) {
@@ -165,8 +165,9 @@ func TestDecodeCosMountRequestSplitsMalformedFromUnsupported(t *testing.T) {
 ================
 TestCosSummonTimer3691PinsSubtypeAndWidths
 
-The 0x3691 subtype-3 body sub_775f20 @0x7760FE reads as three u32s after
-the subtype byte, little-endian, with no tail.
+The 0x3691 subtype-3 body the client's
+CPSMission_OnRefreshBuffRemainTime0x3691 reads at 0x7760FE, as three
+u32s after the subtype byte, little-endian, with no tail.
 ================
 */
 func TestCosSummonTimer3691PinsSubtypeAndWidths(t *testing.T) {
@@ -183,7 +184,8 @@ func TestCosSummonTimer3691PinsSubtypeAndWidths(t *testing.T) {
 	if OpCosStateRefresh != 0x3691 || CosStateRefreshSummonTimer != 3 {
 		t.Fatalf("opcode/subtype drifted: 0x%X/%d", OpCosStateRefresh, CosStateRefreshSummonTimer)
 	}
-	// The zero pair is sub_6E6150's REMOVE selector, not an empty window.
+	// The zero pair is CIFMagicStateBoard_AddOrRemoveSlot's REMOVE
+	// selector, not an empty window.
 	if retire := EncodeCosSummonTimerRetire3691(0x00003039); !bytes.Equal(retire, []byte{3, 0x39, 0x30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
 		t.Fatalf("retire = % X", retire)
 	}

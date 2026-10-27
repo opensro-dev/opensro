@@ -27,7 +27,8 @@ import (
 // This fixture joins two real owners rather than reimplementing either side:
 // simulation.MonsterState commits CurrentHP, then wire serializes the committed
 // Damage/Fatal outcome. The browser harness reads the same bytes through the
-// real B245 -> 8e0440 -> 8e0190 -> 8e1710 -> 8db770 -> 8d5440 chain.
+// client's real B245 chain (CPSMission_OnSkillCastBroadcast0xB245 and the
+// CIDecoSkill result readers).
 //
 // Regenerate:
 //
@@ -179,7 +180,7 @@ func buildActionResultFixture(t *testing.T) actionResultFixture {
 			"MonsterState.ApplyDamage owns the sole monster CurrentHP mutation; its committed Damage/Fatal result",
 			"is serialized by SkillCastSingleTargetResult as one B245 impact row by one target column.",
 			"The same live target pose is appended as the B245 bit-3 steering point, which owns local holder facing.",
-			"The browser verifier consumes these exact bytes through the real 776830/8e0440/8e0190/8e1710/8db770/8d5440 chain.",
+			"The browser verifier consumes these exact bytes through the client's real B245 chain: CPSMission_OnSkillCastBroadcast0xB245 into the CIDecoSkill result readers.",
 			"Live equipped-weapon base attacks emit this shape after the pinned reference-server normal damage lane.",
 		},
 		Expect: actionResultFixtureExpect{

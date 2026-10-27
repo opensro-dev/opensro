@@ -15,9 +15,10 @@ import "opensro.online/server/internal/domain"
 // pickup executor sends the anim inline in its success tail and the
 // despawn rides
 // the item's world-removal in the same grant window. The 0.5-1s of visible
-// linger after the scoop is the CLIENT's own dissolve: CIItem despawn
-// (sub_86e980) arms a fixed 1.5s CIDecoDisappear fade (data_bd5144 = 1.5f,
-// byte-verified). Deferring the despawn to an animation event would DOUBLE
+// linger after the scoop is the CLIENT's own dissolve: the client's
+// CIItem_DespawnWithFade arms a fixed 1.5s CIDecoDisappear fade
+// (data_bd5144 = 1.5f, byte-verified). Deferring the despawn to an
+// animation event would DOUBLE
 // the linger and diverge from native - never do it.
 
 // Frame is one native packet of a burst: the opcode and its encoded payload.
@@ -132,7 +133,8 @@ func PickupGoldGrantFrames(anim PickupAnim, amount uint32, balance uint64, itemG
 // counts); it runs inside the action, so it precedes the release too.
 //
 // An over-cap pickup leaves the REMAINDER on the ground (the total > iMax arm
-// of sub_756a60): the heap keeps its gid and its rendered entity, so the
+// of the client's CPSMission_MergeOrSwapItems): the heap keeps its gid
+// and its rendered entity, so the
 // despawn is withheld - a client still drawing the drop is looking at a real,
 // pickable object.
 func PickupItemGrantFrames(anim PickupAnim, destSlot uint8, item ItemBody, itemGid uint32, groundRemainder uint16, progress []Frame) []Frame {

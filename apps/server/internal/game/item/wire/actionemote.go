@@ -11,19 +11,22 @@ import "fmt"
 // OpActionEmote is BOTH directions of the emote/action channel - the native
 // client sends AND receives opcode 0x324B with different bodies:
 //
-//   - C->S request: [u8 action]. Emitted by sub_695420's emote arms
-//     (@0x695b09 cmd 0xfa0, @0x695b9a jump_table_6960d8 cmds 0xfa1..0xfa6,
-//     @0x695ee6 cmd 0xfab) over CanSendOpcode(0x324B)/CMsgStreamBuffer.
-//   - S->C push: [u32 gid][u8 action]. Consumed by sub_778190 /
-//     CPSMission_HandlePacket324B (registered by sub_74d330 entry #56): the
-//     client resolves the gid and plays the action via SetMotionState
+//   - C->S request: [u8 action]. Emitted by client
+//     CGInterface_ExecuteActionCommand's emote arms (@0x695b09 cmd 0xfa0,
+//     @0x695b9a jump_table_6960d8 cmds 0xfa1..0xfa6, client @0x695ee6 cmd
+//     0xfab) over CanSendOpcode(0x324B)/CMsgStreamBuffer.
+//   - S->C push: [u32 gid][u8 action]. Consumed by the client's
+//     CPSMission_OnEntityTransformUpdate0x324B (registered by sub_74d330
+//     entry #56): the client resolves the gid and plays the action via
+//     SetMotionState
 //     (state 0xd for the CICUser family, state 7 otherwise).
 const OpActionEmote uint16 = 0x324B
 
 // Emote action codes: the complete value space the v1.150 client can emit
 // on the C->S 0x324B request. The names pair the actionwnddata.txt emote
 // records (4000..4006, group 4) with the wire byte each record's command id
-// stages in sub_695420's jump_table_6960d8 (cmd 0xfa0 -> 0, 0xfa1 -> 6,
+// stages in the jump_table_6960d8 of client
+// CGInterface_ExecuteActionCommand (cmd 0xfa0 -> 0, 0xfa1 -> 6,
 // 0xfa2 -> 1, 0xfa3 -> 5, 0xfa4 -> 2, 0xfa5 -> 3, 0xfa6 -> 4; cmd 0xfab
 // also emits 0). Anything above EmoteActionMax cannot come from a retail
 // client and must be refused.

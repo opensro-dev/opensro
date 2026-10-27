@@ -19,32 +19,37 @@ import (
 // COS (internal/transport/pet) command plane, C->S opcode 0x769E.
 //
 // Two client producers are binary-pinned:
-// sub_695420 / CGInterface_ExecuteActionCommand, command id 0x1388
-// (@0x695f6b..0x69605d) emits exactly [u32le cosGid][u8 0x0B] after its own
+// the client's CGInterface_ExecuteActionCommand at 0x695F6B..0x69605D
+// (command id 0x1388) emits exactly [u32le cosGid][u8 0x0B] after its own
 // gates pass (local player present, gid is the ACTIVE COS at global-data
-// header+0x10, the 82d310 command-class gate, and the COS character's +0x644
-// bit 13 CLEAR - i.e. not already mounted); and sub_692cb0's mounted
-// follow/attack branch emits [u32 mountGid][u8 0x02][u32 targetGid] after
-// resolving a nonzero effective-record +0x210.
+// header+0x10, the CCOSEntity_IsPetClass command-class gate, and the COS
+// character's +0x644 bit 13 CLEAR - i.e. not already mounted); and
+// CGInterface_InteractCharacterTarget's mounted follow/attack branch
+// emits [u32 mountGid][u8 0x02][u32 targetGid] after resolving a nonzero
+// effective-record +0x210.
 //
 // 0x769E is a multi-form FAMILY keyed on the trailing tag byte (C3 verify,
 // server-wave seq 38): 0x01 movement, 0x02 approach, 0x03 direction stop,
 // 0x04 steer, 0x08 pickup, 0x09 follow, 0x0B mount. The mount's movement trio is what
 // CNavigationDeadreckon sends for a vehicle instead of the player opcodes:
-// SendTargetMovePacket (0x877D80) tag 0x01 with the 0x7738 body,
-// SendAngleUpdatePacket (0x8777B0) tag 0x03 [u16 heading] instead of 0x72F5,
-// and SendSteeringUpdate (0x877540) tag 0x04 [u16 heading] instead of 0x72CF.
+// SendTargetMovePacket (client 0x877D80) tag 0x01 with the 0x7738 body,
+// SendAngleUpdatePacket (client 0x8777B0) tag 0x03 [u16 heading] instead of
+// 0x72F5, and SendSteeringUpdate (client 0x877540) tag 0x04 [u16 heading]
+// instead of 0x72CF.
 // Every supported form has an exact body length. Unknown tags are rejected.
-// DropItemManager_TickAutoPickupRequests (77DFA0) emits tag 8 with a target;
-// CosEntryPanel_SyncActiveState (6A2777) emits tag 9 without a target.
+// DropItemManager_TickAutoPickupRequests (client 77DFA0) emits tag 8 with
+// a target; CosEntryPanel_SyncActiveState (client 6A2777) emits tag 9
+// without a target.
 //
 // S->C twins (emitted by action.HandleCosCommand after authoritative
 // ActiveCOS identity/capability gates):
-//   - 0xB4B5 ride-state apply (sub_777f60, LIVE in the browser bridge):
+//   - 0xB4B5 ride-state apply (client CPSMission_OnCOSRideStateB4B5, LIVE
+//     in the browser bridge):
 //     mode 1 = [u8 1][u32 riderGid][u8 rideState][u32 vehicleGid],
 //     rideState 1 mounts / 0 dismounts. This - not 0xB69E - is what makes a
 //     client actually mount.
-//   - 0xB69E COS command-result feedback (sub_74fcd0, LIVE):
+//   - 0xB69E COS command-result feedback (client
+//     CPSMission_OnSystemNotification0xB69E, LIVE):
 //     [u8 subType][u8 selector]([u8 resultByte] iff subType==2)[u32 cosGid],
 //     selector 8 appends [u32 dropItemGid]. The refusal bytes retail sends
 //     for a mount the client itself could never compose are UNPINNED, so
@@ -54,21 +59,26 @@ const (
 	OpCosCommandRequest uint16 = 0x769E
 	// OpCosRideRequest is the pet panel's explicit ride-state request.
 	OpCosRideRequest uint16 = 0x74B5
-	// OpCosRideState is the S->C ride-state apply (0xB4B5, sub_777f60).
+	// OpCosRideState is the S->C ride-state apply (0xB4B5, client
+	// CPSMission_OnCOSRideStateB4B5).
 	OpCosRideState uint16 = 0xB4B5
-	// OpCosRecordCreate is the S->C COS record seed consumed by sub_830ec0.
+	// OpCosRecordCreate is the S->C COS record seed consumed by the
+	// client's CCOSDataManager_DeserializeOwnedCOSRecord.
 	OpCosRecordCreate uint16 = 0x3158
 	// OpCosCommandResult is the S->C command-result feedback (0xB69E,
-	// sub_74fcd0).
+	// client CPSMission_OnSystemNotification0xB69E).
 	OpCosCommandResult uint16 = 0xB69E
 	// OpCosStateRefresh is the S->C COS buff/state refresh (0x3691,
-	// sub_775f20, registrar row 74: opcode write @0x0074dcb2). One subtype
-	// byte selects the wire shape; only subtype 3 is emitted here.
+	// client CPSMission_OnRefreshBuffRemainTime0x3691, registrar row 74:
+	// opcode write at client 0x0074DCB2). One subtype byte selects the
+	// wire shape; only subtype 3 is emitted here.
 	OpCosStateRefresh uint16 = 0x3691
 )
 
-// CosStateRefreshSummonTimer is the subtype byte sub_775f20 routes to the
-// kind-3 list-control command (sub_67A470 -> sub_6E6E00), which builds the
+// CosStateRefreshSummonTimer is the subtype byte the client's
+// CPSMission_OnRefreshBuffRemainTime0x3691 routes to the kind-3
+// list-control command (CGInterface_UpdateMagicStateSlot ->
+// CIFMagicStateBoard_SetSlotRemainingTime), which builds the
 // magic-state board's two-bar COS slot.
 const CosStateRefreshSummonTimer uint8 = 3
 
@@ -80,16 +90,20 @@ EncodeCosSummonTimer3691 builds the 0x3691 subtype-3 body:
 
 	[u8 3][u32 itemRefObjID][u32 remainingSec][u32 packedExtra]
 
-sub_775f20 @0x7760FE reads the three u32s and dispatches
-sub_67A470(gi, 3, id, 0, 0, 0) when both trailing words are zero, otherwise
-sub_67A470(gi, 3, id, 1, remainingSec, packedExtra). That flag reaches
-sub_6E6150 as its submit selector: 0 REMOVES the matching row, 1 upserts
-it, so a zero pair is the native retirement rather than an empty window.
+The client's CPSMission_OnRefreshBuffRemainTime0x3691 at 0x7760FE reads
+the three u32s and dispatches CGInterface_UpdateMagicStateSlot(gi, 3,
+id, 0, 0, 0) when both trailing words are zero, otherwise
+CGInterface_UpdateMagicStateSlot(gi, 3, id, 1, remainingSec,
+packedExtra). That flag reaches CIFMagicStateBoard_AddOrRemoveSlot as
+its submit selector: 0 REMOVES the matching row, 1 upserts it, so a zero
+pair is the native retirement rather than an empty window.
 
-sub_6E6E00 kind 3 resolves the ITEM record through sub_7EFE70 and seeds the
-row from its +0x29C duration: the limit is duration*1000 and the elapsed
-accumulator is limit - remainingSec*1000, which sub_6E6AA0 then draws as
-(limit - elapsed) / limit. The third word is what is LEFT, never what has
+CIFMagicStateBoard_SetSlotRemainingTime kind 3 resolves the ITEM record
+through GlobalDataManager_GetItemCommonRecordById and seeds the row from
+its +0x29C duration: the limit is duration*1000 and the elapsed
+accumulator is limit - remainingSec*1000, which
+CIFMagicStateBoard_OnUpdate then draws as (limit - elapsed) / limit.
+The third word is what is LEFT, never what has
 run; kinds 6, 7 and 8 subtract their own arg from a fixed cap identically.
 The +0x2A4 aux is the second bar's limit and the packed extra's low u16 is
 its own remaining, in seconds. The id is the SUMMONING ITEM's ref id, not
@@ -109,35 +123,44 @@ func EncodeCosSummonTimer3691(itemRefObjID, remainingSec, packedExtra uint32) []
 ================
 EncodeCosSummonTimerRetire3691
 
-EncodeCosSummonTimerRetire3691 is the zero pair sub_6E6150 treats as its
-remove selector. It retires the board row without expiring its window.
+EncodeCosSummonTimerRetire3691 is the zero pair
+CIFMagicStateBoard_AddOrRemoveSlot treats as its remove selector. It
+retires the board row without expiring its window.
 ================
 */
 func EncodeCosSummonTimerRetire3691(itemRefObjID uint32) []byte {
 	return EncodeCosSummonTimer3691(itemRefObjID, 0, 0)
 }
 
-// CosCommandMountTag is the mount arm's trailing tag byte (the u8 0x0B the
-// sub_695420 0x1388 arm appends after the gid).
+// CosCommandMountTag is the mount arm's trailing tag byte (the u8 0x0B
+// the client's CGInterface_ExecuteActionCommand 0x1388 arm appends
+// after the gid).
 const CosCommandMountTag uint8 = 0x0B
 
-// CosCommandPickupTag is emitted by the native drop manager at 0x77E1A7.
+// CosCommandPickupTag is emitted by the client's
+// DropItemManager_TickAutoPickupRequests (client 0x77E1A7).
 const CosCommandPickupTag uint8 = 0x08
 
-// CosCommandFollowTag is the 6A2777 command-class pet follow request.
+// CosCommandFollowTag is the command-class pet follow request (client
+// 6A2777 in CICCos_ExecuteActionCommand).
 const CosCommandFollowTag uint8 = 0x09
 
-// CosCommandAttackTag is sub_692cb0's mounted basic-attack selector.
+// CosCommandAttackTag is the mounted basic-attack selector of client
+// CGInterface_InteractCharacterTarget.
 const CosCommandAttackTag uint8 = 0x02
 
-// sub_877d80 -> sub_877cc0: COS gid, tag 1, ordinary native move body.
+// client CNavigationDeadreckon_SendTargetMovePacket ->
+// CNavigationDeadreckon_WriteMovementPayloadToStream: COS gid, tag 1,
+// ordinary native move body.
 const CosCommandMovementTag uint8 = 0x01
 
-// CosCommandStopTag is the vehicle's direction stop (0x8777B0), the twin of
+// CosCommandStopTag is the vehicle's direction stop (client 0x8777B0),
+// the twin of
 // 0x72F5: [u32 gid][u8 0x03][u16 heading].
 const CosCommandStopTag uint8 = 0x03
 
-// CosCommandSteerTag is the vehicle's steer (0x877540), the twin of 0x72CF:
+// CosCommandSteerTag is the vehicle's steer (client 0x877540), the twin
+// of 0x72CF:
 // [u32 gid][u8 0x04][u16 heading].
 const CosCommandSteerTag uint8 = 0x04
 
@@ -274,7 +297,8 @@ const cosRideStateApplyLen = 10
 ================
 EncodeCosRideState
 
-EncodeCosRideState builds sub_777f60's mode-1 B4B5 body.
+EncodeCosRideState builds the mode-1 B4B5 body of client
+CPSMission_OnCOSRideStateB4B5.
 ================
 */
 func EncodeCosRideState(riderGid uint32, mounted bool, vehicleGid uint32) []byte {
@@ -331,7 +355,8 @@ const CosBandCapturedMonster = 6
 ================
 CosSpawnBand2
 
-CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
+CosSpawnBand2 is the plain internal/transport/pet create row of client
+CICCos_DeserializeSpawnPacket.
 ================
 */
 type CosSpawnBand2 struct {
@@ -345,7 +370,7 @@ type CosSpawnBand2 struct {
 	Scale     float32
 	Name      string
 	OwnerName string
-	// Guild soldiers copy equipment from this player model (8554E0).
+	// Guild soldiers copy equipment from this player model (client 8554E0).
 	OwnerModelRef uint32
 	OwnerGid      uint32
 	HoldType      uint8
@@ -394,7 +419,7 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 		U8(1).
 		U16(uint16(len(name))).
 		Bytes(name)
-	// 854FA0 and 8554E0 omit both the owner-name tail and owner GID for
+	// Client 854FA0 and 8554E0 omit both the owner-name tail and owner GID for
 	// ordinary riding horses. The private COS record binds their owner.
 	if row.Band == 1 {
 		return w.U8(row.State).Payload()
@@ -403,7 +428,7 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 		w.U16(uint16(len(name))).Bytes(name)
 	}
 	w.U16(uint16(len(ownerName))).Bytes(ownerName)
-	// 854FA0: a captured quest monster (band 6) carries neither the hold
+	// Client 854FA0: a captured quest monster (band 6) carries neither the hold
 	// nor the PvP byte; a pickup pet (4) only the hold byte.
 	if row.Band != CosBandCapturedMonster {
 		w.U8(row.HoldType)

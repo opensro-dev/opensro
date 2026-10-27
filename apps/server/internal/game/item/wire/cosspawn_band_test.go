@@ -16,9 +16,9 @@ import (
 ================
 TestCosSpawnCapturedMonsterOmitsHoldAndPvp
 
-854FA0: after the owner name a captured quest monster (band 6) goes
-straight to the owner gid; a transport (band 2) carries the hold and PvP
-bytes between them.
+Client CICCos_DeserializeSpawnOwnerBlock (854FA0): after the owner name
+a captured quest monster (band 6) goes straight to the owner gid; a
+transport (band 2) carries the hold and PvP bytes between them.
 ================
 */
 func TestCosSpawnCapturedMonsterOmitsHoldAndPvp(t *testing.T) {

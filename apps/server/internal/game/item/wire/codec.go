@@ -23,9 +23,10 @@ var ErrInvalidLength = errors.New("wire: byte length cannot be negative")
 var ErrTrailingBytes = errors.New("wire: payload has unconsumed trailing bytes")
 
 // degreesToRadians is the exact constant the client multiplies by when it
-// turns a wire heading into a yaw (sub_7780f0 @0x00778150, sub_775cb0
-// @0x00775d25). Reproduced bit-for-bit rather than using math.Pi/180 so the
-// Go side agrees with the client on the last mantissa bits.
+// turns a wire heading into a yaw (client CPSMission_OnPickupAnim_0x35C7
+// at 0x00778150, CPSMission_OnEntitySpeedMode0x30E3 at 0x00775d25).
+// Reproduced bit-for-bit rather than using math.Pi/180 so the Go side
+// agrees with the client on the last mantissa bits.
 const degreesToRadians = 0.01745329238474369
 
 // Reader consumes a packet payload in the same order and widths as the
@@ -59,7 +60,7 @@ func (r *Reader) take(n int) ([]byte, error) {
 	return chunk, nil
 }
 
-// U8 reads one byte (CMsgStreamBuffer_ReadU8, sub_4b10f0).
+// U8 reads one byte (client CMsgStreamBuffer_ReadU8).
 func (r *Reader) U8() (uint8, error) {
 	chunk, err := r.take(1)
 	if err != nil {
@@ -68,7 +69,7 @@ func (r *Reader) U8() (uint8, error) {
 	return chunk[0], nil
 }
 
-// U16 reads a little-endian uint16 (CMsgStreamBuffer_ReadU16, sub_4b10d0).
+// U16 reads a little-endian uint16 (client CMsgStreamBuffer_ReadU16).
 func (r *Reader) U16() (uint16, error) {
 	chunk, err := r.take(2)
 	if err != nil {
@@ -77,7 +78,7 @@ func (r *Reader) U16() (uint16, error) {
 	return binary.LittleEndian.Uint16(chunk), nil
 }
 
-// U32 reads a little-endian uint32 (CMsgStreamBuffer_ReadU32, sub_4b1150).
+// U32 reads a little-endian uint32 (client CMsgStreamBuffer_ReadU32).
 func (r *Reader) U32() (uint32, error) {
 	chunk, err := r.take(4)
 	if err != nil {
@@ -104,7 +105,7 @@ func (r *Reader) F32() (float32, error) {
 	return math.Float32frombits(bits), nil
 }
 
-// Bytes reads n raw bytes (CMsgStreamBuffer_Read, sub_4b0eb0).
+// Bytes reads n raw bytes (client CMsgStreamBuffer_ReadBytes).
 func (r *Reader) Bytes(n int) ([]byte, error) {
 	chunk, err := r.take(n)
 	if err != nil {
@@ -130,7 +131,7 @@ func (r *Reader) Str() (string, error) {
 }
 
 // WStr reads a u16 character count and that many UTF-16LE units
-// (CMsgStreamBuffer_ReadWideString 5E2BA0).
+// (client CMsgStreamBuffer_ReadWideString).
 func (r *Reader) WStr() (string, error) {
 	n, err := r.U16()
 	if err != nil {
@@ -168,19 +169,19 @@ func NewWriter(size int) *Writer {
 	return &Writer{buf: make([]byte, 0, size)}
 }
 
-// U8 appends one byte (CMsgStreamBuffer_AppendU8, sub_4c4350).
+// U8 appends one byte (client CMsgStreamBuffer_AppendU8).
 func (w *Writer) U8(value uint8) *Writer {
 	w.buf = append(w.buf, value)
 	return w
 }
 
-// U16 appends a little-endian uint16 (CMsgStreamBuffer_AppendU16, sub_4fcd50).
+// U16 appends a little-endian uint16 (client CMsgStreamBuffer_AppendU16).
 func (w *Writer) U16(value uint16) *Writer {
 	w.buf = append(w.buf, byte(value), byte(value>>8))
 	return w
 }
 
-// U32 appends a little-endian uint32 (CMsgStreamBuffer_AppendU32, sub_4fcdb0).
+// U32 appends a little-endian uint32 (client CMsgStreamBuffer_AppendU32).
 func (w *Writer) U32(value uint32) *Writer {
 	w.buf = append(w.buf, byte(value), byte(value>>8), byte(value>>16), byte(value>>24))
 	return w
@@ -200,7 +201,7 @@ func (w *Writer) F32(value float32) *Writer {
 	return w.U32(math.Float32bits(value))
 }
 
-// Bytes appends raw bytes (CMsgStreamBuffer_AppendBytes, sub_4c3cf0).
+// Bytes appends raw bytes (client CMsgStreamBuffer_AppendBytes).
 func (w *Writer) Bytes(values []byte) *Writer {
 	w.buf = append(w.buf, values...)
 	return w
@@ -233,8 +234,9 @@ func (w *Writer) Payload() []byte {
 //
 // The two opcodes scale by different divisors, so this is the only supported
 // way to move a heading between them: 0x35C7 divides the byte by 255.0
-// (sub_7780f0 @0x00778150) while 0x30E3 divides the word by 65535.0
-// (sub_775cb0 @0x00775d25). Round-tripping through this helper keeps the
+// (client CPSMission_OnPickupAnim_0x35C7 at 0x00778150); 0x30E3 divides
+// the word by 65535.0 (client CPSMission_OnEntitySpeedMode0x30E3
+// at client 0x00775d25). Round-tripping through this helper keeps the
 // resulting yaw equal.
 func HeadingByteFromAngle(angle uint16) uint8 {
 	return uint8(math.Round(float64(angle)/65535.0*255.0)) & 0xFF

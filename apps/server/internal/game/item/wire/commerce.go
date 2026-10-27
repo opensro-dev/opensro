@@ -14,8 +14,9 @@ const (
 	MoveTypeCosShopSell  uint8 = 0x14
 )
 
-// Native 697e80 (6980d3 / 6982c0), outgoing direction; 699250 binds
-// the selected NPC GID. Decoding a layout does not authorize a transaction.
+// The client's ItemMoveRequest_Serialize (6980D3 / 6982C0), outgoing
+// direction; client CGInterface_RequestItemMove binds the selected NPC
+// GID. Decoding a layout does not authorize a transaction.
 // Action commerce authorizes supported player transactions; COS storage
 // transactions still require a COS inventory authority.
 func (q ItemMoveRequest) encodeCommerce(w *Writer) error {
