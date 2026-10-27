@@ -64,6 +64,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
+import { failureReport, failureSummary } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -350,77 +351,6 @@ async function wave( name, steps ) {
 		} ` +
 			`(wave ${formatSeconds( performance.now() - waveStarted )}s)`
 	);
-}
-
-/*
-================
-exitDescription
-
-How a step's command ended, for the failure report: the signal that
-killed it, its exit code, or - exit 0 - the step's own acceptance check
-that rejected output the command was happy with (gofmt's file list, the
-test budget, the release contract).
-================
-*/
-function exitDescription( result ) {
-	if ( result.signal ) return `killed by ${result.signal}`;
-	if ( result.code === null || result.code === undefined ) return "exit status unknown";
-	if ( result.code === 0 ) return "exit 0, rejected by the step's acceptance check";
-	return `exit ${result.code}`;
-}
-
-/*
-================
-failingPackages
-
-The packages a step's output names as failed, in order, duplicates
-removed: the "FAIL <pkg>" lines of a `go test` run, including the
-"[build failed]" ones. Empty for non-test steps, and for the
-killed-command failure: `go test` prints ok as each package completes,
-so a command killed mid-run leaves an all-ok output and no name.
-================
-*/
-function failingPackages( output ) {
-	const seen = new Set();
-	for ( const match of output.matchAll( /^FAIL\s+(\S+)/gm ) ) {
-		seen.add( match[1] );
-	}
-	return [ ...seen ];
-}
-
-/*
-================
-failureSummary
-
-One failed step in one line, for the thrown error: the label, how the
-command ended and its failing packages, so a log that keeps only the
-error still names them.
-================
-*/
-function failureSummary( result ) {
-	const packages = failingPackages( result.output );
-	const named = packages.length > 0 ? `: ${packages.join( ", " )}` : "";
-	return `${result.label} failed (${exitDescription( result )}${named})`;
-}
-
-/*
-================
-failureReport
-
-One failed step's printed block: the summary line, the failing packages
-(or the note that the output names none), then the full captured output.
-================
-*/
-function failureReport( result ) {
-	const lines = [ `--- ${failureSummary( result )} ---` ];
-	if ( failingPackages( result.output ).length === 0 && result.code !== 0 ) {
-		lines.push(
-			"the output names no failing package: the command itself failed " +
-				"(killed, or a toolchain-level error) before reporting one"
-		);
-	}
-	lines.push( result.output );
-	return lines.join( "\n" );
 }
 
 /*
