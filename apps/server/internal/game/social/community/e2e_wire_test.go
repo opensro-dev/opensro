@@ -15,9 +15,9 @@ package community_test
 //	                0xB3CD [01 00];
 //	0x766F reg   -> the 0xB66F ack {mode 1, result 0, u16 len + name}
 //	                rides the wire (client
-//	                CPSMission_OnAliasActionResponse0xB66F applies the name
-//	                to the
-//	                blocking panel LIVE) and the store persists it;
+//	                CPSMission_OnAliasActionResponse0xB66F applies the
+//	                name to the blocking panel LIVE) and the store
+//	                persists it;
 //	0x766F dup   -> 0xB66F {1, 1} ("Name already exists."), no change;
 //	0x766F unknown> 0xB66F {1, 2} ("User does not exist."), no change;
 //	0x7164       -> SILENT refusal (live handler; unknown target name);
