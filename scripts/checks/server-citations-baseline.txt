@@ -66,8 +66,6 @@ apps/server/internal/game/item/inventory/slots.go 8
 apps/server/internal/game/item/inventory/stack.go 4
 apps/server/internal/game/item/inventory/tradegoods.go 5
 apps/server/internal/game/item/inventory/transfer_test.go 1
-apps/server/internal/game/item/wire/playerspawnrow.go 141
-apps/server/internal/game/item/wire/playerspawnrow_test.go 33
 apps/server/internal/game/item/wire/skillobject.go 1
 apps/server/internal/game/item/wire/skillrecovery.go 1
 apps/server/internal/game/item/wire/skinchange.go 1
