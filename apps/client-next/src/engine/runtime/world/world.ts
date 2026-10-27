@@ -28,7 +28,8 @@ import {
 	initialCameraPitch,
 	initialCameraYaw
 } from "@/engine/foundation/rendering/camera-options";
-import { isDungeonRegion, sectorX, sectorY } from "@/engine/foundation/world/world-space";
+import { featuresAt } from "@/engine/foundation/world/plane";
+import { sectorX, sectorY } from "@/engine/foundation/world/world-space";
 import { sampleCameraWaypoints } from "@/engine/foundation/ui/camera-waypoints";
 
 type Transaction =
@@ -423,7 +424,7 @@ export function createWorldStream(
 		previous = { ...pose };
 		if (
 			transaction.phase === "ready" && transaction.region === pose.regionId && catalog &&
-			!isDungeonRegion( pose.regionId )
+			featuresAt( pose.regionId ).sectorFrames
 		) {
 			const dx = prior?.regionId === pose.regionId ? pose.x - prior.x : 0,
 				dz = prior?.regionId === pose.regionId ? pose.z - prior.z : 0;
@@ -487,7 +488,7 @@ export function createWorldStream(
 		}
 		if ( future && future.region !== pose.regionId ) clearFuture();
 		if ( assets.available() === 0 ) return;
-		if ( isDungeonRegion( pose.regionId ) ) {
+		if ( !featuresAt( pose.regionId ).regionCatalog ) {
 			transaction = { phase: "loading", region: pose.regionId };
 			// A dungeon has its own coordinates; outdoor terrain is not kept meanwhile.
 			terrain.clear();
@@ -652,7 +653,7 @@ export function createWorldStream(
 				transaction.phase === "ready" || transaction.phase === "failed"
 			) return undefined;
 			const region = previous.regionId;
-			const adjacent = !isDungeonRegion( region ) && !isDungeonRegion( displayedRegion ) &&
+			const adjacent = featuresAt( region ).sectorFrames && featuresAt( displayedRegion ).sectorFrames &&
 				Math.abs( sectorX( region ) - sectorX( displayedRegion ) ) <= 1 &&
 				Math.abs( sectorY( region ) - sectorY( displayedRegion ) ) <= 1;
 			return adjacent ? undefined : region;

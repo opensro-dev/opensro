@@ -77,6 +77,17 @@ export interface PlaneFeatures {
 	// A cave pose is a signed 16-bit plane; a field pose is an unsigned
 	// 1920-unit cell (movement-wire's admitPose).
 	readonly signedLocalCoordinates: boolean;
+	// worldMap: the world map (M) projects the position onto its overview
+	// and town pages, and the hunting guide's anchors live there. The map
+	// draws sector space only; a cave has no place on it.
+	readonly worldMap: boolean;
+	// floorMinimap: the minimap draws the floor's own art (minimap_d,
+	// chosen by the floor query) instead of the sector tiles.
+	readonly floorMinimap: boolean;
+	// regionCatalog: a region is found through the world region catalog
+	// and loads its own outdoor bundle; a cave loads its dungeon bundle
+	// (world) and the dungeon resources (navigation) by region id instead.
+	readonly regionCatalog: boolean;
 }
 
 const OUTDOOR_FEATURES = {
@@ -87,10 +98,13 @@ const OUTDOOR_FEATURES = {
 	residentOnly: false,
 	rooms: false,
 	sectorFrames: true,
+	signedLocalCoordinates: false,
+	worldMap: true,
+	floorMinimap: false,
+	regionCatalog: true,
 	sky: true,
 	animatedWater: true,
-	dungeonWater: false,
-	signedLocalCoordinates: false
+	dungeonWater: false
 } as const;
 
 const CAVE_FEATURES = {
@@ -101,10 +115,13 @@ const CAVE_FEATURES = {
 	residentOnly: true,
 	rooms: true,
 	sectorFrames: false,
+	signedLocalCoordinates: true,
+	worldMap: false,
+	floorMinimap: true,
+	regionCatalog: false,
 	sky: false,
 	animatedWater: false,
-	dungeonWater: true,
-	signedLocalCoordinates: true
+	dungeonWater: true
 } as const;
 
 /*

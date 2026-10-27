@@ -175,9 +175,22 @@ func tickPhaseObserver(hub *transport.Hub) func(simulation.TickTiming) {
 	}
 }
 
-// SnapshotSessions lists the in-world sessions for one tick.
+/*
+==================
+SnapshotSessions
+
+Every in-world session's full snapshot for one tick, in hub order.
+==================
+*/
 func (b *Bridge) SnapshotSessions() []simulation.SessionSnapshot {
-	return b.snapshot(false)
+	sessions := b.hub.Sessions()
+	out := make([]simulation.SessionSnapshot, 0, len(sessions))
+	for _, s := range sessions {
+		if snap, ok := b.sessionSnapshot(s, false); ok {
+			out = append(out, snap)
+		}
+	}
+	return out
 }
 
 /*
@@ -187,82 +200,84 @@ SnapshotSessionViews
 The same sessions as SnapshotSessions, without building their peer
 presentation (action speed, spawn skills, guild, stall, companions): the
 tick hooks that read only identity, population, publication and world.
+Each view is taken straight from its session's snapshot, so no full
+snapshot slice is built just to be narrowed.
 ==================
 */
 func (b *Bridge) SnapshotSessionViews() []simulation.SessionView {
-	snaps := b.snapshot(true)
-	views := make([]simulation.SessionView, len(snaps))
-	for i := range snaps {
-		views[i] = snaps[i].View()
+	sessions := b.hub.Sessions()
+	views := make([]simulation.SessionView, 0, len(sessions))
+	for _, s := range sessions {
+		if snap, ok := b.sessionSnapshot(s, true); ok {
+			views = append(views, snap.View())
+		}
 	}
 	return views
 }
 
 /*
 ==================
-snapshot
+sessionSnapshot
 
-One walk for both faces: light skips the peer presentation where the
-provider offers WorldView. Every session filter is shared.
+One session's snapshot for both faces: light skips the peer presentation
+where the provider offers WorldView. Every session filter is here, so the
+full walk and the views agree on which sessions are in the world.
 ==================
 */
-func (b *Bridge) snapshot(light bool) []simulation.SessionSnapshot {
-	sessions := b.hub.Sessions()
-	out := make([]simulation.SessionSnapshot, 0, len(sessions))
-	for _, s := range sessions {
-		if s.Evicted() {
-			// A session evicted by the single-bind swap is a
-			// lame duck — it neither drives the tick nor receives its
-			// pushes while the BYE drains. (Delivery is also refused at
-			// the Session level; this skip stops its snapshot from
-			// feeding the world computation at all.)
-			continue
-		}
-		revision, active := s.SceneRevision()
-		if !active {
-			continue
-		}
-		v, ok := s.WorldSnapshot()
-		if !ok {
-			continue
-		}
-		provider, ok := v.(SnapshotProvider)
-		if !ok {
-			continue
-		}
-		var snap simulation.SessionSnapshot
-		if viewer, ok := v.(ViewProvider); ok && light {
-			view := viewer.WorldView()
-			snap = simulation.SessionSnapshot{DivisionID: view.DivisionID, CharacterID: view.CharacterID,
-				WorldInstance: view.WorldInstance, World: view.World}
-		} else {
-			snap = provider.WorldSnapshot()
-		}
-		if b.PopulationLease != nil {
-			division, name, bound := s.CharacterBinding()
-			if !bound {
-				continue
-			}
-			lease, valid := b.PopulationLease(division, name, s.ID)
-			if !valid || uint32(lease.ID) != snap.WorldInstance {
-				continue
-			}
-			snap.Population = lease
-		}
-		snap.SessionID = sceneSessionID(s.ID, revision)
-		published, current := s.PublishedObjects(revision)
-		if !current {
-			continue
-		}
-		snap.PublishedObjects = published
-		if snap.DivisionID == "" {
-			if div, ok := s.DivisionID(); ok {
-				snap.DivisionID = div
-			}
-		}
-		out = append(out, snap)
+func (b *Bridge) sessionSnapshot(s *transport.Session, light bool) (simulation.SessionSnapshot, bool) {
+	if s.Evicted() {
+		// A session evicted by the single-bind swap is a
+		// lame duck — it neither drives the tick nor receives its
+		// pushes while the BYE drains. (Delivery is also refused at
+		// the Session level; this skip stops its snapshot from
+		// feeding the world computation at all.)
+		return simulation.SessionSnapshot{}, false
 	}
-	return out
+	revision, active := s.SceneRevision()
+	if !active {
+		return simulation.SessionSnapshot{}, false
+	}
+	v, ok := s.WorldSnapshot()
+	if !ok {
+		return simulation.SessionSnapshot{}, false
+	}
+	provider, ok := v.(SnapshotProvider)
+	if !ok {
+		return simulation.SessionSnapshot{}, false
+	}
+	var snap simulation.SessionSnapshot
+	if viewer, ok := v.(ViewProvider); ok && light {
+		view := viewer.WorldView()
+		snap = simulation.SessionSnapshot{DivisionID: view.DivisionID, CharacterID: view.CharacterID,
+			WorldInstance: view.WorldInstance, World: view.World}
+	} else {
+		snap = provider.WorldSnapshot()
+	}
+	if b.PopulationLease != nil {
+		division, name, bound := s.CharacterBinding()
+		if !bound {
+			return simulation.SessionSnapshot{}, false
+		}
+		lease, valid := b.PopulationLease(division, name, s.ID)
+		if !valid || uint32(lease.ID) != snap.WorldInstance {
+			return simulation.SessionSnapshot{}, false
+		}
+		snap.Population = lease
+	}
+	snap.SessionID = sceneSessionID(s.ID, revision)
+	// Shared, not copied: the full walk and every view hook read this set
+	// each tick, and every tick reader only reads it (SessionSnapshot).
+	published, current := s.PublishedObjectsShared(revision)
+	if !current {
+		return simulation.SessionSnapshot{}, false
+	}
+	snap.PublishedObjects = published
+	if snap.DivisionID == "" {
+		if div, ok := s.DivisionID(); ok {
+			snap.DivisionID = div
+		}
+	}
+	return snap, true
 }
 
 /*

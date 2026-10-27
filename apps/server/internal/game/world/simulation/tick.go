@@ -76,6 +76,9 @@ type SessionSnapshot struct {
 	WorldInstance uint32
 	Population    instance.Lease
 	// Non-nil is the transport's detached, revision-checked publication set.
+	// READ ONLY: it is the session's kept set, shared by this tick's
+	// snapshot and views (transport.Session.PublishedObjectsShared), which
+	// no later change rewrites. Replace the field; never write an element.
 	PublishedObjects []uint32
 	// CombatEligible reports whether this session represents a living,
 	// targetable player (LIFE == 1 in native terms). Dead players or sessions
@@ -151,7 +154,8 @@ The part of a SessionSnapshot that tick hooks read: identity, population,
 publication set and world. It has no peer presentation (Appearance, COS,
 Companions), so it is cheap to build, and a consumer that needs the
 presentation cannot be handed one: monster acquisition, peer interest and
-the player map keep taking the full SessionSnapshot.
+the player map keep taking the full SessionSnapshot. PublishedObjects is
+read only, as in SessionSnapshot.
 ==================
 */
 type SessionView struct {

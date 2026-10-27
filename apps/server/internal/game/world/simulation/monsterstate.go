@@ -514,6 +514,22 @@ func (s *MonsterState) MaterializedInstances(divisionID string) []monster.Instan
 	return out
 }
 
+/*
+================
+CurrentHP
+
+Get(divisionID, gid)'s CurrentHP and existence without copying the
+instance. Per-tick sweeps that only ask whether an actor still lives use
+it; Get's summon-action expiry never touches HP, so the two agree.
+================
+*/
+func (s *MonsterState) CurrentHP(divisionID string, gid uint32) (uint32, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.populationForObject(divisionID, gid).instances.currentHP(gid)
+}
+
 // Get returns a value snapshot of one live instance.
 /*
 ================
@@ -524,12 +540,13 @@ func (s *MonsterState) Get(divisionID string, gid uint32) (monster.Instance, boo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	state := s.populationForObject(divisionID, gid)
-	instance, ok := state.instances.lookup(gid)
-	if ok {
-		instance = finishSummonAction(instance, s.nowMillis())
+	state, slot := s.locateObject(divisionID, gid)
+	if state == nil {
+		return monster.Instance{}, false
 	}
-	return instance, ok
+	instance := state.instances.slotValue(gid, &slot)
+	clearExpiredSummonAction(&instance, s.nowMillis())
+	return instance, true
 }
 
 /*
