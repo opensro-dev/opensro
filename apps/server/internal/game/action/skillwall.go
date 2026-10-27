@@ -5,18 +5,18 @@ skillwall.go - the Chinese Force walls (Crystal Wall, Fire Wall)
 
 The cast installs the caster's persistent instance and fills the actor's
 single wall slot (+0xC0C) with it, the pool loaded from pw word 1
-(593662..5936A5). While the wall stands:
+at the engage. While the wall stands:
 
-	hits      58E5F0 splits every monster hit: the wall's lanes land on a
+	hits      the hit outcome splits every monster hit: the wall's lanes land on a
 	          second target entry (type-7 records), the defender's own
 	          record loses them (combat.ResolveAgainstWall)
-	drain     593C5E takes the impacts' absorbed total from the pool
-	update    5851F7 retires the wall once the pool is 0; 585262 pays onff
+	drain     the result pass takes the impacts' absorbed total from the pool
+	update    the persistent cast retires the wall once the pool is 0; it pays onff
 	          word 1 MP every onff period or retires it
 	footing   the wall's motion (0x11) refuses further ao / pw casts
-	          (58E0EB), as sitting or riding does
+	          as sitting or riding does
 
-The slot empties when the instance retires (5829D0 at 582DC0).
+The slot empties when the instance retires.
 
 ===========================================================================
 */
@@ -50,7 +50,7 @@ func wallKey(division, name string) string {
 ==================
 acceptWall
 
-583657 for a pw row: charge the cast, install the caster's persistent
+The native persistent cast for a pw row: charge the cast, install the caster's persistent
 instance and load the slot.
 ==================
 */
@@ -97,17 +97,15 @@ func (rt *Runtime) acceptWall(division string, c, snapshot *enterworld.Character
 		}
 		return OpResult{DiagnosticRefusal: "wall-commit-refused"}
 	}
-	// CastLifecycle_ProcessPersistent (5830B0) enters sub-state 0 (583530) and,
-	// on its TargetRequired == 0 self-persistent branch (583609 -> 583C33 ->
-	// 583DDC -> 583FFB), calls SkillPacket_SendCancelAction(1, 0, castToken, 0)
-	// at 584088..58408A before queueing the sub-state 1 child command (584096..
-	// 5841D9) that clears char+C08 (5841F4) and engages the wall in char+C0C
-	// (584337 -> 59369F). Mode-1 B505 releases the client's stage-0 WAIT
-	// (8E2C90 -> 8DF180) so the caster finishes ANI_SKILL_4 and extinguishes
-	// the READY hand effects instead of freezing in ANI_WAIT04. Natively
-	// the standing wall roots through motion state 11 (593690..5936A5)
-	// until the wall retires (B6A0); CGObjChar_IsAttackLocked
-	// (4AAB40..4AAB5A) reads char+C08 and char+C44, not char+C0C, so the
+	// The native persistent cast enters sub-state 0 and, on its
+	// TargetRequired == 0 self-persistent branch, sends the cancel action
+	// (1, 0, castToken, 0) before queueing the sub-state 1 child command that
+	// clears char+C08 and engages the wall in char+C0C. Mode-1 B505 releases the
+	// client's stage-0 WAIT (8E2C90 -> 8DF180) so the caster finishes ANI_SKILL_4
+	// and extinguishes the READY hand effects instead of freezing in ANI_WAIT04.
+	// Natively the standing wall roots through motion state 11 until the wall
+	// retires (B6A0); the native attack-lock test reads char+C08 and char+C44,
+	// not char+C0C, so the
 	// port's wallStanding fold in PlayerAttackLocked carries the root on
 	// the server lanes.
 	rt.queuePersistentRelease(division, c, token, skill, now)
@@ -149,7 +147,7 @@ func (rt *Runtime) standingWallOf(division, name string) (standingWall, bool) {
 	return *w, true
 }
 
-// drainWall is 593C5E: the pool loses the absorbed total, floored at 0.
+// drainWall is the native pool drain: the pool loses the absorbed total, floored at 0.
 func (rt *Runtime) drainWall(division, name string, token, absorbed uint32) {
 	rt.wallMu.Lock()
 	defer rt.wallMu.Unlock()
@@ -164,7 +162,7 @@ func (rt *Runtime) drainWall(division, name string, token, absorbed uint32) {
 ==================
 wallRecords
 
-58EE49..58F0B2 for one hit's committed impacts: each covered impact adds
+The native wall pass for one hit's committed impacts: each covered impact adds
 its absorbed damage to the group total and reports the pool that total
 leaves; an empty pool or an uncovered attack yields a bare type 8. Returns
 the records and the total the pool must lose.
@@ -207,9 +205,9 @@ type wallSplit struct {
 ==================
 advanceWalls
 
-The 5830B0 update of every standing wall: the caster and instance must
-live, an empty pool retires it (5851F7), and the onff pulse is paid or
-retires it (585262).
+The native persistent update of every standing wall: the caster and instance must
+live, an empty pool retires it, and the onff pulse is paid or
+retires it.
 ==================
 */
 func (rt *Runtime) advanceWalls(now int64) []simulation.DivisionFrames {
@@ -263,7 +261,7 @@ func (rt *Runtime) retireWall(w *standingWall) {
 	request()
 }
 
-// wallStanding feeds the 58E0EB footing gate.
+// wallStanding feeds the native footing gate.
 func (rt *Runtime) wallStanding(division, name string) bool {
 	_, ok := rt.standingWallOf(division, name)
 	return ok
@@ -273,12 +271,12 @@ func (rt *Runtime) wallStanding(division, name string) bool {
 ==================
 queuePersistentRelease
 
-CastLifecycle_ProcessPersistent (5830B0) sends the mode-1 release (B071 in
+The native persistent cast sends the mode-1 release (B071 in
 v1.188, B505 here) across all four sub-state 0 branches via
-SkillPacket_SendCancelAction (59AE10): TargetRequired != 0 party aura
-(+0x28C at 5836F5), world-object spawn (+0x294 at 583CF0), TargetRequired == 0
-party aura (+0x28C at 583E4F), and TargetRequired == 0 self-persistent / pw
-wall (583FFB..58408A). The port installs the aura or wall at the press, so
+its cancel-action send: TargetRequired != 0 party aura
+(+0x28C), world-object spawn (+0x294), TargetRequired == 0
+party aura (+0x28C), and TargetRequired == 0 self-persistent / pw
+wall. The port installs the aura or wall at the press, so
 the release lands at the end of the authored casting time, where the native
 lifecycle reaches it: the client's WAIT ends, the shot motion plays and the
 caster goes back to idle while the aura or wall stands. No mode-2 close

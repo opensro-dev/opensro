@@ -21,7 +21,7 @@ import (
 ================
 RecoverLevelVitals
 
-SR_GameServer 4E5065..4E50AF recovers the missing HP and MP only on an
+The reference server recovers the missing HP and MP only on an
 upward level crossing, through the normal reduced-recovery path. The
 supplied character is progression's detached post-level candidate; only
 that candidate is changed if all keeper inputs are valid.

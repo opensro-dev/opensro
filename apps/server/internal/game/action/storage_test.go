@@ -164,7 +164,7 @@ func TestStorageRefusesUnstorableItemsAndOverdrafts(t *testing.T) {
 ================
 TestStorageFollowsTheNpcRangeAndFunctionState
 
-The room list takes the 4A8E10 range gate and answers too far; moves need
+The room list takes the hit-range gate and answers too far; moves need
 the storage function an in-range request opened, as trades do.
 ================
 */
@@ -223,7 +223,7 @@ func TestWarehouseTicketOpensTheRoomAnywhere(t *testing.T) {
 		t.Fatalf("remote deposit = %+v", r)
 	}
 	// A new selection leaves the ticket's room open (native reads the
-	// warehouse-open record, 524090); the window's close ends it.
+	// warehouse-open record); the window's close ends it.
 	rt.Selected.Set(testDivision, c.Name, 17)
 	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 0, DestSlot: slot, NpcGID: self})
 	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 0 {
@@ -250,7 +250,7 @@ BR-261011-1342-EE58 ("can not put gold in storage"): the client selects
 the keeper again (0x745A) when it is clicked with the window open, which
 ended the port's selection-held function state, so every gold move was
 refused. Native warehouse moves read the player's own warehouse-open
-record (526CE0 gold, 524160 deposit), never the selection.
+record (the gold and deposit moves), never the selection.
 ================
 */
 func TestStorageStaysOpenAcrossANewSelection(t *testing.T) {

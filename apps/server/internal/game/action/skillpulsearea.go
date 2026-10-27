@@ -6,10 +6,10 @@ its owner on a period
 
 A pulse-area effect (enterworld.SkillPulseArea) installs through the
 ordinary timed self-effect release. While its instance lives,
-CastLifecycle_ProcessPersistent selects the area afresh each time puls has
+the native persistent cast selects the area afresh each time puls has
 elapsed since the last pulse (efr kind 2, centred on the owner, at most
 its most-targets, each later victim's share cut by the reduction) and
-strikes every victim with the pdmg record (40F5F0). The victims' results
+strikes every victim with the pdmg record. The victims' results
 leave in one B0BC (v1.150 B3C6 mode 2, wire.SkillPulseFrame). The hits
 are the owner's credited hits; a fatal one settles rewards.
 

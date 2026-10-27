@@ -36,7 +36,7 @@ func TestJobGoodsTeleportFromEnv(t *testing.T) {
 ================
 TestTownGateAdmitsATransportOnlyWithTheRule
 
-513A70 kind 2: natively a near transport is refused (0x10); with the rule
+The reference server's teleport link check, kind 2: natively a near transport is refused (0x10); with the rule
 it passes. A far transport is refused either way (0x13): it could not
 come along.
 ================
@@ -83,7 +83,7 @@ func summonTestTransport(rt *Runtime, c *enterworld.Character) {
 ================
 TestReturnScrollWithATransportOnlyWithTheRule
 
-4A0380: natively a transport refuses the scroll (0x5E) and nothing starts;
+The reference server's return scroll: natively a transport refuses the scroll (0x5E) and nothing starts;
 with the rule the cast starts and completes, and the transport stays out.
 ================
 */
@@ -117,7 +117,7 @@ func TestReturnScrollWithATransportOnlyWithTheRule(t *testing.T) {
 ================
 TestReverseReturnWithATransportOnlyWithTheRule
 
-4F2B50 case 5: natively a transport refuses the guide's reverse return
+The reference server's teleport use, case 5: natively a transport refuses the guide's reverse return
 (0x10); with the rule the player travels to where they died.
 ================
 */

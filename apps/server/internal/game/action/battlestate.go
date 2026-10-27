@@ -3,16 +3,14 @@
 
 battlestate.go - the player battle state
 
-CGObjPC_SetBattleState (4E2910) stores state+0xD (state channel 8) and, on
-entry, arms the 20-count timer at +0x203C; a change of value publishes
-0x30BF through CGObjChar_BroadcastStateChannel (4A8340), 0x3122 channel 8
+The reference server's battle-state setter stores state+0xD (state channel 8)
+and, on entry, arms the 20-count timer at +0x203C; a change of value publishes
+0x30BF through its state-channel broadcast, 0x3122 channel 8
 on the v1.150 wire (client 777E84 -> localPlayer +0x781).
-CGObjPC_TickStateTimers (52AA90) counts the timer down and leaves battle at
-zero. A player enters battle by striking (CGObjPC_EnterBattleOnAttack
-4E27C0, vtable +0x508), by being struck (CGObjPC_EnterBattleOnAttacked
-4E1DF0 from ProcessNormalHit) and by a hit on their pet
-(CGObjCOS_ProcessNormalHit 52A1E0). Death leaves battle (529C93) before
-the life change.
+Its state-timer tick counts the timer down and leaves battle at
+zero. A player enters battle by striking (vtable +0x508), by being struck
+(from the hit path) and by a hit on their pet (the pet's hit path). Death
+leaves battle before the life change.
 
 The tick behind +0x680 is the per-second state callback: each call
 advances the character's timed-action clock by exactly one second, so
@@ -33,7 +31,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// battleStateMs is the +0x203C count (4E2915) at one tick per second.
+// battleStateMs is the +0x203C count at one tick per second.
 const battleStateMs = 20 * 1000
 
 // battleExpiry is the tick index entry; the character store owns the state.
@@ -80,7 +78,7 @@ func (rt *Runtime) enterBattleState(division string, c *enterworld.Character, no
 ==================
 leaveBattleState
 
-Clears the state (death, 529C93). The caller holds the character door and
+Clears the state (death). The caller holds the character door and
 publishes the returned frame, if any, before the life change.
 ==================
 */
@@ -98,7 +96,7 @@ func (rt *Runtime) leaveBattleState(division string, c *enterworld.Character, no
 ==================
 advanceBattleStates
 
-The 52AA90 countdown: players whose timer ran out leave battle and every
+The native state-timer countdown: players whose timer ran out leave battle and every
 observer sees channel 8 return to 0. A restarted timer or a cleared state
 leaves the stale index entry without effect.
 ==================

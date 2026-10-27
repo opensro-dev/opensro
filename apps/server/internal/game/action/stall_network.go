@@ -14,8 +14,8 @@ owner pays the network's 1% commission.
 
 The search's last byte is the small-category combo's index (id 43,
 CIFStallNetwork_SendSearch 5ABB90): the degree, 0 for any. An offer's
-degree is CGItem_GetDegree (v1.188 4775A0, enterworld.ItemDegree), which
-v1.188's open market stores on every listing (4781C0), so an elixir's
+degree is the native item degree (enterworld.ItemDegree), which
+v1.188's open market stores on every listing, so an elixir's
 degree is its class.
 
 INFERENCE: outside a town a search answers 0x49, which closes the window

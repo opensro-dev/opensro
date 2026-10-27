@@ -21,8 +21,8 @@ const (
 	partyFailureTimeout        byte = 0x10
 	partyFailureFormRefused    byte = 0x0c
 	partyFailureJoinRefused    byte = 0x17
-	// partyFailureJobMismatch is ShardManager 44ED70/44F130's 0x2C23 for
-	// two players whose job classes may not party (44ED20); v1.150 shows
+	// partyFailureJobMismatch is the reference shard manager's 0x2C23 for
+	// two players whose job classes may not party; v1.150 shows
 	// UIIT_MSG_PARTY_USER_MISSMATCH.
 	partyFailureJobMismatch byte = 0x23
 )
@@ -46,7 +46,7 @@ type partyConsent struct {
 ================
 notifyInvitationFailure
 
-5BE9B0/5BEA20 fan out to both surviving peers; B452 is the invitee carrier.
+The reference server's formation and join failures fan out to both surviving peers; B452 is the invitee carrier.
 The pending record retains the formation/join distinction after consumption.
 ================
 */
@@ -87,7 +87,7 @@ func (r *Runtime) applyPartyConsent(session *transport.Session, divisionID strin
 	inviter := findCharacterByName(r.deps, divisionID, invite.InviterName)
 	inviterSession, online := r.sessionByName(divisionID, invite.InviterName)
 	if inviter == nil || !online {
-		// 5BE45B / 5BE3E3 report 2C0E when the proposer has disappeared.
+		// Natively 2C0E is reported when the proposer has disappeared.
 		r.notifyInvitationFailure(invite, partyFailureCreatorMissing)
 		return
 	}
@@ -125,7 +125,7 @@ under its lock, then both sessions get the 0xB0D5 + 0x35D6 seed.
 func (r *Runtime) commitFormConsent(consent partyConsent) byte {
 	targetSession, inviterSession := consent.targetSession, consent.inviterSession
 	divisionID, inviter, target, optionBits := consent.invite.divisionID, consent.inviter, consent.target, consent.invite.OptionBits
-	// 44ED70 refuses the pair after its own partyless checks; the registry
+	// The reference shard manager refuses the pair after its own partyless checks; the registry
 	// repeats those under its lock when it forms the party.
 	if !enterworld.JobsMayParty(enterworld.PartyJobClass(inviter), enterworld.PartyJobClass(target)) {
 		return partyFailureJobMismatch
@@ -135,7 +135,7 @@ func (r *Runtime) commitFormConsent(consent partyConsent) byte {
 	snapshot, refusal := r.registry.Form(divisionID, leader, second, optionBits)
 	if refusal != "" {
 		// Inference: local registry rejection replaces a failed coordinator job;
-		// use its generic failure (5BE447 / 5BE3BB), never silent success.
+		// use its generic failure, never silent success.
 		return partyFailureUnknown
 	}
 	rows := r.rosterRows(divisionID, snapshot)
@@ -168,7 +168,7 @@ func (r *Runtime) commitJoinConsent(consent partyConsent) byte {
 	if snapshot.LeaderID != inviterID && snapshot.OptionBits&PartyOptionJoinAnyone == 0 {
 		return partyFailureUnknown
 	}
-	// 44F130 compares the joiner with the party's job class. Members cannot
+	// The reference shard manager compares the joiner with the party's job class. Members cannot
 	// change suits inside a party (0xA0), so the leader's class is the
 	// party's.
 	if !enterworld.JobsMayParty(r.partyJobClass(divisionID, snapshot, inviter), enterworld.PartyJobClass(target)) {
@@ -178,7 +178,7 @@ func (r *Runtime) commitJoinConsent(consent partyConsent) byte {
 	joined, refusal := r.registry.Join(divisionID, inviter.Name, joiner)
 	if refusal != "" {
 		// Inference: local registry rejection replaces a failed coordinator job;
-		// use its generic failure (5BE447 / 5BE3BB), never silent success.
+		// use its generic failure, never silent success.
 		return partyFailureUnknown
 	}
 	joinRow := r.memberRowFor(divisionID, target)

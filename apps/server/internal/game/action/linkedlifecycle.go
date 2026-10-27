@@ -15,7 +15,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// 58482E..584A67 checks the live pair, not the two original cast positions.
+// The reference server checks the live pair, not the two original cast positions.
 // Retirement itself stays in the existing character-effect update owner.
 /*
 ================
@@ -45,7 +45,7 @@ func (rt *Runtime) advanceLinkedEffectInDivision(link statuseffect.Link, nowMs i
 	if valid && link.MaxDistance != 0 {
 		from := rt.liveSpawn(simulation.WorldKey(link.DivisionID, source.Name), source, nowMs)
 		to := rt.liveSpawn(simulation.WorldKey(link.DivisionID, target.Name), target, nowMs)
-		// 5849F1 shares the trap tether's native 3D distance and float stores.
+		// The reference server shares the trap tether's native 3D distance and float stores.
 		a := monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}
 		b := monster.Pose{RegionID: to.RegionID, X: to.X, Y: to.Y, Z: to.Z}
 		valid = monster.NativeActorDistance(a, b) <= float32(link.MaxDistance)

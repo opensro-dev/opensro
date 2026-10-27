@@ -42,7 +42,7 @@ type skillHealingThreat struct {
 ================
 makeSkillHealingThreat
 
-5A09D3 / 5A0B69 add the two dwords before 5A0650 halves the signed sum.
+Natively both heal routines add the two dwords before the healing threat halves the signed sum.
 ================
 */
 func makeSkillHealingThreat(division string, caster, recipient *enterworld.Character, skill enterworld.SkillRow) skillHealingThreat {
@@ -73,7 +73,7 @@ func (rt *Runtime) publishSkillHealingThreat(heal skillHealingThreat, now int64)
 ================
 healingThreatActor
 
-589CC0 calls the actor-class predicates at vtable 3C8/3CC/3D4/28. Only
+The native combat-AI test calls the actor-class predicates at vtable 3C8/3CC/3D4/28. Only
 the first siege subtype additionally reads life state (F8). Squad lifetime
 and hostility admission independently retire dead ordinary monsters.
 ================

@@ -3,7 +3,7 @@
 
 war_publish.go - guild-war rows, combat receipts and terminal publication
 
-GameServer 5CFD30 writes remaining seconds, victory-point index, combined
+The GameServer writes remaining seconds, victory-point index, combined
 stake, opponents and scores. Client 75AD90 consumes that exact layout.
 
 ===========================================================================
@@ -86,7 +86,7 @@ func (r *WarRuntime) publishWarEnd(division string, war domain.GuildWarRecord, w
 ================
 handleWarSurrender
 
-5C7390 requires a guild master; the opposing guild receives the stake.
+The native war end requires a guild master; the opposing guild receives the stake.
 ================
 */
 func (r *WarRuntime) handleWarSurrender(s *transport.Session, _ uint16, payload []byte) {
@@ -107,7 +107,7 @@ func (r *WarRuntime) handleWarSurrender(s *transport.Session, _ uint16, payload 
 	}
 	var war domain.GuildWarRecord
 	if code == 0 {
-		// Approved parity exception: native 5C7390 / ShardManager 43CB50
+		// Approved parity exception: the native war end and the ShardManager
 		// omit participant admission. A third guild cannot surrender this war.
 		for _, row := range r.Authority.Wars(division, *c.GuildID) {
 			if row.ID == id {
@@ -130,7 +130,7 @@ func (r *WarRuntime) handleWarSurrender(s *transport.Session, _ uint16, payload 
 	if winner == *c.GuildID {
 		winner = war.Guilds[1]
 	}
-	// Shard 4289F0 admits the job per requester/opcode, not per war.
+	// The shard manager admits the job per requester/opcode, not per war.
 	// Both masters may surrender; the first queued deadline settles the war.
 	for _, pending := range r.ending {
 		if pending.requester == c.Name {
@@ -140,7 +140,7 @@ func (r *WarRuntime) handleWarSurrender(s *transport.Session, _ uint16, payload 
 	}
 	r.ending = append(r.ending, pendingWarEnd{war: war, winner: winner, requester: c.Name, deadline: r.Now().UnixMilli() + guildWarSurrenderDelayMs})
 
-	// 5CAC40 sends the surrendering side 1A, the other side 1B, before 1C.
+	// Natively the surrendering side gets 1A, the other side 1B, before 1C.
 	r.unions.sendToGuild(division, *c.GuildID, OpGuildUpdatePush, wire.NewWriter(5).U8(0x1a).U32(id).Payload())
 	r.unions.sendToGuild(division, winner, OpGuildUpdatePush, wire.NewWriter(5).U8(0x1b).U32(id).Payload())
 
@@ -252,7 +252,7 @@ func (r *WarRuntime) Tick(nowMs int64) []simulation.DivisionFrames {
 	return nil
 }
 
-// 43CB50 initializes the surrender job with float duration 60 seconds.
+// The shard manager initializes the surrender job with float duration 60 seconds.
 const guildWarSurrenderDelayMs int64 = 60 * 1000
 
 /*

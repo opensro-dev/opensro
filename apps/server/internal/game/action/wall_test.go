@@ -220,17 +220,17 @@ func TestWallBreaksRetiresAndBlocksASecondWall(t *testing.T) {
 ================
 TestWallRootsItsCasterUntilItRetires
 
-CastLifecycle_ProcessPersistent (5830B0) releases the wall's stage-0 WAIT
-at ActionCastingTimeMs with a single mode-1 B505 (584088..58408A ->
-59AE10(1, 0, castToken, 0)), so the client completes ANI_SKILL_4 to idle
+The reference server's persistent cast releases the wall's stage-0 WAIT
+at ActionCastingTimeMs with a single mode-1 B505 (its cancel action
+send (1, 0, castToken, 0)), so the client completes ANI_SKILL_4 to idle
 and extinguishes the READY hand effects (8E2C90 -> 8DF180 -> 8DF480). No
 mode-2 B505 is sent while the wall stands. Natively the wall roots
-through motion state 11 (593690..5936A5); CGObjChar_IsAttackLocked
-(4AAB40..4AAB5A) reads char+C08 / char+C44, so the port folds char+C0C
+through motion state 11 (the skill engage); the attack lock
+reads char+C08 / char+C44, so the port folds char+C0C
 into PlayerAttackLocked for the wall's lifetime: both ground clicks and
 auto-navigator pursuit/pickup walks are dropped until the wall retires,
-an in-range basic attack is held (4AD91A..4AD929), and an in-range skill
-cast still fires in place (4AE590).
+an in-range basic attack is held, and an in-range skill
+cast still fires in place.
 ================
 */
 func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
@@ -281,7 +281,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 	}
 
 	// Out-of-range combat pursuit and out-of-range ground-item pickup must
-	// not walk the caster out of the standing wall (4B0490 -> 4B0EA0 -> 4B0F8E).
+	// not walk the caster out of the standing wall (pursuit tick -> move command, dropped).
 	worldKey := simulation.WorldKey(testDivision, c.Name)
 	start := rt.liveSpawn(worldKey, c.Snapshot(), clock.NowMs())
 	farDrop := rt.Ground.Add(testDivision, grounditem.Item{
@@ -312,7 +312,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 		t.Fatalf("combat pursuit moved caster from (%v,%v) to (%v,%v)", start.X, start.Z, after.X, after.Z)
 	}
 
-	// The in-range intent is held by the same lock (4AD91A..4AD929): no
+	// The in-range intent is held by the same lock: no
 	// B245 opens and the monster keeps its HP while the wall stands.
 	before, _ := rt.Monsters.Get(testDivision, mob.Gid)
 	held := rt.advanceBasicAttackIntent(c, basicAttackIntent{
@@ -325,7 +325,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 		t.Fatalf("held basic attack damaged the monster: %d -> %d", before.CurrentHP, after.CurrentHP)
 	}
 
-	// An in-range skill cast still fires in place (4AE590): the SingleCast
+	// An in-range skill cast still fires in place: the SingleCast
 	// exemption opens its cast and the monster loses HP.
 	smash := shippedOffense(t, "SKILL_CH_SWORD_SMASH_A_01")
 	smash.ChainNext = 0

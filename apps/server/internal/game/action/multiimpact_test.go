@@ -20,9 +20,9 @@ import (
 ==================
 TestAreaCarriesEveryImpactPerVictim
 
-58E5F0 loops every mc impact over every target group: each victim gets one
+Natively every mc impact loops over every target group: each victim gets one
 record per impact and loses their sum. A victim killed by an earlier
-impact gets bare type-8 records for the rest (58EE1B).
+impact gets bare type-8 records for the rest.
 ==================
 */
 func TestAreaCarriesEveryImpactPerVictim(t *testing.T) {
@@ -133,9 +133,9 @@ func arrowStack(c *enterworld.Character) (int64, bool) {
 ==================
 TestBowChainSpendsAnArrowPerImpact
 
-585AF0: a shot spends cnsm count x mc impacts arrows (BOW_CHAIN_A: 1 x 2)
+A shot spends cnsm count x mc impacts arrows (BOW_CHAIN_A: 1 x 2)
 and both impacts land at release. With a single arrow left the shot is
-still admitted (58E348 tests only the item) and spends that one.
+still admitted (natively only the item is tested) and spends that one.
 ==================
 */
 func TestBowChainSpendsAnArrowPerImpact(t *testing.T) {
@@ -164,8 +164,8 @@ func TestBowChainSpendsAnArrowPerImpact(t *testing.T) {
 ==================
 TestHPCostChecksMaximumChargesCurrentAndNeverKills
 
-58E1B6: current HP below the flat + percent-of-MAXIMUM cost refuses 0x3013.
-58312C charges the percent of CURRENT HP; 4A8770 clamps the debit so the
+Natively current HP below the flat + percent-of-MAXIMUM cost refuses 0x3013.
+The charge takes the percent of CURRENT HP, clamped so the
 caster keeps 1 HP.
 ==================
 */

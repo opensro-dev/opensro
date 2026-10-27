@@ -4,8 +4,8 @@
 jobparty_e2e_test.go - opposing job users cannot party together, and a
 suited member shows as its job alias
 
-ShardManager 44ED70 (forming) and 44F130 (joining) refuse two players
-whose active job classes may not party (44ED20) with 0x2C23: traders and
+The shard manager refuses (forming and joining) two players
+whose active job classes may not party with 0x2C23: traders and
 hunters together, thieves only with thieves, players outside job mode only
 with each other.
 
@@ -48,7 +48,7 @@ func dressForJob(t *testing.T, server e2eServer, name string, job uint8) {
 ================
 dressForJobWithAlias
 
-dressForJob, also giving the character its job alias (the nickname 5BAE80
+dressForJob, also giving the character its job alias (the nickname natively
 puts on a suited member's roster row).
 ================
 */
@@ -103,7 +103,7 @@ func TestOpposingJobsCannotFormOrJoinAParty(t *testing.T) {
 	}
 
 	// A trader and a hunter party together, each row named by the member's
-	// job alias (5BAE80).
+	// job alias (as natively).
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidC, 0x03))
 	expectPartyPrompt(t, connC, gidA, "the hunter's proposal", 2, 3)
 	sendFrame(t, connC, party.OpInvitationProposal, consentFrame(1))
@@ -126,7 +126,7 @@ func TestOpposingJobsCannotFormOrJoinAParty(t *testing.T) {
 ================
 TestMatchJoinCommitRefusesOpposingJobs
 
-The match board's commit repeats 44F850's pair test: a thief cannot join a
+The match board's commit repeats the shard manager's pair test: a thief cannot join a
 trader's listing even once the owner has approved.
 ================
 */

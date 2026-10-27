@@ -46,7 +46,7 @@ func hawkStrikes(rt *Runtime, ms int64) [][]byte {
 ================
 TestBlackHawkStrikesWhatItsOwnerAttacks
 
-582750: the hawk strikes only after its owner attacks, once per summ
+Natively the hawk strikes only after its owner attacks, once per summ
 interval, while the owner attacked within the last interval. Each strike is
 the 357A frame {effect token, target, damage} and damages the monster.
 ================

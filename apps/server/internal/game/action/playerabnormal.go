@@ -55,7 +55,7 @@ const (
 playerAbnormalStore
 
 playerAbnormalStore owns every character's abnormal-state block (the
-CGObjChar block at +D30 of a CGObjPC). Stored blocks are immutable
+character block at +D30 of a player object). Stored blocks are immutable
 snapshots; every change commits a fresh copy under the character door.
 ==================
 */
@@ -143,7 +143,7 @@ func (rt *Runtime) playerAbnormalCandidates() []playerAbnormalEntry {
 ================
 PlayerMovementBlocked
 
-4B0EA0 drops ground commands while frozen, asleep, rooted or stunned.
+The reference server's move command drops ground commands while frozen, asleep, rooted or stunned.
 ================
 */
 func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
@@ -163,21 +163,21 @@ func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 ================
 PlayerAttackLocked
 
-CGObjChar_IsAttackLocked (4AAB40..4AAB5A): true while the casting instance
-at char+C08 is set (4AAB40..4AAB4E, [skillComp+1D8], a skill action has not
+The reference server's attack lock: true while the casting instance
+at char+C08 is set ([skillComp+1D8], a skill action has not
 yet released its positive-time step) or the standing-instance pointer at
-char+C44 is set (4AAB4F..4AAB5A, [skillComp+214]: the stns +448 slot written
-at 594F4D and cleared at 582C3B). The predicate does not read char+C0C, the
-protective-wall slot ([skillComp+1DC]) that SkillCombat_EngageSkill fills
-at 59369F and wall retirement clears at 582DCE / 585351..58536A; natively
-the standing wall roots through motion state 11 (593690..5936A5). This
+char+C44 is set ([skillComp+214]: the stns +448 slot written
+by the buff modifier pass and cleared on retirement). The predicate does not read char+C0C, the
+protective-wall slot ([skillComp+1DC]) that the skill engage fills
+and wall retirement clears; natively
+the standing wall roots through motion state 11. This
 port folds its wallStanding (char+C0C) in beside chainStageBlocked
 (char+C08) so the same root holds on the lanes below.
-CGObjPC_IsMotionChangeLocked (4EF880, vt+0x5A0) feeds it to
-CGObjChar_HandleMoveCommand (4B0EA0 at 4B0F8E), which drops both direct
-ground moves and CGCharAutoNavigator_TickPursuit's internal 0x7021 moves
-(4B0490 at 4B0813 / 4B0A89), and to CGCharAutoCommandActor_Handler_NormalAttack
-(4AD8E0 at 4AD91F): a player cannot walk out of a cast or a standing wall.
+The motion-change lock (vt+0x5A0) feeds it to
+the move command, which drops both direct
+ground moves and the auto-navigator pursuit's internal 0x7021 moves,
+and to the normal-attack auto command:
+a player cannot walk out of a cast or a standing wall.
 ================
 */
 func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
@@ -188,7 +188,7 @@ func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
 ==================
 playerCastBlocked
 
-playerCastBlocked is 58D8F0's pre-engage abnormal gate (0x3009): freeze,
+playerCastBlocked is the native pre-engage abnormal gate (0x3009): freeze,
 sleep and stun (mask 4041) forbid every command. The 'nmf' waiver and the
 MOB_RM_SEALSTONE exemption name no v1.150 player skill.
 ==================
@@ -301,7 +301,7 @@ func (o *playerAbnormalOwner) CurrentHP() uint32 {
 ================
 MaxHP
 
-4A5320 applies the working block's factor before computing its HP drain.
+The native panic callback applies the working block's factor before computing its HP drain.
 ================
 */
 func (o *playerAbnormalOwner) MaxHP() uint32 {
@@ -312,7 +312,7 @@ func (o *playerAbnormalOwner) MaxHP() uint32 {
 ================
 MaxMP
 
-4A54A0 applies the working block's factor before computing its MP drain.
+The native combustion callback applies the working block's factor before computing its MP drain.
 ================
 */
 func (o *playerAbnormalOwner) MaxMP() uint32 {
@@ -422,7 +422,7 @@ SetMotion
 No v1.150 wire carries a player's motion hold: 0x3122 publishes state
 channels only, and the client derives the frozen/asleep/stunned pose from
 the mask. The hold is kept on the world plane for gates that read the
-native motion byte (state+0x2), such as the 74B5 mount door (5119D5),
+native motion byte (state+0x2), such as the 74B5 mount door,
 because it outlives the mask by the 1.5 s thaw after a freeze.
 ==================
 */
@@ -430,8 +430,8 @@ func (o *playerAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 	if o.rt.Worlds == nil {
 		return
 	}
-	// 4A9D1F: state zero falls back to a still-active freeze, stun or sleep
-	// (4AAB60), as the monster owner does.
+	// Natively state zero falls back to a still-active freeze, stun or sleep
+	// (the resting motion state), as the monster owner does.
 	if state == simulation.MotionNone {
 		switch {
 		case o.block.Has(abnormal.Freeze):
@@ -460,7 +460,7 @@ func (o *playerAbnormalOwner) SetMotion(state, next uint8, delay float32) {
 ================
 CancelActions
 
-4AA340 stops the live mover before withdrawing commands. Settle the position
+The native cancel stops the live mover before withdrawing commands. Settle the position
 under the authority lock; publish cancellation and correction after commit.
 ================
 */
@@ -501,7 +501,7 @@ func (o *playerAbnormalOwner) StopMove() {
 ================
 AIEvent
 
-4A4BD0 and 4A4F70 check the monster discriminator; players have no AI callback.
+The native fear and confusion callbacks check the monster discriminator; players have no AI callback.
 ================
 */
 func (o *playerAbnormalOwner) AIEvent(uint8, uint8, uint32) {}
@@ -528,7 +528,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	remaining -= debit
 	o.c.CurrentHP = &remaining
 	o.hpChanged = true
-	// 52A33D publishes the authored hit independently of the saturated debit.
+	// The native hit path publishes the authored hit independently of the saturated debit.
 	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	if remaining == 0 {
 		o.fatal = true
@@ -539,7 +539,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 		o.warCombat = o.rt.prepareGuildWarCombat(o.division, o.c, killer)
 		o.deathKill = playerKill{kind: o.rt.deathKind(o.division, o.c, killer), victimLevel: rewardLevel(o.c)}
 		if o.deathKiller != nil {
-			// 52A3F9 calls the striker before the victim's death relief.
+			// The native hit path calls the striker before the victim's death relief.
 			o.deathKill = o.sources[source].kill.withVictim(o.deathKiller, o.c)
 		}
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
@@ -572,7 +572,7 @@ func (o *playerAbnormalOwner) ConsumeResources(hp, mp int32, _ uint8) {
 ================
 Detonate
 
-59B300 applies the bomb's authored damage and defers its explosion frame.
+The native detonation applies the bomb's authored damage and defers its explosion frame.
 ================
 */
 func (o *playerAbnormalOwner) Detonate(slot abnormal.Slot) {
@@ -584,7 +584,7 @@ func (o *playerAbnormalOwner) Detonate(slot abnormal.Slot) {
 ================
 commit
 
-Publish the working block into the registry; death clears it first (4A59F0).
+Publish the working block into the registry; death clears it first.
 ================
 */
 func (o *playerAbnormalOwner) commit() {
@@ -630,7 +630,7 @@ func (o *playerAbnormalOwner) applyHit(hit abnormal.HitContext, records []abnorm
 ================
 clearPlayerAbnormalInDoor
 
-Apply 4A59F0 when another gameplay owner commits the character's death.
+Apply the native abnormal clear when another gameplay owner commits the character's death.
 ================
 */
 func (rt *Runtime) clearPlayerAbnormalInDoor(division string, c *enterworld.Character, now int64) *playerAbnormalOwner {
@@ -661,21 +661,21 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	// Also retire the legacy persisted segment echo. A reconnect must seed
 	// the corpse, not the destination of its last living movement.
 	c.World.MoveSegment = nil
-	// 529B98: ProcessNormalDeath records where the player died (4E0330), the
+	// Natively the death records where the player died, the
 	// reverse return's second destination.
 	if point, ok := recordedPoint(c, state.Spawn); ok {
 		c.World.LastDeathPoint = point
 	}
 	effects = rt.retireBodyEffectsOnDeath(division, c)
-	// CGObjPC_ClearJobStateOnDeath (51B5DB) writes the interaction state 0:
+	// The native death writes the interaction state 0:
 	// an open warehouse ends with its user's death.
 	rt.endStorageInteraction(division, c.Name)
-	// 529B10: the ridden vehicle is released with its rider's death.
+	// Natively the ridden vehicle is released with its rider's death.
 	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now)
 	effects = append(effects, released...)
-	// 529B10 -> 513EA0: a pending return or reverse-return cast is cancelled.
+	// Natively a pending return or reverse-return cast is cancelled.
 	effects = append(effects, rt.cancelReturnOnDeathInDoor(division, c)...)
-	// CGObjPC_ProcessNormalDeath leaves battle (529C93) before the life change.
+	// The native death leaves battle before the life change.
 	effects = append(effects, rt.leaveBattleState(division, c, now)...)
 	// The death's cost (pkdeath.go) commits in the fatal HP closure, so the
 	// corpse and its EXP loss, drop and PK relief are one durable
@@ -691,7 +691,7 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 		frames, _ := rt.ReleaseQuestCapturesOnDeath(c)
 		progression = append(progression, frames...)
 	}
-	// 529D6D: the death ends with the victim's private notice of its kind,
+	// Natively the death ends with the victim's private notice of its kind,
 	// which labels the death box's rebirth button (wire/deathnotice.go).
 	progression = append(progression, owned...)
 	return effects, append(progression, wire.DeathNoticeFrame(rt.deathNoticeKind(c.DeathKind)))
@@ -719,8 +719,8 @@ type playerAbnormalFrames struct {
 playerAbnormalPublication
 
 playerAbnormalPublication follows a committed owner: withdrawn casts (570),
-the stop (4B0), the speed pair (4AA410), the private stat block (303D), the
-victim's 0x36C7 snapshot (server 30D2, 4A5C60) and the shared vitals mask
+the stop (4B0), the speed pair, the private stat block (303D), the
+victim's 0x36C7 snapshot (server 30D2) and the shared vitals mask
 (dirty bit 0x100 -> 33A6).
 ==================
 */
@@ -759,7 +759,7 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 		if hit.damage > 0 {
 			out.public = append(out.public, rt.tailwindDamage(division, c, hit.source, o.now)...)
 		}
-		// 52A38E/52A3FD also send the victim an echo, even when its source
+		// The native hit path also sends the victim an echo, even when its source
 		// vanished or died. The source's credit does not gate that packet.
 		if hit.reason != abnormalDamageOverTimeReason {
 			continue
@@ -828,7 +828,7 @@ playerAbnormalSnapshotPayload
 playerAbnormalSnapshotPayload is the v1.150 0x36C7 body (client 77C110):
 u32 mask, then per set bit low to high u16 duration/100, u16 elapsed/100
 and one byte: the level for bits in 203F, the grade for bits in 017FCFC0.
-Server 4A5C60 truncates both divisions under RC=chop.
+The reference server truncates both divisions under RC=chop.
 ==================
 */
 func playerAbnormalSnapshotPayload(block *abnormal.Block, now int64) []byte {

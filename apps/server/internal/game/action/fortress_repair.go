@@ -3,7 +3,7 @@
 
 fortress_repair.go - item-owned linked healing of fortress structures
 
-49CC80 admits the target, then 59B840 enters the persistent skill handler.
+The reference server admits the target, then enters the persistent skill handler.
 The shared effect registry owns cancellation, linkedpulse owns pulse clocks,
 and the existing fortress population owns HP, destruction and persistence.
 
@@ -39,7 +39,7 @@ const (
 ================
 structureRepairTarget
 
-Keep 49CC80's refusal order. Guild membership failure is an authority refusal
+Keep the native refusal order. Guild membership failure is an authority refusal
 instead of reproducing the native missing-member assertion.
 ================
 */
@@ -99,7 +99,7 @@ func (rt *Runtime) structureRepairTarget(c *enterworld.Character, use skillItemU
 ================
 useStructureRepair
 
-49CC80 consumes after 59B840 accepts the invocation. 59B480 returns one
+The native item use consumes after the skill handler accepts the invocation. The cast returns one
 even when the persistent handler refuses its prerequisites, so a skill
 refusal still consumes the kit and publishes an item success afterward.
 ================
@@ -203,7 +203,7 @@ func (rt *Runtime) structureRepairSourceActive(effect linkedpulse.Effect) bool {
 ================
 pulseStructureRepair
 
-5A09F0 forms a percentage of recipient maximum HP. Native structures in
+The native heal forms a percentage of recipient maximum HP. Native structures in
 this feature set have no heal amplification or recovery-reduction modifiers.
 ================
 */
@@ -226,7 +226,7 @@ func (rt *Runtime) pulseStructureRepair(effect linkedpulse.Effect, skill enterwo
 ================
 consumeRefusedRepair
 
-59B7A8 returns success after the handler's skill refusal. Preserve both
+The native cast returns success after the handler's skill refusal. Preserve both
 responses and the item debit; this is distinct from target admission.
 ================
 */
@@ -242,7 +242,7 @@ func (rt *Runtime) consumeRefusedRepair(c *enterworld.Character, use skillItemUs
 ================
 repairPreparingAction
 
-59B840 refuses an item-started targeted skill while the prepared command
+The native skill handler refuses an item-started targeted skill while the prepared command
 owns an ao action. Read the common preparation owner under its mutex.
 ================
 */

@@ -107,7 +107,7 @@ func TestEveryBowLineCasts(t *testing.T) {
 ================
 TestBerserkerArrowRollsWithItsHitRate
 
-593540 installs the engaged attack's hr through 594AC0: Berserker Arrow's hits
+Natively the engaged attack's hr is installed like a buff: Berserker Arrow's hits
 roll with the caster's hit rate raised by its flat word.
 ================
 */

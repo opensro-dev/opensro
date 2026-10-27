@@ -93,7 +93,7 @@ func EncodeVoteOpened3A6C(vote *enterworld.GuildVote, nowMs int64) []byte {
 
 // EncodeVoteParticipationB332 is 0xB332's answer to the vote row's 0x7332
 // (client 75CBD0 -> 82CEE0), the body v1.188 writes as B106
-// (VoteMgr_SendParticipation 5E7F00, Vote_WriteOptions 5E79C0): {u8 1}
+// (the reference server's vote participation writer): {u8 1}
 // {u32 id}{u32 remaining ms}{u8 n} then n x {u32 candidate jid}{u8 ballots}.
 func EncodeVoteParticipationB332(vote *enterworld.GuildVote, nowMs int64) []byte {
 	n := min(len(vote.Candidates), 0xff)
@@ -104,7 +104,7 @@ func EncodeVoteParticipationB332(vote *enterworld.GuildVote, nowMs int64) []byte
 	return writer.Payload()
 }
 
-// EncodeVoteBallot3A6C is 0x3A6C type 4 (v1.188 0x3908 type 4, 5E7A70):
+// EncodeVoteBallot3A6C is 0x3A6C type 4 (v1.188 0x3908 type 4):
 // {u8 4}{u32 id}{u8 previous option}{u8 option}{u8 option count}.
 func EncodeVoteBallot3A6C(id uint32, previous, option, count uint8) []byte {
 	return wire.NewWriter(8).U8(4).U32(id).U8(previous).U8(option).U8(count).Payload()

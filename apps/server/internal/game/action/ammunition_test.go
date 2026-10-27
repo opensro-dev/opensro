@@ -106,7 +106,7 @@ func TestWrongRangedAmmunitionRefusesBeforeDamageOrDebit(t *testing.T) {
 	result := rt.HandleTargetInteract(testDivision, character, wire.SkillAction{
 		ActionId: 2, HasTarget: true, TargetGid: target.Gid,
 	}.Encode())
-	// 58E32D: the basic attack's cnsm requirement refuses 0x300E, the
+	// The basic attack's cnsm requirement refuses 0x300E, the
 	// out-of-ammunition notice, before any damage or debit.
 	assertAmmunitionRefusal(t, result)
 	if character.MissionInventory[1].StackCount != 2 {
@@ -192,7 +192,7 @@ func assertAmmunitionRefusal(t *testing.T, result OpResult) {
 ================
 TestEmptyBowIsRefusedAtThePressOutOfRange
 
-Command acceptance (phase 0x37, 4ACED4) carries the ammo bit 0x20, so an
+Command acceptance (phase 0x37) carries the ammo bit 0x20, so an
 empty bow pressed at a monster out of range is refused at once, with the
 notice, and never walks: neither the basic attack nor a bow skill.
 ================

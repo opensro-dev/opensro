@@ -101,7 +101,7 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 				level = ref.Level
 			}
 		}
-		// 5C7000 attributes a COS kill to its owner but scores the COS level.
+		// The reference server attributes a COS kill to its owner but scores the COS level.
 		return abnormalSourceState{exists: true, dead: pet.CurrentHP == 0,
 			killer: deathKiller{player: snapshot, strikerLevel: int64(level)}}
 	}

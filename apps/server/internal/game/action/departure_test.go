@@ -195,7 +195,7 @@ func TestDepartureCancelEndsTheCountdown(t *testing.T) {
 ================
 TestDepartureFollowsTheNativeBattleRules
 
-CGObjPC_OnLogoutRequest (50EFF0): ordinary battle still logs out; in battle
+The reference server's logout request: ordinary battle still logs out; in battle
 a PvP state or a ride refuses with code 1, and a teleport in progress
 refuses with code 2. A PvP state outside battle does not refuse.
 ================

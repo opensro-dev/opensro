@@ -75,7 +75,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
 	}
-	// 49B9F0 case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
+	// Native item use case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
 	if ref.TypeIDs == [4]int64{3, 3, 3, 5} {
 		return itemUseGlobalChat
 	}
@@ -85,7 +85,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 3, 1} && (ref.ReturnDestination == "RESURRECT" || ref.ReturnDestination == "THIEFDEN") {
 		return itemUseReturn
 	}
-	// CGItemMonsterCapsule (sub_42E750, TID 3/2/2): the monster mask.
+	// The monster capsule (TID 3/2/2): the monster mask.
 	if wire.IsMonsterCapsule(ref.TypeFlags()) {
 		return itemUseMonsterCapsule
 	}
@@ -101,40 +101,40 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 13, 12} {
 		return itemUsePetExtension
 	}
-	// 49C2B0 case 5 (type 4 = 6): the resurrection scroll, usable only dead.
+	// Native special consumable case 5 (type 4 = 6): the resurrection scroll, usable only dead.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 6} {
 		return itemUseResurrection
 	}
-	// 49ACA0 family 6: a firework only needs a living user; its whole effect
+	// Native family 6: a firework only needs a living user; its whole effect
 	// is the item visual every use publishes. Type 4 = 2 is the fortress shock
 	// bomb, a siege item.
 	if ref.TypeIDs == [4]int64{3, 3, 6, 1} {
 		return itemUseFirework
 	}
-	// The reverse return scroll (reversereturn.go): 4A00C0, spent from the bag.
+	// The reverse return scroll (reversereturn.go), spent from the bag.
 	if ref.TypeIDs == [4]int64{3, 3, 3, 3} {
 		return itemUseReverseReturn
 	}
-	// 49B9F0 case 3 (type 4 = 4): a stall booth decoration, kept for good.
+	// Native item use case 3 (type 4 = 4): a stall booth decoration, kept for good.
 	if ref.TypeIDs == [4]int64{3, 3, 3, 4} {
 		return itemUseStallDecoration
 	}
-	// 49C2B0 case 6 (type 4 = 7): the repair hammer (npcrepair.go).
+	// Native special consumable case 6 (type 4 = 7): the repair hammer (npcrepair.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 7} {
 		return itemUseRepairHammer
 	}
-	// 49C2B0 cases 3 and 4 (type 4 = 4 and 5): the premium time tickets.
+	// Native special consumable cases 3 and 4 (type 4 = 4 and 5): the premium time tickets.
 	if ref.TypeIDs == [4]int64{3, 3, 13, 4} {
 		return itemUsePremiumTicket
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 13, 5} {
 		return itemUseSkillTimeTicket
 	}
-	// 49C2B0 case 7 (type 4 = 8): the armour gender change (gendertool.go).
+	// Native special consumable case 7 (type 4 = 8): the armour gender change (gendertool.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 8} {
 		return itemUseGenderTool
 	}
-	// 49C2B0 case 8 (type 4 = 9): the character skin change (skinchange.go).
+	// Native special consumable case 8 (type 4 = 9): the character skin change (skinchange.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 9} {
 		return itemUseSkinChange
 	}
@@ -154,11 +154,11 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 		}
 		return itemUseStatRecall
 	}
-	// 49F590: the composite scroll (UIU1 param jobs).
+	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
 	}
-	// 49D240, and the v1.150 client appends the COS gid for TID4 4/5/7
+	// The native COS item use, and the v1.150 client appends the COS gid for TID4 4/5/7
 	// (6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the
 	// revival scroll (696490 / server case 6).
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 1 {
@@ -174,8 +174,8 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	if ref.TypeIDs == [4]int64{3, 3, 2, 7} {
 		return itemUsePetCure
 	}
-	// 49B710: TID3 2 is the player cure family; TID4 1 is the universal pill.
-	// TID4 7 is the pet cure, which 49D240 applies to the owner's COS, not
+	// TID3 2 is the player cure family; TID4 1 is the universal pill.
+	// TID4 7 is the pet cure, which the native COS item use applies to the owner's COS, not
 	// the player, so it never enters the player cure path.
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 2 && ref.TypeIDs[3] != 7 {
 		return itemUseCure
@@ -247,10 +247,10 @@ func itemUseRequirements(character *enterworld.Character, ref *enterworld.ItemRe
 ==================
 recoveryCooldownDuration
 
-SR_GameServer 49B94B..49B993 -> 4E0AB0: the reuse lock follows 49AA70's
+The reference server's recovery use starts the reuse lock from the recovery amount's
 arm. Absolute potions lock 1.1 s in China and 15.1 s in Europe; percentage
 potions lock 4.1 s in both. The native server guard outlasts the client
-icon by 100 ms. 4EB410 tests independent category reuse bits, so changing
+icon by 100 ms. The native reuse check tests independent category reuse bits, so changing
 stack/grade cannot evade a lane, and HP must not block MP.
 ==================
 */

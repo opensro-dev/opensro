@@ -4,15 +4,15 @@
 skilllinkedeffect.go - timed effects paired between caster and recipient
 
 The Cleric's Force and Mental Blessings (BLESSA_STR / BLESSA_INT) carry
-lnks. 5830B0 installs a source half on the caster (context mode 1) and a
+lnks. The reference server installs a source half on the caster (context mode 1) and a
 recipient half on the target (mode 2), joined by a descriptor that
-59DC80 admits and 5829D0 tears down as a pair. Only the recipient
-receives the stri / inti writes: 594F53 skips them for a linked source.
+it admits and tears down as a pair. Only the recipient
+receives the stri / inti writes: the buff modifier install skips them for a linked source.
 The caster sees the source half on its own board through the private
 B5ED, which names the subject; everyone sees the recipient through B419.
 The Warrior's Protect (GUARDA_AGGRO) is the same pair with lkag and no
 writes: the link carries the threat share commitAggression hands to the
-source (594EAC, 5A03A0). The Bard's Mana Switch (BATTLAA_MPSTEAL) is the
+source (reference server). The Bard's Mana Switch (BATTLAA_MPSTEAL) is the
 pair with lkdh: the link hands the Bard MP from the member's dealt damage
 (linkedmana.go). The Warrior's Physical and Magical Fence carry lkdr and
 Pain Quota lkdd: the links move part of the member's incoming damage to
@@ -37,8 +37,8 @@ import (
 acceptLinkedTargetEffect
 
 Runs after acceptTimedTargetEffect has admitted the target: builds the
-recipient's writes from the caster's HLFS / HLMI (583A65) and the target's
-current parameters, checks the link against 59DC80 before the caster pays,
+recipient's writes from the caster's HLFS / HLMI and the target's
+current parameters, checks the link against the outgoing-link validation before the caster pays,
 then installs both halves.
 ==================
 */

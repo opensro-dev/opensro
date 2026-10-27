@@ -11,7 +11,7 @@ module resolves that hit, and the struck monster's answer, through the
 shared combat formula and the one monster HP door, and publishes it as the
 same B245 bracket a monster's attack on a player uses.
 
-58D2F2..58D30A rejects a Confusion cast against a nonzero base monster
+The native target validation rejects a Confusion cast against a nonzero base monster
 grade with 0x3033. Party grade flags and TID4 are not part of that test.
 
 Inferred, recorded deliberately:
@@ -133,7 +133,7 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 	for _, formula := range formulas {
 		plan := simulation.MonsterDamagePlan{GID: target.Gid, ExpectedHP: remaining, Damage: formula.Damage}
 		if formula.Blocked {
-			plan.Damage = 0 // 5905FB: a blocked impact deals no damage
+			plan.Damage = 0 // natively a blocked impact deals no damage
 		}
 		plans = append(plans, plan)
 		remaining -= min(remaining, plan.Damage)
@@ -225,8 +225,8 @@ const confusionTag = 0x6361
 ================
 temptationTargetRefusal
 
-58D2F2..58D30A tests ca (+0x458), then the monster's base-grade getter
-(vtable +0x12C). Nonzero base grade returns 0x3033 at 58D424.
+The native target validation tests ca (+0x458), then the monster's base-grade getter
+(vtable +0x12C). Nonzero base grade returns 0x3033.
 ================
 */
 func temptationTargetRefusal(skill enterworld.SkillRow, target monster.Instance) uint16 {

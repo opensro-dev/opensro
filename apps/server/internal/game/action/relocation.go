@@ -3,7 +3,7 @@
 
 relocation.go - moving a character elsewhere, possibly into another world
 
-The server-driven teleport (the PC world teleport, CGObjPC vtable +0x378)
+The server-driven teleport (the reference server's player world teleport)
 that a GM warp and the fortress war's expulsions share: settle the pose at
 the destination, move the world membership, carry the returning pet, then
 rebuild the scene with an ordered re-entry. Anything that fails before the

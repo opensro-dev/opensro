@@ -5,13 +5,13 @@ duplicate.go - the Rogue's Duplicate and Sable Duplicate (msch 2)
 
 The Rogue targets an allied player and takes that player's look: the
 persistent instance lives on the Rogue with the player's gid in its
-context (CastLifecycle_ProcessPersistent 583BC6), and
-CGObjPC_ApplyDupleTransform (4F0040) copies the player's model, record
-byte and nine worn slots into the transform block (4F0320) - only when no
+context (the persistent cast lifecycle), and the
+reference server's Duple transform copies the player's model, record
+byte and nine worn slots into the transform block - only when no
 transform already holds it. The speeds stay the Rogue's own.
 
 The instance ends with the next skill cast (skc event 2), death, a
-loading area or a COS summon; its end clears the block (4F0210) and the
+loading area or a COS summon; its end clears the block and the
 client restores the Rogue's own body (8DD131).
 
 ===========================================================================
@@ -32,7 +32,7 @@ import (
 ==================
 duplicateTargetRefusal
 
-TargetValidation_ValidateAllTargets for msch 2 (58D1D3..58D2A0): a player
+The native target validation for msch 2: a player
 in a job suit or riding a horse or fellow, one above the level word, a GM
 or a murderer (PvP state 2) cannot be copied.
 ==================
@@ -49,7 +49,7 @@ func (rt *Runtime) duplicateTargetRefusal(target *enterworld.Character, maxLevel
 	return 0
 }
 
-// duplicateLook is 4F0320 on the copied player: its model, the record byte
+// duplicateLook is the native skin block fill on the copied player: its model, the record byte
 // (+0x64, taken here as the body shape byte) and the RefObjs in its nine
 // worn slots.
 func (rt *Runtime) duplicateLook(target *enterworld.Character) (EffectPresentation, bool) {
@@ -79,7 +79,7 @@ func (rt *Runtime) duplicateLook(target *enterworld.Character) (EffectPresentati
 acceptDuplicate
 
 A target out of reach defers the cast behind a support intent, as every
-player-targeted command walks first (58D8F0 never refuses for range).
+player-targeted command walks first (the native admission never refuses for range).
 ==================
 */
 func (rt *Runtime) acceptDuplicate(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64) OpResult {

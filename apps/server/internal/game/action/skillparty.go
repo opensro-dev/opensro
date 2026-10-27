@@ -3,15 +3,15 @@
 
 skillparty.go - persistent party auras
 
-CastLifecycle_ProcessPersistent (5830B0) for efr kind 2 rows: bard dances,
+The reference server's persistent cast lifecycle for efr kind 2 rows: bard dances,
 the guard aura and the cleric recovery aura.
 
 One update runs, in native order:
 
 	1. caster checks      the caster's persistent instance must still live
-	2. onff pulse         pay MP every PulseMs or retire (585262)
-	3. leave walk         drop members who left (584C..)
-	4. eshp heal          heal the lowest HP ratio (584D95 / 584E5B)
+	2. onff pulse         pay MP every PulseMs or retire
+	3. leave walk         drop members who left
+	4. eshp heal          heal the lowest HP ratio
 	5. join walk          add party members who came in range
 
 Steps 3-5 are throttled by puls (+0x384) when the row has it.
@@ -132,7 +132,7 @@ CAST START
 ==================
 acceptPartyBuff
 
-584115: charge the cast, install the caster's persistent instance and open
+Reference server: charge the cast, install the caster's persistent instance and open
 the area. Members are chosen by the update, never here. The caster's new
 stats ride its own burst only; observers see the cast and the instance.
 ==================
@@ -153,8 +153,8 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	if code := rt.skillAdmission(division, snapshot, skill, now, nil, nil, admitExecution); code != 0 {
 		return offensiveRefusal(code)
 	}
-	// 58E2F4 validates untargeted source instances too. The area link lets
-	// 59D9CE retire the previous source instead of opening another healer.
+	// The reference server validates untargeted source instances too. The area link lets
+	// the buff replacement retire the previous source instead of opening another healer.
 	// A Bard switching its own instrument or dance follows owner rule 1
 	// instead (replacesOwnAura).
 	if !rt.replacesOwnAura(division, snapshot, skill) && !rt.auraReplacementAllowed(division, snapshot, skill, true) {
@@ -251,7 +251,7 @@ UPDATE
 ==================
 advancePartyAuras
 
-The 5830B0 update for every open aura in two passes (see the file
+The persistent cast update for every open aura in two passes (see the file
 header): every retirement, including the owner's two-Bard rule, then every
 heal and join on what stayed open, then the owed 0x343C frames. The list
 lock is held for the whole update so a cast cannot add an aura mid-update.
@@ -275,7 +275,7 @@ func (rt *Runtime) advancePartyAuras(now int64) []simulation.DivisionFrames {
 		rt.installAuraStep(&u, &rt.partyAuras[i], now)
 	}
 	// A recipient replacement can retire another source during the join
-	// walk (59DAA9/59DAB0). Finish its remaining children before stats are
+	// walk (reference server). Finish its remaining children before stats are
 	// published; installAuraStep prevents that source from running again.
 	kept = rt.partyAuras[:0]
 	for _, aura := range rt.partyAuras {
@@ -389,7 +389,7 @@ func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bo
 ==================
 pulseAura
 
-CastLifecycle_ProcessPersistent 585277..585284: current MP below the raw onff
+The reference server's persistent cast: current MP below the raw onff
 word 1 retires the aura (jl), before any cut; the charge that follows is the
 word at the caster's 0x8D rate cut by BDMD and getv (auraPulseCost). A Bard
 holding enough for the cut charge but not the raw word loses the aura, as
@@ -434,8 +434,8 @@ func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, 
 	if err != nil {
 		return 0, false
 	}
-	// 583224..583262: the pulse's MP at the caster's 0x8D rate, then the
-	// getv cuts (58327A..).
+	// Reference server: the pulse's MP at the caster's 0x8D rate, then the
+	// getv cuts.
 	cost := combat.PreparedCost(0, skill.Aura.PulseMP, 0, true, true, combat.MPConsumptionRate(stats))
 	return int64(combat.ApplyMPDecrease(cost, skill.Attack.Parameters, stats.SkillParameters)), true
 }
@@ -557,7 +557,7 @@ The native leave rule, in its order:
 
   - a member outside the caster's party leaves
   - another plane or sector stays: that branch jumps to the keep path
-    (584D95) before distance is read
+    before distance is read
   - a 3D distance past the radius leaves
 
 Death is never read by this walk.
@@ -610,7 +610,7 @@ func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.C
 		var installed []wire.Frame
 		joined := rt.deps.UpdateDeferred(member, "aura-join", func() bool {
 			var ok bool
-			// 5850C3/5850CE: recipient mode 2 retains the same source link.
+			// Reference server: recipient mode 2 retains the same source link.
 			presentation := EffectPresentation{
 				Phase: 2, AuraParent: aura.token,
 				AreaSourceGID: enterworld.ObjectIDForCharacter(caster), AreaSourceName: aura.casterName,
@@ -695,7 +695,7 @@ func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[
 	return out
 }
 
-// auraReplacementAllowed is CSkillManager_ValidateBuffReplacement on the
+// auraReplacementAllowed is the reference server's buff replacement check on the
 // member's own manager.
 /*
 ================
@@ -765,8 +765,8 @@ HEALING (eshp)
 ==================
 healAura
 
-584E5B: heal the member pickHealTarget chose through
-CSkillManager_ApplyHealRecovery (5A09F0).
+The reference server's eshp heal: heal the member pickHealTarget chose through
+the skill manager's heal recovery.
 ==================
 */
 func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) []simulation.DivisionFrames {
@@ -802,7 +802,7 @@ func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill
 ==================
 pickHealTarget
 
-584D95 on the members the leave walk kept, in set (ascending gid) order,
+The reference server's eshp scan on the members the leave walk kept, in set (ascending gid) order,
 plus the caster when select bit 0 put the caster in the set. Dead members
 are scored too.
 
@@ -826,7 +826,7 @@ func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character,
 ==================
 lowestHPRatio
 
-584D95's choice over set, in ascending gid order. The ratio is
+The eshp scan's choice over set, in ascending gid order. The ratio is
 float32(current / max * 100). The running minimum starts at 0 and 0 means
 unset: the first scored actor is taken, a later one only when strictly
 lower, and an actor at 0 is always replaced by the next.

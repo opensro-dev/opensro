@@ -5,9 +5,9 @@ skillareaburst.go - untargeted caster-centred attacks (Booming Chord/Wave)
 
 The Bard's Booming Chord and Booming Wave strike without a target: the
 hostile monsters and attackable players around the caster are the victims. Selection follows the
-untargeted taunt and status area (efr shape 1 around the caster, 58A088);
+untargeted taunt and status area (efr shape 1 around the caster);
 each victim takes every authored mc impact with the area's reduction per
-victim in selection order, as the cast-owned area does (58E5F0). The rows
+victim in selection order, as the cast-owned area does. The rows
 author zero casting time, so the cast resolves at command time like the
 untargeted taunt: one commit, results on the opening record.
 
@@ -102,7 +102,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 	private := append(wire.ProgressionPrivateFrames(commit.progression), vitals)
 	private = append(private, wire.ProgressionPrivateFrames(commit.playerActor)...)
 	public = append(public, commit.settlements.public...)
-	// Entering battle (4E27C0) follows the hit's burst.
+	// Entering battle follows the hit's burst.
 	actor = append(actor, battleFrames...)
 	public = append(public, battleFrames...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private,
@@ -114,7 +114,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 ================
 casterAreaVictims
 
-efr shape 1 around the caster (58A088): the caster's population's
+efr shape 1 around the caster: the caster's population's
 monsters and the attackable players within the radius plus both body
 radii, in selection order, at most the area's most-targets.
 ================

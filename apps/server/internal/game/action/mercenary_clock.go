@@ -4,7 +4,7 @@
 mercenary_clock.go - native penalty-keeper polling for soldier reuse
 
 The absolute deadline survives logout. Job presence lasts until its ten-second
-online poll retires it (652080); merely reading an elapsed deadline cannot
+online poll retires it; merely reading an elapsed deadline cannot
 permit another summon or guild-master transfer.
 
 ===========================================================================

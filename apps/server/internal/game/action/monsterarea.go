@@ -4,7 +4,7 @@
 monsterarea.go - the further victims of a monster's area attack
 
 A monster skill's action area (efr kind 1, RefSkill +0x28C) selects through
-the same TargetSelection_DispatchByShape the player areas use (skillarea.go,
+the same shape dispatcher the player areas use (skillarea.go,
 skillarea_directional.go), with the monster as the caster. Its candidates
 are the players in the monster's world and the companions they keep; the
 monster's own hostility (simulation.MonsterAreaStrikes) filters them, so a
@@ -32,7 +32,7 @@ monsterAreaVictim
 One candidate a monster area may strike. A companion names its owner; a
 rider's hit goes to the vehicle (ride), as the primary's does
 (monsterAttackStage), while the rider's own status decides whether it is
-struck (5A1AD0 passes checkFirstAttack=0 at 5A1ADE).
+struck (the reference server passes checkFirstAttack=0).
 ================
 */
 type monsterAreaVictim struct {
@@ -89,7 +89,7 @@ func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spa
 ================
 selectCreatureArea
 
-58A020 dispatches the same shape geometry for monsters and companions.
+The reference server dispatches the same shape geometry for monsters and companions.
 The caller supplies candidates admitted by its own hostility predicate.
 ================
 */
@@ -104,8 +104,8 @@ func selectCreatureArea(skill enterworld.SkillRow, from, primary simulation.Spaw
 	var admitted []monsterAreaVictim
 	switch area.Shape {
 	case 1, 2:
-		// 58A088 centres shape 1 on the caster, 58A831 shape 2 on the
-		// selected target; the reach adds both body radii (58AB6D).
+		// The reference server centres shape 1 on the caster, shape 2 on the
+		// selected target; the reach adds both body radii.
 		center := primary
 		if area.Shape == 1 {
 			center = from

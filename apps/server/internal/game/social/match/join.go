@@ -247,8 +247,8 @@ func (r *Runtime) handlePartyJoin(s *transport.Session, opcode uint16, payload [
 		refuseJoinWithCode(s, OpPartyJoinAck, JoinErrorCantFindParty, character.Name, "listing owner offline")
 		return
 	}
-	// ShardManager 44FAB7 -> 44F7F0 gates applicant job vs purpose;
-	// 44FA96 -> 44ED20 also gates existing leader/applicant job compatibility.
+	// The shard manager gates applicant job vs purpose;
+	// it also gates existing leader/applicant job compatibility.
 	// Both actors satisfying this purpose permits exactly the same job groups.
 	owner, _, ownerAvailable := r.sessionIdentity(ownerSession, opcode)
 	if !ownerAvailable || !partyPurposeAllowed(activePartyJob(owner), entry.Purpose) || !partyPurposeAllowed(activePartyJob(character), entry.Purpose) {

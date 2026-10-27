@@ -3,8 +3,8 @@
 
 cosdeath_test.go - a dead COS, or a dead rider's vehicle, is released at once
 
-CGObjCOS_ProcessNormalDeath (52A000; pets 529F70, summoned 529F10) and
-CGObjPC_ProcessNormalDeath (529B10) both end in ReleaseCOSOrExit: the COS
+The native COS death (its pet and summoned variants alike) and
+the native player death both end in the same release: the COS
 leaves the world. A pet's record stays on its item (kind 8); a vehicle's
 is deleted (kind 1), and a vehicle's own death drops its cargo first.
 
@@ -76,8 +76,8 @@ func TestRiderDeathReleasesTheRiddenVehicle(t *testing.T) {
 ================
 TestRiderDeathKeepsAnUnriddenCompanion
 
-529B10 releases only the ridden vehicle (+0x30); a pet beside its owner
-lives on.
+Natively a player's death releases only the ridden vehicle (+0x30); a pet
+beside its owner lives on.
 ================
 */
 func TestRiderDeathKeepsAnUnriddenCompanion(t *testing.T) {
@@ -147,8 +147,8 @@ func TestStarvedPetIsReleased(t *testing.T) {
 ================
 TestTransportDeathDropsCargoAndDeletesRecord
 
-4C42F0 -> 4D1FD0: a transport killed in the field drops its goods
-unowned around it, and 52A000's kind-1 release deletes its record; a pet
+Natively a transport killed in the field drops its goods
+unowned around it, and the COS death's kind-1 release deletes its record; a pet
 of the same death keeps its record for revival.
 ================
 */

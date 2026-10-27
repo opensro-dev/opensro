@@ -104,7 +104,7 @@ func TestZombiePotionDamagesHPAndRestoresMP(t *testing.T) {
 		return true
 	})
 	result := useBagItem(rt, c, potion(40, 30))
-	// 49AA70 at level 1, STR/INT 20: HP 40 -> 41, MP 30 -> 31.
+	// Reference server recovery at level 1, STR/INT 20: HP 40 -> 41, MP 30 -> 31.
 	if c.CurrentHP == nil || *c.CurrentHP != 59 || c.CurrentMP == nil || *c.CurrentMP != 81 {
 		t.Fatalf("hp %v mp %v frames %d", c.CurrentHP, c.CurrentMP, len(result.Frames))
 	}
@@ -129,7 +129,7 @@ func TestZombiePotionKillsThroughTheDeathPath(t *testing.T) {
 	}
 }
 
-// 49B710 deals the potion's whole HP amount while zombie is set, even when a
+// The reference server deals the potion's whole HP amount while zombie is set, even when a
 // full gauge would absorb none of it as healing.
 func TestZombiePotionAtFullHPStillDamages(t *testing.T) {
 	rt, clock, c, m := newCombatTestRuntime(t, 100)
@@ -142,7 +142,7 @@ func TestZombiePotionAtFullHPStillDamages(t *testing.T) {
 		return true
 	})
 	useBagItem(rt, c, potion(40, 0))
-	// 49AA70 at level 1, STR 20: Param1 40 -> 41.
+	// Reference server recovery at level 1, STR 20: Param1 40 -> 41.
 	if c.CurrentHP == nil || *c.CurrentHP != maxHP-41 {
 		t.Fatalf("hp %v want %d", c.CurrentHP, maxHP-41)
 	}
@@ -173,7 +173,7 @@ func TestCureAlwaysConsumesAndLocksItsLane(t *testing.T) {
 	}
 }
 
-// 4A6560 shuffles the selection before the limit: with two matching slots,
+// The reference server shuffles the selection before the limit: with two matching slots,
 // i=1 swaps with rand()%2, so rand 0 cures the higher slot and 1 the lower.
 func TestPillLimitFollowsTheNativeShuffle(t *testing.T) {
 	for _, tc := range []struct {

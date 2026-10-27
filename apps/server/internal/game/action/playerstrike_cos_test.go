@@ -85,7 +85,7 @@ func TestPlayerBasicAttackStrikesAnotherPlayersCOS(t *testing.T) {
 ================
 TestCOSTargetIsJudgedThroughItsOwner
 
-5291D0 then 5293A0 on the owner: an attacker in body mode 2, a target COS in
+The reference server's attack checks on the owner: an attacker in body mode 2, a target COS in
 body mode 2..4, or an owner in body mode 2..4 refuses with 0x3020 and the
 COS keeps its HP; hidden modes 6..7 do not resolve as a target; a player's
 own COS is never a target.
@@ -188,7 +188,7 @@ func TestCOSTargetIsJudgedThroughItsOwner(t *testing.T) {
 ================
 TestThiefCannotStrikeALevelOneCaravanTransport
 
-The 1-star caravan protection (52B760) is the owner's, so it holds for the
+The 1-star caravan protection is the owner's, so it holds for the
 transport too: a dressed thief is refused against a dressed trader's
 transport carrying a level-1 caravan (0x3024), and admitted once the
 transport is empty.
@@ -235,8 +235,8 @@ func TestThiefCannotStrikeALevelOneCaravanTransport(t *testing.T) {
 TestPlayerKillOfATransportScattersItsCargo
 
 A player's fatal hit on a transport settles through the companion owner's
-death, as a monster's does: 4C42F0 -> 4D1FD0 drops the goods unowned around
-it and 52A000's kind-1 release deletes the record. The owner is untouched.
+death, as a monster's does: the reference server drops the goods unowned around
+it and its kind-1 release deletes the record. The owner is untouched.
 ================
 */
 func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
@@ -267,8 +267,8 @@ func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
 ================
 TestPlayerKillOfACOSEasesTheKillersPenalty
 
-4E27F4 -> 4E1F60 books the kill against the owner first (a murder here:
-total +1, penalty +1200, daily +1), then 4C42F0 -> 4EB6B0 eases the
+The reference server books the kill against the owner first (a murder here:
+total +1, penalty +1200, daily +1), then eases the
 killer's penalty by the gap to the companion's level, and the killer
 hears its 0x30F2; a blow that does not kill books and eases nothing.
 ================
@@ -299,9 +299,9 @@ func TestPlayerKillOfACOSEasesTheKillersPenalty(t *testing.T) {
 ================
 TestPlayerKillOfACOSBooksTheKillAgainstItsOwner
 
-4E1F60 with the COS as actual victim: an open-field kill of a neutral
+The reference server's PvP kill rewards with the COS as actual victim: an open-field kill of a neutral
 owner's COS is a murder against the owner (never against the COS), and a
-guild-war kill of a COS scores from the COS's own level (5C71D7) with no
+guild-war kill of a COS scores from the COS's own level with no
 murder booked.
 ================
 */
@@ -383,7 +383,7 @@ func TestPlayerKillOfACOSBooksTheKillAgainstItsOwner(t *testing.T) {
 ================
 TestPlayerAttackOnAMountedPlayerStrikesTheRide
 
-59B5F3: a player's single-target attack aimed at a player riding a
+Reference server: a player's single-target attack aimed at a player riding a
 transport lands on the transport; the rider keeps every HP.
 ================
 */
@@ -408,7 +408,7 @@ func TestPlayerAttackOnAMountedPlayerStrikesTheRide(t *testing.T) {
 ================
 TestAreaCandidatesSpareTheRiderAndTakeTheRide
 
-5A1AD0 excludes a mounted player (5A1B51..5D) and admits companions
+The reference server excludes a mounted player and admits companions
 through their owner with mode 3: the ride is a candidate, its rider is
 not, and an unmounted companion is a candidate too.
 ================
@@ -446,7 +446,7 @@ TestAreaStrikeOnACOSBooksTheKillAgainstItsOwner
 
 An area victim that is a COS takes the area's running percent on its own
 body, and a fatal area hit books the kill against the owner exactly as a
-single-target COS kill does (4E1F60 through the owner).
+single-target COS kill does (through the owner).
 ================
 */
 func TestAreaStrikeOnACOSBooksTheKillAgainstItsOwner(t *testing.T) {
@@ -498,7 +498,7 @@ func TestAreaStrikeOnACOSBooksTheKillAgainstItsOwner(t *testing.T) {
 ================
 TestAreaSkillOnAMountedPlayerStrikesTheRide
 
-59B5F3 swaps a mounted target for its ride at admission, so an area row
+The reference server swaps a mounted target for its ride at admission, so an area row
 aimed at the rider resolves with the ride as primary: the ride takes the
 hit, the rider keeps every HP (the Bug 3 area arm of the redirect).
 ================
@@ -589,7 +589,7 @@ func TestPeriodicSkillPulsesOnACOSAndBooksTheKill(t *testing.T) {
 ================
 TestLifeStealSkillStrikesACOS
 
-An lfst row strikes the COS with the life-steal record (40F750) instead
+An lfst row strikes the COS with the life-steal record instead
 of refusing 0x3006, and the caster recovers from the committed damage.
 ================
 */

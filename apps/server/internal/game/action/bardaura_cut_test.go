@@ -3,7 +3,7 @@
 
 bardaura_cut_test.go - a hit on the Bard ends its aura unless skc's keep holds
 
-CSkillManager_ProcessDamageEffects (5A160A..5A1691): skc word 2 is the keep
+In the reference server's damage-effect pass, skc word 2 is the keep
 chance; the caster's getv MUCR (+0x548) and getv DSER (+0x54C) modifiers
 add to it, and a masked hit ends the effect with 100 - keep. DSCR (+0x550)
 has no reader. The rolls come from the injected CombatRoll: the first roll
@@ -88,8 +88,8 @@ TestBardDanceKeepChance
 A dance reads getv DSER, never MUCR or DSCR. Screen Dance (setv DSCR) and
 Prism (setv MUCR) leave Dancing of Valor at keep 80, so a roll of 20 ends
 it. The Dancing Range passive's DSER 50 is the dance's area addend and, as
-5A162E reads the same key, a keep addend too: keep 130 is held at 100 and
-no hit ends the dance.
+the native damage pass reads the same key, a keep addend too: keep 130 is
+held at 100 and no hit ends the dance.
 ================
 */
 func TestBardDanceKeepChance(t *testing.T) {

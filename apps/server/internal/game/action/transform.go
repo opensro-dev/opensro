@@ -4,22 +4,21 @@
 transform.go - the transform block (msch 1 mask, msch 2 Duplicate)
 
 A filled ITEM_ETC_TRANS_MONSTER capsule holds a monster RefObj in its
-item data. Using it (CGItemMonsterCapsule_Use 493C30) casts the item's
-SKILL_ETC_TRANS_MONSTER_01 through BeginIndirectSkill with that RefObj in
-the context (+0x20). The cast is admitted by msch word 1 (58DE46) and its
-effect installs the transform block (CGObjPC_ApplyMonsterTransform
-4F00F0):
+item data. Using it (the native capsule use) casts the item's
+SKILL_ETC_TRANS_MONSTER_01 as an indirect skill with that RefObj in
+the context (+0x20). The cast is admitted by msch word 1 and its
+effect installs the transform block:
 
 	skin   everyone near sees the monster's model (0x323A, spawn row)
 	speed  walk and run are the monster's own, not the player's
 	       modified speeds, unless the player rides
 
 A Duplicate (duplicate.go) fills the same block with another player's
-model and worn equipment (CGObjPC_ApplyDupleTransform 4F0040), and only
+model and worn equipment (the native Duplicate transform), and only
 when no transform holds it; its speeds stay the player's own.
 
 The block lives as long as its instance: retiring any msch 1 or 2
-instance clears it (CGObjPC_ClearTransform 4F0210, via 582D65). The
+instance clears it (the native transform clear). The
 client puts the player model back when that instance ends (CIDecoSkill
 8DD131), so the end needs no packet of its own.
 
@@ -61,7 +60,7 @@ func applyTransform(c *enterworld.Character, word uint8, p EffectPresentation) w
 	return wire.Frame{Opcode: wire.OpSkinChange, Payload: wire.SkinChange{GID: enterworld.ObjectIDForCharacter(c), Skin: skin}.Encode()}
 }
 
-// clearTransform is 4F0210 for a batch of ended effects: any msch 1
+// clearTransform is the native transform clear for a batch of ended effects: any msch 1
 // instance among them ends the transform, even one a newer mask already
 // replaced on screen. The caller holds c's door.
 func clearTransform(c *enterworld.Character, ended []statuseffect.Effect) bool {
@@ -80,7 +79,7 @@ func clearTransform(c *enterworld.Character, ended []statuseffect.Effect) bool {
 
 // transformSpeeds are the walk and run the block holds (RefObj +0xE4,
 // +0xE6), which the speed getters return in place of the modified speeds
-// while the player is on foot (4AA410).
+// while the player is on foot.
 func (rt *Runtime) transformSpeeds(c *enterworld.Character) (float32, float32, bool) {
 	if c.TransformMode != 1 || rt.Monsters == nil || c.ActiveCOS != nil && c.ActiveCOS.Mounted {
 		return 0, 0, false
@@ -96,10 +95,10 @@ func (rt *Runtime) transformSpeeds(c *enterworld.Character) (float32, float32, b
 ==================
 transformAttackSkill
 
-59E650's first arm: while the msch 1 instance holds the block, the
+The native default attack's first arm: while the msch 1 instance holds the block, the
 default attack is the RefObj's skill at +0x260 (its first default skill),
-not the weapon's base attack, and 59D600 skips the weapon record. The
-normal-attack admission (4AD9B0, mask 0x64) still runs 58D480, which
+not the weapon's base attack, and the weapon record is skipped. The
+normal-attack admission (mask 0x64) still runs the equipment check, which
 passes: every monster a mask can hold (TID4 1) has a weapon-free basic
 skill. Zero when the player is not transformed.
 ==================
@@ -119,7 +118,7 @@ func (rt *Runtime) transformAttackSkill(c *enterworld.Character) uint32 {
 ==================
 transformRefusal
 
-58DE46, msch word 1. The RefObj must exist (0x3006) and be no higher
+The native msch word 1 check. The RefObj must exist (0x3006) and be no higher
 than the caster (0x3008); the caster must not ride, be changing motion
 (the async job 1 a sit or stand runs) or sit (0x3009).
 
@@ -156,13 +155,13 @@ func (rt *Runtime) transformRefusal(division string, c *enterworld.Character, re
 ==================
 useMonsterCapsule
 
-CGItemMonsterCapsule_Use (493C30), under the item-use door:
+The native capsule use, under the item-use door:
 
 	body mode 4, an empty mask or an item without a skill   error 2
-	the item's skill refused by 58D8F0                      its 0xB070
+	the item's skill refused natively                       its 0xB070
 	                                                        error, then 5
 
-On success the hide ends (493D52) and the mask is spent. The indirect
+On success the hide ends and the mask is spent. The indirect
 skill's cast broadcast is not sent, as for every item skill here.
 ==================
 */
@@ -204,8 +203,8 @@ func (rt *Runtime) useMonsterCapsule(division string, c *enterworld.Character, r
 	return true
 }
 
-// itemUseSkillRefused is the item-use result 493C30 gives when
-// BeginIndirectSkill refuses (5).
+// itemUseSkillRefused is the item-use result the native capsule gives when
+// the indirect skill refuses (5).
 const itemUseSkillRefused uint8 = 5
 
 /*
@@ -213,8 +212,8 @@ const itemUseSkillRefused uint8 = 5
 endTransform
 
 Retires the transform instance early, the way three natives do: mounting
-(CGObjPC_MountCOSAndBroadcast 4EC68F, msch 1 only), summoning a COS
-(49BE8F, any word but 4) and a loading area, which both transforms'
+(the native mount and broadcast, msch 1 only), summoning a COS
+(any word but 4) and a loading area, which both transforms'
 descriptions name as an end. The caller holds c's door.
 ==================
 */

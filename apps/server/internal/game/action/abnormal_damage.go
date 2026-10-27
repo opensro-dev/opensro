@@ -31,7 +31,7 @@ type abnormalHit struct {
 ================
 abnormalDamageFrame
 
-52A33D/52A38E use the authored damage, even when it exceeds remaining HP.
+The reference server uses the authored damage, even when it exceeds remaining HP.
 The v1.150 74FE80 handler consumes this body through opcode 3128.
 ================
 */

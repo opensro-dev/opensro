@@ -13,7 +13,7 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// v1.188 50EFF0 -> 50EF70 explicit request: ordinary five-second delay.
+// v1.188 explicit request: ordinary five-second delay.
 // Wire identifiers and byte widths are the v1.150 client's 700020/74B2E0.
 const departureSeconds = 5
 
@@ -35,12 +35,12 @@ const (
 	departureResultOK         uint8  = 1
 	departureResultError      uint8  = 2
 	// departureRefusedInBattle and departureRefusedTeleporting are the low
-	// bytes of 50EFF0's 0x801 / 0x802 (UIIT_MSG_LOGOUT_ERR_CANT_LOGOUT_IN_
+	// bytes of the reference server's 0x801 / 0x802 (UIIT_MSG_LOGOUT_ERR_CANT_LOGOUT_IN_
 	// BATTLE_STATE / _WHILE_TELEPORT_WORKING, client category 0xF 1 / 2).
 	departureRefusedInBattle    uint8 = 1
 	departureRefusedTeleporting uint8 = 2
-	// departureCancelNotPending is v1.188 CGObjPC_OnLogoutCancelRequest's
-	// error code (0x50F13D push 0) when no countdown runs.
+	// departureCancelNotPending is the v1.188 logout cancel handler's
+	// error code (it pushes 0) when no countdown runs.
 	departureCancelNotPending uint8 = 0
 )
 
@@ -107,7 +107,7 @@ func (rt *Runtime) armDepartureInDivision(division string, s *transport.Session,
 	if code := rt.departureRefusal(division, c); code != 0 {
 		return code, false
 	}
-	// 50EF70 first cancels the actor's current action through vtable +6A8.
+	// The reference server first cancels the actor's current action through vtable +6A8.
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	rt.departureMu.Lock()
@@ -123,13 +123,13 @@ func (rt *Runtime) armDepartureInDivision(division string, s *transport.Session,
 ================
 departureRefusal
 
-CGObjPC_OnLogoutRequest (v1.188 50EFF0). Ordinary battle does not stop a
+The reference server's logout request. Ordinary battle does not stop a
 logout: in battle (state+0xD) it is refused only for a PvP state of 1 or
 2 (state+0xC), job mode (job class, vtable +0x11C, not 4), a siege world
 while its war runs, or a ride. Out of battle, or in battle with none of
 those, a teleport in progress (vtable +0x120) refuses. 0 admits.
 
-INFERENCE: 50EFF0 also refuses in battle while the actor's byte at +0x21EC
+INFERENCE: the reference server also refuses in battle while the actor's byte at +0x21EC
 (arg1[0x87B]) is set; no port state carries it, so that arm never refuses.
 ================
 */
@@ -157,7 +157,7 @@ func (rt *Runtime) departureRefusal(division string, c *enterworld.Character) ui
 ================
 cancelDeparture
 
-v1.188 CGObjPC_OnLogoutCancelRequest (50F130, its 0x7006): a countdown in
+The v1.188 logout cancel handler (its 0x7006): a countdown in
 progress ends and the client gets [1]; without one the answer is the error
 [2][0], which the v1.150 client shows no notice for. The request has no
 body; a non-empty one is treated as having nothing to cancel.

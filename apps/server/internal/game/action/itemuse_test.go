@@ -131,7 +131,7 @@ func TestHandleItemUseConsumesPotionRecoversHPAndAnswersNativeBurst(t *testing.T
 		wire.EncodeItemUseSuccess(21, 1, 0x08EC); !reflect.DeepEqual(got, want) {
 		t.Fatalf("0xB5BD = % X, want % X", got, want)
 	}
-	// 49AA70 sizes 125 HP; 49A5B0 credits 25 now and queues four steps.
+	// The reference server sizes 125 HP, credits 25 now and queues four steps.
 	if character.CurrentHP == nil || *character.CurrentHP != 65 {
 		t.Fatalf("CurrentHP = %v, want first-pulse HP 65", character.CurrentHP)
 	}
@@ -308,7 +308,7 @@ func TestCosMountAndMountedAttackShareAuthorityOnlyAfterCosGates(t *testing.T) {
 ================
 TestMountedAttackOrderNeverMakesTheRiderFight
 
-4D2200 hands the attack order to the vehicle's AI (event 0x19). A rider on a
+The reference server hands the attack order to the vehicle's AI (event 0x19). A rider on a
 horse or transport never swings its own weapon from the saddle: no strike,
 no attack intent, whatever the rider carries (a bow included).
 ================
@@ -482,8 +482,8 @@ func TestPetSkillItemRaisesTheKind3WindowOnlyWithALivePet(t *testing.T) {
 	}
 }
 
-// 49B710 consumes a potion into a full gauge: only both amounts <= 0 is a
-// refusal, and 4EF450 clamps the recovery to the maximum.
+// The reference server consumes a potion into a full gauge: only both amounts <= 0 is a
+// refusal, and the recovery is clamped to the maximum.
 /*
 ================
 TestHandleItemUseConsumesIntoAFullGauge
@@ -508,7 +508,7 @@ func TestHandleItemUseConsumesIntoAFullGauge(t *testing.T) {
 ==================
 TestComputePotionAmountFollowsNative
 
-49AA70 against independently computed values: the absolute arm scales by
+The reference server's recovery amount against independently computed values: the absolute arm scales by
 (stat/416+1) * 1.02^(level-1); the percentage arm multiplies the maximum by
 the float32 fraction; a nonzero absolute param wins over percentages.
 ==================
@@ -544,7 +544,7 @@ func TestComputePotionAmountFollowsNative(t *testing.T) {
 TestQuestToolSpendsItsOwnRowAfterAGrant
 
 A quest tool's handler may grant its result before the tool is spent
-(the warehouse amulets, 895BC0); the spend finds the used row by its slot
+(the warehouse amulets); the spend finds the used row by its slot
 even when the grant moved it in the inventory slice.
 ================
 */

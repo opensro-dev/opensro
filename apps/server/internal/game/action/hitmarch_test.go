@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-hitmarch_test.go - the hr block of 594AC0 on skill buffs and item programs
+hitmarch_test.go - the hr block of the buff installer on skill buffs and item programs
 
 Hit March and Clout March are Bard party auras whose only payload is hr: the
 caster and every joined member must gain hit rate (parameter 11) for as long

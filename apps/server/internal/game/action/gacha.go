@@ -5,7 +5,7 @@ gacha.go - Magic Pop machine interaction, ticket rolls, and Gori prize exchange
 
 Owns 0x7338 machine opening, 0x7053 ticket roll to win/loss vouchers, and
 0x71BE voucher redemption through Gori (NPC_CH_GACHA_OPERATOR), including the
-native 725720 equipment property roll (+1..+5 OptLevel, 5-bit white variance
+native equipment property roll (+1..+5 OptLevel, 5-bit white variance
 + durability, and blue magic options).
 
 ===========================================================================
@@ -88,7 +88,7 @@ func secureGachaRoll() (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("gacha: random source: %w", err)
 	}
-	// Native 9DD338 returns 15 bits; 4C8010..4C8015 takes %10000.
+	// Native rand() returns 15 bits; the reference server takes %10000.
 	// Keep its distribution while retaining the server-owned secure source.
 	return uint32(value.Uint64()) % gachaRollDenominator, nil
 }
@@ -291,7 +291,7 @@ func (rt *Runtime) HandleGachaRoll(
 			result = rt.GachaCatalog.WinCard
 			code = gacha.ResultWin
 		}
-		// 4EDE1B..4EDE77 writes both parameters for either result card.
+		// Natively both parameters are written for either result card.
 		magicOptions := []uint64{uint64(prize.RewardRefObjID), uint64(prize.Quantity)}
 		delta := gacha.EncodeResultItemDelta(request.InventorySlot, result.RefObjID, prize.RewardRefObjID, prize.Quantity)
 		*row = enterworld.InventoryRow{
@@ -346,13 +346,13 @@ func (rt *Runtime) gachaNpcForGID(
 ================
 prepareGachaRewardItem
 
-4ED910 mutates the voucher to the prize item and calls 725720
-(Loot_InitializeSpecialEquipmentProperties) with a zeroed override spec
+Natively the voucher mutates to the prize item and the special equipment
+property roll runs with a zeroed override spec
 (all 26 v1.150 gachaitemset.txt rows carry param1..4 == 0). Non-equipment
 returns immediately without drawing from DropRoll; equipment (TID 3.1.*.*)
 rolls a low-biased +1..+5 enhancement level (minimum of two 1..5 draws),
-5-bit white-stat variance + tier-0 durability (727590), and blue magic
-options (7276A0: 100% entry for Rarity == 2 Seal of Star, 31/101 for
+5-bit white-stat variance + tier-0 durability, and blue magic
+options (100% entry for Rarity == 2 Seal of Star, 31/101 for
 normal gear).
 ================
 */
@@ -396,9 +396,9 @@ func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity u
 HandleGachaExchange
 
 HandleGachaExchange answers 0x71BE [operatorGid] from the talk row 5DB67B
-sends once 642270 found a voucher in the bag. Per 4C8130 -> 4ED910 -> 725720,
+sends once 642270 found a voucher in the bag. Per the reference server's exchange,
 the lowest-slot win or loss voucher is consumed and its recorded pair,
-reference id then quantity, becomes bag items with 725720 rolling +1..+5
+reference id then quantity, becomes bag items with the native roll giving +1..+5
 OptLevel, 5-bit white variance + durability, and blue magic options on
 equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
 than a row delete, because that is the update 7654B0 turns into

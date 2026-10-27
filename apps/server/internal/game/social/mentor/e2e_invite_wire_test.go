@@ -595,7 +595,7 @@ func TestMentorInviteConsentEndToEndOverWire(t *testing.T) {
 		t.Fatalf("short-fee 0xB2EC = % X", got)
 	}
 	campOpenCamp(t, connM, first.authority, master, 60)
-	// 4E4680 tests the gold before the camp, so the second try pays again.
+	// The native camp validation tests the gold before the camp, so the second try pays again.
 	refill := int64(mentor.CampOpenFee)
 	first.authority.MutateCharacter(master, "test-refill", func() { master.Gold = &refill })
 	campSendFrame(t, connM, mentor.OpTCOpenRequest, campU32(0x2710))
@@ -821,7 +821,7 @@ func TestMentorInviteConsentEndToEndOverWire(t *testing.T) {
 }
 
 // TestMentorInvitePartyGuildOneProposalPerPlayerEndToEnd pins the native
-// one-transaction-per-player rule (46F420) with the party AND guild
+// one-transaction-per-player rule (the native transaction manager) with the party AND guild
 // lanes: while one lane's proposal waits the others refuse, and
 // byte-identical {01 01} accepts route to the lane holding the only
 // pending - MENTOR, then GUILD, then PARTY.

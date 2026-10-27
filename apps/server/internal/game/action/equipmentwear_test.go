@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-equipmentwear_test.go - CGObjPC_RollEquipmentWear and the durability point
+equipmentwear_test.go - the equipment wear roll and the durability point
 
 ===========================================================================
 */
@@ -64,7 +64,7 @@ func durabilityAt(c *enterworld.Character, slot int64) int64 {
 ================
 TestAttackWearsTheWeaponAtTwoPercentPerAttempt
 
-4A9A90 mode 0: one unblocked attempt is a 2% chance; abs(rand()) % 100 + 1
+Wear roll mode 0: one unblocked attempt is a 2% chance; abs(rand()) % 100 + 1
 <= 2 passes for 0 and 1 only.
 ================
 */

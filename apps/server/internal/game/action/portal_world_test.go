@@ -121,7 +121,7 @@ func TestFortressGateMovesThePlayerIntoTheFortressWorld(t *testing.T) {
 ================
 TestFortressGateRefusesAJobSuit
 
-4F2B50 -> 61D3D0: job state 4 (no job) is required at a fortress gate.
+Natively job state 4 (no job) is required at a fortress gate.
 ================
 */
 func TestFortressGateRefusesAJobSuit(t *testing.T) {
@@ -188,7 +188,7 @@ func inField(t *testing.T, rt *Runtime, c *enterworld.Character, what string) {
 ================
 TestReturnScrollLeavesTheFortressForTheAppointedTown
 
-4E08A0 resolves the appointed town through its teleport, world included:
+Natively the appointed town resolves through its teleport, world included:
 a return from inside a fortress lands in the field world.
 ================
 */
@@ -261,7 +261,7 @@ func TestGMWarpLeavesTheFortressForTheField(t *testing.T) {
 ================
 TestFortressWarBeginsByClearingTheFortress
 
-601170 mode 0, five seconds after the war begins: an unoccupied fortress
+The native war phase mode 0, five seconds after the war begins: an unoccupied fortress
 sends everyone to its town gate (GATE_CH, in the field); the war's end
 (mode 2) does so at once.
 ================
