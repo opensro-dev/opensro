@@ -229,7 +229,6 @@ apps/server/internal/game/social/guild/operations_grant.go 3
 apps/server/internal/game/social/guild/operations_membership.go 4
 apps/server/internal/game/social/guild/register.go 1
 apps/server/internal/game/social/guild/union_wire.go 6
-apps/server/internal/game/social/guild/wire.go 117
 apps/server/internal/game/social/guild/wire_test.go 16
 apps/server/internal/game/social/match/board.go 2
 apps/server/internal/game/social/match/e2e_wire_test.go 2
