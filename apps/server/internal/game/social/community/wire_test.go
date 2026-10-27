@@ -8,8 +8,8 @@ import (
 )
 
 // TestEncodeFriendRoster3769 pins the client's roster read layout:
-// u8 count,
-// per friend {u32 jid, u16 len + ANSI name, u32 modelRefId, u8 state}.
+// u8 count, per friend {u32 jid, u16 len + ANSI name, u32 modelRefId,
+// u8 state}.
 func TestEncodeFriendRoster3769(t *testing.T) {
 	if got := EncodeFriendRoster3769(nil); !bytes.Equal(got, []byte{0x00}) {
 		t.Fatalf("empty roster = % x, want the single 0x00 count byte", got)
