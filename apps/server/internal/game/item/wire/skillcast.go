@@ -16,10 +16,13 @@ import "math"
 // The S->C skill-cast bracket: server accept, then 0xB245/0xB505.
 //
 // Ordinary cast brackets own one 0xB505 mode-2 finalize with the
-// same token. Exception: tele guided travel closes on arrival (8DD611/8DD61C),
-// with secondary motion authored by its effect metadata. The client has no
-// arbitrary wall-clock finalize - sub_8dcf40
-// callers are event-driven - so without a steering payload the ONLY thing that
+// same token. Exception: tele guided travel closes on arrival
+// (client 0x008DD611/0x008DD61C inside
+// CIDecoSkill_OnGuidedTrajectoryTick), with
+// secondary motion authored by its effect metadata. The client has no
+// arbitrary wall-clock finalize - the client's
+// CIDecoSkill_RequestCancellation callers are event-driven - so without
+// a steering payload the ONLY thing that
 // clears busy bit 2 (and reopens the 0x2476 move gate) is a received 0xB505
 // mode 2. B245 opens the action bracket immediately. B505 mode 1 releases
 // WAIT at Action_CastingTime without movement steering; mode 2 closes the
@@ -29,19 +32,23 @@ import "math"
 // Opcodes of the skill-cast bracket.
 const (
 	// OpSkillCastResult is the Sâ†’C 0xB245 cast bracket open: success enters
-	// motion state 2 through sub_776830 â†’ sub_8e06e0 Init. The fail form
+	// motion state 2 through the client's
+	// CPSMission_OnSkillCastBroadcast0xB245 â†’ CIDecoSkill_InitializeCast Init. The fail form
 	// ([ok != 1][errCode]) is a pure notice - not composed here; landing 1
 	// keeps every non-accepted shape on its pre-existing refuse path.
 	OpSkillCastResult uint16 = 0xB245
 	// OpSkillEffectControl is the Sâ†’C 0xB505 effect-control packet
-	// (sub_8e2c90 via thunk sub_7754f0): mode 1 re-arms steering, mode 2
-	// finalizes (sub_8dcf40 â†’ busy bit 2 clears). The client never sends
+	// (the client's CIDecoSkill_ProcessCastControl via its
+	// CPSMission_OnSkillCastControl0xB505 dispatch): mode 1 re-arms
+	// steering, mode 2
+	// finalizes (CIDecoSkill_RequestCancellation â†’ busy bit 2 clears). The client never sends
 	// it - a deferred close must be a server emit.
 	OpSkillEffectControl uint16 = 0xB505
 )
 
 // SkillCastSuccess is the common 0xB245 success prefix pinned in the
-// sub_776830 fold research. Live combat appends its target/result block via
+// CPSMission_OnSkillCastBroadcast0xB245 fold research. Live combat
+// appends its target/result block via
 // SkillCastSingleTargetResult:
 //
 //	[ok=0x01][btResult u8][skillId u32][casterGid u32][instanceToken u32]
@@ -55,12 +62,12 @@ SkillCastSuccess
 */
 type SkillCastSuccess struct {
 	// BtResult must be 0 or 2 - the client accepts exactly {0,2} and both
-	// jump to the same label 0x776940, so they are indistinguishable;
+	// jump to the same client label 0x776940, so they are indistinguishable;
 	// anything else trips the 0xe7 assert and retail silently drops the
 	// cast. Landing 1 pins 0.
 	BtResult uint8
 	// SkillId keys the client's effect-record lookup (g_effectRecordMap /
-	// cec870+0x16c) and the cool-time insert.
+	// client data_cec870+0x16c) and the cool-time insert.
 	SkillId uint32
 	// CasterGid MUST be the gid the enter-world plane assigned
 	// (enterworld.ObjectIDForCharacter): the local-cast tail gates on
@@ -71,9 +78,10 @@ type SkillCastSuccess struct {
 	// client's f08a48 instance map and the finalize must echo it.
 	InstanceToken uint32
 	// OwnerOrTargetGid is the 4 bytes the plan mislabeled "dur f32": a u32
-	// GID, stored to the skill-effect object's +0xcc by an integer mov (sub_8e0440
-	// @0x8e0493/97, no fld/fstp) and consumed by
-	// GidObjectRegistry_FindCharacterByGid (sub_8d9740), read on the
+	// GID, stored to the skill-effect object's +0xcc by an integer mov (the
+	// client's CIDecoSkill_ReadCastPayload at client 0x8E0493/97, no
+	// fld/fstp) and consumed by the client's
+	// CIDecoSkill_GetTargetOrSecondaryEntity (client 8D9740), read on the
 	// local-echo path REGARDLESS of steeringFlags. Single-target result
 	// encoding derives this from TargetGid so the animation/effect owner and
 	// the damage-row owner cannot diverge. Other cast shapes may still send 0.
@@ -305,8 +313,9 @@ func (r SkillCastSingleTargetResult) WithAbsorb(impacts []SkillCastTargetImpact)
 	return r
 }
 
-// NewStationarySkillCastSingleTargetResult retains target/result ownership without bit 3. In 8e0440 that
-// bit starts a 500-unit/s movement controller; it is not a facing-only hint.
+// NewStationarySkillCastSingleTargetResult retains target/result ownership without bit 3. In the
+// client's CIDecoSkill_ReadCastPayload that bit starts a 500-unit/s
+// movement controller; it is not a facing-only hint.
 /*
 ================
 NewStationarySkillCastSingleTargetResult
@@ -316,8 +325,10 @@ func NewStationarySkillCastSingleTargetResult(cast SkillCastSuccess, target uint
 	return SkillCastSingleTargetResult{cast: cast, targetGid: target, impacts: append([]SkillCastTargetImpact(nil), impacts...), stationary: true}
 }
 
-// SkillCastReleaseFrame is 8e2c90 mode 1 followed by 8e0440's no-steering
-// target/flags record. It releases WAIT through 8df180 without moving the actor.
+// SkillCastReleaseFrame is the client's CIDecoSkill_ProcessCastControl
+// mode 1 followed by CIDecoSkill_ReadCastPayload's no-steering
+// target/flags record. It releases WAIT through the client's
+// CIDecoSkill_ReleaseStageWait without moving the actor.
 /*
 ================
 SkillCastReleaseFrame
@@ -405,11 +416,12 @@ func (r SkillCastSingleTargetResult) Encode() []byte {
 }
 
 // SkillCastFinalize is the 0xB505 mode-2 finalize, shape pinned in the
-// sub_8e2c90 fold research:
+// CIDecoSkill_ProcessCastControl fold research:
 //
 //	[mode=0x02][extra u8 (read, discarded)][instanceToken u32]
 //
-// A token miss is a SILENT consume-and-return (sub_8e2bc0) - the bracket
+// A token miss is a SILENT consume-and-return (the client's
+// SkillInstanceRegistry_Find) - the bracket
 // never closes - so the token must echo the success frame's exactly.
 /*
 ================

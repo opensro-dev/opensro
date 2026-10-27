@@ -19,9 +19,10 @@ const OpPartyLootNotice uint16 = 0x317D
 ================
 EncodePartyLootNotice
 
-[u32 recipient gid][u32 item ref] then the amount in the width 7511C0 reads
-for the item's type: a u32 for a gold heap (ETC, group 0x280), a u16 for
-another expendable stack, otherwise a single byte.
+[u32 recipient gid][u32 item ref] then the amount in the width the
+client's CPSMission_OnItemLootGoldOrItem0x317D reads for the item's type:
+a u32 for a gold heap (ETC, group 0x280), a u16 for another expendable
+stack, otherwise a single byte.
 ================
 */
 func EncodePartyLootNotice(recipientGid, refObjID uint32, typeFlags uint16, amount uint32) []byte {
