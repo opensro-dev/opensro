@@ -144,17 +144,17 @@ func TestDecodeInvitationConsent3393(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "party accept (sub_526020 button 1)",
+			name:    "party accept (CIFMessageBox_OnAcceptButton button 1)",
 			payload: []byte{0x01, 0x01},
 			want:    InvitationConsent{InviteType: 1, Button: ConsentButtonAccept},
 		},
 		{
-			name:    "party refuse (sub_52c800 button 2)",
+			name:    "party refuse (CIFMessageBox_OnRefuseButton button 2)",
 			payload: []byte{0x01, 0x02},
 			want:    InvitationConsent{InviteType: 1, Button: ConsentButtonRefuse},
 		},
 		{
-			name:    "option-off auto-decline (sub_7644e0 spilled 0)",
+			name:    "option-off auto-decline (CPSMission_OnConfirmBoxPrompt0x3393 spilled 0)",
 			payload: []byte{0x01, 0x00},
 			want:    InvitationConsent{InviteType: 1, Button: 0},
 		},
@@ -194,7 +194,8 @@ func TestEncodeCreatePartyAckB0D5(t *testing.T) {
 	}
 }
 
-// memberRowBytes renders the expected MemberMaskFull row in sub_75db30's
+// memberRowBytes renders the expected MemberMaskFull row in
+// CPartyMemberInfo_ReadMasked's
 // read order: mask, id, sized name + model dword, level, status
 // nibbles, region + int16 x/y/z + war.
 func memberRowBytes(row MemberRow) []byte {

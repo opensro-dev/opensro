@@ -153,8 +153,8 @@ the privilege gate re-runs against the LIVE snapshot (the party may
 have re-formed or delegated while the prompt was up), the registry
 re-validates membership/cap under its lock, then the sitting members
 get the 0x3E58 type-2 JOIN row and the joiner the 0xB0D5 + 0x35D6
-seed (which also clears the inviter's pending latch, the native
-@0x0076193e leg).
+seed (which also clears the inviter's pending latch, the client's
+CPSMission_OnPartyJobMemberJoinLogout0x3E58 leg).
 ==================
 */
 func (r *Runtime) commitJoinConsent(consent partyConsent) byte {

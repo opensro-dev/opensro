@@ -28,7 +28,9 @@ ConsentArm is one PEER invitation lane on the SHARED 0x3393 opcode
 (guild today; mentor/TC type 9 when it ships). The party lane owns
 the single hub registration, and a C->S reply routes to whichever
 lane holds the answering character's outstanding invitation - the
-reply cannot name its subsystem: the party composers 6FDE80/6FE050
+reply cannot name its subsystem: the party composers
+NetClient_SendPartyFormRefuse3393/
+NetClient_SendPartyJoinRefuse3393
 accept with {01 01}, the guild accept is the byte-identical {01 01},
 and the guild refuse's first byte is a RESULT code 2, never a type.
 Implemented STRUCTURALLY (internal/game/social/guild's InviteRuntime) because the
@@ -421,7 +423,7 @@ handleInvite
 handleInvite applies one 0x70D5 create proposal: resolve the target by
 world gid within the actor's division, refuse silently (self, unknown,
 offline, either side already partied), then PROMPT the target with
-0x3393 {u8 1, u32 inviterGid} (the sub_7644e0 party arm) and park the
+0x3393 {u8 1, u32 inviterGid} (the CPSMission_OnConfirmBoxPrompt0x3393 party arm) and park the
 proposal in the pending-invitation table. NOTHING commits here - the
 party forms only when the target's 0x3393 accept consent arrives.
 ==================
@@ -588,8 +590,9 @@ handleInvitationConsent
 handleInvitationConsent applies one C->S 0x3393 {u8, u8} reply. The
 opcode is the SHARED invitation multiplex and the reply does NOT name
 its subsystem: party accepts use {01 01}, the
-guild accept (sub_6971b0 case 0xc @0x006975c3) is the byte-identical
-{01 01}, and the guild refuse {02 16} (@0x00697616) carries a RESULT
+guild accept (CGInterface_OnMsgBoxResult case 0xc) is the
+byte-identical
+{01 01}, and the guild refuse {02 16} carries a RESULT
 code first, never a type - so the router resolves ownership by WHO
 HOLDS the answering character's outstanding invitation. At most one
 lane holds one at a time: no lane proposes while another's proposal
@@ -700,7 +703,8 @@ handleLeave
 
 handleLeave applies one 0x704F request - the empty-body frame whose
 leave-vs-dissolve split the server decides by leadership (the
-sub_6fdc30 fold's note): the leader leaving BREAKS the party (0x3E58
+NetClient_SendPartyLeave704F fold's note): the leader leaving
+BREAKS the party (0x3E58
 type-1 to every member including the initiator - full clear + the
 BROKEN guide); a member leaving emits type-3 SECEDE to everyone (the
 leaver's own is-me split full-clears their client), and a departure
