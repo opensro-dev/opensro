@@ -304,6 +304,74 @@ func Interpolate(from, to RegionXZ, t float64) RegionXZ {
 	})
 }
 
+/*
+================
+RegionsAlong
+
+Every region the straight walk from->to enters, in order, starting with
+from's own region (each region once per entry). Outdoors it walks the
+sector grid exactly (one grid traversal step per seam, so a chord that
+clips a sector corner still lists that sector); a chord through a corner
+point steps both axes at once, as one movement step past the corner does.
+The cave plane has no sectors, and a walk between planes is never one
+chord: both answer the two end regions. Callers use it to test each region
+change a walk makes, the way the reference server tests every step of a
+moving object (CGObj_StepMovement).
+================
+*/
+func RegionsAlong(from, to RegionXZ) []uint16 {
+	if IsDungeonRegion(from.RegionID) || !SamePlane(from.RegionID, to.RegionID) {
+		if from.RegionID == to.RegionID {
+			return []uint16{from.RegionID}
+		}
+		return []uint16{from.RegionID, to.RegionID}
+	}
+	dx, dz := Delta(from, to)
+	sx, sz := SectorX(from.RegionID), SectorY(from.RegionID)
+	ix, iz := int(math.Floor(from.X/OutdoorRegionSize)), int(math.Floor(from.Z/OutdoorRegionSize))
+	endX := int(math.Floor((from.X + dx) / OutdoorRegionSize))
+	endZ := int(math.Floor((from.Z + dz) / OutdoorRegionSize))
+	regions := []uint16{RegionIDForSectors(sx+ix, sz+iz)}
+	stepX, nextX, deltaX := gridStep(from.X, dx, ix)
+	stepZ, nextZ, deltaZ := gridStep(from.Z, dz, iz)
+	for ix != endX || iz != endZ {
+		switch {
+		case nextX < nextZ:
+			ix += stepX
+			nextX += deltaX
+		case nextZ < nextX:
+			iz += stepZ
+			nextZ += deltaZ
+		default:
+			ix += stepX
+			iz += stepZ
+			nextX += deltaX
+			nextZ += deltaZ
+		}
+		regions = append(regions, RegionIDForSectors(sx+ix, sz+iz))
+	}
+	return regions
+}
+
+/*
+================
+gridStep
+
+One axis of the RegionsAlong traversal: the cell step direction, the chord
+fraction at which the walk reaches its first seam on this axis, and the
+fraction between seams. An axis the chord does not move along never steps.
+================
+*/
+func gridStep(start, delta float64, cell int) (step int, next, between float64) {
+	switch {
+	case delta > 0:
+		return 1, (float64(cell+1)*OutdoorRegionSize - start) / delta, OutdoorRegionSize / delta
+	case delta < 0:
+		return -1, (float64(cell)*OutdoorRegionSize - start) / delta, -OutdoorRegionSize / delta
+	}
+	return 0, math.Inf(1), math.Inf(1)
+}
+
 //============================================================================
 // Plane-keyed arithmetic moved here from the simulation (#1646): the
 // region bit decides a frame or a grid, which is this file's job.
