@@ -5,16 +5,15 @@ import "fmt"
 // Target release closes a server-owned NPC interaction.
 //
 // v1.150 byte truth:
-//   - C->S: the client's CGInterface_RequestNpcTargetRelease
-//     (client 693790): 0x74B3 [trackedTargetGid624:u32le]
-//   - S->C: the client's CPSMission_OnPartyJobLeaveResponse0xB4B3
-//     (client 761820): 0xB4B3 [mode:u8] ([extra:u8] only when mode == 2)
+//   - C->S sub_693790 / CGInterface_SendTargetRelease74B3:
+//     0x74B3 [trackedTargetGid624:u32le]
+//   - S->C sub_761820 / CPSMission_HandleTalkCloseB4B3:
+//     0xB4B3 [mode:u8] ([extra:u8] only when mode == 2)
 //
 // Mode 1 is the minimal close acknowledgement: the client unconditionally
-// runs its CGInterface_CloseNpcInteraction interaction-window sweep and
-// needs no extra byte. Mode 2 is the refusal:
-// CPSMission_OnPartyJobLeaveResponse0xB4B3 reads its one extra byte and
-// discards it, then closes the interaction as for mode 1.
+// runs sub_69fff0's interaction-window sweep and needs no extra byte. Mode 2
+// is the refusal: 761820 reads its one extra byte and discards it, then
+// closes the interaction as for mode 1.
 const (
 	OpTargetReleaseRequest uint16 = 0x74B3
 	OpTalkCloseResult      uint16 = 0xB4B3
@@ -23,8 +22,7 @@ const (
 // TargetReleaseRequestSize is exactly one little-endian object gid.
 const TargetReleaseRequestSize = 4
 
-// DecodeTargetReleaseRequest parses the exact client
-// CGInterface_RequestNpcTargetRelease request body.
+// DecodeTargetReleaseRequest parses the exact sub_693790 request body.
 func DecodeTargetReleaseRequest(payload []byte) (uint32, error) {
 	if len(payload) != TargetReleaseRequestSize {
 		return 0, fmt.Errorf(
@@ -42,8 +40,7 @@ func DecodeTargetReleaseRequest(payload []byte) (uint32, error) {
 }
 
 // EncodeTalkCloseResult composes 0xB4B3 mode 1. Do not append an invented
-// success byte: the client's CPSMission_OnPartyJobLeaveResponse0xB4B3
-// interprets this first byte as a mode selector.
+// success byte: sub_761820 interprets this first byte as a mode selector.
 func EncodeTalkCloseResult() []byte {
 	return []byte{1}
 }

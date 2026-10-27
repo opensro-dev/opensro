@@ -4,8 +4,7 @@
 exchange.go - the player-to-player exchanges of every division
 
 Package exchange owns who is trading with whom and what each side has
-put on the table (the reference server's exchange manager). A request
-waits for the
+put on the table (ExchangeMgr in the GameServer). A request waits for the
 target's answer (the 0x3393 kind-1 prompt, 30 s like every proposal); an
 accepted request opens a session of two sides. Each side offers up to
 twelve bag slots (CIFExchange holds 12 per side, 6B2DA0) and an amount of

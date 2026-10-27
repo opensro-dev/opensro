@@ -32,13 +32,14 @@ import (
 // server-wave seq 38): 0x01 movement, 0x02 approach, 0x03 direction stop,
 // 0x04 steer, 0x08 pickup, 0x09 follow, 0x0B mount. The mount's movement trio is what
 // CNavigationDeadreckon sends for a vehicle instead of the player opcodes:
-// SendTargetMovePacket (client 0x877D80) tag 0x01 with the 0x7738 body,
-// SendAngleUpdatePacket (client 0x8777B0) tag 0x03 [u16 heading] instead of
-// 0x72F5, and SendSteeringUpdate (client 0x877540) tag 0x04 [u16 heading]
-// instead of 0x72CF.
+// CNavigationDeadreckon_SendTargetMovePacket (client 0x877D80) tag 0x01
+// with the 0x7738 body, CNavigationDeadreckon_SendAngleUpdatePacket
+// (client 0x8777B0) tag 0x03 [u16 heading] instead of 0x72F5, and
+// CNavigationDeadreckon_SendSteeringUpdate (client 0x877540) tag 0x04
+// [u16 heading] instead of 0x72CF.
 // Every supported form has an exact body length. Unknown tags are rejected.
 // DropItemManager_TickAutoPickupRequests (client 77DFA0) emits tag 8 with
-// a target; CosEntryPanel_SyncActiveState (client 6A2777) emits tag 9
+// a target; CICCos_ExecuteActionCommand (client 6A2777) emits tag 9
 // without a target.
 //
 // S->C twins (emitted by action.HandleCosCommand after authoritative

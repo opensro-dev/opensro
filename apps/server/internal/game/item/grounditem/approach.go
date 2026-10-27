@@ -162,8 +162,8 @@ type Pending struct {
 // PendingTracker holds the one approach each character may have in flight.
 //
 // The native target-move latch is a single slot: issuing any new command
-// replaces it (client CGInterface_SetTargetMoveActive), which is why
-// arming an approach overwrites rather than queues.
+// replaces it (sub_67b0e0), which is why arming an approach overwrites rather
+// than queues.
 /*
 ================
 PendingTracker

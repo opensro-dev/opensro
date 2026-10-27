@@ -9,10 +9,9 @@ package inventory
 
 import "opensro.online/server/internal/game/item/wire"
 
-// TransferWholeTo applies a whole-source transfer between bag owners. The
-// client's CPSMission_ApplyInventoryOperation supplies the source count to
-// CPSMission_MergeOrSwapItems for both COS directions: compatible stacks
-// merge (including the full-destination count exchange), otherwise swap.
+// TransferWholeTo applies a whole-source transfer between bag owners. Native
+// 756CF0 supplies the source count to 756A60 for both COS directions: compatible
+// stacks merge (including the full-destination count exchange), otherwise swap.
 /*
 ================
 TransferWholeTo

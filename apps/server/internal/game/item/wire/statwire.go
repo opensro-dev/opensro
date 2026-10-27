@@ -9,109 +9,85 @@ package wire
 // a different version.
 //
 //	+STR  CIFPlayerInfo GDR_PI_BTN_ADDHP (id 14) -> sub_59fa80 @0x0059fa80
-//	      -> the client's NetClient_Send7552(0x4b, 1) at client
-//	      client 0x00692B47 -> 0x727A, EMPTY body
+//	      -> sub_692a90(0x4b, 1) @0x00692b47 -> 0x727A, EMPTY body
 //	+INT  CIFPlayerInfo GDR_PI_BTN_ADDMP (id 15) -> sub_59faa0 @0x0059faa0
-//	      -> the client's NetClient_Send7552(0x4b, 2) at client
-//	      client 0x00692AF2 -> 0x7552, EMPTY body
+//	      -> sub_692a90(0x4b, 2) @0x00692af2 -> 0x7552, EMPTY body
 //	train CIFSkillPracticeBox confirm sub_5de690 @0x005de771
-//	      -> the client's NetClient_Send7165 -> 0x7165
-//	      [u32 masteryId][u8 amount]
+//	      -> sub_6fee40 @0x006fee40 -> 0x7165 [u32 masteryId][u8 amount]
 const (
 	// OpAllocStrRequest is the client's "+1 STR" click. EMPTY payload:
-	// the client's NetClient_Send7552 constructs the packet and submits
-	// it with no AppendBytes call between (ctor at client 0x00692B47,
-	// submit at client 0x00692B70).
+	// sub_692a90 constructs the packet and submits it with no
+	// AppendBytes call between (@0x00692b47 ctor, @0x00692b70 submit).
 	OpAllocStrRequest uint16 = 0x727A
 	// OpAllocIntRequest is the client's "+1 INT" click. EMPTY payload.
 	OpAllocIntRequest uint16 = 0x7552
 	// OpMasteryLevelUpRequest is the mastery-training confirm.
 	// Payload [u32 masteryId][u8 amount]; the UI only ever sends amount 1
-	// (the client's NetClient_Send7165 at client
-	// client 0x006FEEAD/0x006FEEBD).
+	// (sub_6fee40 @0x006feead/@0x006feebd).
 	OpMasteryLevelUpRequest uint16 = 0x7165
 	// OpSkillLearnRequest is the skill-learn confirm (the skill board's
-	// confirm callback, the client's
-	// CIFSkillSlot_OpenSkillWithdrawalOrTraining, stashes the skill id
-	// at client 0x0058834B and calls the sender NetClient_Send72CB,
-	// which constructs 0x72CB at client 0x006FEDC1 and appends exactly
-	// the u32 skill id at client 0x006FEDED).
+	// confirm callback sub_5882c0 stashes the skill id @0x0058834b and
+	// calls the sender sub_6fed80 @0x006fed80, which constructs 0x72CB
+	// @0x006fedc1 and appends exactly the u32 skill id @0x006feded).
 	// Payload [u32 skillId].
 	OpSkillLearnRequest uint16 = 0x72CB
 
-	// OpAllocStrResponse acks 0x727A. Handler: the client's
-	// CPSMission_OnStatPointSpendResponse0xB27A:
+	// OpAllocStrResponse acks 0x727A. Handler sub_75ba00 @0x0075ba00:
 	// result 1 decrements the client's remaining stat points (the u16 at
 	// CICPlayer+0x83c) and refreshes the character window.
 	OpAllocStrResponse uint16 = 0xB27A
-	// OpAllocIntResponse acks 0x7552. Handler: the client's
-	// CPSMission_OnTradeItemAddResponse0xB552.
+	// OpAllocIntResponse acks 0x7552. Handler sub_75ba50 @0x0075ba50.
 	OpAllocIntResponse uint16 = 0xB552
-	// OpMasteryLevelUpResponse acks 0x7165. Handler: the client's
-	// CPSMission_OnMasteryLearnResponse0xB165: result 1 writes the new
-	// level into the mastery record (record+4 via the client's
-	// SkillMasteryBlock_FindMasteryRecordById) and refreshes the skill
-	// window.
+	// OpMasteryLevelUpResponse acks 0x7165. Handler sub_75bc00
+	// @0x0075bc00: result 1 writes the new level into the mastery record
+	// (record+4 via sub_8505a0) and refreshes the skill window.
 	OpMasteryLevelUpResponse uint16 = 0xB165
-	// OpSkillLearnResponse acks 0x72CB. Handler: the client's
-	// CPSMission_OnSkillLearnResponse0xB2CB: result 1 reads the u32
-	// skill id, ASSERTS the skill's group is not already learned at
-	// that level or higher (client 0x0075BB71 - a wrong success ack
-	// trips a debug breakpoint), marks it learned (the client's
-	// LearnedSkillMap_AddRecordByHost, which REPLACES the group's
-	// previous-level entry) and refreshes; result 2 reads one error
-	// byte routed to guide category 5 (client 0x0075BBE9).
+	// OpSkillLearnResponse acks 0x72CB. Handler sub_75bb20 @0x0075bb20:
+	// result 1 reads the u32 skill id, ASSERTS the skill's group is not
+	// already learned at that level or higher (@0x0075bb71 - a wrong
+	// success ack trips a debug breakpoint), marks it learned
+	// (sub_8509f0, which REPLACES the group's previous-level entry) and
+	// refreshes; result 2 reads one error byte routed to guide category
+	// 5 (@0x0075bbe9).
 	OpSkillLearnResponse uint16 = 0xB2CB
 
 	// OpPointsUpdate carries an ABSOLUTE points value on a typed channel.
-	// Handler: the client's CPSMission_OnPointUpdate30B3; type 2 is
-	// skill points, type 3 stat points.
+	// Handler sub_779c70; type 2 is skill points, type 3 stat points.
 	OpPointsUpdate uint16 = 0x30B3
-	// OpBaseStats is the login/base-stat staging block. Handler: the
-	// client's CPSMission_OnBaseStats0x343C, the ONLY channel that moves
-	// the live STR/INT words (CICPlayer+0x834/+0x836) - char-data never
-	// carries them.
+	// OpBaseStats is the login/base-stat staging block. Handler
+	// sub_75be90 @0x0075be90: the ONLY channel that moves the live STR/INT
+	// words (CICPlayer+0x834/+0x836) - char-data never carries them.
 	OpBaseStats uint16 = 0x343C
 
 	// OpExpUpdate is the experience / skill-exp delta channel (levelup
-	// wave, LANE-1). Handler: the client's
-	// CPSMission_OnExpGainEventGuide0x30D2 (registered in
-	// CPSMission_RegisterPacketHandlers: opcode write at client
-	// 0x0074D8D4, handler ptr at client 0x0074D8DC): adds the SIGNED exp
+	// wave, LANE-1). Handler sub_779620 @0x00779620 (registrar opcode
+	// write @0x0074d8d4, handler ptr @0x0074d8dc): adds the SIGNED exp
 	// delta to the player's u64 exp (CICPlayer+0x828/+0x82c), walks the
-	// leveldata curve itself (the client's
-	// CGlobalData_GetLevelDataPayload(level) row +0x08 u64 = column 1
+	// leveldata curve itself (sub_7e0f20(level) row +0x08 u64 = column 1
 	// of leveldata.txt) and increments the level byte +0x820 per
 	// crossing - THE LEVEL-UP IS DERIVED CLIENT-SIDE FROM THIS PACKET,
 	// there is no separate "set level" opcode in the registrar. When one
 	// or more levels are crossed the handler reads a TRAILING u16
-	// straight into the stat-points word +0x83c (client 0x007797B0) -
-	// see
+	// straight into the stat-points word +0x83c (@0x7797b0) - see
 	// EncodeExpUpdate for the hazard that creates. The skill-exp delta
-	// accumulates at +0x830 and wraps mod 0x190=400 (client
-	// client 0x00779B02..0x00779B29); the SP counter +0x838 is NOT touched
-	// here - SP still
+	// accumulates at +0x830 and wraps mod 0x190=400 (@0x779b02..
+	// 0x779b29); the SP counter +0x838 is NOT touched here - SP still
 	// rides 0x30B3 type 2 only.
 	OpExpUpdate uint16 = 0x30D2
 	// OpLevelUpEffect is the level-up presentation notification. Handler
-	// The client's CPSMission_OnLevelUpSoundAndDeco0x36B0 (registered
-	// in CPSMission_RegisterPacketHandlers at client
-	// client 0x0074D8B3/0x0074D8BB): payload is exactly [u32 gid]; the handler
-	// resolves the entity (the client's GidObjectRegistry_FindEntityByGid,
-	// miss = silent return) and plays the SYSTEM_LEVELUP effect
-	// 0x80000006 (COS/pet entities take SYSTEM_PET_LEVEL_UP 0x80000022
-	// instead, via the client's CObject_IsExactRuntimeClass against
-	// client data_cedc38) plus the "snd_levup" sound (client
-	// client 0x00777707). Pure presentation: no player state
+	// sub_777670 @0x00777670 (registrar @0x0074d8b3/@0x0074d8bb):
+	// payload is exactly [u32 gid]; the handler resolves the entity
+	// (sub_852730, miss = silent return) and plays the SYSTEM_LEVELUP
+	// effect 0x80000006 (COS/pet entities take SYSTEM_PET_LEVEL_UP
+	// 0x80000022 instead, sub_a05510 vs data_cedc38) plus the
+	// "snd_levup" sound (@0x777707). Pure presentation: no player state
 	// moves. The 0x30D2 handler itself never references the effect
-	// (verified: the client's CPSMission_OnExpGainEventGuide0x30D2 body
-	// carries no 0x80000006 use), so a
+	// (verified: sub_779620's body carries no 0x80000006 use), so a
 	// level-up burst that wants the retail visual must send BOTH.
 	OpLevelUpEffect uint16 = 0x36B0
 )
 
-// Points-update channel types (the leading discriminator byte of the
-// client's CPSMission_OnPointUpdate30B3).
+// Points-update channel types (sub_779c70's leading discriminator byte).
 const (
 	// PointsTypeGold is [u8 1][u64 balance][u8 notify].
 	PointsTypeGold uint8 = 1
@@ -134,8 +110,7 @@ const (
 type MasteryLevelUpRequest struct {
 	MasteryID uint32
 	// Amount is the level count the client asks to train. The native UI
-	// hardcodes 1 (the client's NetClient_Send7165 caller stacks the
-	// literal); a bulk value
+	// hardcodes 1 (sub_6fee40's caller stacks the literal); a bulk value
 	// is unmodelled, so the server refuses anything else rather than
 	// guessing how retail batches the SP spend.
 	Amount uint8
@@ -160,8 +135,7 @@ func DecodeMasteryLevelUpRequest(payload []byte) (MasteryLevelUpRequest, error) 
 
 // EncodePointsAck is the shared success/error shape of the stat acks
 // (0xB27A/0xB552): [u8 1] on success, [u8 2][u8 errorCode] on refusal.
-// The client's CPSMission_OnStatPointSpendResponse0xB27A reads the
-// result byte, and only on result 2 reads the error.
+// sub_75ba00 reads the result byte, and only on result 2 reads the error.
 func EncodePointsAck(success bool, errorCode uint8) []byte {
 	if success {
 		return NewWriter(1).U8(ResultSuccess).Payload()
@@ -171,9 +145,7 @@ func EncodePointsAck(success bool, errorCode uint8) []byte {
 
 // EncodeMasteryLevelUpAck is a successful 0xB165:
 // [u8 1][u32 masteryId][u8 newLevel]. The client writes newLevel straight
-// into the mastery record (the client's
-// CPSMission_OnMasteryLearnResponse0xB165 at client 0x0075BCA0), so
-// this value IS what
+// into the mastery record (sub_75bc00 @0x0075bca0), so this value IS what
 // the skill window shows - it must be the post-training level.
 func EncodeMasteryLevelUpAck(masteryID uint32, newLevel uint8) []byte {
 	return NewWriter(6).U8(ResultSuccess).U32(masteryID).U8(newLevel).Payload()
@@ -187,8 +159,7 @@ func EncodeMasteryLevelUpError(errorCode uint8) []byte {
 }
 
 // Mastery-training refusal codes. The client maps these through notice
-// category 0x07 (the mastery guide group) in the client's
-// CGInterface_ShowSystemNotification; the keys named
+// category 0x07 (the mastery guide group) in sub_689420; the keys named
 // below are the ones that group already carries, so a refusal surfaces the
 // retail message without any client work.
 const (
@@ -213,8 +184,7 @@ type SkillLearnRequest struct {
 }
 
 // DecodeSkillLearnRequest reads the 0x72CB body: exactly one u32 (the
-// sender, the client's NetClient_Send72CB, appends 4 bytes and
-// submits at client 0x006FEDED).
+// sender sub_6fed80 appends 4 bytes and submits, @0x006feded).
 func DecodeSkillLearnRequest(payload []byte) (SkillLearnRequest, error) {
 	r := NewReader(payload)
 	skillID, err := r.U32()
@@ -229,26 +199,21 @@ func DecodeSkillLearnRequest(payload []byte) (SkillLearnRequest, error) {
 
 // EncodeSkillLearnAck is a successful 0xB2CB: [u8 1][u32 skillId]. The
 // client marks exactly this id learned (sub_75bb20 @0x0075bb48 reads the
-// u32, the client's LearnedSkillMap_AddRecordByHost inserts it), so
-// it must echo the request's id.
+// u32, sub_8509f0 inserts it), so it must echo the request's id.
 func EncodeSkillLearnAck(skillID uint32) []byte {
 	return NewWriter(5).U8(ResultSuccess).U32(skillID).Payload()
 }
 
 // EncodeSkillLearnError is a refused 0xB2CB: [u8 2][u8 errorCode]. The
-// client routes the code through guide category 5 (its
-// CPSMission_OnSkillLearnResponse0xB2CB at client 0x0075BBE9 ->
-// CGInterface_ShowSystemNotification), whose recovered table is the
-// codes below.
+// client routes the code through guide category 5 (sub_75bb20
+// @0x0075bbe9 -> sub_689420), whose recovered table is the codes below.
 func EncodeSkillLearnError(errorCode uint8) []byte {
 	return NewWriter(2).U8(ResultError).U8(errorCode).Payload()
 }
 
 // Skill-learn refusal codes. Guide category 5's dispatcher maps EXACTLY
-// three codes to notice keys (the client's
-// CGInterface_ShowSystemNotification at client
-// client 0x0068A219/0x0068A21E/0x0068A223); every other byte falls through
-// with no retail notice.
+// three codes to notice keys (sub_689420 @0x0068a219/@0x0068a21e/
+// @0x0068a223); every other byte falls through with no retail notice.
 const (
 	// ErrCodeSkillLearnStr is UIIT_STT_SKILL_LEARN_STR_INSUFFICIENCY
 	// (05:03): character STR below the skilldata ReqStr column. Shipped
@@ -276,11 +241,8 @@ const ErrCodeSkillLearnRefused uint8 = 0x01
 // ErrCodeStatAllocRefused is the error byte the stat acks carry on refusal.
 //
 // Pinned (LANE-3): UNLIKE the mastery/skill acks, the v1.150 stat handlers
-// the client's CPSMission_OnStatPointSpendResponse0xB27A /
-// CPSMission_OnTradeItemAddResponse0xB552 READ this byte and then
-// DISCARD it - they never call the guide dispatcher
-// CGInterface_ShowSystemNotification (contrast
-// CPSMission_OnMasteryLearnResponse0xB165 at client 0x0075BC00,
+// sub_75ba00 / sub_75ba50 READ this byte and then DISCARD it - they never
+// call the guide dispatcher sub_689420 (contrast sub_75bc00 @0x0075bc00,
 // which routes the mastery refusal to cat 7). So the byte produces NO client
 // notice regardless of value, and retail never triggers the refusal anyway
 // (the plus buttons only enable while CICPlayer+0x83c > 0, @0x005a01f8). 0x02
@@ -314,16 +276,13 @@ func EncodePointsSkillUpdate(skillPoints uint32, notify bool) []byte {
 //	[u32 sourceGid][s32 expDelta][s32 skillExpDelta][u8 flags]
 //	+ [u16 statPoints]  ONLY when the deltas cross >= 1 level upward
 //
-// Field semantics, pinned against the client's
-// CPSMission_OnExpGainEventGuide0x30D2:
+// Field semantics, pinned against sub_779620:
 //
-//   - sourceGid is only ever nonzero-CHECKED (client 0x00779B69) to
-//     gate the
+//   - sourceGid is only ever nonzero-CHECKED (@0x779b69) to gate the
 //     exp-gauge animation; retail rides the granting entity's gid, 0
 //     plays no animation. The value itself is never dereferenced.
 //   - expDelta is SIGNED (the handler sign-extends it into the 64-bit
-//     add, client 0x00779779). It must be the delta the server
-//     ACTUALLY APPLIED:
+//     add, @0x779779). It must be the delta the server ACTUALLY APPLIED:
 //     the client re-walks the same leveldata curve from this delta, so
 //     an emitted value larger than the applied one (e.g. a grant the
 //     server clamped at the level cap) would walk the client past the
@@ -331,10 +290,8 @@ func EncodePointsSkillUpdate(skillPoints uint32, notify bool) []byte {
 //   - skillExpDelta accumulates into the client's mod-400 gauge word.
 //   - flags is ALWAYS 0 from this server: bit patterns (f&0x0f)==1 and
 //     (f&0xf0)==0x10 make the handler read extra dwords whose meaning is
-//     unpinned (base-stat singleton +0x2f0 via the client's
-//     CCharacterDependentData_SetField0x290; the client 827C30 /
-//     CCharacterDependentData_RemoveField2E4Entry paths) - never emit
-//     what cannot be named.
+//     unpinned (base-stat singleton +0x2f0 via sub_818930; the
+//     sub_827c30/sub_827c80 paths) - never emit what cannot be named.
 //   - statPoints is the ABSOLUTE post-grant stat-point pool, read
 //     straight into CICPlayer+0x83c (@0x7797b0) - the same word the
 //     0xB27A/0xB552 acks decrement and 0x30B3 type 3 overwrites. The
@@ -356,19 +313,16 @@ func EncodeExpUpdate(sourceGid uint32, expDelta, skillExpDelta int32, levelled b
 }
 
 // EncodeLevelUpEffect is the 0x36B0 body: exactly [u32 gid], the entity
-// the SYSTEM_LEVELUP effect and snd_levup sound play on (the client's
-// CPSMission_OnLevelUpSoundAndDeco0x36B0 reads 4 bytes at client
-// client 0x0077767D and resolves by gid; an unknown gid is a
+// the SYSTEM_LEVELUP effect and snd_levup sound play on (sub_777670
+// reads 4 bytes @0x77767d and resolves by gid; an unknown gid is a
 // silent no-op client-side).
 func EncodeLevelUpEffect(gid uint32) []byte {
 	return NewWriter(4).U32(gid).Payload()
 }
 
-// BaseStats is the 0x343C staging block (the read order of the
-// client's CPSMission_OnBaseStats0x343C).
+// BaseStats is the 0x343C staging block (sub_75be90's read order).
 //
-// The handler stages every field into the client's singleton at
-// client 0xced160. The local
+// The handler stages every field into the singleton at 0xced160. The local
 // player-info pane reads the first eight fields from that singleton, while
 // four later fields are also applied directly to CICPlayer:
 //
@@ -411,8 +365,7 @@ type BaseStats struct {
 // two u32 + two u16.
 const BaseStatsSize = 0x24
 
-// Encode serializes the block in the read order of the client's
-// CPSMission_OnBaseStats0x343C.
+// Encode serializes the block in sub_75be90's read order.
 func (b BaseStats) Encode() []byte {
 	return NewWriter(BaseStatsSize).
 		U32(b.PhysicalAttackMin).

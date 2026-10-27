@@ -16,8 +16,8 @@ import "math"
 // The S->C skill-cast bracket: server accept, then 0xB245/0xB505.
 //
 // Ordinary cast brackets own one 0xB505 mode-2 finalize with the
-// same token. Exception: tele guided travel closes on arrival (client
-// client 0x008DD611/0x008DD61C inside
+// same token. Exception: tele guided travel closes on arrival
+// (client 0x008DD611/0x008DD61C inside
 // CIDecoSkill_OnGuidedTrajectoryTick), with
 // secondary motion authored by its effect metadata. The client has no
 // arbitrary wall-clock finalize - the client's

@@ -6,8 +6,9 @@ import (
 )
 
 // TestDecodeActionEmoteRequestAcceptsExactlyTheClientBytes drives the decoder
-// with the EXACT single-byte bodies the v1.150 client emits: sub_695420's
-// emote arms stage {0,6,1,5,2,3,4,0} for commands 0xfa0,0xfa1..0xfa6,0xfab
+// with the EXACT single-byte bodies the v1.150 client emits:
+// CGInterface_ExecuteActionCommand's (client 0x695420) emote arms stage
+// {0,6,1,5,2,3,4,0} for commands 0xfa0,0xfa1..0xfa6,0xfab
 // (jump_table_6960d8; the client-side harness pins the same table as REAL
 // built frames in actionPaneEmitChainParity.test.ts). Every emitted byte must
 // decode to itself - the request byte IS the action code, there is no
@@ -53,8 +54,9 @@ func TestDecodeActionEmoteRequestRejectsNonClientShapes(t *testing.T) {
 }
 
 // TestActionEmotePushEncodeMatchesTheClientReadOrder pins the S->C body
-// byte-for-byte against the consumer: sub_778190 / CPSMission_HandlePacket324B
-// reads a u32 gid (CMsgStreamBuffer little-endian) THEN the action byte.
+// byte-for-byte against the consumer: CPSMission_OnEntityTransformUpdate0x324B
+// (client 0x778190) reads a u32 gid (CMsgStreamBuffer_ReadBytes,
+// little-endian) THEN the action byte.
 // Field-swapped or wide encodings fail on the literal bytes.
 func TestActionEmotePushEncodeMatchesTheClientReadOrder(t *testing.T) {
 	got := ActionEmotePush{Gid: 0x12345678, Action: EmoteActionLaugh}.Encode()

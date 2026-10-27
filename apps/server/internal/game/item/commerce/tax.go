@@ -14,9 +14,8 @@ type Tax struct {
 	Precision uint
 }
 
-// AdjustPrice follows the client's CIFNPCWindow_ApplyFortressTaxToPrice:
-// signed percent / 100, multiply, truncate toward zero, then add for
-// purchases or subtract for sales. Round each arithmetic
+// AdjustPrice follows 5D67F0: signed percent / 100, multiply, truncate toward
+// zero, then add for purchases or subtract for sales. Round each arithmetic
 // operation, just as x87 does. FILD itself loads the signed integer exactly.
 func AdjustPrice(base uint64, tax Tax, purchase bool) (uint64, bool) {
 	if base > math.MaxInt64 {

@@ -29,7 +29,7 @@ const (
 	avatarTypeID1    = 3
 	avatarTypeID2    = 1
 	avatarTypeID3    = 13
-	avatarFlagTypeID = 4 // TID4 4, the avatar flag: refused by both sides (client ItemTID_IsAvatarFlag)
+	avatarFlagTypeID = 4 // TID4 4, the avatar flag: refused by both sides (6EA1B0)
 
 	// The server's grant handler accepts inventory slots 0x0D..0x6F.
 	avatarSlotFirst = 0x0d
@@ -59,9 +59,9 @@ const (
 loadAvatarOptions
 
 The TID3 13 rows of magicoptionassign.txt: column 0 service, 1 country,
-2 TID3, 3 TID4, then the option codenames up to "xxx". The client's
-GlobalDataManager_FindMagicOptionAssign keys on TID3/TID4 alone, so a
-second row for the same part would be unreachable; it is refused here.
+2 TID3, 3 TID4, then the option codenames up to "xxx". The client's lookup
+(7D4600) keys on TID3/TID4 alone, so a second row for the same part would be
+unreachable; it is refused here.
 ================
 */
 func (c *Catalog) loadAvatarOptions(dir string) error {

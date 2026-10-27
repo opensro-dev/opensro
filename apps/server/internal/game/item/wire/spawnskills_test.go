@@ -17,8 +17,7 @@ import (
 ================
 TestPeerSpawnRowCarriesActiveEffects
 
-A buffed peer's row lists its effects in the client's
-CICharactor_DeserializeSpawnData shape: the token only
+A buffed peer's row lists its effects in the 85FB20 shape: the token only
 for a skill that has one, the status byte only for a skill that has one.
 ================
 */

@@ -41,7 +41,7 @@ func BagEnd(character *domain.Character) uint8 {
 }
 
 // Equipment sockets, as the native CIFEquipment TID->socket map assigns them
-// (client ItemTid_IsEquipTid3_6 / ItemTID_IsShield family).
+// (sub_550490 / sub_5932c0 family).
 const (
 	SocketHead     uint8 = 0
 	SocketBody     uint8 = 1
@@ -52,8 +52,7 @@ const (
 	SocketWeapon   uint8 = 6
 	SocketShield   uint8 = 7
 	// SocketSpecialDress is the job/trade-suit socket (CICPlayer+0x850),
-	// routed by the TID 3.1.7 arm of the client's
-	// CIFEquipment_DispatchItemDropAction.
+	// routed by the TID 3.1.7 arm of sub_594980.
 	SocketSpecialDress uint8 = 8
 	SocketEarring      uint8 = 9
 	SocketNecklace     uint8 = 10
@@ -77,24 +76,22 @@ func isEquipmentClassWord(typeFlags uint16) bool {
 }
 
 // isBodyArmorTid3 is the six-value body-armor TID3 set: CH garment(1),
-// protector(2), armor(3) + the EU triple (9, 10, 11): the client's
-// ItemTid_IsBodyArmorTid3.
+// protector(2), armor(3) + the EU triple (9, 10, 11). Native sub_593270.
 func isBodyArmorTid3(tid3 uint8) bool {
 	return tid3 == 1 || tid3 == 2 || tid3 == 3 || tid3 == 9 || tid3 == 10 || tid3 == 11
 }
 
 // EquipSocketForTypeFlags resolves the equipment socket from the RefItemData
-// TypeID word exactly as the client's CIFEquipment_DispatchItemDropAction
-// routes it (cross-checked against the independent visual-side mapper
-// ItemRecord_GetEquipSlotIndex). The second result is false for "no socket
-// class", which is the native SILENT reject: the dispatcher falls off its
-// end with no packet and no message.
+// TypeID word exactly as native sub_594980 /
+// CIFEquipment_ComposeEquipMoveForDroppedItem routes it (cross-checked against
+// the independent visual-side mapper sub_868a80). The second result is false
+// for "no socket class", which is the native SILENT reject: sub_594980 falls
+// off its end with no packet and no message.
 //
 // This is the AUTHORITATIVE resolver - the word is on every inventory row -
-// and it deliberately carries no gender/race gate: the only requirement
-// check the client's CIFEquipment_DispatchItemDropAction performs is the
-// required-sex test inside the job/trade-suit branch, so a blanket gate
-// here would be stricter than retail.
+// and it deliberately carries no gender/race gate: the only requirement check
+// sub_594980 performs is the required-sex test inside the job/trade-suit
+// branch, so a blanket gate here would be stricter than retail.
 func EquipSocketForTypeFlags(typeFlags uint16) (uint8, bool) {
 	if typeFlags&0x02 != 0 || typeFlags&0x1C != 0x0C {
 		return 0, false

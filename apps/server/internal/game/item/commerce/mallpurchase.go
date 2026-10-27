@@ -35,9 +35,8 @@ type MallQuote struct {
 ================
 Quote
 
-The client's CIFItemMallConfirmBuy_SetPointContribution limits point
-contribution to the multiplied Silk cost. Reject invalid wire values here
-instead of applying the UI's convenience clamp to a request.
+6BFD00 limits point contribution to the multiplied Silk cost. Reject invalid
+wire values here instead of applying the UI's convenience clamp to a request.
 ================
 */
 func (catalog *MallCatalog) Quote(q wire.MallPurchase) (MallQuote, error) {

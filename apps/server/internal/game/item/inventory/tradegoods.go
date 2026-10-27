@@ -72,10 +72,8 @@ func stackIdentityMatches(a, b Item) bool {
 ================
 wholeStackIdentityMatches
 
-The client's CPSMission_MergeOrSwapItems exchanges counts even at cap
-one (its arms at client 756A99..756AD5 and 756BF4..756C14); the client's
-CItem_MatchesItem does not compare Plus. Retained stacks after rollback
-still need
+Native 756A99..756AD5 and 756BF4..756C14 exchange counts even at cap one;
+7895F0 does not compare Plus. Retained stacks after rollback still need
 the port-only value guard, or a count exchange changes assimilation stock.
 ================
 */

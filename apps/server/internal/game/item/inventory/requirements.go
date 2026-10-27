@@ -8,8 +8,7 @@ package inventory
 // passes, exactly like the socket resolver's nil-source behavior.
 //
 // The split mirrors the NATIVE evaluation order of the client's full-mask
-// requirement check (CSOItem_Query_789C60): razed (bit 0x004), STR
-// (0x008), INT (0x010), level
+// requirement check (sub_789c60): razed (bit 0x004), STR (0x008), INT (0x010), level
 // (0x020), mastery (0x100) and gender (0x040) run BEFORE the clothes/hard
 // exclusivity scan (0x080); country (0x200) and the fortress-guild role
 // (0x400) run AFTER it - so an item refused by two rules reads back the

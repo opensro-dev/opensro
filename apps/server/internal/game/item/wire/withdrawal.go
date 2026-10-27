@@ -5,9 +5,7 @@ withdrawal.go - v1.150 skill and mastery restoration packets
 
 Client senders 701D60/701E40 carry the potion reference, learned identity,
 and desired rank. The rank is absolute, not a number of levels to remove.
-Handlers: the client's CPSMission_OnSkillWithdrawal /
-CPSMission_OnMasteryWithdrawal consume a one-byte error or the committed
-identity.
+Handlers 75BCE0/75BDB0 consume a one-byte error or the committed identity.
 
 ===========================================================================
 */

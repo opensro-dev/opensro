@@ -16,7 +16,7 @@ func potionWithCount(slot uint8, count uint16) Item {
 	return row
 }
 
-// The native CPSMission_MergeOrSwapItems arithmetic, all three arms.
+// The native sub_756a60 arithmetic, all three arms.
 func TestTransferSlotStackArms(t *testing.T) {
 	cases := []struct {
 		name          string

@@ -3,8 +3,8 @@ package wire
 import "fmt"
 
 // Action-pane command wire contracts: the 0x324B emote/action channel the
-// client's Action-command dispatcher sub_695420 /
-// CGInterface_ExecuteActionCommand composes; every layout below is pinned
+// client's Action-command dispatcher CGInterface_ExecuteActionCommand
+// (client 0x695420) composes; every layout below is pinned
 // to that fold and to the client's inbound handlers (addresses cited per
 // constant).
 
@@ -16,8 +16,9 @@ import "fmt"
 //     @0x695b9a jump_table_6960d8 cmds 0xfa1..0xfa6, client @0x695ee6 cmd
 //     0xfab) over CanSendOpcode(0x324B)/CMsgStreamBuffer.
 //   - S->C push: [u32 gid][u8 action]. Consumed by the client's
-//     CPSMission_OnEntityTransformUpdate0x324B (registered by sub_74d330
-//     entry #56): the client resolves the gid and plays the action via
+//     CPSMission_OnEntityTransformUpdate0x324B (registered by
+//     CPSMission_RegisterPacketHandlers, client 0x74D330, entry #56): the
+//     client resolves the gid and plays the action via
 //     SetMotionState
 //     (state 0xd for the CICUser family, state 7 otherwise).
 const OpActionEmote uint16 = 0x324B
@@ -64,8 +65,9 @@ func DecodeActionEmoteRequest(payload []byte) (uint8, error) {
 }
 
 // ActionEmotePush is one S->C 0x324B body: [u32 gid][u8 action], the exact
-// read order of sub_778190 / CPSMission_HandlePacket324B (u32 via
-// CMsgStreamBuffer_Read then the action byte).
+// read order of CPSMission_OnEntityTransformUpdate0x324B (client 0x778190):
+// CMsgStreamBuffer_ReadBytes takes the gid (4 bytes), then the action
+// byte (1 byte).
 type ActionEmotePush struct {
 	Gid    uint32
 	Action uint8
