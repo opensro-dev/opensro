@@ -13,6 +13,7 @@ package action
 import (
 	"time"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/world/monster"
@@ -60,11 +61,12 @@ func (rt *Runtime) prepareUniqueEquipment(ctx uniqueDropContext, nonRepair bool)
 	if !ok {
 		return grounditem.Item{}, false, false
 	}
-	group, ok := loot.SpecialEquipmentGroup(ctx.mob.Ref.Level)
+	level := rt.uniqueDropTableLevel(ctx.mob)
+	group, ok := loot.SpecialEquipmentGroup(level)
 	if !ok {
 		return grounditem.Item{}, false, false
 	}
-	chosen, ok := loot.SelectEquipment(country, group, false, ctx.mob.Ref.Level, rt.DropRoll)
+	chosen, ok := loot.SelectEquipment(country, group, false, level, rt.DropRoll)
 	if !ok {
 		return grounditem.Item{}, false, false
 	}
@@ -284,4 +286,116 @@ func (rt *Runtime) prepareUniqueDrops(ctx uniqueDropContext) []grounditem.Item {
 		}
 	}
 	return drops
+}
+
+//============================================================================
+// Guaranteed seals (port-only, not native; owner 2026-10-25)
+//============================================================================
+
+// uniqueSealAttempts bounds the re-draws of one guaranteed seal: a seal
+// bucket's absolute admission or a reference lookup can refuse a pick, but a
+// guaranteed reward must not go missing on an ordinary draw.
+const uniqueSealAttempts = 32
+
+/*
+================
+uniqueSealRewards
+
+The seal tiers one unique kill rewards, in drop order, with the draw each is
+guaranteed on: 0 means every kill. Owner decision 2026-10-26 (the round-1
+shape, held through round 2): a Star every kill and a Moon one kill in ten,
+on top of whatever the ordinary rare rolls bring. There is no guaranteed
+Sun: it stays on the ordinary rare roll for uniques as for everyone else.
+================
+*/
+var uniqueSealRewards = []struct {
+	tier  int
+	oneIn uint32
+}{
+	{enterworld.SealStar, 0},
+	{enterworld.SealMoon, 10},
+}
+
+/*
+================
+prepareUniqueSeals
+
+One unique kill's guaranteed sealed equipment: the highest degree the drop
+level offers (loot.SealGroupAt; degree 9 at the native cap, degree 11 once
+the cap-110 catalog moves it), one named seal each. The Star leaves every
+kill, the Moon one in ten; no Sun is guaranteed. The seal rates and the
+Sun class widening do not thin these: they are the reward, not a rare roll.
+================
+*/
+func (rt *Runtime) prepareUniqueSeals(ctx uniqueDropContext) []grounditem.Item {
+	if !RollsUniqueDrops(ctx.mob.Rarity()) || rt.DropRoll == nil {
+		return nil
+	}
+	country, ok := rt.resolveMonsterDropCountry(ctx.mob.Ref.Country)
+	if !ok {
+		return nil
+	}
+	level := rt.uniqueDropTableLevel(ctx.mob)
+	var drops []grounditem.Item
+	for _, reward := range uniqueSealRewards {
+		if reward.oneIn > 1 {
+			draw, err := rt.DropRoll()
+			if err != nil {
+				return drops
+			}
+			if draw%reward.oneIn != 0 {
+				continue
+			}
+		}
+		group, ok := loot.SealGroupAt(level, reward.tier)
+		if !ok {
+			continue
+		}
+		if item, ok := rt.prepareSealEquipment(country, group, level, ctx); ok {
+			drops = append(drops, item)
+		}
+	}
+	return drops
+}
+
+/*
+================
+prepareSealEquipment
+
+One guaranteed seal pick: the sealed class of the named tier, its native
+equipment plus roll, and the common door (variance, blues, ground item).
+Rare equipment always enters the magic-option constructor (7276A0), so a
+seal carries options; the retry covers absolute admission, an unavailable
+reference and a mixed bucket's item of another seal tier. The native Moon
+bucket includes Star body armour: only this port-only reward rejects it;
+ordinary native equipment selection keeps the original mixed assignment.
+================
+*/
+func (rt *Runtime) prepareSealEquipment(country uint8, group int, level uint8, ctx uniqueDropContext) (grounditem.Item, bool) {
+	items := rt.deps.ItemReferences()
+	if items == nil {
+		return grounditem.Item{}, false
+	}
+	for attempt := 0; attempt < uniqueSealAttempts; attempt++ {
+		chosen, ok := loot.SelectEquipment(country, group, true, level, rt.DropRoll)
+		if !ok {
+			continue
+		}
+		ref, found := items.ItemRefByCodename(chosen.Codename)
+		seal, sealed := enterworld.EquipmentSeal(ref)
+		if !found || !sealed || seal != group%enterworld.SealTiers {
+			continue
+		}
+		plus, ok := rt.rollDroppedEquipmentPlus()
+		if !ok {
+			return grounditem.Item{}, false
+		}
+		item, ok := rt.prepareSelectedDrop(loot.DropItem{
+			Codename: chosen.Codename, Count: 1, Plus: plus, FromUnique: true,
+		}, ctx.at, ctx.owner, ctx.now)
+		if ok {
+			return item, true
+		}
+	}
+	return grounditem.Item{}, false
 }
