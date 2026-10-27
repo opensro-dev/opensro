@@ -17,9 +17,10 @@ package match
 // refusal carrier is the unpinned flag-2 code table, so they stay
 // silent), the join request HAS pinned refusal arms the client consumes
 // - the 0xB5BF/0xB592 outer-1 details 0 (refused) and 2 (no reply),
-// which also clear the joiner's join-progress pane (sub_75ebd0 tail
-// @0x0075eda7 -> sub_634eb0(wnd, 0); sub_769ca0 tail @0x00769dae ->
-// sub_672280(wnd, 0)). A silent drop would leave that pane latched
+// which also clear the joiner's join-progress pane (the client
+// CPSMission_OnPartyMatchingJoinResponse0xB5BF tail clears the pane
+// window; CNetProcess_OnResponse0xB592's tail does the mentor twin).
+// A silent drop would leave that pane latched
 // forever, so every server-side refusal of a JOIN answers detail 0, and
 // a request that dies without the owner answering (owner logout,
 // displacement by a newer request) answers detail 2. DECISION: the
@@ -30,9 +31,11 @@ package match
 // PENDING-REQUEST TABLE: in-memory and session-scoped like the board
 // itself (a reboot drops it; the joiner's client recovers through its
 // own no-reply machinery - the owner-side panes carry their own timers,
-// e.g. the kind-0xe box's 15s arm @0x005305a11 sub_a00b30(0xa, 0x3a98)).
+// e.g. the kind-0xe box's 15s arm (client
+// CIObject_ScheduleStateTimer(0xa, 0x3a98))).
 // One outstanding request per LISTING OWNER: the owner's request pane
-// stores exactly one request (sub_63cbc0 overwrites +0x7b8.. in place),
+// stores exactly one request (client CIFPartyMatchReqJoin_SetRequest
+// overwrites +0x7b8.. in place),
 // so a second request would make the first unanswerable client-side -
 // the server mirrors that by DISPLACING the older request and acking
 // its joiner detail-2 (DECISION). One outstanding request per JOINER
@@ -310,7 +313,8 @@ func (r *Runtime) handlePartyJoinAnswer(s *transport.Session, opcode uint16, pay
 	// The commit derives the formed party's option bits from the
 	// LISTING's type bits when the owner is still partyless - the same
 	// party-settings words the registering client folded into them
-	// (sub_63bba0 @0x0063bc2c..0x0063bc53), so no second source exists.
+	// (client CGInterface_Uses_UIIT_MSG_PARTYMATCH_RECORD_ERROR_LEVEL),
+	// so no second source exists.
 	entry, found := r.board.PartyEntryByID(divisionID, pending.entryID)
 	if !found || entry.MasterName != pending.ownerName {
 		_ = joinerSession.Send(OpPartyJoinAck, EncodeJoinAck(JoinAckRefused))
