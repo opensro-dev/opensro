@@ -223,7 +223,7 @@ func TestTrainingCampAdmissionRefusesInvalidAggregateCommands(t *testing.T) {
 ================
 TestTrainingCampOpenChecksThenBurnsTheFee
 
-4E4680's refusals in its order (dead, level, gold, already in a camp) change
+The server's camp open check refuses in its order (dead, level, gold, already in a camp) change
 nothing; an accepted opening burns the fee, installs the camp and its one
 master row, books an academy_fee ledger row, and survives a reopen.
 ================

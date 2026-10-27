@@ -69,7 +69,7 @@ func TestDefenseCapRequiresValidInstallationSnapshot(t *testing.T) {
 			t.Fatalf("invalid cap snapshot accepted %v", v)
 		}
 	}
-	// No cap means no read of recipient defense at all, as at 595229.
+	// No cap means no read of recipient defense at all, as in the server's installer.
 	if _, err := defenseModifierWrites(123, DefenseModifierInput{Physical: 20, CurrentPhysical: float32(math.NaN())}); err != nil {
 		t.Fatal(err)
 	}

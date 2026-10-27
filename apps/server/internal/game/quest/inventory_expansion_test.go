@@ -100,7 +100,7 @@ func TestExpansionQuestsPayTheAdvertisedSlots(t *testing.T) {
 ================
 TestExpansionRewardPastTheLimitStillCompletes
 
-4E19D0 refuses slots past the limit and its caller ignores the refusal.
+The server's slot grant refuses slots past the limit and its caller ignores the refusal.
 ================
 */
 func TestExpansionRewardPastTheLimitStillCompletes(t *testing.T) {

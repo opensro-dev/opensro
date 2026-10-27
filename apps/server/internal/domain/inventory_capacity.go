@@ -7,17 +7,17 @@ The capacity byte counts the 13 equipment sockets and the bag together, as
 the 0x32B3 entry block ships it. A character is created with 45 (a 32-slot
 bag) and the six QSP_*_EXINVENTORY quests add to it.
 
-Native v1.188 pays the slots from the quest reward row (CBasicQuest_PayRewardRow
-924CF0, byte +0x3db) through CGObjPC_ExpandInventoryByQuest (4E19D0), which
-refuses silently past 112, and then announces the new size with 0x3092. The
-v1.150 client has no such message: CICPlayer+0x1848, the bag size, is
-written by the entry parser (8675F0), the sole direct caller of the inventory
-rebuild (59DF10), which holds at most two 32-slot tabs. The port therefore
-stops at 77. Inference for the v1.150 wire contract: a paid expansion waits
-for the next world entry (login, teleport or resurrection), where the client
-learns it. Port-only, not native: SRO_INSTANT_INVENTORY_EXPANSION presents
-the slots at the turn-in and sends the v1.188 0x3092 announce, which the port
-client applies (quest/instant_expansion.go).
+Native v1.188 pays the slots from the quest reward row (byte +0x3db) through
+the player's quest inventory expansion, which refuses silently past 112, and
+then announces the new size with 0x3092. The v1.150 client has no such
+message: CICPlayer+0x1848, the bag size, is written by the entry parser
+(8675F0), the sole direct caller of the inventory rebuild (59DF10), which
+holds at most two 32-slot tabs. The port therefore stops at 77. Inference
+for the v1.150 wire contract: a paid expansion waits for the next world
+entry (login, teleport or resurrection), where the client learns it.
+Port-only, not native: SRO_INSTANT_INVENTORY_EXPANSION presents the slots at
+the turn-in and sends the v1.188 0x3092 announce, which the port client
+applies (quest/instant_expansion.go).
 
 ===========================================================================
 */
@@ -65,7 +65,7 @@ GrantInventoryExpansion
 
 A quest's slot reward. It waits in InventoryExpansion until the next world
 entry presents it. Past MaxInventorySize the grant is refused and the quest
-still completes, as 4E19D0's refusal is ignored by its caller.
+still completes, as the native expansion's refusal is ignored by its caller.
 ================
 */
 func (character *Character) GrantInventoryExpansion(slots uint8) bool {

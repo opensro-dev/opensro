@@ -887,7 +887,7 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			}
 		}
 		// Slots follow the items and gold, as 924CF0 pays them. A grant past
-		// the capacity limit is refused and the quest still completes: 4E19D0's
+		// the capacity limit is refused and the quest still completes: the grant's
 		// refusal is ignored by its caller.
 		if character.GrantInventoryExpansion(def.RewardInventorySlots) && rt.InstantInventoryExpansion {
 			// Port-only: the slots are usable now, not at the next entry.

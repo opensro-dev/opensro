@@ -4,8 +4,8 @@
 session_restrictions.go - command restrictions: the session record and the
 hub's by-character record
 
-A command restriction (trade 3, chat 4; the native CCmdSrcNet record
-selectors) rides the session that carries it, mirroring 40B7F0/40B840, and
+A command restriction (trade 3, chat 4; the native command-source record
+selectors) rides the session that carries it, mirroring the server's setter and clearer, and
 the session record is what the send gates read. Moderation must not end at
 logoff, so installing or clearing on a character-bound session also records
 against the character in the hub, where by-character readers
@@ -44,7 +44,7 @@ type characterRestrictions struct {
 ================
 SetCommandRestriction
 
-Mirrors 40B7F0: retain the enabled flag and the exact eight SYSTEMTIME
+Mirrors the server's setter: retain the enabled flag and the exact eight SYSTEMTIME
 words. No clock interpretation or normalization occurs. Only authenticated
 server-side moderation should invoke this method. A character-bound
 session also records the install against its character in the hub
@@ -69,7 +69,7 @@ func (s *Session) SetCommandRestriction(kind uint8, until [8]uint16) bool {
 ================
 ClearCommandRestriction
 
-Mirrors 40B840. Expiry is controlled by the owner that installs/clears
+Mirrors the server's clearer. Expiry is controlled by the owner that installs/clears
 restrictions, not a request handler's local clock. A character-bound
 session also clears the hub's by-character record.
 ================

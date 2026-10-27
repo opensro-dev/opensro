@@ -3,19 +3,20 @@
 
 impactfinish.go - the tail every skill impact shares after its formula
 
-SkillCombat_CalculateHitOutcome (58E5F0) ends the normal impact with one
-tail (58FC3F..58FD59), whatever produced the damage word (att lanes, pdmg,
+The reference server's hit-outcome routine ends the normal impact with
+one shared tail, whatever produced the damage word (att lanes, pdmg,
 life steal, an HP ratio): the victim's area percent, the monster
-attacker's damage scale (5874D0), and a floor that keeps a landed att
-impact from dealing nothing. Every 58E5F0 caller reaches it: the instant
-and projectile actions, the persistent pulse (CastLifecycle_
-ProcessPersistent) and skill objects (CGSkillObject). So the port's single
+attacker's damage scale, and a floor that keeps a landed att impact from
+dealing nothing. Every caller of the hit-outcome routine reaches it: the
+instant and projectile actions, the persistent pulse and the server's
+skill objects. So the port's single
 target, area, pulse, trap, pet and monster strikes all finish here.
 
-A blocked impact (record type 2, the section at 58F0EB) and a ck kill
-(0x86) keep their zero: 5905FB drops a block's damage, and a kill has
-none. Neither does a defender its wall fully covers: 58F05D..58F0A2 makes
-that record type 8 and jumps to 5905FB, past the whole tail.
+A blocked impact (record type 2, the block section) and a ck kill
+(0x86) keep their zero: the record writer drops a block's damage, and a
+kill has none. Neither does a defender its wall fully covers: the wall
+test makes that record type 8 and jumps to the record writer, past the
+whole tail.
 
 ===========================================================================
 */
@@ -33,14 +34,14 @@ const (
 	// byte +5: the whole result.
 	fullImpactPercent = 100
 
-	// populationKindParty is CGObjMob_GetPopulationKind (vtable +0x300,
+	// populationKindParty is the monster's population kind (vtable +0x300,
 	// the rarity byte's high nibble) for a party monster.
 	populationKindParty = 1
-	// partyMonsterDamageScale is 5874D0's float32 1.3 (0xB45F88).
+	// partyMonsterDamageScale is the damage-scale routine's float32 1.3.
 	partyMonsterDamageScale = float32(1.29999995)
 
 	// The base grade (vtable +0x12C, the rarity byte's low nibble) picks a
-	// jump-table arm at 5875A8.
+	// jump-table arm in the damage-scale routine.
 	gradeNeutralScale = 2 // fld1: exactly 1, the population scale ignored
 	gradeGiant        = 4
 	gradeTitan        = 5
@@ -56,14 +57,13 @@ const (
 ================
 MonsterDamageScale
 
-SkillCombat_GetMonsterDamageScale (5874D0), read from its instructions:
-the population kind gives 1 (kind 0) or 1.3f (kind 1, a party monster);
-any other kind logs "Unknown Monster Type" and takes 1. The [0.1, 10]
-clamp that follows cannot move either value. The base grade then keeps
-that scale (grades 0, 1, 3 and 8), replaces it with 1 (grade 2),
-multiplies it by 1.5 (giants, titans and elites: grades 4 to 6) or by
-1.7999999523 (grade 7), each product stored as a float32; any grade
-above 8 takes 1.
+The reference server's monster damage-scale routine, read from its
+instructions: the population kind gives 1 (kind 0) or 1.3f (kind 1, a party
+monster); any other kind logs "Unknown Monster Type" and takes 1. The [0.1,
+10] clamp that follows cannot move either value. The base grade then keeps
+that scale (grades 0, 1, 3 and 8), replaces it with 1 (grade 2), multiplies
+it by 1.5 (giants, titans and elites: grades 4 to 6) or by 1.7999999523
+(grade 7), each product stored as a float32; any grade above 8 takes 1.
 ================
 */
 func MonsterDamageScale(rarity uint8) float32 {
@@ -88,10 +88,10 @@ func MonsterDamageScale(rarity uint8) float32 {
 ================
 scaleDamageExact
 
-58FD0A..58FD3A: fild the damage, fmulp by the scale on the x87 stack and
-fistp under truncation. A 32-bit damage times a 24-bit mantissa fits the
-x87 64-bit mantissa, so the product is exact; the integer product here is
-exact too, then truncated by the exponent shift.
+The tail's scaling step: fild the damage, fmulp by the scale on the x87
+stack and fistp under truncation. A 32-bit damage times a 24-bit mantissa
+fits the x87 64-bit mantissa, so the product is exact; the integer product
+here is exact too, then truncated by the exponent shift.
 ================
 */
 func scaleDamageExact(damage uint32, scale float32) uint32 {
@@ -99,7 +99,8 @@ func scaleDamageExact(damage uint32, scale float32) uint32 {
 	exponent := int(bits >> 23 & 0xff)
 	mantissa := uint64(bits & 0x7fffff)
 	if exponent == 0 || exponent == 0xff || bits>>31 != 0 {
-		// Never produced by 5874D0: a scale is positive and normal.
+		// Never produced by the damage-scale routine: a scale is positive
+		// and normal.
 		return damage
 	}
 	mantissa |= 1 << 23
@@ -117,15 +118,16 @@ func scaleDamageExact(damage uint32, scale float32) uint32 {
 ================
 ImpactTail
 
-What the shared tail needs about one impact. Percent is the victim's
-entry byte +5 (0 reads as the whole result); PercentApplied marks a life
-steal record, whose percent already rode into 40F750 (58F4B5 jumps past
-the percent step). MonsterAttacker and AttackerRarity describe the
-attacker (vtable +0x28, then 5874D0 on its rarity byte). Attack is the
-RefSkill att block (+0x230): only an att impact takes the floor
-([esp+0x50] = 0 at 58FD4B). Covered marks a defender whose standing wall
-covers every lane of the impact (combat.WallOutcome.Covered): its record
-skips the tail, so the wall's absorption leaves it at zero.
+What the shared tail needs about one impact. Percent is the victim's entry
+byte +5 (0 reads as the whole result); PercentApplied marks a life steal
+record, whose percent already rode into the life-steal formula (the
+life-steal branch jumps past the percent step). MonsterAttacker and
+AttackerRarity describe the attacker (vtable +0x28, then the damage-scale
+routine on its rarity byte). Attack is the RefSkill att block (+0x230): only
+an att impact takes the floor ([esp+0x50] = 0 at the floor test). Covered
+marks a defender whose standing wall covers every lane of the impact
+(combat.WallOutcome.Covered): its record skips the tail, so the wall's
+absorption leaves it at zero.
 ================
 */
 type ImpactTail struct {
@@ -141,11 +143,11 @@ type ImpactTail struct {
 ================
 FinishImpact
 
-58FC3F..58FD59 on one normal impact: the percent (trunc(percent *
-damage / 100)), then a monster attacker's scale, then a zero att damage
-becomes 1. A non-att zero stays zero (58FD5E: an effect-only result when
-the skill carries a status, otherwise nothing). The lane accumulators
-keep their pre-scaling values, as the native records do.
+The shared tail on one normal impact: the percent (trunc(percent * damage /
+100)), then a monster attacker's scale, then a zero att damage becomes 1. A
+non-att zero stays zero (the tail's exit: an effect-only result when the
+skill carries a status, otherwise nothing). The lane accumulators keep their
+pre-scaling values, as the native records do.
 ================
 */
 func FinishImpact(r Result, tail ImpactTail) Result {

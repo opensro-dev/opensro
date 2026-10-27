@@ -23,7 +23,7 @@ import (
 ==================
 StatusReductionWrites
 
-595542..59568F: reat adds its value to the flat status reduction 0x91+i
+The buff installer's reat block adds its value to the flat status reduction 0x91+i
 for each mask bit i (0..5). The caller stamps the source.
 ==================
 */
@@ -41,9 +41,9 @@ func StatusReductionWrites(reat enterworld.SkillPassiveReat) []paramkeeper.Write
 ==================
 ElementResistanceWrites
 
-595698..5957EE: Fire Shield's bgra adds its value to the element resistance
+The installer's next block: Fire Shield's bgra adds its value to the element resistance
 0x1B+i for each mask bit i (0..5), the block after reat's and the same
-writer (4B3510) and channel. The abnormal owner reads 0x1B+i when it weighs
+writer and channel. The abnormal owner reads 0x1B+i when it weighs
 an incoming status (abnormalElementResistBase). The caller stamps the source.
 ==================
 */
@@ -61,8 +61,8 @@ func ElementResistanceWrites(bgra enterworld.SkillPassiveReat) []paramkeeper.Wri
 ==================
 FileStatusResistance
 
-59DF20: file real's flat under its grade in each masked status's bucket.
-5999E0 and 599740 decrement the ends of unsigned-key trees: highest grade,
+The server files real's flat under its grade in each masked status's bucket.
+Its tree helpers decrement the ends of unsigned-key trees: highest grade,
 then highest flat within that grade. Preserve the independent percent side.
 filed distinguishes an empty bucket from a present zero-grade contribution.
 ==================

@@ -14,8 +14,9 @@ package domain
 ================
 GuildWarRecord
 
-SR_ShardManager 435A10: two guilds, doubled stake, optional deadline and
-unsigned scores. A zero deadline means an unlimited war.
+The reference shard manager's guild war record: two guilds, doubled stake,
+optional deadline and unsigned scores. A zero deadline means an unlimited
+war.
 ================
 */
 type GuildWarRecord struct {

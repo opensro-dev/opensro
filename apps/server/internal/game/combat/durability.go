@@ -5,7 +5,7 @@ durability.go - an equipment item's maximum durability
 
 The item's +0x194 in v1.188: the itemdata range picked by variance field 0
 (the same interpolation a drop rolls its first durability from), then
-CGItemEquip_ApplyMagicOptions (496A70) moves it by a percentage: 'nrep'
+the server's magic-option pass moves it by a percentage: 'nrep'
 and 'duru' add theirs, 'dura' subtracts its own, and the result is
 base + trunc(sum / 100 * base), at least 1. Repair restores this value.
 
@@ -29,7 +29,7 @@ DurabilityFromVariance
 The itemdata durability range interpolated by a variance field (0..31):
 VarianceIntMin (at least 1) to Dur_U, rounded to the nearest point.
 
-Port-only, not native: v1.188 CGItemEquip_CalculateBaseStats (495D60)
+Port-only, not native: the v1.188 server's base-stat pass
 truncates, while the v1.150 client rounds the same interpolation
 (CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5). A drop
 then started one point below the maximum the client showed, the client
@@ -85,7 +85,7 @@ func EquipmentMaxDurability(ref *enterworld.ItemRef, row enterworld.InventoryRow
 	if sum == 0 {
 		return base, nil
 	}
-	// 496BD9: x87 product, truncated by fistp, added to the base word.
+	// The magic-option pass: x87 product, truncated by fistp, added to the base word.
 	maximum := uint32(int64(float64(sum)/100*float64(base))) + base
 	return max(maximum, 1), nil
 }
@@ -94,7 +94,7 @@ func EquipmentMaxDurability(ref *enterworld.ItemRef, row enterworld.InventoryRow
 ================
 RepairableByOptions
 
-CGItemEquip_CanRepair's option half (497340): no 'nrep' option, and a
+The option half of the server's repair check: no 'nrep' option, and a
 'rep' (MATTR_REPAIR) count, if present, above 1.
 ================
 */
@@ -111,7 +111,7 @@ func RepairableByOptions(row enterworld.InventoryRow, source enterworld.MagicOpt
 	return true, nil
 }
 
-// RepairQuote limits: v1.188 496E60 caps the points one repair restores
+// RepairQuote limits: the v1.188 repair routine caps the points one repair restores
 // and the gold it charges.
 const (
 	maxRepairPoints = 100000
@@ -126,7 +126,7 @@ The points a repair restores and the gold it costs. The price is the
 v1.150 client's (CSOItem_CalculateRepairCost 789630, the cost its repair
 confirmation shows): CostRepair / maximum per missing point as a float32,
 at least 1, truncated over the points, plus CostRevive for a broken item,
-which repairs from 1. v1.188 496E60 adds the gold rule: only the points the
+which repairs from 1. the v1.188 repair routine adds the gold rule: only the points the
 player can pay for are restored. ok is false when nothing is missing or
 the gold pays for no point.
 ================

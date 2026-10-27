@@ -47,7 +47,7 @@ func blockWith(records ...abnormal.Record) *abnormal.Block {
 	return &b
 }
 
-// 4A4CC0 bleeding writes percent-sum -N to parameters 5 and 6; the native
+// Bleeding writes percent-sum -N to parameters 5 and 6; the native
 // minimum clamps an over-100 % cut to zero and retirement restores the base.
 func TestBleedingDefenseCutThroughBlock(t *testing.T) {
 	m := monster.Instance{Ref: monster.MonsterRef{CombatPinned: true, PhysicalDefense: 100, MagicalDefense: 200},
@@ -68,7 +68,7 @@ func TestBleedingDefenseCutThroughBlock(t *testing.T) {
 	}
 }
 
-// 4A5000 / 4A50B0: Impotent scales outgoing damage by -M %, Division scales
+// Impotent scales outgoing damage by -M %, Division scales
 // incoming damage by +M % (percent-product channel, source 5).
 func TestCurseFinalDamageFactors(t *testing.T) {
 	m := monster.Instance{Ref: monster.MonsterRef{CombatPinned: true, PhysicalDefense: 100, MagicalDefense: 200},
@@ -102,8 +102,8 @@ func TestCurseFinalDamageFactors(t *testing.T) {
 ==================
 TestStatusParameterWrites
 
-4A4850 electric shock scales parameter 9 by (100-N) %; 4A4E20 dark cuts
-hit rate (B) by percent-sum; decay (4A5160) cuts its authored amount,
+Electric shock scales parameter 9 by (100-N) %; dark cuts
+hit rate (B) by percent-sum; decay cuts its authored amount,
 capped at current - 0.3*current (so at most 70 % of the defense).
 ==================
 */

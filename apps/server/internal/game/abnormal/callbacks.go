@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-callbacks.go - per-status start / update / end callbacks (4A4570..4A5620)
+callbacks.go - per-status start / update / end callbacks (the server's callback table)
 
 ===========================================================================
 */
@@ -12,7 +12,7 @@ package abnormal
 ==================
 Owner
 
-Owner is the CGObjChar surface the per-status callbacks use. Adapters
+Owner is the native character surface the per-status callbacks use. Adapters
 (monster and player) implement reads directly and record the side effects
 for their owning transaction.
 ==================
@@ -28,7 +28,7 @@ type Owner interface {
 	Param(id uint16) float32
 	// SourceExists is ObjMgr_FindByID(+4C) plus vfunc 18.
 	SourceExists(gid uint32) bool
-	// SourceDead is the source's life state 2 or 3 (4A4B1A).
+	// SourceDead is the source's life state 2 or 3.
 	SourceDead(gid uint32) bool
 	// Roll is the owner's CZoeZoeRnd stream.
 	Roll(key uint32, chance int32) bool
@@ -45,7 +45,7 @@ type Owner interface {
 	// Credited is false when the tick is uncredited (dead source, lethal).
 	Hit(source uint32, credited bool, damage uint32, reason uint8, status Status)
 	ConsumeResources(hp, mp int32, reason uint8) // +308
-	Detonate(slot Slot)                          // 59B300
+	Detonate(slot Slot)                          // the time bomb's detonation
 }
 
 // Native event argument of the block+E0C table.
@@ -69,7 +69,7 @@ func clamp100(v float32) float32 {
 
 func callback(b *Block, o Owner, event int, slot *Slot) {
 	switch slot.Status {
-	case Freeze: // 4A4570
+	case Freeze: // cancel actions, hold the freeze motion
 		switch event {
 		case eventStart:
 			o.CancelActions(false)
@@ -77,7 +77,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 		case eventEnd:
 			o.SetMotion(0xa, 0, 1.5)
 		}
-	case Frostbite: // 4A45D0
+	case Frostbite: // owns the movement factors
 		switch event {
 		case eventStart:
 			b.applyModifier(0x17, 3, abnormalSource, 50)
@@ -91,7 +91,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.applyModifier(0x8c, 0, 0, 100)
 			o.ParamsChanged(true)
 		}
-	case ElectricShock: // 4A4850
+	case ElectricShock: // scales parameter 9
 		switch event {
 		case eventStart:
 			b.applyModifier(9, 3, abnormalSource, clamp100(float32(uint32(100-slot.Param28))))
@@ -100,7 +100,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.applyModifier(9, 3, abnormalSource, 100)
 			o.ParamsChanged(false)
 		}
-	case Burn: // 4A46F0
+	case Burn: // rate-scaled damage tick
 		if event == eventUpdate {
 			damageOverTime(o, slot, func() uint32 {
 				rate := float64(float32(slot.Rate24)) / (float64(o.Param(8))/100 + 1)
@@ -111,7 +111,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 				return uint32(ftol(float64(float32(value))))
 			}, 2000, true)
 		}
-	case Poison: // 4A4940
+	case Poison: // HP-relative damage tick
 		if event == eventUpdate {
 			damageOverTime(o, slot, func() uint32 {
 				hp := int64(o.CurrentHP())
@@ -125,7 +125,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 				return uint32(hp - rest)
 			}, 2000, false)
 		}
-	case Sleep: // 4A49F0
+	case Sleep: // cancel actions, sleep motion
 		switch event {
 		case eventStart:
 			o.CancelActions(false)
@@ -133,11 +133,11 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 		case eventEnd:
 			o.SetMotion(0, 0xff, 0)
 		}
-	case Root: // 4A4A50
+	case Root: // stop moving
 		if event == eventStart {
 			o.StopMove()
 		}
-	case Slow: // 4A4A90
+	case Slow: // movement factors unless frostbite owns them
 		switch {
 		case event == eventStart || event == eventUpdate && b.SpeedOwner == 1:
 			if b.Mask&Frostbite.Bit() == 0 {
@@ -153,21 +153,21 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.applyModifier(0x8c, 3, abnormalSource, 100)
 			o.ParamsChanged(true)
 		}
-	case Fear: // 4A4BD0
+	case Fear: // monster AI events 0x14 / 0x15
 		switch {
 		case event == eventStart && o.IsMonster() && o.Alive():
 			o.AIEvent(0x14, 9, slot.SourceGID)
 		case event == eventEnd && !slot.Retired && o.IsMonster() && o.Alive():
 			o.AIEvent(0x15, 9, 0)
 		}
-	case Myopia: // 4A4C60
+	case Myopia: // flat parameter 0xB7
 		switch event {
 		case eventStart:
 			b.applyModifier(0xb7, 0, abnormalSource, float32(slot.Param3C))
 		case eventEnd:
 			b.removeModifier(0xb7, abnormalSource)
 		}
-	case Bleeding: // 4A4CC0
+	case Bleeding: // defense cut plus damage tick
 		switch event {
 		case eventStart:
 			b.applyModifier(5, 1, abnormalSource, -float32(slot.Param40))
@@ -184,7 +184,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(6, abnormalSource)
 			o.ParamsChanged(false)
 		}
-	case Dark: // 4A4E20
+	case Dark: // hit rate cut
 		switch event {
 		case eventStart:
 			b.applyModifier(0xb, 1, abnormalSource, -float32(slot.Param48))
@@ -193,7 +193,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(0xb, abnormalSource)
 			o.ParamsChanged(false)
 		}
-	case Stun: // 4A4EC0
+	case Stun: // cancel actions, stun motion
 		switch event {
 		case eventStart:
 			o.CancelActions(true)
@@ -201,21 +201,21 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 		case eventEnd:
 			o.SetMotion(0, 0xff, 0)
 		}
-	case Disease: // 4A4F20
+	case Disease: // flat parameter 0xA9
 		switch event {
 		case eventStart:
 			b.applyModifier(0xa9, 0, abnormalSource, float32(slot.Param44))
 		case eventEnd:
 			b.applyModifier(0xa9, 0, abnormalSource, 0)
 		}
-	case Confusion: // 4A4F70
+	case Confusion: // monster AI events 0x14 / 0x15
 		switch {
 		case event == eventStart && o.IsMonster() && o.Alive():
 			o.AIEvent(0x14, 0x10, 0)
 		case event == eventEnd && !slot.Retired && o.IsMonster() && o.Alive():
 			o.AIEvent(0x15, 0x10, 0)
 		}
-	case Decay, Weaken: // 4A5160 / 4A5240
+	case Decay, Weaken: // capped defense cut
 		param := uint16(5)
 		if slot.Status == Weaken {
 			param = 6
@@ -235,7 +235,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(param, abnormalSource)
 			o.ParamsChanged(false)
 		}
-	case Impotent, Division: // 4A5000 / 4A50B0
+	case Impotent, Division: // percent-product damage factors
 		// Impotent lowers outgoing damage (B2/B3); Division raises incoming
 		// damage (B4/B5) by the unsigned magnitude.
 		first, second, magnitude := uint16(0xb2), uint16(0xb3), -float32(slot.Param38)
@@ -250,7 +250,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(first, abnormalSource)
 			b.removeModifier(second, abnormalSource)
 		}
-	case Panic, Combustion: // 4A5320 / 4A54A0
+	case Panic, Combustion: // maximum, recovery and drain
 		maximum, recovery := uint16(3), uint16(0x8f)
 		if slot.Status == Combustion {
 			maximum, recovery = 4, 0x90
@@ -279,7 +279,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(recovery, abnormalSource)
 			o.ParamsChanged(false)
 		}
-	case TimeBomb: // 4A5620
+	case TimeBomb: // detonates on a natural end
 		if event == eventEnd && !slot.Retired && o.Alive() {
 			o.Detonate(*slot)
 		}
@@ -290,7 +290,7 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 ==================
 damageOverTime
 
-damageOverTime is the shared tick of 4A46F0, 4A4940 and 4A4CC0. The
+damageOverTime is the shared tick of the burn, poison and bleeding callbacks. The
 latch +6C records a dead source. A latched burn/bleeding tick keeps its
 source only when it is lethal; a latched poison tick never does.
 ==================

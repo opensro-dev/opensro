@@ -5,7 +5,7 @@ lane.go - the fortress-war lane: schedule edges, periods and the login list
 
 The lane is the ShardManager-and-GameServer pair of the fortress war folded
 into one owner. Each tick it evaluates the shard's schedules; on an edge it
-does what CSiegeFortressMgr_OnShardMessage (62EE90) does for that subtype
+does what the server's fortress manager does with that shard subtype
 and relays the subtype to every player:
 
 	AllowSiegeRequest  start 0x33 / end 0x34   request period
@@ -85,7 +85,7 @@ type Lane struct {
 	mu     sync.Mutex
 	active map[string]bool
 	// lastTickMs is the siege tick's clock, which the list's countdowns
-	// are read against (600F60 refreshes the seconds each tick).
+	// are read against (the server's fortress tick refreshes the seconds each tick).
 	lastTickMs int64
 }
 

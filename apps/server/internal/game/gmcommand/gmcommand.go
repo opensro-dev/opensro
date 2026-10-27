@@ -237,9 +237,10 @@ type PlayerTeleports interface {
 	RecallUserGM(division, name, target string) bool
 }
 
-// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. 51DE90
-// acks the teleport it performed with [1, subcmd]; an empty name, a target
-// not in the world or a refused move is the result-2 ack.
+// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. The
+// server's GM handler acks the teleport it performed with [1, subcmd]; an
+// empty name, a target not in the world or a refused move is the result-2
+// ack.
 func handlePlayerTeleport(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: teleport 0x%02X refused", request.Subcmd)}
 	if !request.HasName || request.Name == "" || len(status) == 0 {

@@ -31,7 +31,7 @@ const (
 	markerStateTooLow     = 4
 )
 
-// Formulae_ClassifyLevelDiff_Extended (40FE90) category 4: the quest is more
+// The server's extended level-difference category 4: the quest is more
 // than this many levels below the character, and its NPC shows no offer.
 const markerTrivialLevelGap = 6
 
@@ -88,7 +88,7 @@ func (rt *Runtime) MarkerStates(c *enterworld.Character) map[uint32]NpcMarker {
 offerMarkerState
 
 925D20's level rule for a quest the character has not taken:
-QuestGameServer_ClassifyLevelDiff (57BE00 -> 40FE90) of the quest level
+the server's quest level-difference classifier of the quest level
 (+0x23) against the character's hides a quest more than six levels below
 it; a quest above the character's level shows the red scroll, any other the
 offer mark. A quest with a minimum level shows nothing below it: the offer

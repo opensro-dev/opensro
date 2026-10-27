@@ -11,7 +11,7 @@ import (
 ==================
 TestBlockRateWritesFollowTheLaneMask
 
-594AC0: br 7 (physical, both attack kinds) raises 0x88 and 0x89 only; br 11
+The buff installer: br 7 (physical, both attack kinds) raises 0x88 and 0x89 only; br 11
 (magical, both) raises 0x8A and 0x8B only.
 ==================
 */
@@ -38,7 +38,7 @@ func TestBlockRateWritesFollowTheLaneMask(t *testing.T) {
 ==================
 TestBlockChanceAddsTheLaneBonusAndIgnoresNothingElse
 
-58E73C: base block rate plus the attack's lane bonus, divided by
+The server's block test: base block rate plus the attack's lane bonus, divided by
 (1 + attacker param 0x38 / 100) and truncated. A physical basic hit reads
 0x88 and not 0x89; a magical hit reads neither physical bonus; ck removes
 the chance.

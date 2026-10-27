@@ -276,7 +276,7 @@ func TestBitsSwapBurnAndShock(t *testing.T) {
 TestElementRollLevelAndDuration
 
 Element statuses roll first, then scale their level by the target resist
-and take a rank-multiplied duration (590680 / 410B40).
+and take a rank-multiplied duration (the roll and the per-level duration).
 ================
 */
 func TestElementRollLevelAndDuration(t *testing.T) {
@@ -347,7 +347,7 @@ func TestSlowGradeFromCasterLevel(t *testing.T) {
 ================
 TestWallContextSuppressesStunAndMagicalStatusRolls
 
-590680's sixth argument points to the Force wall parameters. Ordinary hit
+The roll's sixth argument points to the Force wall parameters. Ordinary hit
 flags and the true type-two block branch are independent of that context.
 ================
 */
@@ -408,7 +408,7 @@ func TestTimeBombDrawsRandBeforeRoll(t *testing.T) {
 ================
 TestApplyReplacementRule
 
-4A4270: an active slot accepts only a strictly stronger level/grade; the
+Admission: an active slot accepts only a strictly stronger level/grade; the
 refreshed flag is set even when the source then fails to resolve.
 ================
 */
@@ -442,7 +442,7 @@ func TestApplyReplacementRule(t *testing.T) {
 ================
 TestUpdateExpiresAfterDuration
 
-4A4390 expires strictly after the duration and republishes the mask.
+The update expires strictly after the duration and republishes the mask.
 ================
 */
 func TestUpdateExpiresAfterDuration(t *testing.T) {
@@ -518,7 +518,7 @@ func TestDamageOverTimeCredit(t *testing.T) {
 TestFrostbiteAndSlowShareMovement
 
 Frostbite owns the movement factors; slow applies only without it and
-re-applies once frostbite has ended (4A4A90 event 1 with owner 1).
+re-applies once frostbite has ended (slow's update event with owner 1).
 ================
 */
 func TestFrostbiteAndSlowShareMovement(t *testing.T) {
@@ -634,7 +634,7 @@ func TestBurnTableAbsorptionAndDuration(t *testing.T) {
 TestGradeRollBleedingVectors
 
 Vectors carried over from the former combat.BleedingParameters port
-(591A2A..591B79): level gap, disease bonus, flat resistance halved per
+(the server's grade-roll x87 block): level gap, disease bonus, flat resistance halved per
 grade above its own grade, and percentage resistance.
 ==================
 */

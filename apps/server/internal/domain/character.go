@@ -27,7 +27,8 @@ reads it). varianceBits persists as a decimal string because JSON has no
 */
 type InventoryRow struct {
 	// TradeOwner is the original job alias in the goods record's owner string
-	// (490930). A transfer changes the holder, never this sale-admission identity.
+	// (the server's goods record). A transfer changes the holder, never this
+	// sale-admission identity.
 	TradeOwner string        `json:"tradeOwner,omitempty"`
 	Summon     *CharacterCOS `json:"summon,omitempty"`
 	// Portable persistence for an already supplied native +20/+24 identity.
@@ -57,7 +58,7 @@ type InventoryRow struct {
 	// every encoded value stays far below the 2^53 float boundary.
 	MagicOptions []uint64 `json:"magicOptions,omitempty"`
 	// TransformRefObjID is a monster capsule's Data (item record +0x38,
-	// 42E54B): the monster the mask turns its user into.
+	// the capsule's data word): the monster the mask turns its user into.
 	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
 }
 
@@ -104,8 +105,9 @@ movement lane, the snapshot only echoes it).
 */
 type CharacterWorld struct {
 	// SavedReturn is the native CSO return world/region/position. Region
-	// admission updates it only in type-0 worlds on layer 1 (4E6FE0).
-	// It is independent of the movement goal and appointed rebirth town.
+	// admission updates it only in type-0 worlds on layer 1 (the server's
+	// region admission). It is independent of the movement goal and
+	// appointed rebirth town.
 	SavedReturn *SavedReturnLocation `json:"savedReturn,omitempty"`
 	// PackedInstance is the native world identity: definition in the low
 	// word, instance in the high word. An absent legacy record belongs to
@@ -133,10 +135,10 @@ type CharacterWorld struct {
 	// RebirthPoint remains the durable fallback for legacy records and removed gates.
 	RebirthGateRefID uint32 `json:"rebirthGateRefId,omitempty"`
 	// LastRecallPoint is where the player last used a return scroll (native
-	// char-data +0xCC.., CGObjPC_SaveLatestRecallPosition 4E0250, called from
-	// the return scroll's location check); LastDeathPoint is where the player
-	// last died (+0xDC.., CGObjPC_SaveLatestDeathPosition 4E0330 from
-	// ProcessNormalDeath). Both record only in a type-0 world. The reverse
+	// char-data +0xCC.., saved by the server's recall-position routine, called
+	// from the return scroll's location check); LastDeathPoint is where the
+	// player last died (+0xDC.., saved by the death-position routine from the
+	// normal death path). Both record only in a type-0 world. The reverse
 	// return scroll takes the player back to either, in its world.
 	LastRecallPoint *WorldPoint `json:"lastRecallPoint,omitempty"`
 	LastDeathPoint  *WorldPoint `json:"lastDeathPoint,omitempty"`
@@ -233,23 +235,25 @@ type Character struct {
 	// door. Writers use TransitionBodyStatus; presentation never owns it.
 	BerserkPoints  uint8 `json:"berserkPoints"`
 	BerserkUntilMs int64 `json:"-"`
-	// BattleUntilMs ends the battle state (CGObjPC state+0xD, channel 8).
-	// Striking or being struck restarts its countdown; zero is peace.
+	// BattleUntilMs ends the battle state (the player object's state+0xD,
+	// channel 8). Striking or being struck restarts its countdown; zero is
+	// peace.
 	BattleUntilMs int64 `json:"-"`
-	// LastExpLoss is CGObjPC+0x1CE0, the size of the last negative EXP
-	// change (CGObjPC_ApplyExpDelta 4E5710). Resurrection returns a percent
-	// of it; every revival clears it.
+	// LastExpLoss is the player object's +0x1CE0, the size of the last
+	// negative EXP change (recorded by the server's EXP delta routine).
+	// Resurrection returns a percent of it; every revival clears it.
 	LastExpLoss int64 `json:"-"`
-	// DeathKind is CGObjPC+0x1CB4, the last death's kind (pk.DeathKind):
-	// 4E6EC0 records it, the 0x37CE notice carries it, and the rebirth
-	// (50FEE0) revives a team death where it fell. Every revival clears it
-	// (CGObjPC_TeleportToTown 4DF2EE). Runtime-only, as natively.
+	// DeathKind is the player object's +0x1CB4, the last death's kind
+	// (pk.DeathKind): the server's death routine records it, the 0x37CE
+	// notice carries it, and the rebirth revives a team death where it
+	// fell. Every revival clears it (as the server's town teleport does).
+	// Runtime-only, as natively.
 	DeathKind uint8 `json:"-"`
-	// SiegeDeathAtMs is CGObjPC+0x1CD4 kept as the death instant:
-	// CGObjPC::OnDeath (52CDB0, misnamed CGObjPC_ProcessSiegeDeath)
-	// sets the counter to 180 ticks at 52CFBA on every death, OnTick
-	// (52D9EB) decays it one a tick while a siege war runs and the corpse
-	// waits, and the rebirth (5100D0) refuses outright while it still
+	// SiegeDeathAtMs is the player object's +0x1CD4 kept as the death
+	// instant: the server's player death handler sets the counter to 180
+	// ticks on every death, the player tick decays it one a tick while a
+	// siege war runs and the corpse waits, and the rebirth refuses
+	// outright while it still
 	// reads above 165. The port measures elapsed ticks from the stamp
 	// instead of ticking every corpse. One tick is one second, inferred
 	// from the native constants: a 180-tick corpse clock and a 15-tick
@@ -258,16 +262,17 @@ type Character struct {
 	SiegeDeathAtMs   int64  `json:"-"`
 	NativeBodyStatus uint8  `json:"-"`
 	BodyStatusOwner  uint64 `json:"-"`
-	// TransformRefObjID is the transform block (CGObjPC+0x21A0): the monster
-	// a mask made the player (msch 1), or the player a Duplicate copies
-	// (msch 2). Runtime-only; the effect instance that set it clears it
-	// (4F0210).
+	// TransformRefObjID is the transform block (player object +0x21A0): the
+	// monster a mask made the player (msch 1), or the player a Duplicate
+	// copies (msch 2). Runtime-only; the effect instance that set it clears
+	// it (through the server's transform reset).
 	TransformRefObjID uint32 `json:"-"`
 	// TransformMode is that instance's msch word (1 mask, 2 duplicate), the
-	// value CSkillManager_GetTransformMschMode (49A1B0) answers; 0 when none.
+	// value the server's transform-mode query answers; 0 when none.
 	TransformMode uint8 `json:"-"`
 	// TransformShape and TransformEquipment are a Duplicate's copy of the
-	// other player's record byte and nine worn slots (4F0320).
+	// other player's record byte and nine worn slots (the server's copy
+	// step).
 	TransformShape     uint8          `json:"-"`
 	TransformEquipment [9]uint32      `json:"-"`
 	BuybackNext        uint32         `json:"buybackNext,omitempty"`
@@ -329,9 +334,9 @@ type Character struct {
 	// must match this exact GID and never trust a client-proposed vehicle.
 	ActiveCOS *CharacterCOS `json:"activeCos,omitempty"`
 	// Guild soldiers are character-owned rows, independent of the consumed
-	// scroll. 4FA430 restores their remaining calendar leases.
+	// scroll. The server's re-entry restores their remaining calendar leases.
 	Mercenaries []*CharacterCOS `json:"mercenaries,omitempty"`
-	// Owner timed job (2, 4), created by 4FB0FC for 1,200 seconds.
+	// Owner timed job (2, 4), created by the summon for 1,200 seconds.
 	MercenarySummonUntilMs int64 `json:"mercenarySummonUntilMs,omitempty"`
 	// CapturedCOS is a capture-escort quest's captured monster (TypeID
 	// 1/2/3/6, client 692260): runtime-only, never persisted. The quest
@@ -341,16 +346,16 @@ type Character struct {
 	BroodGeneration uint64           `json:"-"`
 	Brood           []*CharacterCOS  `json:"-"`
 	PetSkillWindows []PetSkillWindow `json:"petSkillWindows,omitempty"`
-	// ParamJobs are the live item parameter jobs (CTJ_CharParamKeeper):
-	// EXP/skill-EXP scroll bonuses with an absolute deadline.
+	// ParamJobs are the live item parameter jobs (the server's param keeper
+	// job): EXP/skill-EXP scroll bonuses with an absolute deadline.
 	ParamJobs []ParamJob `json:"paramJobs,omitempty"`
 	// CompositeJobs are the premium package's limited uses and booth buffs
-	// (CTJ_CompositeItemKeeper works UIL1, UQL1, BFI1).
+	// (the server's composite item keeper works UIL1, UQL1, BFI1).
 	CompositeJobs []CompositeJob `json:"compositeJobs,omitempty"`
 	// StallDecoration is the stall booth decoration (ITEM_MALL_BOOTH_*, TID
-	// 3.3.3.4) the character applied for good: v1.188 CGItemExpendable_UseItem
-	// stores the item's reference id in the persistent record through
-	// 4A3F10. Zero is the country's default stall.
+	// 3.3.3.4) the character applied for good: the v1.188 expendable item use
+	// stores the item's reference id in the persistent record. Zero is the
+	// country's default stall.
 	StallDecoration uint32 `json:"stallDecoration,omitempty"`
 	// PublicHidden keeps the character off the community site's public read
 	// API (port-only, not native: the opensro.online privacy choice). Its
@@ -377,18 +382,18 @@ type Character struct {
 	// milliseconds, for the site's player database (port-only, not native).
 	LastLoginAtMs int64 `json:"lastLoginAtMs,omitempty"`
 	// PremiumClock is the running premium ticket's daily allotment
-	// (CTJ_PremiumKeeper); nil when no ticket runs.
+	// (the server's premium keeper job); nil when no ticket runs.
 	PremiumClock *PremiumClock `json:"premiumClock,omitempty"`
 	// ItemGroupCooldowns maps an item COOLTIME group to its absolute end.
 	ItemGroupCooldowns map[uint32]int64 `json:"itemGroupCooldowns,omitempty"`
 	TimedSkillJobs     []TimedSkillJob  `json:"timedSkillJobs,omitempty"`
 	// FortressReturnUntilMs ends the fortress-return cooldown, the owner
-	// timed job (2, 5) of 600 s CGObjPC_HandleSiegeReturn705D (51A5B0)
+	// timed job (2, 5) of 600 s the server's 0x705D fortress-return handler
 	// creates; zero when none runs.
 	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
-	// CampDisbandedAtMs is when the character last dissolved a training camp
-	// (SR_GameServer 0x005dd3f0: 7-day / 604,800 s reopen cooldown, error
-	// 0x681C -> client 0x1C UIIT_MSG_TC_ERROR_NOT_OPEN_7D).
+	// CampDisbandedAtMs is when the character last dissolved a training
+	// camp (the reference server's camp disband: 7-day / 604,800 s reopen
+	// cooldown, error 0x681C -> client 0x1C UIIT_MSG_TC_ERROR_NOT_OPEN_7D).
 	CampDisbandedAtMs int64 `json:"campDisbandedAtMs,omitempty"`
 
 	// InventorySize is the inventory capacity byte the client was given at
@@ -451,14 +456,17 @@ type Character struct {
 	// timer/map per item. Only the successful item-use transaction writes it;
 	// reconnect, stack movement and rebirth must not reset these deadlines.
 	ItemUseCooldowns [3]int64 `json:"itemUseCooldowns,omitempty"`
-	// ItemCureCooldowns are the cure lanes of the same reuse mask (4EB410):
-	// [0] the universal pill (bit 0x100), [1] every other cure (bit 0x40).
+	// ItemCureCooldowns are the cure lanes of the same reuse mask (the
+	// server's cure check): [0] the universal pill (bit 0x100), [1] every
+	// other cure (bit 0x40).
 	ItemCureCooldowns [2]int64 `json:"itemCureCooldowns,omitempty"`
-	// PetPotionCooldowns are 49D240's 1.1 s recovery lock on the owner, one
-	// lane per pet-potion TID4 the v1.150 client sends (4, 5, 7).
+	// PetPotionCooldowns are the server's pet potion 1.1 s recovery lock on
+	// the owner, one lane per pet-potion TID4 the v1.150 client sends (4,
+	// 5, 7).
 	PetPotionCooldowns [3]int64 `json:"petPotionCooldowns,omitempty"`
 
-	// Job is the job guild membership (v1.188 CJobInfo at CGObjPC+0x1FB4).
+	// Job is the job guild membership (the v1.188 job record at player
+	// object +0x1FB4).
 	Job CharacterJob `json:"job,omitzero"`
 
 	// QuickSlots are the persisted CIFUnderBar bindings. The entered-player
@@ -486,7 +494,7 @@ type Character struct {
 	QuestCompletionCounts map[uint32]uint32           `json:"questCompletionCounts,omitempty"`
 	QuestSupplies         map[uint32]QuestSupplyState `json:"questSupplies,omitempty"`
 	// EndedQuestIds are quests closed for good without being completed
-	// (native quest state 5, QuestManager_CreateEndedRecord 570F10): a
+	// (native quest state 5, written by the server's ended-record routine): a
 	// branch the character turned down. Server-side only, like the
 	// counts: the native server sends no update for state 5. A completed
 	// quest that is also ended keeps its completion and count.
@@ -612,7 +620,7 @@ type PetSkillWindow struct {
 ================
 ParamJob
 
-One live CTJ_CharParamKeeper (SR_GameServer 654F30): an internal param item
+One live param keeper job of the reference server: an internal param item
 (TID 3/3/3/10) writes Value to ParamKeeper parameter Param until EndUnixMs.
 The internal item's reference id is the client board row's identity
 (UpdateMagicStateSlot kind 4).
@@ -626,23 +634,23 @@ type ParamJob struct {
 	EndUnixMs    int64  `json:"endUnixMs"`
 }
 
-// Composite work kinds (49F590 entry tags; CTJ_CompositeItemKeeper 654C40).
+// Composite work kinds (the server's composite keeper entry tags).
 const (
-	CompositeUsedItemLimit  = "UIL1" // CUsedItemLimit: an item's effect N times a period
-	CompositeUsedQuestLimit = "UQL1" // CUsedQuestLimit: a premium quest N times a period
-	CompositeBuffItem       = "BFI1" // CBuffItem: a stall booth decoration for a period
+	CompositeUsedItemLimit  = "UIL1" // used-item limit: an item's effect N times a period
+	CompositeUsedQuestLimit = "UQL1" // used-quest limit: a premium quest N times a period
+	CompositeBuffItem       = "BFI1" // buff item: a stall booth decoration for a period
 )
 
 /*
 ================
 CompositeJob
 
-One CTJ_CompositeItemKeeper work, identified by its package and target.
+One composite item keeper work, identified by its package and target.
 The package's reference id is the client board's kind-5 slot (its icon and
 period); Target is the limited item's or booth item's reference id, the
 board's count key, or zero for a quest limit, whose quest is QuestCodename. A limited work holds Uses of
 MaxUses until NextRefillUnixMs, when every PeriodSeconds the count returns
-to MaxUses (CUsedObjectLimit_Refill 653A40). The work ends at EndUnixMs.
+to MaxUses (the server's limit refill). The work ends at EndUnixMs.
 ================
 */
 type CompositeJob struct {
@@ -662,7 +670,7 @@ type CompositeJob struct {
 ================
 PremiumClock
 
-CTJ_PremiumKeeper's daily allotment (CTJ_PremiumKeeper_Tick 6529D0). The
+The server's premium keeper daily allotment (its tick). The
 ticket's period starts at StartUnixMs; each 86,400 s day grants
 DailyAllotmentMs, and what a day leaves unspent carries into the next day
 only (CarriedMs), spent first. Today is what remains of the current day's
@@ -702,10 +710,12 @@ type CharacterCOS struct {
 	ResolveStacks uint8 `json:"-"`
 	// Port-only Arcane Resonance projection; cleared on re-entry.
 	ArcaneMagicPercent float64 `json:"-"`
-	// Runtime source-zero movement multiplier installed by 548A30.
+	// Runtime source-zero movement multiplier the server's follow run
+	// installs.
 	FollowRunFactor float32 `json:"-"`
 	FollowRunSet    bool    `json:"-"`
-	// The installed 4D9850 source, refreshed by the guild owner on a purchase.
+	// The installed guild-soldier attribute source, refreshed by the guild
+	// owner on a purchase.
 	MercenaryAttributes    uint8         `json:"mercenaryAttributes,omitempty"`
 	SummonGeneration       uint64        `json:"summonGeneration,omitempty"`
 	RentalExpiresAtUnix    int64         `json:"rentalExpiresAtUnix,omitempty"`
@@ -724,8 +734,8 @@ type CharacterCOS struct {
 	Name                   string        `json:"name,omitempty"`
 	CurrentHP              uint32        `json:"currentHp"`
 	CurrentMP              uint32        `json:"currentMp"`
-	// StateFlags bit 0 is CCOSData+0x38 (49D240): revival refuses while it
-	// is set and sets it when the revive succeeds.
+	// StateFlags bit 0 is the COS data's +0x38 (the pet potion check):
+	// revival refuses while it is set and sets it when the revive succeeds.
 	StateFlags uint32 `json:"stateFlags,omitempty"`
 	Summoned   bool   `json:"summoned"`
 	Mounted    bool   `json:"mounted"`
@@ -813,12 +823,13 @@ CharacterJob
 A job guild membership: the job type joined at a guild NPC, its grade
 (+0x783, 1 on joining) and experience (+0x18B4), the alias a dressed job
 player shows, and the time before a thief or hunter who withdrew may join
-again (v1.188 CGObjPC_HandleJobLeave70E2's seven-day timed job).
+again (the seven-day timed job of the v1.188 0x70E2 job leave handler).
 
-WeeklyReward is the native _CharTrijob.Contribution (CJobInfo +0x24,
-CJobInfo_AddContribution 60E0A0): a trader's sale share or a thief's or
-hunter's job experience this week. Reward (+0x28) is the outcome a thief or
-hunter collects at the guild; the weekly cycle (jobweek.go) credits it.
+WeeklyReward is the native _CharTrijob.Contribution (job record +0x24,
+raised by the server's contribution routine): a trader's sale share or a
+thief's or hunter's job experience this week. Reward (+0x28) is the outcome
+a thief or hunter collects at the guild; the weekly cycle (jobweek.go)
+credits it.
 ==================
 */
 type CharacterJob struct {

@@ -521,7 +521,7 @@ func allMissionsReached(def *Definition, record enterworld.ActiveQuestRecord) bo
 killTargetMatches
 
 Native 91bc82..91bc9b indexes the rank by the matching species, and
-CGObjMob::GetMonsterClass (4c1c60) returns only the low rarity nibble.
+the server's monster class read returns only the low rarity nibble.
 ================
 */
 func killTargetMatches(def *Definition, code string, rarity uint8) bool {

@@ -1,6 +1,6 @@
 package vitals
 
-// HitDebit is the numeric gate in native 52A240/52D460. The wire dword
+// HitDebit is the numeric gate in the server's hit handlers. The wire dword
 // is interpreted as signed damage before HP subtraction; its high bit must
 // not turn an overflowed or negative amount into an unsigned killing blow.
 // Attribution receives the original amount separately. This is not the full

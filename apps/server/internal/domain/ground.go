@@ -43,7 +43,7 @@ type GroundItemRecord struct {
 	// generations are deliberately excluded from persistence.
 	PopulationWorld uint32   `json:"populationWorld,omitempty"`
 	MagicOptions    []uint64 `json:"magicOptions,omitempty"`
-	// TransformRefObjID survives a dropped monster capsule (4B2B26).
+	// TransformRefObjID survives a dropped monster capsule (the server's drop keeps it).
 	TransformRefObjID uint32  `json:"transformRefObjId,omitempty"`
 	Gid               uint32  `json:"gid"`
 	RefObjID          uint32  `json:"refObjId"`

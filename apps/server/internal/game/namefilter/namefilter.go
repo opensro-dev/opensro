@@ -3,17 +3,17 @@
 
 namefilter.go - the native name filter (AbuseFilter.txt)
 
-The original server checks every player-chosen name (CGame_IsValidCharacterName,
-v1.188 4184A0) against AbuseFilter.txt, loaded by NameFilter_LoadAbuseFilter
-(987CB0) and applied by NameFilter_IsAllowedName (987770):
+The original server checks every player-chosen name (its v1.188
+character-name check) against AbuseFilter.txt, which its name filter
+loads once and applies to each name:
 
-  - the text is lowercased in ASCII only (Text_CopyLowercaseASCII);
+  - the text is lowercased in ASCII only;
   - every code point must lie in the locale's #ALLOW_ID_TABLE ranges (the
-    loader fills a bitmap from them and then inverts it, so 987AA0 refuses
-    a code point outside them);
-  - no context-1 word of type 2 may appear anywhere in it (987B00);
+    loader fills a bitmap from them and then inverts it, so the code-point
+    test refuses a code point outside them);
+  - no context-1 word of type 2 may appear anywhere in it (substring test);
   - no context-1 word of type 1 may equal one of its space-separated
-    words (987C20).
+    words (whole-word test).
 
 The file is UTF-16 with six columns per locale: the word (or
 #ALLOW_ID_TABLE), then four context types, then a blank. Context 1 is
@@ -25,8 +25,8 @@ group, the one the browser client already applies to new names
 (foundation/ui/character-create.ts), so the server and the client refuse
 the same names.
 
-4184A0 also refuses a space and anything the shard database's
-rejected-text table matches (CShardDB_FindRejectedText 7312F0). The port
+The server's name check also refuses a space and anything the shard
+database's rejected-text table matches. The port
 has no copy of that table; the callers' name shape already refuses a space
 and every quote.
 

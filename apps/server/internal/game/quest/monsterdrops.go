@@ -37,8 +37,8 @@ type MonsterDropRule struct {
 	// rate. Lua stores each species' probability as float32 (86c077..86c081).
 	SpeciesChancePercent []float32
 	// MonsterGrades, when set, is aligned with MonsterCodenames: a kill counts
-	// only when the monster's grade (rarity & 15, CGObjMob_GetBaseGrade
-	// 4C1C60) matches. Gather missions set it with +0x10D and list the
+	// only when the monster's grade (rarity & 15, the server's base grade
+	// read) matches. Gather missions set it with +0x10D and list the
 	// grades at +0x111 (91C4D0).
 	MonsterGrades  []uint8
 	MinPlayerLevel uint8
@@ -186,7 +186,7 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 ================
 nativeQuestDropChance
 
-57BE70 joins two 15-bit draws and rounds the normalized sample to float32
+The server joins two 15-bit draws and rounds the normalized sample to float32
 before comparison. Zero fails and equality succeeds, including fractional rates.
 ================
 */

@@ -4,15 +4,15 @@
 ended.go - quests closed for good without being completed
 
 The native server keeps a quest record in state 5 for a quest the character
-can never take: QuestManager_CreateEndedRecord (570F10) creates one with
-count 0, or SetQuestState(5) overwrites an existing record and keeps its
+can never take: its ended-record routine creates one with
+count 0, or its quest-state setter (state 5) overwrites an existing record and keeps its
 count. KT_SMITH_2 (8A77A0) is the fork that uses it: refusing its first
 page ends SMITH_2 and SMITH_3, pressing Accept ends ACCESSORY_2 and
 ACCESSORY_3, and ACCESSORY_2 requires both blacksmith quests ended and
 never completed (list 0x108, CBasicQuest_MeetsPrerequisites 9262A0).
 
 The port keeps the ended ids in Character.EndedQuestIds. Native sends no
-update for state 5 (SetQuestState 5709C0 with arg4 = 0), so nothing here
+update for state 5 (its quest-state setter with arg4 = 0), so nothing here
 reaches the client: the login completed list stays the completions, and an
 ended quest that was completed stays completed with its count.
 

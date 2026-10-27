@@ -22,7 +22,7 @@ import (
 ================
 packQuestMinutes
 
-570650 packs hours/minutes, not milliseconds: the hours split into days
+The server's journal timer packs hours/minutes, not milliseconds: the hours split into days
 (hours / 24) and the hour of the day. v1.150 5C2A30 consumes days at bit
 10, hours at bit 15 and minutes at bit 20.
 ================
@@ -182,7 +182,7 @@ advanceWaitMinute
 
 89E050, once per online minute while the branch is not yet achieved
 (+0xA): a positive count (+0xC) drops by one, and the journal timer is
-sent (570650, 0x30D5) unless the new count is a multiple of ten. A count
+sent (0x30D5) unless the new count is a multiple of ten. A count
 already at zero sets the achieved word, announces the branch's achieved-now
 line and republishes the record (slot 0x114), so the branch stands
 achieved on the minute after the last one is spent.

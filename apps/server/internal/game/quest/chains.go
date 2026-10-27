@@ -84,7 +84,7 @@ func heldItemsMet(c *enterworld.Character, def *Definition) bool {
 JobCondition
 
 9262A0 under flag 0x1000: byte +0x21 set requires the job state
-(CGObjPC_GetJobState 4DDC80, the worn suit's job, zero outside job mode)
+(the server's player job state, the worn suit's job, zero outside job mode)
 to equal +0x20; clear, to differ from it. The trade quests require a
 dressed trader (1, set); Rahid 3 and 4 refuse a dressed thief (2, clear).
 ================

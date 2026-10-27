@@ -6,7 +6,7 @@ passives.go - learned passive skills projected onto the keeper
 Each learned passive group's highest rank contributes its setv parameter
 values, keeper writes (reat, br, hpi/mpi/er/hr, passive defense, passive
 cr) and status
-resistance buckets. A program declaring reqi is gated by the 59F0E0
+resistance buckets. A program declaring reqi is gated by the server's reqi
 equipment walk; passive cr follows the equipped weapon kind instead.
 Nothing here is cached: Character.Snapshot is the only input.
 
@@ -145,23 +145,23 @@ func learnedPassivesFrom(c *domain.Character, rows []enterworld.SkillRow, items 
 	var power enterworld.SkillParameterValues
 	for _, selected := range rows {
 		source++ // distinct from parameter and equipment projection identities
-		// 59F0E0: a passive whose reqi the equipment fails contributes
+		// The reqi walk: a passive whose reqi the equipment fails contributes
 		// nothing - its setv entries, keeper writes and resistances alike.
 		eligible := !selected.Reqi.Present || ReqiRefusal(c, items, selected.Reqi) == 0
 		if p := selected.PassiveParameters; p.Pinned && !selected.ChainSub && eligible {
-			// 5A02E0 assigns the setv entry; it does not sum values. Highest
+			// The server assigns the setv entry; it does not sum values. Highest
 			// learned group rank is selected above.
 			for slot := enterworld.SkillParameter(0); slot < enterworld.SkillParameterCount; slot++ {
 				if p.Mask.Has(slot) {
 					power[slot] = p.Values[slot]
 				}
 			}
-			// 595542..59568F: reat raises flat status reduction 0x91+i.
+			// The effect installer's reat case raises flat status reduction 0x91+i.
 			for _, w := range StatusReductionWrites(p.Reat) {
 				w.Source = source
 				writes = append(writes, w)
 			}
-			// 594AC0 at 0x595DFD..0x595EFA: br raises the flat block rate of
+			// The effect installer's br case raises the flat block rate of
 			// each lane its mask selects. BlockChance reads those lanes with no
 			// shield test of its own, so the reqi walk is the only gate.
 			if p.Br.Mask != 0 {
@@ -170,7 +170,7 @@ func learnedPassivesFrom(c *domain.Character, rows []enterworld.SkillRow, items 
 					writes = append(writes, w)
 				}
 			}
-			// 594AC0: hr, er, hpi and mpi put word 1 on the percent channel
+			// The effect installer: hr, er, hpi and mpi put word 1 on the percent channel
 			// and word 0 on the flat channel of parameters 11, 9, 3 and 4.
 			for _, fr := range [...]struct {
 				rate  enterworld.SkillFlatRate
@@ -188,7 +188,7 @@ func learnedPassivesFrom(c *domain.Character, rows []enterworld.SkillRow, items 
 			if m := selected.BuffModifiers; p.IncomingReduction && m.Odar {
 				writes = append(writes, IncomingReductionWrites(m.OdarBits, m.OdarWord, source)...)
 			}
-			// 595A97: dru word 0 on 0x80/0x81, word 1 on 0x82/0x83.
+			// The installer's dru case: word 0 on 0x80/0x81, word 1 on 0x82/0x83.
 			if p.Dru != [2]uint32{} {
 				for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
 					for _, param := range params {
@@ -216,10 +216,10 @@ func learnedPassivesFrom(c *domain.Character, rows []enterworld.SkillRow, items 
 ==================
 learnedStatusResistance
 
-The CSkillManager status-resistance buckets real fills (59DF20): each
-masked status's bucket keys its flats by grade. StatusResistance_Read
-(5999E0) reports the highest unsigned grade and its highest unsigned flat; no
-v1.150 source fills the percent side. Eligibility is 59F0E0's, as for
+The skill manager's status-resistance buckets real fills: each
+masked status's bucket keys its flats by grade. The server's resistance read
+reports the highest unsigned grade and its highest unsigned flat; no
+v1.150 source fills the percent side. Eligibility is the reqi walk's, as for
 every other passive contribution.
 ==================
 */

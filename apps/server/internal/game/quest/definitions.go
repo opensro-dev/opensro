@@ -155,7 +155,7 @@ type QuestSpec struct {
 	RequiredHeldItems    []string
 	RequiredAnyHeldItems []string
 	// JobCondition gates the offer on the dressed job (condition table
-	// 0xC2 flag 0x1000; 9262A0 compares +0x20 with CGObjPC_GetJobState).
+	// 0xC2 flag 0x1000; 9262A0 compares +0x20 with the server's job state).
 	JobCondition         *JobCondition
 	Stages               []QuestStage
 	MonsterDrop          *MonsterDropRule

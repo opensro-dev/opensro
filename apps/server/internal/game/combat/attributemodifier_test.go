@@ -21,7 +21,7 @@ import (
 ================
 TestLifeControlPenaltyAddsToOtherHPPercentages
 
-59613F..59616A: 1000 base HP, +20 percent and -50 percent give 700,
+The pmhp case: 1000 base HP, +20 percent and -50 percent give 700,
 not the 600 produced by multiplying the penalty after the bonus.
 ================
 */

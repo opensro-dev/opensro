@@ -142,7 +142,7 @@ func TestRahidTwoWaitingBranchCountsOnlineMinutes(t *testing.T) {
 	holdItems(t, rt, c, def.CollectItemCodename, 7)
 	for minute := 1; minute <= 1800; minute++ {
 		frames := rt.AdvanceMinute(c)
-		// 570650 is sent unless the new count is a multiple of ten.
+		// The journal timer is sent unless the new count is a multiple of ten.
 		if (len(frames) == 0) != ((1800-minute)%10 == 0) {
 			t.Fatalf("minute %d sent %d frame(s)", minute, len(frames))
 		}

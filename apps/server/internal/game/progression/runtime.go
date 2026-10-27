@@ -36,7 +36,7 @@ import (
 // level-up gate enforces (sub_5841d0: level < 0x78).
 const MasteryLevelCap int64 = 120
 
-// 59E450 returns 34xx; the v1.150 learning response carries the low byte.
+// The server's skill learning check returns 34xx; the v1.150 learning response carries the low byte.
 const (
 	skillLearnMasteryLevelRefusal uint8 = 0x02
 	skillLearnRaceRefusal         uint8 = 0x05
@@ -637,7 +637,7 @@ plus the absolute SP refresh on 0x30B3 type 2 - the ack handler
 sub_75bb20 never touches the client's SP, so without the refresh its
 display goes stale).
 
-The native 59E450 validator checks row/SP eligibility, masteries, STR/INT,
+The native skill learning check tests row/SP eligibility, masteries, STR/INT,
 country, the exact next rank, three prerequisite groups and finally SP.
 Keep this order: simultaneous failures must return the same refusal byte.
 Chain children remain internal execution records rather than learned entries.
@@ -658,7 +658,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 	}
 	row, known := rt.deps.SkillData().SkillByID(request.SkillID)
 	if !known || row.SPCost == 0 {
-		// 59E47D / 59E4A3: absent and zero-SP rows are not trainable.
+		// Absent and zero-SP rows are not trainable.
 		return skillLearnRefusal(skillLearnUnavailable)
 	}
 
@@ -704,7 +704,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 			refusal = wire.ErrCodeSkillLearnInt
 			return false
 		}
-		// 59E579..59E591: country 3 is unrestricted; other bytes must match.
+		// Country 3 is unrestricted; other bytes must match.
 		if row.RequiredRace != enterworld.SkillRaceAny && int(row.RequiredRace) != enterworld.NativeCountryByte9C(character) {
 			refusal = skillLearnRaceRefusal
 			return false
@@ -794,12 +794,12 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 passiveChangesStats
 
 A learned passive is a standing skill instance whose keeper writes
-(594AC0) change the derived stats: the setv, hpi/mpi/hr/er, br, reat/real
+(the buff installer) change the derived stats: the setv, hpi/mpi/hr/er, br, reat/real
 and damage blocks (PassiveParameters), the flat critical (PassiveCritical)
 and the defense passives. Learning or replacing one resends the stat block,
 or the client keeps the old maximum MP, HP and rates until something else
 refreshes them. Inferred: native rebuilds the derived parameters on any
-passive learn, as withdrawal (59FA85) does on any removal.
+passive learn, as withdrawal does on any removal.
 ==================
 */
 func passiveChangesStats(row enterworld.SkillRow) bool {

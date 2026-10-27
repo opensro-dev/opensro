@@ -3,7 +3,7 @@
 
 statusresistance_test.go - shared passive and buff resistance selection
 
-Compare every status bucket against original 5999E0 machine execution,
+Compare every status bucket against the original resistance read's machine execution,
 including unsigned boundaries and order-independent equal-grade stacking.
 
 ===========================================================================

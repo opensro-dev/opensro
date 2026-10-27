@@ -27,11 +27,10 @@ import (
 ================
 Graduate
 
-CGObjPC_HandleAcademyGraduate7475 (0x00519600) ->
-TrainingCamp_ApplyMemberCommand (0x005DEF20) ->
-TrainingCampManager_SubmitPersistentOperation (0x005DF5C0, case 4):
+The v1.188 server's graduation request applies a member command that the
+camp manager submits as persistent operation case 4:
 Voluntary apprentice graduation at level >= 40 with satisfaction 0..4
-(0x0051972E: cmp dl, 0x5; jae 0x519667).
+(a satisfaction of 5 or more is refused).
 ================
 */
 func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisfaction uint8, nowMs int64) domain.TrainingCampGraduateResult {
@@ -80,12 +79,12 @@ func (door storeCampDoor) Graduate(divisionID string, memberCharID int64, satisf
 ================
 CompulsoryGraduate
 
-CGObjPC_HandleAcademyCompulsoryGraduate7476 (0x00519770) ->
-TrainingCamp_ApplyMemberCommand (0x005DEF20 @ 0x005198AB):
+The v1.188 server's compulsory graduation request applies the same member
+command:
 Master-initiated compulsory graduation of a level-41+ apprentice
-(TrainingCampMember_IsState2 0x005E36E0 @ 0x0051987A; 0x00519883: cmp dl, 0x28;
-jbe 0x519898 -> push 0x6822), passing arg3 = +1 (@Evaluation delta +1, matching
-0x00ADE9A4[2] = satisfaction 2) and arg2 = 0 (compulsory) at 0x005198A4..0x005198AB.
+(the member must be in state 2; a level at or below 0x28 is refused with
+0x6822), passing arg3 = +1 (@Evaluation delta +1, matching the
+evaluation table's entry for satisfaction 2) and arg2 = 0 (compulsory).
 ================
 */
 func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int64, targetName string, nowMs int64) domain.TrainingCampGraduateResult {
@@ -138,22 +137,21 @@ func (door storeCampDoor) CompulsoryGraduate(divisionID string, masterCharID int
 ================
 completeGraduationLocked
 
-CTrainingCamp_OnMemberGraduatedUpdatePoints (0x005DDD50),
-CTrainingCamp_AwardGraduationHonorAndEvalPoints (0x005E3730),
-TrainingCampMember_AddHonorPointsClamped (0x005E3760), and retail stored
+The v1.188 server's graduation point update, its honor and evaluation
+award, its clamped honor add, and retail stored
 procedure _TRAINING_CAMP_MEMBER_GRADUATE (SRO_VT_SHARD.bak @ 0x53E8B30):
-  - Always increments camp.GraduateCount by 1 (0x005DDE56; SQL 0x53E9376/0x53E94B0).
-  - When joinLevel <= 30 (0x1E at 0x005DDE8E / 0x005E3741; SQL IF @JoinLvl <= 30 at 0x53E9104):
-  - mentorPoint = 40 - joinLevel (0x005E3748: mov eax, 0x28; sub eax, ecx)
-  - subMentorPoint = (40 - joinLevel) / 10 (0x005DDEB0..0x005DDED0: x87 trunc(* 0.1); SQL @MentorPoint / 10)
+  - Always increments camp.GraduateCount by 1 (SQL 0x53E9376/0x53E94B0).
+  - When joinLevel <= 30 (0x1E in both server tests; SQL IF @JoinLvl <= 30 at 0x53E9104):
+  - mentorPoint = 40 - joinLevel (0x28 minus the join level)
+  - subMentorPoint = (40 - joinLevel) / 10 (x87 trunc(* 0.1); SQL @MentorPoint / 10)
   - Master (Kind 0) gains mentorPoint; Sub-Mentors (Kind 1) gain subMentorPoint
-    (clamped against signed int32 overflow 0x7FFFFFFF per 0x005E3760, and
-    emitting HonorDeltas only when reward > 0 per 0x005DDF96: test edx, edx; je 0x5de022).
-  - Evaluation delta from 0x00ADE9A4 indexed at 0x0051973A: [-3, -1, +1, +3, +5]
-    for satisfaction 0..4 (compulsory graduation passes satisfaction 2 = +1 per 0x005198A4).
+    (clamped against signed int32 overflow 0x7FFFFFFF by the clamped add, and
+    emitting HonorDeltas only when reward > 0, as the point update skips a zero).
+  - Evaluation delta from the server's evaluation table: [-3, -1, +1, +3, +5]
+    for satisfaction 0..4 (compulsory graduation passes satisfaction 2 = +1).
   - When joinLevel > 30, neither Honor points nor Evaluation points change.
-  - Voluntary apprentice graduation sets AwardedExp = true (CTrainingCampMgr_OnGraduateDBSuccess
-    0x005DFC30 @ 0x005DFC4F..0x005DFC72).
+  - Voluntary apprentice graduation sets AwardedExp = true (the camp
+    manager's graduation database-success step).
 
 ================
 */
@@ -355,10 +353,8 @@ func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []do
 ================
 HonorRankings
 
-CGObjPC_HandleAcademyHonorRank7478 (0x00519AD0) ->
-CTrainingCampMgr_SendHonorRankList_B478 (0x005DF010),
-CTrainingCampMgr_RebuildHonorRankPacketBuffer (0x005E16A0), and
-CTrainingCamp_WriteHonorRankEntry_5DD1C0 (0x005DD1C0):
+The v1.188 server's honor-rank request: the camp manager sends its 0xB478
+honor rank list from a rebuilt packet buffer, one written entry per camp:
 Returns the division's Top-50 honor-ranked camps in ranking order.
 ================
 */

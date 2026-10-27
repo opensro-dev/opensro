@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-fortress_death_test.go - special-world death EXP cap from 4E6D60
+fortress_death_test.go - special-world death EXP cap of the server's death penalty
 
 ===========================================================================
 */

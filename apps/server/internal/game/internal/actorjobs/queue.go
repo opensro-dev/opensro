@@ -1,4 +1,4 @@
-// Package actorjobs projects CAsyncJobMgr (406540/4065D0/4066A0/4066C0).
+// Package actorjobs projects the reference server's async actor job queue.
 // This actor state queue is distinct from persistent database/timed skill jobs.
 package actorjobs
 

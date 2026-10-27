@@ -7,11 +7,12 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
-// DefenseModifierInput is an installation-time snapshot, not a live formula.
-// 595209..59533C adds context +34/+38 with uint32 wrap, then optionally caps
-// against the recipient's current Param5/6. Store the resulting writes for
-// this effect's lifetime: reevaluating the cap after later buffs is incorrect.
-// The caller owns reqi/reqn eligibility and resolves caster dictionary bonuses.
+// DefenseModifierInput is an installation-time snapshot, not a live
+// formula. The skill-parameter installer's defense branch adds context
+// +34/+38 with uint32 wrap, then optionally caps against the recipient's
+// current Param5/6. Store the resulting writes for this effect's lifetime:
+// reevaluating the cap after later buffs is incorrect. The caller owns
+// reqi/reqn eligibility and resolves caster dictionary bonuses.
 type DefenseModifierInput struct {
 	Physical, Magical               uint32
 	PhysicalBonus, MagicalBonus     uint32

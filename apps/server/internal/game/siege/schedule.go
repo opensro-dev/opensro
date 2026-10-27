@@ -5,8 +5,8 @@ schedule.go - the shard's schedule.cfg, and when each schedule is running
 
 SR_ShardManager reads schedule.cfg at boot and tells the game servers when
 each named schedule starts and ends; the GameServer's schedule jobs
-(CGameSJ_SiegeRequestPeriod 679320/6794C0, CGameSJ_SiegePeriod
-679720/6798B0, CGame_SiegeTaxPeriod 679B00/679CA0) act on those edges.
+(one start/end pair each for the request, war and tax periods) act on
+those edges.
 This server is both processes, so it evaluates the same file itself.
 
 A schedule is a block:
