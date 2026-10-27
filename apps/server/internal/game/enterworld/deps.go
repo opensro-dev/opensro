@@ -178,10 +178,9 @@ type Deps struct {
 	UpdateCharacterDeferred  func(character *Character, label string, update func() bool) bool
 	UpdateCharactersDeferred func(characters []*Character, label string, update func() bool) bool
 	// OnCharacterLevelChanged runs after a character update door releases its
-	// authority lock when a character's Level changed during the transaction
-	// (v1.188 CGObjPC_ApplyLevelTransitionAndRecoverVitals 0x004E4D90 @
-	// 0x004E4E21 / 0x004E4E50 -> CTrainingCampMgr_SendMemberStatusUpdateToSM
-	// 0x005DE6C0).
+	// authority lock when a character's Level changed during the transaction:
+	// natively the level transition recovers the character's vitals and the
+	// training-camp member status goes out with it.
 	OnCharacterLevelChanged func(character *Character)
 	// CloseJobWeek and JobRankings own the job guilds' weekly close and its
 	// ranking snapshot (store jobweek.go).

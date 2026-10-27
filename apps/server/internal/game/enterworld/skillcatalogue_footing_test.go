@@ -14,7 +14,7 @@ import "testing"
 ================
 TestCatalogueMarksFootingRows
 
-Every shipped row whose cast gate is ao or pw (58E0BF refuses it to a rider
+Every shipped row whose cast gate is ao or pw (the server refuses it to a rider
 with 0x3009) is projected with needsFooting, and no other row is.
 ================
 */

@@ -1,6 +1,7 @@
 package statuseffect
 
-// ReplacementDescriptor contains only native 59D870 inputs. It describes the
+// ReplacementDescriptor contains only the inputs of the server's buff
+// replacement validation. It describes the
 // authored program, not an assertion that the entire skill is executable.
 // Presence flags distinguish an absent instruction from a present zero word.
 type ReplacementDescriptor struct {

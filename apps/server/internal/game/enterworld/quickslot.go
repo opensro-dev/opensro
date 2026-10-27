@@ -24,7 +24,7 @@ const OpcodeQuickSlotBinding uint16 = 0x7541
 const quickSlotSaveMode uint8 = 1
 
 // The binding stores a bag-relative index; inventory move slots are bytes.
-// 572E00 checks the current bag capacity, not a fixed 45-slot inventory.
+// The native check uses the current bag capacity, not a fixed 45-slot inventory.
 const quickSlotBagPayloadLimit = (1 << 8) - 13
 
 // Native CGInterface_OnMissionLoadingRevealed (client sub_683b40) can emit

@@ -135,7 +135,7 @@ func TestShippedDirectMovementAdmissionAndEnvelopeBoundaries(t *testing.T) {
 TestInstantMovementEnvelopeLeavesPackedStatesAndWeaponsToTheirOwners
 
 Column 18 is the replacement descriptor's PackedStates word and columns
-50/51 are the weapon kinds 58D480 checks at execution; neither selects the
+50/51 are the weapon kinds the server checks at execution; neither selects the
 activation shape. The weapon columns must still be bytes, or the row would
 keep the compiler's 0xFF/0xFF default and admit any weapon.
 ================
@@ -172,7 +172,7 @@ func TestInstantMovementEnvelopeLeavesPackedStatesAndWeaponsToTheirOwners(t *tes
 TestShippedScudIsAnInstantMovementOverride
 
 SKILL_EU_ROG_DAGGERA_SPEED_A (Scud): dura(15000) hst2(N), dagger only
-(13/255), packed states 78. hst2 is the override branch (5964B3/59652F).
+(13/255), packed states 78. hst2 is the override branch.
 ================
 */
 func TestShippedScudIsAnInstantMovementOverride(t *testing.T) {

@@ -63,7 +63,8 @@ const (
 	// OpCosDistanceError tells a player its step was refused by a COS
 	// tether: one byte, 1 = too far from the trade transport, 2 = too far
 	// from the capture-quest monster (CPSMission_OnCosTradeDistanceError0x342F
-	// 75DF40; v1.188 server 0x30E7 from 4F1230).
+	// 75DF40; the v1.188 server sends 0x30E7 from its COS-tether move
+	// validation).
 	OpCosDistanceError uint16 = 0x342F
 	// OpObjectStateRefresh flips one discrete state channel on an entity.
 	// Handler sub_777b60.
@@ -123,9 +124,10 @@ const (
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
 	// ErrCodePartyInventoryFull is UIIT_MSG_STRGERR_PARTY_INVENTORY_FULL
-	// (01:DA, 689420 index 0xDA): CPlayer_ExecuteGroundPickup (5263A8) returns
-	// 0x18DA to the picker after sending 0x1807 (ErrCodeStorageFull) to the
-	// rotated party recipient whose bag is full (526397).
+	// (01:DA, 689420 index 0xDA): the server's ground-pickup executor
+	// returns 0x18DA to the picker after sending 0x1807
+	// (ErrCodeStorageFull) to the rotated party recipient whose bag is
+	// full.
 	ErrCodePartyInventoryFull uint8 = 0xDA
 	// ErrCodeCantEquip is UIIT_MSG_STRGERR_EQUIPITEM (01:0e, "Cannot equipt
 	// the selected item"): the item cannot sit in the requested socket
@@ -143,15 +145,15 @@ const (
 	// banner + guide): the request exceeds the carried balance.
 	ErrCodeNotEnoughGold uint8 = 0x0F
 	// ErrCodeGuildShopNotMaster is UIIT_MSG_GUILD_STORE_BUY_LIMIT (01:C4,
-	// CGInterface_ShowSystemNotification 689BBA; CShopApp_CheckPurchasePayment
-	// 6178D2 returns 0x18C4): a guild-point-priced package bought by a player
-	// who is not a guild master (not in a guild or CGuild_IsMemberMaster
-	// 5D0F50 returns 0).
+	// CGInterface_ShowSystemNotification 689BBA; the server's shop-payment
+	// check returns 0x18C4): a guild-point-priced package bought by a
+	// player who is not a guild master (not in a guild or its guild-master
+	// test fails).
 	ErrCodeGuildShopNotMaster uint8 = 0xC4
 	// ErrCodeNotEnoughGuildPoints is UIIT_MSG_GUILD_LACK_GP (01:C5,
-	// CGInterface_ShowSystemNotification 689CA4; CShopApp_CheckPurchasePayment
-	// 6178C4 returns 0x18C5): a guild-point-priced package the buyer's guild
-	// points cannot pay.
+	// CGInterface_ShowSystemNotification 689CA4; the server's shop-payment
+	// check returns 0x18C5): a guild-point-priced package the buyer's
+	// guild points cannot pay.
 	ErrCodeNotEnoughGuildPoints uint8 = 0xC5
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
@@ -171,13 +173,16 @@ const (
 	// v1.150 client 01:6C, 689555: HIGHER_LEVEL_REQUIRED_TO_USE_THISITEM.
 	// Client notice contract; not a claim about later-server error numbering.
 	ErrCodeItemUseLevelRequired uint8 = 0x6C
-	// Research server 510CD0/510DA5/4FCF74 returns 1889/185B/185C.
-	// v1.150 category 1 retains these low-byte meanings; its reply uses u8.
+	// The research server's item-use and summon-family checks return
+	// 1889/185B/185C. v1.150 category 1 retains these low-byte meanings;
+	// its reply uses u8.
 	ErrCodeItemUseDead uint8 = 0x89
-	// ErrCodeCosTarget is the low byte of 49D240's 0x1871. The v1.150
-	// 0xB5BD body carries one notice byte (755E40).
+	// ErrCodeCosTarget is the low byte of the server COS-expendable
+	// producer's 0x1871. The v1.150 0xB5BD body carries one notice byte
+	// (755E40).
 	ErrCodeCosTarget uint8 = 0x71
-	// ErrCodeCosRefused is 49D240's plain 3: every refusal of the pet-cure
+	// ErrCodeCosRefused is the same producer's plain 3: every refusal of
+	// the pet-cure
 	// arm (target missing, dead or not the caller's COS) and of the revival
 	// arm (no COS, or the COS is already alive). Only the pet-potion arm
 	// uses 0x1871.
@@ -237,12 +242,13 @@ const (
 	// refuses to equip while its current durability reads 0.
 	ErrCodeCantEquipRazed uint8 = 0x37
 	// ErrCodeTargetGone is UIIT_MSG_STRGERR_INVALID_TARGET (01:03, "Cannot
-	// find target"): the ground item is already gone. v1.188 4A9050 sets 3
-	// before its object lookup and returns it when the gid resolves to
-	// nothing, so a pickup that lost the race to another grant reads this.
+	// find target"): the ground item is already gone. The v1.188 server's
+	// pickup gate sets 3 before its object lookup and returns it when the
+	// gid resolves to nothing, so a pickup that lost the race to another
+	// grant reads this.
 	ErrCodeTargetGone uint8 = 0x03
 	// ErrCodeCannotBePicked is UIIT_MSG_STRGERR_CANNOT_BE_PICKED (01:39):
-	// v1.188 4A9050 writes 0x1839 for one cause only - the drop object's
+	// the same gate writes 0x1839 for one cause only - the drop object's
 	// own pickable virtual (+0xD4) refusing. Another character's protected
 	// drop is a different native byte (ErrCodeLockedByOther); the two were
 	// once conflated here, which cost the specific message.
@@ -250,8 +256,8 @@ const (
 	// ErrCodeLockedByOther is UIIT_MSG_STRGERR_LOCKED_BY_OTHER_ONE
 	// (01:12, banner + guide type 5): the drop is inside its ownership
 	// window and this character is neither its owner nor entitled by the
-	// party's distribution option. v1.188 4A9050's tail gate writes
-	// 0x1812 for exactly this (same party with the option bit may pass).
+	// party's distribution option. The same gate's tail writes 0x1812 for
+	// exactly this (same party with the option bit may pass).
 	ErrCodeLockedByOther uint8 = 0x12
 	// ErrCodeCannotDropEquipped is the equipment-source ground-drop refusal
 	// (01:6d). PINNED in v1.150: the drop-confirm dialog sub_68d430

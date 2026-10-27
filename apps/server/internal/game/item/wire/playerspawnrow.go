@@ -251,9 +251,9 @@ type PlayerSpawnRow struct {
 	// FortSiegeAuthority is the guild sub-block's trailing team byte: the
 	// client reads it at sub_869df0 @0x0086a1b2 and stores it via
 	// sub_869940 CICUser_SetGuildWarJobTitle into CICPlayer+0x7e0 (the
-	// six-mark gate needs it in {1,2}). Values are the v1.188
-	// FortSiegeAuthority enum, a bit-for-bit match to the client's
-	// lookup_table_869bcc: 0 None, 1 Commander, 2 DeputyCommander,
+	// six-mark gate needs it in {1,2}). Values are a bit-for-bit match
+	// to the client's lookup_table_869bcc: 0 None, 1 Commander,
+	// 2 DeputyCommander,
 	// 4 FortressWarAdministrator, 8 ProductionAdministrator,
 	// 16 TrainingAdministrator, 32 MilitaryEngineer.
 	FortSiegeAuthority uint8
@@ -363,7 +363,7 @@ func (p PlayerSpawnRow) Encode() []byte {
 	}
 
 	// Transform skin (@0x0086b14f): u8 present, then the skin block
-	// (TransformSkin_WriteBlock 4DD6B0), applied through
+	// (the skin block the server writes), applied through
 	// CICharactor_ApplyTransformationSkin (86B265).
 	if p.Skin.RefObjID != 0 {
 		p.Skin.write(w.U8(1))
@@ -456,7 +456,7 @@ func (p PlayerSpawnRow) Encode() []byte {
 	// @0x0086a2ff: action-progress seconds -> +0x780 (sub_8686a0).
 	w.U8(0)
 	// 86A33C -> +7E1: inactive event team, matching local EnterWorld.
-	// SR_GameServer 645BC7 writes FF when neither event manager has a team.
+	// The server writes FF when neither event manager has a team.
 	team := uint8(0xff)
 	if p.EventTeam != nil {
 		team = *p.EventTeam

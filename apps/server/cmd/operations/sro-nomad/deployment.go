@@ -402,8 +402,11 @@ func resolveDeployment(
 	if requirePrerequisites {
 		if err := validateWebTransportPosture(
 			certificate,
-			portOnly.webTransportPublic(),
-			options.TransportWTAddr,
+			webTransportPosture{
+				Public:     portOnly.webTransportPublic(),
+				WTAddr:     options.TransportWTAddr,
+				PublicPort: options.TransportWTPublicPort,
+			},
 			shards,
 		); err != nil {
 			return nil, err

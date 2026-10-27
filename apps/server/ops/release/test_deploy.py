@@ -76,14 +76,29 @@ class DeployTests(unittest.TestCase):
 		self.assertEqual(deploy.webtransport_deployer({}), ({}, []))
 		self.assertEqual(deploy.webtransport_deployer({"webtransport_public": "off"}),
 			({"SRO_WEBTRANSPORT_PUBLIC": "off"}, []))
-		full = {"webtransport_public": "on", "transport_wt_addr": "203.0.113.7:443",
+		full = {"webtransport_public": "on", "transport_wt_addr": "[::]:18443",
 			"transport_cert_file": "/etc/opensro-tls/fullchain.pem",
 			"transport_key_file": "/etc/opensro-tls/privkey.pem"}
 		environment, arguments = deploy.webtransport_deployer(full)
 		self.assertEqual(environment, {"SRO_WEBTRANSPORT_PUBLIC": "on"})
-		self.assertEqual(arguments, ["-transport-wt-addr", "203.0.113.7:443",
+		self.assertEqual(arguments, ["-transport-wt-addr", "[::]:18443",
 			"-transport-cert-file", "/etc/opensro-tls/fullchain.pem",
-			"-transport-key-file", "/etc/opensro-tls/privkey.pem"])
+			"-transport-key-file", "/etc/opensro-tls/privkey.pem",
+			"-transport-wt-public-port", "443"])
+		# The GameWorld runs unprivileged: a bind it cannot hold is refused
+		# here, before any deploy, and so is a bind without a port.
+		for refused in ("[::]:443", "[::]:1023"):
+			with self.assertRaisesRegex(ValueError, "bind port must be 1024-65535"):
+				deploy.webtransport_deployer(dict(full, transport_wt_addr=refused))
+		# The redirect delivers to the interface address, IPv4 and IPv6: any
+		# host but the dual-stack wildcard misses players silently.
+		for refused in ("127.0.0.1:18443", "203.0.113.7:18443", "0.0.0.0:18443", "[2001:db8::1]:18443"):
+			with self.assertRaisesRegex(ValueError, "bind host must be \\[::\\]"):
+				deploy.webtransport_deployer(dict(full, transport_wt_addr=refused))
+		for malformed in ("203.0.113.7", ":18443", "[::]:port"):
+			with self.assertRaisesRegex(ValueError, "must be host:port"):
+				deploy.webtransport_deployer(dict(full, transport_wt_addr=malformed))
+		self.assertEqual(deploy.wt_bind("[::]:18443"), ("[::]", 18443))
 		with self.assertRaisesRegex(ValueError, "webtransport_public"):
 			deploy.webtransport_deployer({"webtransport_public": "yes"})
 		incomplete = dict(full)
@@ -95,6 +110,32 @@ class DeployTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "requires webtransport_public on"):
 			deploy.webtransport_deployer({"webtransport_public": "off",
 				"transport_cert_file": "/etc/opensro-tls/fullchain.pem"})
+
+	# ================
+	# test_public_webtransport_waits_for_the_host
+	#
+	# A public deploy stops before any token is issued while the host lacks
+	# the redirect (quic_host.problems names the gap); a ready host, or a
+	# deploy with the switch off, goes ahead without asking the host.
+	# ================
+	def test_public_webtransport_waits_for_the_host(self):
+		on = {"webtransport_public": "on", "transport_wt_addr": "[::]:18443"}
+		with patch.object(deploy.quic_host, "problems", return_value=["no live nftables redirect"]) as asked:
+			with self.assertRaisesRegex(RuntimeError, "host is not ready: no live nftables redirect"):
+				deploy.require_quic_host(on, {"SRO_WEBTRANSPORT_PUBLIC": "on"})
+		asked.assert_called_once_with(18443)
+		with patch.object(deploy.quic_host, "problems", return_value=[]):
+			deploy.require_quic_host(on, {"SRO_WEBTRANSPORT_PUBLIC": "on"})
+		with patch.object(deploy.quic_host, "problems") as asked:
+			deploy.require_quic_host({}, {})
+			deploy.require_quic_host({"webtransport_public": "off"}, {"SRO_WEBTRANSPORT_PUBLIC": "off"})
+		asked.assert_not_called()
+		full = dict(on, transport_cert_file="/etc/opensro-tls/fullchain.pem",
+			transport_key_file="/etc/opensro-tls/privkey.pem", nomad_bootstrap="/nonexistent")
+		with patch.object(deploy, "shard_settings", return_value={}), patch.object(deploy, "run") as run, 				patch.object(deploy.quic_host, "problems", return_value=["gap"]):
+			with self.assertRaisesRegex(RuntimeError, "host is not ready"):
+				deploy.deployer(full, "")
+			run.assert_not_called()
 
 	# ================
 	# test_preflight_and_token_lifecycle

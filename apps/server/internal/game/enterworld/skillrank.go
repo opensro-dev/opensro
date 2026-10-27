@@ -49,7 +49,7 @@ func (t *TextdataSkills) indexLearnedRanks() {
 ================
 SkillByGroupLevel
 
-Native 59FA03 follows the previous-rank chain. The port resolves the same
+The server follows the previous-rank chain. The port resolves the same
 root from the catalog; an ambiguous ladder refuses instead of picking an
 arbitrary map iteration result.
 ================

@@ -3,8 +3,9 @@ package wire
 // OpGMRestrictionNotice is v1.150 74BFF0's registered 36EA carrier.
 const OpGMRestrictionNotice uint16 = 0x36EA
 
-// EncodeGMRestrictionNotice uses the 4F8860 packed SYSTEMTIME layout. kind is
-// the notice selector (0 chat, 1 trade), not CCmdSrcNet's record ID (4/3).
+// EncodeGMRestrictionNotice uses the server's packed SYSTEMTIME layout.
+// kind is the notice selector (0 chat, 1 trade), not the command source's
+// record ID (4/3).
 // Native masks fields rather than validating or converting timezone/date.
 func EncodeGMRestrictionNotice(kind uint8, date [8]uint16) []byte {
 	packed := uint32(date[6])

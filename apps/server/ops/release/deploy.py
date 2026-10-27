@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
+import quic_host
 import server_data
 
 CONFIG = Path("/etc/opensro-release/config.json")
@@ -161,6 +162,12 @@ def shard_settings(path=None):
 # before the deployer runs; sro-nomad refuses it again on its side, and
 # the GameWorld again at boot. The posture keys without the switch are a
 # half-posture and deploy nothing either.
+#
+# The GameWorld runs unprivileged (Nomad raw_exec as the sro user), and the
+# host only lets root bind ports below 1024, so a public bind on UDP 443
+# would fail and the GameWorld would refuse to start. The bind port must be
+# 1024 or above and the host redirects public UDP 443 to it (quic_host.py);
+# sro-nomad is told the public port, so the advertised 443 still checks.
 # ================
 def webtransport_deployer(config):
 	public = config.get("webtransport_public", "")
@@ -178,7 +185,38 @@ def webtransport_deployer(config):
 		if not isinstance(value, str) or not value.strip():
 			raise ValueError("webtransport_public is on but " + key + " is not configured")
 		arguments += [flag, value.strip()]
+	quic_host.require_bind(*wt_bind(config["transport_wt_addr"]))
+	arguments += ["-transport-wt-public-port", str(quic_host.PUBLIC_PORT)]
 	return {"SRO_WEBTRANSPORT_PUBLIC": "on"}, arguments
+
+
+# ================
+# require_quic_host
+#
+# A public WebTransport deploy goes ahead only when the host already
+# carries the redirect, firewall opening and buffers for its bind port
+# (quic_host.problems); otherwise the listener would bind and no player
+# would reach it. Checked before any token is issued.
+# ================
+def require_quic_host(config, wt_environment):
+	if wt_environment.get("SRO_WEBTRANSPORT_PUBLIC") != "on":
+		return
+	gaps = quic_host.problems(wt_bind(config["transport_wt_addr"])[1])
+	if gaps:
+		raise RuntimeError("public WebTransport host is not ready: " + "; ".join(gaps))
+
+
+# ================
+# wt_bind
+#
+# The host and port of a host:port WebTransport bind ("[::]:18443"); a
+# value without a host or a numeric port is refused.
+# ================
+def wt_bind(address):
+	host, separator, port = address.strip().rpartition(":")
+	if not separator or not host or not port.isdigit() or not 0 < int(port) < 65536:
+		raise ValueError("transport_wt_addr must be host:port, not " + repr(address))
+	return host, int(port)
 
 
 # ================
@@ -550,12 +588,13 @@ def check_nomad_version(config):
 # ================
 def deployer(config, stack_sizes):
 	settings = shard_settings()
+	wt_environment, wt_arguments = webtransport_deployer(config)
+	require_quic_host(config, wt_environment)
 	management = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646",
 		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
 	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
 		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
 	token = json.loads(issued.stdout)
-	wt_environment, wt_arguments = webtransport_deployer(config)
 	environment = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
 		SRO_STACK_SIZES=stack_sizes,

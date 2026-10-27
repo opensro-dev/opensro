@@ -3,8 +3,8 @@
 
 replacement_shared_test.go - DecideReplacement against the shared truth table
 
-The browser predicts a press only when its replay of 59D870
-(press-admission.ts decideReplacement) admits it. Both sides read the same
+The browser predicts a press only when its replay of the native
+replacement rule (press-admission.ts decideReplacement) admits it. Both sides read the same
 cases (testdata/buff-replacement-cases.json, canonical in the client's
 tests/fixtures/native), so the two decisions cannot drift apart.
 

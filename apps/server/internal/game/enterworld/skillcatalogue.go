@@ -56,12 +56,12 @@ type SkillUiRow struct {
 	// Omitted when either column is unpinned.
 	ActionMs uint64 `json:"actionMs,omitempty"`
 	// HaltsWalk marks an ordinary cast (activity 2, column 8): it stops the
-	// caster's walk where it stands (InitiateSkillCast 59B5F6), so the
+	// caster's walk where it stands (the server's cast initiation), so the
 	// client ends its own walk at the press. Omitted for instant rows.
 	HaltsWalk bool `json:"haltsWalk,omitempty"`
 	// NeedsFooting marks a row whose cast gate is ao or pw: the server
 	// refuses it while the caster is seated, behind a wall or riding
-	// (Skill_ValidatePrerequisitesAndCost 58E0BF, 0x3009), so the client
+	// (0x3009), so the client
 	// stands no cooldown in for it while mounted.
 	NeedsFooting bool `json:"needsFooting,omitempty"`
 	// Range is the authored action range (column 21), omitted for a row
@@ -91,7 +91,7 @@ type SkillUiRow struct {
 	// MP and MPPercent are the cast's authored MP cost (flat plus percent of
 	// maximum MP), before the caster's consumption rate (parameter 0x8D):
 	// the client does not stand a cooldown in for a press the caster cannot
-	// pay for, which the server refuses with 0x3004 (58E2B1).
+	// pay for, which the server refuses with 0x3004.
 	MP        uint32 `json:"mp,omitempty"`
 	MPPercent uint16 `json:"mpPercent,omitempty"`
 	// Targets are the authored target groups (columns 22..33) as
@@ -110,8 +110,8 @@ type SkillUiRow struct {
 	Chain         bool                `json:"chain,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
-	// Admit is what the client needs to replay Skill_ValidatePrerequisites
-	// AndCost (58D8F0) for its own press: the native press animates only on
+	// Admit is what the client needs to replay the server's prerequisite
+	// and cost validation for its own press: the native press animates only on
 	// the server's answer (6FCD50), so the client predicts a cast and its
 	// cooldown only when every gate it can read admits the press. Player
 	// rows only.
@@ -122,40 +122,40 @@ type SkillUiRow struct {
 ================
 SkillUiAdmit
 
-The 58D8F0 inputs of one row, in the order the server reads them. Gates
-on state only the server holds (an rpkt buff 58DB22, the qest area 58DB38,
-a transform mode 58DE1E, the dance selector 58DFF4, a knocked-down target
-58D199, battle state for hide modes 1 and 2 58DF20) collapse into
+The server's validation inputs of one row, in the order the server reads
+them. Gates on state only the server holds (an rpkt buff, the qest area,
+a transform mode, the dance selector, a knocked-down target, battle
+state for hide modes 1 and 2) collapse into
 ServerOnly: the client never predicts such a row.
 ================
 */
 type SkillUiAdmit struct {
-	// Nmf exempts the row from the frozen/asleep/stunned refusal (58DAEF).
+	// Nmf exempts the row from the frozen/asleep/stunned refusal.
 	Nmf bool `json:"nmf,omitempty"`
 	// ServerOnly marks a gate the client cannot evaluate.
 	ServerOnly bool `json:"serverOnly,omitempty"`
-	// Berserk refuses the row to a berserk caster (58DF20, 0x3031): a hide
+	// Berserk refuses the row to a berserk caster (0x3031): a hide
 	// gate without a trap.
 	Berserk bool `json:"berserk,omitempty"`
-	// LowHP keeps the row for a caster at or below 30 % HP (58DF8C, 0x3036).
+	// LowHP keeps the row for a caster at or below 30 % HP (0x3036).
 	LowHP bool `json:"lowHp,omitempty"`
-	// StealthStrike needs the press issued in stealth (58DFE0, 0x3034).
+	// StealthStrike needs the press issued in stealth (0x3034).
 	StealthStrike bool `json:"stealthStrike,omitempty"`
-	// Teleports is tele or tel3, refused while rooted (58E010, 0x3009).
+	// Teleports is tele or tel3, refused while rooted (0x3009).
 	Teleports bool `json:"teleports,omitempty"`
 	// WeaponKinds are +0xC7/+0xC8, compared with the primary weapon's TID4
-	// when the row has no reqi pairs (58D480); 0xFF/0xFF admits anything.
+	// when the row has no reqi pairs; 0xFF/0xFF admits anything.
 	WeaponKinds [2]uint8 `json:"weaponKinds"`
-	// Reqi are the row's equipment pairs (58D4E3); All is reqn.
+	// Reqi are the row's equipment pairs; All is reqn.
 	Reqi *SkillUiReqi `json:"reqi,omitempty"`
-	// HP and HPPercent are the authored HP cost (58E1AC, 0x3013).
+	// HP and HPPercent are the authored HP cost (0x3013).
 	HP        uint32 `json:"hp,omitempty"`
 	HPPercent uint16 `json:"hpPercent,omitempty"`
 	// Ammunition needs a stack of the weapon's ammunition in socket 7
-	// (58E32D, 0x300E).
+	// (0x300E).
 	Ammunition bool `json:"ammunition,omitempty"`
-	// Replace is the row's buff-replacement descriptor (58E2BC -> 59D870,
-	// 0x300C): the client replays statuseffect.DecideReplacement from it
+	// Replace is the row's buff-replacement descriptor
+	// (0x300C): the client replays statuseffect.DecideReplacement from it
 	// and never derives it from data. Absent for a row without one.
 	Replace *SkillUiReplace `json:"replace,omitempty"`
 }
@@ -164,7 +164,8 @@ type SkillUiAdmit struct {
 ================
 SkillUiReplace
 
-The 59D870 inputs the client's replay decides from: the category, group,
+The server's replacement-decision inputs the client's replay decides from:
+the category, group,
 rank, the packed state words and the old row's cbuf skip. Undecided marks
 a descriptor whose outcome hangs on what the client cannot see (Dttp, an
 Efr2 area link, Lnks/Lks2, an Msch mode): no prediction, on either side.
@@ -214,7 +215,7 @@ type SkillUiReqi struct {
 ================
 skillUiAdmit
 
-The row's 58D8F0 inputs for the client (SkillUiAdmit).
+The row's cast-gate inputs for the client (SkillUiAdmit).
 ================
 */
 func skillUiAdmit(row SkillRow) *SkillUiAdmit {
