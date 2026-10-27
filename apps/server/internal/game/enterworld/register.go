@@ -205,9 +205,7 @@ packetBytes
 */
 func packetBytes(p Packet) []byte {
 	out := make([]byte, len(p.Payload))
-	for index, value := range p.Payload {
-		out[index] = byte(value)
-	}
+	copy(out, p.Payload)
 	return out
 }
 

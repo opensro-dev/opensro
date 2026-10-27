@@ -8,6 +8,8 @@ wire.go - projects authoritative game state into native protocol records
 package enterworld
 
 import (
+	"encoding/json"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
@@ -30,9 +32,13 @@ const (
 	OpcodeVitalsUpdate        uint16 = 0x33a6
 )
 
-// Packet is one {nativeOpcode, payload} bootstrap packet. Payload marshals as
-// a JSON number array exactly like the Node side (never base64, which is what
-// encoding/json would do to a []byte).
+// Packet is one {nativeOpcode, payload} bootstrap packet. The payload
+// rides as bytes; its JSON form is a number array exactly like the Node
+// side (never base64, which is what encoding/json would do to a []byte),
+// so MarshalJSON and UnmarshalJSON below convert at the JSON boundary
+// only. The packet used to carry []int end to end, so every wire frame
+// paid a byte-to-int-to-byte round trip, the 0x0007 entry blob included
+// (#1820).
 /*
 ================
 Packet
@@ -41,7 +47,49 @@ Packet
 type Packet struct {
 	Scope        []domain.ObjectScopeChange `json:"-"`
 	NativeOpcode uint16                     `json:"nativeOpcode"`
-	Payload      []int                      `json:"payload"`
+	Payload      []byte                     `json:"payload"`
+}
+
+/*
+================
+MarshalJSON
+
+Emits the payload as a JSON number array, byte for byte the form the
+[]int payload produced.
+================
+*/
+func (p Packet) MarshalJSON() ([]byte, error) {
+	payload := make([]int, len(p.Payload))
+	for index, value := range p.Payload {
+		payload[index] = int(value)
+	}
+	return json.Marshal(struct {
+		NativeOpcode uint16 `json:"nativeOpcode"`
+		Payload      []int  `json:"payload"`
+	}{NativeOpcode: p.NativeOpcode, Payload: payload})
+}
+
+/*
+================
+UnmarshalJSON
+
+Reads the number-array payload MarshalJSON emits.
+================
+*/
+func (p *Packet) UnmarshalJSON(data []byte) error {
+	var decoded struct {
+		NativeOpcode uint16 `json:"nativeOpcode"`
+		Payload      []int  `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	p.NativeOpcode = decoded.NativeOpcode
+	p.Payload = make([]byte, len(decoded.Payload))
+	for index, value := range decoded.Payload {
+		p.Payload[index] = byte(value)
+	}
+	return nil
 }
 
 // NewPacket ports buildMissionBootstrapPacket.
@@ -51,10 +99,8 @@ NewPacket
 ================
 */
 func NewPacket(nativeOpcode uint16, payload []byte) Packet {
-	body := make([]int, len(payload))
-	for index, value := range payload {
-		body[index] = int(value)
-	}
+	body := make([]byte, len(payload))
+	copy(body, payload)
 	return Packet{NativeOpcode: nativeOpcode, Payload: body}
 }
 

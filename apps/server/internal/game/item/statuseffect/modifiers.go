@@ -56,7 +56,8 @@ func (r *Registry) bindModifiersLocked(e *Effect) bool {
 
 // ModifierWrites returns detached installed contributions. A stop request or
 // elapsed timer does not itself erase native parameter entries: retirement
-// owns removal (5829D0 and the parameter-source removal callback). Consequently
+// owns removal (the retirement callback and the parameter-source removal
+// callback). Consequently
 // this query deliberately does not filter StopRequested or read a clock.
 func (r *Registry) ModifierWrites(division, name string) []paramkeeper.Write {
 	if r == nil {

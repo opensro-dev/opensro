@@ -467,10 +467,10 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	}
 
 	bothInBag := inv.bagSlot(sourceSlot) && inv.bagSlot(destSlot)
-	// CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) moves or swaps a
+	// The server's inventory slot-move dispatch moves or swaps a
 	// summoner item inside the owner's bag even while its companion is
-	// summoned; only cross-container transfers (523F70 at 523FB8..523FEA)
-	// and equipment sockets reject an active summon.
+	// summoned; only cross-container transfers and equipment sockets
+	// reject an active summon.
 	summonerGate := summonerTransferFault
 	if bothInBag && inv.bagStart > 0 {
 		summonerGate = summonerItemFault
@@ -721,8 +721,8 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 ================
 DeathDrop
 
-The death penalty's drop (move 0x17, re-typed to 7 by 5264E0 for any
-slot but the weapon): unlike Drop it may take a worn item. The weapon
+The death penalty's drop (move 0x17, re-typed to 7 by the server for
+any slot but the weapon): unlike Drop it may take a worn item. The weapon
 socket refuses (0x1806, "Can't drop equipped weapon forcely by server").
 ================
 */
@@ -742,7 +742,7 @@ func (inv *Inventory) DeathDrop(sourceSlot uint8) (Item, *Fault) {
 	return dropped, nil
 }
 
-// deathDropWeaponSlot is the weapon socket 5264E0 refuses.
+// deathDropWeaponSlot is the weapon socket the death drop refuses.
 const deathDropWeaponSlot = 6
 
 // DropQuantity removes count units from the row at a wire slot. FIXTURE

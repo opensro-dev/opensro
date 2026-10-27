@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"opensro.online/server/internal/domain"
 	"strings"
+	"sync"
 	"time"
 
 	"opensro.online/server/internal/game/item/wire"
@@ -44,10 +45,32 @@ func (s StaticCharacterSource) CharactersForDivision(divisionID string) []*Chara
 Deps
 ================
 */
+/*
+================
+refObjSnapshotCache
+
+Memoizes the filtered RefObj snapshot (bootstrap.go) for one
+BrowserReferences generation. The snapshot's inputs are boot-static:
+the roster, the NPC roster, the summonable refs and the monster
+template are loaded once and never mutated afterwards. The production
+constructor installs the holder; a nil holder computes on every Build,
+as fixtures always have.
+================
+*/
+type refObjSnapshotCache struct {
+	mu     sync.Mutex
+	refs   *BrowserReferences
+	rows   []RefObjRow
+	cached bool
+}
+
 type Deps struct {
 	BrowserReferences *BrowserReferences
-	Roster            *Roster
-	Characters        CharacterSource
+	// refObjCache memoizes the filtered RefObj snapshot; installed by
+	// NewDevDepsWithRoster, nil in fixtures (see refObjSnapshotCache).
+	refObjCache *refObjSnapshotCache
+	Roster      *Roster
+	Characters  CharacterSource
 
 	Items        ItemRefSource
 	Levels       LevelDataSource
@@ -535,11 +558,21 @@ func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool)
 	projection.RestoreEntryEffects = nil // Caller already owns the live actor transaction.
 	projection.PrepareEntry = nil
 	projection.AdoptEntrySpawn = nil
+	// The bootstrap's own writes (the seed, the starter kit, the encoded
+	// inventory adoption below) ride the deferred door (#1820): a
+	// re-entry built on the tick joins the tick's one batched commit
+	// instead of committing per door under the division lock. A deferred
+	// door called with no batch open commits at once (store
+	// tickbatch.go), so a re-entry built by a handler behaves exactly as
+	// before. Login never passes through here and keeps its doors.
+	if d.MutateCharacterDeferred != nil {
+		projection.MutateCharacter = d.MutateCharacterDeferred
+	}
 	result := Build(&projection, BootstrapRequest{
 		DivisionID:    divisionID,
 		CharacterName: characterName,
 	})
-	return d.encodeReentry(result)
+	return projection.encodeReentry(result)
 }
 
 // PreparedReentry couples the packets to the resolved placement they encode.

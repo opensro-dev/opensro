@@ -16,7 +16,7 @@ import (
 // buildCountedObjectListPackets drives buildBootstrapPackets with n
 // synthetic object rows and returns the start payload plus the number of
 // row packets emitted between the start and finalize brackets.
-func buildCountedObjectListPackets(t *testing.T, n int) (startPayload []int, rowCount int) {
+func buildCountedObjectListPackets(t *testing.T, n int) (startPayload []byte, rowCount int) {
 	t.Helper()
 	deps := &Deps{ObjectListRows: func(string, *Character, *LocalPlayerEntry) []Packet {
 		rows := make([]Packet, n)
@@ -54,10 +54,10 @@ func buildCountedObjectListPackets(t *testing.T, n int) (startPayload []int, row
 func TestObjectListStartCountIsLittleEndianU16(t *testing.T) {
 	cases := []struct {
 		rows int
-		want []int
+		want []byte
 	}{
-		{rows: 256, want: []int{0x01, 0x00, 0x01}},
-		{rows: 300, want: []int{0x01, 0x2c, 0x01}},
+		{rows: 256, want: []byte{0x01, 0x00, 0x01}},
+		{rows: 300, want: []byte{0x01, 0x2c, 0x01}},
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%d-rows", tc.rows), func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestObjectListStartCountIsLittleEndianU16(t *testing.T) {
 // did.
 func TestObjectListStartCountBelow256StaysByteIdentical(t *testing.T) {
 	payload, rowCount := buildCountedObjectListPackets(t, 7)
-	want := []int{0x01, 0x07, 0x00}
+	want := []byte{0x01, 0x07, 0x00}
 	if len(payload) != 3 || payload[0] != want[0] || payload[1] != want[1] || payload[2] != want[2] {
 		t.Fatalf("start payload = %v, want %v", payload, want)
 	}
@@ -92,7 +92,7 @@ func TestObjectListStartCountBelow256StaysByteIdentical(t *testing.T) {
 // multi-frame paging contract is pinned; truncate-and-log is the posture).
 func TestObjectListRowsClampAtTheU16Ceiling(t *testing.T) {
 	payload, rowCount := buildCountedObjectListPackets(t, 0x10000+5)
-	want := []int{0x01, 0xff, 0xff}
+	want := []byte{0x01, 0xff, 0xff}
 	if len(payload) != 3 || payload[0] != want[0] || payload[1] != want[1] || payload[2] != want[2] {
 		t.Fatalf("start payload = %v, want %v", payload, want)
 	}

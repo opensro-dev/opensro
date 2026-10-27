@@ -1,8 +1,9 @@
 package statuseffect
 
-// relativeJobClock is the online-seconds branch of native CTJ_SkillKeeper
-// (6511D0). Absolute epoch jobs have a different record mode and are not
-// admitted by this clock. All accumulators are stored as native float32.
+// relativeJobClock is the online-seconds branch of the server's native
+// skill-keeper tick. Absolute epoch jobs have a different record mode and
+// are not admitted by this clock. All accumulators are stored as native
+// float32.
 type relativeJobClock struct {
 	remaining               uint32
 	checkpoint, accrued     float32

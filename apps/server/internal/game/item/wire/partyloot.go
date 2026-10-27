@@ -3,7 +3,7 @@
 
 partyloot.go - the party loot notice (0x317D)
 
-CParty_BroadcastLootNotice (server 5BDC80, v1.188 0x3068) tells every party
+The native party loot notice (v1.188 opcode 0x3068) tells every party
 member what an item-share pickup granted and to whom; the v1.150 client
 (CPSMission_OnItemLootGoldOrItem0x317D, 7511C0) prints it in the system chat.
 

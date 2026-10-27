@@ -114,6 +114,9 @@ type Hub struct {
 	// placementMetrics reads the placement guard's counters
 	// (SetPlacementMetrics); nil publishes no block.
 	placementMetrics atomic.Pointer[func() map[string]uint64]
+	// storeLockMetrics reads the authority lock's waits, holds and commit
+	// phases (SetStoreLockMetrics); nil publishes no block.
+	storeLockMetrics atomic.Pointer[func() any]
 }
 
 /*

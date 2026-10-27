@@ -280,6 +280,10 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			return append(rows, monsterSpawns.MonsterRefObjSnapshot(monsters)...)
 		},
 	}
+	// The RefObj snapshot's inputs are all loaded above and never
+	// mutated afterwards, so Build may memoize the filtered snapshot
+	// instead of rebuilding the catalogues per entry (#1820).
+	deps.refObjCache = &refObjSnapshotCache{}
 	if paths.StarterKitEnabled {
 		deps.StarterKit = ResolveStarterKit(items)
 		deps.StarterRefills = ResolveStarterRefills(items)
