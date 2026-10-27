@@ -2,6 +2,32 @@
 
 All 60 books are tracked separately. "Prior live verified" means existing recorded gameplay evidence, not a new test in this sweep. Pending books are not accepted. Rank permutations and visual polish are separate from functional acceptance.
 
+## Follow-up gameplay checks — 2026-10-27
+
+These checks ran against build `84f9d6ae`, before the branch's later main merges.
+They document that tested build, not a fresh acceptance sweep of subsequent code.
+No gameplay source changes were required for these checks.
+
+- **Guardian's Bond cooldown:** the rank-one owner resurrection was reused after
+  600,088 ms of real elapsed time. HP and lost-EXP recovery were both 10%.
+- **Resurrection visuals:** owner and party recipients showed the rising radiance
+  without moving; the effect faded normally. The party recipient was viewed from
+  another character's browser, not from a second recipient-local camera.
+- **Resurrection sound:** actual owner and party revivals were captured from the
+  browser game's audio mix. Decoded recordings matched the shipped rebirth chime
+  with normalized correlations of 0.681 and 0.785 respectively. The muted control
+  was silent. One earlier enabled capture was also silent; its cause remains
+  unresolved, and it is not counted as a passing result.
+- **Wolf owner speed:** Howl I is wolf-only; II and III affected the owner. Live
+  median attack intervals changed from 1,600 ms to approximately 500 ms and 400 ms,
+  then returned to baseline after the eight-second buff. Party sharing was also
+  observed. This is cadence evidence, not an exact inverse-speed formula claim.
+- **Cleanup:** all five original character records matched the database backup
+  after restoration; database integrity passed. Original server environments,
+  temporary GM permissions and audio preferences were restored, and both services
+  returned healthy. No recordings, database snapshots or account data are included
+  in this documentation commit.
+
 ## Completed sweep — 2026-10-26
 
 All four pets and all 60 books have recorded functional gameplay coverage. The table distinguishes tests performed in this sweep from earlier live results. Tests used authenticated native game commands against the running local server, tier-isolated level-90 test pets, real monsters and GM training dummies. Protocol evidence verifies health, status, mana, counters and reuse timers; it does not replace visual animation review.

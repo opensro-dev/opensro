@@ -33,13 +33,13 @@ type LevelDataSource interface {
 	SkillPointCost(level int64) (int64, bool)
 	// ExpRequired answers the experience needed to advance FROM level to
 	// level+1: the exp curve the client's own level-up walk reads (the
-	// 0x30D2 handler sub_779620 calls sub_7e0f20(level) and reads the
+	// 0x30D2 handler (client 779620) calls 7E0F20(level) and reads the
 	// u64 at row +0x08/+0x0c, immediately before the SP-cost field at
 	// +0x10 - it is column index 1 of leveldata.txt). The second result
 	// is false when the table has no row, which must refuse the exp
 	// grant rather than invent a threshold.
 	ExpRequired(level int64) (int64, bool)
-	// MonsterExpBasis answers the CRefLevel +0x1c field (GUST_Mob_Exp,
+	// MonsterExpBasis answers the server level row's +0x1c field (GUST_Mob_Exp,
 	// column 5). The server uses this one authored value at both
 	// sides of the progression boundary: its monster skill-EXP reward
 	// divides the monster's EXP reward by it, while its death penalty
@@ -48,23 +48,23 @@ type LevelDataSource interface {
 	MonsterExpBasis(level int64) (int64, bool)
 }
 
-// leveldataSkillPointColumn is the SP-cost cell (the sub_7e0f20 row's
+// leveldataSkillPointColumn is the SP-cost cell (the client 7E0F20 row's
 // +0x10 field): the third tab-separated column.
 const leveldataSkillPointColumn = 2
 
-// leveldataExpColumn is the exp-requirement cell (the sub_7e0f20 row's
-// +0x08 u64, read by the 0x30D2 exp walk @0x77977a..0x7797f3): the second
+// leveldataExpColumn is the exp-requirement cell (the client 7E0F20 row's
+// +0x08 u64, read by the 0x30D2 exp walk, client @0x77977a..0x7797f3): the second
 // tab-separated column. First rows read level 1 -> 118, 2 -> 470,
 // 3 -> 1058; row 140 carries 34900085783 (> u32, hence int64).
 const leveldataExpColumn = 1
 
-// leveldataMonsterExpBasisColumn is CRefLevel::GUST_Mob_Exp (+0x1c) in
+// leveldataMonsterExpBasisColumn is the server level row's GUST_Mob_Exp (+0x1c) in
 // v1.188 and the client CLevelData reward-feedback divisor (+0x28) in v1.150.
 // It is column 5 in the shared textdata. The shipped rows carry level 1 ->
 // 24, level 4 -> 94, level 11 -> 259 and level 90 -> 6949.
 const leveldataMonsterExpBasisColumn = 5
 
-// leveldataJobExpColumn is the trader's job-EXP requirement (CRefLevel
+// leveldataJobExpColumn is the trader's job-EXP requirement (server level row
 // +0x20); the thief's (+0x24) and the hunter's (+0x28) follow it.
 // The server's job-exp gain reads the row of the job grade.
 const leveldataJobExpColumn = 6

@@ -9,6 +9,7 @@ lanes own their targets, damage and rewards. No summon survives logout.
 package action
 
 import (
+	"encoding/binary"
 	"strings"
 
 	"opensro.online/server/internal/domain"
@@ -23,6 +24,11 @@ const broodHatchMs int64 = 30000
 const broodLifeMs int64 = 600000
 const broodWindOpcode uint16 = 0x3FBA
 const broodDeathMultiplier = 5
+
+// The 0x33A6 vitals body is [u32 gid][u16 source][u8 updateMask]...; mask
+// bit 0x01 means the body carries HP (simulation.HPRefreshPayload).
+const vitalsUpdateMaskOffset = 6
+const vitalsUpdateMaskHP uint8 = 0x01
 
 /*
 ================
@@ -281,7 +287,9 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 		skill.ActionArea = enterworld.SkillOffensiveArea{}
 		if hit, committed := rt.strikePetTarget(step, target, skill); committed {
 			public := hit.strike.public
-			if current, found := rt.Monsters.Get(key.division, target.gid); found {
+			// A target with an abnormal state already got its HP in the strike's
+			// abnormal vitals frame (monsterImpactAbnormalFrames); send one refresh.
+			if current, found := rt.Monsters.Get(key.division, target.gid); found && !hasVitalsFrameFor(public, target.gid) {
 				public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
 			}
 			// The dying clone cannot publish a normal cast result after despawning.
@@ -299,4 +307,25 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 			break
 		}
 	}
+}
+
+/*
+================
+hasVitalsFrameFor
+
+Reports whether frames already carry gid's HP in a vitals update, so the
+death burst never publishes the target's HP twice. A vitals update without
+the HP bit (an abnormal- or MP-only body) does not count.
+================
+*/
+func hasVitalsFrameFor(frames []wire.Frame, gid uint32) bool {
+	for _, frame := range frames {
+		if frame.Opcode != simulation.OpVitalsUpdate || len(frame.Payload) <= vitalsUpdateMaskOffset {
+			continue
+		}
+		if binary.LittleEndian.Uint32(frame.Payload) == gid && frame.Payload[vitalsUpdateMaskOffset]&vitalsUpdateMaskHP != 0 {
+			return true
+		}
+	}
+	return false
 }

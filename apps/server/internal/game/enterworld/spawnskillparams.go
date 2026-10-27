@@ -1,6 +1,6 @@
 package enterworld
 
-// Native 84b2f0 parameter strides, ported from the reviewed skill-pane
+// Client 84b2f0 parameter strides, ported from the reviewed skill-pane
 // table. Unknown tokens advance one word; ssou terminates the stream.
 func spawnParamArity(tag uint32) int {
 	arity, _ := spawnParamSpec(tag)

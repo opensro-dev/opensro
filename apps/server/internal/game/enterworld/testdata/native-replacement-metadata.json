@@ -4,7 +4,7 @@
   "server_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
   "unicorn_version": "2.1.4",
   "candidate_sha256": "eae67aa120dfbda172858518c2468540c5b4bb13723c4d4d9b9135cf1d31a750",
-  "program_schema_sha256": "569f991dd4961e88d22eaec5e70bf163abac3227e46749bbc5f35cb36c8b8ebd",
+  "program_schema_sha256": "8a1b93f2fdb1bf661a22635ffd59dffd4b3881524bec0f78b17c861308016b93",
   "intervals": [
     {
       "start": "0x587630",

@@ -3,7 +3,7 @@
     "GENERATED + PINNED by internal/game/enterworld/monsterfixture_test.go (TestMonsterScopedFixturePinned).",
     "Q2 scoped-emission scenarios for the harness (WIP seq395 S1-S4 + seq419 S5): ring login",
     "bracket, eviction shapes (0x36AB single + byListSub=2 brackets at 1 and 2 rows - the exact",
-    "spans the sub_712620 bug dropped), 0xB738 goal + 0x30E3 glide for a scoped gid, same-gid",
+    "spans the client 712620 bug dropped), 0xB738 goal + 0x30E3 glide for a scoped gid, same-gid",
     "re-enter, and mid-motion scope-exit (goal in flight then despawn before arrival).",
     "Live emitter shape: single for one exit, bracket for bulk (flagged in S2).",
     "ROLE (binding, board seq437): monsters spawn at SHIPPED v1.150 npcpos COORDINATES, scoped",

@@ -72,8 +72,9 @@ func TestRegistryPendingInviteLifecycle(t *testing.T) {
 		t.Fatalf("PendingInviteCount = %d, want 1", registry.PendingInviteCount())
 	}
 
-	// A second proposal REPLACES the first (the native sub_5c8210 prior-
-	// prompt dismiss: the latest prompt is the only answerable one).
+	// A second proposal REPLACES the first (the client's
+	// CIFConfirmBox_RetirePeerPrompts prior-prompt dismiss: the latest
+	// prompt is the only answerable one).
 	registry.SetPendingInvite(testDivision, "MEMBER2", PendingInvite{
 		Kind: PendingInviteJoin, InviterName: "member3",
 	})

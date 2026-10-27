@@ -149,7 +149,7 @@ func handleEnterWorldWithDiagnostics(deps *Deps, payload []byte, session string)
 	// The community seeds (empty friend roster / letter list) ride AFTER
 	// the bootstrap sequence, on the transport outcome only: Build's
 	// Packets are a frozen fixture contract, and the client's community
-	// folds (0x3769 sub_75ac30 / 0xB3CD sub_75cef0) dispatch fine once
+	// folds (client 0x3769 75AC30 / 0xB3CD 75CEF0) dispatch fine once
 	// the mission packet owner is live, which the preceding entered
 	// flush guarantees. A fresh slice - appending onto result.Packets
 	// would alias the envelope's backing array.

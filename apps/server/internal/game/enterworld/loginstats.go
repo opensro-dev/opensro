@@ -43,7 +43,7 @@ resurrect the old layout.
 MaxHP/MaxMP ride as the DERIVED maxima (charactervitals/vitals.go: trunc of
 1.02^(level-1) * STR/INT * 10, the retail formula the adopt-wave
 landed; the v1.150 client never derives HP/MP itself - its 0x343C
-handler applies MaxHP/MaxMP verbatim, sub_75be90: block +0x18 ->
+handler applies MaxHP/MaxMP verbatim, client 75BE90: block +0x18 ->
 vtable+0x98, +0x1c -> +0x9c). Because the stat plane re-encodes this
 block inside its commit door after every granted allocation, a
 mid-session +STR/+INT now MOVES the player's HP/MP gauges - the
@@ -56,7 +56,7 @@ the only packet that can ever move them.
 
 CURRENT-HP POLICY when a max changes mid-session: LEAVE current
 untouched. The client never reconciles (its 0x33A6 handler stores
-current verbatim with no clamp, and its display getter sub_856740
+current verbatim with no clamp, and its display getter (client 856740)
 clamps at read: min(current, max)); this server clamps current into
 [0, max] at every emission (wire.go coerceInt). Auto-filling or
 proportionally scaling current on a raise would be invented gameplay.

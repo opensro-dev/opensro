@@ -20,7 +20,7 @@ import (
 ================
 BuildCOSRecord
 
-830EC0 selects the grammar from characterdata. The record and world actor
+Client 830EC0 selects the grammar from characterdata. The record and world actor
 must describe the same canonical companion before either is published.
 ================
 */

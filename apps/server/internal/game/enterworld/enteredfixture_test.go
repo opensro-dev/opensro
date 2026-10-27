@@ -52,7 +52,7 @@ type enteredFixture struct {
 // liveItemNativeFieldsByCodename loads the real itemdata numeric fields from the
 // recorded live bootstrap (testdata/live_bootstrap_asd2_full.json). The
 // client's entered chain deserializes each inventory item through the folded
-// PK2 readers (sub_78bd00 durability/variance derivations reject an absent
+// PK2 readers (client 78BD00 durability/variance derivations reject an absent
 // column loudly), so the fixture's refItemSnapshot must carry the same full
 // records the live server ships - never invented minima.
 func liveItemNativeFieldsByCodename(t *testing.T) map[string]NativeFields {

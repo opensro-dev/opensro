@@ -2,12 +2,12 @@ package enterworld
 
 // DefaultSiegeItemForgeGroups returns the exact v1.150
 // textdata/siegefortressitemforge.txt projection loaded by native
-// sub_7f22d0 case 0x3a into CGlobalDataManager+0x4dc.
+// client 7F22D0 case 0x3a into CGlobalDataManager+0x4dc.
 //
-// The source file has 17 enabled rows, all in group 1. Native sub_5502c0
+// The source file has 17 enabled rows, all in group 1. Client 5502C0
 // classifies RefItem TypeIDs (3,3,3,2) into the group's +0x10 vector; in
 // v1.150 those are refs 19569 and 19570. Every other row enters +0x00.
-// sub_5d7ad0 only tests the vector sizes to decide whether the fortress
+// client 5D7AD0 only tests the vector sizes to decide whether the fortress
 // manager-hire menu exposes blacksmith and trainer employment.
 func DefaultSiegeItemForgeGroups() []SiegeItemForgeGroupRow {
 	return []SiegeItemForgeGroupRow{

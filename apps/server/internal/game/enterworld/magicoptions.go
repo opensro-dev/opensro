@@ -43,7 +43,7 @@ count +0x85).
 ==================
 */
 type MagicOptionRow struct {
-	// Native body+0x4c..0x54, consumed by 563700/55b540.
+	// Native body+0x4c..0x54, consumed by client 563700/55b540.
 	RangeWords *[3]uint32 `json:"rangeWords,omitempty"`
 	ParamID    uint32     `json:"paramId"`
 	OptionName string     `json:"optionName"`
@@ -244,7 +244,7 @@ EncodeMagicOption
 
 EncodeMagicOption packs one reinforce-leg wire param: low u16 = the
 magicoption.txt param id, high u32 = the modifier magnitude (the client
-stores the high dword as the map value, sub_78b1b0 @0x0078b29f).
+stores the high dword as the map value, client 78B1B0 @0x0078b29f).
 ==================
 */
 func EncodeMagicOption(paramID uint32, magnitude uint32) uint64 {
@@ -327,7 +327,7 @@ AvatarMagicOptionRow
 
 One avatar part's grantable options: the TID4 (1 hat, 2 dress,
 3 attachment) and the codenames of its magicoptionassign.txt row. The
-grant window (CSOItem_FillAvatarMagicOptionCandidates 78C720) lists
+grant window (client CSOItem_FillAvatarMagicOptionCandidates 78C720) lists
 these, resolved through the magicOptionSnapshot definitions.
 ==================
 */

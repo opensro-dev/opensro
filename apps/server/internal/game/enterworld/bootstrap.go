@@ -575,7 +575,7 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 		if character.AvatarInventory != nil {
 			// Avatar rows ride the SAME snapshot: the client's entered
 			// avatar loop parses each row through the full CSOItem reader,
-			// and an unseeded refObjId desyncs the stream (sub_78c830
+			// and an unseeded refObjId desyncs the stream (client 78C830
 			// L182-183) - the row's family word must be the real itemdata
 			// avatar-band word ((typeFlags & 0x780) == 0x680).
 			for _, row := range character.AvatarInventory.Rows {

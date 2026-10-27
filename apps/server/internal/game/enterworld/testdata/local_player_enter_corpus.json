@@ -77983,7 +77983,7 @@
     {
       "label": "trackedquests-optional",
       "notes": [
-        "tracked-only quest block with BOTH optional arms: record 5 flags 0x01 (no optional) then record 29 flags 0x03 (optional u32 rides, @0x867524); the last wire record wins the +0x398 tracked id"
+        "tracked-only quest block with BOTH optional arms: record 5 flags 0x01 (no optional) then record 29 flags 0x03 (optional u32 rides, client @0x867524); the last wire record wins the +0x398 tracked id"
       ],
       "characterName": "corpus25",
       "characterId": 125,
@@ -84379,7 +84379,7 @@
     {
       "label": "activequests-full-0x5c",
       "notes": [
-        "one active SQuestInfo record with flags=0x5c - every gated block: progress u32 + u10 + 2 contents nodes (a real objective-value array AND the 0xFF sentinel node that skips the array, @0x785d03) + a targetId that resolves in the shipped npcpos (2005 NPC_CH_POTION)"
+        "one active SQuestInfo record with flags=0x5c - every gated block: progress u32 + u10 + 2 contents nodes (a real objective-value array AND the 0xFF sentinel node that skips the array, client @0x785d03) + a targetId that resolves in the shipped npcpos (2005 NPC_CH_POTION)"
       ],
       "characterName": "corpus27",
       "characterId": 127,
@@ -87577,7 +87577,7 @@
     {
       "label": "quests-all-three-sections",
       "notes": [
-        "the full sub_8673d0 quest block on ONE wire: completed {2,3,4} + active {5 minimal, 29 full 0x5c} + tracked {29 with optional} - the section ordering and every gated read exercised together"
+        "the full client 8673D0 quest block on ONE wire: completed {2,3,4} + active {5 minimal, 29 full 0x5c} + tracked {29 with optional} - the section ordering and every gated read exercised together"
       ],
       "characterName": "corpus28",
       "characterId": 128,

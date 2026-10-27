@@ -315,7 +315,7 @@ func TestBuffDescriptorRepeatedTagsPreserveNativePointerOwnership(t *testing.T) 
 	}
 }
 
-// 6DE630, 8608A0 and 85CE40 read hste/hst2, hide and dttp pointers from the
+// Client 6DE630, 8608A0 and 85CE40 read hste/hst2, hide and dttp pointers from the
 // same record that classifies the buff; the UI projection carries them intact.
 func TestBuffViewerSuppressionParametersPublishToUI(t *testing.T) {
 	rows := map[uint32]SpawnSkillRow{}

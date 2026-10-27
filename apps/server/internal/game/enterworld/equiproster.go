@@ -60,7 +60,7 @@ type ItemRef struct {
 	// loader contract and may not silently coerce a missing combat column.
 	Combat *ItemCombatRef
 	// VarianceIntMin1c0 is record.varianceIntMin1c0, the fresh-item
-	// durability derivation input (sub_78bd00 case 0 collapses to it at
+	// durability derivation input (client 78BD00 case 0 collapses to it at
 	// variance 0, so current = max and the tooltip reads N/N like retail).
 	// Pointer so an absent column takes the Node coercion fallback (100)
 	// while a present zero clamps to 1.
@@ -81,7 +81,7 @@ type ItemRef struct {
 	// degraded textdata load never invents a refusal.
 
 	// Country is media column 14 (native ref[0x27]): 0 China, 1 Europe,
-	// 3 = every character (the sub_789c60 bit 0x200 wildcard). Default 3.
+	// 3 = every character (the client 789C60 bit 0x200 wildcard). Default 3.
 	Country int64
 	// CashItem (column 7), Rarity (column 15) and CanDropOnDeath feed the
 	// server's death-penalty drop gate.
@@ -95,7 +95,7 @@ type ItemRef struct {
 	// ReqQuadTypes/ReqQuadValues are the four typed requirement pairs
 	// (media columns 32/34/36/38 types + 33/35/37/39 values; native
 	// +0xc8..+0xd4 types and +0xd8..+0xe4 values). Semantics per the
-	// sub_789c60 legs:
+	// Client 789C60 legs:
 	//   type 1     = character level (bit 0x020 vs player +0x820);
 	//   type > 0xa = a masterydata ID (bit 0x100 vs the trained level;
 	//                EU armor carries 513..518);
@@ -121,7 +121,7 @@ type ItemRef struct {
 	RequiredInt int64
 	// MaxDurability is media column 64 (Dur_U / varianceIntMax1c4): the
 	// class-level "this item HAS a durability attribute" marker the razed
-	// gate (sub_789c60 bit 0x004) is conditioned on - native tests the
+	// gate (client 789C60 bit 0x004) is conditioned on - native tests the
 	// instance attribute blob (+0xc0)[5], which only durability-bearing
 	// classes carry. Shipped data: weapons/armor N > 0, accessories 0.
 	// Default 0 (no durability concept, gate never fires).
@@ -145,7 +145,7 @@ type ItemRef struct {
 	CureLevels   [6]int64
 	// FortressRoleMask is media column 124 (native +0x2ac / ref[0xab],
 	// LOW BYTE compared): the fortress-guild role bits allowed to wield a
-	// fortress siege weapon (sub_789c60 bit 0x400). Only the 14
+	// fortress siege weapon (client 789C60 bit 0x400). Only the 14
 	// TID-(3,1,6,16) hammer/axe rows carry it, all -1 (0xff = any role).
 	// Default 0 - non-fortress items never reach the compare (the TID
 	// gate refuses the leg first).
@@ -191,8 +191,8 @@ CharacterRef
 CharacterRef is the exact characterdata projection required to create a
 COS and seed its RefObj mirror before a 0x30D7 spawn arrives. In
 particular, MountedAttackCapability210 is media column 88: Rizin proves
-sub_808670 stores that parsed dword at CCharacterData+0x210, and
-sub_692cb0 treats a nonzero value as the mounted-attack gate.
+Client 808670 stores that parsed dword at CCharacterData+0x210, and
+client 692CB0 treats a nonzero value as the mounted-attack gate.
 ==================
 */
 type CharacterRef struct {

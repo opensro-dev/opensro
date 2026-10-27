@@ -55,7 +55,7 @@ type RefObjRow struct {
 	// /LOADMONSTER sends it when no type token is typed.
 	MonsterType uint8 `json:"monsterType,omitempty"`
 	// CCharacterData+0x210, parsed from characterdata column 88. Despite
-	// older host names calling the slot a skill id, sub_692cb0 consumes it
+	// older host names calling the slot a skill id, client 692CB0 consumes it
 	// as the nonzero mounted-attack capability gate.
 	MountedAttackCapability210 uint32 `json:"mountedAttackCapability210,omitempty"`
 	Kind                       string `json:"kind"`
@@ -106,7 +106,7 @@ type EquipItemRow struct {
 SiegeItemForgeGroupRow
 
 SiegeItemForgeGroupRow is one v1.150 siegefortressitemforge.txt group.
-The two vectors are the exact sub_64b440 (+0x00) and sub_64b450 (+0x10)
+The two vectors are the exact client 64B440 (+0x00) and 64B450 (+0x10)
 projections consumed by the fortress NPC manager-hire menu.
 ================
 */
@@ -148,14 +148,14 @@ type SiegeFortressDataRow struct {
 	NameStrID       string `json:"nameStrId"`
 	OfficialNpcCode string `json:"officialNpcCode"`
 	// RequestFee is the row's +0x80 gold, which the official's application
-	// question quotes (6649C0 box 0x64, 7E16A0).
+	// question quotes (client 6649C0 box 0x64, 7E16A0).
 	RequestFee uint64 `json:"requestFee"`
 	// TaxTargets is column 10 (+0x96): bits 0..6 tick the tax management
 	// window's smith, armor, grocery, potion, portal, specialty and warp
 	// boxes (CIFTaxManagement_Refresh 665470).
 	TaxTargets uint8 `json:"taxTargets"`
 	// OfficialRefObjID resolves OfficialNpcCode for the browser, which
-	// knows NPCs by RefObjID (662E80 matches the official in conversation).
+	// knows NPCs by RefObjID (client 662E80 matches the official in conversation).
 	OfficialRefObjID uint32 `json:"officialRefObjId,omitempty"`
 }
 

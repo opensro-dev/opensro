@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// The 0x32B3 skill list rides sub_866e50's second marker-framed loop:
+// The 0x32B3 skill list rides client 866E50's second marker-framed loop:
 // discarded count byte, then per entry marker 1 + u32 skilldata id + u8
 // value, terminated by marker 2. The value byte is 1 (the native entry
 // ctor's default, and what the learn ack inserts). These bytes feed the
@@ -43,7 +43,7 @@ func TestCharDataEmitsTheLearnedSkillList(t *testing.T) {
 }
 
 // A character with quest state emits the full three-section quest block
-// (sub_8673d0 grammar): completed refs, active SQuestInfo bodies with
+// (client 8673D0 grammar): completed refs, active SQuestInfo bodies with
 // flag-gated fields, and tracked records with the flags&0x02 optional.
 // Pinned byte-exact so an emission drift fails HERE, next to the writer.
 func TestCharDataEmitsThePopulatedQuestBlock(t *testing.T) {
@@ -109,7 +109,7 @@ func TestCharDataEmitsThePopulatedQuestBlock(t *testing.T) {
 
 // TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies: unlike the
 // mastery/skill lists, the completed-quest count is the reader's loop
-// bound (sub_8673d0), so past 255 the emission must clamp - 255 bodies
+// bound (client 8673D0), so past 255 the emission must clamp - 255 bodies
 // under a 255 count, never a wrapped count over fewer bodies - and the
 // sections after it stay aligned.
 func TestCharDataCompletedQuestClampKeepsCountAlignedWithBodies(t *testing.T) {

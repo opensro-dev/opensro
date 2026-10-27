@@ -106,7 +106,7 @@ type SkillConcealment struct {
 	// it the caster alone receives the effect.
 	Area SkillRecipientArea
 	// Range is the client's detection distance: an efr whose shape is 1
-	// lends its radius (85CC70), 0 means everywhere.
+	// lends its radius (client 85CC70), 0 means everywhere.
 	Range uint32
 }
 
@@ -242,7 +242,7 @@ func parseSkillConcealment(fields []string, row *SkillRow) {
 	row.Concealment = c
 }
 
-// encodedDetectRange is what 85CC70 reads from +0x64: the radius of the
+// encodedDetectRange is what client 85CC70 reads from +0x64: the radius of the
 // last efr block when its shape is 1, else 0.
 func encodedDetectRange(fields []string) uint32 {
 	values, ok := encodedLastParameters(fields, tagEfr)

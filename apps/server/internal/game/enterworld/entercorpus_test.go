@@ -71,12 +71,12 @@ type enterCorpus struct {
 // bodies: u08/u09/flags/valueA/word/tail values are wire-legal shapes
 // from the questInfoWireParity listing pins (the flag combos 0x00 and
 // 0x5c are observed-legal; tracked flags 0x01/0x03 exercise both arms of
-// the @0x86751d optional gate); the ContentsNode description strings are
+// the client @0x86751d optional gate); the ContentsNode description strings are
 // WIRE-carried symbols, authored here as the quests' own shipped
 // textquest SN_CON_* keys (v1.150-consistent content - the client
-// resolves them through the 0xcec800 manager); the targetId is the
+// resolves them through the client's 0xcec800 manager); the targetId is the
 // potion seller's real npcpos row so a tracked minimap pass resolves
-// instead of throwing map::at (sub_7e1240 @0x007e126d).
+// instead of throwing map::at (client 7E1240 @0x007e126d).
 const (
 	corpusQuestTutorialChID uint32 = 2    // QTUTORIAL_CH
 	corpusQuestSmith1ID     uint32 = 3    // QNO_CH_SMITH_1
@@ -101,7 +101,7 @@ func corpusActiveQuestMinimal() ActiveQuestRecord {
 }
 
 // corpusActiveQuestFull is the flags=0x5c arm: every gated block on one
-// record - progress (a 5-minute remain word per the sub_5c2a30 decode),
+// record - progress (a 5-minute remain word per the client 5C2A30 decode),
 // the u10 kind byte 1 (the CIFQuestReward-opening class), two contents
 // nodes (one with an objective value array, one with the 0xFF sentinel
 // that skips the array entirely), and one npcpos-valid targetId.
@@ -122,7 +122,7 @@ func corpusActiveQuestFull() ActiveQuestRecord {
 }
 
 // corpusTrackedQuestPlain is the flags&0x02-CLEAR tracked arm: no
-// trailing optional u32 (@0x867522 je).
+// trailing optional u32 (client @0x867522 je).
 func corpusTrackedQuestPlain() TrackedQuestRecord {
 	return TrackedQuestRecord{
 		RefID: corpusQuestSoldierEa1ID,
@@ -132,7 +132,7 @@ func corpusTrackedQuestPlain() TrackedQuestRecord {
 }
 
 // corpusTrackedQuestWithOptional is the flags&0x02-SET tracked arm: the
-// optional u32 rides the tail (@0x867524).
+// optional u32 rides the tail (client @0x867524).
 func corpusTrackedQuestWithOptional() TrackedQuestRecord {
 	return TrackedQuestRecord{
 		RefID:    corpusQuestPotion1ID,
@@ -154,7 +154,7 @@ func corpusTrackedQuestWithOptional() TrackedQuestRecord {
 //   - MATTR_DUR degree 2  = param id 81, paramName "+"  (visible)
 //   - MATTR_DEC_MAXDUR degree 1 = param id 1, paramName "-@" (the '-'
 //     name drives the client's visible-count decrement, sub_78b1b0
-//     @0x0078b306..)
+//     client @0x0078b306..)
 //   - MATTR_REINFORCE_ITEM degree 1 = param id 66 (name equality sets the
 //     client's +0x30 reinforce flag, @0x0078b2f7..)
 //
@@ -593,7 +593,7 @@ func enterCorpusSpecs() []enterCorpusSpec {
 		},
 		{
 			label: "trackedquests-optional",
-			notes: []string{"tracked-only quest block with BOTH optional arms: record 5 flags 0x01 (no optional) then record 29 flags 0x03 (optional u32 rides, @0x867524); the last wire record wins the +0x398 tracked id"},
+			notes: []string{"tracked-only quest block with BOTH optional arms: record 5 flags 0x01 (no optional) then record 29 flags 0x03 (optional u32 rides, client @0x867524); the last wire record wins the +0x398 tracked id"},
 			character: func() *Character {
 				character := corpusBaseCharacter(125, "corpus25")
 				character.TrackedQuests = []TrackedQuestRecord{corpusTrackedQuestPlain(), corpusTrackedQuestWithOptional()}
@@ -613,7 +613,7 @@ func enterCorpusSpecs() []enterCorpusSpec {
 		},
 		{
 			label: "activequests-full-0x5c",
-			notes: []string{"one active SQuestInfo record with flags=0x5c - every gated block: progress u32 + u10 + 2 contents nodes (a real objective-value array AND the 0xFF sentinel node that skips the array, @0x785d03) + a targetId that resolves in the shipped npcpos (2005 NPC_CH_POTION)"},
+			notes: []string{"one active SQuestInfo record with flags=0x5c - every gated block: progress u32 + u10 + 2 contents nodes (a real objective-value array AND the 0xFF sentinel node that skips the array, client @0x785d03) + a targetId that resolves in the shipped npcpos (2005 NPC_CH_POTION)"},
 			character: func() *Character {
 				character := corpusBaseCharacter(127, "corpus27")
 				character.ActiveQuests = []ActiveQuestRecord{corpusActiveQuestFull()}
@@ -623,7 +623,7 @@ func enterCorpusSpecs() []enterCorpusSpec {
 		},
 		{
 			label: "quests-all-three-sections",
-			notes: []string{"the full sub_8673d0 quest block on ONE wire: completed {2,3,4} + active {5 minimal, 29 full 0x5c} + tracked {29 with optional} - the section ordering and every gated read exercised together"},
+			notes: []string{"the full client 8673D0 quest block on ONE wire: completed {2,3,4} + active {5 minimal, 29 full 0x5c} + tracked {29 with optional} - the section ordering and every gated read exercised together"},
 			character: func() *Character {
 				character := corpusBaseCharacter(128, "corpus28")
 				character.CompletedQuestIds = corpusCompletedQuestIds()
@@ -789,7 +789,7 @@ func TestEnterCorpusContentPins(t *testing.T) {
 	}
 
 	// Quest content pins: codename -> id over the shipped questdata.txt
-	// (col 0 Service, col 1 id, col 2 codename - the sub_810620 parse
+	// (col 0 Service, col 1 id, col 2 codename - the client 810620 parse
 	// order the buildQuestDataAsset.mjs contract documents).
 	questIDByCodename := map[string]uint32{}
 	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths(t).TextdataDir, "questdata.txt")) {
@@ -820,7 +820,7 @@ func TestEnterCorpusContentPins(t *testing.T) {
 
 	// The full-record targetId must resolve in the shipped npcpos.txt (the
 	// client minimap quest pass map::at THROWS on a miss once the quest is
-	// tracked, sub_7e1240 @0x007e126d).
+	// tracked, client 7E1240 @0x007e126d).
 	npcPosFound := false
 	for _, fields := range readTextdataFile(filepath.Join(realAssetPaths(t).TextdataDir, "npcpos.txt")) {
 		if len(fields) >= 1 {

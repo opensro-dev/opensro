@@ -16,7 +16,7 @@ func TestLocalEntryProjectsCriminalRecordAndEventTeam(t *testing.T) {
 		t.Fatalf("bootstrap state disagrees with authority: %+v", entry)
 	}
 	p := BuildLocalPlayerEntryPayload(c, &entry, 0, nil)
-	// sub_863880's fixed base record ends with visual flags, daily PK u8,
+	// Client 863880's fixed base record ends with visual flags, daily PK u8,
 	// total PK u16 and penalty u32, before the variable inventory block.
 	const dailyOffset = 47
 	if len(p) < dailyOffset+7 || p[dailyOffset] != 3 || binary.LittleEndian.Uint16(p[dailyOffset+1:]) != 5 || binary.LittleEndian.Uint32(p[dailyOffset+3:]) != 3600 {

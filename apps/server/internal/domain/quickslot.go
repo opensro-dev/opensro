@@ -11,7 +11,7 @@ type QuickSlotBinding struct {
 
 const QuickSlotCount = 0x33
 
-// QuickSlotKindValid is the complete sub_572080/sub_572e00 state-kind set.
+// QuickSlotKindValid is the complete client 572080/572E00 state-kind set.
 func QuickSlotKindValid(kind uint8) bool {
 	switch kind {
 	case 0, 0x25, 0x46, 0x47, 0x49, 0x4a, 0x4e:

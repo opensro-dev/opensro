@@ -60,7 +60,7 @@ func TestJanganFortressStartsWithItsStructures(t *testing.T) {
 TestDefaultSiegeFortressRowsMatchShippedTextdata
 
 The bootstrap's fortress rows are a hand projection of siegefortress.txt
-(sub_7f22d0 case 0x36); every enabled row must agree with the shipped file,
+(client 7F22D0 case 0x36); every enabled row must agree with the shipped file,
 including the column 10 tax target mask the tax management window ticks.
 ================
 */
