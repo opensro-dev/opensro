@@ -51,7 +51,7 @@ function bindings( record ) {
 	};
 }
 
-test("each token arm writes the binding CSkillEffectManager_ParseSkillEffectRecord writes", () => {
+test("each token arm writes the binding sub_91e720 writes", () => {
 	// 0x91f3b2 arms over a record zeroed at 0x91eaca.
 	assert.deepEqual( bindings( SkillEffectSet_ParseRow( row( "none", "none" ) ) ), {
 		start: [ null, false, false ],
