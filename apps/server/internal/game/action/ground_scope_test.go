@@ -43,8 +43,8 @@ func TestGroundScopeSpawnsInRangeAndDespawnsTheRest(t *testing.T) {
 	const monster = 7
 	viewer := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: region, X: 100, Z: 100})
 
-	spawn, despawn := groundScope(placeDrops([]grounditem.Item{near, shownNear, far}), viewer,
-		[]uint32{monster, shownNear.Gid, far.Gid, gone})
+	spawn, despawn := groundScope(bucketDrops([]grounditem.Item{near, shownNear, far}), viewer,
+		[]uint32{monster, shownNear.Gid, far.Gid, gone}, make(map[uint32]struct{}))
 	if len(spawn) != 1 || spawn[0].Gid != near.Gid {
 		t.Fatalf("spawn %+v, want only the unshown drop in range", spawn)
 	}

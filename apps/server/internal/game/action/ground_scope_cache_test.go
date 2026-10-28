@@ -99,6 +99,10 @@ func TestGroundScopeCacheMatchesTheFlatWalk(t *testing.T) {
 				x: float64(rng.Intn(5000)), z: float64(rng.Intn(5000))})
 		}
 	}
+	// One scratch set for every viewer of every pass, as the tick pass
+	// runs it: the reused map must never leak one viewer's set into
+	// the next.
+	shown := make(map[uint32]struct{})
 	for tick := 0; tick < 40; tick++ {
 		for m := rng.Intn(9); m > 0; m-- {
 			population := populations[rng.Intn(len(populations))]
@@ -117,8 +121,8 @@ func TestGroundScopeCacheMatchesTheFlatWalk(t *testing.T) {
 				viewer.z += float64(rng.Intn(641) - 320)
 			}
 			block := viewerBlock(simulation.Spawn{RegionID: 0x6a9a, X: viewer.x, Z: viewer.z})
-			drops := rt.groundPlacedDrops(division, viewer.population)
-			spawn, despawn := groundScope(drops, block, viewer.published)
+			drops := rt.groundDropBuckets(division, viewer.population)
+			spawn, despawn := groundScope(drops, block, viewer.published, shown)
 			wantSpawn, wantDespawn := referenceGroundScope(
 				placeDrops(rt.Ground.AllInPopulation(division, viewer.population)), block, viewer.published)
 			if !slices.EqualFunc(spawn, wantSpawn, func(a, b grounditem.Item) bool { return a.Gid == b.Gid }) ||
@@ -146,44 +150,86 @@ func TestGroundScopeCacheMatchesTheFlatWalk(t *testing.T) {
 
 /*
 ================
-TestGroundPlacedDropsFollowsRegistryWrites
+placedGidsOf
+
+Every gid in a bucketed placement, ascending.
+================
+*/
+func placedGidsOf(buckets map[worldgeom.InterestBlock][]placedDrop) []uint32 {
+	var gids []uint32
+	for _, drops := range buckets {
+		for _, drop := range drops {
+			gids = append(gids, drop.item.Gid)
+		}
+	}
+	slices.Sort(gids)
+	return gids
+}
+
+/*
+================
+TestGroundDropBucketsFollowRegistryWrites
 
 The pin for the cache: a write after a read must appear in the next
 read. A cache that stops watching the registry revision - the mutation
 this guards - keeps serving the first read and fails here.
 ================
 */
-func TestGroundPlacedDropsFollowsRegistryWrites(t *testing.T) {
+func TestGroundDropBucketsFollowRegistryWrites(t *testing.T) {
 	rt := &Runtime{Ground: grounditem.NewRegistry()}
-	if drops := rt.groundPlacedDrops("pin", grounditem.Population{}); len(drops) != 0 {
-		t.Fatalf("empty registry placed %d drops", len(drops))
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", grounditem.Population{})); len(gids) != 0 {
+		t.Fatalf("empty registry placed %v", gids)
 	}
 	first := rt.Ground.Add("pin", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
 		Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
-	drops := rt.groundPlacedDrops("pin", grounditem.Population{})
-	if len(drops) != 1 || drops[0].item.Gid != first.Gid {
-		t.Fatalf("after the first add the cache placed %v, want gid %d", drops, first.Gid)
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", grounditem.Population{})); !slices.Equal(gids, []uint32{first.Gid}) {
+		t.Fatalf("after the first add the cache placed %v, want gid %d", gids, first.Gid)
 	}
 	second := rt.Ground.Add("pin", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
 		Position: grounditem.Point{RegionID: 0x6a9a, X: 20, Z: 20}})
-	if drops := rt.groundPlacedDrops("pin", grounditem.Population{}); len(drops) != 2 {
-		t.Fatalf("after the second add the cache placed %d drops, want 2", len(drops))
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", grounditem.Population{})); len(gids) != 2 {
+		t.Fatalf("after the second add the cache placed %v, want 2 drops", gids)
 	}
 	if _, ok := rt.Ground.Remove("pin", first.Gid); !ok {
 		t.Fatalf("registry lost gid %d", first.Gid)
 	}
-	drops = rt.groundPlacedDrops("pin", grounditem.Population{})
-	if len(drops) != 1 || drops[0].item.Gid != second.Gid {
-		t.Fatalf("after the remove the cache placed %v, want only gid %d", drops, second.Gid)
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", grounditem.Population{})); !slices.Equal(gids, []uint32{second.Gid}) {
+		t.Fatalf("after the remove the cache placed %v, want only gid %d", gids, second.Gid)
 	}
 	instanced := grounditem.Population{World: 0x00030002, Generation: 1}
 	rt.Ground.Add("pin", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Population: instanced,
 		Position: grounditem.Point{RegionID: 0x6a9a, X: 30, Z: 30}})
-	if drops := rt.groundPlacedDrops("pin", grounditem.Population{}); len(drops) != 1 {
-		t.Fatalf("an instanced drop leaked into the main world: %d drops", len(drops))
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", grounditem.Population{})); len(gids) != 1 {
+		t.Fatalf("an instanced drop leaked into the main world: %v", gids)
 	}
-	if drops := rt.groundPlacedDrops("pin", instanced); len(drops) != 1 {
-		t.Fatalf("the instanced population placed %d drops, want 1", len(drops))
+	if gids := placedGidsOf(rt.groundDropBuckets("pin", instanced)); len(gids) != 1 {
+		t.Fatalf("the instanced population placed %v, want one drop", gids)
+	}
+}
+
+/*
+================
+TestGroundCacheDropsTheEmptyDivision
+
+A division whose last drop leaves keeps no cache entry, so a closed
+instance division does not accumulate in the cache.
+================
+*/
+func TestGroundCacheDropsTheEmptyDivision(t *testing.T) {
+	rt := &Runtime{Ground: grounditem.NewRegistry()}
+	item := rt.Ground.Add("gone", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
+	if gids := placedGidsOf(rt.groundDropBuckets("gone", grounditem.Population{})); len(gids) != 1 {
+		t.Fatalf("the division placed %v, want one drop", gids)
+	}
+	if _, ok := rt.Ground.Remove("gone", item.Gid); !ok {
+		t.Fatalf("registry lost gid %d", item.Gid)
+	}
+	if gids := placedGidsOf(rt.groundDropBuckets("gone", grounditem.Population{})); len(gids) != 0 {
+		t.Fatalf("after the last remove the cache placed %v", gids)
+	}
+	if _, kept := rt.groundDrops.divisions["gone"]; kept {
+		t.Fatal("the empty division kept its cache entry")
 	}
 }
 
@@ -203,7 +249,7 @@ func TestHasExpiredOwnerReadsTheCachedDrops(t *testing.T) {
 	}
 	// The tick pass snapshots the division every tick; force that empty
 	// snapshot so the sweep must notice the add that follows.
-	rt.groundPlacedDrops("pin", grounditem.Population{})
+	rt.groundDropBuckets("pin", grounditem.Population{})
 	rt.Ground.Add("pin", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", OwnerJID: 7,
 		DroppedAt: now.Add(-grounditem.OwnerLifetime), Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
 	if !rt.hasExpiredOwner(now) {

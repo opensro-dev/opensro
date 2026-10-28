@@ -51,7 +51,8 @@ func (rt *Runtime) ReconcileGroundScope(s *transport.Session, divisionID string,
 		return
 	}
 	at := rt.liveSpawn(simulation.WorldKey(divisionID, c.Name), c, rt.Now().UnixMilli())
-	spawn, despawn := groundScope(placeDrops(rt.CharacterGroundItems(divisionID, c)), viewerBlock(at), published)
+	spawn, despawn := groundScope(bucketDrops(rt.CharacterGroundItems(divisionID, c)), viewerBlock(at), published,
+		make(map[uint32]struct{}))
 	rt.publishGroundScope(s, revision, spawn, despawn)
 }
 

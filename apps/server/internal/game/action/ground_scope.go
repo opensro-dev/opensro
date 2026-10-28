@@ -36,8 +36,8 @@ import (
 ================
 placedDrop
 
-A drop with its message block, computed once per pass and shared by every
-viewer of its population.
+A drop with its message block, computed once per registry revision and
+shared by every viewer of its population. Readers never mutate it.
 ================
 */
 type placedDrop struct {
@@ -79,7 +79,7 @@ newer than the content, so stale content is never served as current.
 type groundDivisionDrops struct {
 	revision uint64
 	items    []grounditem.Item
-	placed   map[grounditem.Population][]placedDrop
+	buckets  map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop
 }
 
 type groundDropCache struct {
@@ -99,6 +99,13 @@ func (rt *Runtime) groundDivisionLocked(division string, revision uint64) *groun
 	entry := rt.groundDrops.divisions[division]
 	if entry == nil || entry.revision != revision {
 		entry = &groundDivisionDrops{revision: revision, items: rt.Ground.All(division)}
+		if len(entry.items) == 0 {
+			// A division with no drops retains no entry, so a closed
+			// instance division leaves the cache with its last drop.
+			// The empty copy is cheap to rebuild on demand.
+			delete(rt.groundDrops.divisions, division)
+			return entry
+		}
 		if rt.groundDrops.divisions == nil {
 			rt.groundDrops.divisions = make(map[string]*groundDivisionDrops)
 		}
@@ -124,19 +131,37 @@ func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops 
 
 /*
 ================
-groundPlacedDrops
+bucketDrops
 
-The population's placed drops from the division's cached copy, placed
-once per revision and shared by every viewer of the population.
+placeDrops grouped by message block, so a viewer scans only its own
+block, its eight neighbours and its region's block-less drops instead
+of the whole population.
 ================
 */
-func (rt *Runtime) groundPlacedDrops(division string, population grounditem.Population) []placedDrop {
+func bucketDrops(items []grounditem.Item) map[worldgeom.InterestBlock][]placedDrop {
+	buckets := make(map[worldgeom.InterestBlock][]placedDrop)
+	for _, drop := range placeDrops(items) {
+		buckets[drop.block] = append(buckets[drop.block], drop)
+	}
+	return buckets
+}
+
+/*
+================
+groundDropBuckets
+
+The population's drops by message block, from the division's cached
+copy: bucketed once per revision and shared by every viewer of the
+population.
+================
+*/
+func (rt *Runtime) groundDropBuckets(division string, population grounditem.Population) map[worldgeom.InterestBlock][]placedDrop {
 	revision := rt.Ground.Revision()
 	rt.groundDrops.mu.Lock()
 	defer rt.groundDrops.mu.Unlock()
 	entry := rt.groundDivisionLocked(division, revision)
-	if drops, ok := entry.placed[population]; ok {
-		return drops
+	if buckets, ok := entry.buckets[population]; ok {
+		return buckets
 	}
 	mine := make([]grounditem.Item, 0, len(entry.items))
 	for _, item := range entry.items {
@@ -144,12 +169,12 @@ func (rt *Runtime) groundPlacedDrops(division string, population grounditem.Popu
 			mine = append(mine, item)
 		}
 	}
-	drops := placeDrops(mine)
-	if entry.placed == nil {
-		entry.placed = make(map[grounditem.Population][]placedDrop)
+	buckets := bucketDrops(mine)
+	if entry.buckets == nil {
+		entry.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop)
 	}
-	entry.placed[population] = drops
-	return drops
+	entry.buckets[population] = buckets
+	return buckets
 }
 
 /*
@@ -159,26 +184,49 @@ groundScope
 The drops a viewer in block viewer should be shown but is not, and the
 published drops it should no longer be shown: out of range, or gone from
 the population.
+
+buckets are the population's shared cache rows, read-only here. shown
+is the caller's scratch set, cleared on entry, so one map serves every
+viewer of a pass. Spawn keeps the old flat walk's order - gid ascending,
+as the registry reads - so the bucket visit order never reaches the
+wire.
 ================
 */
-func groundScope(drops []placedDrop, viewer worldgeom.InterestBlock, published []uint32) ([]grounditem.Item, []uint32) {
-	shown := make(map[uint32]struct{})
+func groundScope(buckets map[worldgeom.InterestBlock][]placedDrop, viewer worldgeom.InterestBlock, published []uint32,
+	shown map[uint32]struct{},
+) ([]grounditem.Item, []uint32) {
+	clear(shown)
 	for _, gid := range published {
 		if gid > domain.GroundItemGIDBase && gid <= domain.GroundItemGIDLimit {
 			shown[gid] = struct{}{}
 		}
 	}
 	var spawn []grounditem.Item
-	for _, drop := range drops {
-		if !viewer.Adjacent(drop.block) {
-			continue
+	scan := func(drops []placedDrop) {
+		for _, drop := range drops {
+			if _, exists := shown[drop.item.Gid]; exists {
+				delete(shown, drop.item.Gid)
+				continue
+			}
+			spawn = append(spawn, drop.item)
 		}
-		if _, exists := shown[drop.item.Gid]; exists {
-			delete(shown, drop.item.Gid)
-			continue
-		}
-		spawn = append(spawn, drop.item)
 	}
+	if viewer.Whole {
+		// A block-less dungeon viewer neighbours every block of its region.
+		for block, drops := range buckets {
+			if block.Dungeon == viewer.Dungeon {
+				scan(drops)
+			}
+		}
+	} else {
+		for dx := -1; dx <= 1; dx++ {
+			for dz := -1; dz <= 1; dz++ {
+				scan(buckets[worldgeom.InterestBlock{Dungeon: viewer.Dungeon, X: viewer.X + dx, Z: viewer.Z + dz}])
+			}
+		}
+		scan(buckets[worldgeom.InterestBlock{Dungeon: viewer.Dungeon, Whole: true}])
+	}
+	sort.Slice(spawn, func(i, j int) bool { return spawn[i].Gid < spawn[j].Gid })
 	despawn := make([]uint32, 0, len(shown))
 	for gid := range shown {
 		despawn = append(despawn, gid)
@@ -331,13 +379,14 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 ) {
 	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
+	shown := make(map[uint32]struct{})
 	for _, session := range sessions {
 		population, ok := sessionGroundPopulation(session)
 		if !ok {
 			continue
 		}
-		drops := rt.groundPlacedDrops(division, population)
-		spawn, despawn := groundScope(drops, viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects)
+		spawn, despawn := groundScope(rt.groundDropBuckets(division, population),
+			viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects, shown)
 		if len(spawn) == 0 && len(despawn) == 0 {
 			continue
 		}
