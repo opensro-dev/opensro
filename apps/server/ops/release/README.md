@@ -305,16 +305,25 @@ scheduled jobs can be delayed, so the external check is not a guaranteed paging
 latency. Tests inject failures and notification delivery; they do not stop live
 services or send fake public outages.
 
-The WebTransport leg is checked from outside the game host too. On another
-host, run `wtprobe_verdict.py --probe sro-wtprobe --origin https://game.example.com
---out verdict.json --push user@game-host:/path/verdict.json` on that host's own
-timer (60 seconds is the intended cadence). Each run executes `sro-wtprobe
--health` once and publishes one verdict. On the game host, a second monitor
-config of kind `wtprobe` (with `verdict` naming that file) reads it every 30
-seconds. Two consecutive failed probe runs page and two passing runs recover;
-re-reading the same run does not count. A verdict older than 180 seconds, or
-none at all, pages as a probe-pipeline failure, so a stopped runner is reported
-rather than silent.
+The WebTransport leg is checked from outside the game host too (#1984; owner
+decisions 2026-10-28: the runner lives on vps0, probes every 60 seconds, a
+verdict goes stale at 180 seconds, and a stopped runner pages).
+
+- Game host, once, as root in an owner-approved window:
+  `wtprobe_host.py apply --public-key runner.pub`. It creates the push account
+  (its key may only run `wtprobe_verdict.py --receive`), the verdict directory,
+  `/etc/opensro-release/monitor-wtprobe.json` and the 30-second
+  `opensro-monitor-wtprobe.timer`. `check` lists gaps; `remove` undoes it.
+- Runner host: install `opensro-wtprobe-runner.service` and `.timer` with the
+  placeholders filled. Each run executes `sro-wtprobe -health` and pushes one
+  verdict over ssh.
+- Two consecutive failed probe runs page and two passing runs recover;
+  re-reading the same run does not count. A verdict older than 180 seconds, or
+  none at all, pages as a probe-pipeline failure.
+- `wtprobe_drill.py --announced` is the announced WebTransport-only break test.
+  It drops inbound UDP 443 in a table of its own (a systemd fallback deletes
+  it after 10 minutes), waits for the page while the fleet monitor stays up,
+  restores, and waits for the recovery.
 
 Browser smoke uses ordinary browser settings and records negotiated worker
 protocols. Choose edge transport settings from measurements on your infrastructure.

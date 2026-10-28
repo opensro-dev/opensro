@@ -16,7 +16,9 @@ import tempfile
 import unittest
 
 from monitor import check_wtprobe
-from wtprobe_verdict import make_verdict, push_commands, run_probe, write_verdict
+import io
+
+from wtprobe_verdict import make_verdict, parse_verdict, push_command, receive, run_probe, write_verdict
 
 
 # ================
@@ -96,16 +98,40 @@ class WTProbeVerdictTests(unittest.TestCase):
 			self.assertEqual(sorted(p.name for p in Path(directory).iterdir()), ["verdict.json"])
 
 	# ================
-	# test_publication_copies_aside_then_renames
+	# test_publication_is_one_ssh_to_the_push_account
+	#
+	# The verdict travels on stdin; the host key's forced command chooses
+	# where it lands, so the runner names only the account.
 	# ================
-	def test_publication_copies_aside_then_renames(self):
-		commands = push_commands("verdict.json", "probe@game.example:/var/lib/opensro/wtprobe verdict.json")
-		self.assertEqual(commands[0][-1], "probe@game.example:/var/lib/opensro/wtprobe verdict.json.incoming")
-		self.assertEqual(commands[1][:3], ["ssh", "-o", "BatchMode=yes"])
-		self.assertEqual(commands[1][-1], "mv -f '/var/lib/opensro/wtprobe verdict.json.incoming' '/var/lib/opensro/wtprobe verdict.json'")
-		for bad in ("verdict.json", "probe@game.example:relative.json", ":/abs.json"):
+	def test_publication_is_one_ssh_to_the_push_account(self):
+		self.assertEqual(push_command("opensro-wtprobe@game.example"), ["ssh", "-o", "BatchMode=yes", "opensro-wtprobe@game.example"])
+		for bad in ("game.example", "@game.example", "opensro-wtprobe@", "opensro-wtprobe@game.example:/tmp/x", "a b@host"):
 			with self.subTest(target=bad), self.assertRaises(ValueError):
-				push_commands("verdict.json", bad)
+				push_command(bad)
+
+	# ================
+	# test_the_receiver_writes_only_a_well_formed_verdict
+	#
+	# A refused verdict leaves the previous one in place: the monitor then
+	# reports staleness, never a forged or truncated result.
+	# ================
+	def test_the_receiver_writes_only_a_well_formed_verdict(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "verdict.json"
+			good = json.dumps(make_verdict(True, "pass", 1000)).encode()
+			receive(path, io.BytesIO(good))
+			self.assertEqual(json.loads(path.read_text())["checkedAt"], 1000)
+			for bad in (b"not json", b"[]", json.dumps({"v": 1, "checkedAt": 1, "ok": True}).encode(),
+					json.dumps({"v": 1, "checkedAt": 1, "ok": "yes", "detail": ""}).encode(),
+					json.dumps({"v": 2, "checkedAt": 1, "ok": True, "detail": ""}).encode(),
+					json.dumps({"v": 1, "checkedAt": True, "ok": True, "detail": ""}).encode(),
+					json.dumps({"v": 1, "checkedAt": 1, "ok": True, "detail": "", "extra": 1}).encode(),
+					json.dumps({"v": 1, "checkedAt": 1, "ok": True, "detail": "x" * 241}).encode(),
+					b" " * 5000):
+				with self.subTest(verdict=bad[:40]), self.assertRaises(ValueError):
+					receive(path, io.BytesIO(bad))
+			self.assertEqual(json.loads(path.read_text())["checkedAt"], 1000)
+			self.assertEqual(parse_verdict(good)["ok"], True)
 
 
 if __name__ == "__main__":

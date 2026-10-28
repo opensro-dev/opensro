@@ -29,10 +29,12 @@ ROOT = Path("/var/lib/opensro-release")
 CONFIG = Path("/etc/opensro-release/config.json")
 MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "retention.py",
 	"client_deploy.py", "client_data.py", "server_data.py", "coordinated.py", "deploy.py", "rollback.py", "monitor.py",
-	"stalldump_watch.py", "receiver.py", "quic_host.py", "module_inputs.py")
+	"stalldump_watch.py", "receiver.py", "quic_host.py", "module_inputs.py", "wtprobe_verdict.py", "wtprobe_host.py",
+	"wtprobe_drill.py")
 CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "shard-settings.json", "overview.html", "routes.caddy",
 	"opensro-monitor.service", "opensro-monitor.timer", "opensro-stalldump.service", "opensro-stalldump.timer",
-	"opensro-release-deadman.service", "opensro-release-deadman.timer")
+	"opensro-release-deadman.service", "opensro-release-deadman.timer", "opensro-monitor-wtprobe.service",
+	"opensro-monitor-wtprobe.timer")
 
 
 # ================
