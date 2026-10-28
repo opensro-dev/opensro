@@ -202,6 +202,10 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 		s.mailboxes[division][id] = letters
 	}
 	s.ground.loadedRecords = ground
+	// The rename rewrote ground rows outside the registry's change
+	// stamps (loadedRecords' DroppedBy): the next ground write diffs the
+	// whole plane against them, exactly as before stamps existed (#2040).
+	s.ground.revisionRecorded = false
 	if reservation != nil {
 		if s.nameReservations[division] == nil {
 			s.nameReservations[division] = map[string]NameReservation{}

@@ -7,9 +7,14 @@ The v1.150 textdata has no Qin-Shi Emperor Tomb rows: the 79 monster
 characterdata rows and 230 skilldata rows live only in the server's
 committed overlays (apps/server, from #1154), because the server itself
 appends them behind SRO_QINSHI_TOMB (monster.WithQinShiTomb, port-only,
-not native; off by default). The client bake reads the same two files
-through here so a flag-on bake resolves the Tomb references exactly the
-way the flag-on server spawns them, and a flag-off bake never sees them.
+not native). The client bake reads the same two files through here so a
+bake resolves the Tomb references exactly when the shard spawns them.
+
+The bake follows the shard's deployed posture, not a bare build env:
+an unset SRO_QINSHI_TOMB means what the deployment means by it - the
+release profile's value, else the shard registry's default (on). The
+bake once read unset as off while the shard defaulted on, so the live
+shard spawned 79 species no shipped pack could draw (#2024).
 
 ===========================================================================
 */
@@ -19,17 +24,65 @@ import path from "node:path";
 import { splitTextDataRow } from "./textDataIo.mjs";
 import { serverSourceRoot } from "../world/paths.mjs";
 
+// The switch, its deployed profile, and the shard settings registry
+// that holds its default (shardsettings.go, the server's one owner).
+const QINSHI_TOMB_ENV = "SRO_QINSHI_TOMB";
+const SHARD_PROFILE = path.join( "ops", "release", "shard-settings.json" );
+const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
+
+/*
+================
+flagWordOn
+
+Mirrors monster.QinShiTombFromEnv: the value trimmed and folded to
+lower case must be 1, on, true or yes.
+================
+*/
+function flagWordOn( value ) {
+	const word = String( value ).trim().toLowerCase();
+	return word === "1" || word === "on" || word === "true" || word === "yes";
+}
+
+/*
+================
+qinshiTombShardPosture
+
+The switch's value as the deployment sets it when the build env does
+not: the release profile's entry, else the registry Default. A registry
+row this cannot read throws - a posture the bake cannot see must stop
+the build, never read as off.
+================
+*/
+export function qinshiTombShardPosture() {
+	const serverRoot = qinshiTombServerRoot();
+	const profile = JSON.parse( fs.readFileSync( path.join( serverRoot, SHARD_PROFILE ), "utf8" ) );
+	if ( typeof profile[QINSHI_TOMB_ENV] === "string" ) {
+		return profile[QINSHI_TOMB_ENV];
+	}
+	const registry = fs.readFileSync( path.join( serverRoot, SHARD_REGISTRY ), "utf8" );
+	const row = new RegExp( `\\{\\s*Env:\\s*"${QINSHI_TOMB_ENV}"[^}]*?Default:\\s*"([^"]*)"` ).exec( registry );
+	if ( !row ) {
+		throw new Error(
+			`${QINSHI_TOMB_ENV}: no Default in ${SHARD_REGISTRY}; the bake cannot see the shard's posture`
+		);
+	}
+	return row[1];
+}
+
 /*
 ================
 qinshiTombEnabled
 
-Mirrors monster.QinShiTombFromEnv: SRO_QINSHI_TOMB trimmed and folded to
-lower case must be 1, on, true or yes.
+An explicit SRO_QINSHI_TOMB wins (any non-blank value, "off" included);
+unset or blank takes the shard's deployed posture.
 ================
 */
 export function qinshiTombEnabled() {
-	const value = (process.env.SRO_QINSHI_TOMB ?? "").trim().toLowerCase();
-	return value === "1" || value === "on" || value === "true" || value === "yes";
+	const value = process.env[QINSHI_TOMB_ENV] ?? "";
+	if ( value.trim() !== "" ) {
+		return flagWordOn( value );
+	}
+	return flagWordOn( qinshiTombShardPosture() );
 }
 
 /*
