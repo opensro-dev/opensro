@@ -139,8 +139,14 @@ the EXP, and the client's next level crossing failed its length check.
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
 	var out, results []simulation.DivisionFrames
-	before := rt.advanceSkillObjectCommits(nowMs, &out, &results)
-	after := rt.SkillObjects.Snapshot()
+	before, generation := rt.advanceSkillObjectCommits(nowMs, &out, &results)
+	// A commit pass that wrote nothing leaves the registry exactly as
+	// before names it, so the post-pass copy is paid only on a pass that
+	// created, retired or restamped an object.
+	after := before
+	if rt.SkillObjects.Generation() != generation {
+		after = rt.SkillObjects.Snapshot()
+	}
 	for _, session := range sessions {
 		if session.PublishedObjects == nil {
 			continue
@@ -181,14 +187,16 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 advanceSkillObjectCommits
 
 Runs every live object's pulse under the publication gate and returns the
-objects as they stood before it. A batch sourced by its own object is a
+objects as they stood before it, with the registry generation read just
+before that copy. A batch sourced by its own object is a
 viewer row (results); every other batch is the pulse's routed output, whose
 private tails are sealed before the gate is released.
 ================
 */
-func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) []skillobject.Object {
+func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) ([]skillobject.Object, uint64) {
 	unlock := rt.lockTickPublication()
 	defer unlock()
+	generation := rt.SkillObjects.Generation()
 	before := rt.SkillObjects.Snapshot()
 	var routed []simulation.DivisionFrames
 	for _, object := range before {
@@ -201,7 +209,7 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 		}
 	}
 	*out = append(*out, rt.sealTickPrivate(routed)...)
-	return before
+	return before, generation
 }
 
 /*
