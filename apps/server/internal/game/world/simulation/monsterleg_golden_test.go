@@ -228,6 +228,59 @@ func TestActivityGateResolvesSettledBlockOnce(t *testing.T) {
 
 /*
 ================
+TestMonsterLegActivityGateResolvesSettledBlockOnce
+
+The production leg reaches the gate through the dispatch copy: with
+RunAction installed (always, in production), each actor's gate runs on
+a value copy of the ops, so a memo map made inside the gate would land
+on the discarded copy and every due gate would resolve its block
+again. Driven through RunMonsterLeg itself, a settled actor's block
+must still resolve at most once across due legs.
+================
+*/
+func TestMonsterLegActivityGateResolvesSettledBlockOnce(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	calls := 0
+	ops.MessageBlockAt = func(p Spawn) (worldgeom.MessageBlock, bool) {
+		calls++
+		return worldgeom.OutdoorMessageBlock(worldgeom.RegionXZ{RegionID: p.RegionID, X: p.X, Z: p.Z})
+	}
+	// The production dispatch shape: the passthrough stands in for the
+	// wired action lane, so the gate runs on the leg's per-actor copy.
+	ops.RunAction = func(_ string, run func(MonsterAttackOperation)) { run(nil) }
+	pusher := &fakePusher{}
+	// Suspend the actor unobserved, then let its pending pose settle at
+	// the segment's end; from there it stands still.
+	ops.RunMonsterLeg(now+1001, nil, pusher)
+	mover, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if mover.Mode() != monster.MoverPending {
+		t.Fatalf("actor did not suspend unobserved: %v", mover.Mode())
+	}
+	settleAt, goal := mover.ArriveMs, mover.To
+	ops.RunMonsterLeg(settleAt, nil, pusher)
+	mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if mover.Mode() != monster.MoverPending || mover.Pose != goal {
+		t.Fatalf("pending actor did not settle at its segment goal: %+v", mover)
+	}
+	settled := calls
+	for k := int64(1); k <= 3; k++ {
+		at := settleAt + k*1500
+		ops.RunMonsterLeg(at, nil, pusher)
+		mover, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+		if mover.Activity.LastCheck != uint32(at) {
+			t.Fatalf("leg %d ran no due activity gate (LastCheck %d, want %d)", k, mover.Activity.LastCheck, at)
+		}
+	}
+	if calls-settled > 1 {
+		t.Fatalf("settled block resolved %d times over 3 due legs through the dispatch, want at most 1", calls-settled)
+	}
+	if mover.Mode() != monster.MoverPending {
+		t.Fatalf("settled actor left PENDING unobserved: %v", mover.Mode())
+	}
+}
+
+/*
+================
 BenchmarkMonsterLegSeeded
 
 BenchmarkMonsterLegSeeded runs one 100 ms leg over the seeded 1200-monster

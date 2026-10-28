@@ -38,6 +38,13 @@ variant step read, and the bundle must hold the cap110 overlays the
 variant textdata wrote. Off, the variant carries no field monsters
 and no overlay is required.
 
+SRO_CAP110_QINSHI (#1800 step 2) is read the same way again. On, it
+needs SRO_CAP110_MONSTERS on as well (its drops ride the shared
+cap-110 loot catalogue), and the bundle must hold cap110-qinshi.txt,
+the qinshi family's nest file. Off, the bundle must hold none: a
+qinshi overlay the settings did not ask for is not the candidate the
+operator asked for.
+
 The stage 1 import compares the VSRO map against the native v1.150
 mapinfo.mfo. The isolated import root holds no native extraction, so
 this tool resolves the native file in its own (native) environment,
@@ -74,6 +81,10 @@ SHARD_FILES = {ITEMS_FLAG: "itemdata_110000.txt", SKILLS_FLAG: "skilldata_110000
 # needs the database export (cap110_monsters.SOURCE_ENV).
 MONSTERS_FLAG = "SRO_CAP110_MONSTERS"
 MONSTER_DATABASE_ENV = "SRO_CAP110_MONSTER_DATABASE"
+# The qinshi setting (#1800 step 2) adds no shard either; it adds the one
+# nest file, and only with the monster setting on.
+QINSHI_FLAG = "SRO_CAP110_QINSHI"
+QINSHI_FILE = "cap110-qinshi.txt"
 NATIVE_MAPINFO = Path("Data_extracted") / "navmesh" / "mapinfo.mfo"
 
 
@@ -144,26 +155,27 @@ def run_process(argv, env):
 # ================
 # shard_settings
 #
-# The three build-time settings, normalized to the "on"/"off" the shard
+# The four build-time settings, normalized to the "on"/"off" the shard
 # settings table deploys, with the import tools' own on values.
 # ================
 def shard_settings(env):
 	return {
 		flag: "on" if str(env.get(flag, "")).strip().lower() in FLAG_ON else "off"
-		for flag in (*SHARD_FILES, MONSTERS_FLAG)
+		for flag in (*SHARD_FILES, MONSTERS_FLAG, QINSHI_FLAG)
 	}
 
 
 # ================
 # monster_overrides
 #
-# The monster setting and its database, for the two steps that read
-# them. Off passes an empty database, so a stale one in the caller's
-# environment cannot reach a step.
+# The monster setting, its database and the qinshi family that rides
+# it, for the two steps that read them. Off passes an empty database,
+# so a stale one in the caller's environment cannot reach a step.
 # ================
 def monster_overrides(inputs, settings):
 	database = str(inputs.monster_database) if settings[MONSTERS_FLAG] == "on" else ""
-	return {MONSTERS_FLAG: settings[MONSTERS_FLAG], MONSTER_DATABASE_ENV: database}
+	return {MONSTERS_FLAG: settings[MONSTERS_FLAG], QINSHI_FLAG: settings[QINSHI_FLAG],
+		MONSTER_DATABASE_ENV: database}
 
 
 # ================
@@ -203,9 +215,9 @@ def step_commands(inputs, settings):
 # the overlay the server gates on SRO_ALEXANDRIA, and every cap110
 # overlay of the variant textdata, projected into the bundle. Monsters
 # on must have written at least one overlay. The equipment and skill
-# shards must match the build-time settings: a bundle built against
-# other settings than the declared ones is not the candidate the
-# operator asked for.
+# shards and the qinshi nest file must match the build-time settings:
+# a bundle built against other settings than the declared ones is not
+# the candidate the operator asked for.
 # ================
 def verify_variant(staging, shards):
 	bundle_textdata = staging / "server-data" / "textdata"
@@ -221,6 +233,8 @@ def verify_variant(staging, shards):
 	missing = [name for name in overlays if not (bundle_textdata / name).is_file()]
 	if missing:
 		raise ValueError(f"variant bundle is missing cap110 overlays: {', '.join(missing)}")
+	if (bundle_textdata / QINSHI_FILE).is_file() != (shards[QINSHI_FLAG] == "on"):
+		raise ValueError(f"variant bundle's {QINSHI_FILE} disagrees with {QINSHI_FLAG}={shards[QINSHI_FLAG]}")
 	for flag, shard in SHARD_FILES.items():
 		if (bundle_textdata / shard).is_file() != (shards[flag] == "on"):
 			raise ValueError(f"variant bundle's {shard} disagrees with {flag}={shards[flag]}")
@@ -253,6 +267,8 @@ def build(inputs, run=run_process, env=os.environ):
 	if staging.exists() and any(staging.iterdir()):
 		raise ValueError(f"staging folder {staging} is not empty; a variant build needs a fresh one")
 	settings = shard_settings(env)
+	if settings[QINSHI_FLAG] == "on" and settings[MONSTERS_FLAG] != "on":
+		raise ValueError(f"{QINSHI_FLAG}=on needs {MONSTERS_FLAG}=on (its drops ride the shared cap-110 loot catalogue)")
 	if settings[MONSTERS_FLAG] == "on" and inputs.monster_database is None:
 		raise ValueError(f"{MONSTERS_FLAG}=on needs --monster-database, the monster database export")
 	native_files = [*inputs.native_files, inputs.native_mapinfo]
