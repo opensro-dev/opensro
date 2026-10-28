@@ -14,6 +14,7 @@ console's secret: the page talks to /api/invites on this console.
 ===========================================================================
 */
 import { createRequest, madeStatus } from "./invite-made.js";
+import { allStatusCount, openCount } from "./invite-counts.js";
 import { escape } from "./model.js";
 import { postJSON, requestJSON } from "./request.js";
 
@@ -166,7 +167,7 @@ function syncFilterOptions() {
 	const status = byID( "filter-status" );
 	const keptStatus = status.value;
 	status.innerHTML = STATUS_FILTERS.map( ( [value, label] ) => {
-		const count = value ? currentCounts.status[value] : currentCounts.total;
+		const count = value ? currentCounts.status[value] : allStatusCount( currentCounts );
 		return `<option value="${value}">${label} (${count})</option>`;
 	} ).join( "" );
 	status.value = keptStatus;
@@ -201,7 +202,7 @@ function render() {
 		`<tr><td colspan="8" class="muted">No keys match.</td></tr>`;
 	const member = byID( "filter-id" ).value.trim();
 	if ( currentCounts ) {
-		const open = currentCounts.status.unused + currentCounts.status.partial;
+		const open = openCount( currentCounts, byID( "filter-status" ).value );
 		setStatus(
 			member ?
 				`Discord member ${member}: ${currentCounts.total} keys, ${open} open.` :

@@ -83,6 +83,7 @@ for (
 		"history.css",
 		"invites.js",
 		"invite-made.js",
+		"invite-counts.js",
 		"invites.css",
 		"request.js",
 		"economy.html",
