@@ -130,9 +130,12 @@ func TestRefreshCompanionOwnerLabelsBumpsOnlyTheOwnersPets(t *testing.T) {
 	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
 	rt.BindPetSession(testDivision, c, 101)
 	useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
-	other := testCharacter()
+	// A second owner with its own summoned pet, so the "nothing else"
+	// half of the rule is asserted against a real presentation.
+	other, _ := persistentSummonFixture()
 	other.ID, other.Name = 4, "other1"
 	rt.BindPetSession(testDivision, other, 202)
+	useSummonerFixture(t, rt, other, 23, refs.staticItemSource["SUMMON_ATTACK"])
 
 	generationOf := func(character *enterworld.Character) (uint64, bool) {
 		for _, pet := range rt.CompanionPresentations(testDivision, character.Name) {
@@ -144,15 +147,16 @@ func TestRefreshCompanionOwnerLabelsBumpsOnlyTheOwnersPets(t *testing.T) {
 	if !ok {
 		t.Fatal("no companion presentation for the owner")
 	}
-	otherBefore, otherOK := generationOf(other)
+	otherBefore, ok := generationOf(other)
+	if !ok {
+		t.Fatal("no companion presentation for the second owner")
+	}
 	rt.refreshCompanionOwnerLabels(testDivision, c)
 	after, _ := generationOf(c)
 	if after != before+1 {
 		t.Fatalf("owner pet generation = %d, want %d after the republish", after, before+1)
 	}
-	if otherOK {
-		if got, _ := generationOf(other); got != otherBefore {
-			t.Fatalf("another owner's pet generation moved %d -> %d", otherBefore, got)
-		}
+	if got, _ := generationOf(other); got != otherBefore {
+		t.Fatalf("another owner's pet generation moved %d -> %d", otherBefore, got)
 	}
 }
