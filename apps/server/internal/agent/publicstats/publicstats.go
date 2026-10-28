@@ -151,6 +151,10 @@ type Sources struct {
 	// Chat returns the shard's public chat transcript, oldest first, with
 	// muted authors already left out (chat.go); nil serves no lines.
 	Chat func() []chatfeed.Line
+	// Events returns the shard's automated gameplay announcements (seal
+	// drops, enhancements, job kills, breaks), oldest first, kept apart
+	// from Chat so they never push people's lines out; nil serves none.
+	Events func() []chatfeed.Line
 	// SealCounts and SealCountingSince read the weekly seal board's
 	// counter (platform/sealboard, #1641): per-character tier counts and
 	// when the week's counting began. Nil leaves the seals board
@@ -264,6 +268,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
 	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))
 	mux.HandleFunc("GET /public/v1/chat", s.cached(chatMaxAge, s.chat))
+	mux.HandleFunc("GET /public/v1/events", s.cached(chatMaxAge, s.events))
 	s.installPrivacy(mux)
 	return mux
 }

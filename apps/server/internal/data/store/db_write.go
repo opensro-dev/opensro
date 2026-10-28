@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -75,8 +76,8 @@ func writeCharacterTx(tx *sql.Tx, division string, c *domain.Character, record [
 }
 
 // replaceGroundTx replaces the WHOLE ground plane inside a transaction.
-// Ground rows are TTL-bounded drops - a handful of rows - so a replace
-// on ground-dirty commits is simpler than row diffing and still O(small).
+// Only rare whole-plane rewrites use it (a character rename); the
+// per-commit path is writeGroundDiffTx.
 /*
 ================
 replaceGroundTx
@@ -103,6 +104,124 @@ func replaceGroundTx(tx *sql.Tx, divisions map[string][]domain.GroundItemRecord)
 		}
 	}
 	return nil
+}
+
+const (
+	upsertGroundSQL = "INSERT INTO ground_items (division, gid, record) VALUES (?, ?, ?) " +
+		"ON CONFLICT(division, gid) DO UPDATE SET record = excluded.record"
+	deleteGroundSQL = "DELETE FROM ground_items WHERE division = ? AND gid = ?"
+)
+
+/*
+================
+writeGroundDiffTx
+
+Brings ground_items from the committed plane to the next one, writing
+only the rows that differ: a gone gid is deleted, a new or changed row
+is upserted. committed must be what the table holds: the store's
+loadedRecords, set at load, after every committed ground write, and
+never on a rolled-back one.
+
+The live plane holds about 1,600 rows (prod, 2026-10-28). Rewriting it
+whole on every ground-dirty commit cost 13% of the GameWorld's CPU,
+on the tick goroutine. The diff is a merge walk over gid-sorted rows
+(Registry.Snapshot sorts, the load query orders by gid), so a commit
+that changed one drop does one statement and allocates nothing for
+the rows it skips. Returns the rows written and deleted.
+================
+*/
+func writeGroundDiffTx(tx *sql.Tx, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
+	divisionIDs := make([]string, 0, len(next)+len(committed))
+	for divisionID := range next {
+		divisionIDs = append(divisionIDs, divisionID)
+	}
+	for divisionID := range committed {
+		if _, both := next[divisionID]; !both {
+			divisionIDs = append(divisionIDs, divisionID)
+		}
+	}
+	sort.Strings(divisionIDs)
+	written, deleted := 0, 0
+	for _, divisionID := range divisionIDs {
+		w, d, err := writeGroundDivisionDiffTx(tx, divisionID, sortedGround(committed[divisionID]), sortedGround(next[divisionID]))
+		if err != nil {
+			return 0, 0, err
+		}
+		written, deleted = written+w, deleted+d
+	}
+	return written, deleted, nil
+}
+
+/*
+================
+writeGroundDivisionDiffTx
+
+One division's merge walk; both row lists are sorted by gid.
+================
+*/
+func writeGroundDivisionDiffTx(tx *sql.Tx, divisionID string, old, next []domain.GroundItemRecord) (int, int, error) {
+	written, deleted := 0, 0
+	i, j := 0, 0
+	for i < len(old) || j < len(next) {
+		switch {
+		case j == len(next) || i < len(old) && old[i].Gid < next[j].Gid:
+			if _, err := tx.Exec(deleteGroundSQL, divisionID, old[i].Gid); err != nil {
+				return 0, 0, err
+			}
+			deleted++
+			i++
+		case i == len(old) || next[j].Gid < old[i].Gid:
+			if err := upsertGroundTx(tx, divisionID, &next[j]); err != nil {
+				return 0, 0, err
+			}
+			written++
+			j++
+		default:
+			// Same gid. DeepEqual can only err towards a rewrite, never
+			// towards a missed change, and it follows any new field.
+			if !reflect.DeepEqual(&old[i], &next[j]) {
+				if err := upsertGroundTx(tx, divisionID, &next[j]); err != nil {
+					return 0, 0, err
+				}
+				written++
+			}
+			i, j = i+1, j+1
+		}
+	}
+	return written, deleted, nil
+}
+
+/*
+================
+upsertGroundTx
+================
+*/
+func upsertGroundTx(tx *sql.Tx, divisionID string, item *domain.GroundItemRecord) error {
+	record, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
+	}
+	_, err = tx.Exec(upsertGroundSQL, divisionID, item.Gid, string(record))
+	return err
+}
+
+/*
+================
+sortedGround
+
+The rows in gid order. Every producer already sorts, so this is a
+check; an unsorted list (a future producer) is sorted on a copy rather
+than trusted, because a wrong order would delete live rows.
+================
+*/
+func sortedGround(rows []domain.GroundItemRecord) []domain.GroundItemRecord {
+	less := func(a, b int) bool { return rows[a].Gid < rows[b].Gid }
+	if sort.SliceIsSorted(rows, less) {
+		return rows
+	}
+	sorted := append([]domain.GroundItemRecord(nil), rows...)
+	sort.Slice(sorted, func(a, b int) bool { return sorted[a].Gid < sorted[b].Gid })
+	return sorted
 }
 
 // replaceMailboxTx replaces ONE character's mailbox rows inside a

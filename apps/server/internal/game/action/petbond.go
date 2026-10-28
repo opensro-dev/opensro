@@ -62,7 +62,12 @@ func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.C
 	if !rt.AttackPetExpansion || state == nil || !state.ready || state.follower == nil {
 		return nil, nil, companion.SkillDef{}, 0, false
 	}
-	owner := rt.characterSnapshot(key.division, state.character)
+	// Runs for every bear source per bond plan: copy the owner only when
+	// the record still holds a live summoned bear under this gid (#1943).
+	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		pet := c.CompanionByGID(key.gid)
+		return !c.DeletePending && pet != nil && pet.CurrentHP != 0 && companion.PetKind(pet.Codename) == "Bear"
+	})
 	if owner == nil || owner.DeletePending {
 		return nil, nil, companion.SkillDef{}, 0, false
 	}

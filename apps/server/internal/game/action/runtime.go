@@ -448,6 +448,10 @@ type Runtime struct {
 	// counted kill (mostwantednotice.go; port-only, not native). False is
 	// the current rule: nothing until a level.
 	MostWantedStreakNotice bool
+	// MostWantedCOSKills counts a job kill delivered on a companion for
+	// Most Wanted like a player kill (mostwanted.go; port-only, not
+	// native). False is native.
+	MostWantedCOSKills bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field

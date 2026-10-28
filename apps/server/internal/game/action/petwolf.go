@@ -57,6 +57,25 @@ func (rt *Runtime) elementalCompanion(division string, owner *enterworld.Charact
 
 /*
 ================
+hasElementalCandidate
+
+The record half of elementalCompanionEligibility's pet filter: plain
+field reads, safe inside the read door. Every pet it rejects the loop
+below rejects too, so admission never changes the outcome.
+================
+*/
+func hasElementalCandidate(c *enterworld.Character, gid uint32, kind string) bool {
+	for _, pet := range c.Companions() {
+		if pet.BroodStage == 0 && (gid == 0 || pet.GID == gid) && pet.Summoned && pet.CurrentHP != 0 &&
+			companion.PetKind(pet.Codename) == kind {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 elementalCompanionEligibility
 
 Only travel support may opt into safe zones; combat callers keep the town gate.
@@ -67,7 +86,11 @@ func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterwo
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
-	snapshot := rt.characterSnapshot(division, owner)
+	// Runs per pet per tick: copy the owner only when a pet could pass the
+	// record filters below (#1943; characterSnapshotAdmitted).
+	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, gid, kind)
+	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
 		return step, false
 	}

@@ -234,7 +234,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	}
 
 	if groundSnapshot != nil {
-		if err := replaceGroundTx(tx, groundSnapshot.Divisions); err != nil {
+		if _, _, err := writeGroundDiffTx(tx, s.ground.loadedRecords, groundSnapshot.Divisions); err != nil {
 			return err
 		}
 		if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", groundSnapshot.GidCounter)); err != nil {

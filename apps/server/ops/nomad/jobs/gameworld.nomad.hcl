@@ -430,6 +430,15 @@ variable "most_wanted_streak_notice" {
   default = "off"
 }
 
+# most_wanted_cos_kills counts a job kill delivered on a companion for
+# Most Wanted like a player kill, credited to the companion's owner
+# (port-only, not native; owner decision 2026-10-28). "off", the
+# default, is native.
+variable "most_wanted_cos_kills" {
+  type    = string
+  default = "off"
+}
+
 # teleport_grace makes a teleport arrival (scroll, gate, relocation)
 # untouchable for the revival's grace from game-ready (port-only, not
 # native; owner decision 2026-10-25). "off" is native.
@@ -1053,9 +1062,22 @@ variable "cpu" {
   default = 6000
 }
 
+# The live shard keeps about 560 MB of heap and 970 MB of runtime memory
+# (2026-10-28, #1943). At 1024 the soft limit below (768MiB) sat under
+# that: the collector ran about once a second, its assists and write
+# barriers landing on the tick, with RSS 800 MB of a 1024 MB cgroup.
+# 3072 gives a 2304MiB soft limit and room for GOGC below to work.
 variable "memory_mb" {
   type    = number
-  default = 1024
+  default = 3072
+}
+
+# GOGC for the GameWorld (owner decision 2026-10-28, #1943): 200 lets
+# the heap grow to three times the live set between collections, half
+# as many cycles as Go's default 100, still bounded by GOMEMLIMIT.
+variable "gogc" {
+  type    = string
+  default = "200"
 }
 
 # sro-nomad replaces __SHARD_ID__ with the validated catalog ID before
@@ -1167,6 +1189,7 @@ job "sro-gameworld-__SHARD_ID__" {
         # references): the collector then ran almost without pause and took
         # 82% of 3.6 cores with one player online.
         GOMEMLIMIT                              = "${floor(var.memory_mb * 3 / 4)}MiB"
+        GOGC                                    = var.gogc
         SRO_SHARD_CATALOG_PATH                  = var.catalog_path
         SRO_SHARD_ID                            = var.shard_id
         SRO_AGENT_URL_REQUIRE                   = "1"
@@ -1213,6 +1236,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_TEST_BOUNTY             = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
+        SRO_MOST_WANTED_COS_KILLS               = var.most_wanted_cos_kills
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TELEPORT_GRACE                      = var.teleport_grace
         SRO_PREMIUM_UPGRADE                     = var.premium_upgrade

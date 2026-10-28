@@ -182,3 +182,34 @@ func TestChatWithoutSourceIsEmpty(t *testing.T) {
 		t.Fatalf("chat answered %d %+v", code, chat)
 	}
 }
+
+/*
+================
+TestEventsServeAnnouncementsApartFromChat
+
+The events route serves the announcer's lines with time and text only;
+the chat route never sees them, and no source serves an empty list.
+================
+*/
+func TestEventsServeAnnouncementsApartFromChat(t *testing.T) {
+	s := newFixture().service()
+	var empty EventsResponse
+	if code := get(t, s, "/public/v1/events", &empty); code != http.StatusOK || empty.Lines == nil || len(empty.Lines) != 0 {
+		t.Fatalf("events answered %d %+v", code, empty)
+	}
+	feed := chatfeed.New()
+	feed.Record("shard", chatfeed.KindChat, "kekw", "kekw", "hi")
+	feed.Record("shard", chatfeed.KindEvent, "", "", "Shy got a Seal of Star")
+	s = newFixture().service()
+	s.src.Chat = func() []chatfeed.Line { return feed.Lines("shard", nil) }
+	s.src.Events = func() []chatfeed.Line { return feed.Events("shard") }
+	var events EventsResponse
+	if code := get(t, s, "/public/v1/events", &events); code != http.StatusOK || len(events.Lines) != 1 ||
+		events.Lines[0].Text != "Shy got a Seal of Star" || events.Lines[0].At == "" {
+		t.Fatalf("events answered %d %+v", code, events)
+	}
+	var chat ChatResponse
+	if code := get(t, s, "/public/v1/chat", &chat); code != http.StatusOK || len(chat.Lines) != 1 || chat.Lines[0].Text != "hi" {
+		t.Fatalf("chat answered %d %+v", code, chat)
+	}
+}

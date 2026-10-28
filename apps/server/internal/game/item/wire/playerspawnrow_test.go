@@ -92,9 +92,10 @@ func testRow() PlayerSpawnRow {
 }
 
 // TestPlayerSpawnRowEncodeUnarmedGolden is the byte-for-byte pin of the
-// unarmed row against the layout the client's REAL sub_86afb0 fold chain
-// reads (the wave-3 harness fixture shape, cicUserSpawnMinimapParity.test.ts
-// userPayload, with live values).
+// unarmed row against the layout the client's REAL
+// CICUser_DeserializeAppearanceSpawnData fold chain reads (the wave-3
+// harness fixture shape, cicUserSpawnMinimapParity.test.ts userPayload, with
+// live values).
 func TestPlayerSpawnRowEncodeUnarmedGolden(t *testing.T) {
 	row := testRow()
 
