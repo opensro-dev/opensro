@@ -30,8 +30,11 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -295,32 +298,67 @@ func TestTickSkillPathsTakeDeferredDoors(t *testing.T) {
 ================
 TestHandlerCommandsNeverTakeADeferredDoor
 
-The lane rule as one table (#2036 review): whatever a target-interact
-handler answers - an engage, or a follow that walks into range and
-strikes - commits through the immediate doors and touches no deferred
-seam, because its answer would otherwise precede the commit.
+The lane rule as one table (#2036 review): whatever a handler answers -
+an engage, a follow that walks into range and strikes, an in-range
+skill cast, a monster capture, a pickup approach arm, a pet's ground
+pickup - commits through the immediate doors and touches no deferred
+seam, because its answer would otherwise precede the commit. Each row
+is one handler entry that passes rt.handlerDoors(); flipping any of
+them to the tick lane fails its row.
 ================
 */
 func TestHandlerCommandsNeverTakeADeferredDoor(t *testing.T) {
 	for _, command := range []struct {
 		name  string
 		setup func(t *testing.T) (*Runtime, *enterworld.Character, []byte)
+		// itemMove sends the payload to the item-move handler instead
+		// of the target-interact handler.
+		itemMove bool
 	}{
-		{"engage", func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+		{name: "engage", setup: func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 			rt, _, character, target := newCombatTestRuntime(t, 100000)
 			return rt, character, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode()
 		}},
-		{"follow", func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+		{name: "follow", setup: func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
 			rt, _, character, target := followFixture(t)
 			return rt, character, wire.FollowTarget{TargetGid: enterworld.ObjectIDForCharacter(target)}.Encode()
 		}},
+		{name: "skill cast", setup: func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+			// acceptSkillCast: an offensive skill on a target in range.
+			rt, _, character, target := newCombatTestRuntime(t, 100000)
+			return rt, character, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode()
+		}},
+		{name: "capture", setup: func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+			// acceptMonsterCapture: the monster mask on a corpse out of
+			// reach, so the capture intent commits its approach (in reach
+			// and idle it would commit nothing to observe).
+			rt, _, character, corpse := corpseFixture(t, true, func(*monster.MonsterRef) {})
+			rt.Worlds.Update(simulation.WorldKey(testDivision, character.Name),
+				func() simulation.WorldState { return simulation.SeedWorldState(character) },
+				func(w *simulation.WorldState) { w.Spawn.X += 300 })
+			return rt, character, wire.SkillAction{ActionId: monsterMaskA1, HasTarget: true, TargetGid: corpse.Gid}.Encode()
+		}},
+		{name: "pickup approach", setup: func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+			// armApproach: a ground drop out of reach arms the walk to it.
+			rt, clock, character, _ := newCombatTestRuntime(t, 100000)
+			at := simulation.SeedWorldState(character).Spawn
+			far := rt.Ground.Add(testDivision, PlanGoldDrop(
+				GoldHeapRef{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Tid1: 3, Tid2: 3, Tid3: 5, Tid4: 2},
+				1000, simulation.Spawn{RegionID: at.RegionID, X: at.X + 100, Y: at.Y, Z: at.Z}, "someone", clock.Now()))
+			return rt, character, wire.TargetInteract{Gid: far.Gid}.Encode()
+		}},
+		{name: "pet ground pickup", itemMove: true, setup: cosGroundHandlerFixture},
 	} {
 		t.Run(command.name, func(t *testing.T) {
 			rt, character, payload := command.setup(t)
 			installStoreDoor(t, rt)
 			immediate, deferred := watchFixtureDoors(rt)
 
-			rt.HandleTargetInteract(testDivision, character, payload)
+			if command.itemMove {
+				rt.HandleItemMove(testDivision, character, payload)
+			} else {
+				rt.HandleTargetInteract(testDivision, character, payload)
+			}
 			if len(immediate.labels) == 0 {
 				t.Fatal("handler committed nothing; the table no longer reaches a commit")
 			}
@@ -329,4 +367,43 @@ func TestHandlerCommandsNeverTakeADeferredDoor(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+================
+cosGroundHandlerFixture
+
+A summoned grab pet with an empty bag beside a gold-free drop at its
+feet, and the item-move payload that asks it to pick the drop up
+(applyCosGround, the item-move handler's pet pickup).
+================
+*/
+func cosGroundHandlerFixture(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+	t.Helper()
+	c := testCharacter()
+	items := testItems()
+	const dropRefID uint32 = 45166
+	items["ITEM_QNO_RM_ARCHEMY_01"] = &enterworld.ItemRef{
+		RefObjID: dropRefID, Codename: "ITEM_QNO_RM_ARCHEMY_01", TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	refs := testCosSource(items)
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 8}}
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: dropRefID, Codename: "ITEM_QNO_RM_ARCHEMY_01", TypeFlags: wire.PackTypeFlags(3, 3, 9, 0), StackCount: 1,
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y),
+	})
+	payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rt, c, payload
 }
