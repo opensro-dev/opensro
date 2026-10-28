@@ -141,8 +141,7 @@ func (rt *Runtime) advanceCompoundJob(key compoundKey, nowMs int64) []wire.Frame
 		rt.clearCompoundJob(key)
 		return nil
 	}
-	snapshot := character.Snapshot()
-	if snapshot.DeletePending || enterworld.CurrentHP(snapshot) <= 0 {
+	if alive, deletePending, _ := rt.characterLifeState(key.division, character); deletePending || !alive {
 		rt.clearCompoundJob(key)
 		return []wire.Frame{{Opcode: 0x3359, Payload: []byte{2, 6}}}
 	}

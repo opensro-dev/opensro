@@ -287,3 +287,30 @@ func TestReplacingBodyEffectWithOrdinaryEffectReleasesOwnedStatus(t *testing.T) 
 		t.Fatal("replacement retained retired ownership")
 	}
 }
+
+/*
+================
+TestBodyStatusReadWithoutACopy
+
+The re-entry body-status replay (rebirth and relocation) reads the
+one retained field under the read door instead of detaching the
+record (#1943): the same value the copy carries, at a fraction of
+its cost.
+================
+*/
+func TestBodyStatusReadWithoutACopy(t *testing.T) {
+	rt, _, c, _ := newCombatTestRuntime(t, 100)
+	for _, want := range []uint8{3, 0, 3} {
+		c.NativeBodyStatus = want
+		if _, _, status := rt.characterLifeState(testDivision, c); status != want {
+			t.Fatalf("body status %d, want %d", status, want)
+		}
+	}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	readAllocs := testing.AllocsPerRun(20, func() { rt.characterLifeState(testDivision, c) })
+	t.Logf("allocs: one character copy %.0f, body-status read %.0f", copyAllocs, readAllocs)
+	if readAllocs >= copyAllocs {
+		t.Fatalf("the body-status read still copies the character: %.0f allocs; one copy is %.0f",
+			readAllocs, copyAllocs)
+	}
+}
