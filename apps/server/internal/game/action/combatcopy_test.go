@@ -18,12 +18,14 @@ package action
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -150,6 +152,84 @@ func periodicTrace(t *testing.T, full bool) string {
 
 /*
 ================
+pulseAreaTrace
+
+A Soul Chaos instance installed directly, then two due pulses, on a
+loaded bag. The pulse root takes the combat copy of the caster; the
+bag carries an attack pet's summon row, so a pulse that resolved the
+caster's companions through its copy would diverge on the narrow root.
+================
+*/
+func pulseAreaTrace(t *testing.T, full bool) string {
+	rt, _, c, row, mob := warlockFixture(t, "SKILL_EU_WARLOCK_SOULA_CHAOS_A_01")
+	loadCombatBag(c)
+	if full {
+		forceFullCombatCopy(rt)
+	}
+	now := rt.Now().UnixMilli()
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: row.ID,
+		SkillGroup: row.Group, InstanceToken: 9, State: statuseffect.StateActive,
+		StartedAtMs: now - 2000, DurationPresent: true, ExpiresAtMs: now + 14000}) {
+		t.Fatal("Soul Chaos did not install")
+	}
+	rt.trackPulseArea(testDivision, c.Name)
+	trace := fmt.Sprintf("%+v\n", rt.advancePulseAreas(now))
+	trace += fmt.Sprintf("%+v\n", rt.advancePulseAreas(now+2000))
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if after.CurrentHP >= 100000 {
+		t.Fatal("pulse-area pulses never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
+TestPulseAreaReadsTheCombatCopy
+
+Guard for the #1943 pulse-area slice: the pulse reads the caster's
+combat copy, not the whole record. On this rig (bag bulked to 44 plain
+rows past the combat fixture's own) one due pulse measures 59,288
+allocated bytes through the combat copy and 64,383 through the former
+full copy - the bag rows are the difference - so the bound sits
+between them while leaving the narrow root headroom.
+================
+*/
+func TestPulseAreaReadsTheCombatCopy(t *testing.T) {
+	rt, _, c, row, _ := warlockFixture(t, "SKILL_EU_WARLOCK_SOULA_CHAOS_A_01")
+	loadCombatBag(c)
+	for slot := int64(20); slot < 60; slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: slot, RefObjID: 9999, Codename: "ITEM_QSP_TEST_01", StackCount: 1})
+	}
+	now := rt.Now().UnixMilli()
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: row.ID,
+		SkillGroup: row.Group, InstanceToken: 9, State: statuseffect.StateActive,
+		StartedAtMs: now - 2000, DurationPresent: true, ExpiresAtMs: now + 1000000}) {
+		t.Fatal("Soul Chaos did not install")
+	}
+	rt.trackPulseArea(testDivision, c.Name)
+	at := now
+	pulse := func() {
+		at += 2000
+		if len(rt.advancePulseAreas(at)) == 0 {
+			t.Fatal("pulse produced no frames")
+		}
+	}
+	for i := 0; i < 10; i++ {
+		pulse()
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for i := 0; i < 100; i++ {
+		pulse()
+	}
+	runtime.ReadMemStats(&after)
+	if got := (after.TotalAlloc - before.TotalAlloc) / 100; got > 62000 {
+		t.Fatalf("pulse allocated %d bytes, want <= 62000 (whole-record copy back?)", got)
+	}
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -157,7 +237,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
