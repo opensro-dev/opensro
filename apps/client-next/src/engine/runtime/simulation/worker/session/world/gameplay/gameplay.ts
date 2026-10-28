@@ -5393,6 +5393,9 @@ dispose
 	// the journal: the receive path has many exits, so the check follows it.
 	const receiveFrame = api.receive;
 	api.receive = ( frame, now, chatSender, stallReceipt ) => {
+		// Any frame at all proves the inbound stream is delivering: a
+		// movement receipt still missing is behind it, not lost (#1978).
+		movement.noteInboundProgress( now );
 		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
 		journalClock = now;
 		journalBagChange( now, frame.opcode, frame.payload );
