@@ -328,6 +328,7 @@ export function startRuntime(
 				apiBase,
 				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
+				assets: () => assets.snapshot?.(),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
