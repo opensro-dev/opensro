@@ -305,6 +305,17 @@ scheduled jobs can be delayed, so the external check is not a guaranteed paging
 latency. Tests inject failures and notification delivery; they do not stop live
 services or send fake public outages.
 
+The WebTransport leg is checked from outside the game host too. On another
+host, run `wtprobe_verdict.py --probe sro-wtprobe --origin https://game.example.com
+--out verdict.json --push user@game-host:/path/verdict.json` on that host's own
+timer (60 seconds is the intended cadence). Each run executes `sro-wtprobe
+-health` once and publishes one verdict. On the game host, a second monitor
+config of kind `wtprobe` (with `verdict` naming that file) reads it every 30
+seconds. Two consecutive failed probe runs page and two passing runs recover;
+re-reading the same run does not count. A verdict older than 180 seconds, or
+none at all, pages as a probe-pipeline failure, so a stopped runner is reported
+rather than silent.
+
 Browser smoke uses ordinary browser settings and records negotiated worker
 protocols. Choose edge transport settings from measurements on your infrastructure.
 The game transport is a proxied WebSocket.
