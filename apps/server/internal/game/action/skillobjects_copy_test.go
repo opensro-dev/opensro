@@ -94,9 +94,11 @@ func TestSkillObjectQuietPassCopiesTheRegistryOnce(t *testing.T) {
 }
 
 // quietPassAllocBound sits between the two measured passes over the
-// fixture above: 1925 allocs/run gated, 2048 ungated - the difference
+// fixture above: 2045 allocs/run gated, 2168 ungated - the difference
 // is one registry copy (the slice plus one tracked-set copy per object).
-const quietPassAllocBound = 1985
+// First measured at 1925/2048; #1965 then admits the owner copy through
+// a closure, one allocation per present owner (+120 here) on both sides.
+const quietPassAllocBound = 2106
 
 /*
 ================
