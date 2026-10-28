@@ -37,12 +37,26 @@ import (
 placedDrop
 
 A drop with its message block, computed once per registry revision and
-shared by every viewer of its population. Readers never mutate it.
+shared by every viewer of its population. item points into the slice
+the drop was placed from (the division's cached copy), so a bucket row
+is a pointer and a block, not a copy of the item (#2031). Readers never
+mutate either.
 ================
 */
 type placedDrop struct {
-	item  grounditem.Item
+	item  *grounditem.Item
 	block worldgeom.InterestBlock
+}
+
+/*
+================
+dropBlock
+================
+*/
+func dropBlock(item *grounditem.Item) worldgeom.InterestBlock {
+	return worldgeom.InterestBlockAt(worldgeom.RegionXZ{
+		RegionID: item.Position.RegionID, X: float64(item.Position.X), Z: float64(item.Position.Z),
+	})
 }
 
 /*
@@ -52,10 +66,8 @@ placeDrops
 */
 func placeDrops(items []grounditem.Item) []placedDrop {
 	out := make([]placedDrop, len(items))
-	for i, item := range items {
-		out[i] = placedDrop{item: item, block: worldgeom.InterestBlockAt(worldgeom.RegionXZ{
-			RegionID: item.Position.RegionID, X: float64(item.Position.X), Z: float64(item.Position.Z),
-		})}
+	for i := range items {
+		out[i] = placedDrop{item: &items[i], block: dropBlock(&items[i])}
 	}
 	return out
 }
@@ -133,15 +145,37 @@ func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops 
 ================
 bucketDrops
 
-placeDrops grouped by message block, so a viewer scans only its own
-block, its eight neighbours and its region's block-less drops instead
-of the whole population.
+The kept drops grouped by message block, so a viewer scans only its
+own block, its eight neighbours and its region's block-less drops
+instead of the whole population. keep nil keeps every drop.
+
+Counted first, then laid into one backing array: each bucket is a
+window of it, so the rows cost one allocation, not an append growth
+per bucket, and keep filters in place of a filtered copy (#2031).
+Within a bucket the rows keep items' order.
 ================
 */
-func bucketDrops(items []grounditem.Item) map[worldgeom.InterestBlock][]placedDrop {
-	buckets := make(map[worldgeom.InterestBlock][]placedDrop)
-	for _, drop := range placeDrops(items) {
-		buckets[drop.block] = append(buckets[drop.block], drop)
+func bucketDrops(items []grounditem.Item, keep func(*grounditem.Item) bool) map[worldgeom.InterestBlock][]placedDrop {
+	counts := make(map[worldgeom.InterestBlock]int)
+	total := 0
+	for i := range items {
+		if keep == nil || keep(&items[i]) {
+			counts[dropBlock(&items[i])]++
+			total++
+		}
+	}
+	rows := make([]placedDrop, total)
+	buckets := make(map[worldgeom.InterestBlock][]placedDrop, len(counts))
+	next := 0
+	for block, n := range counts {
+		buckets[block] = rows[next : next : next+n]
+		next += n
+	}
+	for i := range items {
+		if keep == nil || keep(&items[i]) {
+			block := dropBlock(&items[i])
+			buckets[block] = append(buckets[block], placedDrop{item: &items[i], block: block})
+		}
 	}
 	return buckets
 }
@@ -163,13 +197,7 @@ func (rt *Runtime) groundDropBuckets(division string, population grounditem.Popu
 	if buckets, ok := entry.buckets[population]; ok {
 		return buckets
 	}
-	mine := make([]grounditem.Item, 0, len(entry.items))
-	for _, item := range entry.items {
-		if item.Population == population {
-			mine = append(mine, item)
-		}
-	}
-	buckets := bucketDrops(mine)
+	buckets := bucketDrops(entry.items, func(item *grounditem.Item) bool { return item.Population == population })
 	if entry.buckets == nil {
 		entry.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop)
 	}
@@ -208,7 +236,7 @@ func groundScope(buckets map[worldgeom.InterestBlock][]placedDrop, viewer worldg
 				delete(shown, drop.item.Gid)
 				continue
 			}
-			spawn = append(spawn, drop.item)
+			spawn = append(spawn, *drop.item)
 		}
 	}
 	if viewer.Whole {
@@ -316,7 +344,7 @@ func (rt *Runtime) GroundObjectRows(division string, c *enterworld.Character, en
 	var items []grounditem.Item
 	for _, drop := range placeDrops(rt.CharacterGroundItems(division, c)) {
 		if viewer.Adjacent(drop.block) {
-			items = append(items, drop.item)
+			items = append(items, *drop.item)
 		}
 	}
 	return enterworld.GroundObjectListRows(items)

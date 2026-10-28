@@ -141,10 +141,13 @@ type Runtime struct {
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache
-	deps        Dependencies
-	Ground      *grounditem.Registry
-	Pending     *grounditem.PendingTracker
-	Worlds      *simulation.WorldStore
+	// staticRefs is the published static reference set
+	// (ground_references.go).
+	staticRefs staticRefCache
+	deps       Dependencies
+	Ground     *grounditem.Registry
+	Pending    *grounditem.PendingTracker
+	Worlds     *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
 	Steps simulation.StepTimer
 	// PublicationHold receives publication-gate holds at or above the
