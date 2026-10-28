@@ -26,7 +26,11 @@ petAreaTargets
 
 The candidate mask is the authored hostile/object mask (24). Guild soldiers
 use the owner's world-context predicate; ordered attack pets use the owner's
-ordinary attack permission. Each target retains its own body radius.
+ordinary attack permission. Each target retains its own body radius. The
+ordinary permission refuses an aggression weight of exactly one on the
+target's record alone (areaTargetAggressionRefusal), so that player is
+refused before its copy is detached; the soldier's query reads no
+aggressions and always pays for the copy.
 ================
 */
 func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, skill enterworld.SkillRow) []petCombatTarget {
@@ -81,12 +85,16 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		}
 	}
 	world := domain.CharacterWorldInstance(step.snapshot)
+	soldier := step.ref.TidWord>>11 == domain.MercenaryBand
+	admitPlayer := func(live *enterworld.Character) bool {
+		return soldier || !areaTargetAggressionRefusal(live)
+	}
 	for _, present := range rt.PopulationPlayers(step.key.division, step.nowMs) {
 		if present.World != world || !worldgeom.SamePlane(present.Spawn.RegionID, from.RegionID) {
 			continue
 		}
 		owner := rt.findCharacterByGid(step.key.division, present.GID)
-		snapshot := rt.characterSnapshot(step.key.division, owner)
+		snapshot := rt.characterSnapshotAdmitted(step.key.division, owner, admitPlayer)
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}
@@ -96,7 +104,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		if rt.companionTeamRefusal(step.snapshot, snapshot) != 0 {
 			continue
 		}
-		if step.ref.TidWord>>11 == domain.MercenaryBand {
+		if soldier {
 			if !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 				continue
 			}
