@@ -16,6 +16,9 @@ package action
 import (
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 )
 
 /*
@@ -118,5 +121,95 @@ func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) 
 	if broodAllocs >= copyAllocs || spiritAllocs >= copyAllocs || broodSpaceAllocs >= crowCopyAllocs {
 		t.Fatalf("refused advances still copy the owner: brood %.0f, spirit %.0f, brood-space %.0f allocs; one copy is %.0f (crow %.0f)",
 			broodAllocs, spiritAllocs, broodSpaceAllocs, copyAllocs, crowCopyAllocs)
+	}
+}
+
+/*
+================
+stuffOwnerInventories
+
+Fill the owner's bag and avatar rows with content no equipment reader
+resolves, on top of the equipment the fixture already wears.
+================
+*/
+func stuffOwnerInventories(c *enterworld.Character) {
+	for slot := int64(domain.EquipmentSlotEnd); slot < 45; slot++ {
+		c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: slot, Codename: "ITEM_BAG_FILLER", Durability: 3})
+	}
+	c.AvatarInventory = &domain.AvatarInventory{Capacity: 4, Rows: []domain.InventoryRow{{Slot: 0, Codename: "ITEM_AVATAR_FILLER"}}}
+}
+
+/*
+================
+assertNarrowCopy
+
+The handed-out owner copy carries equipment rows only and no avatar
+inventory.
+================
+*/
+func assertNarrowCopy(t *testing.T, what string, snapshot *enterworld.Character) {
+	t.Helper()
+	if snapshot == nil {
+		t.Fatalf("%s: no owner copy", what)
+	}
+	if snapshot.AvatarInventory != nil {
+		t.Fatalf("%s: copy kept the avatar inventory", what)
+	}
+	for _, row := range snapshot.MissionInventory {
+		if row.Slot < 0 || row.Slot >= int64(domain.EquipmentSlotEnd) {
+			t.Fatalf("%s: copy kept bag row %+v", what, row)
+		}
+	}
+}
+
+/*
+================
+TestNarrowOwnerCopiesKeepPetVerdicts
+
+The wolf eligibility and the bear bond source now copy only the
+owner's equipment rows and no avatar inventory (#1943). On owners
+carrying a stuffed bag and avatar rows, the wolf stays eligible and
+the bear stays a bond source, the handed-out copies carry no bag or
+avatar rows, and a narrow copy allocates less than a full one.
+================
+*/
+func TestNarrowOwnerCopiesKeepPetVerdicts(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_WOLF_040", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	stuffOwnerInventories(c)
+	gid, now := c.ActiveCOS.GID, clock.NowMs()
+	step, ok := rt.wolfCompanion(testDivision, c, gid, now)
+	if !ok {
+		t.Fatal("wolf owner lost wolf eligibility behind a full bag")
+	}
+	assertNarrowCopy(t, "wolf step", step.snapshot)
+
+	bearRT, bearClock, bear, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(bearRT, bear, "COS_P_BEAR_090", 90)
+	bearRT.AttackPetExpansion = true
+	roarField(t, bearRT, bear, bearClock)
+	stuffOwnerInventories(bear)
+	skill := learnPetBook(t, bear, 26)
+	bear.ActiveCOS.Training.Levels[skill.Index()] = 10
+	bearStep, ok := bearRT.elementalCompanion(testDivision, bear, bear.ActiveCOS.GID, "Bear", bearClock.NowMs())
+	if !ok {
+		t.Fatal("bear owner lost eligibility behind a full bag")
+	}
+	owner, pet, _, _, ok := bearRT.bondSource(bearStep.key, bearStep.state)
+	if !ok || owner == nil || pet == nil {
+		t.Fatal("bear stopped being a bond source behind a full bag")
+	}
+	assertNarrowCopy(t, "bond owner", owner)
+	if plan := bearRT.planPetBond(testDivision, bear, bearClock.NowMs()); plan == nil {
+		t.Fatal("stuffed bear owner lost its bond plan")
+	}
+
+	fullAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	narrowAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshotEquipment(testDivision, c) })
+	t.Logf("allocs: one full owner copy %.0f, one narrow owner copy %.0f", fullAllocs, narrowAllocs)
+	if narrowAllocs >= fullAllocs {
+		t.Fatalf("narrow copy allocates like the full one: %.0f vs %.0f", narrowAllocs, fullAllocs)
 	}
 }

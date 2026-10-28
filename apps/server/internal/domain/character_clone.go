@@ -18,6 +18,31 @@ Every mutable child added to Character must acquire an independent copy here.
 ================
 */
 func cloneCharacter(source *Character) *Character {
+	return cloneCharacterFiltered(source, false)
+}
+
+/*
+================
+cloneCharacterEquipment
+
+cloneCharacter for readers that never leave the worn equipment: the
+mission inventory keeps only its equipment rows and the avatar
+inventory is not copied at all. Every other child detaches exactly as
+cloneCharacter detaches it.
+================
+*/
+func cloneCharacterEquipment(source *Character) *Character {
+	return cloneCharacterFiltered(source, true)
+}
+
+/*
+================
+cloneCharacterFiltered
+
+The one clone walk; equipmentOnly narrows the two inventory children.
+================
+*/
+func cloneCharacterFiltered(source *Character, equipmentOnly bool) *Character {
 	if source == nil {
 		return nil
 	}
@@ -57,7 +82,11 @@ func cloneCharacter(source *Character) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+	if equipmentOnly {
+		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
+	} else {
+		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+	}
 	clone.Buyback = cloneSlice(source.Buyback)
 	for i := range clone.Buyback {
 		clone.Buyback[i].Item.Summon = CloneCOS(source.Buyback[i].Item.Summon)
@@ -94,7 +123,11 @@ func cloneCharacter(source *Character) *Character {
 		}
 	}
 	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
-	clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
+	if equipmentOnly {
+		clone.AvatarInventory = nil
+	} else {
+		clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
+	}
 	clone.Masteries = cloneSlice(source.Masteries)
 	clone.Skills = cloneSlice(source.Skills)
 	if source.OffensiveSkillCooldowns != nil {
@@ -177,6 +210,31 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 		clone[index].Summon = CloneCOS(source[index].Summon)
 		clone[index].MagicOptions =
 			cloneSlice(source[index].MagicOptions)
+	}
+	return clone
+}
+
+/*
+================
+cloneEquipmentRows
+
+The worn half of cloneInventoryRows: rows in the equipment slots,
+deep-copied in order; bag rows are dropped, and a nil inventory stays
+nil so absence keeps its meaning.
+================
+*/
+func cloneEquipmentRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	clone := make([]InventoryRow, 0, EquipmentSlotEnd)
+	for _, row := range source {
+		if row.Slot < 0 || row.Slot >= EquipmentSlotEnd {
+			continue
+		}
+		row.Summon = CloneCOS(row.Summon)
+		row.MagicOptions = cloneSlice(row.MagicOptions)
+		clone = append(clone, row)
 	}
 	return clone
 }

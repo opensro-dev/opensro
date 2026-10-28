@@ -162,6 +162,51 @@ func TestLearnedProjectionsFollowEveryContentWriter(t *testing.T) {
 
 /*
 ================
+TestLearnedProjectionsKeyOnEquipmentOnly
+
+The key covers the equipment band only: a narrow equipment-only copy
+of a character and its full copy (bag rows and all) hit the same
+entry, a bag-only change keeps it, and an equipment change misses.
+================
+*/
+func TestLearnedProjectionsKeyOnEquipmentOnly(t *testing.T) {
+	skills, items, sword := projectionFixture()
+	full := &domain.Character{ID: 980010, Level: pointer(80), Strength: pointer(300), Intellect: pointer(200),
+		Skills: []uint32{101, 102, 201, 202, 301, 302},
+		MissionInventory: []domain.InventoryRow{
+			{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90},
+			{Slot: 20, RefObjID: 99, Codename: "ITEM_BAG_THING", VarianceBits: "0", Durability: 5},
+		}}
+	defer ForgetLearnedProjections(full.ID)
+
+	first := assertProjectionFresh(t, "full copy seeds", full, skills, items, 2)
+	narrow := full.SnapshotEquipment()
+	if len(narrow.MissionInventory) != 1 {
+		t.Fatalf("narrow copy kept %+v", narrow.MissionInventory)
+	}
+	again := assertProjectionFresh(t, "narrow copy reads", narrow, skills, items, 2)
+	if &first.writes[0] != &again.writes[0] {
+		t.Fatal("the narrow copy recomputed the projections")
+	}
+
+	full.MissionInventory[1].Codename = "ITEM_BAG_OTHER"
+	still := assertProjectionFresh(t, "bag change reads", full, skills, items, 2)
+	if &first.writes[0] != &still.writes[0] {
+		t.Fatal("a bag-only change recomputed the projections")
+	}
+
+	narrow.MissionInventory[0].Durability = 0
+	broken := assertProjectionFresh(t, "broken weapon reads", narrow, skills, items, 2)
+	if broken.resistance != ([17]abnormal.Resistance{}) {
+		t.Fatalf("a broken sword still gates the resistance in: %+v", broken.resistance)
+	}
+	if &first.writes[0] == &broken.writes[0] {
+		t.Fatal("an equipment change kept the cached projections")
+	}
+}
+
+/*
+================
 projectionFixtureSkillsWithPower
 
 The fixture's skill source with group 1's rank-2 power replaced, standing
