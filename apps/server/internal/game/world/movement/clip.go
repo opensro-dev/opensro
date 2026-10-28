@@ -75,7 +75,7 @@ const (
 // the chord for an object edge. It exists so the rest is unambiguously on
 // the near side of the contact (a rest exactly on a tile boundary would
 // floor into the blocked tile when moving in +x/+z). 0.01u is the
-// client's own portal-entry clamp scale (sub_404510 clamps hop locals to
+// client's own portal-entry clamp scale (CRTNavMeshTerrain_Move clamps hop locals to
 // (0.01, 1919.99)) - far below the frame-quantization residual Q3 measures.
 const clipRestPullback = 0.01
 
@@ -429,7 +429,7 @@ func (v *WaterValidator) clipOutdoorSegment(from simulation.Spawn, fromOwner sim
 	// The object plane's first contact runs on the FULL chord (a same-tile
 	// move can still cross a deck rail). Composition below is
 	// nearest-wins: the native walk stops at its first clip on either
-	// plane and never continues past it (client sub_428930 bit0 semantics).
+	// plane and never continues past it (client CRTNavMeshObj_WalkOwnedCells bit0 semantics).
 	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
 	if transfer != nil && (!objectFound || objectT >= transfer.at-1e-9) {
 		// The next QueryMovement leg starts at the linked cell's repaired

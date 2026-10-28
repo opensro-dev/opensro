@@ -21,7 +21,7 @@ import (
 // leg pushes one 0x30D7 single-object spawn per (viewer, peer) pair when the
 // peer first becomes visible, and one 0x36AB despawn when the peer's session
 // leaves the division. The row bytes are the wire.PlayerSpawnRow layout,
-// which the client's REAL sub_86afb0 CICUser_DeserializeFull fold chain
+// which the client's REAL CICUser_DeserializeAppearanceSpawnData CICUser_DeserializeFull fold chain
 // parses field for field (proven end-to-end by the client parity harness).
 
 // PeerAppearance is the wire-visible appearance of one connected character,
@@ -39,11 +39,11 @@ type PeerAppearance struct {
 	Walk, Run   float32
 	ActionSpeed float32
 	// RefObjID is the character-model RefObjData id (character.ModelRef,
-	// the same record the local player resolves through client sub_850c60).
+	// the same record the local player resolves through client CIGIDObject_ResolveRefObj).
 	RefObjID uint32
-	// Name is the character name (-> CICUser +0x108 via sub_4b1710).
+	// Name is the character name (-> CICUser +0x108 via CMsgStreamBuffer_ReadAsciiString).
 	Name string
-	// BodyShapeByte rides the client sub_869110 lead byte into +0x758.
+	// BodyShapeByte rides the client CICUser_DeserializeSpawnTail lead byte into +0x758.
 	BodyShapeByte uint8
 	// JobType/JobGrade are a dressed job player's job and grade (+0x782 /
 	// +0x783); zero outside job mode.
@@ -53,21 +53,21 @@ type PeerAppearance struct {
 	// Skin is the transform the player wears (RefObjID 0: none).
 	Skin wire.TransformSkin
 	// Equipment is the WORN set (equipment-band inventory slots), in slot
-	// order, for the client sub_86afb0 equip loop.
+	// order, for the client CICUser_DeserializeAppearanceSpawnData equip loop.
 	Equipment []wire.PlayerEquipItem
 	// Avatars are the worn avatar dresses (the avatar inventory, socket
 	// order) for the client @0x0086b0c7 avatar loop. Without them a peer who comes
 	// into view is drawn without its dress.
 	Avatars []wire.PlayerEquipItem
 	// GuildName/GuildID/GuildGrantName/CrestParam are the guild half of
-	// the client sub_869df0 non-local tail, resolved from the store's guild door
+	// the client CICPlayer_DeserializeSpawnData non-local tail, resolved from the store's guild door
 	// (the same rows the 0x32C4 seed encodes) for guild members and left
 	// zero otherwise. A NON-EMPTY GuildName is what arms the client's
-	// client sub_869810 BindGuild leg (@0x0086a242 tests the +0x7a8 wstring's
+	// client CICPlayer_BindCompanionOwner BindGuild leg (@0x0086a242 tests the +0x7a8 wstring's
 	// size field at +0x7bc), so crests and banner labels can resolve for
 	// peers at all; CrestParam is the wire crestParamA - the
 	// G{prefix}_{guildId}_{crestParamA}.crb filename parameter
-	// (client sub_833d40 @0x833e42). AllianceID/AllianceCrest are params B/C: the
+	// (client CGuildCrestManager_UpdateCharacterCrests @0x833e42). AllianceID/AllianceCrest are params B/C: the
 	// peer guild's union and its emblem (the A{prefix}_{B}_{C}.crb file),
 	// zero outside a union.
 	GuildName      string
@@ -81,7 +81,7 @@ type PeerAppearance struct {
 	// StallDecoration is that stall's booth item (zero: the default stall).
 	StallDecoration uint32
 	// FortSiegeAuthority is the guild sub-block's trailing team byte
-	// (client sub_869df0 @0x0086a1b2 -> sub_869940 -> CICPlayer+0x7e0),
+	// (client CICPlayer_DeserializeSpawnData @0x0086a1b2 -> CICPlayer_SetFortressWarOfficerTitle -> CICPlayer+0x7e0),
 	// sourced from the member row's FortressRole - the SAME byte the
 	// 0x32C4 member loop carries at +0x5c for the local player. The
 	// six-mark fortress-war gate needs it in {1 Commander, 2 Deputy}.

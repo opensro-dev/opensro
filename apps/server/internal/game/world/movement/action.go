@@ -1,6 +1,6 @@
 // Action-pane commands on the motion lane: the 0x324B emote/action channel.
 // The request originates from the same client dispatcher as sit/stand and
-// run/walk (sub_695420 / CGInterface_ExecuteActionCommand), and the emote's
+// run/walk (CGInterface_ExecuteActionCommand / CGInterface_ExecuteActionCommand), and the emote's
 // whole effect is a
 // SetMotionState on every viewing client - the same plane the rest of this
 // package drives - so they live here rather than in the item or stat lanes
@@ -88,8 +88,8 @@ func broadcastObservedMotion(hub *transport.Hub, division string, exceptSession 
 // S->C 0x324B play push {u32 gid, u8 action} to the acting session AND the
 // division peers. The sender gets its own copy because the native client
 // does NOT animate locally on send - the emote only plays when the push
-// comes back (client sub_695420's emote arms emit the packet and return; the only
-// SetMotionState path is the inbound client sub_778190).
+// comes back (client CGInterface_ExecuteActionCommand's emote arms emit the packet and return; the only
+// SetMotionState path is the inbound client CPSMission_OnEntityTransformUpdate0x324B).
 //
 // No state persists and nothing mutates: motion state 7 is a transient
 // one-shot animation on every client (the same state the idle-fidget timer

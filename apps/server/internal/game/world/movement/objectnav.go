@@ -27,12 +27,12 @@ import (
 //  1. decode the region bundle's nav object placements (assetId + position
 //     + yaw) and the BMS offset-7 object-nav payloads the placements
 //     resolve to through the object-resource index - the same shipped
-//     assets the client decodes (nativeObjectNavPayload.ts, sub_4265b0);
-//  2. mirror the native nearest-Y owner arbitration (client sub_403d20): the
+//     assets the client decodes (nativeObjectNavPayload.ts, CRTNavMeshObj_Load);
+//  2. mirror the native nearest-Y owner arbitration (client CRTNavMeshTerrain_ResolvePosition): the
 //     spawn stands on the deck only when a containing object cell's plane
 //     Y is closer to the persisted Y than the terrain height is;
 //  3. run the sealed-lane BFS over the payload's own edge flags
-//     (client sub_428930 side-block bits: crossing an internal edge from srcCell
+//     (client CRTNavMeshObj_WalkOwnedCells side-block bits: crossing an internal edge from srcCell
 //     is blocked by 0x2, from dstCell by 0x1): the lane is SEALED when no
 //     open outline edge (flags 0x0) is reachable. Sealed => trapped =>
 //     stranded; a lane with a reachable open exit (bridge decks) is a
@@ -324,7 +324,7 @@ func decodeObjectNavEdgeGroup(c *objectNavCursor, label string, stride, vertexCo
 }
 
 // decodeObjectNavPayload decodes a preserved BMS offset-7 object-nav slice
-// (client sub_4265b0 CRTNavMeshObj_ReadFromArchive grammar; byte-exact port of
+// (client CRTNavMeshObj_Load CRTNavMeshObj_ReadFromArchive grammar; byte-exact port of
 // the client's decodeNativeObjectNavPayloadBytes). navFlags is the BMS
 // headerOffsets[11] word gating the optional record bytes. The payload
 // must consume exactly to EOF or the decode fails.
@@ -444,7 +444,7 @@ func decodeObjectNavPayload(raw []byte, navFlags int) (*objectNavMesh, error) {
 		}
 	}
 
-	// 5. Outline-edge grid tail (client sub_426160): 20-byte header then per tile
+	// 5. Outline-edge grid tail (client CRTNavMeshObj_ReadEdges): 20-byte header then per tile
 	//    { u32 refCount, refCount x u16 }. Parsed only to prove the exact
 	//    consume; the rescue never queries the grid.
 	if err := c.ensure(20, "grid header"); err != nil {
@@ -973,10 +973,10 @@ func objectCellPlaneYAt(mesh *objectNavMesh, cell int, lx, lz float64) (float64,
 
 // objectLaneSealed runs the sealed-lane BFS from startCell: crossing an
 // internal edge from its srcCell is blocked by flag 0x2, from its dstCell
-// by 0x1 (client sub_428930's side-block bits). The lane is sealed when no OPEN
+// by 0x1 (client CRTNavMeshObj_WalkOwnedCells's side-block bits). The lane is sealed when no OPEN
 // outline edge (flags 0x0) belongs to a reachable cell - the only edge
 // kind whose reflect path lets the native walk exit the object
-// (client sub_403fb0's exitObjectToTerrain tail).
+// (client CRTNavMeshTerrain_StepPlacedObject's exitObjectToTerrain tail).
 /*
 ================
 objectLaneSealed

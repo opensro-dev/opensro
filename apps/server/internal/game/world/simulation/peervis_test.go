@@ -205,7 +205,7 @@ func TestTickerPeerVisibilityFences(t *testing.T) {
 // peerSpawnFixture is the two-sided contract artifact: this Go test pins the
 // emitter output byte-for-byte against testdata/peer_spawn_row_fixture.json,
 // and the client parity harness reads the SAME file and drives every payload through the client's REAL
-// client sub_86afb0 fold chain. Either side drifting fails its own gate.
+// client CICUser_DeserializeAppearanceSpawnData fold chain. Either side drifting fails its own gate.
 //
 // Regenerate with UPDATE_PEER_SPAWN_FIXTURE=1 go test ./internal/game/world/simulation/ -run
 // TestPeerSpawnRowFixturePinned (then re-run the harness test).
@@ -219,7 +219,7 @@ type peerSpawnFixtureScenario struct {
 	Name          string `json:"name"`
 	CharacterName string `json:"characterName"`
 	ModelRefObjID uint32 `json:"modelRefObjId"`
-	// ModelTidWord is the client sub_851420 user-leaf classification word the
+	// ModelTidWord is the client GIDObject_SelectRuntimeClassAndSpawn user-leaf classification word the
 	// viewer's spawn roster row carries (char 0x02 | tid1 0x04 | tid2 0x20).
 	ModelTidWord uint16 `json:"modelTidWord"`
 	// CountryByte9c/SexSelector1ac are the client-seed record context bytes
@@ -235,9 +235,9 @@ type peerSpawnFixtureScenario struct {
 	Z              float64                `json:"z"`
 	Heading        uint16                 `json:"heading"`
 	Equipment      []peerSpawnFixtureItem `json:"equipment"`
-	// The guild half of the client sub_869df0 non-local tail: a non-empty
+	// The guild half of the client CICPlayer_DeserializeSpawnData non-local tail: a non-empty
 	// GuildName arms the client's +0x7bc BindGuild gate, and CrestParamA
-	// is the G-crest filename parameter (client sub_833d40 @0x833e42). Zero
+	// is the G-crest filename parameter (client CGuildCrestManager_UpdateCharacterCrests @0x833e42). Zero
 	// values keep the retail no-guild row shape.
 	GuildName      string `json:"guildName,omitempty"`
 	GuildID        uint32 `json:"guildId,omitempty"`
@@ -299,7 +299,7 @@ func fixtureScenarios() []peerSpawnFixtureScenario {
 			// +0x7bc BindGuild gate (client @0x0086a242 - the +0x7a8 wstring size
 			// field) and the client @0x0086a12d member sub-block carries the guild
 			// id + crestParamA the crest filename derives from
-			// (G{prefix}_{guildId}_{crestParamA}.crb, client sub_833d40 @0x833e42).
+			// (G{prefix}_{guildId}_{crestParamA}.crb, client CGuildCrestManager_UpdateCharacterCrests @0x833e42).
 			Name:          "guild-member-peer",
 			CharacterName: "PeerC",
 			ModelRefObjID: 1907,

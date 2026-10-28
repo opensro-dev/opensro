@@ -70,7 +70,7 @@ func TestHeadingWordFromDeltaDependsOnlyOnDirection(t *testing.T) {
 //
 // WHY THERE ARE STILL TWO. HeadingWordFromRadians (moverequest.go) TRUNCATES
 // toward zero because it replicates the CLIENT's 0x7738 request serializer,
-// client sub_877cc0 @0x877ceb, where the x87 rounding control is forced to truncate;
+// client CNavigationDeadreckon_WriteMovementPayloadToStream @0x877ceb, where the x87 rounding control is forced to truncate;
 // that pin covers the C->S direction only. headingWordFromDelta ROUNDS, which is
 // what the parity oracle and the human-verified BUG-11 fix already emit on the
 // S->C side. How the retail SERVER converted radians into the S->C heading word

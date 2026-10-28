@@ -7,7 +7,7 @@ import (
 	itemcodec "opensro.online/server/internal/game/item/wire"
 )
 
-// wantEmotePush is the exact S->C 0x324B body client sub_778190 reads for the
+// wantEmotePush is the exact S->C 0x324B body client CPSMission_OnEntityTransformUpdate0x324B reads for the
 // shared test character (ID 7 -> gid 100007 = 0x000186A7 little-endian, the
 // same pinning motionstate_test's want3122 uses).
 func wantEmotePush(action uint8) []byte {
@@ -15,7 +15,7 @@ func wantEmotePush(action uint8) []byte {
 }
 
 // TestHandleActionEmoteEchoesAndBroadcastsTheClientBytes drives the handler
-// with every byte the v1.150 client can emit (sub_695420's emote arms:
+// with every byte the v1.150 client can emit (CGInterface_ExecuteActionCommand's emote arms:
 // {0,6,1,5,2,3,4,0} for cmds 0xfa0,0xfa1..0xfa6,0xfab) and pins BOTH output
 // legs byte-exact: the sender echo (the native client does NOT animate
 // locally - only the inbound push plays, so a missing echo means the actor

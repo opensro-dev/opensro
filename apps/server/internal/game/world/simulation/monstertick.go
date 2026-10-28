@@ -228,7 +228,7 @@ MonsterDespawnBracketFrames
 
 MonsterDespawnBracketFrames encodes a byListSub=2 object-list group:
 0x30CB {0x02, u16 count} begin, one 0x3417 chunk of 4-byte gids (the
-client sub_777310 despawn bodies the finalize loop consumes), empty 0x330A
+client CPSMission_OnEntityDespawn36AB despawn bodies the finalize loop consumes), empty 0x330A
 finalize. The native bulk-eviction shape (byListSub=2 pinned by
 RZ seq134/DUMP seq91; client-side handling sabotage-proven by WIP's
 ensureDespawn4cBinding chain, board seq359/373).
@@ -579,7 +579,7 @@ commitSegment
 commitSegment is THE single emit seam: computes the timed segment from
 the live departure pose, commits the mover, and builds the frames -
 an optional 0x3122 MOVE channel push (only when the run/walk channel
-changes; client sub_777b60 case 1 -> SetRunWalkMode, the pinned wire that
+changes; client CPSMission_OnEntityStateUpdate0x3122 case 1 -> SetRunWalkMode, the pinned wire that
 keeps the client integrator at the server's segment speed - BUG-7
 speed-half fix) followed by the 0xB738 goal. The optional source follows
 the retail autonomous-entity turn gate, not the player ack's first-move
@@ -644,7 +644,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// discontinuity.
 	// Shallow chase re-aims therefore preserve the client's PATH source cursor;
 	// reversals and hard cuts re-anchor that logical cursor at this live pose.
-	// This says nothing about animation playback: v1.150 sub_776200 re-enters
+	// This says nothing about animation playback: v1.150 CPSMission_OnSkillNavResponse0xB738 re-enters
 	// state 9 for every B738 destination, and the cyclic mixer reset clears its
 	// authored cursor. The browser presentation adapter separately retains the
 	// visible walk/run phase while that locomotion lane remains continuously live.

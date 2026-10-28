@@ -12,7 +12,7 @@ import (
 )
 
 // ---- synthetic object-nav payload building (wire grammar of
-// nativeObjectNavPayload.ts / client sub_4265b0, navFlags = 0) ----
+// nativeObjectNavPayload.ts / client CRTNavMeshObj_Load, navFlags = 0) ----
 
 type testNavEdge struct {
 	vA, vB, src, dst uint16
@@ -590,7 +590,7 @@ func TestObjectMeshChordContact(t *testing.T) {
 
 	// Directional internal side-blocks: flags 0x2 blocks leaving srcCell
 	// (cell 0, the lower-right triangle), not entering it; flags 0x1 the
-	// reverse (client sub_428930 side-block bits).
+	// reverse (client CRTNavMeshObj_WalkOwnedCells side-block bits).
 	src2, err := decodeObjectNavPayload(internalFlagsPayload(0x2), 0)
 	if err != nil {
 		t.Fatal(err)
