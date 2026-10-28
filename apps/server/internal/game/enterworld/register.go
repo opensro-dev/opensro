@@ -10,13 +10,13 @@ package enterworld
 import (
 	"time"
 
-	"encoding/json"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/platform/jsonscratch"
 	"opensro.online/server/internal/transport"
 )
 
@@ -47,10 +47,22 @@ EnterWorldBlob
 ================
 */
 func EnterWorldBlob(result *BootstrapResult) ([]byte, error) {
-	return json.Marshal(enterWorldBlob{
+	return marshalBlob(plainBlobValue(result))
+}
+
+/*
+================
+plainBlobValue
+
+The plain blob's one shape, shared by EnterWorldBlob and the borrowed
+per-entry path (browserEntryPayload).
+================
+*/
+func plainBlobValue(result *BootstrapResult) enterWorldBlob {
+	return enterWorldBlob{
 		V:         EnterWorldBlobVersion,
 		Bootstrap: result.blobView(),
-	})
+	}
 }
 
 // browserEntryPayload is shared by first entry and resident-world replacement.
@@ -61,17 +73,28 @@ browserEntryPayload
 ================
 */
 func browserEntryPayload(result *BootstrapResult, references *BrowserReferences) ([]byte, error) {
+	// The blob is borrowed from the pooled scratch and copied exactly
+	// once, by EncodeEnterWorldResult into the envelope; the owned
+	// encoders above would clone it first for bytes nobody keeps.
+	scratch := blobScratchPool.Get().(*jsonscratch.Scratch)
 	var blob []byte
 	var err error
 	if references != nil {
-		blob, err = referenceEnterWorldBlob(result, references)
+		blob, err = scratch.Marshal(referenceBlobValue(result, references))
 	} else {
-		blob, err = EnterWorldBlob(result)
+		blob, err = scratch.Marshal(plainBlobValue(result))
 	}
 	if err != nil {
+		if scratch.Cap() <= maxBlobScratch {
+			blobScratchPool.Put(scratch)
+		}
 		return nil, err
 	}
-	return transport.EncodeEnterWorldResult(transport.EnterWorldResult{OK: true, Blob: blob}), nil
+	payload := transport.EncodeEnterWorldResult(transport.EnterWorldResult{OK: true, Blob: blob})
+	if scratch.Cap() <= maxBlobScratch {
+		blobScratchPool.Put(scratch)
+	}
+	return payload, nil
 }
 
 // EnterWorldOutcome is HandleEnterWorld's transport-agnostic answer: the

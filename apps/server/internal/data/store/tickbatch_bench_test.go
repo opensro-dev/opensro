@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/platform/jsonscratch"
 )
 
 // benchBurstCalls is the door calls in one benchmarked burst;
@@ -115,6 +116,32 @@ func BenchmarkEncodeCharacter(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		record, err := encodeCharacter(testDivision, c)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = record
+	}
+}
+
+/*
+================
+BenchmarkEncodeCharacterBorrowed
+
+The commit path's unit after the scratch swap: the same character row
+encoded into the store's shared buffer. BenchmarkEncodeCharacter is
+the before column.
+================
+*/
+func BenchmarkEncodeCharacterBorrowed(b *testing.B) {
+	_, chars := benchBurstFixture(b)
+	c := chars[0]
+	var scratch jsonscratch.Scratch
+	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		record, err := encodeCharacterBorrowed(&scratch, testDivision, c)
 		if err != nil {
 			b.Fatal(err)
 		}

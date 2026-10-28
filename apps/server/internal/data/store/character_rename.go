@@ -169,7 +169,7 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 			return err
 		}
 	}
-	if err := replaceGroundTx(tx, ground); err != nil {
+	if err := replaceGroundTx(tx, &s.encodeScratch, ground); err != nil {
 		return err
 	}
 	if reservation != nil {

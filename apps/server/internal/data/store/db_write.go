@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/jsonscratch"
 )
 
 // Transaction writers translate dirty in-memory authority records into the
@@ -65,6 +66,27 @@ func encodeCharacter(division string, c *domain.Character) ([]byte, error) {
 
 /*
 ================
+encodeCharacterBorrowed
+
+encodeCharacter into the caller's scratch instead of a fresh Marshal:
+the same bytes, borrowed from the scratch until its next encode. The
+commit path encodes every dirty character under the store lock on
+every commit; Marshal's per-call owned copy was the store's largest
+single allocation source (bytes.Clone in the production profile).
+Callers consume the record synchronously (writeCharacterTx copies it
+into the statement), so the borrowed lifetime is exact.
+================
+*/
+func encodeCharacterBorrowed(scratch *jsonscratch.Scratch, division string, c *domain.Character) ([]byte, error) {
+	record, err := scratch.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling character %s/%s: %w", division, c.Name, err)
+	}
+	return record, nil
+}
+
+/*
+================
 writeCharacterTx
 ================
 */
@@ -83,7 +105,7 @@ func writeCharacterTx(tx *sql.Tx, division string, c *domain.Character, record [
 replaceGroundTx
 ================
 */
-func replaceGroundTx(tx *sql.Tx, divisions map[string][]domain.GroundItemRecord) error {
+func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[string][]domain.GroundItemRecord) error {
 	if _, err := tx.Exec("DELETE FROM ground_items"); err != nil {
 		return err
 	}
@@ -94,7 +116,7 @@ func replaceGroundTx(tx *sql.Tx, divisions map[string][]domain.GroundItemRecord)
 	sort.Strings(divisionIDs)
 	for _, divisionID := range divisionIDs {
 		for _, item := range divisions[divisionID] {
-			record, err := json.Marshal(item)
+			record, err := scratch.Marshal(item)
 			if err != nil {
 				return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 			}
@@ -130,7 +152,7 @@ that changed one drop does one statement and allocates nothing for
 the rows it skips. Returns the rows written and deleted.
 ================
 */
-func writeGroundDiffTx(tx *sql.Tx, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
+func writeGroundDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
 	divisionIDs := make([]string, 0, len(next)+len(committed))
 	for divisionID := range next {
 		divisionIDs = append(divisionIDs, divisionID)
@@ -143,7 +165,7 @@ func writeGroundDiffTx(tx *sql.Tx, committed, next map[string][]domain.GroundIte
 	sort.Strings(divisionIDs)
 	written, deleted := 0, 0
 	for _, divisionID := range divisionIDs {
-		w, d, err := writeGroundDivisionDiffTx(tx, divisionID, sortedGround(committed[divisionID]), sortedGround(next[divisionID]))
+		w, d, err := writeGroundDivisionDiffTx(tx, scratch, divisionID, sortedGround(committed[divisionID]), sortedGround(next[divisionID]))
 		if err != nil {
 			return 0, 0, err
 		}
@@ -159,7 +181,7 @@ writeGroundDivisionDiffTx
 One division's merge walk; both row lists are sorted by gid.
 ================
 */
-func writeGroundDivisionDiffTx(tx *sql.Tx, divisionID string, old, next []domain.GroundItemRecord) (int, int, error) {
+func writeGroundDivisionDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisionID string, old, next []domain.GroundItemRecord) (int, int, error) {
 	written, deleted := 0, 0
 	i, j := 0, 0
 	for i < len(old) || j < len(next) {
@@ -171,7 +193,7 @@ func writeGroundDivisionDiffTx(tx *sql.Tx, divisionID string, old, next []domain
 			deleted++
 			i++
 		case i == len(old) || next[j].Gid < old[i].Gid:
-			if err := upsertGroundTx(tx, divisionID, &next[j]); err != nil {
+			if err := upsertGroundTx(tx, scratch, divisionID, &next[j]); err != nil {
 				return 0, 0, err
 			}
 			written++
@@ -180,7 +202,7 @@ func writeGroundDivisionDiffTx(tx *sql.Tx, divisionID string, old, next []domain
 			// Same gid. DeepEqual can only err towards a rewrite, never
 			// towards a missed change, and it follows any new field.
 			if !reflect.DeepEqual(&old[i], &next[j]) {
-				if err := upsertGroundTx(tx, divisionID, &next[j]); err != nil {
+				if err := upsertGroundTx(tx, scratch, divisionID, &next[j]); err != nil {
 					return 0, 0, err
 				}
 				written++
@@ -196,8 +218,8 @@ func writeGroundDivisionDiffTx(tx *sql.Tx, divisionID string, old, next []domain
 upsertGroundTx
 ================
 */
-func upsertGroundTx(tx *sql.Tx, divisionID string, item *domain.GroundItemRecord) error {
-	record, err := json.Marshal(item)
+func upsertGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisionID string, item *domain.GroundItemRecord) error {
+	record, err := scratch.Marshal(item)
 	if err != nil {
 		return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 	}

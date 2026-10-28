@@ -22,7 +22,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
+	"opensro.online/server/internal/platform/jsonscratch"
 	"opensro.online/server/internal/releaseprotocol"
 )
 
@@ -256,6 +258,40 @@ func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
 
 /*
 ================
+blobScratchPool, marshalBlob
+
+Enter-world renders its blob per entry (355 MB of Marshal output in a
+60-second production heap profile). Entry is concurrent across
+sessions and no single owner spans it, so the encode buffer's owner
+is a pool checkout; a scratch that grew past maxBlobScratch is dropped
+rather than held. marshalBlob is the owned-bytes form for callers
+that keep the blob (fixtures, the failure outcome): pooled encode,
+then one clone at final size. The per-entry hot path
+(browserEntryPayload) borrows the pooled bytes instead and lets the
+envelope's copy be the only one.
+
+The blob bytes are identical to json.Marshal's (jsonscratch pins the
+equivalence).
+================
+*/
+var blobScratchPool = sync.Pool{New: func() any { return new(jsonscratch.Scratch) }}
+
+const maxBlobScratch = 1 << 20
+
+func marshalBlob(v any) ([]byte, error) {
+	scratch := blobScratchPool.Get().(*jsonscratch.Scratch)
+	raw, err := scratch.Marshal(v)
+	if scratch.Cap() <= maxBlobScratch {
+		blobScratchPool.Put(scratch)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return bytes.Clone(raw), nil
+}
+
+/*
+================
 referenceEnterWorldBlob
 
 The wire envelope carries only the immutable identity. The full
@@ -263,9 +299,22 @@ BootstrapResult remains available for detached fixtures/legacy consumers.
 ================
 */
 func referenceEnterWorldBlob(result *BootstrapResult, refs *BrowserReferences) ([]byte, error) {
-	return json.Marshal(struct {
+	return marshalBlob(referenceBlobValue(result, refs))
+}
+
+/*
+================
+referenceBlobValue
+
+The reference blob's one shape, shared by the owned encoder above and
+the borrowed per-entry path (browserEntryPayload), so the two can never
+drift apart.
+================
+*/
+func referenceBlobValue(result *BootstrapResult, refs *BrowserReferences) any {
+	return struct {
 		V          int                `json:"v"`
 		Bootstrap  any                `json:"bootstrap"`
 		References *BrowserReferences `json:"references"`
-	}{2, result.referenceBlobView(), refs})
+	}{2, result.referenceBlobView(), refs}
 }

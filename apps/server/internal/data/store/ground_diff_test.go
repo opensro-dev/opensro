@@ -98,7 +98,7 @@ func applyGroundDiff(t testing.TB, s *Store, committed, next map[string][]domain
 	if err != nil {
 		t.Fatal(err)
 	}
-	written, deleted, err := writeGroundDiffTx(tx, committed, next)
+	written, deleted, err := writeGroundDiffTx(tx, &s.encodeScratch, committed, next)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,9 +213,9 @@ func BenchmarkGroundCommit(b *testing.B) {
 					b.Fatal(err)
 				}
 				if mode == "replace" {
-					err = replaceGroundTx(tx, next)
+					err = replaceGroundTx(tx, &s.encodeScratch, next)
 				} else {
-					_, _, err = writeGroundDiffTx(tx, committed, next)
+					_, _, err = writeGroundDiffTx(tx, &s.encodeScratch, committed, next)
 				}
 				if err != nil {
 					b.Fatal(err)
