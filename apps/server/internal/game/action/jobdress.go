@@ -493,7 +493,11 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 			rt.startJobActivation(dress.division, c, now)
 		}
 		if rt.jobDressed(c) != dressed {
+			// #1983: a completed dress or undress changes the owner's public
+			// name, so already-summoned companions respawn with the new
+			// label (alias while suited, real name once bare).
 			rt.reloadJobDress(dress.division, c, now, &result)
+			rt.refreshCompanionOwnerLabels(dress.division, c)
 		}
 		// Port-only, not native: taking the suit off clears the streak.
 		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
