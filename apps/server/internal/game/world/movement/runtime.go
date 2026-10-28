@@ -209,7 +209,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 		}
 		s.OnSceneReady(rearm)
 	})
-	hub.OnSessionClose(func(s *transport.Session, _ error) { rt.forgetLoadingQueue(s.ID) })
+	hub.OnSessionClose(func(s *transport.Session, _ error) { rt.answerHeldOnClose(s, s.Send) })
 	hub.Handle(simulation.OpClientMovementRequest, func(s *transport.Session, _ uint16, payload []byte) {
 		if _, live := s.SceneRevision(); !live {
 			// Scene still loading: hold the command for scene-ready so

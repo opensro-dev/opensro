@@ -12,6 +12,8 @@ package transport
 
 import (
 	"slices"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // PublishedObjects returns only scope changes admitted to this scene's queue.
@@ -121,10 +123,14 @@ BeginSceneAdmission
 */
 func (s *Session) BeginSceneAdmission() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sceneRevision++
 	s.sceneLoading = true
 	s.clearObservedLocked()
+	revision := s.sceneRevision
+	s.mu.Unlock()
+	// One line per scene transition: a scene stuck loading is otherwise
+	// invisible in the log until its held commands time out (#1978).
+	log.WithFields(log.Fields{"session": s.ID, "revision": revision}).Info("transport: scene loading")
 }
 
 // ObjectScopeChange accompanies the object's complete creation or removal
@@ -274,7 +280,9 @@ func (s *Session) FinishSceneReentry() bool {
 	s.sceneLoading = false
 	hooks := s.sceneReadyHooks
 	s.sceneReadyHooks = nil
+	revision := s.sceneRevision
 	s.mu.Unlock()
+	log.WithFields(log.Fields{"session": s.ID, "revision": revision}).Info("transport: scene live")
 	for _, hook := range hooks {
 		hook()
 	}
