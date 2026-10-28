@@ -52,10 +52,12 @@ const (
 // 3,588 allocs; with the pet-periodic admissions (the pet tick, the
 // persistent-effect pulse, the crow recipient walk and the COS/monster
 // source capture) on that same seeded shard, measured 1,019,000 B /
-// 2,719 allocs.
+// 2,719 allocs; with the test-only refusal audit out of the measured
+// window (it never runs in production, and its two encodes per door were
+// 58% of the counted bytes), measured 422,144 B / 2,541 allocs.
 const (
-	tickBudgetBytesPerTick  = 1121000
-	tickBudgetAllocsPerTick = 2991
+	tickBudgetBytesPerTick  = 464400
+	tickBudgetAllocsPerTick = 2795
 )
 
 /*
@@ -335,6 +337,10 @@ func BenchmarkTickSyntheticShard(b *testing.B) {
 	for i := int64(0); i < tickBudgetWarmupTicks; i++ {
 		s.tick(i)
 	}
+	// The refusal audit runs through warm-up and is off while counted: it
+	// never runs in production and would dominate the measurement.
+	restore := enterworld.SuspendRefusalAudit(b)
+	defer restore()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -359,6 +365,9 @@ func TestTickAllocationBudget(t *testing.T) {
 	for i := int64(0); i < tickBudgetWarmupTicks; i++ {
 		s.tick(i)
 	}
+	// The refusal audit runs through warm-up and after the window; it is
+	// off only while counted, as it never runs in production.
+	restore := enterworld.SuspendRefusalAudit(t)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -366,6 +375,9 @@ func TestTickAllocationBudget(t *testing.T) {
 		s.tick(tickBudgetWarmupTicks + i)
 	}
 	runtime.ReadMemStats(&after)
+	restore()
+	// One audited tick after the window: the doors still pass the audit.
+	s.tick(tickBudgetWarmupTicks + tickBudgetMeasureTicks)
 	bytesPerTick := float64(after.TotalAlloc-before.TotalAlloc) / tickBudgetMeasureTicks
 	allocsPerTick := float64(after.Mallocs-before.Mallocs) / tickBudgetMeasureTicks
 	t.Logf("synthetic tick: %.0f bytes/tick, %.0f allocs/tick over %d ticks", bytesPerTick, allocsPerTick, tickBudgetMeasureTicks)
