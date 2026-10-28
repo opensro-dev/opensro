@@ -144,6 +144,29 @@ class DeployInputsTests(unittest.TestCase):
 			self.assertEqual((module / "release.json").read_bytes(), live)
 			self.assertEqual([path.name for path in root.iterdir() if path.name.startswith(".inputs-")], [])
 
+	# ================
+	# test_a_refused_forward_release_removes_the_file_it_added
+	#
+	# The forward case of the same bug: a release that adds a binary the live
+	# module does not carry yet, refused before the fleet is touched. The
+	# added file must be gone again, so the module holds exactly the live
+	# release's set.
+	# ================
+	def test_a_refused_forward_release_removes_the_file_it_added(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			module, staging, config, _retained, live = self.fixture(root)
+			(module / self.DROPPED).unlink()
+			(staging / self.DROPPED).write_text("forward " + self.DROPPED)
+			forward = {"commit": "f" * 40, "files": {name: "digest" for name in FILES}}
+			before = self.snapshot(module)
+			self.assertIsNone(before[self.DROPPED])
+			with self.assertRaises(RuntimeError):
+				self.run_deploy(config, staging, forward, refuse="validate")
+			self.assertFalse((module / self.DROPPED).exists())
+			self.assertEqual(self.snapshot(module), before)
+			self.assertEqual((module / "release.json").read_bytes(), live)
+
 
 if __name__ == "__main__":
 	unittest.main()
