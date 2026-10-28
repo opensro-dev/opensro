@@ -251,18 +251,31 @@ func TestPetShieldTickTakesTheCompanionCopy(t *testing.T) {
 	roarField(t, rt, c, clock)
 	c.MissionInventory = nil
 	rt.AttackPetExpansion = true
+	near := nearbyCharacter(rt, c, 21, "shield-near", 50)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
 	skill := learnPetBook(t, c, 20)
 	if result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs()); len(result.Broadcast) < 2 {
 		t.Fatalf("no shields: %+v", result)
 	}
-	copies := 0
+	copied := map[string]int{}
 	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
-		copies++
+		copied[character.Name]++
 		return rt.characterSnapshot(divisionID, character)
 	}
 	rt.advancePetShields(clock.NowMs() + 5000)
-	if copies == 0 {
-		t.Fatal("the shield tick never took the companion copy (whole-record copy back?)")
+	// The owner site sits inside the per-row loop (once per shield row), and
+	// each row then copies its own recipient at the recipient site, so the
+	// owner's own row also copies him there. Both sites therefore leave a
+	// distinct shape: recipient copies of the other member exist at all, and
+	// owner copies outnumber them. A whole-record copy back at either site
+	// breaks one of the two.
+	if copied[near.Name] == 0 {
+		t.Fatalf("the shield tick never companion-copied recipient %s (whole-record copy back at the recipient site?); copied %v", near.Name, copied)
+	}
+	if copied[c.Name] <= copied[near.Name] {
+		t.Fatalf("owner companion copies = %d, recipient copies = %d; the owner site must copy the owner once per shield row (whole-record copy back there?); copied %v", copied[c.Name], copied[near.Name], copied)
 	}
 }
 
