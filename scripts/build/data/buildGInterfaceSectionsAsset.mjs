@@ -1,10 +1,10 @@
 // Publish the resinfo\ginterface.txt Toggle*Window layout sections as RAW
 // authored lines: the native CIFMainFrame section table (CIFMainFrame+0xc)
-// is filled from this file by the resinfo INIF parser (sub_70b640 /
-// ResinfoRegistry_FindOrParseSection, sole caller sub_783aa0
+// is filled from this file by the resinfo INIF parser (CIRMManager_GetResInfo /
+// ResinfoRegistry_FindOrParseSection, sole caller CIFWnd_LoadResourceInfo
 // AttachResourceSection), and the CGInterface Toggle*Window family
-// (sub_69cb20 AlchemyBox 0x2c / sub_69e480 AutoPotion 0x87 / sub_69db80
-// StallNetwork 0x96) instantiates each section through sub_783f80 /
+// (CGInterface_ToggleAlchemyWindow AlchemyBox 0x2c / CGInterface_ToggleAutoPotionWindow AutoPotion 0x87 / CGInterface_ToggleStallNetworkWindow
+// StallNetwork 0x96) instantiates each section through CIFWnd_CreateChildrenFromLayout /
 // CIFMainFrame_CreateControlsFromSection.
 //
 // NO field decoding happens here (the actionwnddata raw-rows precedent): the
@@ -35,9 +35,9 @@ const ginterfacePath = path.join(
 
 /**
  * The window-plane sections consumed by the browser Toggle*Window binds.
- * IFStall (0x21, sub_69da70) joined for W3's case-9 anchor arm
- * (frontier-wave seq278). Ghacha (0x8c, sub_69dda0) and
- * GrantMagicAttribute (0x9c, sub_69f200) joined for the 0xB338
+ * IFStall (0x21, CGInterface_SetStallWindowActive) joined for W3's case-9 anchor arm
+ * (frontier-wave seq278). Ghacha (0x8c, CGInterface_SetGachaWindowVisible) and
+ * GrantMagicAttribute (0x9c, CGInterface_SetGrantMagicAttributeWindowVisible) joined for the 0xB338
  * window-action arms; the GrantMagicAttribute block sits inside an
  * `#ifdef APPLY_AVATAR_SYSTEM` guard in the authored file, but the
  * extraction is brace-balanced from the `Section =` header so the raw
@@ -55,7 +55,7 @@ const SECTION_NAMES = [
   "COSWnd",
   "CompositeItem",
   // Generic NPC-talk actions 0x17/0x18 lazily create these two authored
-  // guild-management windows through sub_69d010/sub_69d720.
+  // guild-management windows through CGInterface_ShowGuildLevelUpWnd/CGInterface_ShowGuildMasterLeaveWnd.
   "GuildLevelUp",
   "GuildMasterElection",
   "GuildMasterLeave",
@@ -63,22 +63,22 @@ const SECTION_NAMES = [
   "GrantMagicAttribute",
   "SkillWithdrawal",
   // NPC-talk 0x22/0x23 and opcode 0xB37E lazily materialize the two job
-  // ranking windows through sub_69e690/sub_69e770.
+  // ranking windows through CGInterface_SetJobActiveRankWindowVisible/CGInterface_SetJobContributionRankWindowVisible.
   "JobActiveRank",
   "JobContributionRank",
-  // Opcode 0xB5EE result-1: sub_69e850 lazily creates control 0x42 from
+  // Opcode 0xB5EE result-1: CGInterface_SetPrevJobInfoWindowVisible lazily creates control 0x42 from
   // this authored outer-window section.
   "PrevJobInfo"
 ];
 
 /**
  * Per-window resinfo files whose OWN sections the native attaches through
- * sub_783aa0 / CIFMainFrame_AttachResourceSection (frame+0xc source) before
- * running sub_783f80 over a section name WITHIN that file. Shipped keyed by
+ * CIFWnd_LoadResourceInfo / CIFMainFrame_AttachResourceSection (frame+0xc source) before
+ * running CIFWnd_CreateChildrenFromLayout over a section name WITHIN that file. Shipped keyed by
  * the native attach path so the browser registry twin (data_cec7d0) can
- * cache-hit exactly like the native find-or-parse (sub_70b640).
+ * cache-hit exactly like the native find-or-parse (CIRMManager_GetResInfo).
  * COS Stage 2 (server-wave W4): the two COS entry-row frames
- * (CIFCOSCommand OnCreate sub_6a3d90 / CIFCOSStatus OnCreate sub_6aa190).
+ * (CIFCOSCommand OnCreate CIFCOSCommand_OnCreate / CIFCOSStatus OnCreate CIFCOSStatus_OnCreate).
  */
 const RESINFO_FILE_SECTIONS = [
   // The six always-mounted mission roots are one synchronous CGInterface
@@ -150,7 +150,7 @@ const RESINFO_FILE_SECTIONS = [
     attachPath: "resinfo\\ifchatoptionboard.txt",
     sections: ["Create"]
   },
-  // CIFRegionView::OnCreate/Initialize (sub_54f2d0) attaches this child
+  // CIFRegionView::OnCreate/Initialize (CIFRegionView_OnCreate) attaches this child
   // frame during CGInterface::OnCreate.  It is a mandatory fresh-mission
   // boot dependency: region-crossed and mission-reveal dereference control
   // 0x53 and its ids 1/0xb/0xc before any optional HUD window is opened.
@@ -161,7 +161,7 @@ const RESINFO_FILE_SECTIONS = [
   },
   // The target-status family is one authored object graph, not a collection
   // of browser-sized rectangles. CIFTargetStatusPanel::OnCreate
-  // (sub_581010) creates the six children from iftargetwindow.txt; each
+  // (CIFTargetWindow_OnCreate) creates the six children from iftargetwindow.txt; each
   // target-kind child then attaches its own Create section. Shipping the
   // complete family preserves the native DFS construction order, including
   // the id-11 CIFCloseButton and id-100 CIFBuffViewer prerequisites.
@@ -197,21 +197,21 @@ const RESINFO_FILE_SECTIONS = [
   },
   { file: "ifcoscommand.txt", attachPath: "resinfo\\ifcoscommand.txt", sections: ["Create"] },
   { file: "ifcosstatus.txt", attachPath: "resinfo\\ifcosstatus.txt", sections: ["Create"] },
-  // The COS window frame (CIFCOS OnCreate sub_6a1370 attaches it @0x6a13bb;
+  // The COS window frame (CIFCOS OnCreate CIFCOS_Initialize attaches it @0x6a13bb;
   // "Create" = the int_window_ inner frame, the three page sections are the
-  // sub_6a15f0/sub_6a16a0/sub_6a1750 page-visible creates).
+  // CIFCOSCommandPanel_ShowInfoWindow/CIFWnd_Str_COSInventoryWnd/CIFWnd_Str_COSSetupWnd page-visible creates).
   {
     file: "ifcos.txt",
     attachPath: "resinfo\\ifcos.txt",
     sections: ["Create", "COSInfoWnd", "COSInventoryWnd", "COSSetupWnd"]
   },
   // The three COS page interiors (COS window unit, page-interior wave):
-  // CIFCOSInfo OnCreate sub_6a5750 attaches ifcosinfo.txt @0x6a5762,
-  // CIFCOSInventory OnCreate sub_6a8c60 attaches ifcosinventory.txt
+  // CIFCOSInfo OnCreate CIFCOSInfo_OnCreate attaches ifcosinfo.txt @0x6a5762,
+  // CIFCOSInventory OnCreate CIFCos_InitializeCommandSlots attaches ifcosinventory.txt
   // @0x6a8c80 ("Create" + the type-1 "TradeInfo" section the record bind
-  // sub_6a9420 creates @0x6a9465), CIFCOSSetup OnCreate sub_6a9a10
+  // CIFCosBag_BindCompanion creates @0x6a9465), CIFCOSSetup OnCreate CIFCOSSetup_vf24
   // attaches ifcossetup.txt @0x6a9a24. ifcosinfoslot.txt is the dynamic
-  // passenger-row class (CIFCOSInfoSlot OnCreate sub_6a7ac0 @0x6a7ad2) -
+  // passenger-row class (CIFCOSInfoSlot OnCreate CIFCosInfoSlot_vf24 @0x6a7ad2) -
   // shipped with its parent page so the transport rows can fold later.
   { file: "ifcosinfo.txt", attachPath: "resinfo\\ifcosinfo.txt", sections: ["Create"] },
   { file: "ifcosinfoslot.txt", attachPath: "resinfo\\ifcosinfoslot.txt", sections: ["Create"] },
@@ -221,28 +221,28 @@ const RESINFO_FILE_SECTIONS = [
     sections: ["Create", "TradeInfo"]
   },
   { file: "ifcossetup.txt", attachPath: "resinfo\\ifcossetup.txt", sections: ["Create"] },
-  // The CIFCheckBox chrome (OnCreate sub_541810 attaches it @0x541823:
+  // The CIFCheckBox chrome (OnCreate CIFCheckBox_OnCreate attaches it @0x541823:
   // the id-0 GDR_STATIC_SELECTED com_checkbutton_on check mark) and the
-  // CIFSpinButtonCtrl chrome (OnCreate sub_542a20 attaches it @0x542a40:
+  // CIFSpinButtonCtrl chrome (OnCreate CIFSpinButtonCtrl_OnCreate attaches it @0x542a40:
   // ids 0/1/2 page text + prev/next arrows) - the ifcossetup checkboxes
   // and the ifcosinventory pager author these classes.
   { file: "ifcheckbox.txt", attachPath: "resinfo\\ifcheckbox.txt", sections: ["Create"] },
   { file: "ifspincontrol.txt", attachPath: "resinfo\\ifspincontrol.txt", sections: ["Create"] },
-  // The message-box frame (CIFMessageBox OnCreate sub_527990 attaches it;
+  // The message-box frame (CIFMessageBox OnCreate CIFMessageBox_OnCreate attaches it;
   // "Create" = the shared chrome, "MsgBoxSimple" = the kind-9 confirm-box
-  // layout the 0x3f1 premium-avatar arm builds through sub_52a0f0,
-  // "MsgBoxINIF" = the kind-1 tracking-entry layout built through sub_528230
+  // layout the 0x3f1 premium-avatar arm builds through CIFSimpleMessageBox_OnCreate,
+  // "MsgBoxINIF" = the kind-1 tracking-entry layout built through CIFMessageBox_BuildTrackingLayout
   // by the native 0x7164 friend-tracking push).
   {
     file: "ifmessagebox.txt",
     attachPath: "resinfo\\ifmessagebox.txt",
-    // "MsgBoxInsertMsg" = the kind-4 input-box layout (sub_529e00; the
+    // "MsgBoxInsertMsg" = the kind-4 input-box layout (CIFMessageBox_BuildInputLayout; the
     // stall slot-spinner overlay's content kind).
     sections: ["Create", "MsgBoxSimple", "MsgBoxINIF", "MsgBoxInsertMsg"]
   },
-  // The personal-stall window family (the CIFStall OnCreate sub_5a2d60
-  // cascade): the stall frame chrome, the per-slot chrome (sub_5b03a0),
-  // the chat module (sub_545be0) and the scroll manager (sub_6f3990).
+  // The personal-stall window family (the CIFStall OnCreate CIFStall_OnCreate
+  // cascade): the stall frame chrome, the per-slot chrome (CIFStallSlot_OnCreate),
+  // the chat module (CIFChatModule_OnCreate) and the scroll manager (CIFScrollManager_OnCreate).
   { file: "ifstall.txt", attachPath: "resinfo\\ifstall.txt", sections: ["Create"] },
   { file: "ifstallslot.txt", attachPath: "resinfo\\ifstallslot.txt", sections: ["Create"] },
   { file: "ifchatmodule.txt", attachPath: "resinfo\\ifchatmodule.txt", sections: ["Create"] },
@@ -251,24 +251,24 @@ const RESINFO_FILE_SECTIONS = [
     attachPath: "resinfo\\ifscrollmanager.txt",
     sections: ["Create"]
   },
-  // The CIFVerticalScroll OnCreate (sub_545190) attaches its own chrome.
+  // The CIFVerticalScroll OnCreate (CIFVerticalScroll_OnCreate) attaches its own chrome.
   {
     file: "ifverticalscroll.txt",
     attachPath: "resinfo\\ifverticalscroll.txt",
     sections: ["Create"]
   },
   // The composite-item window interior (CIFCompositeItemWnd OnCreate
-  // sub_6af680 attaches it @0x6af6d2; "Create" = the GDR_COMPOSITE_FRAME
+  // CIFCompositeItemWnd_OnCreate attaches it @0x6af6d2; "Create" = the GDR_COMPOSITE_FRAME
   // int_window_ ring id 6 + the GDR_COMPOSITE_BGTILE com_bg_tile_b id 5).
   {
     file: "ifcompositeitemwnd.txt",
     attachPath: "resinfo\\ifcompositeitemwnd.txt",
     sections: ["Create"]
   },
-  // The party-match window interior (CIFPartyMatch OnCreate sub_637400
+  // The party-match window interior (CIFPartyMatch OnCreate CIFPartyMatch_OnCreate
   // attaches it @0x637420 and creates the four sections @0x63744d..
   // 0x6374bf; "PartyRegister" is the register form child 0x69 the
-  // register/modify button legs create on demand, sub_6350c0 @0x6351a0/
+  // register/modify button legs create on demand, CIFPartyMatch_OpenRegisterDialog @0x6351a0/
   // @0x63510c). "JoinProgress"/"AutoMatch" stay un-shipped: their windows
   // (CIFPartyJoinProgress 0x64 / CIFPartyMatchAuto 0x6e) are unfolded
   // frontiers.
@@ -277,10 +277,10 @@ const RESINFO_FILE_SECTIONS = [
     attachPath: "resinfo\\ifpartymatch.txt",
     sections: ["Create", "SearchInfo", "SlotListButton", "SlotList", "PartyRegister"]
   },
-  // The slot-row interior (CIFPartyMatchSlot OnCreate sub_63da20 attaches
+  // The slot-row interior (CIFPartyMatchSlot OnCreate CIFPartyMatchSlot_OnCreate attaches
   // it @0x63da32: the id-5 com_bar01_ select bar + statics 10..17).
   { file: "ifpartymatchslot.txt", attachPath: "resinfo\\ifpartymatchslot.txt", sections: ["Create"] },
-  // The register form interior (CIFPartyMatchRegister OnCreate sub_63c010
+  // The register form interior (CIFPartyMatchRegister OnCreate CIFPartyMatchRegister_Initialize
   // attaches it @0x63c02d: purpose radio 0x28, level edits 0x2a/0x2b,
   // share statics 0x2d/0x2f, title edit 0x31, OK/Cancel 0x3c/0x3d).
   {
@@ -289,19 +289,19 @@ const RESINFO_FILE_SECTIONS = [
     sections: ["Create"]
   },
   // The exchange (player-trade) window interior (CIFExchange OnCreate
-  // sub_6b2780 attaches it @0x6b279d via the pinned data_bfbb60
+  // CIFExchange_OnCreate attaches it @0x6b279d via the pinned data_bfbb60
   // "resinfo\\ifexchange.txt" and creates "Create" @0x6b27c9: the 12+12
   // CIFSlotWithHelp offer grids ids 200..211 / 100..111, the EXCHANGE /
   // CANCEL / money buttons 11/12/15 and the money statics 13/14/18/19).
   { file: "ifexchange.txt", attachPath: "resinfo\\ifexchange.txt", sections: ["Create"] },
   // The alchemy window interior family (alchemy packet-domain wave):
-  // CIFAlchemyBox OnCreate sub_620420 attaches ifnewalchemybox.txt
+  // CIFAlchemyBox OnCreate CIFAlchemyBox_OnCreate attaches ifnewalchemybox.txt
   // @0x620461 and caches the created panels (+0x370 = id 0x15
   // CIFAlchemyProcess, +0x374 = id 0x16 CIFAlchemyReinforce, chrome ids
   // 0/1/2); the two panel OnCreates attach their own interiors -
-  // CIFAlchemyProcess sub_622700 @0x622714 (9 staging slots ids
+  // CIFAlchemyProcess CIFAlchemyProcess_OnCreate @0x622714 (9 staging slots ids
   // 0x26..0x2e + the id-0x32 CIFDecoratedStatic gauge + the 0x1e..0x23
-  // button row), CIFAlchemyReinforce sub_625600 @0x625614 (5 slots ids
+  // button row), CIFAlchemyReinforce CIFAlchemyReinforce_OnCreate @0x625614 (5 slots ids
   // 0x26..0x2a + the id-0x32 gauge + the id-0x1e process button).
   {
     file: "ifnewalchemybox.txt",
@@ -319,10 +319,10 @@ const RESINFO_FILE_SECTIONS = [
     sections: ["Create"]
   },
   // The packetless 0x3230 skill-withdrawal open chain:
-  // CIFSkillWithdrawal OnCreate sub_6b89f0 attaches
+  // CIFSkillWithdrawal OnCreate CIFSkillWithdrawal_CreateControls attaches
   // ifskillwithdrawal.txt and creates its CIFSkill child; CIFSkill
-  // OnCreate sub_58de80 attaches ifskill.txt; its CIFSkillBoard child
-  // OnCreate sub_5840c0 attaches ifskillboard.txt.
+  // OnCreate CIFSkill_OnCreate attaches ifskill.txt; its CIFSkillBoard child
+  // OnCreate CIFSkillBoard_OnCreate attaches ifskillboard.txt.
   {
     file: "ifskillwithdrawal.txt",
     attachPath: "resinfo\\ifskillwithdrawal.txt",
@@ -338,7 +338,7 @@ const RESINFO_FILE_SECTIONS = [
     attachPath: "resinfo\\ifskillboard.txt",
     sections: ["Create"]
   },
-  // CIFPrevJobInfo OnCreate sub_648de0 attaches this file and creates its
+  // CIFPrevJobInfo OnCreate CIFPrevJobInfo_OnCreate attaches this file and creates its
   // 22-control Merchant/Hunter/Thief interior.
   {
     file: "ifprevjobinfo.txt",

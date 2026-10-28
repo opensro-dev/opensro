@@ -4,7 +4,7 @@
 buildTeleportDataAsset.mjs - publish the teleportdata/teleportlink catalogue
 
 Publishes the v1.150 teleportdata.txt + teleportlink.txt relation used by
-CIFNPCTalk_BuildTeleportDestinationMenu (sub_5d7040). The native lookup is:
+CIFNPCTalk_BuildTeleportDestinationMenu (CIFNPCTalk_AppendTeleportDestinationRows). The native lookup is:
 bound runtime NPC gid -> RefObj id -> teleportdata source row -> linked
 destination rows. Keep those identities explicit so the browser never
 substitutes a runtime gid for a media-table key.

@@ -1,11 +1,11 @@
 // Publish the skillmasterydata.txt + skillgroup.txt tables as RAW record
 // rows: the native CGlobalDataManager loads both at client boot into the
 // mastery table at data_cec870+0x1c0 and the per-mastery group vectors at
-// +0x184, the sources CIFSkill's mastery-tab builder (sub_592030), the
-// board header refresh (sub_5841d0: name "%s %s", level "Lv %d", icon) and
-// the group-row fill (sub_586b40: skillgroup ICON column + "_focus.ddj",
-// group name via textdataname) read through sub_7f81a0 / sub_7e5be0 /
-// sub_7e5dd0.
+// +0x184, the sources CIFSkill's mastery-tab builder (CIFSkill_RebuildMasteryPages), the
+// board header refresh (CIFSkillBoard_RefreshMasteryHeaderAndTrainButton: name "%s %s", level "Lv %d", icon) and
+// the group-row fill (CIFSkillMasteryRow_CreateSkillCells: skillgroup ICON column + "_focus.ddj",
+// group name via textdataname) read through SkillMasteryRecord_GetPayload / CGlobalData_FindMasterySkillRow /
+// CGlobalData_GetMasterySkillRowPayload.
 //
 // NO field decoding happens here (the actionwnddata raw-rows precedent):
 // the browser bridge (bridge/ui/panes/skillPanePlane.ts) decodes the columns it

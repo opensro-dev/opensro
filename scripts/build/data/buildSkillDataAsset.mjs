@@ -13,11 +13,11 @@ owner's action effects, shadow sizes and appearance references).
 import { loadCharacterDataRows } from "../char/resolveCharRoster.mjs";
 import { expandCharacterInfoCodenames, resolveCharacterInfoRows } from "../shared/characterInfo.mjs";
 // Publish the skilldata shard tables as PROJECTED raw record rows: the
-// native CGlobalDataManager boot loader (sub_722e20 @0x722f78) formats
+// native CGlobalDataManager boot loader (Client_LoadGameDataTables @0x722f78) formats
 // "%stextdata\skilldata.txt" and hands the manifest to the table dispatcher
-// sub_7f22d0(0xcec870, ..., kind=1, enc=1); each shard line is parsed by
-// CSkillData's sub_7f9310 into the +0x694 info block (GetData() =
-// sub_7f8560 = record+0x694). The CIFSkill pane's slot plane consumes only
+// CGlobalDataManager_LoadTextDataFile(0xcec870, ..., kind=1, enc=1); each shard line is parsed by
+// CSkillData's CSkillData_ParseTextRow into the +0x694 info block (GetData() =
+// CSkillData_GetExtendedInfo = record+0x694). The CIFSkill pane's slot plane consumes only
 // the columns pinned below. The same native +0x16c owner is also queried by
 // CIFBuffViewer for pet-only and non-board timed skills, so the projected
 // record set MUST cover every service-enabled CSkillData row; filtering by
@@ -27,24 +27,24 @@ import { expandCharacterInfoCodenames, resolveCharacterInfoRows } from "../share
 // one place, the buildSkillMasteryDataAsset.mjs precedent.
 //
 // Pinned column contract (source column index -> native parse offset; the
-// table loader consumes column 0 "Service" before sub_7f9310 runs, so parse
+// table loader consumes column 0 "Service" before CSkillData_ParseTextRow runs, so parse
 // token N is file column N+1):
-//   col  1 -> +0x694 skill id        (sub_7f1090 slot payload / by-id map key)
+//   col  1 -> +0x694 skill id        (SkillMasteryTable_InsertBoardCell slot payload / by-id map key)
 //   col  2 -> +0x698 group id        (the "slot->dwGroupID == dwGroupID"
 //                                     assert @0x7f111a, globaldatamanager.cpp)
 //   col  7 -> +0x6f4 basic level     (GetData()+0x60: slot level digits,
-//                                     sub_7efff0 level-1 base lookup)
+//                                     GlobalDataManager_FindGroupSkillByLevel level-1 base lookup)
 //   col  8 -> +0x6f5 basic activity  (GetData()+0x61: capture gate @0x58911d)
 //   col 34 -> +0x738 req mastery 1   (GetData()+0xa4: the row-population key,
-//                                     sub_7f1320 @0x7f13a2)
+//                                     CGlobalData_BuildSkillMasteryBoard @0x7f13a2)
 //   col 36 -> +0x740 req mastery lv1 (GetData()+0xac: the >0x5a insert skip
-//                                     @0x7f1158 and the sub_8500a0 level gate)
-//   col 38 -> +0x744 req STR         (GetData()+0xb0: the sub_588af0 add-button
+//                                     @0x7f1158 and the ActiveSkillCollection_IsMasterySatisfied level gate)
+//   col 38 -> +0x744 req STR         (GetData()+0xb0: the CIFSkillSlot_UpdateLevelUpButton add-button
 //                                     gate vs CICPlayer+0x834 @0x588ddb)
 //   col 39 -> +0x748 req INT         (GetData()+0xb4: the gate vs +0x836
 //                                     @0x588dfb)
 //   col 40..42 -> +0x74c..+0x754     req skill GROUP ids 1..3 (GetData()
-//                                     +0xb8/+0xbc/+0xc0: the sub_7f1680
+//                                     +0xb8/+0xbc/+0xc0: the SkillBoard_BuildMasteryRows
 //                                     relation-link pass reads the trio
 //                                     @0x7f19a0 and pushes the group's row at
 //                                     the required basic level into the
@@ -53,23 +53,23 @@ import { expandCharacterInfoCodenames, resolveCharacterInfoRows } from "../share
 //                                     (GetData()+0xc4/+0xc5/+0xc6: the
 //                                     basic-level match @0x7f1a02)
 //   col 46 -> +0x75c req learn SP    (GetData()+0xc8 m_nReq_Sp: parse writes
-//                                     the +0x8fc enabled byte sub_7f8570 gates
+//                                     the +0x8fc enabled byte CSkillData_IsLearnable gates
 //                                     slot insertion on)
-//   col 57 -> +0x784 tab value       (GetData()+0xf0: the sub_584f40 learned
+//   col 57 -> +0x784 tab value       (GetData()+0xf0: the CIFSkillBoard_RefreshLearnedSkillCells learned
 //                                     walk's masterydata+0x5c tab-key match)
 //   col 59 -> +0x78c UI row          (GetData()+0xf8: 0xff = not on the board)
 //   col 60 -> +0x790 UI column       (GetData()+0xfc: the 37+36c slot x)
 //   col 61 -> +0x79c icon path       (GetData()+0x108, icon-root relative,
-//                                     lowercased by sub_811890 flag 1)
+//                                     lowercased by RefData_AssignResourceStringA flag 1)
 //   col 62 -> +0x7b8 name symbol     (the SN_ textdataname code)
 //
-// Tooltip closure (sub_55fe60 -> sub_806ee0/sub_806240):
+// Tooltip closure (CIFSlotWithHelp_AppendSkillTooltipRows -> CSkillData_ComposeTooltipDescription/CSkillData_FormatUseRequirementsTooltip):
 //   col  9 -> +0x64 chain-next skill id (effect/attack aggregation walk)
 //   col 22 -> +0x98 target-required / flat record+0x72c enable byte
 //   col 50/51 -> +0xd8/+0xdc required weapon kinds (0xff = none)
 //   col 52..55 -> +0xe0/+0xe4/+0xe8/+0xea HP/MP absolute/ratio costs
 //   col 64 -> +0x15c localized tooltip-description symbol
-//   col 65 -> +0x178 study/explanation symbol (sub_5de040 translates it into
+//   col 65 -> +0x178 study/explanation symbol (CIFSkillPracticeBox_ConfigureRecord translates it into
 //             GDR_SKLPB_DESCRIPTION @0x5de161..0x5de1bf)
 //   col 69..117 -> the complete decoder-consumed parameter tail. File col
 //                  68 is Param1, which CSkillData_DecodeParamBlocks skips
@@ -167,8 +167,8 @@ function parseCharacterInfoOffset( value, codename ) {
 }
 
 /**
- * Native sub_920020 loads this client-owned table from
- * textdata/skilleffect.txt; sub_91b830 writes one 0x40-byte action-effect
+ * Native CSkillEffectManager_LoadSkillEffectTextData loads this client-owned table from
+ * textdata/skilleffect.txt; CharacterInfo_ParseAndRegisterRow writes one 0x40-byte action-effect
  * context per character codename. Keep the projection beside skillData so
  * the app can publish it before any world-entry packet binds CICharactor+710.
  */
@@ -279,8 +279,8 @@ export async function buildSkillDataAsset() {
 	}
 
 	// Every folded skill-driven sound profile resolves the active CIDecoSkill
-	// id through CSkillData. sub_7f9310 writes source columns 1/3/5/6 to the
-	// info block's +0x00/+0x08/+0x40/+0x5c fields respectively; sub_8edfa0
+	// id through CSkillData. CSkillData_ParseTextRow writes source columns 1/3/5/6 to the
+	// info block's +0x00/+0x08/+0x40/+0x5c fields respectively; SkillEffect_ResolveOriginalSkillName
 	// follows the +0x5c root override before returning one of the two names.
 	// Keep that complete identity plane, not an effectsound-handle-specific
 	// subset. The authoritative skill id remains the join key.
@@ -318,11 +318,11 @@ export async function buildSkillDataAsset() {
 		// v11: the audio and character planes moved to their own files.
 		// v10: resolve characterInfo through direct/original/default registration.
 		// v9: characterInfo now comes from the native textdata file opened by
-		// sub_920020, not the stale resinfo mirror (anchors/effects differ).
+		// CSkillEffectManager_LoadSkillEffectTextData, not the stale resinfo mirror (anchors/effects differ).
 		// v8: complete +0x16c row ownership (pet/non-board timed skills included)
 		// and append col22 target-required without disturbing the v7 indices.
 		// v7: replace the CH-biased first-`att` slice with the complete
-		// sub_84b2f0 decoder-consumed parameter tail.
+		// CSkillData_IndexParameterTags decoder-consumed parameter tail.
 		version: 11,
 		// Source column index per shipped tab-separated field (the contract in
 		// the banner above; decode semantics live in skill-tooltip-catalog.ts).
