@@ -203,6 +203,34 @@ func (rt *Runtime) characterPartyJobClass(
 }
 
 /*
+=================
+mountedCosGID
+
+The movement gate's mounted question, read as values under the
+authority read door. The gate used to detach the whole record -
+equipment, bag rows and companions - to read the active COS's mounted
+flag and GID (#1943); both are plain record fields the copy would
+carry unchanged. An absent character or COS answers unmounted.
+=================
+*/
+func (rt *Runtime) mountedCosGID(
+	divisionID, characterName string,
+) (petGID uint32, mounted bool) {
+	character := rt.findCharacter(divisionID, characterName)
+	if character == nil {
+		return 0, false
+	}
+
+	rt.deps.Read(divisionID, func() {
+		if character.ActiveCOS != nil {
+			petGID, mounted = character.ActiveCOS.GID, character.ActiveCOS.Mounted
+		}
+	})
+
+	return petGID, mounted
+}
+
+/*
 ==================
 writeBackWorld
 

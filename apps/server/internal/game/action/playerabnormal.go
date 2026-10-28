@@ -151,12 +151,8 @@ func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 	if block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0 {
 		return true
 	}
-	character := rt.findCharacter(division, name)
-	if character == nil {
-		return false
-	}
-	snapshot := rt.characterSnapshot(division, character)
-	return snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.Mounted && rt.cosMovementBlocked(division, snapshot)
+	petGID, mounted := rt.mountedCosGID(division, name)
+	return mounted && rt.cosMovementBlockedFor(division, name, petGID)
 }
 
 /*
