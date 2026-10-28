@@ -45,6 +45,11 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 		}},
 	}
 
+	var noCharacter *Character
+	if noCharacter.SnapshotEquipment() != nil {
+		t.Fatal("nil character produced an equipment copy")
+	}
+
 	snapshot := character.Snapshot()
 	character.QuestCompletionCounts[42] = 3
 	if snapshot.QuestCompletionCounts[42] != 2 {
@@ -129,5 +134,65 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 			"snapshot collapsed non-nil empty slice: %#v",
 			snapshot.CompletedQuestIds,
 		)
+	}
+}
+
+/*
+================
+TestSnapshotEquipmentKeepsOnlyWornRows
+
+The narrow copy: equipment rows deep-copied in order, bag rows gone,
+the avatar inventory absent, and every other child Snapshot's. A
+record with no worn rows narrows to no rows; a nil inventory stays nil.
+================
+*/
+func TestSnapshotEquipmentKeepsOnlyWornRows(t *testing.T) {
+	level := int64(10)
+	character := &Character{
+		Name:  "narrowOwner",
+		Level: &level,
+		MissionInventory: []InventoryRow{
+			{Slot: 6, Codename: "WEAPON", MagicOptions: []uint64{11}},
+			{Slot: 20, Codename: "BAG_A", MagicOptions: []uint64{21}},
+			{Slot: 8, Codename: "SUIT"},
+			{Slot: 44, Codename: "BAG_B"},
+		},
+		AvatarInventory: &AvatarInventory{Capacity: 4, Rows: []InventoryRow{{Slot: 0, Codename: "AVATAR"}}},
+		Skills:          []uint32{7},
+	}
+
+	narrow := character.SnapshotEquipment()
+	if narrow.AvatarInventory != nil {
+		t.Fatal("narrow copy kept the avatar inventory")
+	}
+	if len(narrow.MissionInventory) != 2 ||
+		narrow.MissionInventory[0].Slot != 6 || narrow.MissionInventory[0].Codename != "WEAPON" ||
+		narrow.MissionInventory[1].Slot != 8 || narrow.MissionInventory[1].Codename != "SUIT" {
+		t.Fatalf("narrow inventory = %+v", narrow.MissionInventory)
+	}
+	if narrow.MissionInventory[0].MagicOptions[0] != 11 {
+		t.Fatal("narrow copy lost the worn row's magic options")
+	}
+	// The full copy is untouched by the narrowing.
+	full := character.Snapshot()
+	if len(full.MissionInventory) != 4 || full.AvatarInventory == nil || len(full.AvatarInventory.Rows) != 1 {
+		t.Fatal("the full copy narrowed too")
+	}
+	// Detachment and normalization match Snapshot's.
+	narrow.MissionInventory[0].MagicOptions[0] = 99
+	if character.MissionInventory[0].MagicOptions[0] != 11 {
+		t.Fatal("narrow copy aliases the record")
+	}
+	if narrow.StatPoints == nil || *narrow.Level != 10 || len(narrow.Skills) != 1 || narrow.Skills[0] != 7 {
+		t.Fatal("narrow copy lost Snapshot's normalized fields")
+	}
+
+	bagOnly := &Character{MissionInventory: []InventoryRow{{Slot: 30, Codename: "BAG"}}}
+	if got := bagOnly.SnapshotEquipment(); len(got.MissionInventory) != 0 {
+		t.Fatalf("bag-only copy kept rows: %+v", got.MissionInventory)
+	}
+	empty := &Character{}
+	if got := empty.SnapshotEquipment(); got.MissionInventory != nil {
+		t.Fatal("nil inventory became non-nil")
 	}
 }

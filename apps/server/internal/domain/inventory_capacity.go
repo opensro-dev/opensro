@@ -30,6 +30,12 @@ const (
 	DefaultInventorySize uint8 = 45
 	// MaxInventorySize is two CIFInventory tabs of 32 behind the 13 sockets.
 	MaxInventorySize uint8 = 77
+	// EquipmentSlotEnd is one past the last equipment socket: slots
+	// 0..12 of MissionInventory are worn equipment, the rest is the bag.
+	// It mirrors the item/inventory package's constant of the same name;
+	// that package imports domain, so the value is stated here and the
+	// two are tied by test.
+	EquipmentSlotEnd = 13
 )
 
 /*
