@@ -701,6 +701,10 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
+	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// port-only, not native): its Global Chatting line reaches only
+	// itself. Nil mutes no one.
+	ChatShadowMuted func(accountID string) bool
 
 	// HonorPoints returns the character's usable Training Camp honor points
 	// (the reference server's Training Camp member record, [member+0x34]+0x54). Nil reports 0.
