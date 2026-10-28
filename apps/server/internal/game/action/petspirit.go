@@ -129,8 +129,11 @@ func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Fra
 		return nil
 	}
 	// Runs for every pet per tick: copy the owner only when the pet
-	// still holds Resolve stacks to expire (#1943).
-	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+	// still holds Resolve stacks to expire (#1943). The copy is the
+	// companion copy: every read below (the pet record, the expansion
+	// gate, town) resolves through companion rows or scalars it keeps
+	// (#2030; TestPetSpiritReadsNothingOutsideTheCompanionCopy).
+	owner := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		pet := c.CompanionByGID(key.gid)
 		return pet != nil && pet.ResolveStacks != 0
 	})

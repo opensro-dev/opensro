@@ -110,3 +110,52 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
 	}
 }
+
+/*
+================
+TestPetSpiritReadsNothingOutsideTheCompanionCopy
+
+The Resolve expiry advance resolves its pet through the owner's rows;
+production keeps that record in a bag row behind a stuffed bag. The
+expiry must land identically on the companion copy and on the
+whole-record copy, and the seam must see the copy happen.
+================
+*/
+func TestPetSpiritReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	gid := c.ActiveCOS.GID
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: gid}
+	movePetToBagRow(c, 100)
+	stuffOwnerInventories(c)
+
+	run := func() string {
+		c.CompanionByGID(gid).ResolveStacks = 5
+		frames := rt.advancePetSpirit(key, clock.NowMs())
+		if len(frames) == 0 {
+			t.Fatal("earned Resolve stacks never expired; the trace would agree vacuously")
+		}
+		if got := c.CompanionByGID(gid).ResolveStacks; got != 0 {
+			t.Fatalf("Resolve stacks = %d after expiry, want 0", got)
+		}
+		return fmt.Sprintf("%+v", frames)
+	}
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	narrow := run()
+	if len(copied) == 0 || copied[0] != c.Name {
+		t.Fatalf("the spirit advance never took the companion copy of its owner; copied %v", copied)
+	}
+
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	if full := run(); full != narrow {
+		t.Fatalf("spirit expiry diverged\nnarrow: %.600s\nfull:   %.600s", narrow, full)
+	}
+}
