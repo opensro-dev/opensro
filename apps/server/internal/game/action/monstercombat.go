@@ -227,7 +227,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
 			// Natively a COS answers the job test with its owner's state.
-			if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(rt.characterSnapshot(divisionID, owner))) {
+			if release == nil && instance.JobTargetRefused(rt.characterPartyJobClass(divisionID, owner)) {
 				return result
 			}
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
@@ -239,16 +239,21 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		}
 		return result
 	}
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+	// Admission copies the victim only when it may be struck: presence,
+	// life and - for an unowned command - the job refusal are field
+	// facts weighed on the live record in the copy's own door pass
+	// (#1943). The admitted copy still feeds spacing, stats and the
+	// strike, exactly as the detached record did.
+	snapshot := rt.characterSnapshotAdmitted(divisionID, character, func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			(release != nil || !instance.JobTargetRefused(enterworld.PartyJobClass(live)))
+	})
+	if snapshot == nil {
 		return result
 	}
 	// Natively a job monster refuses its own side at admission, before the
 	// ride swap (a ride answers with its rider's job). The zero result sends
 	// the monster home rather than retrying a strike it may never make.
-	if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(snapshot)) {
-		return result
-	}
 	// Only hostile-target skills swap (natively the target flag is tested); summons
 	// and self effects keep their own branches below.
 	if ride := ridingCOS(snapshot); release == nil && ride != 0 && ok && skill.TargetRequired &&

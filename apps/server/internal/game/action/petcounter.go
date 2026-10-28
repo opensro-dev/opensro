@@ -44,8 +44,25 @@ Tier III rolls separately for other ordinary monsters around the hit recipient.
 ================
 */
 func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
-	owner := rt.characterSnapshot(hit.division, hit.owner)
-	if owner == nil || !enterworld.CharacterAlive(owner) || rt.Monsters == nil {
+	if rt.Monsters == nil {
+		return nil
+	}
+	// The counter needs a living owner holding a summoned bear; both
+	// are record fields, so a dead or bear-less owner never pays for
+	// its detached copy (#1943). The admitted copy feeds the gear,
+	// town and session gates below, as the detached record did.
+	owner := rt.characterSnapshotAdmitted(hit.division, hit.owner, func(live *enterworld.Character) bool {
+		if !enterworld.CharacterAlive(live) {
+			return false
+		}
+		for _, candidate := range live.Companions() {
+			if candidate.Summoned && companion.PetKind(candidate.Codename) == "Bear" {
+				return true
+			}
+		}
+		return false
+	})
+	if owner == nil {
 		return nil
 	}
 	if _, found := rt.characterMonster(hit.division, owner, hit.attacker); !found {

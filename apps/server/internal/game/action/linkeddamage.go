@@ -72,8 +72,14 @@ func (rt *Runtime) planQuotaMembers(division string, victim *enterworld.Characte
 		if gid == self {
 			continue
 		}
-		member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid))
-		if member == nil || !enterworld.CharacterAlive(member) {
+		// Only the member's life and live pose are weighed, so read
+		// the life fact as a value and seed the pose from the live
+		// record instead of detaching every member (#1943).
+		member := rt.findCharacterByGid(division, gid)
+		if member == nil {
+			continue
+		}
+		if alive, _, _ := rt.characterLifeState(division, member); !alive {
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, member.Name), member, now)

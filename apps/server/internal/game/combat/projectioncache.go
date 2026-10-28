@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
@@ -189,9 +190,15 @@ projectionCache.insert
 ================
 */
 func (cache *projectionCache) insert(c *domain.Character, skillsSource, itemsSource uintptr, weaponKind uint8, result learnedProjection) {
-	equipment := make([]projectionEquipRow, len(c.MissionInventory))
-	for i, row := range c.MissionInventory {
-		equipment[i] = projectionEquipRow{slot: row.Slot, codename: row.Codename, durability: row.Durability}
+	// Only the equipment band is keyed: bag rows never reach a
+	// projection, so a narrow equipment-only copy of the same
+	// character keys exactly like the full copy.
+	equipment := make([]projectionEquipRow, 0, inventory.EquipmentSlotEnd)
+	for _, row := range c.MissionInventory {
+		if row.Slot < 0 || row.Slot >= int64(inventory.EquipmentSlotEnd) {
+			continue
+		}
+		equipment = append(equipment, projectionEquipRow{slot: row.Slot, codename: row.Codename, durability: row.Durability})
 	}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -218,19 +225,23 @@ func (cache *projectionCache) insert(c *domain.Character, skillsSource, itemsSou
 projectionEquipmentEqual
 
 Whether a stored equipment key still describes these rows, field by
-field, in order.
+field, in order. Only the equipment band is keyed, so a bag change on
+a full copy and an equipment-only narrow copy of the same character
+both keep the entry.
 ================
 */
 func projectionEquipmentEqual(key []projectionEquipRow, rows []domain.InventoryRow) bool {
-	if len(key) != len(rows) {
-		return false
-	}
-	for i, row := range rows {
-		if key[i].slot != row.Slot || key[i].codename != row.Codename || key[i].durability != row.Durability {
+	i := 0
+	for _, row := range rows {
+		if row.Slot < 0 || row.Slot >= int64(inventory.EquipmentSlotEnd) {
+			continue
+		}
+		if i >= len(key) || key[i].slot != row.Slot || key[i].codename != row.Codename || key[i].durability != row.Durability {
 			return false
 		}
+		i++
 	}
-	return true
+	return i == len(key)
 }
 
 /*

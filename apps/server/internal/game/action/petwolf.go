@@ -38,10 +38,12 @@ func (rt *Runtime) wolfSource(division string, owner *enterworld.Character, gid 
 wolfCompanion
 
 Common eligibility for every wolf bonus; no learned Execute prerequisite.
+The wolf lanes read nothing of the owner past its worn equipment, so
+their copy is the narrow one (#1943).
 ================
 */
 func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, gid uint32, now int64) (petCombatStep, bool) {
-	return rt.elementalCompanion(division, owner, gid, "Wolf", now)
+	return rt.elementalCompanionEligibilityWith(division, owner, gid, "Wolf", now, false, rt.characterSnapshotEquipmentAdmitted)
 }
 
 /*
@@ -82,13 +84,27 @@ Only travel support may opt into safe zones; combat callers keep the town gate.
 ================
 */
 func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool) (petCombatStep, bool) {
+	return rt.elementalCompanionEligibilityWith(division, owner, gid, kind, now, allowTown, rt.characterSnapshotAdmitted)
+}
+
+/*
+================
+elementalCompanionEligibilityWith
+
+The one eligibility walk. snapshotFor supplies the owner copy: the
+admitted full copy for the combat and travel lanes, the admitted
+equipment copy for the wolf lanes, whose readers stay inside the worn
+equipment (#1943).
+================
+*/
+func (rt *Runtime) elementalCompanionEligibilityWith(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool, snapshotFor func(string, *enterworld.Character, func(*enterworld.Character) bool) *enterworld.Character) (petCombatStep, bool) {
 	var step petCombatStep
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
 	// Runs per pet per tick: copy the owner only when a pet could pass the
-	// record filters below (#1943; characterSnapshotAdmitted).
-	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+	// record filters below (#1943; the admitted snapshotFor door).
+	snapshot := snapshotFor(division, owner, func(c *enterworld.Character) bool {
 		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, gid, kind)
 	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {

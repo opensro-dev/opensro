@@ -12,6 +12,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/jsonscratch"
 )
 
 // Env configuration (documented in ops/docs/DEPLOYMENT.md).
@@ -175,6 +176,11 @@ type Store struct {
 	// commits their phases (lock_timing.go).
 	mu      timedRWMutex
 	commits commitTiming
+	// encodeScratch is the commit path's reusable JSON encode buffer
+	// (db_write.go). Every encode through it runs under mu, which is
+	// the scratch's ownership domain; its records are consumed by the
+	// statement that follows each encode.
+	encodeScratch jsonscratch.Scratch
 	// beforeSQLiteCommit, nil in production, runs inside a commit's sqlite
 	// phase: tests make a commit slow to watch what waits on it.
 	beforeSQLiteCommit func()

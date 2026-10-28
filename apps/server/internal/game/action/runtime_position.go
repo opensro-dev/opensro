@@ -85,6 +85,64 @@ func (rt *Runtime) characterSnapshotAdmitted(
 
 /*
 ==================
+characterSnapshotEquipment
+
+characterSnapshot for readers that never leave the worn equipment and
+never read the avatar inventory: the copy keeps only the equipment
+rows and no AvatarInventory. Convert a call site only when every
+reader of the copy is cleared for the narrow rows root by root (#1943
+transitive audit) - a bag or avatar reader would silently see its
+rows missing.
+==================
+*/
+func (rt *Runtime) characterSnapshotEquipment(
+	divisionID string,
+	character *enterworld.Character,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		snapshot = character.SnapshotEquipment()
+	})
+
+	return snapshot
+}
+
+/*
+==================
+characterSnapshotEquipmentAdmitted
+
+characterSnapshotEquipment behind characterSnapshotAdmitted's
+field-only admission: a rejected target pays for neither copy.
+==================
+*/
+func (rt *Runtime) characterSnapshotEquipmentAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		if admit != nil && !admit(character) {
+			return
+		}
+		snapshot = character.SnapshotEquipment()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterLifeState
 
 The life facts a refused monster strike revalidates - alive, deletion
@@ -110,6 +168,34 @@ func (rt *Runtime) characterLifeState(
 	})
 
 	return alive, deletePending, nativeBodyStatus
+}
+
+/*
+==================
+characterPartyJobClass
+
+The party job class a job-admission refusal weighs, read as a value
+under the authority read door. A COS target answers the job test with
+its owner's state, and the owner's whole record used to be detached
+for this one byte (#1943): the class derives from the dressed job
+suit row, a record field the copy would carry unchanged.
+==================
+*/
+func (rt *Runtime) characterPartyJobClass(
+	divisionID string,
+	character *enterworld.Character,
+) uint8 {
+	if character == nil {
+		return enterworld.NoJobClass
+	}
+
+	class := enterworld.NoJobClass
+
+	rt.deps.Read(divisionID, func() {
+		class = enterworld.PartyJobClass(character)
+	})
+
+	return class
 }
 
 /*

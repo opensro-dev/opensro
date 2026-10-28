@@ -63,8 +63,10 @@ func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.C
 		return nil, nil, companion.SkillDef{}, 0, false
 	}
 	// Runs for every bear source per bond plan: copy the owner only when
-	// the record still holds a live summoned bear under this gid (#1943).
-	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+	// the record still holds a live summoned bear under this gid, and
+	// only its equipment rows - no reader of this copy leaves the worn
+	// equipment or reaches the avatar inventory (#1943).
+	owner := rt.characterSnapshotEquipmentAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		pet := c.CompanionByGID(key.gid)
 		return !c.DeletePending && pet != nil && pet.CurrentHP != 0 && companion.PetKind(pet.Codename) == "Bear"
 	})
@@ -236,8 +238,15 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 	gids = append(gids, party...)
 	for _, gid := range gids {
 		target := rt.findCharacterByGid(key.division, gid)
-		snapshot := rt.characterSnapshot(key.division, target)
-		if snapshot == nil || enterworld.CharacterAlive(snapshot) || snapshot.DeathKind != uint8(pk.DeathMonster) || rewardLevel(snapshot) > int64(pet.Level)+10 || !rt.bondRecipient(key, owner, snapshot, pet, skill, now) {
+		// Revival weighs a dead, monster-killed, in-band target; all
+		// three are record fields, so a living or out-of-band member
+		// never pays for its detached copy (#1943). The admitted copy
+		// feeds the recipient gate and the revival stats, as before.
+		snapshot := rt.characterSnapshotAdmitted(key.division, target, func(live *enterworld.Character) bool {
+			return !enterworld.CharacterAlive(live) && live.DeathKind == uint8(pk.DeathMonster) &&
+				rewardLevel(live) <= int64(pet.Level)+10
+		})
+		if snapshot == nil || !rt.bondRecipient(key, owner, snapshot, pet, skill, now) {
 			continue
 		}
 		stats, _, err := rt.playerCombatStats(key.division, snapshot)

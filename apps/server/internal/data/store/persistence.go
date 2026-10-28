@@ -16,6 +16,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/jsonscratch"
 )
 
 // Persistence is the store's single SQLite commit boundary. Domain mutation
@@ -116,7 +117,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
-				if err := upsertTimedTx(tx, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
+				if err := upsertTimedTx(tx, &s.encodeScratch, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
 					return err
 				}
 			}
@@ -133,7 +134,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 			if !known {
 				return fmt.Errorf("dirty character %q has no division binding", c.Name)
 			}
-			if err := upsertTimedTx(tx, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
+			if err := upsertTimedTx(tx, &s.encodeScratch, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
 				return err
 			}
 		}
@@ -234,7 +235,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	}
 
 	if groundSnapshot != nil {
-		if _, _, err := writeGroundDiffTx(tx, s.ground.loadedRecords, groundSnapshot.Divisions); err != nil {
+		if _, _, err := writeGroundDiffTx(tx, &s.encodeScratch, s.ground.loadedRecords, groundSnapshot.Divisions); err != nil {
 			return err
 		}
 		if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", groundSnapshot.GidCounter)); err != nil {
@@ -400,9 +401,9 @@ upsertTimedTx
 upsertCharacterTx for the commit: the encoding's time is added to encode.
 ================
 */
-func upsertTimedTx(tx *sql.Tx, division string, c *domain.Character, now func() time.Time, encode *time.Duration) error {
+func upsertTimedTx(tx *sql.Tx, scratch *jsonscratch.Scratch, division string, c *domain.Character, now func() time.Time, encode *time.Duration) error {
 	start := now()
-	record, err := encodeCharacter(division, c)
+	record, err := encodeCharacterBorrowed(scratch, division, c)
 	*encode += now().Sub(start)
 	if err != nil {
 		return err
