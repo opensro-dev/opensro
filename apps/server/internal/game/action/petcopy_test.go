@@ -3,9 +3,10 @@
 
 petcopy_test.go - the pet tick reads nothing outside its narrow copy (#2030)
 
-advancePet took the owner's whole record per summoned pet per tick.
-It now takes the companion copy (domain SnapshotCompanion): equipment
-and companion rows, no plain bag rows, no avatar inventory. The
+The pet tick took the owner's whole record per summoned pet per tick.
+advancePet and the elemental eligibility walk now take the companion
+copy (domain SnapshotCompanion): equipment and companion rows, no
+plain bag rows, no avatar inventory. The
 scenario here runs twice on a bag loaded with plain rows - once on
 the narrow copy and once forced onto the full copy - and every frame
 and the follower state must agree. A reader that reached a plain bag
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -108,5 +110,66 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		len(c.Snapshot().MissionInventory), len(c.SnapshotCompanion().MissionInventory))
 	if narrow >= full/2 {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
+	}
+}
+
+/*
+================
+TestElementalWalkReadsNothingOutsideTheCompanionCopy
+
+Production keeps the wolf's record in a bag row behind a stuffed bag.
+The eligibility walk must resolve it on the companion copy - which
+keeps companion rows and drops plain ones - and produce the same step
+as on the whole-record copy; the seam must see the copy happen.
+================
+*/
+func TestElementalWalkReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_WOLF_040", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	gid, now := c.ActiveCOS.GID, clock.NowMs()
+	movePetToBagRow(c, 100)
+	stuffOwnerInventories(c)
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	narrow, ok := rt.wolfCompanion(testDivision, c, gid, now)
+	if !ok {
+		t.Fatal("wolf in a bag row lost eligibility on the companion copy")
+	}
+	if len(copied) == 0 || copied[0] != c.Name {
+		t.Fatalf("the walk never took the companion copy of its owner; copied %v", copied)
+	}
+	if narrow.snapshot.AvatarInventory != nil {
+		t.Fatal("companion copy kept the avatar inventory")
+	}
+	for _, row := range narrow.snapshot.MissionInventory {
+		if row.Summon == nil && (row.Slot < 0 || row.Slot >= int64(domain.EquipmentSlotEnd)) {
+			t.Fatalf("companion copy kept plain bag row %+v", row)
+		}
+	}
+
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	full, ok := rt.wolfCompanion(testDivision, c, gid, now)
+	if !ok {
+		t.Fatal("wolf in a bag row lost eligibility on the full copy")
+	}
+	if narrow.pet.GID != full.pet.GID || narrow.pet.Codename != full.pet.Codename || narrow.pet.CurrentHP != full.pet.CurrentHP {
+		t.Fatalf("pet diverged: narrow %+v, full %+v", narrow.pet, full.pet)
+	}
+	narrowPets, fullPets := narrow.snapshot.Companions(), full.snapshot.Companions()
+	if len(narrowPets) != len(fullPets) {
+		t.Fatalf("companion lists diverged: narrow %d pets, full %d", len(narrowPets), len(fullPets))
+	}
+	for i := range narrowPets {
+		if narrowPets[i].GID != fullPets[i].GID {
+			t.Fatalf("companion %d diverged: narrow gid %d, full gid %d", i, narrowPets[i].GID, fullPets[i].GID)
+		}
 	}
 }

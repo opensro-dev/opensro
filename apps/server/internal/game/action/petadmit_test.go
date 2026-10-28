@@ -235,9 +235,11 @@ TestBagRowCompanionsKeepPetVerdicts
 
 Production shape: the wolf's and the bear's records ride in bag rows
 (slot 100, Summoned, ActiveCOS nil) behind a stuffed bag. The wolf
-stays eligible and the bear stays a bond source with a bond plan -
-both lanes resolve their pets through the owner's rows, so their
-owner copies stay full (#1943).
+stays eligible and the bear stays a bond source with a bond plan.
+Both lanes resolve their pets through the owner's rows: the wolf's
+eligibility walk reads them from the companion copy, which keeps
+companion rows (#2030); the bear's bond lane still takes its full
+copy (#1943).
 ================
 */
 func TestBagRowCompanionsKeepPetVerdicts(t *testing.T) {

@@ -39,10 +39,9 @@ func (rt *Runtime) wolfSource(division string, owner *enterworld.Character, gid 
 wolfCompanion
 
 Common eligibility for every wolf bonus; no learned Execute prerequisite.
-The copy stays the full one: eligibility itself resolves the wolf
-through the owner's inventory rows, and companion resolution walks
-bag rows - the narrow equipment copy drops the pet it just admitted
-(#1943; the domain SnapshotEquipment pin).
+Eligibility resolves the wolf through the owner's companion rows;
+the companion copy keeps exactly those rows, where the #1943
+equipment copy dropped the pet it just admitted (#2030).
 ================
 */
 func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, gid uint32, now int64) (petCombatStep, bool) {
@@ -124,9 +123,12 @@ func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterwo
 ================
 elementalCompanionMatching
 
-The one eligibility walk. The owner copy is the full admitted one,
-because the walk itself resolves the pet through the owner's
-inventory rows (#1943).
+The one eligibility walk. The owner copy is the admitted companion
+copy: the walk resolves the pet through the owner's companion rows,
+which that copy keeps, and neither the walk nor the kits it feeds
+read anything else the whole-record copy carries (#2030;
+TestElementalWalkReadsNothingOutsideTheCompanionCopy). The #1943
+equipment copy dropped bag-row pets; the companion copy does not.
 ================
 */
 func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld.Character, q elementalQuery, now int64) (petCombatStep, bool) {
@@ -137,7 +139,7 @@ func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld
 	gid, kind, allowTown := q.gid, q.kind, q.allowTown
 	// Runs per pet per tick: copy the owner only when a pet could pass the
 	// record filters below (#1943).
-	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(c *enterworld.Character) bool {
 		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
 	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
