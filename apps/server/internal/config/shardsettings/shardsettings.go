@@ -113,6 +113,11 @@ var Settings = []Setting{
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
 	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off", Catalogue: true},
+	// Port-only, not native: the temple band population and its 22
+	// instanced worlds (#1800 step 3). Needs SRO_CAP110_MONSTERS (the
+	// importer writes cap110-temple.txt only on that pairing, and the
+	// consumer refuses the same pairing at load). "off" is native.
+	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.

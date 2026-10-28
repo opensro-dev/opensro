@@ -223,6 +223,13 @@ variable "cap110_qinshi" {
   default = "off"
 }
 
+# Port-only, not native: the temple band instances (#1800 step 3). It
+# needs cap110_monsters on as well; GameWorld refuses to start otherwise.
+variable "cap110_temple" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the name-change scroll (#1689) - the Item Mall
 # lists it for 500 silk and a use queues a rename for the next login.
 # "off" is native: names never change.
@@ -1236,6 +1243,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_CAP110_QINSHI                  = var.cap110_qinshi
+        SRO_CAP110_TEMPLE                  = var.cap110_temple
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
