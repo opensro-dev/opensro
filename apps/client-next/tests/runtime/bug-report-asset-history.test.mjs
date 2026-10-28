@@ -37,6 +37,7 @@ then calls sample() as the UI frame would.
 ================
 */
 function harness() {
+	/** @type {{ snapshot: object | undefined, phase: string | null }} */
 	const host = { snapshot: undefined, phase: "world" };
 	const history = createAssetHistory( { read: () => host.snapshot, phase: () => host.phase } );
 	return { host, history };
