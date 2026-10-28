@@ -33,6 +33,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/economy"
 )
 
@@ -107,6 +108,7 @@ func publicRules() publicstats.RulesResponse {
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -322,6 +324,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "With a trade transport out you cannot use a town gate, a return scroll or the reverse return (ferries are allowed).",
 				Now:    "You can use town gates, return scrolls and the reverse return with a trade transport out; the transport travels with you.",
 				Why:    "Requested for the beta, for testing trade runs; the original returns with one setting."},
+			{Flag: townarea.EnvThiefCartTownAreas, On: thiefCartTownAreasOn,
+				Native: "A thief with a transport out is stopped at a town's protected ground; the outer streets of some towns are open ground the cart can reach.",
+				Now:    "The cart is also stopped at the walls of those towns (Hotan, Constantinople and Samarkand).",
+				Why:    "Owner decision: thieves should not bring stolen goods into any part of a town."},
 			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
 				Native: "Job kills earn job EXP only.",
 				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +

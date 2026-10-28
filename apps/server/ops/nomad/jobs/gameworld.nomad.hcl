@@ -895,6 +895,15 @@ variable "job_goods_teleport" {
   default = "off"
 }
 
+# thief_cart_town_areas stops a thief's transport at the town walls that
+# regioninfo.txt places in battlefield regions, not only at a town's
+# protected regions (port-only, not native; owner decision 2026-10-28,
+# #1985). "off" is native. A malformed value stops GameWorld at boot.
+variable "thief_cart_town_areas" {
+  type    = string
+  default = "on"
+}
+
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
 # attribute stones out of every monster drop (port-only, not native, beta
 # balance; owner 2026-10-13): players buy them from the Jangan shops. "off"
@@ -1324,6 +1333,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRANSPORT_FOLLOW                    = var.transport_follow
         SRO_TRANSPORT_FOLLOW_TETHER             = var.transport_follow_tether
         SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
+        SRO_THIEF_CART_TOWN_AREAS               = var.thief_cart_town_areas
         SRO_ELIXIR_DROPS_OFF                    = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9              = var.beta_shop_only_degree9

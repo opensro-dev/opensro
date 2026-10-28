@@ -579,7 +579,7 @@ func (rt *Runtime) HandleItemUse(
 				Run:       cosRef.RunSpeed,
 				Scale:     cosRef.Scale,
 				Name:      name,
-				OwnerName: character.Name,
+				OwnerName: enterworld.PartyMemberName(character),
 				OwnerGid:  enterworld.ObjectIDForCharacter(character),
 			})
 			rt.rememberTransportCOS(divisionID, character, live)

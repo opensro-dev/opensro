@@ -212,12 +212,15 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 	unlock := rt.lockDivision(effect.Division)
 	defer unlock()
 	c := rt.findCharacter(effect.Division, effect.SourceName)
-	var snapshot *enterworld.Character
-	if c != nil {
-		snapshot = rt.characterSnapshot(effect.Division, c)
-	}
-	live := snapshot != nil && enterworld.CharacterAlive(snapshot) && !snapshot.DeletePending &&
-		rt.periodicEffects.Active(effect.Division, effect.SourceToken)
+	// Copy the source only when it can still act: a dead or
+	// deletion-pending caster's record was detached on every pulse of
+	// every persistent effect only to be refused here (#1943). A refused
+	// source resolves no target below - its life verdict already retires
+	// the effect, exactly as the copy's did.
+	snapshot := rt.characterSnapshotAdmitted(effect.Division, c, func(live *enterworld.Character) bool {
+		return enterworld.CharacterAlive(live) && !live.DeletePending
+	})
+	live := snapshot != nil && rt.periodicEffects.Active(effect.Division, effect.SourceToken)
 	if effect.StructureRepair {
 		live = live && rt.structureRepairSourceActive(effect)
 	}

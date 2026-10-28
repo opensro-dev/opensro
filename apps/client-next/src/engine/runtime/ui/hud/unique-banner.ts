@@ -11,7 +11,12 @@ a 1000 ms fade.
 
 ===========================================================================
 */
-import type { SystemNotice } from "@/engine/foundation/gameplay/system-notices";
+import {
+	SEAL_NOTICE_COLOR_MOON,
+	SEAL_NOTICE_COLOR_STAR,
+	type SystemNotice,
+	sealDropTierFromText
+} from "@/engine/foundation/gameplay/system-notices";
 import { noticeText } from "@/engine/foundation/ui/notice-text";
 import type { UiTuning } from "@/engine/foundation/ui/ui-tuning";
 
@@ -45,6 +50,87 @@ export const SHORT_NOTICE_TIMING: NoticeTiming = { showMs: 5000, fadeMs: 1000 };
 // plate gold/amber instead of crimson and draw the caption in gold.
 export const SUN_DROP_BANNER_COLOR = [ 180, 120, 16 ] as const;
 export const SUN_DROP_BANNER_TEXT_RGB = [ 1, 215 / 255, 80 / 255 ] as const;
+
+/*
+================
+SealBannerColors
+
+A seal drop's banner colours: the plate in a deep shade of its tier,
+the caption in the tier colour itself (SEAL_NOTICE_COLOR_*).
+================
+*/
+export interface SealBannerColors {
+	readonly plate: readonly [number, number, number];
+	readonly textRgb: readonly [number, number, number];
+}
+
+/*
+================
+argbTextRgb
+
+A SEAL_NOTICE_COLOR_* word as a caption colour.
+================
+*/
+function argbTextRgb( argb: number ): readonly [number, number, number] {
+	return [ ((argb >>> 16) & 255) / 255, ((argb >>> 8) & 255) / 255, (argb & 255) / 255 ];
+}
+
+// Port-only, not native (#1976): every seal tier colours its top-centre
+// notice, not only Sun. Sun keeps the plate and caption #1640 shipped.
+const SEAL_BANNER_COLORS: readonly SealBannerColors[] = [
+	{ plate: [ 112, 86, 16 ], textRgb: argbTextRgb( SEAL_NOTICE_COLOR_STAR ) },
+	{ plate: [ 52, 64, 94 ], textRgb: argbTextRgb( SEAL_NOTICE_COLOR_MOON ) },
+	{ plate: SUN_DROP_BANNER_COLOR, textRgb: SUN_DROP_BANNER_TEXT_RGB }
+];
+
+/*
+================
+sealBannerColors
+
+The banner colours for a seal tier (0 Star, 1 Moon, 2 Sun).
+================
+*/
+export function sealBannerColors( tier: 0 | 1 | 2 ): SealBannerColors {
+	return SEAL_BANNER_COLORS[tier]!;
+}
+
+// A seal notice's plate grows past its caption and sits more opaque
+// than the shipped plate (port-only, #1976).
+const SEAL_ROW_PAD_X = 16, SEAL_ROW_PAD_Y = 6, SEAL_ROW_PLATE_ALPHA = 0.8;
+
+/*
+================
+noticeBannerRow
+
+The notification row's plate choice (port-only, #1976): a line that
+announces a seal drop wears its tier's colours (Sun's tier keeps the
+shipped gold) on the padded, more opaque plate. Every other notice -
+academy, guild war, friends, letters, plain server notices - keeps the
+native plate exactly: crimson, hugging the caption, the shipped alpha.
+================
+*/
+export function noticeBannerRow(
+	banner: Pick<ReturnType<typeof createNoticeBanner>, "sealTier">
+): {
+	readonly color: readonly [number, number, number];
+	readonly textRgb: readonly [number, number, number];
+	readonly padX: number;
+	readonly padY: number;
+	readonly plateAlpha: number | undefined;
+} {
+	const tier = banner.sealTier();
+	if ( tier !== undefined ) {
+		const colors = sealBannerColors( tier );
+		return {
+			color: colors.plate,
+			textRgb: colors.textRgb,
+			padX: SEAL_ROW_PAD_X,
+			padY: SEAL_ROW_PAD_Y,
+			plateAlpha: SEAL_ROW_PLATE_ALPHA
+		};
+	}
+	return { color: [ 128, 45, 67 ], textRgb: [ 1, 1, 1 ], padX: 0, padY: 0, plateAlpha: undefined };
+}
 
 // The banner's alpha steps (the native quad alpha byte).
 const ALPHA_STEPS = 255;
@@ -145,7 +231,16 @@ export function createNoticeBanner( kind: "banner" | "notificationBanner" = "ban
 		sunDrop
 		================
 		*/
-		sunDrop: () => Boolean( current?.sunDrop )
+		sunDrop: () => Boolean( current?.sunDrop ),
+		/*
+		================
+		sealTier
+
+		The current line's seal tier (0 Star, 1 Moon, 2 Sun) when it
+		announces a seal drop, so the banner can colour by tier (#1976).
+		================
+		*/
+		sealTier: () => current?.sunDrop ? 2 : (current?.text ? sealDropTierFromText( current.text ) : undefined)
 	};
 }
 

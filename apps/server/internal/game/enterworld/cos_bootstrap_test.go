@@ -1,9 +1,11 @@
 package enterworld
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -86,5 +88,57 @@ func TestBootstrapRehydratesCosBeforeObjectListAndRideAfterFinalize(t *testing.T
 		if gotRide[index] != want {
 			t.Fatalf("B4B5[%d] = 0x%02X, want 0x%02X", index, gotRide[index], want)
 		}
+	}
+}
+
+/*
+================
+TestBootstrapCosOwnerNameFollowsTheJobSuit
+
+#1983: a relogging suited owner's rehydrated COS row carries the job
+alias, not the real name; the disguise survives the relogin.
+================
+*/
+func TestBootstrapCosOwnerNameFollowsTheJobSuit(t *testing.T) {
+	ref := &CharacterRef{
+		RefObjID: 3914, TidWord: 0x11C6, Codename: "COS_T_DHORSE3", Name: "Red Horse",
+		WalkSpeed: 20, RunSpeed: 40, Scale: 100, MaxHP: 87829,
+		MountedAttackCapability210: 3000,
+	}
+	deps := &Deps{Items: cosBootstrapRefSource{character: ref}}
+	character := &Character{
+		ID: 3, Name: "asd2",
+		Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Trader"},
+		MissionInventory: []InventoryRow{
+			{Slot: JobSuitSlot, RefObjID: 9101, Codename: "ITEM_CH_M_TRADE_TRADER_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, 1), StackCount: 1},
+		},
+		ActiveCOS: &CharacterCOS{
+			GID: 0x00C00003, RefObjID: ref.RefObjID, Codename: ref.Codename,
+			Name: ref.Name, CurrentHP: ref.MaxHP, Summoned: true, Mounted: true,
+			NativeBodyStatus: 4,
+		},
+	}
+	entry := &LocalPlayerEntry{StartProfile: StartProfileForRaceProfile()}
+	packets, err := buildBootstrapPackets(deps, "global-official", character, entry, nil, ObjectIDForCharacter(character))
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := append([]byte{byte(len("Trader")), 0}, "Trader"...)
+	realName := append([]byte{byte(len(character.Name)), 0}, character.Name...)
+	found := false
+	for _, packet := range packets {
+		if packet.NativeOpcode != OpcodeObjectListChunk {
+			continue
+		}
+		found = true
+		if !bytes.Contains(packet.Payload, alias) {
+			t.Fatalf("relogin COS row owner name is not the alias: %v", packet.Payload)
+		}
+		if bytes.Contains(packet.Payload, realName) {
+			t.Fatalf("relogin COS row leaks the real name: %v", packet.Payload)
+		}
+	}
+	if !found {
+		t.Fatal("bootstrap published no COS object row")
 	}
 }

@@ -160,6 +160,25 @@ export function sealNoticeColorArgb(
 
 /*
 ================
+sealDropTierFromText
+
+The seal tier a drop line's text names (0 Star, 1 Moon, 2 Sun), or
+undefined when the line announces no seal drop. This is the chat
+colour's text fallback (chat-layout's sealNoticeChatColor) shared with
+the top-centre banner: only drop lines carry a tier, so a plus line's
+parenthesised seal names none.
+================
+*/
+export function sealDropTierFromText( text: string ): 0 | 1 | 2 | undefined {
+	if ( !text.includes( " has dropped " ) ) return undefined;
+	if ( isSunDropNoticeText( text ) ) return 2;
+	if ( text.includes( "(Seal Of Moon)" ) ) return 1;
+	if ( text.includes( "(Seal Of Star)" ) ) return 0;
+	return undefined;
+}
+
+/*
+================
 serverNotification
 
 753A6F -> 752ABD -> 67A140/6B3180: the native type-7 server notification,

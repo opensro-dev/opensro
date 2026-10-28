@@ -328,6 +328,9 @@ func newGameplayPlane(
 	}
 	// A thief in job mode may not bring its transport into a town (#721).
 	movementRuntime.TownEntryBlocked = items.ThiefCargoTownBlocked
+	if err := configureThiefCartTownAreas(items, movementRuntime, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
 	movementRuntime.EnableGroundWalk()
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable

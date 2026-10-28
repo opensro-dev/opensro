@@ -287,6 +287,10 @@ var Settings = []Setting{
 	// restores the native name-only whisper resolution. The alias/name
 	// collision refusals are unconditional and not behind this switch.
 	{Env: "SRO_WHISPER_JOB_ALIAS", NomadVar: "whisper_job_alias", Default: "on"},
+	// Owner, 2026-10-28 (#1985): a thief's transport also stops at town
+	// walls that stand in battlefield regions; "off" is the native region
+	// rule alone.
+	{Env: "SRO_THIEF_CART_TOWN_AREAS", NomadVar: "thief_cart_town_areas", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Community vote, 2026-10-24: the monster parts drop again, so the
 	// deployment default is native ("off"); "on" restores the 2026-10-14

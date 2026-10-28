@@ -47,8 +47,13 @@ func (rt *Runtime) crowSupportRecipients(step petCombatStep, party, allowTown bo
 	from := rt.liveSpawn(simulation.WorldKey(step.key.division, step.snapshot.Name), step.snapshot, step.nowMs)
 	for gid := range rt.auraParty(step.key.division, step.snapshot) {
 		member := rt.findCharacterByGid(step.key.division, gid)
-		snapshot := rt.characterSnapshot(step.key.division, member)
-		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !rt.petExpansionAllowed(snapshot, step.pet) || !allowTown && rt.inTown(step.key.division, snapshot) {
+		// A dead or deletion-pending member is refused on its live
+		// facts; only an admitted member pays for the copy the runtime
+		// checks below read (#1943).
+		snapshot := rt.characterSnapshotAdmitted(step.key.division, member, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live)
+		})
+		if snapshot == nil || !rt.petExpansionAllowed(snapshot, step.pet) || !allowTown && rt.inTown(step.key.division, snapshot) {
 			continue
 		}
 		session := rt.petSessionFor(step.key.division, snapshot.Name, 0)
