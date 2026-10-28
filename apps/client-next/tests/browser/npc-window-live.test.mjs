@@ -119,7 +119,7 @@ test('live NPC title drag and ESC retire the selected conversation',{timeout:300
   if(!baseline){assert.equal(systemOpen,'System');}
   await page.keyboard.press('Escape');
   await page.waitForFunction(()=>__npcWindowProbe.owner.stats().panel==='',null,{timeout:10000});
-  // Retail sub_5d03e0 hides the menu and sends restart type 2; no placeholder panel.
+  // Retail UI_HideMenuAndRequestRestartType2 hides the menu and sends restart type 2; no placeholder panel.
   await page.keyboard.press('Escape');
   await page.locator('[data-ui-id="system-restart"]').waitFor({timeout:10000});
   await page.locator('[data-ui-id="system-restart"]').click();

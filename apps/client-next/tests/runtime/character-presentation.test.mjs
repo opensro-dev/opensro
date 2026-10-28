@@ -3209,7 +3209,7 @@ test("quest marker waits for character metadata admission without reporting a mi
 			count: 1,
 			resource: "marker.bsr",
 			life: 0,
-			// sub_91e720 decodes '*' into no bone plus binding +0x09.
+			// CSkillEffectManager_ParseSkillEffectRecord decodes '*' into no bone plus binding +0x09.
 			bone: null,
 			addHeight: true,
 			offset: [ 0, 5, 0 ]

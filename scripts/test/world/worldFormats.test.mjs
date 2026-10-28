@@ -177,13 +177,13 @@ test("JMXVNVM 1000 0x694e parses walkability and height maps", async () => {
 });
 
 test("JMXVNVM 1000 object link rows decode as reciprocal {neighborObj, neighborEdge, myEdge} u16 triples", async () => {
-	// Native consumer: sub_403fb0 @0x0040429c walks NavMeshInstance+0xa0 rows
-	// (read by CRTNavMeshTerrain_LoadFromNvm sub_4033e0) to hand a mover off to
+	// Native consumer: CRTNavMeshTerrain_StepPlacedObject @0x0040429c walks NavMeshInstance+0xa0 rows
+	// (read by CRTNavMeshTerrain_LoadFromNvm CRTNavMeshTerrain_Load) to hand a mover off to
 	// a NEIGHBOR object mesh (multi-object bridge chains). Row layout verified
 	// against the ASM and the full 3863-file corpus: u16[0] neighbor object
 	// index in the SAME region (0xffff = one-sided), u16[1] neighbor outline
-	// edge index (sub_428cb0 entry), u16[2] own outline edge index (the scan
-	// key from sub_425ed0). nv_17ab is a known multi-object chain region.
+	// edge index (CRTNavMesh_EnterCellThroughEdge entry), u16[2] own outline edge index (the scan
+	// key from CRTNavMeshObj_FindOutlineEdgeIndex). nv_17ab is a known multi-object chain region.
 	const linked = parseNavmesh(
 		await readFile( path.join( extractedRoot, "Data_extracted", "navmesh", "nv_17ab.nvm" ) )
 	);

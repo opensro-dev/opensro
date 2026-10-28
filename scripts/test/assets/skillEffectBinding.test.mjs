@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skillEffectBinding.test.mjs - skilleffectset bone tokens decode as sub_91e720
+skillEffectBinding.test.mjs - skilleffectset bone tokens decode as CSkillEffectManager_ParseSkillEffectRecord
 
 A stage row names its start and target anchors with one token each. The
 native parser reads a marker off the token into the binding's +0x08 / +0x09

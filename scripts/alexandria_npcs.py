@@ -56,7 +56,7 @@ SKILL_PAIR_COUNT = 5
 # The native table that new rows join (its ids end below the city's).
 CHARACTER_TARGET = "characterdata_25000.txt"
 
-# CICNPC's class gate (sub_851420), as the server's npcworlddata.go tests it.
+# CICNPC's class gate (GIDObject_SelectRuntimeClassAndSpawn), as the server's npcworlddata.go tests it.
 NPC_TID_MASK = 0x7FE
 NPC_TID_WORD = 0x0146
 
