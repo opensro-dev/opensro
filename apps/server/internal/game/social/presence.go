@@ -3,8 +3,7 @@
 package social
 
 import (
-	"strings"
-
+	"opensro.online/server/internal/platform/namekey"
 	"opensro.online/server/internal/transport"
 )
 
@@ -20,9 +19,11 @@ func NewDirectory(hub *transport.Hub) *Directory {
 	return &Directory{hub: hub}
 }
 
-// BindKey composes the identity claimed by Hub.BindExclusive.
+// BindKey composes the identity claimed by Hub.BindExclusive; the key's
+// shape is defined once in platform/namekey so bindings and the
+// live-world store can never drift apart.
 func BindKey(divisionID, characterName string) string {
-	return divisionID + ":" + strings.ToLower(characterName)
+	return namekey.Key(divisionID, characterName)
 }
 
 // SessionByName returns the session currently driving a character.
