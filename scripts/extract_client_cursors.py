@@ -3,13 +3,13 @@
 
 extract_client_cursors.py - the native cursors from SRO_Client.exe
 
-The native cursor manager (sub_a15af0 / CursorManager_SetCursorByParam) calls
+The native cursor manager (CursorManager_SetCursorByParam) calls
 LoadCursorA(hInstance, MAKEINTRESOURCE(param)) - the interaction cursor param
 IS the RT_GROUP_CURSOR resource ordinal. The port serves these as
 /assets/cursors/sro_client_cursor_0x<id>.png, decoded from the native DIB:
 every browser draws a PNG cursor, while .cur support differs (Safari drew no
 cursor at all, BUG-068). 0x95 is the arrow; 0x99 pickup / 0x9a
-pickup-pressed are the sub_67a410 params the ground-drop hover uses.
+pickup-pressed are the CGInterface_SetCursorParam params the ground-drop hover uses.
 
 Usage: py scripts/extract_client_cursors.py [ids...]
 Defaults to every cursor referenced by the browser client. SRO_Client.exe

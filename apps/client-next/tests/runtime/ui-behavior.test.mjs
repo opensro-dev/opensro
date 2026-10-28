@@ -1274,7 +1274,7 @@ test("System menu inserts Experimental below Options using the authored buttons"
 		assert.equal(
 			restarted.controls.filter( c => c.id === "system-restart" ).length,
 			0,
-			"Restart hides the System menu like retail sub_5d03e0"
+			"Restart hides the System menu like retail UI_HideMenuAndRequestRestartType2"
 		);
 	} finally {
 		f.dispose();
