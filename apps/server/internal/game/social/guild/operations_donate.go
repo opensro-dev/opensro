@@ -40,7 +40,7 @@ func refusedGpDonate(reason string) GpDonateOutcome {
 // DonateGuildPoints store door (SP debit + guild-GP credit + member
 // DonatedGP credit, ONE commit - two sequential doors would tear SP-vs-
 // GP state on a crash between commits). The arm is IN-GUILD ONLY: the
-// client's donate button gates solely on sub_8188b0 (@0x005e4db8) with
+// client's donate button gates solely on CCharacterDependentData_IsInGuild (@0x005e4db8) with
 // NO permission-mask bit and NO grade gate, so any member may donate.
 // Validation order mirrors the v1.188 job posture (identity -> state ->
 // resource last; EVIDENCE(v1.188, logic) - the 0x4c0c gold-deficit

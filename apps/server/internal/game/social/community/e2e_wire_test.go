@@ -312,7 +312,7 @@ func readBlockedWhisperers(t *testing.T, authority *store.Store) []string {
 }
 
 // expectWhisperBlockAck asserts the next frame is 0xB66F with the exact
-// body - the raw-byte contract the client agent pins sub_771550 against.
+// body - the raw-byte contract the client agent pins CPSMission_OnAliasActionResponse0xB66F against.
 func expectWhisperBlockAck(t *testing.T, c *websocket.Conn, want []byte, what string) {
 	t.Helper()
 	got := expectFrame(t, c, community.OpWhisperBlockAck, what)

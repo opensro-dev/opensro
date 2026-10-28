@@ -2,7 +2,7 @@ package domain
 
 const (
 	// BeginnerMarkMaxLevel is the native CIFOption game-page gate
-	// (sub_5cb550: CICPlayer_GetLevel() <= 0x13).
+	// (CIFOption_Hotkey_OnDefault: CICPlayer_GetLevel() <= 0x13).
 	BeginnerMarkMaxLevel int64 = 19
 	VisualFlagBeginner   uint8 = 1 << 0
 	// VisualFlagHelper is the Helper status mark: CGInterface_ExecuteActionCommand

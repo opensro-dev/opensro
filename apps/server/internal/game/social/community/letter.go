@@ -24,7 +24,7 @@ import (
 // never needs a stable id column.
 
 // PackLetterReceiveTime composes the packed receive-time dword the
-// client's sub_60c9b0 decode reads (record +0x3c): bits 0..5 the
+// client's CIFLetterSlot_SetRecord decode reads (record +0x3c): bits 0..5 the
 // two-digit year, 6..9 the month, 10..14 the day, 15..19 the hour,
 // 20..25 the minute. The year field is 6 bits, so years past 2063 alias
 // - exactly what the native field does; the client renders it %0.2d.

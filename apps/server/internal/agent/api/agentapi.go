@@ -11,7 +11,7 @@ agentapi.go - private character selection and control HTTP surface
 // opens a login path or chooses a shard.
 //
 // Response shapes are 1:1 with the client's recovered native folds
-// (sub_72c0e0_CPSCharacterCreate_OnClickOk / sub_735c00 / authClient
+// (sub_72c0e0_CPSCharacterCreate_OnClickOk / CPSCharacterSelect_OnStartClicked / authClient
 // types) - the client is the surviving contract, and its error codes map
 // through the native agent-error table (data_cc9e5c).
 package agentapi
@@ -499,7 +499,7 @@ const maxGuildMarkBytes int64 = 1 << 20
 
 // handleGuildMark serves one guild-crest .crb blob by its native filename
 // from the configured marks directory - a raw passthrough, no
-// transformation (the client's sub_4ba950 loader consumes the bytes and
+// transformation (the client's CGuildCrestManager_BuildCrestUrl loader consumes the bytes and
 // caches them locally as .rd under the client's 0xcbc340 cache root). The server
 // stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
 // lineage), never images, so art is host-supplied: no directory or no

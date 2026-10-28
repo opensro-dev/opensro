@@ -451,7 +451,7 @@ func (r *InviteRuntime) handleInvite(s *transport.Session, opcode uint16, payloa
 		return
 	}
 	if characterLevel(actor) < MasterMinLevel {
-		// Below 0x3c the client's sub_81e9f0 kind-0 leg never publishes
+		// Below 0x3c the client's TrainingCampMember_ClassifyGrade kind-0 leg never publishes
 		// the master name, so the inviter's own pane could not have
 		// armed the Invite button - a frame that arrives anyway is a
 		// desync or forged.

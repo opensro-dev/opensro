@@ -1,7 +1,7 @@
 package community
 
 // Letter-lane table tests: the packed receive time against a mirror of
-// the client's sub_60c9b0 bit decode, the 0x7261 strict decode, the
+// the client's CIFLetterSlot_SetRecord bit decode, the 0x7261 strict decode, the
 // pinned answer encoders byte for byte, and the three handlers over a
 // fake letter door (refusal arms silent, mutation arms copy-then-swap).
 

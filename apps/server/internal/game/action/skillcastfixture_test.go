@@ -30,7 +30,7 @@ import (
 // requires the checked-in file to match byte for byte; the client parity
 // harness reads the SAME file and drives the immediate 0xB245 and deferred 0xB505
 // payloads through the
-// client's REAL sub_776830 -> 8e06e0 -> 857830 state-2 enter and
+// client's REAL CPSMission_OnSkillCastBroadcast0xB245 -> 8e06e0 -> 857830 state-2 enter and
 // client 7754F0 -> 8E2C90 -> 8DCF40 finalize chain. Either side drifting fails
 // its own gate; neither re-implements the other.
 //

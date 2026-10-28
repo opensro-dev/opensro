@@ -592,7 +592,7 @@ func EncodeMemberKick3B29(jid uint32) []byte {
 }
 
 // EncodeLeaveAckB56E composes the 0xB56E success body: the result byte
-// 1 and nothing else. The client's sub_75c8c0 handler runs only a light
+// 1 and nothing else. The client's CPSMission_OnGuildLeaveResponse0xB56E handler runs only a light
 // UI refresh on result 1 - the guild-state wipe rides the subOp-3
 // kind-1 push, so the ack alone would leave the leaver's client stale.
 // Result=2 bodies are deliberately never composed (wire.go constant

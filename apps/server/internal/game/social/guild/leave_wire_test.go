@@ -5,7 +5,7 @@ import (
 )
 
 // TestDecodeLeaveRequest pins the 0x756E strict decoder: exactly one
-// u32 (the sub_7007b0 composer writes 4 bytes from CGInterface+0x620)
+// u32 (the NetClient_SendSelectedTarget756E composer writes 4 bytes from CGInterface+0x620)
 // and nothing else - short, empty and trailing-byte payloads error.
 func TestDecodeLeaveRequest(t *testing.T) {
 	t.Parallel()

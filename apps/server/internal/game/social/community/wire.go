@@ -113,7 +113,7 @@ const (
 	// WhisperBlockResultListFull: "Cannot register any more users to
 	// block list."
 	WhisperBlockResultListFull uint8 = 3
-	// WhisperBlockResultNoEffect: the client's no-op arm - sub_771550
+	// WhisperBlockResultNoEffect: the client's no-op arm - CPSMission_OnAliasActionResponse0xB66F
 	// reads the byte and does nothing (no msgbox, no panel change). The
 	// v1.188 GameServer sends it for the quote-scan hit and
 	// for job-enqueue failures (its ADD caller maps every internal

@@ -95,7 +95,7 @@ func TestDecodeFriendDeleteRequest(t *testing.T) {
 TestEncodeFriendEvents3F9A
 
 TestEncodeFriendEvents3F9A pins the three friend event bodies byte for
-byte against the client's sub_760fb0 reads: case 2 {u8 2, u32 jid,
+byte against the client's CPSMission_OnFriendConnectNotice0x3F9A reads: case 2 {u8 2, u32 jid,
 u16 len + ANSI name, u32 model}, case 3 {u8 3, u32 jid}, case 4
 {u8 4, u32 jid, u8 state}.
 ==================

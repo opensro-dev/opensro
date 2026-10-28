@@ -10,7 +10,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// whisperBlockPayload composes the sub_704a00 wire body the client's REAL
+// whisperBlockPayload composes the NetClient_Send766F wire body the client's REAL
 // send chain builds (re-harness communitySendersParity: {u8 mode, u16
 // len, ANSI name}).
 func whisperBlockPayload(mode uint8, name string) []byte {
@@ -279,7 +279,7 @@ func whisperBlockAckDeps(before []string) (*enterworld.Deps, *enterworld.Charact
 }
 
 // TestWhisperBlockAckContract pins the 0xB66F ack RAW BYTES per arm -
-// the wire contract the client's sub_771550 reads: {u8 mode, u8 result},
+// the wire contract the client's CPSMission_OnAliasActionResponse0xB66F reads: {u8 mode, u8 result},
 // result 0 appending {u16 len, ANSI name}. Result codes: 0 success
 // (panel applies live), 1 "Name already exists.", 2 "User does not
 // exist.", 3 "Cannot register any more users to block list.", 4 the
@@ -380,7 +380,7 @@ func TestWhisperBlockAckContract(t *testing.T) {
 			// CharNextA and returns 1 on 0x27 '\'' ("quotation");
 			// the gate then lands internal 4 and
 			// the caller maps every result > 3 to wire 4 - the
-			// client's sub_771550 no-op arm (no msgbox, no panel change).
+			// client's CPSMission_OnAliasActionResponse0xB66F no-op arm (no msgbox, no panel change).
 			// NOT silence: retail does send the {1,4} frame.
 			label:     "register single-quoted name acks {1,4} (native quote scan)",
 			payload:   whisperBlockPayload(WhisperBlockModeRegister, "O'Brien"),

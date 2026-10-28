@@ -43,7 +43,7 @@ package match
 // pending refuses detail-0, DECISION).
 //
 // NO wall-clock timeout runs server-side (DECISION): the no-reply
-// answer is client-composed (the party pane's sub_63c340 arm sends
+// answer is client-composed (the party pane's CIFPartyMatchReqJoin_OnTimeout arm sends
 // answer 2), and an owner whose session dies has the request dropped
 // with detail-2 by the lifecycle hooks below.
 
