@@ -56,10 +56,11 @@ const (
 // window (it never runs in production, and its two encodes per door were
 // 58% of the counted bytes), measured 422,144 B / 2,541 allocs; with a
 // brood-free crow taking no owner copy on its tick, measured 275,466 B /
-// 2,099 allocs.
+// 2,099 allocs; with crows lacking Tailwind or Guiding Feathers refused
+// before the owner copy on those ticks, measured 208,183 B / 1,862 allocs.
 const (
-	tickBudgetBytesPerTick  = 303000
-	tickBudgetAllocsPerTick = 2309
+	tickBudgetBytesPerTick  = 229000
+	tickBudgetAllocsPerTick = 2048
 )
 
 /*

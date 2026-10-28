@@ -9,6 +9,7 @@ credited monster HP/reward door and publish death, not another cast or animation
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
@@ -45,7 +46,7 @@ bag rows - the narrow equipment copy drops the pet it just admitted
 ================
 */
 func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, gid uint32, now int64) (petCombatStep, bool) {
-	return rt.elementalCompanionEligibilityWith(division, owner, gid, "Wolf", now, false, rt.characterSnapshotAdmitted)
+	return rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: "Wolf"}, now)
 }
 
 /*
@@ -61,21 +62,51 @@ func (rt *Runtime) elementalCompanion(division string, owner *enterworld.Charact
 
 /*
 ================
-hasElementalCandidate
+elementalQuery
 
-The record half of elementalCompanionEligibility's pet filter: plain
-field reads, safe inside the read door. Every pet it rejects the loop
-below rejects too, so admission never changes the outcome.
+Which pet an eligibility walk looks for. passive, when set, admits only
+a pet with that passive slotted: the per-tick passive lanes (Tailwind,
+Guiding Feathers) refuse every other crow before copying its owner.
 ================
 */
-func hasElementalCandidate(c *enterworld.Character, gid uint32, kind string) bool {
+type elementalQuery struct {
+	gid       uint32
+	kind      string
+	allowTown bool
+	passive   string
+}
+
+/*
+================
+hasElementalCandidate
+
+The record half of elementalCompanionMatching's pet filter: plain field
+reads and catalogue lookups, safe inside the read door. Every pet it
+rejects the walk (or, for passive, the caller's own Passive check on
+the selected pet) rejects too, so admission never changes the outcome.
+================
+*/
+func hasElementalCandidate(c *enterworld.Character, q elementalQuery) bool {
 	for _, pet := range c.Companions() {
-		if pet.BroodStage == 0 && (gid == 0 || pet.GID == gid) && pet.Summoned && pet.CurrentHP != 0 &&
-			companion.PetKind(pet.Codename) == kind {
+		if pet.BroodStage == 0 && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
+			companion.PetKind(pet.Codename) == q.kind && (q.passive == "" || hasPassive(pet, q.passive)) {
 			return true
 		}
 	}
 	return false
+}
+
+/*
+================
+hasPassive
+
+companion.Passive's verdict without its level: the slotted rows alone
+decide it, so no modifiers are computed.
+================
+*/
+func hasPassive(pet *domain.CharacterCOS, name string) bool {
+	_, _, ok := companion.Passive(pet, name, companion.Modifiers{})
+	return ok
 }
 
 /*
@@ -86,28 +117,28 @@ Only travel support may opt into safe zones; combat callers keep the town gate.
 ================
 */
 func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool) (petCombatStep, bool) {
-	return rt.elementalCompanionEligibilityWith(division, owner, gid, kind, now, allowTown, rt.characterSnapshotAdmitted)
+	return rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: kind, allowTown: allowTown}, now)
 }
 
 /*
 ================
-elementalCompanionEligibilityWith
+elementalCompanionMatching
 
-The one eligibility walk. snapshotFor supplies the owner copy behind
-the field-only admission; every lane passes the full admitted copy,
+The one eligibility walk. The owner copy is the full admitted one,
 because the walk itself resolves the pet through the owner's
 inventory rows (#1943).
 ================
 */
-func (rt *Runtime) elementalCompanionEligibilityWith(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool, snapshotFor func(string, *enterworld.Character, func(*enterworld.Character) bool) *enterworld.Character) (petCombatStep, bool) {
+func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld.Character, q elementalQuery, now int64) (petCombatStep, bool) {
 	var step petCombatStep
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
+	gid, kind, allowTown := q.gid, q.kind, q.allowTown
 	// Runs per pet per tick: copy the owner only when a pet could pass the
-	// record filters below (#1943; the admitted snapshotFor door).
-	snapshot := snapshotFor(division, owner, func(c *enterworld.Character) bool {
-		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, gid, kind)
+	// record filters below (#1943).
+	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
 	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
 		return step, false

@@ -186,7 +186,14 @@ func (rt *Runtime) advanceCrowKit(key petOwnerKey, now int64) {
 	if state == nil {
 		return
 	}
-	step, ok := rt.elementalCompanion(key.division, state.character, key.gid, "Crow", now)
+	// With no precision or views to retire, a crow without Guiding
+	// Feathers slotted does nothing below: refuse it before its owner is
+	// copied (#1943). The refusal's reset of an empty kit is the same.
+	q := elementalQuery{gid: key.gid, kind: "Crow"}
+	if len(state.crow.precision) == 0 && len(state.crow.views) == 0 {
+		q.passive = "Guiding Feathers"
+	}
+	step, ok := rt.elementalCompanionMatching(key.division, state.character, q, now)
 	if !ok {
 		views := state.crow.views
 		state.crow = crowKit{}
