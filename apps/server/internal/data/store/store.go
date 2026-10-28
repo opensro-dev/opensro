@@ -229,7 +229,10 @@ type Store struct {
 	// character (division, id): a dirty character whose encoded bytes
 	// still hash to it is not rewritten (persistence.go). Entries are
 	// staged inside a commit and retained only once its transaction
-	// commits - the ground plane's loadedRecords discipline.
+	// commits - the ground plane's loadedRecords discipline. A door's
+	// own transaction retains the rows it wrote the same way, through
+	// characterRowTx (db_write.go), so no writer can leave an entry
+	// describing bytes the disk no longer holds.
 	committedDigests map[committedCharacterKey][32]byte
 	changes          changeSet
 	ground           groundState

@@ -8,6 +8,7 @@ db_write.go - normalized authority writes within the caller's transaction
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -31,18 +32,133 @@ func upsertMetaTx(tx *sql.Tx, key, value string) error {
 	return err
 }
 
-// upsertCharacterTx writes one character row inside a transaction.
+// characterRowTx is the ONE owner of a character-row write outside the
+// commit (persistence.go): a separate transaction that writes character
+// rows - an offline door's own commit (storage, the mall, the fortress
+// doors, a guild war's stakes, a rename, the delete reap). It records
+// the digest of every row it writes and every row it deletes, and its
+// Commit retains exactly those in the store's committedDigests once
+// the transaction is durable. A door therefore cannot leave a retained
+// digest describing bytes the disk no longer holds: with only the
+// commit's bytes retained, a later in-memory revert to the pre-door
+// bytes would hash to the stale digest, be skipped, and the door's
+// bytes would come back on reopen. There is no raw character-row
+// writer left for a new door to reach for instead: upsertCharacter and
+// writeCharacterRecord below are the only doors in, and both record.
 /*
 ================
-upsertCharacterTx
+characterRowTx
 ================
 */
-func upsertCharacterTx(tx *sql.Tx, division string, c *domain.Character) error {
+type characterRowTx struct {
+	*sql.Tx
+	store   *Store
+	written map[committedCharacterKey][32]byte
+	deleted map[committedCharacterKey]bool
+}
+
+/*
+================
+beginCharacterTxLocked
+
+A character-writing door's transaction: beginTxLocked (which first
+flushes deferred rows) wrapped so its character rows are recorded.
+================
+*/
+func (s *Store) beginCharacterTxLocked() (*characterRowTx, error) {
+	tx, err := s.beginTxLocked()
+	if err != nil {
+		return nil, err
+	}
+	return &characterRowTx{Tx: tx, store: s,
+		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{}}, nil
+}
+
+/*
+================
+characterRowTx::upsertCharacter
+
+Writes one character row inside the door's transaction and records
+its digest for Commit to retain.
+================
+*/
+func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) error {
 	record, err := encodeCharacter(division, c)
 	if err != nil {
 		return err
 	}
-	return writeCharacterTx(tx, division, c, record)
+	return w.writeCharacterRecord(division, c, record)
+}
+
+/*
+================
+characterRowTx::writeCharacterRecord
+
+upsertCharacter for a caller that already holds the row's bytes (the
+delete reap's friend updates): same write, same recording.
+================
+*/
+func (w *characterRowTx) writeCharacterRecord(division string, c *domain.Character, record []byte) error {
+	if err := writeCharacterTx(w.Tx, division, c, record); err != nil {
+		return err
+	}
+	key := committedCharacterKey{division: division, id: c.ID}
+	w.written[key] = sha256.Sum256(record)
+	delete(w.deleted, key)
+	return nil
+}
+
+/*
+================
+characterRowTx::deleteCharacter
+
+Removes one character row and records the removal: on Commit the
+retained digest goes with it, so a later character reusing the id is
+never skipped against a dead row's bytes.
+================
+*/
+func (w *characterRowTx) deleteCharacter(division string, id int64) error {
+	if _, err := w.Tx.Exec("DELETE FROM characters WHERE division = ? AND id = ?", division, id); err != nil {
+		return err
+	}
+	key := committedCharacterKey{division: division, id: id}
+	w.deleted[key] = true
+	delete(w.written, key)
+	return nil
+}
+
+/*
+================
+characterRowTx::Commit
+
+The wrapped transaction's commit: only once the rows are durable do
+their digests become the store's retained ones (a delete's digest is
+dropped). A rolled-back or failed door retains nothing, so it can
+never make a later commit skip a row the disk does not hold.
+================
+*/
+func (w *characterRowTx) Commit() error {
+	if err := w.Tx.Commit(); err != nil {
+		return err
+	}
+	for key := range w.deleted {
+		delete(w.store.committedDigests, key)
+	}
+	for key, digest := range w.written {
+		w.store.committedDigests[key] = digest
+	}
+	return nil
+}
+
+/*
+================
+characterRowTx::Rollback
+================
+*/
+func (w *characterRowTx) Rollback() error {
+	w.written = map[committedCharacterKey][32]byte{}
+	w.deleted = map[committedCharacterKey]bool{}
+	return w.Tx.Rollback()
 }
 
 /*
@@ -408,7 +524,13 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 
 	for _, divisionID := range divisionIDs {
 		for _, c := range data.characters[divisionID] {
-			if err := upsertCharacterTx(tx, divisionID, c); err != nil {
+			// A fresh database behind no live store: no retained
+			// digest exists yet, so the raw row writer is exact here.
+			record, err := encodeCharacter(divisionID, c)
+			if err != nil {
+				return err
+			}
+			if err := writeCharacterTx(tx, divisionID, c, record); err != nil {
 				return err
 			}
 		}

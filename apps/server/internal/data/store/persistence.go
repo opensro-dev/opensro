@@ -454,7 +454,8 @@ type characterRowCommit struct {
 ================
 upsertTimedTx
 
-upsertCharacterTx for the commit: the encoding's time is added to
+The commit's character-row write (a door's own transaction writes
+through characterRowTx, db_write.go): the encoding's time is added to
 encode. A dirty character whose encoded bytes still hash to the last
 committed digest is not rewritten: doors mark characters dirty with
 no change signal (mutateCharacterLocked), so the commit is the first
