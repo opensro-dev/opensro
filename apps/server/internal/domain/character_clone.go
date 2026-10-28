@@ -28,7 +28,9 @@ cloneCharacterEquipment
 cloneCharacter for readers that never leave the worn equipment: the
 mission inventory keeps only its equipment rows and the avatar
 inventory is not copied at all. Every other child detaches exactly as
-cloneCharacter detaches it.
+cloneCharacter detaches it. Dropping the bag rows also drops every
+companion stored in them: Companions reaches the row Summon records,
+so a reader of this copy must never resolve companions.
 ================
 */
 func cloneCharacterEquipment(source *Character) *Character {

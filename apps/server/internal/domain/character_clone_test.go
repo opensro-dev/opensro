@@ -196,3 +196,39 @@ func TestSnapshotEquipmentKeepsOnlyWornRows(t *testing.T) {
 		t.Fatal("nil inventory became non-nil")
 	}
 }
+
+/*
+================
+TestSnapshotEquipmentDropsBagRowCompanions
+
+A persistent pet's record rides in the mission row of its own item:
+companion resolution walks bag rows (visitCompanions reaches the row
+Summon records), so the narrow copy cannot see a summoned pet stored
+in the bag. This pins the trap - a SnapshotEquipment reader must never
+resolve companions.
+================
+*/
+func TestSnapshotEquipmentDropsBagRowCompanions(t *testing.T) {
+	crow := &CharacterCOS{GID: 7001, Codename: "COS_P_RAVEN_090", Summoned: true, CurrentHP: 100}
+	character := &Character{
+		Name: "bagRowOwner",
+		MissionInventory: []InventoryRow{
+			{Slot: 6, Codename: "WEAPON"},
+			{Slot: 20, Codename: "PET_ITEM", Summon: crow},
+		},
+	}
+
+	if got := character.Snapshot().CompanionByGID(7001); got == nil {
+		t.Fatal("the full copy lost the bag-row crow")
+	}
+	narrow := character.SnapshotEquipment()
+	if got := narrow.CompanionByGID(7001); got != nil {
+		t.Fatal("the narrow copy resolved a bag-row companion")
+	}
+	if len(narrow.Companions()) != 0 {
+		t.Fatalf("the narrow copy carries companions: %v", narrow.Companions())
+	}
+	if len(narrow.MissionInventory) != 1 || narrow.MissionInventory[0].Slot != 6 {
+		t.Fatalf("narrow inventory = %+v", narrow.MissionInventory)
+	}
+}
