@@ -52,7 +52,7 @@ func (d *Deps) clock() time.Time {
 // client 775F20 passes kind 3 (the rest pass 4-8). A kind-3 row therefore exists
 // after login or a ReentryPackets re-entry only if 0x3691 is sent again after
 // the reset.
-// Sending it during loading is safe: CPSMission::OnCreate (sub_729A90)
+// Sending it during loading is safe: CPSMission::OnCreate (CPSMission_OnCreate)
 // installs the 0x3691 handler and creates the CGInterface in the same call,
 // and client 683B40 never clears a row.
 //

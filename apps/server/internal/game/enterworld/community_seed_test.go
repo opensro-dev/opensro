@@ -9,7 +9,7 @@ import (
 )
 
 // TestBuildLocalPlayerEntryPayloadChunkCWhisperBlock pins the entered
-// chunk-C emission (client fold sub_77ad10: u8 count, per name u16 len +
+// chunk-C emission (client fold CPSMission_ReadBlockedWhispererList: u8 count, per name u16 len +
 // ANSI bytes) by differential position: the payload with blocked names
 // must diverge from the empty-list payload at EXACTLY the chunk-C count
 // byte - after the carry-title chunk, immediately before the u32 0x10001

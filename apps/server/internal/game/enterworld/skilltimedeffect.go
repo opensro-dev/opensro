@@ -216,7 +216,7 @@ type SkillShieldAttack struct {
 SkillPreemptiveGuard
 
 pola {grade mask, level}, the "Preemptive attack prevention (lv word 1)"
-row of the client tooltip (sub_7f9bd0). Inferred from the protection
+row of the client tooltip (CSkillParameters_AppendLocalizedTooltip). Inferred from the protection
 branch of the server's monster hostility evaluation, whose target carries a
 mask and a level: a regular monster (type word 0x8C6) whose grade bit
 (normal 1, champion 2, unique 4, elite 8) is in Mask and whose level does

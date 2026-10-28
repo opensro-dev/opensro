@@ -76,7 +76,7 @@ type ItemRef struct {
 	SetID int64
 
 	// Equip requirement columns, typed for the server-side equip gates (the
-	// native client's full-mask sub_789c60 bits compare the same
+	// native client's full-mask CSOItem_Query_789C60 bits compare the same
 	// RefItemData bytes). Absent columns default to their pass values so a
 	// degraded textdata load never invents a refusal.
 

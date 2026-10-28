@@ -28,10 +28,10 @@ gates and the item-tooltip requirement rows read (char-data never
 carries them), so the stat plane emits it after a successful allocation
 to make the new value visible mid-session.
 
-Consumed by the client (sub_75be90, CPSMission base stats):
+Consumed by the client (CPSMission_OnBaseStats0x343C, CPSMission base stats):
 MaxHP/MaxMP onto CICPlayer+0x448/+0x44c, and the block's +0x20/+0x22
 words onto +0x834/+0x836. The first eight fields stage into the singleton
-at 0xced160 and CIFPlayerInfo::UpdateStats (sub_59ffa0) reads them as the
+at 0xced160 and CIFPlayerInfo::UpdateStats (CIFPlayerInfo_UpdateStats) reads them as the
 physical/magical attack ranges, defences, hit ratio and parry ratio.
 
 TRAP: the block ALSO has +0x14/+0x16 words that read like STR/INT and

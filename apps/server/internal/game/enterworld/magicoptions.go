@@ -18,7 +18,7 @@ import (
 )
 
 // The magic-option definition plane: the v1.150 magicoption.txt rows the
-// client's CSOItem magic-option parse resolves per wire param (sub_78b1b0
+// client's CSOItem magic-option parse resolves per wire param (CSOItem_DeserializeMagicOptions
 // REINFORCE leg: the encoded u64's low u16 is a param id that MUST exist in
 // the client's magicOptionDefsByParamId3e4 table - a miss throws "missing
 // required magic-option definition"). The server therefore ships a
@@ -36,7 +36,7 @@ import (
 MagicOptionRow
 
 MagicOptionRow is one magicOptionSnapshot row: exactly the
-MagicOptionDefRecord fields the client's sub_78b1b0 reads - optionName
+MagicOptionDefRecord fields the client's CSOItem_DeserializeMagicOptions reads - optionName
 (the MATTR_* identity; equality with MATTR_REINFORCE_ITEM sets the +0x30
 reinforce flag) and paramName (a '-' in it decrements the visible-option
 count +0x85).
