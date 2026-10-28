@@ -355,6 +355,18 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		return
 	}
 
+	// The activity gate's memo lives on the ops, but the dispatch below
+	// binds each actor to a value copy (owned := *ops): a memo map first
+	// made inside the gate lands on that discarded copy, so on the
+	// production path the memo survives no actor at all - every due gate
+	// allocates a fresh map and re-walks the actor's surface. Make the
+	// map on the leg's own ops before dispatch; every copy then shares
+	// the one map header, as the memo's shard-owned design intends. The
+	// gate keeps its lazy make for direct callers outside a leg.
+	if ops.activityBlocks == nil {
+		ops.activityBlocks = make(map[uint32]activityBlockMemo)
+	}
+
 	// Slow-leg attribution (#1820 part C): one record per leg, filled
 	// below and by the planners through ops.leg; nothing reads it to
 	// decide behaviour.

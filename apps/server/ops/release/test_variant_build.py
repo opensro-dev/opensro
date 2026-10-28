@@ -34,6 +34,7 @@ class FakeRun:
 		self.calls = []
 		self.shards = {}
 		self.monsters = False
+		self.qinshi = False
 
 	def __call__(self, argv, env):
 		self.calls.append((argv, env))
@@ -48,6 +49,9 @@ class FakeRun:
 			self.monsters = env.get(variant_build.MONSTERS_FLAG) == "on"
 			if self.monsters and self.defect != "no-variant-overlay":
 				(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
+			self.qinshi = env.get(variant_build.QINSHI_FLAG) == "on"
+			if self.qinshi and self.defect != "no-qinshi-variant":
+				(textdata / variant_build.QINSHI_FILE).write_text("rows", encoding="utf-8")
 		elif "task.mjs" in tool:
 			(self.staging / "variant" / ".generated").mkdir(parents=True, exist_ok=True)
 		elif "buildServerGameDataBundle" in tool:
@@ -58,6 +62,9 @@ class FakeRun:
 					json.dumps({"format": variant_build.OVERLAY_FORMAT}), encoding="utf-8")
 			if self.monsters and self.defect not in ("no-cap110", "no-variant-overlay"):
 				(textdata / "cap110-monsters.txt").write_text("rows", encoding="utf-8")
+			variant_file = self.staging / "variant" / variant_build.TEXTDATA_DIR / variant_build.QINSHI_FILE
+			if variant_file.is_file() and self.defect != "no-qinshi" or self.defect == "extra-qinshi":
+				(textdata / variant_build.QINSHI_FILE).write_text("rows", encoding="utf-8")
 			for flag, shard in variant_build.SHARD_FILES.items():
 				asked = self.shards.get(flag) == "on"
 				if asked and self.defect != "drop-shard" or not asked and self.defect == "extra-shard":
@@ -174,6 +181,31 @@ class VariantBuildTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "missing cap110 overlays"):
 			self.build(run, env=self.monsters_on(), monster_database=self.database)
 
+	def test_qinshi_on_without_monsters_stops_before_any_step(self):
+		run = FakeRun(self.staging)
+		with self.assertRaisesRegex(ValueError, "SRO_CAP110_QINSHI=on needs SRO_CAP110_MONSTERS=on"):
+			self.build(run, env={variant_build.QINSHI_FLAG: "on"})
+		self.assertEqual(run.calls, [])
+
+	def test_qinshi_on_hands_the_family_to_the_steps_and_ships_its_nest_file(self):
+		run = FakeRun(self.staging)
+		env = {**self.monsters_on(), variant_build.QINSHI_FLAG: "1"}
+		self.build(run, env=env, monster_database=self.database)
+		for call in run.calls[:2]:
+			self.assertEqual(call[1][variant_build.QINSHI_FLAG], "on")
+		self.assertTrue((self.staging / "server-data" / "textdata" / variant_build.QINSHI_FILE).is_file())
+
+	def test_qinshi_on_without_a_variant_nest_file_is_refused(self):
+		run = FakeRun(self.staging, defect="no-qinshi-variant")
+		env = {**self.monsters_on(), variant_build.QINSHI_FLAG: "on"}
+		with self.assertRaisesRegex(ValueError, "disagrees with SRO_CAP110_QINSHI=on"):
+			self.build(run, env=env, monster_database=self.database)
+
+	def test_a_qinshi_overlay_the_settings_did_not_ask_for_is_refused(self):
+		run = FakeRun(self.staging, defect="extra-qinshi")
+		with self.assertRaisesRegex(ValueError, "disagrees with SRO_CAP110_QINSHI=off"):
+			self.build(run)
+
 	def test_staging_must_be_fresh(self):
 		self.staging.mkdir(parents=True)
 		(self.staging / "leftover").write_bytes(b"x")
@@ -189,6 +221,7 @@ class VariantBuildTests(unittest.TestCase):
 		self.assertEqual(step["SRO_CAP110_ITEMS"], "on")
 		self.assertEqual(step["SRO_CAP110_SKILLS"], "off")
 		self.assertEqual(step["SRO_CAP110_MONSTERS"], "off")
+		self.assertEqual(step["SRO_CAP110_QINSHI"], "off")
 		self.assertTrue((self.staging / "server-data" / "textdata" / "itemdata_110000.txt").is_file())
 		self.assertFalse((self.staging / "server-data" / "textdata" / "skilldata_110000.txt").exists())
 

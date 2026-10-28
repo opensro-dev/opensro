@@ -287,8 +287,9 @@ func TestReadSubmissionChecksDiagnosticsShape(t *testing.T) {
 	// included: a member the client sends but this list lacks refuses every
 	// report that carries diagnostics.
 	if err := read(zipOf(t, map[string]string{"manifest.json": "{}", "movement.json": `{"events":[]}`, "timeline.json": "[]",
-		"network.json": `{"frames":[]}`, "state.json": "{}", "environment.json": "{}"})); err != nil {
-		t.Fatalf("the six journals: %v", err)
+		"network.json": `{"frames":[]}`, "state.json": "{}", "environment.json": "{}",
+		"assets.json": `{"samples":[]}`})); err != nil {
+		t.Fatalf("the seven journals: %v", err)
 	}
 	for name, members := range map[string]map[string]string{
 		"extra file":   {"movement.json": "{}", "chat.txt": "hello"},

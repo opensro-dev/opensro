@@ -388,3 +388,80 @@ test("every closed movement refusal code survives receipt error, sample gameplay
 		MOVEMENT_ERROR_CODES.map( code => code === "Movement rejected" ? "movement-rejected" : code )
 	);
 });
+
+/*
+================
+assetSample
+================
+*/
+function assetSample( t, jobs ) {
+	return { t, phase: "character-select", queue: { phase: "running", error: null, available: 0, jobs } };
+}
+
+test("assets.json reaches the uploaded ZIP, rebuilt from typed fields alone (#1975)", async () => {
+	const input = fixture();
+	input["assets.json"] = JSON.stringify( {
+		note: "n",
+		current: assetSample( 9, [] ),
+		samples: [
+			assetSample( 1, [ {
+				id: 4,
+				path: "/assets/world/region.bundle",
+				decode: "frontend-world",
+				ageMs: 30000,
+				state: "cancelling",
+				result: null,
+				extra: "PRIVATE_EXTRA"
+			}, {
+				id: 5,
+				path: "https://x/PRIVATE_URL?token=PRIVATE_TOKEN",
+				decode: "bytes",
+				ageMs: 1,
+				state: "loading",
+				result: null
+			} ] ),
+			{ t: 2, phase: "PRIVATE PHASE", queue: { phase: "failed", error: "PRIVATE_ERROR", available: 3, jobs: [] } }
+		]
+	} );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	const assets = documents["assets.json"];
+	assert.ok( assets, "the member is in the shared ZIP" );
+	assert.doesNotMatch( JSON.stringify( assets ), /PRIVATE_/ );
+	assert.deepEqual( assets.samples[0].queue.jobs[0], {
+		id: 4,
+		path: "/assets/world/region.bundle",
+		decode: "frontend-world",
+		ageMs: 30000,
+		state: "cancelling",
+		result: null
+	} );
+	assert.equal( assets.samples[0].queue.jobs[1].path, null );
+	assert.equal( assets.samples[1].phase, null );
+	assert.equal( assets.samples[1].queue.failed, true );
+	assert.equal( assets.current.t, 9 );
+});
+
+test("an oversized asset history is trimmed oldest first, never refused", async () => {
+	const input = fixture();
+	const job = ( id ) => ({
+		id,
+		path: `/assets/packs/${createHash( "sha256" ).update( String( id ) ).digest( "hex" )}.bin`,
+		decode: "bytes",
+		ageMs: id,
+		state: "loading",
+		result: null
+	});
+	input["assets.json"] = JSON.stringify( {
+		samples: Array.from(
+			{ length: 72 },
+			( _, i ) => assetSample( i, Array.from( { length: 24 }, ( _, j ) => job( i * 24 + j ) ) )
+		)
+	} );
+	const blob = await createDiagnosticUpload( input, { ...OPTIONS, maxBytes: 8192 } );
+	assert.ok( blob.size <= 8192 );
+	const { documents } = await readZip( blob );
+	const samples = documents["assets.json"].samples;
+	assert.ok( samples.length > 0 && samples.length < 72 );
+	assert.equal( samples.at( -1 ).t, 71, "the newest sample is kept" );
+	assert.ok( documents["manifest.json"].omissions.some( line => line.startsWith( "assets.json: dropped" ) ) );
+});
