@@ -64,10 +64,11 @@ func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.C
 	}
 	// Runs for every bear source per bond plan: copy the owner only when
 	// the record still holds a live summoned bear under this gid. The
-	// copy stays the full one: the bear below resolves through the
-	// owner's inventory rows, and companion resolution walks bag rows -
-	// the narrow equipment copy drops the pet it just admitted (#1943).
-	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+	// copy is the companion copy: the bear below resolves through the
+	// owner's companion rows, which that copy keeps, where the #1943
+	// equipment copy dropped the pet it just admitted (#2030;
+	// TestBondSourceReadsNothingOutsideTheCompanionCopy).
+	owner := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		pet := c.CompanionByGID(key.gid)
 		return !c.DeletePending && pet != nil && pet.CurrentHP != 0 && companion.PetKind(pet.Codename) == "Bear"
 	})

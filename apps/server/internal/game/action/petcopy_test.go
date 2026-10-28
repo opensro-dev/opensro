@@ -3,9 +3,10 @@
 
 petcopy_test.go - the pet tick reads nothing outside its narrow copy (#2030)
 
-advancePet took the owner's whole record per summoned pet per tick.
-It now takes the companion copy (domain SnapshotCompanion): equipment
-and companion rows, no plain bag rows, no avatar inventory. The
+The pet tick took the owner's whole record per summoned pet per tick.
+advancePet and the bond source now take the companion copy (domain
+SnapshotCompanion): equipment and companion rows, no plain bag rows,
+no avatar inventory. The
 scenario here runs twice on a bag loaded with plain rows - once on
 the narrow copy and once forced onto the full copy - and every frame
 and the follower state must agree. A reader that reached a plain bag
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -108,5 +110,71 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		len(c.Snapshot().MissionInventory), len(c.SnapshotCompanion().MissionInventory))
 	if narrow >= full/2 {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
+	}
+}
+
+/*
+================
+TestBondSourceReadsNothingOutsideTheCompanionCopy
+
+Production keeps the bear's record in a bag row behind a stuffed bag.
+bondSource must resolve it on the companion copy - which keeps
+companion rows and drops plain ones - and return the same owner, pet
+and Guardian's Bond verdict as on the whole-record copy; the seam
+must see the copy happen.
+================
+*/
+func TestBondSourceReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	skill := learnPetBook(t, c, 26)
+	c.ActiveCOS.Training.Levels[skill.Index()] = 10
+	bearGID, now := c.ActiveCOS.GID, clock.NowMs()
+	movePetToBagRow(c, 100)
+	stuffOwnerInventories(c)
+	step, ok := rt.elementalCompanion(testDivision, c, bearGID, "Bear", now)
+	if !ok {
+		t.Fatal("bear in a bag row lost eligibility")
+	}
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	owner, pet, narrowSkill, narrowLevel, ok := rt.bondSource(step.key, step.state)
+	if !ok {
+		t.Fatal("bear in a bag row stopped being a bond source on the companion copy")
+	}
+	if len(copied) == 0 || copied[0] != c.Name {
+		t.Fatalf("bondSource never took the companion copy of its owner; copied %v", copied)
+	}
+	if owner.AvatarInventory != nil {
+		t.Fatal("companion copy kept the avatar inventory")
+	}
+	for _, row := range owner.MissionInventory {
+		if row.Summon == nil && (row.Slot < 0 || row.Slot >= int64(domain.EquipmentSlotEnd)) {
+			t.Fatalf("companion copy kept plain bag row %+v", row)
+		}
+	}
+
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	fullOwner, fullPet, fullSkill, fullLevel, ok := rt.bondSource(step.key, step.state)
+	if !ok {
+		t.Fatal("bear in a bag row stopped being a bond source on the full copy")
+	}
+	if pet.GID != fullPet.GID || pet.Codename != fullPet.Codename || pet.CurrentHP != fullPet.CurrentHP {
+		t.Fatalf("pet diverged: narrow %+v, full %+v", pet, fullPet)
+	}
+	if narrowSkill.ID != fullSkill.ID || narrowLevel != fullLevel {
+		t.Fatalf("bond verdict diverged: narrow skill %d level %d, full skill %d level %d",
+			narrowSkill.ID, narrowLevel, fullSkill.ID, fullLevel)
+	}
+	if owner.Name != fullOwner.Name {
+		t.Fatalf("owner diverged: narrow %s, full %s", owner.Name, fullOwner.Name)
 	}
 }
