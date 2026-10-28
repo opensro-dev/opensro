@@ -23,12 +23,12 @@ learnPetBook
 Use the real rank gates and automatic passive slot selection in the fixture.
 ================
 */
-func learnPetBook(t *testing.T, c *enterworld.Character, id uint8) companion.SkillDef {
-	t.Helper()
+func learnPetBook(tb testing.TB, c *enterworld.Character, id uint8) companion.SkillDef {
+	tb.Helper()
 	companion.UpgradeTree(c.ActiveCOS)
 	selected, ok := companion.PetSkill(c.ActiveCOS, id)
 	if !ok {
-		t.Fatal("missing book")
+		tb.Fatal("missing book")
 	}
 	for _, s := range companion.SkillsForPet(c.ActiveCOS) {
 		if s.Row != selected.Row || s.Option > selected.Option {
@@ -40,7 +40,7 @@ func learnPetBook(t *testing.T, c *enterworld.Character, id uint8) companion.Ski
 		}
 		for range ranks {
 			if msg := companion.Learn(c.ActiveCOS, s.ID); msg != "" {
-				t.Fatal(msg)
+				tb.Fatal(msg)
 			}
 		}
 	}
