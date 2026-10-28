@@ -73,9 +73,9 @@ test("the banner reads its seal tier off the current line", () => {
 	assert.equal( plain.sealTier(), undefined );
 });
 
-test("the Event chat tab is off unless explicitly turned on", () => {
+test("the Event chat tab is on unless explicitly turned off", () => {
 	for ( const value of [ undefined, null, {}, { eventChatTab: 1 }, { eventChatTab: "true" } ] ) {
-		assert.equal( experimentalOptions( value ).eventChatTab, false );
+		assert.equal( experimentalOptions( value ).eventChatTab, true );
 	}
-	assert.equal( experimentalOptions( { eventChatTab: true } ).eventChatTab, true );
+	assert.equal( experimentalOptions( { eventChatTab: false } ).eventChatTab, false );
 });
