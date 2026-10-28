@@ -96,7 +96,11 @@ guaranteeConn.WriteFrame
 */
 func (c *guaranteeConn) WriteFrame(f transport.Frame) error {
 	if c.writeDelay > 0 {
-		time.Sleep(c.writeDelay)
+		// The throttle models a slow link; a closed conn stops waiting.
+		select {
+		case <-time.After(c.writeDelay):
+		case <-c.closed:
+		}
 	}
 	c.mu.Lock()
 	c.written = append(c.written, f)
