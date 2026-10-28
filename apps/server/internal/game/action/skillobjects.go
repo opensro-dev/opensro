@@ -216,12 +216,21 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	unlock := rt.lockDivision(object.Division)
 	defer unlock()
 	c := rt.findCharacter(object.Division, object.OwnerName)
-	snapshot := rt.characterSnapshot(object.Division, c)
 	lease, present := rt.EntryPopulationLease(object.Division, object.OwnerName)
-	ownerPresent := present && lease == object.Population && snapshot != nil && !snapshot.DeletePending &&
-		enterworld.CharacterAlive(snapshot) && snapshot.NativeTeleportMode == 0 &&
-		enterworld.ObjectIDForCharacter(snapshot) == object.OwnerGID &&
-		domain.CharacterWorldInstance(snapshot) == uint32(object.Population.ID)
+	// The presence verdict weighs only record facts the copy carries
+	// verbatim, so the copy is admitted on those facts: an absent
+	// owner retires its object in the registry before any reader
+	// touches the snapshot (#1943).
+	var snapshot *enterworld.Character
+	if present && lease == object.Population {
+		snapshot = rt.characterSnapshotAdmitted(object.Division, c, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live) &&
+				live.NativeTeleportMode == 0 &&
+				enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&
+				domain.CharacterWorldInstance(live) == uint32(object.Population.ID)
+		})
+	}
+	ownerPresent := snapshot != nil
 	if object.Program.Field {
 		rt.advanceSkillField(object, snapshot, ownerPresent, nowMs)
 		return nil

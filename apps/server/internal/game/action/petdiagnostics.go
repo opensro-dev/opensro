@@ -79,7 +79,7 @@ func (rt *Runtime) petTargetEnded(division string, owner *enterworld.Character, 
 		return ""
 	}
 	if player := rt.findCharacterByGid(division, gid); player != nil {
-		if snapshot := rt.characterSnapshot(division, player); snapshot != nil && !enterworld.CharacterAlive(snapshot) {
+		if alive, _, _ := rt.characterLifeState(division, player); !alive {
 			return petTargetDied
 		}
 		return ""

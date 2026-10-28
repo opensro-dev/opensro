@@ -87,3 +87,57 @@ func TestTagPointReportsTheMarkOutOfSight(t *testing.T) {
 		t.Fatalf("a stopped mark was reported: %+v", stopped)
 	}
 }
+
+/*
+================
+TestHuntingReportReadsTheLiveRecord
+
+The report weighs only the marked player's identity - the object id
+from the character id, which never changes after creation - so it
+reads the live record (#1943): a mismatched gid is refused exactly as
+the detached copy's check refused it, a moved subject still reports,
+and no copy of the marked player is paid per report.
+================
+*/
+func TestHuntingReportReadsTheLiveRecord(t *testing.T) {
+	rt, clock, c, marked := newPvpPair(t)
+	learnShipped(t, rt, c, tagPointA1)
+	skill, _ := rt.deps.SkillData().SkillByID(tagPointA1)
+	weapon := rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[0].Codename]
+	weapon.TypeIDs[3] = int64(skill.RequiredWeaponKinds[0])
+	c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	marked.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	subject := enterworld.ObjectIDForCharacter(marked)
+	r := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: tagPointA1, HasTarget: true, TargetGid: subject}.Encode())
+	if r.DiagnosticRefusal != "" {
+		t.Fatalf("Tag Point refused: %+v", r)
+	}
+	sessions := []simulation.SessionView{{DivisionID: testDivision, CharacterID: c.ID, PublishedObjects: []uint32{}}}
+	now := clock.NowMs()
+	if reports := rt.AdvanceHuntingPoints(now, sessions); len(reports) != 1 {
+		t.Fatalf("out-of-sight report: %+v", reports)
+	}
+	links := rt.effects.HuntLinks(now)
+	if len(links) != 1 {
+		t.Fatalf("live hunt links %d, want 1", len(links))
+	}
+	token := links[0].SourceToken
+	if _, ok := rt.huntingReport(testDivision, c.Name, marked.Name, subject+1, token, now, sessions); ok {
+		t.Fatal("a report left for a mismatched gid")
+	}
+	key := simulation.WorldKey(testDivision, marked.Name)
+	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) },
+		func(w *simulation.WorldState) { w.Spawn.X += 500 })
+	if _, ok := rt.huntingReport(testDivision, c.Name, marked.Name, subject, token, now, sessions); !ok {
+		t.Fatal("a moved subject was not reported")
+	}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, marked) })
+	reportAllocs := testing.AllocsPerRun(20, func() {
+		rt.huntingReport(testDivision, c.Name, marked.Name, subject, token, now, sessions)
+	})
+	t.Logf("allocs: one character copy %.0f, hunting report %.0f", copyAllocs, reportAllocs)
+	if reportAllocs >= copyAllocs {
+		t.Fatalf("the hunting report still copies the marked player: %.0f allocs; one copy is %.0f",
+			reportAllocs, copyAllocs)
+	}
+}

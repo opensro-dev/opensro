@@ -462,8 +462,8 @@ func (rt *Runtime) handleRebirthInDoor(
 	frames = append(frames, headPublic...)
 	// Re-entry reconstructs the client actor. A retained runtime body status
 	// must be replayed after construction; rebirth does not blanket-clear it.
-	if snapshot := rt.characterSnapshot(divisionID, character); snapshot != nil && snapshot.NativeBodyStatus != 0 {
-		frames = append(frames, bodyStatusFrame(gid, snapshot.NativeBodyStatus))
+	if _, _, bodyStatus := rt.characterLifeState(divisionID, character); bodyStatus != 0 {
+		frames = append(frames, bodyStatusFrame(gid, bodyStatus))
 	}
 	frames = append(frames, life)
 	if camp != nil {

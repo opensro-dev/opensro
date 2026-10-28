@@ -138,6 +138,25 @@ func areaPlayerPreRefusal(target *enterworld.Character, skill enterworld.SkillRo
 		target.Level != nil && *target.Level > int64(skill.Abnormal.ResuMaxLevel) {
 		return true
 	}
+	return areaTargetAggressionRefusal(target)
+}
+
+/*
+================
+areaTargetAggressionRefusal
+
+The refusal the attack validations take from the target's record
+alone: aggression weights summing to exactly one. playerAttackRefusal
+returns it (0x3009) ahead of every admitting relation test - party is
+a refusal itself, and capes, wars, jobs and the caster's own
+aggression all admit later - so an area or companion selection may
+refuse on it before any copy is detached. The mercenary's
+world-enemy query is a different validation: it admits any target
+whose aggression map is non-empty (presence, never the weights), so a
+weight-one target is its enemy and it must not pre-refuse on this fact.
+================
+*/
+func areaTargetAggressionRefusal(target *enterworld.Character) bool {
 	var aggressionWeight uint32
 	for _, weight := range target.Aggressions {
 		aggressionWeight += weight

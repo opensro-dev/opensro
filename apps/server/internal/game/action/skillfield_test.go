@@ -143,3 +143,46 @@ func TestHarmonyFieldHoldsItsRecipients(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestFieldOwnerIsCopiedOnlyWhilePresent
+
+The object tick's presence verdict weighs only record facts the copy
+carries verbatim - life, deletion, teleport mode, object id, world
+instance - so the copy is admitted on those facts (#1943): a dead
+owner's pass retires the field and its recipients exactly as the
+copied verdict did, and pays for no copy to learn it.
+================
+*/
+func TestFieldOwnerIsCopiedOnlyWhilePresent(t *testing.T) {
+	rt, clock, c, row := harmonyFixture(t)
+	mate := nearbyCharacter(rt, c, 12, "harmony-mate", float64(row.TimedEffect.Field.Radius)-1)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(mate)}}}
+	}
+	releaseHarmony(t, rt, clock, c, row)
+	fieldPass(rt, clock)
+	if !hasSkillEffect(rt, mate.Name, row.ID) {
+		t.Fatal("the living owner's field did not admit its party member")
+	}
+	objects := rt.SkillObjects.Snapshot()
+	if len(objects) != 1 {
+		t.Fatalf("field objects %d, want 1", len(objects))
+	}
+	object := objects[0]
+	c.CurrentHP = testInt64(0)
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	passAllocs := testing.AllocsPerRun(20, func() { rt.advanceSkillObject(object, clock.NowMs()) })
+	t.Logf("allocs: one character copy %.0f, absent-owner object pass %.0f", copyAllocs, passAllocs)
+	if passAllocs >= copyAllocs {
+		t.Fatalf("an absent owner still pays for its copy: %.0f allocs; one copy is %.0f",
+			passAllocs, copyAllocs)
+	}
+	if len(rt.SkillObjects.Snapshot()) != 0 {
+		t.Fatal("the dead owner's field survived its pass")
+	}
+	if hasSkillEffect(rt, mate.Name, row.ID) {
+		t.Fatal("a recipient kept the dead owner's field")
+	}
+}
