@@ -150,6 +150,98 @@ func TestGroundScopeCacheMatchesTheFlatWalk(t *testing.T) {
 
 /*
 ================
+TestGroundScopeDungeonBlocksMatchTheFlatWalk
+
+The dungeon wing of the golden: region 0x8F01 with a message grid
+installed, so its drops sit in grid cells except one outside the grid,
+whose block is the whole region; two more dungeons without grids and
+one outdoor region. A gridded viewer must see the whole-region drop of
+its own dungeon (the bucket walk's Whole scan), a whole-region viewer
+must see every drop of its dungeon, and no viewer may see another
+dungeon's drops. Every tick is also checked against the flat walk.
+================
+*/
+func TestGroundScopeDungeonBlocksMatchTheFlatWalk(t *testing.T) {
+	restore := worldgeom.InstallDungeonMessageGrids(map[uint16]worldgeom.DungeonMessageGrid{
+		0x8F01: {Min: [3]float64{-320, -1000, -320}, Max: [3]float64{1600, 1000, 1600}},
+	})
+	defer restore()
+	const division = "dungeon"
+	rt := &Runtime{Ground: grounditem.NewRegistry()}
+	add := func(region uint16, x, z float32) grounditem.Item {
+		return rt.Ground.Add(division, grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+			Position: grounditem.Point{RegionID: region, X: x, Z: z}})
+	}
+	cell := add(0x8F01, 0, 0)          // the viewer's own grid cell
+	farCell := add(0x8F01, 1500, 1500) // a far cell of the same dungeon
+	whole := add(0x8F01, 5000, 5000)   // outside the grid: the whole region
+	second := add(0x8F02, 0, 0)        // a second dungeon, no grid installed
+	third := add(0x8F03, 0, 0)         // a third
+	outdoor := add(0x6a9a, 0, 0)
+
+	viewers := []struct {
+		name  string
+		spawn simulation.Spawn
+		want  []uint32 // tick 0's spawns, ascending
+	}{
+		{"gridded", simulation.Spawn{RegionID: 0x8F01, X: 0, Z: 0},
+			[]uint32{cell.Gid, whole.Gid}},
+		{"whole-region", simulation.Spawn{RegionID: 0x8F01, X: 5000, Z: 5000},
+			[]uint32{cell.Gid, farCell.Gid, whole.Gid}},
+		{"second dungeon", simulation.Spawn{RegionID: 0x8F02, X: 0, Z: 0},
+			[]uint32{second.Gid}},
+		{"third dungeon", simulation.Spawn{RegionID: 0x8F03, X: 0, Z: 0},
+			[]uint32{third.Gid}},
+		{"outdoor", simulation.Spawn{RegionID: 0x6a9a, X: 0, Z: 0},
+			[]uint32{outdoor.Gid}},
+	}
+	published := make([][]uint32, len(viewers))
+	shown := make(map[uint32]struct{})
+	for tick := 0; tick < 3; tick++ {
+		if tick == 1 {
+			rt.Ground.Remove(division, whole.Gid)
+		}
+		buckets := rt.groundDropBuckets(division, grounditem.Population{})
+		for vi, viewer := range viewers {
+			block := viewerBlock(viewer.spawn)
+			spawn, despawn := groundScope(buckets, block, published[vi], shown)
+			wantSpawn, wantDespawn := referenceGroundScope(
+				placeDrops(rt.Ground.AllInPopulation(division, grounditem.Population{})), block, published[vi])
+			gotGids := make([]uint32, 0, len(spawn))
+			for _, item := range spawn {
+				gotGids = append(gotGids, item.Gid)
+			}
+			wantGids := make([]uint32, 0, len(wantSpawn))
+			for _, item := range wantSpawn {
+				wantGids = append(wantGids, item.Gid)
+			}
+			if !slices.Equal(gotGids, wantGids) || !slices.Equal(despawn, wantDespawn) {
+				t.Fatalf("tick %d viewer %s: cached scope = %v spawn / %v despawn, flat walk = %v / %v",
+					tick, viewer.name, gotGids, despawn, wantGids, wantDespawn)
+			}
+			if tick == 0 && !slices.Equal(gotGids, viewer.want) {
+				t.Fatalf("viewer %s spawned %v, want %v", viewer.name, gotGids, viewer.want)
+			}
+			next := published[vi][:0]
+			gone := make(map[uint32]bool, len(despawn))
+			for _, gid := range despawn {
+				gone[gid] = true
+			}
+			for _, gid := range published[vi] {
+				if !gone[gid] {
+					next = append(next, gid)
+				}
+			}
+			for _, item := range spawn {
+				next = append(next, item.Gid)
+			}
+			published[vi] = next
+		}
+	}
+}
+
+/*
+================
 placedGidsOf
 
 Every gid in a bucketed placement, ascending.
