@@ -5,8 +5,9 @@ petarea_test.go - the companion area pre-refusal and its copy saving
 
 The ordinary pet validation refuses an aggression weight of exactly
 one on the target's record alone, so petAreaTargets refuses that
-player before its copy; the soldier's world-enemy query reads no
-aggressions and keeps every candidate. Both verdicts are pinned
+player before its copy; the soldier's world-enemy query admits any
+target whose aggression map is non-empty (presence, never the weights),
+so a weight-one player is its genuine candidate and keeps its copy. Both verdicts are pinned
 against the validations themselves, and the refused walk is pinned
 against the copy it no longer pays for.
 

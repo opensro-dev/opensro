@@ -151,8 +151,9 @@ returns it (0x3009) ahead of every admitting relation test - party is
 a refusal itself, and capes, wars, jobs and the caster's own
 aggression all admit later - so an area or companion selection may
 refuse on it before any copy is detached. The mercenary's
-world-enemy query is a different validation and never reads
-aggressions, so it must not pre-refuse on this fact.
+world-enemy query is a different validation: it admits any target
+whose aggression map is non-empty (presence, never the weights), so a
+weight-one target is its enemy and it must not pre-refuse on this fact.
 ================
 */
 func areaTargetAggressionRefusal(target *enterworld.Character) bool {

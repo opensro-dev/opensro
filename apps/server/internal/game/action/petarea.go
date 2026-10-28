@@ -29,8 +29,9 @@ use the owner's world-context predicate; ordered attack pets use the owner's
 ordinary attack permission. Each target retains its own body radius. The
 ordinary permission refuses an aggression weight of exactly one on the
 target's record alone (areaTargetAggressionRefusal), so that player is
-refused before its copy is detached; the soldier's query reads no
-aggressions and always pays for the copy.
+refused before its copy is detached; the soldier's query admits any
+target with a non-empty aggression map (presence, never the weights),
+so a weight-one player is its candidate and always pays for the copy.
 ================
 */
 func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, skill enterworld.SkillRow) []petCombatTarget {
