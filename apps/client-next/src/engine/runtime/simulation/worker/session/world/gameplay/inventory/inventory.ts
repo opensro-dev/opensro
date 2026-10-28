@@ -1223,7 +1223,8 @@ cosTransferred
 				// A mismatched result against a live pending whose source
 				// item is still present stays fatal, as before.
 				if ( record.gid !== gid ) return record;
-				const sourcePresent = p[1] === 0x1b ? slots.has( p[6]! ) :
+				const sourcePresent = p[1] === 0x1b ?
+					slots.has( p[6]! ) :
 					(record.inventory?.some( row => row.slot === p[6] ) ?? false);
 				if ( !sourcePresent ) return record;
 				if ( pending ) throw Error( "Unmatched COS transfer result" );
