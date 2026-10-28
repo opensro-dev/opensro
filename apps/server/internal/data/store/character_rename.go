@@ -184,6 +184,10 @@ func (s *Store) renameCharacterLocked(division string, selected *domain.Characte
 		return err
 	}
 	for c, next := range updates {
+		// The rename wrote this row in its own transaction: drop the
+		// retained digest so the next commit rewrites it rather than
+		// trusting a digest staged before the rename.
+		delete(s.committedDigests, committedCharacterKey{division: division, id: c.ID})
 		c.Name = next.Name
 		c.PendingRenameName = next.PendingRenameName
 		c.PendingRenameQueuedMs = next.PendingRenameQueuedMs
