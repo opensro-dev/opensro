@@ -20,7 +20,6 @@ import (
 )
 
 const EnvCap110Temple = "SRO_CAP110_TEMPLE"
-const templePopulationFile = "cap110-temple.txt"
 
 /*
 ================

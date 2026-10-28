@@ -32,14 +32,11 @@ const (
 	PharaohTomb3ID DefinitionID = pharaohtomb.World3ID
 )
 
-// The temple bands' layer shape (port-only, #1800 step 3): the shipped
-// quest instances (INS_QNO_* in the catalogue) are native type 1 with a
-// hundred layers and eight players; the owner settlement sets the
-// temple's limit at 8 per layer, so the bands register in that shape.
-const (
-	templeLayerLimit  = 100
-	templePlayerLimit = 8
-)
+// The temple bands' layer shape (port-only, #1800 step 3): the source
+// world table rows for 63-84 are native type 1 with fifty layers; a
+// layer's resident limit rides each world row (the leaf's PlayerLimit:
+// four on the LEVEL_1/_2 worlds of a band, eight on LEVEL_3/_4).
+const templeLayerLimit = 50
 
 var portOnly struct {
 	sync.RWMutex
@@ -74,8 +71,8 @@ func PharaohTombDefinitions() []Definition {
 TempleDefinitions
 
 The 22 port-only temple band worlds, in band order. Native type 1
-(instanced, never opened at boot), layered per party, at most
-templePlayerLimit residents a layer.
+(instanced, never opened at boot), layered per party, each layer
+holding its world row's resident limit.
 ================
 */
 func TempleDefinitions() []Definition {
@@ -87,7 +84,7 @@ func TempleDefinitions() []Definition {
 			CodeName:    world.CodeName,
 			NativeType:  1,
 			LayerLimit:  templeLayerLimit,
-			PlayerLimit: templePlayerLimit,
+			PlayerLimit: uint16(world.PlayerLimit),
 		}
 	}
 	return definitions

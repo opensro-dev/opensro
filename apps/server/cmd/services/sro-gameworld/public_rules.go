@@ -138,7 +138,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
 				Native: "There is no temple instance.",
-				Now:    "The temple's band worlds open as instances: a party of up to eight shares its own layer, a solo player enters alone, and a character outside a band's levels is refused.",
+				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
 				Why:    "Instanced group hunting for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
