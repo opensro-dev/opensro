@@ -41,10 +41,12 @@ const (
 // Pinned budgets: the measured tick plus ten percent. One constant per
 // metric; a #1943 fix lowers the constant it improves, never raises it.
 // History: f3004434 ticked 1,977,338 B / 5,505 allocs; after #1944,
-// #1945 and #1948 (dd2e3691c) 1,299,000 B / 3,458 allocs.
+// #1945 and #1948 (dd2e3691c) 1,299,000 B / 3,458 allocs; after the
+// crow-brood and pet-spirit owner-copy admissions 1,131,000 B /
+// 2,962 allocs.
 const (
-	tickBudgetBytesPerTick  = 1429000
-	tickBudgetAllocsPerTick = 3804
+	tickBudgetBytesPerTick  = 1245000
+	tickBudgetAllocsPerTick = 3260
 )
 
 /*

@@ -15,6 +15,7 @@ package action
 
 import (
 	"testing"
+	"time"
 )
 
 /*
@@ -50,5 +51,63 @@ func TestPetChecksKeepTheirVerdictWithoutCopyingRejectedOwners(t *testing.T) {
 	if wolfAllocs >= copyAllocs || bondAllocs >= copyAllocs {
 		t.Fatalf("rejected checks still copy the owner: wolf %.0f, bond %.0f allocs; one copy is %.0f",
 			wolfAllocs, bondAllocs, copyAllocs)
+	}
+}
+
+/*
+================
+TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners
+
+The two per-tick pet advances copied the owner before refusing the
+pets they never move: advanceCrowBrood for every non-crow,
+advancePetSpirit for every pet without Resolve stacks. The refusals
+still refuse, the admitted advances still land, and each refused
+advance allocates less than one copy of the owner would.
+================
+*/
+func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
+	now := clock.NowMs()
+	if frames := rt.advanceCrowBrood(key, now); frames != nil {
+		t.Fatalf("bear owner gained brood frames: %v", frames)
+	}
+	if frames := rt.advancePetSpirit(key, now); frames != nil {
+		t.Fatalf("stackless bear gained spirit frames: %v", frames)
+	}
+
+	// The admitted advances keep their verdicts: a crow's egg still
+	// hatches on schedule, and earned Resolve stacks still expire.
+	crowRT, crowClock, crow, _, crowKey := tailwindFixture(t, 1)
+	skill := learnPetBook(t, crow, 49)
+	crowRT.castCrowBrood(testDivision, crow, crowKey.gid, skill, crowClock.NowMs())
+	if len(crow.Brood) != 1 {
+		t.Fatal("crow cast left no egg")
+	}
+	crowClock.now = crowClock.now.Add(30 * time.Second)
+	crowRT.advanceCrowBrood(crowKey, crowClock.NowMs())
+	if crow.Brood[0].BroodStage != 2 {
+		t.Fatal("admitted crow advance lost the hatch")
+	}
+
+	bearRT, bearClock, bear, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(bearRT, bear, "COS_P_BEAR_090", 90)
+	bearRT.AttackPetExpansion = true
+	bearKey := petOwnerKey{division: testDivision, name: bear.Name, gid: bear.ActiveCOS.GID}
+	bear.ActiveCOS.ResolveStacks = 5
+	bearRT.advancePetSpirit(bearKey, bearClock.NowMs())
+	if bear.ActiveCOS.ResolveStacks != 0 {
+		t.Fatal("admitted spirit advance lost the expiry")
+	}
+
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	broodAllocs := testing.AllocsPerRun(20, func() { rt.advanceCrowBrood(key, now) })
+	spiritAllocs := testing.AllocsPerRun(20, func() { rt.advancePetSpirit(key, now) })
+	t.Logf("allocs: one owner copy %.0f, refused brood advance %.0f, refused spirit advance %.0f", copyAllocs, broodAllocs, spiritAllocs)
+	if broodAllocs >= copyAllocs || spiritAllocs >= copyAllocs {
+		t.Fatalf("refused advances still copy the owner: brood %.0f, spirit %.0f allocs; one copy is %.0f",
+			broodAllocs, spiritAllocs, copyAllocs)
 	}
 }

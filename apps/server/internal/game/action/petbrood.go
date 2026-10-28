@@ -131,6 +131,28 @@ func (rt *Runtime) broodSpawnFrame(division string, state *petSession, pet *doma
 
 /*
 ================
+crowBroodSource
+
+The companion the brood lifecycle answers for: the summoned record
+under this gid, else a brood-stage crow still waiting in the roster.
+Admission and the advance itself resolve through here so the two can
+never disagree about which pet a gid names.
+================
+*/
+func crowBroodSource(c *enterworld.Character, gid uint32) *domain.CharacterCOS {
+	if source := c.CompanionByGID(gid); source != nil {
+		return source
+	}
+	for _, candidate := range c.Companions() {
+		if candidate.GID == gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
+			return candidate
+		}
+	}
+	return nil
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -142,16 +164,17 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	if state == nil {
 		return nil
 	}
-	snapshot := rt.characterSnapshot(key.division, state.character)
-	source := snapshot.CompanionByGID(key.gid)
-	if source == nil {
-		for _, candidate := range snapshot.Companions() {
-			if candidate.GID == key.gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
-				source = candidate
-				break
-			}
-		}
+	// Runs for every pet per tick: copy the owner only when the check
+	// below would let this gid through - every other pet (and every
+	// brood-space gid) is refused before any state moves (#1943).
+	snapshot := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		source := crowBroodSource(c, key.gid)
+		return key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+	})
+	if snapshot == nil {
+		return nil
 	}
+	source := crowBroodSource(snapshot, key.gid)
 	if source != nil && companion.PetKind(source.Codename) != "Crow" || key.gid >= broodGIDBase {
 		return nil
 	}
