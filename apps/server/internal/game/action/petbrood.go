@@ -143,12 +143,14 @@ func crowBroodSource(c *enterworld.Character, gid uint32) *domain.CharacterCOS {
 	if source := c.CompanionByGID(gid); source != nil {
 		return source
 	}
-	for _, candidate := range c.Companions() {
+	var found *domain.CharacterCOS
+	c.VisitCompanions(func(candidate *domain.CharacterCOS) bool {
 		if candidate.GID == gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
-			return candidate
+			found = candidate
 		}
-	}
-	return nil
+		return found == nil
+	})
+	return found
 }
 
 /*

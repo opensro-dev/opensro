@@ -273,3 +273,33 @@ func TestBagRowCompanionsKeepPetVerdicts(t *testing.T) {
 		t.Fatal("bear in a bag row lost its bond plan")
 	}
 }
+
+/*
+================
+TestAdmissionChecksAllocateNothing
+
+The record checks run inside the read door, per pet per tick: they walk
+the owner's companions in place. Building the Companions slice for
+each check - the mutation this guards - allocates and fails here.
+================
+*/
+func TestAdmissionChecksAllocateNothing(t *testing.T) {
+	rt, _, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+	stuffOwnerInventories(c)
+	gid := c.ActiveCOS.GID
+	if !hasElementalCandidate(c, elementalQuery{gid: gid, kind: "Crow"}) || hasElementalCandidate(c, elementalQuery{gid: gid, kind: "Wolf"}) {
+		t.Fatal("candidate verdicts changed")
+	}
+	if crowBroodSource(c, gid) != c.ActiveCOS || crowBroodSource(c, gid+1) != nil {
+		t.Fatal("brood source verdicts changed")
+	}
+	allocs := testing.AllocsPerRun(50, func() {
+		hasElementalCandidate(c, elementalQuery{gid: gid, kind: "Wolf"})
+		hasElementalCandidate(c, elementalQuery{gid: gid, kind: "Crow", passive: "Tailwind"})
+		crowBroodSource(c, gid+1)
+	})
+	if allocs != 0 {
+		t.Fatalf("admission checks allocate %.0f per round", allocs)
+	}
+}

@@ -87,13 +87,13 @@ the selected pet) rejects too, so admission never changes the outcome.
 ================
 */
 func hasElementalCandidate(c *enterworld.Character, q elementalQuery) bool {
-	for _, pet := range c.Companions() {
-		if pet.BroodStage == 0 && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
-			companion.PetKind(pet.Codename) == q.kind && (q.passive == "" || hasPassive(pet, q.passive)) {
-			return true
-		}
-	}
-	return false
+	found := false
+	c.VisitCompanions(func(pet *domain.CharacterCOS) bool {
+		found = pet.BroodStage == 0 && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
+			companion.PetKind(pet.Codename) == q.kind && (q.passive == "" || hasPassive(pet, q.passive))
+		return !found
+	})
+	return found
 }
 
 /*

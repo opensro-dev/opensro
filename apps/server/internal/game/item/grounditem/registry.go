@@ -20,6 +20,7 @@ registry.go - owns registry behavior and its checked data boundaries
 package grounditem
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -439,13 +440,33 @@ func (r *Registry) All(divisionID string) []Item {
 
 	items := r.byDivision[divisionID]
 	out := make([]Item, 0, len(items))
-	for _, item := range items {
+	for _, gid := range sortedGids(items) {
+		item := items[gid]
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 		item.Summon = domain.CloneCOS(item.Summon)
 		out = append(out, item)
 	}
-	sort.Slice(out, func(a, b int) bool { return out[a].Gid < out[b].Gid })
 	return out
+}
+
+/*
+================
+sortedGids
+
+A division's gids in ascending order. All and the persisted snapshot
+read their items in this order: sorting the gids and then reading the
+map moves 4-byte keys, where sorting the copied rows moved whole items
+through sort.Slice's reflective swapper - 17% of the synthetic tick's
+CPU in the per-commit snapshot (#2031).
+================
+*/
+func sortedGids(items map[uint32]Item) []uint32 {
+	gids := make([]uint32, 0, len(items))
+	for gid := range items {
+		gids = append(gids, gid)
+	}
+	slices.Sort(gids)
+	return gids
 }
 
 // Count reports how many entries a division holds.
