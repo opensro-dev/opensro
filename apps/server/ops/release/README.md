@@ -320,6 +320,9 @@ verdict goes stale at 180 seconds, and a stopped runner pages).
 - Two consecutive failed probe runs page and two passing runs recover;
   re-reading the same run does not count. A verdict older than 180 seconds, or
   none at all, pages as a probe-pipeline failure.
+- Both hosts keep their clocks synchronised (NTP): the monitor compares the
+  runner's probe time with its own clock, so a skew over 180 seconds pages as
+  a stale probe.
 - `wtprobe_drill.py --announced` is the announced WebTransport-only break test.
   It drops inbound UDP 443 in a table of its own (a systemd fallback deletes
   it after 10 minutes), waits for the page while the fleet monitor stays up,

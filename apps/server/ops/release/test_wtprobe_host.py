@@ -11,7 +11,9 @@ account, writes /etc or touches systemd.
 """
 
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -67,6 +69,9 @@ class WTProbeHostTest(unittest.TestCase):
 					patch.object(wtprobe_host, "ensure_user"), patch.object(wtprobe_host.shutil, "chown"), \
 					patch.object(wtprobe_host, "install_file") as installed:
 				wtprobe_host.apply(KEY, modules, run=lambda argv, **_: ran.append(argv))
+			if os.name == "posix":
+				# setgid: verdicts inherit the monitor's group.
+				self.assertEqual(stat.S_IMODE((root / "wtprobe").stat().st_mode), 0o2750)
 		written = {Path(call.args[0]).name: call.args[1].decode() for call in installed.call_args_list}
 		self.assertIn("--receive", written["authorized_keys"])
 		self.assertEqual(json.loads(written["monitor-wtprobe.json"])["production_state"], "/state/production.json")

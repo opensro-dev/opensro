@@ -14,7 +14,7 @@ Wants=network-online.target
 Type=oneshot
 User=opensro-wtprobe-runner
 ExecStart=/usr/bin/python3 @RUNNER@/wtprobe_verdict.py --probe @RUNNER@/sro-wtprobe --origin @ORIGIN@ --out @RUNNER@/verdict.json --push opensro-wtprobe@@GAME_HOST@
-TimeoutStartSec=55
+TimeoutStartSec=90
 NoNewPrivileges=true
 PrivateTmp=true
 

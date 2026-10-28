@@ -38,6 +38,8 @@ PUSH_USER = "opensro-wtprobe"
 MONITOR_USER = "opensro-monitor"
 VERDICT_DIR = ROOT / "wtprobe"
 VERDICT = VERDICT_DIR / "verdict.json"
+# setgid, owner rwx, group r-x: the monitor's group owns every verdict.
+VERDICT_DIR_MODE = 0o2750
 MONITOR_CONFIG = Path("/etc/opensro-release/monitor-wtprobe.json")
 WEBHOOK = Path("/etc/opensro-release/monitor-webhook")
 UNIT_NAMES = ("opensro-monitor-wtprobe.service", "opensro-monitor-wtprobe.timer")
@@ -96,8 +98,11 @@ def apply(public_key, modules, run=subprocess.run):
 	home = ROOT / "wtprobe-push"
 	ensure_user(PUSH_USER, home, run)
 	VERDICT_DIR.mkdir(parents=True, exist_ok=True)
-	VERDICT_DIR.chmod(0o750)
+	# Owner first, then mode: setgid makes every verdict the push account
+	# writes belong to the monitor's group, which the receiver's 0640 lets
+	# read (chown before chmod, so nothing clears the bit).
 	shutil.chown(VERDICT_DIR, user=PUSH_USER, group=MONITOR_USER)
+	VERDICT_DIR.chmod(VERDICT_DIR_MODE)
 	(home / ".ssh").mkdir(parents=True, exist_ok=True)
 	(home / ".ssh").chmod(0o755)
 	install_file(home / ".ssh/authorized_keys", push_keys(public_key, modules).encode())

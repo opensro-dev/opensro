@@ -40,6 +40,9 @@ PUSH_TIMEOUT_SECONDS = 30
 MAX_DETAIL_CHARACTERS = 240
 # A verdict is one small JSON object; the receiver reads no more than this.
 MAX_VERDICT_BYTES = 4096
+# The received verdict: the push account writes it, the monitor's group
+# (the setgid verdict directory's group, wtprobe_host.py) reads it.
+RECEIVED_MODE = 0o640
 
 
 # ================
@@ -72,14 +75,17 @@ def make_verdict(ok, detail, now):
 # write_verdict
 #
 # Atomic on one filesystem: a temporary file beside the target, then a
-# rename over it.
+# rename over it. mkstemp creates the file 0600; it is set to mode before
+# the rename, so the reader (the monitor's group, on the game host) can
+# open it the moment it appears.
 # ================
-def write_verdict(path, verdict):
+def write_verdict(path, verdict, mode=0o644):
 	path = Path(path)
 	descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
 	try:
 		with os.fdopen(descriptor, "w", encoding="utf-8") as file:
 			json.dump(verdict, file, sort_keys=True)
+		os.chmod(temporary, mode)
 		os.replace(temporary, path)
 	except BaseException:
 		Path(temporary).unlink(missing_ok=True)
@@ -136,7 +142,7 @@ def parse_verdict(data):
 # reports staleness rather than garbage.
 # ================
 def receive(path, stream):
-	write_verdict(path, parse_verdict(stream.read(MAX_VERDICT_BYTES + 1)))
+	write_verdict(path, parse_verdict(stream.read(MAX_VERDICT_BYTES + 1)), RECEIVED_MODE)
 
 
 # ================

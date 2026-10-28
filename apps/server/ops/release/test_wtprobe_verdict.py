@@ -10,7 +10,9 @@ opens a network connection or reaches another host.
 """
 
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -132,6 +134,22 @@ class WTProbeVerdictTests(unittest.TestCase):
 					receive(path, io.BytesIO(bad))
 			self.assertEqual(json.loads(path.read_text())["checkedAt"], 1000)
 			self.assertEqual(parse_verdict(good)["ok"], True)
+
+	# ================
+	# test_the_received_verdict_is_group_readable
+	#
+	# The push account writes the verdict and the monitor reads it through
+	# the directory's group: a 0600 file (mkstemp's default) would read as
+	# "unreadable" on every poll and page forever.
+	# ================
+	@unittest.skipUnless(os.name == "posix", "POSIX file modes")
+	def test_the_received_verdict_is_group_readable(self):
+		with tempfile.TemporaryDirectory() as directory:
+			path = Path(directory) / "verdict.json"
+			receive(path, io.BytesIO(json.dumps(make_verdict(True, "pass", 1000)).encode()))
+			self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o640)
+			write_verdict(path, make_verdict(True, "pass", 1000))
+			self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o644)
 
 
 if __name__ == "__main__":
