@@ -18,6 +18,9 @@ package enterworld
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 
 	"opensro.online/server/internal/testsupport/entryauth"
@@ -125,5 +128,56 @@ func BenchmarkBrowserEntryPayload(b *testing.B) {
 		if _, err := browserEntryPayload(outcome.Result, refs); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+/*
+================
+TestMarshalBlobOwnsItsBytesUnderConcurrentEntry
+
+marshalBlob's result must survive other entries reusing the pooled
+scratch. Concurrent callers encode distinct values and each must get
+exactly json.Marshal's bytes for its own value. The scratch handoff
+is nondeterministic, so this bites reliably under -race (which flags
+the overlapping write) and only sometimes without it; returning the
+scratch before cloning failed it under -race with one caller holding
+another's encode.
+================
+*/
+func TestMarshalBlobOwnsItsBytesUnderConcurrentEntry(t *testing.T) {
+	const callers = 8
+	const rounds = 50
+	var wg sync.WaitGroup
+	errs := make(chan string, callers)
+	for caller := 0; caller < callers; caller++ {
+		wg.Add(1)
+		go func(caller int) {
+			defer wg.Done()
+			for round := 0; round < rounds; round++ {
+				value := map[string]string{}
+				for k := 0; k < 64; k++ {
+					value[fmt.Sprintf("k%03d", k)] = fmt.Sprintf("value-%d-%d-%s", caller, round, strings.Repeat("x", 400))
+				}
+				want, err := json.Marshal(value)
+				if err != nil {
+					errs <- err.Error()
+					return
+				}
+				got, err := marshalBlob(value)
+				if err != nil {
+					errs <- err.Error()
+					return
+				}
+				if !bytes.Equal(got, want) {
+					errs <- fmt.Sprintf("caller %d round %d got another encode", caller, round)
+					return
+				}
+			}
+		}(caller)
+	}
+	wg.Wait()
+	close(errs)
+	for msg := range errs {
+		t.Error(msg)
 	}
 }

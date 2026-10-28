@@ -281,13 +281,30 @@ const maxBlobScratch = 1 << 20
 func marshalBlob(v any) ([]byte, error) {
 	scratch := blobScratchPool.Get().(*jsonscratch.Scratch)
 	raw, err := scratch.Marshal(v)
+	if err != nil {
+		releaseBlobScratch(scratch)
+		return nil, err
+	}
+	// raw aliases the scratch: clone it before the scratch goes back,
+	// or a concurrent entry can encode over it mid-clone and hand this
+	// caller another player's blob.
+	owned := bytes.Clone(raw)
+	releaseBlobScratch(scratch)
+	return owned, nil
+}
+
+/*
+================
+releaseBlobScratch
+
+Returns a scratch to the pool once nothing reads its bytes any more,
+dropping one that grew past maxBlobScratch.
+================
+*/
+func releaseBlobScratch(scratch *jsonscratch.Scratch) {
 	if scratch.Cap() <= maxBlobScratch {
 		blobScratchPool.Put(scratch)
 	}
-	if err != nil {
-		return nil, err
-	}
-	return bytes.Clone(raw), nil
 }
 
 /*

@@ -85,15 +85,11 @@ func browserEntryPayload(result *BootstrapResult, references *BrowserReferences)
 		blob, err = scratch.Marshal(plainBlobValue(result))
 	}
 	if err != nil {
-		if scratch.Cap() <= maxBlobScratch {
-			blobScratchPool.Put(scratch)
-		}
+		releaseBlobScratch(scratch)
 		return nil, err
 	}
 	payload := transport.EncodeEnterWorldResult(transport.EnterWorldResult{OK: true, Blob: blob})
-	if scratch.Cap() <= maxBlobScratch {
-		blobScratchPool.Put(scratch)
-	}
+	releaseBlobScratch(scratch)
 	return payload, nil
 }
 
