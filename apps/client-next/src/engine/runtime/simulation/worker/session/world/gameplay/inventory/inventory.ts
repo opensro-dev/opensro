@@ -1209,10 +1209,25 @@ cosTransferred
 				throw Error( "Invalid COS transfer result" );
 			}
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
-			if (
-				!pending || pending.opcode !== 0xb06d || pending.movementType !== p[1] || pending.cosGid !== gid ||
-				record.gid !== gid || pending.source !== p[6] || pending.destination !== p[7]
-			) throw Error( "Unmatched COS transfer result" );
+			const matched = pending && pending.opcode === 0xb06d && pending.movementType === p[1] &&
+				pending.cosGid === gid && record.gid === gid && pending.source === p[6] &&
+				pending.destination === p[7];
+			if ( !matched ) {
+				// Native 756CF0 arms 0x1A/0x1B hold no request to match: the
+				// result applies to the bags it names, and a replayed copy of
+				// an already-applied transfer finds its source slot empty and
+				// changes nothing. The port keeps its pending only as the
+				// authority for what a live request may consume: a result
+				// whose source item is already gone is a duplicate or a
+				// re-entry replay and is set aside, never a session failure.
+				// A mismatched result against a live pending whose source
+				// item is still present stays fatal, as before.
+				if ( record.gid !== gid ) return record;
+				const sourcePresent = p[1] === 0x1b ? slots.has( p[6]! ) :
+					(record.inventory?.some( row => row.slot === p[6] ) ?? false);
+				if ( !sourcePresent ) return record;
+				if ( pending ) throw Error( "Unmatched COS transfer result" );
+			}
 			const next = planCosTransfer(
 				record,
 				[ ...slots.values() ],

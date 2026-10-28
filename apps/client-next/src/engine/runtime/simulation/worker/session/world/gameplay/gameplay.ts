@@ -4388,7 +4388,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload.length !== 8 ) throw Error( "Invalid COS transfer result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 8 ).getUint32( 2, true ),
 						record = cosRecords.get( gid );
-					if ( !record ) throw Error( "Absent COS transfer owner" );
+					// Native 756CF0 guards both transfer arms with
+					// CCosDataManager_FindCharData(...) != 0: a result for a
+					// COS with no record (a replay ahead of the re-entry
+					// bootstrap that rebuilds it) is silently dropped.
+					if ( !record ) return true;
 					const next = inventory.cosTransferred( record, frame.payload, cosItemCaps );
 					cosRecords.set( gid, next );
 					cosPickup.spaceChanged();
