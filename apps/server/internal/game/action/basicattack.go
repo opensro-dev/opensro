@@ -686,7 +686,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	var movementRevision uint64
 	var movementState simulation.WorldState
 	rt.bindResidentRegion(worldKey, nowMs)
-	if !rt.deps.Update(character, "basic-attack-approach", func() bool {
+	if !rt.deps.UpdateDeferred(character, "basic-attack-approach", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -759,7 +759,7 @@ func (rt *Runtime) enterBasicAttackRange(
 		return OpResult{}, true
 	}
 	var committed simulation.Spawn
-	accepted := rt.deps.Update(character, "basic-attack-enter-range", func() bool {
+	accepted := rt.deps.UpdateDeferred(character, "basic-attack-enter-range", func() bool {
 		if character.DeletePending {
 			return false
 		}

@@ -69,7 +69,7 @@ func (rt *Runtime) acceptInstantSelfEffect(division string, character, snapshot 
 	if skill.Imbue.Pinned {
 		label = "skill-weapon-imbue"
 	}
-	if !rt.deps.Update(character, label, func() bool {
+	if !rt.deps.UpdateDeferred(character, label, func() bool {
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
 			return false
 		}

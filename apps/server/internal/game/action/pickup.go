@@ -57,7 +57,7 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 	// walk mode) along the committed path. A fixed run-speed estimate made a
 	// faster character stand on the drop until the estimate ran out.
 	arrivesAtMs := now.Add(approach.Travel).UnixMilli()
-	if !rt.deps.Update(character, "pickup-approach", func() bool {
+	if !rt.deps.UpdateDeferred(character, "pickup-approach", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -209,7 +209,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 		}
 		removed := false
 		balances := make([]uint64, len(shares))
-		rt.deps.UpdateMany(credited, "pickup-gold", func() bool {
+		rt.deps.UpdateManyDeferred(credited, "pickup-gold", func() bool {
 			for _, s := range shares {
 				// The durable character stores signed-64 gold. Refuse before removing
 				// the heap rather than publishing a balance that persistence clamps.
@@ -256,7 +256,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 	var grantedItem inventory.Item
 	var questFrames []wire.Frame
 	result = pickupRefusal(wire.ErrCodeInvalidRequest)
-	if !rt.deps.Update(character, "pickup-item", func() bool {
+	if !rt.deps.UpdateDeferred(character, "pickup-item", func() bool {
 		if character.DeletePending {
 			return false
 		}

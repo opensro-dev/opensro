@@ -409,7 +409,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	var battle []wire.Frame
 	var tuning, stolen wire.Frame
 	var refusal uint16
-	if !rt.deps.UpdateMany([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
+	if !rt.deps.UpdateManyDeferred([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
 		var cost skillCharge
 		if st.advanced {
 			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {
@@ -562,7 +562,7 @@ A planned credited hit's door and publication.
 */
 func (rt *Runtime) commitCreditedPlayerHit(division string, caster *enterworld.Character, hit playerHit, now int64) (playerHit, OpResult, bool) {
 	var commit playerHitCommit
-	if !rt.deps.UpdateMany([]*enterworld.Character{caster, hit.target.player}, "player-credited-hit", func() bool {
+	if !rt.deps.UpdateManyDeferred([]*enterworld.Character{caster, hit.target.player}, "player-credited-hit", func() bool {
 		if caster.DeletePending {
 			return false
 		}

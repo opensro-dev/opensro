@@ -268,7 +268,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	var killAfter jobKillPayout
 	var killWar domain.GuildWarCombat
 	var refusal uint16
-	if !rt.deps.UpdateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
+	if !rt.deps.UpdateManyDeferred([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
 		var cost skillCharge
 		if st.advanced {
 			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {

@@ -150,7 +150,7 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 			continue
 		}
 		var struck playerStruck
-		if !rt.deps.Update(taker, "linked-damage-share", func() bool {
+		if !rt.deps.UpdateDeferred(taker, "linked-damage-share", func() bool {
 			if taker.DeletePending || !enterworld.CharacterAlive(taker) {
 				return false
 			}

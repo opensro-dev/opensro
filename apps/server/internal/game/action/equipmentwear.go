@@ -222,8 +222,8 @@ func (rt *Runtime) equipmentMaxDurability(row *enterworld.InventoryRow) uint32 {
 ================
 applyEquipmentWear
 
-Rolls one actor's tally after its execution, in its own character
-transaction. Monsters never wear.
+Rolls one actor's tally after its execution, in the tick's batched
+commit (#2028): every caller is a strike path. Monsters never wear.
 ================
 */
 func (rt *Runtime) applyEquipmentWear(division string, c *enterworld.Character, tally wearTally) wearFrames {
@@ -231,7 +231,7 @@ func (rt *Runtime) applyEquipmentWear(division string, c *enterworld.Character, 
 	if c == nil || tally == (wearTally{}) {
 		return out
 	}
-	rt.deps.Update(c, "equipment-wear", func() bool {
+	rt.deps.UpdateDeferred(c, "equipment-wear", func() bool {
 		if c.DeletePending {
 			return false
 		}

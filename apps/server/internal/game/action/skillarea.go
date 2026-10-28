@@ -590,7 +590,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	roster := rt.monsterRewardRoster(division, character, nowMs)
 	var ammo ammunitionResult
 	var stolen wire.Frame
-	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
+	if !rt.deps.UpdateManyDeferred(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
 		if charged {
 			cost, refusal = rt.stagePhaseCost(division, character, skill, nowMs, release, rootID)

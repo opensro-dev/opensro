@@ -768,7 +768,7 @@ func (rt *Runtime) HandleItemUse(
 			})
 		}
 	} else {
-		committed = rt.deps.Update(character, "item-use", update)
+		committed = rt.deps.UpdateDeferred(character, "item-use", update)
 	}
 	if committed && after != nil {
 		after()

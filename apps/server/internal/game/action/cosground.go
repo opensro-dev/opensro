@@ -92,7 +92,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	var picked grounditem.Item
-	rt.deps.Update(c, "cos-ground-item", func() bool {
+	rt.deps.UpdateDeferred(c, "cos-ground-item", func() bool {
 		bag, inv, valid := rt.ownedCOSContainer(c, q.CosGID)
 		if !valid || c.CompanionByGID(q.CosGID).Mounted || enterworld.CurrentHP(c) == 0 {
 			return false
@@ -376,7 +376,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 	var picked grounditem.Item
 	var peerPetGID uint32
 	var peerBagFull bool
-	rt.deps.Update(recipient, "cos-ground-item", func() bool {
+	rt.deps.UpdateDeferred(recipient, "cos-ground-item", func() bool {
 		peerPetGID = rt.findPickupPetGID(recipient)
 		if peerPetGID == 0 {
 			return false

@@ -395,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		// Character ammo and monster HP move under the same per-division lock
 		// and the same character authority closure. Validation is read-only;
 		// debit is the non-refusing tail after the HP authority accepts damage.
-		if !rt.deps.UpdateMany(roster.characters, "player-basic-attack", func() bool {
+		if !rt.deps.UpdateManyDeferred(roster.characters, "player-basic-attack", func() bool {
 			var cost skillCharge
 			if advanced {
 				cost, refusal = rt.stagePhaseCost(divisionID, character, skill, nowMs, release, rootID)
@@ -613,7 +613,7 @@ for its release (advanceProjectileCasts), whatever its target's kind.
 */
 func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, advanced bool, rootID uint32, nowMs int64) (OpResult, skillCastDecision) {
 	var refusal uint16
-	if !rt.deps.Update(character, "prepare-offensive-cooldown", func() bool {
+	if !rt.deps.UpdateDeferred(character, "prepare-offensive-cooldown", func() bool {
 		if !enterworld.CharacterAlive(character) {
 			return false
 		}
