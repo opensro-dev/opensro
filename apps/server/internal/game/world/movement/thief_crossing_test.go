@@ -256,3 +256,46 @@ func TestTownWallStopsAThiefCartInsideARegion(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestGroundDirectionWalkStopsAtATownWithThiefCargo
+
+#1985, seen live: with the ground walker on (production), a direction leg
+is an angular segment the walker follows along its heading until terrain
+stops it, so the clip at the town border was a goal it walked past. A
+clipped leg must end at its goal: the walker stays in the field region
+however long it walks, and the stop shows the thief notice.
+================
+*/
+func TestGroundDirectionWalkStopsAtATownWithThiefCargo(t *testing.T) {
+	character := testCharacter()
+	rt := testRuntime(character)
+	rt.EnableGroundWalk()
+	rt.TownEntryBlocked = townBetweenRule
+	start := simulation.EuropeStartProfile()
+	if outcome := rt.HandleMove("0", character, encodeTurnBody(simulation.AngularFlagGo, headingEast)); outcome.Refusal != nil {
+		t.Fatalf("direction walk refused: %v", outcome.Refusal)
+	}
+	var frames []simulation.Frame
+	for tick := int64(1); tick <= 600; tick++ {
+		now := testStartMs + tick*100
+		setDirectionClock(rt, now)
+		world := directionWorld(rt, character)
+		if live := world.LiveSpawnAt(now); live.RegionID != start.RegionID {
+			t.Fatalf("t+%dms the walker entered 0x%04X: %+v", tick*100, live.RegionID, live)
+		}
+		for _, out := range rt.GroundTickHook()(now) {
+			frames = append(frames, out.Frames...)
+		}
+		for _, out := range rt.DirectionTickHook()(now) {
+			frames = append(frames, out.Frames...)
+		}
+	}
+	if world := directionWorld(rt, character); world.GroundActive() || world.Spawn.RegionID != start.RegionID {
+		t.Fatalf("the walker did not rest in the field: %+v", world.Spawn)
+	}
+	if !hasThiefCargoNotice(frames) {
+		t.Fatalf("stop frames = %+v, want the 0x3058 kind 1 notice", frames)
+	}
+}

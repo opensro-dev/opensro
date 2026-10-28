@@ -272,6 +272,14 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	var result simulation.MoveResult
 	committed, refusal := rt.commitMove(character, admission, func(world *simulation.WorldState) {
 		result = simulation.ApplyDirectionLeg(world, enterworld.ObjectIDForCharacter(character), walk.request, leg.goal, nowMs)
+		// The ground walker steps an angular segment along its heading until
+		// terrain stops it and never arrives at the goal, so a leg a rule cut
+		// short (a closed area, a thief's transport at a town) must end at
+		// its goal: without this a sky or moon walk crossed the border the
+		// clip stopped it at (#1985).
+		if leg.blocked && world.MoveSegment != nil {
+			world.MoveSegment.GroundAngular = false
+		}
 		// Same rule as a destination commit: the spans belong to the chord
 		// walked from this live point and nothing else.
 		if result.LiveBefore == live {
