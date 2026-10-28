@@ -5,10 +5,12 @@ qinshiTombOverlay.test.mjs - the Qin-Shi tomb overlay bake gates
 
 The v1.150 textdata has no Qin-Shi Emperor Tomb rows; the server appends
 its committed overlays behind SRO_QINSHI_TOMB (port-only, not native).
-The client bake must see the Tomb references exactly when the flag-on
-server can spawn them: opted-in character row loads merge the overlay
+The client bake must see the Tomb references exactly when the shard can
+spawn them: opted-in character row loads merge the overlay
 characterdata, unopted loads (the server's own game-data projection)
-never do, and a flag-off bake is the retail table alone.
+never do, and a flag-off bake is the retail table alone. An unset flag
+takes the shard's deployed posture (profile, else registry default), so
+a default build bakes what the default shard spawns (#2024).
 
 ===========================================================================
 */
@@ -25,6 +27,10 @@ import {
 	loadQinShiTombTeleportLinkRows,
 	qinshiTombEnabled
 } from "../../build/shared/qinshiTomb.mjs";
+
+// The server source root this process started with (fixtureServerRoot
+// points it elsewhere for one test).
+const ORIGINAL_SERVER_ROOT = process.env.SRO_SERVER_SOURCE_ROOT;
 
 /*
 ================
@@ -59,16 +65,77 @@ function fixtureTextdata( t ) {
 }
 
 test("qinshiTombEnabled mirrors the server flag words", ( t ) => {
-	withTombFlag( t, undefined );
-	assert.equal( qinshiTombEnabled(), false );
+	withTombFlag( t, "off" );
 	for ( const word of [ "1", "on", "true", "yes", " ON ", "True" ] ) {
 		process.env.SRO_QINSHI_TOMB = word;
 		assert.equal( qinshiTombEnabled(), true, word );
 	}
-	for ( const word of [ "0", "off", "false", "no", "", "2" ] ) {
+	for ( const word of [ "0", "off", "false", "no", "2" ] ) {
 		process.env.SRO_QINSHI_TOMB = word;
 		assert.equal( qinshiTombEnabled(), false, word );
 	}
+});
+
+/*
+================
+fixtureServerRoot
+
+A server source tree holding only what the posture reads: the release
+profile (profileValue undefined leaves the key out) and a registry row
+with the given default. Pointed at through SRO_SERVER_SOURCE_ROOT for one
+test.
+================
+*/
+function fixtureServerRoot( t, profileValue, registryDefault ) {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "sro-tomb-posture-" ) );
+	// Restore the value the process started with, whatever order several
+	// fixtures' hooks run in.
+	t.after( () => {
+		if ( ORIGINAL_SERVER_ROOT === undefined ) delete process.env.SRO_SERVER_SOURCE_ROOT;
+		else process.env.SRO_SERVER_SOURCE_ROOT = ORIGINAL_SERVER_ROOT;
+		fs.rmSync( root, { recursive: true, force: true } );
+	} );
+	fs.mkdirSync( path.join( root, "ops", "release" ), { recursive: true } );
+	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
+	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
+	fs.writeFileSync( path.join( root, "ops", "release", "shard-settings.json" ), JSON.stringify( profile ) );
+	fs.writeFileSync(
+		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
+		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n}\n`
+	);
+	process.env.SRO_SERVER_SOURCE_ROOT = root;
+}
+
+test("an unset tomb flag takes the shard's deployed posture (#2024)", ( t ) => {
+	// The checkout's own posture: the shard spawns the tomb by default, so
+	// a default build must bake it - the split that shipped invisible
+	// tomb monsters.
+	for ( const unset of [ undefined, "", "  " ] ) {
+		withTombFlag( t, unset );
+		assert.equal( qinshiTombEnabled(), true, `unset ${JSON.stringify( unset )} reads the shard default` );
+	}
+	// The registry default decides when the profile is silent...
+	withTombFlag( t, undefined );
+	fixtureServerRoot( t, undefined, "off" );
+	assert.equal( qinshiTombEnabled(), false );
+	// ...the deployed profile overrides it...
+	fixtureServerRoot( t, "on", "off" );
+	assert.equal( qinshiTombEnabled(), true );
+	fixtureServerRoot( t, "off", "on" );
+	assert.equal( qinshiTombEnabled(), false );
+	// ...and an explicit build env still wins over both.
+	process.env.SRO_QINSHI_TOMB = "on";
+	assert.equal( qinshiTombEnabled(), true );
+});
+
+test("a registry the bake cannot read stops the build", ( t ) => {
+	withTombFlag( t, undefined );
+	fixtureServerRoot( t, undefined, "on" );
+	fs.writeFileSync(
+		path.join( process.env.SRO_SERVER_SOURCE_ROOT, "internal", "config", "shardsettings", "shardsettings.go" ),
+		"var Settings = []Setting{}\n"
+	);
+	assert.throws( () => qinshiTombEnabled(), /cannot see the shard's posture/ );
 });
 
 test("tomb character rows join only an opted-in load with the flag on", ( t ) => {
@@ -76,7 +143,7 @@ test("tomb character rows join only an opted-in load with the flag on", ( t ) =>
 	const overlayCount = loadQinShiTombCharacterRows().rows.length;
 	assert.ok( overlayCount > 0, "the committed characterdata overlay is empty" );
 
-	withTombFlag( t, undefined );
+	withTombFlag( t, "off" );
 	const flagOff = loadCharacterDataRows( textdataDir, { codenamePattern: /./, qinshiTombOverlay: true } );
 	assert.equal( flagOff.size, 1 );
 	assert.ok( flagOff.has( "NPC_FIXTURE" ) );
@@ -100,7 +167,7 @@ test("flipping the tomb flag changes the resource build fingerprint", async ( t 
 	// Otherwise an up-to-date tree would skip the build and keep the
 	// flag-off assets after the flag turns on (lane memos hash the same
 	// knob list).
-	withTombFlag( t, undefined );
+	withTombFlag( t, "off" );
 	const off = await computeResourceBuildFingerprint();
 	process.env.SRO_QINSHI_TOMB = "on";
 	const on = await computeResourceBuildFingerprint();
