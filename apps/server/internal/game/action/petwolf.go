@@ -38,12 +38,14 @@ func (rt *Runtime) wolfSource(division string, owner *enterworld.Character, gid 
 wolfCompanion
 
 Common eligibility for every wolf bonus; no learned Execute prerequisite.
-The wolf lanes read nothing of the owner past its worn equipment, so
-their copy is the narrow one (#1943).
+The copy stays the full one: eligibility itself resolves the wolf
+through the owner's inventory rows, and companion resolution walks
+bag rows - the narrow equipment copy drops the pet it just admitted
+(#1943; the domain SnapshotEquipment pin).
 ================
 */
 func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, gid uint32, now int64) (petCombatStep, bool) {
-	return rt.elementalCompanionEligibilityWith(division, owner, gid, "Wolf", now, false, rt.characterSnapshotEquipmentAdmitted)
+	return rt.elementalCompanionEligibilityWith(division, owner, gid, "Wolf", now, false, rt.characterSnapshotAdmitted)
 }
 
 /*
@@ -91,10 +93,10 @@ func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterwo
 ================
 elementalCompanionEligibilityWith
 
-The one eligibility walk. snapshotFor supplies the owner copy: the
-admitted full copy for the combat and travel lanes, the admitted
-equipment copy for the wolf lanes, whose readers stay inside the worn
-equipment (#1943).
+The one eligibility walk. snapshotFor supplies the owner copy behind
+the field-only admission; every lane passes the full admitted copy,
+because the walk itself resolves the pet through the owner's
+inventory rows (#1943).
 ================
 */
 func (rt *Runtime) elementalCompanionEligibilityWith(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool, snapshotFor func(string, *enterworld.Character, func(*enterworld.Character) bool) *enterworld.Character) (petCombatStep, bool) {

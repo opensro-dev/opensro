@@ -218,7 +218,7 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 	if len(hit.formulas) == 0 {
 		return cosHit{}, false
 	}
-	hit.block.sources = rt.captureAbnormalSources(division, hit.block.block, hit.records)
+	hit.block.sources = rt.captureAbnormalSourcesLife(division, hit.block.block, hit.records)
 	return hit, true
 }
 

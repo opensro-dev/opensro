@@ -299,6 +299,22 @@ func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, to
 
 /*
 ================
+ThiefCargoTownAreaEntered
+
+#1985, port-only, not native (SRO_THIEF_CART_TOWN_AREAS, on by default):
+the same thief and transport test as ThiefCargoTownBlocked, against the
+town parts of regioninfo.txt that lie in battlefield regions (townarea).
+Natively the rule sees regions only, so a cart reaches a town's outer
+walls wherever they stand in a battlefield region.
+================
+*/
+func (rt *Runtime) ThiefCargoTownAreaEntered(c *enterworld.Character, from, to worldgeom.RegionXZ) bool {
+	return rt.ThiefCartTownAreas.Len() != 0 && enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) &&
+		rt.ThiefCartTownAreas.EnteredFromBattlefield(from, to)
+}
+
+/*
+================
 battlefieldRegion
 
 A region whose _RefRegion.IsBattleField is set: players may fight there.

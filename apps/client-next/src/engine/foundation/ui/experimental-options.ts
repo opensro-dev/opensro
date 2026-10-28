@@ -40,6 +40,12 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native (#1976): a fifth chat tab, Event, holding the
+	// shard's channel-7 event notices (seal drops, plus results, item
+	// breaks, job kills) that otherwise land in All. On unless turned off
+	// (the owner's choice, 2026-10-28); off is the native four tabs with
+	// notices in All.
+	readonly eventChatTab: boolean;
 	// Port-only, not native: use only the male warrior loading artwork.
 	// Off by default so both original loading backgrounds remain available.
 	readonly safeLoadingScreen: boolean;
@@ -365,7 +371,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -385,6 +391,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		eventChatTab: record.eventChatTab !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),

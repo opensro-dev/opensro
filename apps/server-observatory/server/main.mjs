@@ -51,6 +51,7 @@ const siteAdmin = config.siteAdmin ?? null;
 const siteAdminToken = siteAdmin?.tokenFile ? (await readFile( siteAdmin.tokenFile, "utf8" )).trim() : "";
 const inviteKeys = createInviteKeys( siteAdmin ? siteAdminURL( siteAdmin.url ) : null, siteAdminToken );
 const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
+const INVITE_REVEAL = /^\/api\/invites\/([0-9a-f-]{36})\/reveal$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
 // Fixed paths only; a checkout without built client assets answers 404 and
@@ -82,6 +83,7 @@ for (
 		"history.css",
 		"invites.js",
 		"invite-made.js",
+		"invite-counts.js",
 		"invites.css",
 		"request.js",
 		"economy.html",
@@ -151,12 +153,23 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
-		if ( url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ) {
+		if (
+			url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ||
+			INVITE_REVEAL.test( url.pathname )
+		) {
 			const operator = requestOperator( req, edge );
 			let result;
 			if ( req.method === "GET" && url.pathname === "/api/invites" ) {
 				try {
-					result = await inviteKeys.list( operator, url.searchParams.get( "discordUserId" ) ?? "" );
+					result = await inviteKeys.list( operator, {
+						discordUserId: url.searchParams.get( "discordUserId" ) ?? "",
+						status: url.searchParams.get( "status" ) ?? "",
+						source: url.searchParams.get( "source" ) ?? "",
+						createdFrom: url.searchParams.get( "createdFrom" ) ?? "",
+						createdTo: url.searchParams.get( "createdTo" ) ?? "",
+						expiresFrom: url.searchParams.get( "expiresFrom" ) ?? "",
+						expiresTo: url.searchParams.get( "expiresTo" ) ?? ""
+					} );
 				} catch {
 					result = { status: 502, body: { error: "The website did not answer" } };
 				}
@@ -177,9 +190,12 @@ async function handleRequest( req, res ) {
 					return;
 				}
 				const revoke = url.pathname.match( INVITE_REVOKE );
+				const reveal = url.pathname.match( INVITE_REVEAL );
 				try {
 					result = revoke ?
 						await inviteKeys.revoke( operator, revoke[1] ) :
+						reveal ?
+						await inviteKeys.reveal( operator, reveal[1] ) :
 						await inviteKeys.create( operator, body );
 				} catch {
 					// A key may or may not have been made: list before trying again.

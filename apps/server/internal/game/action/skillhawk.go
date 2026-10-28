@@ -141,7 +141,11 @@ advanceHawk
 
 One record's turn: a lost instance drops it, a dead or missing target
 clears its aim, and a strike needs a full interval since the last one and
-a caster attack within the last interval.
+a caster attack within the last interval. The wait verdict reads values
+only; the resolution and the aim clear it feeds wait for a strike tick,
+so a target that dies mid-interval is cleared at the strike tick instead
+of the tick it died. No strike outcome moves - the strike re-resolves
+first - and the record's target has no reader outside this lane.
 ================
 */
 func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionFrames {
@@ -154,8 +158,21 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 		rt.dropHawk(key, h.token)
 		return nil
 	}
+	// The wait verdict reads values only: life from the read door (the
+	// copy's normalizations feed no vitals fact) and the interval from
+	// the hawk record and its skill row. The caster record is detached
+	// only on a strike tick, below - the resolution and the strike both
+	// still run there, in the original order, before anything commits.
+	alive, _, _ := rt.characterLifeState(h.division, c)
+	if !alive || h.target == 0 {
+		return nil
+	}
+	interval := int64(row.TimedEffect.Hawk.IntervalMs)
+	if now-h.strikeAt < interval || now-h.ownerAttackAt > interval {
+		return nil
+	}
 	snapshot := rt.characterSnapshot(h.division, c)
-	if snapshot == nil || !enterworld.CharacterAlive(snapshot) || h.target == 0 {
+	if snapshot == nil {
 		return nil
 	}
 	target, exists := rt.resolveCombatTarget(h.division, snapshot, h.target, now)
@@ -163,10 +180,6 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 	// player's own single-target hit on a COS).
 	if !exists || target.cos != nil {
 		rt.updateHawk(key, h.token, func(live *summonedHawk) { live.target = 0 })
-		return nil
-	}
-	interval := int64(row.TimedEffect.Hawk.IntervalMs)
-	if now-h.strikeAt < interval || now-h.ownerAttackAt > interval {
 		return nil
 	}
 	rt.updateHawk(key, h.token, func(live *summonedHawk) { live.strikeAt = now })

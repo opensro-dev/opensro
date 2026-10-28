@@ -62,6 +62,7 @@ type directionWalk struct {
 	goal           simulation.Spawn
 	moving         bool
 	blocked        bool
+	thiefCargo     bool
 	groundRevision uint64
 }
 
@@ -156,6 +157,9 @@ type directionLeg struct {
 	goal    simulation.Spawn
 	walk    simulation.NavWalk
 	blocked bool
+	// thiefCargo marks a leg the thief transport rule ended: the walk's
+	// stop shows the same notice a refused destination move does.
+	thiefCargo bool
 }
 
 /*
@@ -186,20 +190,25 @@ func (rt *Runtime) constrainDirectionLeg(character *enterworld.Character, from s
 		blocked = true
 	}
 	// A thief's transport stops at the first protected region it would enter
-	// (#721): the reference server refuses that step, and the walk ends there.
+	// (#721): the reference server refuses that step with the thief-cart
+	// notice (v1.150 shows it for 0x3058 kind 1), and the walk ends there
+	// (#1985: the notice comes with the stop).
+	thiefCargo := false
 	if rt.thiefCargoCrossingBlocked(character, from, end) {
 		end = furthestAdmitted(from, end, func(at simulation.Spawn) bool { return !rt.thiefCargoCrossingBlocked(character, from, at) })
-		blocked = true
+		blocked, thiefCargo = true, true
 	}
 	if end.RegionID == from.RegionID && end.X == from.X && end.Z == from.Z {
-		return standingLeg(from, fromOwner)
+		leg := standingLeg(from, fromOwner)
+		leg.thiefCargo = thiefCargo
+		return leg
 	}
 
 	if rt.groundEnabled {
-		return directionLeg{goal: end, blocked: blocked}
+		return directionLeg{goal: end, blocked: blocked, thiefCargo: thiefCargo}
 	}
 	end, walk := rt.walkOwners(from, fromOwner, end)
-	return directionLeg{goal: end, walk: walk, blocked: blocked}
+	return directionLeg{goal: end, walk: walk, blocked: blocked, thiefCargo: thiefCargo}
 }
 
 /*
@@ -263,6 +272,14 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	var result simulation.MoveResult
 	committed, refusal := rt.commitMove(character, admission, func(world *simulation.WorldState) {
 		result = simulation.ApplyDirectionLeg(world, enterworld.ObjectIDForCharacter(character), walk.request, leg.goal, nowMs)
+		// The ground walker steps an angular segment along its heading until
+		// terrain stops it and never arrives at the goal, so a leg a rule cut
+		// short (a closed area, a thief's transport at a town) must end at
+		// its goal: without this a sky or moon walk crossed the border the
+		// clip stopped it at (#1985).
+		if leg.blocked && world.MoveSegment != nil {
+			world.MoveSegment.GroundAngular = false
+		}
 		// Same rule as a destination commit: the spans belong to the chord
 		// walked from this live point and nothing else.
 		if result.LiveBefore == live {
@@ -278,6 +295,7 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	walk.groundRevision = committed.GroundRevision()
 	walk.moving = committed.MoveSegment != nil
 	walk.blocked = leg.blocked
+	walk.thiefCargo = leg.thiefCargo
 	rt.directions.set(admission.worldKey, walk)
 	return result, committed, nil
 }
@@ -339,7 +357,7 @@ One walk's tick, under its character lock:
   - an open leg inside DirectionLegLookaheadMs of its arrival is followed
     by the next leg from the live point;
   - a blocked leg ends the walk once it matures, with the 0xB2F5 correction
-    for the mover.
+    for the mover, and the thief transport notice when that rule stopped it.
 
 ================
 */
@@ -390,10 +408,15 @@ func (rt *Runtime) continueDirectionWalk(key string, nowMs int64) (simulation.Di
 		}
 		rt.directions.clear(key)
 		correction := directionCorrectionFrame(activeMoverGID(walk.character, walk.cosGID), admission.world.Spawn)
+		frames := []simulation.Frame{{Opcode: correction.Opcode, Payload: correction.Payload}}
+		if walk.thiefCargo {
+			notice := thiefCargoTownNotice()
+			frames = append(frames, simulation.Frame{Opcode: notice.Opcode, Payload: notice.Payload})
+		}
 		return simulation.DivisionFrames{
 			DivisionID:      walk.divisionID,
 			OnlyCharacterID: walk.character.ID,
-			Frames:          []simulation.Frame{{Opcode: correction.Opcode, Payload: correction.Payload}},
+			Frames:          frames,
 		}, true
 	}
 	if nowMs < arrivesAtMs-simulation.DirectionLegLookaheadMs {

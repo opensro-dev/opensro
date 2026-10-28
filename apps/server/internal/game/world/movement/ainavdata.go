@@ -30,6 +30,19 @@ each edge's midpoint, the Y of the block's placement (the vertices' own
 heights are not used), for the mesh's internal edges in order, then its
 portal outline edges in outline order. Checked on all 151 Donwhang blocks.
 
+0x8009's refusal is a recorded decision, not a fault (#1979). It is the
+Capture the Flag arena (dungeon/wchina/event.dof). Its file in the v1.150
+Data.pk2 gives its two rooms 57 cells, while every room mesh the v1.150
+client ships for them has 185 or 187 (room102event and room102 alike);
+its three small blocks match. The table was built for meshes the client
+never shipped. The client never reads these files (no reference to them
+in SRO_Client.exe), and the server's loader trusts its own DATA copy
+(version byte, offset and trailer only, no check against the meshes), so
+native has no counterpart to this pairing. Indexing the 57-cell route
+with a 187-cell mesh's cell would read past the table. The arena keeps
+the port's portal route, and the boot log records the decision at info
+level; any other refusal stays a warning.
+
 ===========================================================================
 */
 package movement
@@ -37,6 +50,7 @@ package movement
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 
@@ -51,6 +65,16 @@ const (
 	// float32 and the port rotates in float64 (Donwhang's worst is 1.4e-4).
 	aiNavPointTolerance = 0.01
 )
+
+// errAINavCellMismatch marks a block whose route cell count is not its
+// mesh's: the file was built for another mesh.
+var errAINavCellMismatch = errors.New("route cells do not match the mesh")
+
+// aiNavKnownMismatches are the route files the v1.150 Data.pk2 ships for
+// meshes it does not ship (#1979): their cell-count refusal is expected.
+var aiNavKnownMismatches = map[uint16]string{
+	0x8009: "the Capture the Flag arena's file gives its two rooms 57 cells; the v1.150 room meshes have 185-187",
+}
 
 // caveRouteTable is one dungeon's parsed route file.
 type caveRouteTable struct {
@@ -284,7 +308,7 @@ func validateAINavData(table *caveRouteTable, surface *dungeonSpawnSurface) erro
 		}
 		mesh := object.meshes[0]
 		if block.cells != mesh.cellCount() {
-			return fmt.Errorf("block %d: %d route cells, the mesh has %d", i, block.cells, mesh.cellCount())
+			return fmt.Errorf("block %d: %d route cells, the mesh has %d: %w", i, block.cells, mesh.cellCount(), errAINavCellMismatch)
 		}
 		edges := aiNavPointEdges(object)
 		if len(block.points) != len(edges) {
@@ -410,12 +434,30 @@ func (v *WaterValidator) loadAINavData(surfaces map[uint16]*dungeonSpawnSurface)
 	for _, file := range packed.Files {
 		table, err := decodeAINavFile(file.RegionID, file.ByteLength, file.RawBase64, surfaces[file.RegionID])
 		if err != nil {
+			if reason, known := aiNavKnownRefusal(file.RegionID, err); known {
+				log.Infof("movement: %s not used (%s, #1979); 0x%04X keeps the port's portal route", file.SourcePath, reason, file.RegionID)
+				continue
+			}
 			log.Warnf("movement: %s refused (%v); 0x%04X keeps the port's portal route", file.SourcePath, err, file.RegionID)
 			continue
 		}
 		tables[file.RegionID] = table
 	}
 	return tables
+}
+
+/*
+================
+aiNavKnownRefusal
+
+Whether a refusal is the recorded mismatch for its region: only a cell
+count disagreement counts, so a file that fails another way (a new data
+build, a parse error) still warns.
+================
+*/
+func aiNavKnownRefusal(region uint16, err error) (string, bool) {
+	reason, known := aiNavKnownMismatches[region]
+	return reason, known && errors.Is(err, errAINavCellMismatch)
 }
 
 /*

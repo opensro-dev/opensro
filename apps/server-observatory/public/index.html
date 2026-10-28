@@ -404,7 +404,21 @@
   <div class="panel-heading"><div><span class="eyebrow">ALL KEYS</span><h2>Keys</h2></div>
    <form id="invites-filter" class="invites-filter">
     <label>Discord user ID<input id="invites-filter-id" type="search" inputmode="numeric" pattern="[0-9]{15,22}" autocomplete="off" placeholder="Show one member's keys"></label>
+    <label>Status<select id="invites-filter-status">
+     <option value="">All</option>
+     <option value="unused">Unused</option>
+     <option value="partial">Partly used</option>
+     <option value="used">Used</option>
+     <option value="revoked">Revoked</option>
+     <option value="expired">Expired</option>
+    </select></label>
+    <label>Source<select id="invites-filter-source"><option value="">All sources</option></select></label>
+    <label>Made from<input id="invites-filter-created-from" type="date"></label>
+    <label>Made to<input id="invites-filter-created-to" type="date"></label>
+    <label>Expires from<input id="invites-filter-expires-from" type="date"></label>
+    <label>Expires to<input id="invites-filter-expires-to" type="date"></label>
     <button class="button" type="submit">Filter</button>
+    <button class="button" type="button" id="invites-filter-clear">Clear</button>
    </form>
   </div>
   <div class="invites-table-wrap"><table class="invites-table">

@@ -92,7 +92,9 @@ never read the avatar inventory: the copy keeps only the equipment
 rows and no AvatarInventory. Convert a call site only when every
 reader of the copy is cleared for the narrow rows root by root (#1943
 transitive audit) - a bag or avatar reader would silently see its
-rows missing.
+rows missing. Companion resolution walks bag rows (Companions reaches
+the row Summon records), so a reader of this copy must never resolve
+companions.
 ==================
 */
 func (rt *Runtime) characterSnapshotEquipment(
@@ -106,35 +108,6 @@ func (rt *Runtime) characterSnapshotEquipment(
 	var snapshot *enterworld.Character
 
 	rt.deps.Read(divisionID, func() {
-		snapshot = character.SnapshotEquipment()
-	})
-
-	return snapshot
-}
-
-/*
-==================
-characterSnapshotEquipmentAdmitted
-
-characterSnapshotEquipment behind characterSnapshotAdmitted's
-field-only admission: a rejected target pays for neither copy.
-==================
-*/
-func (rt *Runtime) characterSnapshotEquipmentAdmitted(
-	divisionID string,
-	character *enterworld.Character,
-	admit func(*enterworld.Character) bool,
-) *enterworld.Character {
-	if character == nil {
-		return nil
-	}
-
-	var snapshot *enterworld.Character
-
-	rt.deps.Read(divisionID, func() {
-		if admit != nil && !admit(character) {
-			return
-		}
 		snapshot = character.SnapshotEquipment()
 	})
 
