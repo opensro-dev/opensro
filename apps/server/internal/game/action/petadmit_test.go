@@ -91,6 +91,12 @@ func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) 
 	if crow.Brood[0].BroodStage != 2 {
 		t.Fatal("admitted crow advance lost the hatch")
 	}
+	// The hatched clone's own key lives in brood space: advancing it
+	// as a brood source is refused, below the copy.
+	broodKey := petOwnerKey{division: testDivision, name: crow.Name, gid: crow.Brood[0].GID}
+	if frames := crowRT.advanceCrowBrood(broodKey, crowClock.NowMs()); frames != nil {
+		t.Fatalf("brood-space gid gained brood frames: %v", frames)
+	}
 
 	bearRT, bearClock, bear, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 	makeTrainedPet(bearRT, bear, "COS_P_BEAR_090", 90)
@@ -105,9 +111,12 @@ func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) 
 	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
 	broodAllocs := testing.AllocsPerRun(20, func() { rt.advanceCrowBrood(key, now) })
 	spiritAllocs := testing.AllocsPerRun(20, func() { rt.advancePetSpirit(key, now) })
-	t.Logf("allocs: one owner copy %.0f, refused brood advance %.0f, refused spirit advance %.0f", copyAllocs, broodAllocs, spiritAllocs)
-	if broodAllocs >= copyAllocs || spiritAllocs >= copyAllocs {
-		t.Fatalf("refused advances still copy the owner: brood %.0f, spirit %.0f allocs; one copy is %.0f",
-			broodAllocs, spiritAllocs, copyAllocs)
+	crowCopyAllocs := testing.AllocsPerRun(20, func() { crowRT.characterSnapshot(testDivision, crow) })
+	broodSpaceAllocs := testing.AllocsPerRun(20, func() { crowRT.advanceCrowBrood(broodKey, crowClock.NowMs()) })
+	t.Logf("allocs: one owner copy %.0f, refused brood advance %.0f, refused spirit advance %.0f; crow owner copy %.0f, refused brood-space advance %.0f",
+		copyAllocs, broodAllocs, spiritAllocs, crowCopyAllocs, broodSpaceAllocs)
+	if broodAllocs >= copyAllocs || spiritAllocs >= copyAllocs || broodSpaceAllocs >= crowCopyAllocs {
+		t.Fatalf("refused advances still copy the owner: brood %.0f, spirit %.0f, brood-space %.0f allocs; one copy is %.0f (crow %.0f)",
+			broodAllocs, spiritAllocs, broodSpaceAllocs, copyAllocs, crowCopyAllocs)
 	}
 }
