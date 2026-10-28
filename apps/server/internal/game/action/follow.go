@@ -47,7 +47,7 @@ func (rt *Runtime) stopFollowMovement(division string, character, snapshot *ente
 	}
 	nowMs := rt.Now().UnixMilli()
 	from := rt.liveSpawn(key, snapshot, nowMs)
-	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, rt.handlerDoors())
 	return stopped
 }
 
@@ -177,7 +177,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 		if snapshot != nil && !teleportBlocks(snapshot.NativeTeleportMode) && enterworld.CharacterAlive(snapshot) {
 			key := simulation.WorldKey(intent.DivisionID, snapshot.Name)
 			from := rt.liveSpawn(key, snapshot, nowMs)
-			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, rt.tickDoors())
 			return stopped
 		}
 		return OpResult{}
@@ -199,7 +199,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 	}
 	return rt.commitIntentMovement(character, snapshot, intentMovement{
 		intent: intent, from: from, target: to, goal: goal, nowMs: nowMs,
-	})
+	}, rt.tickDoors())
 }
 
 /*

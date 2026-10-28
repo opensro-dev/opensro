@@ -196,7 +196,7 @@ func (rt *Runtime) beginSupportApproach(division string, character, snapshot *en
 		ActionReach:   spacing.ActionReach,
 	}
 	rt.setCombatIntent(intent)
-	return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs)
+	return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs, rt.handlerDoors())
 }
 
 /*
@@ -237,11 +237,11 @@ func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, int
 		if !rt.pursuitSteerDue(intent, worldKey, snapshot, to, nowMs) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs)
+		return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs, rt.tickDoors())
 	}
 
 	rt.ClearCombatIntent(division, intent.CharacterName)
-	transition, transitioned := rt.enterBasicAttackRange(character, snapshot, worldKey, to, nowMs)
+	transition, transitioned := rt.enterBasicAttackRange(character, snapshot, worldKey, to, nowMs, rt.tickDoors())
 	if !transitioned {
 		return OpResult{}
 	}

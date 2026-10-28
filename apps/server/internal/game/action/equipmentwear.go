@@ -222,16 +222,17 @@ func (rt *Runtime) equipmentMaxDurability(row *enterworld.InventoryRow) uint32 {
 ================
 applyEquipmentWear
 
-Rolls one actor's tally after its execution, in the tick's batched
-commit (#2028): every caller is a strike path. Monsters never wear.
+Rolls one actor's tally after its execution, through the strike's own
+lane doors (characterDoors): a handler-admitted strike commits before
+its answer, a tick strike joins the batch. Monsters never wear.
 ================
 */
-func (rt *Runtime) applyEquipmentWear(division string, c *enterworld.Character, tally wearTally) wearFrames {
+func (rt *Runtime) applyEquipmentWear(division string, c *enterworld.Character, tally wearTally, doors characterDoors) wearFrames {
 	var out wearFrames
 	if c == nil || tally == (wearTally{}) {
 		return out
 	}
-	rt.deps.UpdateDeferred(c, "equipment-wear", func() bool {
+	doors.update(c, "equipment-wear", func() bool {
 		if c.DeletePending {
 			return false
 		}

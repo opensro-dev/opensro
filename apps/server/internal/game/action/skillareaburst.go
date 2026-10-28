@@ -83,7 +83,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 		return OpResult{DiagnosticRefusal: "area-burst-commit-refused"}
 	}
 	gid := enterworld.ObjectIDForCharacter(snapshot)
-	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, now)
+	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, now, rt.handlerDoors())
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token}
 	open := wire.SkillCastUntargetedFrame(success)

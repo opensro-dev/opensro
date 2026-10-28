@@ -407,7 +407,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		NextActionMs: skillCooldownDeadline(snapshot, skill),
 	}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(character, intent, nowMs)
+	return rt.advanceBasicAttackIntent(character, intent, nowMs, rt.handlerDoors())
 }
 
 /*
@@ -417,7 +417,7 @@ advanceBasicAttackIntent
 Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
-func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
@@ -523,7 +523,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		if !reachChanged && !rt.pursuitSteerDue(intent, worldKey, snapshot, targetSpawn, nowMs) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(character, snapshot, intent, spacing, live, targetSpawn, nowMs)
+		return rt.approachIntentTarget(character, snapshot, intent, spacing, live, targetSpawn, nowMs, doors)
 	}
 	// Entering action range (or, for a combo stage, its turn, in reach or
 	// not) transfers ownership from movement to combat.
@@ -536,6 +536,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		worldKey,
 		targetSpawn,
 		nowMs,
+		doors,
 	)
 	if !transitioned {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -553,7 +554,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
 		ActionId: skill.ID, HasTarget: true, TargetGid: intent.TargetGid,
-	}, nowMs, intent.ComboRootID)
+	}, nowMs, intent.ComboRootID, doors)
 	switch decision {
 	case skillCastDeferred:
 		// Range and the previous action bracket are transient states. Preserve
@@ -624,7 +625,7 @@ Publishes one approach leg toward the intent's target, a monster or a
 player, and records the sample it was authored from.
 ==================
 */
-func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Character, intent basicAttackIntent, spacing simulation.CombatSpacing, from, target simulation.Spawn, nowMs int64) OpResult {
+func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Character, intent basicAttackIntent, spacing simulation.CombatSpacing, from, target simulation.Spawn, nowMs int64, doors characterDoors) OpResult {
 	goal, disposition := spacing.ApproachGoal(from, target)
 	if disposition == simulation.CombatApproachInvalid {
 		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -638,7 +639,7 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 	}
 	return rt.commitIntentMovement(character, snapshot, intentMovement{
 		intent: intent, from: from, target: target, goal: goal, nowMs: nowMs,
-	})
+	}, doors)
 }
 
 /*
@@ -660,7 +661,7 @@ type intentMovement struct {
 commitIntentMovement
 ================
 */
-func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement, doors characterDoors) OpResult {
 	// The reference server's pursuit tick dispatches
 	// its pursuit walk through the character's move command handler, which
 	// drops the move when vt+0x5A0 (the motion-change lock, which asks
@@ -686,7 +687,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	var movementRevision uint64
 	var movementState simulation.WorldState
 	rt.bindResidentRegion(worldKey, nowMs)
-	if !rt.deps.UpdateDeferred(character, "basic-attack-approach", func() bool {
+	if !doors.update(character, "basic-attack-approach", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -750,6 +751,7 @@ func (rt *Runtime) enterBasicAttackRange(
 	worldKey string,
 	target simulation.Spawn,
 	nowMs int64,
+	doors characterDoors,
 ) (OpResult, bool) {
 	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
 	live := world.LiveSpawnAt(nowMs)
@@ -759,7 +761,7 @@ func (rt *Runtime) enterBasicAttackRange(
 		return OpResult{}, true
 	}
 	var committed simulation.Spawn
-	accepted := rt.deps.UpdateDeferred(character, "basic-attack-enter-range", func() bool {
+	accepted := doors.update(character, "basic-attack-enter-range", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -885,5 +887,5 @@ func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, 
 		return nil, OpResult{}, false
 	}
 	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
-	return character, rt.advanceBasicAttackIntent(character, intent, nowMs), true
+	return character, rt.advanceBasicAttackIntent(character, intent, nowMs, rt.tickDoors()), true
 }

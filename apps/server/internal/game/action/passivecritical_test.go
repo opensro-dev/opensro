@@ -29,7 +29,7 @@ func TestPassiveCriticalChangesRealBasicAttackResult(t *testing.T) {
 			}
 			rt.CombatRoll = func() (uint32, error) { return 4, nil } // base3 fails, passive5 succeeds
 			cast := wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}
-			r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, rt.Now().UnixMilli())
+			r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, rt.Now().UnixMilli(), rt.handlerDoors())
 			if decision != skillCastAccepted || len(r.Frames) == 0 || len(r.Frames[0].Payload) < 34 {
 				t.Fatalf("refused %+v", r)
 			}

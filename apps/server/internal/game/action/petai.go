@@ -518,7 +518,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			return state.follower.Approach(target, float64(rt.cosPacedRun(ref, run)), nowMs, grounditem.ExecuteRange, constraint)
 		}
 		frames := state.follower.Stop(nowMs)
-		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs), command: state.pickupCommand})
+		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs), command: state.pickupCommand, doors: rt.tickDoors()})
 		result = finishPendingCosPickup(state, result)
 		state.public = append(state.public, result.Broadcast...)
 		// A shared pickup's receipt and the party loot notices belong to other

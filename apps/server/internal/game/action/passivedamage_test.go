@@ -31,7 +31,7 @@ func TestPassiveDamageChangesCommittedAttackPackets(t *testing.T) {
 			c.Skills = append(c.Skills, passive.ID)
 		}
 		rt.CombatRoll = func() (uint32, error) { return 100, nil }
-		result, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}, rt.Now().UnixMilli())
+		result, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}, rt.Now().UnixMilli(), rt.handlerDoors())
 		if decision != skillCastAccepted || len(result.Frames) == 0 || len(result.Frames[0].Payload) < 34 {
 			t.Fatalf("refused %+v", result)
 		}
@@ -75,7 +75,7 @@ func TestPassiveDamageCannotBypassWeaponAvailability(t *testing.T) {
 			}
 			c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
 			rt.CombatRoll = func() (uint32, error) { return 100, nil }
-			_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}, rt.Now().UnixMilli())
+			_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}, rt.Now().UnixMilli(), rt.handlerDoors())
 			if (decision == skillCastAccepted) != (condition == "repaired") {
 				t.Fatalf("%s decision %v", condition, decision)
 			}

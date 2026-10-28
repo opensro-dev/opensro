@@ -111,11 +111,11 @@ func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAtt
 		if !rt.pursuitSteerDue(intent, worldKey, snapshot, to, now) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now)
+		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now, rt.tickDoors())
 	}
 
 	rt.ClearCombatIntent(division, intent.CharacterName)
-	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now)
+	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now, rt.tickDoors())
 	if !transitioned {
 		return OpResult{}
 	}

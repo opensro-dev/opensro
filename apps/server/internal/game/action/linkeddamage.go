@@ -133,7 +133,7 @@ taker's own links off, and is published as a pulse result with the
 taker's own struck frames.
 ================
 */
-func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64) OpResult {
+func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64, doors characterDoors) OpResult {
 	var result OpResult
 	for _, move := range moves {
 		taker := rt.findCharacterByGid(division, move.gid)
@@ -150,7 +150,7 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 			continue
 		}
 		var struck playerStruck
-		if !rt.deps.UpdateDeferred(taker, "linked-damage-share", func() bool {
+		if !doors.update(taker, "linked-damage-share", func() bool {
 			if taker.DeletePending || !enterworld.CharacterAlive(taker) {
 				return false
 			}
