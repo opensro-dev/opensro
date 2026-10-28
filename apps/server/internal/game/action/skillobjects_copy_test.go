@@ -146,6 +146,28 @@ func TestSkillObjectOwnerCopyIsCombat(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSkillObjectTeleportingOwnerRetires
+
+The admission's teleport fact is the object pass's only gate on a
+teleporting owner (#2012 review): while the owner is in teleport
+mode its standing object retires instead of ticking. Dropping
+NativeTeleportMode from the admission passes the whole suite
+without this pin - the object would scan on.
+================
+*/
+func TestSkillObjectTeleportingOwnerRetires(t *testing.T) {
+	rt, clock, c, _ := plantedTrapRuntime(t, 300000, 300)
+	c.NativeTeleportMode = 1
+	if out := rt.AdvanceSkillObjects(clock.NowMs()+100, nil); len(out) != 0 {
+		t.Fatalf("teleporting owner's object produced output: %+v", out)
+	}
+	if objects := rt.SkillObjects.Snapshot(); len(objects) != 0 {
+		t.Fatalf("teleporting owner's object survived: %+v", objects)
+	}
+}
+
 // quietPassAllocBound sits between the two measured passes over the
 // fixture above: 2045 allocs/run gated, 2168 ungated - the difference
 // is one registry copy (the slice plus one tracked-set copy per object).
