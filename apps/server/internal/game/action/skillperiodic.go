@@ -216,8 +216,14 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 	// deletion-pending caster's record was detached on every pulse of
 	// every persistent effect only to be refused here (#1943). A refused
 	// source resolves no target below - its life verdict already retires
-	// the effect, exactly as the copy's did.
-	snapshot := rt.characterSnapshotAdmitted(effect.Division, c, func(live *enterworld.Character) bool {
+	// the effect, exactly as the copy's did. The copy is the combat
+	// copy: every reader below weighs combat inputs only - the stat
+	// projection reads equipment rows and the avatar inventory, target
+	// resolution weighs the attacker's name, ID and world instance, and
+	// the hit commits read the name and pose. No reader resolves the
+	// caster's companions or bag rows; the one companion resolution
+	// (resolveCOSTarget) walks the target owner's own full copy.
+	snapshot := rt.characterSnapshotCombatAdmitted(effect.Division, c, func(live *enterworld.Character) bool {
 		return enterworld.CharacterAlive(live) && !live.DeletePending
 	})
 	live := snapshot != nil && rt.periodicEffects.Active(effect.Division, effect.SourceToken)

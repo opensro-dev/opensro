@@ -147,6 +147,53 @@ func (rt *Runtime) characterSnapshotCombat(
 
 /*
 ==================
+characterSnapshotCombatAdmitted
+
+characterSnapshotCombat with characterSnapshotAdmitted's door
+contract: the copy is detached only when admit accepts the live
+record. A root takes it under the same audit as characterSnapshotCombat
+- no reader of the copy reads a bag row or resolves companions. The
+combatCopy seam replaces the copy in tests exactly as it does for
+characterSnapshotCombat; admission still judges the live record
+first, in its own door pass, so a refused record pays for no copy
+under the seam either.
+=================
+*/
+func (rt *Runtime) characterSnapshotCombatAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	if rt.combatCopy != nil {
+		admitted := admit == nil
+		if !admitted {
+			rt.deps.Read(divisionID, func() {
+				admitted = admit(character)
+			})
+		}
+		if !admitted {
+			return nil
+		}
+		return rt.combatCopy(divisionID, character)
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		if admit != nil && !admit(character) {
+			return
+		}
+		snapshot = character.SnapshotCombat()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterLifeState
 
 The life facts a refused monster strike revalidates - alive, deletion

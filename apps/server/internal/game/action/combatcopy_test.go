@@ -3,9 +3,10 @@
 
 combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
-The basic attack (engage and every continuation tick) and the projectile
-release take the narrow combat copy: equipment rows and the avatar
-inventory, no bag rows. Each scenario here runs twice on a bag loaded
+The basic attack (engage and every continuation tick), the projectile
+release and the periodic pulse take the narrow combat copy: equipment
+rows and the avatar inventory, no bag rows. Each scenario here runs
+twice on a bag loaded
 with everything a root could trip on - spare ammunition, an attack pet's
 summon row, a quest item - once on the narrow copy and once forced onto
 the full copy, and every frame and the end state must agree. A root that
@@ -122,6 +123,33 @@ func projectileTrace(t *testing.T, full bool) string {
 
 /*
 ================
+periodicTrace
+
+A persistent attack's cast and two pulses on a loaded bag. The pulse
+root takes the combat copy of the caster; the bag carries an attack
+pet's summon row, so a pulse that resolved the caster's companions
+through its copy would find none on the narrow root and diverge.
+================
+*/
+func periodicTrace(t *testing.T, full bool) string {
+	rt, clock, c, target := periodicFixture(t, 10000)
+	loadCombatBag(c)
+	if full {
+		forceFullCombatCopy(rt)
+	}
+	trace := fmt.Sprintf("%+v\n", rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: testPeriodicSkillID, HasTarget: true, TargetGid: target.Gid}.Encode()))
+	for _, at := range []int64{clock.NowMs() + 2000, clock.NowMs() + 4000} {
+		trace += fmt.Sprintf("%+v\n", rt.advancePeriodicEffects(at))
+	}
+	after, _ := rt.Monsters.Get(testDivision, target.Gid)
+	if after.CurrentHP >= 10000 {
+		t.Fatal("periodic pulses never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -129,7 +157,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
