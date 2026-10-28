@@ -9,6 +9,8 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 func TestGMBodyStatusProductionDispatchPublicationAndDamage(t *testing.T) {
@@ -312,5 +314,161 @@ func TestBodyStatusReadWithoutACopy(t *testing.T) {
 	if readAllocs >= copyAllocs {
 		t.Fatalf("the body-status read still copies the character: %.0f allocs; one copy is %.0f",
 			readAllocs, copyAllocs)
+	}
+}
+
+const bodyStatusBuybackRows = 48
+
+/*
+================
+fattenWithBuyback
+
+Grow the record with buyback rows the re-entry never encodes: the
+clone deep-copies each row's summon and magic options, while entry
+preparation rebuilds bag and avatar only. The growth of one detached
+copy over the thin record therefore prices exactly one copy of the
+fattening, whatever else the measured path does.
+================
+*/
+func fattenWithBuyback(c *enterworld.Character) {
+	entries := make([]domain.BuybackEntry, 0, bodyStatusBuybackRows)
+	for i := 0; i < bodyStatusBuybackRows; i++ {
+		entries = append(entries, domain.BuybackEntry{
+			ID: uint32(i + 1), MerchantRef: 1, Price: 10,
+			Item: domain.InventoryRow{
+				Slot:     int64(i),
+				Codename: "BODY_STATUS_BUYBACK",
+				Summon: &domain.CharacterCOS{
+					GID: uint32(1000 + i), Codename: "BODY_STATUS_COS", Level: 20, CurrentHP: 100, Summoned: true,
+				},
+				MagicOptions: []uint64{1, 2, 3},
+			},
+		})
+	}
+	c.Buyback = entries
+}
+
+/*
+================
+bodyStatusFramePresent
+
+The rebuilt client actor received the retained body status: a state
+refresh on the body channel carrying the character's own gid and the
+status value.
+================
+*/
+func bodyStatusFramePresent(frames []wire.Frame, gid uint32, value uint8) bool {
+	for _, frame := range frames {
+		if frame.Opcode != wire.OpObjectStateRefresh {
+			continue
+		}
+		state, err := wire.DecodeObjectStateRefresh(frame.Payload)
+		if err == nil && state.Gid == gid && state.StateType == wire.StateChannelBody && state.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+TestRelocationBodyStatusWithoutASecondCopy
+
+Relocation rebuilds the scene from re-entry packets; preparation
+detaches the record once on its own. The body-status replay after it
+must read the field (#1943), not detach the record a second time:
+fattening the record may grow the relocation only by the one
+preparation copy. Measured on this fixture: one copy 21 thin, 118
+fat (growth 97); relocation 151 thin, 248 fat - a delta of exactly
+the growth, so a second copy (delta near twice the growth) fails.
+================
+*/
+func TestRelocationBodyStatusWithoutASecondCopy(t *testing.T) {
+	rt, c, _ := reverseReturnFixture(t)
+	var pushed []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { pushed = append(pushed, frames...) }
+	c.NativeBodyStatus = 3
+	admit := func() (travelPoint, bool) {
+		destination := simulation.SeedWorldState(c).Spawn
+		destination.X += 10
+		return travelPoint{spawn: destination, world: instance.ID(domain.CharacterWorldInstance(c))}, true
+	}
+	moved := false
+	move := func() { moved = rt.relocateCharacter(testDivision, c, "bodystatus-relocation", admit) }
+	move()
+	if !moved {
+		t.Fatal("relocation refused")
+	}
+	gid := enterworld.ObjectIDForCharacter(c)
+	if !bodyStatusFramePresent(pushed, gid, 3) {
+		t.Fatal("the rebuilt actor lost its body status")
+	}
+	var sink *enterworld.Character
+	copyThin := testing.AllocsPerRun(20, func() { sink = rt.characterSnapshot(testDivision, c) })
+	thinPath := testing.AllocsPerRun(20, move)
+	fattenWithBuyback(c)
+	copyFat := testing.AllocsPerRun(20, func() { sink = rt.characterSnapshot(testDivision, c) })
+	fatPath := testing.AllocsPerRun(20, move)
+	if sink == nil || !moved {
+		t.Fatal("fat relocation refused")
+	}
+	if !bodyStatusFramePresent(pushed, gid, 3) {
+		t.Fatal("the fattened rebuilt actor lost its body status")
+	}
+	growth := copyFat - copyThin
+	t.Logf("allocs: copy %.0f -> %.0f (growth %.0f), relocation %.0f -> %.0f (delta %.0f)",
+		copyThin, copyFat, growth, thinPath, fatPath, fatPath-thinPath)
+	if fatPath-thinPath >= growth+growth/2 {
+		t.Fatalf("the body-status replay detaches the record again: relocation delta %.0f, one copy's growth %.0f",
+			fatPath-thinPath, growth)
+	}
+}
+
+/*
+================
+TestRebirthBodyStatusWithoutAFifthCopy
+
+The rebirth driver detaches the record four times on its own - the
+settled-corpse read, the rebirth candidate, the entry preparation and
+the acceptance compare - so fattening it grows the path by four
+copies of the fattening. The body-status replay among the re-entry
+frames must read the field (#1943), not detach a fifth: the bound
+admits the driver's four and refuses a fifth. Measured on this
+fixture: one copy 27 thin, 124 fat (growth 97); rebirth 217 thin,
+611 fat - a delta of four times the growth.
+================
+*/
+func TestRebirthBodyStatusWithoutAFifthCopy(t *testing.T) {
+	character := rebirthTestCharacter(20, 0)
+	character.World.RebirthPoint = worldSpawnFromMission(simulation.EuropeStartProfile())
+	character.NativeBodyStatus = 3
+	rt, _ := newTestRuntime(character, testItems())
+	var result OpResult
+	rebirth := func() {
+		*character.CurrentHP = 0
+		result = rt.HandleLocalRebirth(testDivision, character, []byte{1})
+	}
+	rebirth()
+	gid := enterworld.ObjectIDForCharacter(character)
+	if len(result.Frames) < 8 || character.NativeBodyStatus == 0 ||
+		!bodyStatusFramePresent(result.Frames, gid, character.NativeBodyStatus) {
+		t.Fatalf("rebirth lost the retained body status: %d frames, status %d", len(result.Frames), character.NativeBodyStatus)
+	}
+	var sink *enterworld.Character
+	copyThin := testing.AllocsPerRun(20, func() { sink = rt.characterSnapshot(testDivision, character) })
+	thinPath := testing.AllocsPerRun(20, rebirth)
+	fattenWithBuyback(character)
+	copyFat := testing.AllocsPerRun(20, func() { sink = rt.characterSnapshot(testDivision, character) })
+	fatPath := testing.AllocsPerRun(20, rebirth)
+	if sink == nil || len(result.Frames) < 8 || character.NativeBodyStatus == 0 ||
+		!bodyStatusFramePresent(result.Frames, gid, character.NativeBodyStatus) {
+		t.Fatalf("fat rebirth lost the retained body status: %d frames, status %d", len(result.Frames), character.NativeBodyStatus)
+	}
+	growth := copyFat - copyThin
+	t.Logf("allocs: copy %.0f -> %.0f (growth %.0f), rebirth %.0f -> %.0f (delta %.0f)",
+		copyThin, copyFat, growth, thinPath, fatPath, fatPath-thinPath)
+	if fatPath-thinPath >= 4*growth+growth/2 {
+		t.Fatalf("the body-status replay detaches the record again: rebirth delta %.0f, four copies' growth %.0f",
+			fatPath-thinPath, 4*growth)
 	}
 }
