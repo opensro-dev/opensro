@@ -416,7 +416,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// its closure before returning, so the slots are reused safely.
 	var dispatch struct {
 		division string
-		instance monster.Instance
+		actor    behaviorActorSnapshot
 		players  []playerPose
 	}
 	act := func(attack MonsterAttackOperation) {
@@ -424,7 +424,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// set. Mutable actor state remains in MonsterState.
 		owned := *ops
 		owned.BasicAttack = attack
-		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
+		owned.advanceAndPublish(dispatch.division, dispatch.actor, dispatch.players, nowMs, sessions, push)
 	}
 	stepped := 0
 	phaseStarted = time.Now()
@@ -448,8 +448,11 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			// The scheduler carries identities, not a second copy of the world.
 			// Read a value snapshot at dispatch so despawn/retaliation between
 			// scheduling and dispatch cannot revive an obsolete actor snapshot.
-			instance, exists := ops.Monsters.behaviorActor(batch.key, gid)
-			if !exists {
+			// The mover resolves in the same locked pass (#2029): the step
+			// starts from it instead of re-reading the same gid under a
+			// second lock and a population scan.
+			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
+			if !actor.ok {
 				continue
 			}
 			if ops.noteResumed(batch.key, gid) {
@@ -459,11 +462,11 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.instance, dispatch.players = divisionID, instance, players
+				dispatch.division, dispatch.actor, dispatch.players = divisionID, actor, players
 				ops.RunAction(divisionID, act)
 				continue
 			}
-			ops.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)
+			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
 	}
 	stats.batch = time.Since(phaseStarted)

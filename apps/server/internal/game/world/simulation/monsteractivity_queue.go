@@ -266,6 +266,58 @@ func (s *MonsterState) behaviorActor(key populationKey, gid uint32) (monster.Ins
 
 /*
 ================
+behaviorActorSnapshot
+
+One due actor as the leg dispatch reads it: the instance and its mover
+value, resolved together. ok is false when the population or the actor
+is gone; the mover is then meaningless.
+================
+*/
+type behaviorActorSnapshot struct {
+	instance monster.Instance
+	mover    monster.MoverState
+	ok       bool
+}
+
+/*
+================
+MonsterState.behaviorActorMover
+
+behaviorActor plus the mover the step is about to read, in the one
+locked pass: the step otherwise re-pays the lock, a population scan
+(populationForObject) and a second storage probe for the same gid
+(#2029). The mover half is MonsterState.Mover's value for this
+population - the stored row, or the synthesized spawn mover when no
+row exists yet - so the step continues with exactly what its own read
+would have returned.
+================
+*/
+func (s *MonsterState) behaviorActorMover(key populationKey, gid uint32) behaviorActorSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(key.division, key.lease)
+	if state == nil {
+		return behaviorActorSnapshot{}
+	}
+	actor, ok := state.instances.lookup(gid)
+	if !ok {
+		return behaviorActorSnapshot{}
+	}
+	if mover, ok := state.movers.lookup(gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+	}
+	mover := monster.NewSpawnMover(actor, s.nowMillis())
+	if err := mover.Validate(); err != nil {
+		panic(err)
+	}
+	return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+}
+
+/*
+================
 MonsterState.behaviorBatches
 ================
 */
