@@ -125,3 +125,47 @@ func TestRecordDropsControlAndBidiRuns(t *testing.T) {
 		t.Fatalf("lines %+v", lines)
 	}
 }
+
+/*
+================
+TestEventsNeverEvictChat
+
+The flood the site showed on 2026-10-28: a burst of seal drops and
+enhancement notices must leave every person's line in place. Events keep
+their own bound and order; neither stream reads the other, and a ban
+purges people's lines only.
+================
+*/
+func TestEventsNeverEvictChat(t *testing.T) {
+	f := New()
+	f.Record("shard", KindChat, "Kekw", "Kekw", "anyone for the tiger girl?")
+	f.Record("shard", KindNotice, "", "", "Maintenance at 10:00")
+	for i := 0; i < MaxEvents+5; i++ {
+		f.Record("shard", KindEvent, "", "", fmt.Sprintf("drop %d", i))
+	}
+	f.Record("shard", KindEvent, "", "", " \u202e ")
+	lines := f.Lines("shard", nil)
+	if len(lines) != 2 || lines[0].Text != "anyone for the tiger girl?" || lines[1].Kind != KindNotice {
+		t.Fatalf("chat lines %+v", lines)
+	}
+	events := f.Events("shard")
+	if len(events) != MaxEvents || events[0].Text != "drop 5" || events[MaxEvents-1].Text != fmt.Sprintf("drop %d", MaxEvents+4) {
+		t.Fatalf("events %+v", events)
+	}
+	events[0].Text = "changed"
+	if f.Events("shard")[0].Text != "drop 5" {
+		t.Fatal("Events returned the feed's own storage")
+	}
+	if other := f.Events("other"); len(other) != 0 {
+		t.Fatalf("divisions mixed: %+v", other)
+	}
+	f.Purge("shard", "Kekw")
+	if len(f.Lines("shard", nil)) != 1 || len(f.Events("shard")) != MaxEvents {
+		t.Fatal("purge reached the wrong stream")
+	}
+	var none *Feed
+	none.Record("shard", KindEvent, "", "", "x")
+	if none.Events("shard") != nil {
+		t.Fatal("nil feed served events")
+	}
+}

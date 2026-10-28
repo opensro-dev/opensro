@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -128,6 +129,30 @@ func TestAnnouncementsAreCappedAndClamped(t *testing.T) {
 	rt.announce(testDivision, announcePlus, "line", wire.NoticeLink{}, 0, 1000+announceWindowMs)
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the window did not reopen: %v", got)
+	}
+}
+
+/*
+================
+TestAnnouncementsFeedTheEventsNotTheChat
+
+The website's chat once filled with drop and enhancement notices until no
+person's line was left (2026-10-28): a drained notice goes to the events
+stream and leaves the transcript alone.
+================
+*/
+func TestAnnouncementsFeedTheEventsNotTheChat(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.PublicChat = chatfeed.New()
+	rt.PublicChat.Record(testDivision, chatfeed.KindChat, "Kekw", "Kekw", "hi")
+	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", wire.NoticeLink{}, 0, 1000)
+	rt.drainAnnouncements(0)
+	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Text != "hi" {
+		t.Fatalf("chat %+v", lines)
+	}
+	if events := rt.PublicChat.Events(testDivision); len(events) != 1 || events[0].Kind != chatfeed.KindEvent ||
+		events[0].Text != "Looter advanced Blade to +8" {
+		t.Fatalf("events %+v", events)
 	}
 }
 

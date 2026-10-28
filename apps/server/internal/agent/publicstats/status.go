@@ -252,3 +252,22 @@ func (s *Service) chat(*http.Request) (any, error) {
 	}
 	return out, nil
 }
+
+/*
+================
+events
+
+The automated gameplay announcements. They name no author, so no
+profile link or mute filter applies.
+================
+*/
+func (s *Service) events(*http.Request) (any, error) {
+	out := EventsResponse{Lines: []EventLine{}}
+	if s.src.Events == nil {
+		return out, nil
+	}
+	for _, line := range s.src.Events() {
+		out.Lines = append(out.Lines, EventLine{At: line.At.UTC().Format(time.RFC3339), Text: line.Text})
+	}
+	return out, nil
+}
