@@ -281,6 +281,12 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: reversed the 2026-10-15 testing switch; the
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
+	// Port-only, not native (#1982; owner, 2026-10-28: default ON):
+	// whispering a dressed player's job alias resolves to them, and the
+	// whisper block list also matches a dressed sender's alias. "off"
+	// restores the native name-only whisper resolution. The alias/name
+	// collision refusals are unconditional and not behind this switch.
+	{Env: "SRO_WHISPER_JOB_ALIAS", NomadVar: "whisper_job_alias", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Community vote, 2026-10-24: the monster parts drop again, so the
 	// deployment default is native ("off"); "on" restores the 2026-10-14

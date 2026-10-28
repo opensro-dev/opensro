@@ -767,6 +767,17 @@ variable "beta_growth_bands" {
   default = ""
 }
 
+# whisper_job_alias arms the port-only job-alias whisper rules (#1982;
+# owner, 2026-10-28: default ON): a whisper typed to a dressed player's
+# job alias resolves to them, and the whisper block list also matches a
+# dressed sender's alias. "off" restores the native name-only whisper
+# resolution. The alias/name collision refusals are unconditional and
+# not behind this switch.
+variable "whisper_job_alias" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_skill_exp_rate" {
   type    = string
   default = "1"
@@ -1287,6 +1298,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
         SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
+        SRO_WHISPER_JOB_ALIAS                   = var.whisper_job_alias
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
