@@ -31,10 +31,10 @@ func TestTimingHistogramsBucketHandlersPhasesAndSlowHooks(t *testing.T) {
 	})
 	m := hub.Metrics()
 	move := m.HandlerMs["0x7738"]
-	if !equalCounts(move.Buckets, []uint64{0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1}) || move.MaxMs != 2000 {
+	if !equalCounts(move.Buckets, []uint64{0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}) || move.MaxMs != 2000 {
 		t.Fatalf("handler histogram = %+v", move)
 	}
-	if m.TickPhaseMs["divisions"].Buckets[6] != 1 || m.TickPhaseMs["hooks"].Buckets[9] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
+	if m.TickPhaseMs["divisions"].Buckets[6] != 1 || m.TickPhaseMs["hooks"].Buckets[12] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
 		t.Fatalf("tick phases = %+v", m.TickPhaseMs)
 	}
 	if slow := m.SlowHooks["action.(*Runtime).TickHook.func1"]; slow.Count != 1 || slow.MaxMs != 300 {
@@ -90,7 +90,7 @@ func TestTickCommitsAreCounted(t *testing.T) {
 	if m.TickCommit != want {
 		t.Fatalf("tick commit = %+v, want %+v", m.TickCommit, want)
 	}
-	if !equalCounts(m.TickPhaseMs["commit"].Buckets, []uint64{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0}) {
+	if !equalCounts(m.TickPhaseMs["commit"].Buckets, []uint64{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}) {
 		t.Fatalf("commit histogram = %+v", m.TickPhaseMs["commit"])
 	}
 }
