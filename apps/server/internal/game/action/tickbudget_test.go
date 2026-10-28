@@ -62,10 +62,11 @@ const (
 // a whole-plane snapshot (#2040), measured 142,251 B / 1,457 allocs;
 // with the pet tick (#2046) and then the brood tick taking the companion
 // copy instead of the whole owner record (#2030), measured 98,010 B /
-// 1,380 allocs.
+// 1,380 allocs; with that copy narrowed to the pet-owner view (#2030),
+// measured 83,925 B / 1,324 allocs.
 const (
-	tickBudgetBytesPerTick  = 107800
-	tickBudgetAllocsPerTick = 1518
+	tickBudgetBytesPerTick  = 92300
+	tickBudgetAllocsPerTick = 1456
 )
 
 /*
