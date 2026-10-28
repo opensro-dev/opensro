@@ -108,6 +108,22 @@ func (character *Character) SnapshotCombat() *Character {
 
 /*
 ================
+SnapshotCompanion
+
+Snapshot's normalized view for the per-tick pet pass (#2030): the
+mission inventory keeps only its equipment rows and the rows carrying
+a companion, and AvatarInventory is nil. Companion resolution walks
+exactly the companions the full copy walks. Each caller must be
+cleared for the narrow copy root by root - a reader of a non-summon
+bag row or an avatar row would silently see it missing.
+================
+*/
+func (character *Character) SnapshotCompanion() *Character {
+	return character.snapshotWith(cloneCharacterCompanion)
+}
+
+/*
+================
 snapshotWith
 
 The one normalized-copy walk behind Snapshot and SnapshotEquipment:

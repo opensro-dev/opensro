@@ -194,6 +194,54 @@ func (rt *Runtime) characterSnapshotCombatAdmitted(
 
 /*
 ==================
+characterSnapshotCompanionAdmitted
+
+characterSnapshotAdmitted for the per-tick pet pass (#2030): the copy
+keeps the equipment rows and every companion-carrying row, and no
+avatar inventory (domain SnapshotCompanion). A root takes it only
+when no reader of its copy reads a non-summon bag row or an avatar
+row; companion resolution and equipment reads see exactly what the
+full copy shows. The companionCopy seam replaces the copy in tests
+exactly as combatCopy does for the combat roots; admission still
+judges the live record first, in its own door pass, so a refused
+record pays for no copy under the seam either.
+==================
+*/
+func (rt *Runtime) characterSnapshotCompanionAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	if rt.companionCopy != nil {
+		admitted := admit == nil
+		if !admitted {
+			rt.deps.Read(divisionID, func() {
+				admitted = admit(character)
+			})
+		}
+		if !admitted {
+			return nil
+		}
+		return rt.companionCopy(divisionID, character)
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		if admit != nil && !admit(character) {
+			return
+		}
+		snapshot = character.SnapshotCompanion()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterLifeState
 
 The life facts a refused monster strike revalidates - alive, deletion
