@@ -125,3 +125,44 @@ func TestBroodTickTakesTheCompanionCopy(t *testing.T) {
 		t.Fatalf("the brood tick saves %d B/run over the whole copy, want at least %d (half the copies' difference)", full-narrow, saving/2)
 	}
 }
+
+/*
+================
+TestSpiritTickTakesThePetOwnerView
+
+advancePetSpirit copies the owner only while a pet holds Resolve
+stacks, and then takes the pet-owner view: with stacks held on an
+owner fattened with plain bag rows, a held tick allocates less than
+the same tick forced onto the whole copy by at least half the copies'
+difference. Restoring the whole copy (the mutation this guards) saves
+nothing.
+================
+*/
+func TestSpiritTickTakesThePetOwnerView(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	petPeriodicFatten(c)
+	c.ActiveCOS.ResolveStacks = 5
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
+	now := clock.NowMs()
+	bytesPerRun := func(run func()) int64 {
+		return testing.Benchmark(func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				c.ActiveCOS.ResolveStacks = 5
+				run()
+			}
+		}).AllocedBytesPerOp()
+	}
+	saving := bytesPerRun(func() { c.Snapshot() }) - bytesPerRun(func() { c.SnapshotCompanion() })
+	narrow := bytesPerRun(func() { rt.advancePetSpirit(key, now) })
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	full := bytesPerRun(func() { rt.advancePetSpirit(key, now) })
+	t.Logf("spirit tick %d B/run on the view, %d B/run on the whole copy; the copies differ by %d B", narrow, full, saving)
+	if full-narrow < saving/2 {
+		t.Fatalf("the spirit tick saves %d B/run over the whole copy, want at least %d", full-narrow, saving/2)
+	}
+}
