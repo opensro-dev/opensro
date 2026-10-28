@@ -93,13 +93,19 @@ type MonsterState struct {
 	regionDormancy  bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
-	players              func(string, int64) []PopulationPlayer
-	mu                   sync.Mutex
-	template             monster.Template
-	counter              uint32
-	divs                 map[string]*divisionMonsterState
-	worldAllocators      map[string]*instance.Registry
-	worldPopulations     map[populationKey]*divisionMonsterState
+	players          func(string, int64) []PopulationPlayer
+	mu               sync.Mutex
+	template         monster.Template
+	counter          uint32
+	divs             map[string]*divisionMonsterState
+	worldAllocators  map[string]*instance.Registry
+	worldPopulations map[populationKey]*divisionMonsterState
+	// popHint is the population key and population the last
+	// populationForObject scan answered with. populationForObject
+	// verifies it against the registry and the population's own rows
+	// before believing it; see there (#2029).
+	popHintKey           populationKey
+	popHintState         *divisionMonsterState
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest
