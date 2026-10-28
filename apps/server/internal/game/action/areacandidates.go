@@ -104,6 +104,46 @@ func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 
 /*
 ================
+areaPlayerPreRefusal
+
+The field-only slice of the attack validation a player fails on the
+facts of its own record alone, whatever the party, guild, war, cape and
+position answers would be: a building/land row never takes a player, a
+dead-body row never takes a living one, a monster-only enemy row never
+takes a player, a resurrection row refuses past its level cap, and an
+aggression weight of exactly one refuses before every relation is read.
+Each is unconditional in the validation's order - the target permission
+is asked on every path that admits, and the weight sits ahead of every
+admitting relation test - so a player refused here is refused by the
+full validation too; the level, PK-state and indirect refusals sit
+behind the relation admits and stay outside with the full validation.
+Read under the character door: record fields only, no runtime calls,
+no locks.
+================
+*/
+func areaPlayerPreRefusal(target *enterworld.Character, skill enterworld.SkillRow) bool {
+	if skill.Targets.Present && !skill.Targets.Animal && (skill.Targets.Building || skill.Targets.Land) {
+		return true
+	}
+	if skill.Targets.DeadBody && enterworld.CharacterAlive(target) {
+		return true
+	}
+	if skill.Targets.EnemyM && !skill.Targets.EnemyP {
+		return true
+	}
+	if skill.Abnormal.AdmitDeadParty && skill.Abnormal.ResuMaxLevel != 0 &&
+		target.Level != nil && *target.Level > int64(skill.Abnormal.ResuMaxLevel) {
+		return true
+	}
+	var aggressionWeight uint32
+	for _, weight := range target.Aggressions {
+		aggressionWeight += weight
+	}
+	return aggressionWeight == 1
+}
+
+/*
+================
 areaPlayerCandidates
 
 Present players of the caster's world within reach (plus their body
@@ -132,11 +172,17 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 			continue
 		}
 		// One door pass weighs the gates on the live record and
-		// detaches a copy only for a player the strike may still take:
-		// dead and deletion-pending players, riders and out-of-range
-		// players never pay for their whole record (#1820 part C).
-		// Companion gids ride out as values; resolveCOSTarget re-judges
-		// each companion's summons and form on its owner itself.
+		// detaches a copy only for a player the strike may actually
+		// take: dead and deletion-pending players, riders and
+		// out-of-range players never pay for their whole record, and
+		// neither does a player the attack validation refuses on its
+		// own record facts alone - the pre-filter reads fields only,
+		// no runtime calls, no locks, and every refusal it gives is
+		// one the full validation gives too, so the copy is judged by
+		// the full validation outside the door exactly as before
+		// (#1820 part C, #1943). Companion gids ride out as values;
+		// resolveCOSTarget re-judges each companion's summons and form
+		// on its owner itself.
 		snapshot, radius, petGIDs = nil, 0, nil
 		rt.deps.Read(q.division, func() {
 			if player.DeletePending || !enterworld.CharacterAlive(player) {
@@ -165,6 +211,9 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 				limit += bodyRadius
 			}
 			if distance > limit {
+				return
+			}
+			if areaPlayerPreRefusal(player, q.skill) {
 				return
 			}
 			radius = bodyRadius

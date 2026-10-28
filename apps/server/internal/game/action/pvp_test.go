@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
@@ -231,6 +232,138 @@ func TestAreaCandidatesIncludeHostilePlayers(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("the hostile player is not an area candidate")
+	}
+}
+
+/*
+================
+TestAreaCandidatesRefuseWithoutCopyingTheRefused
+
+A player the attack validation refuses on its own record facts alone
+(one aggression weight) is weighed by the field-only pre-filter under
+the door (#1943): no candidate, and the weighing must not pay for a
+detached copy of the refused player. The same pair with no such fact
+is copied and judged outside (TestAreaCandidatesIncludeHostilePlayers).
+================
+*/
+func TestAreaCandidatesRefuseWithoutCopyingTheRefused(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	a.Aggressions = nil
+	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+	// A carried bag of production shape, so one detached copy costs
+	// what the live shard pays for it; plain stack rows move no
+	// verdict the walk reads.
+	for slot := int64(20); slot < 60; slot++ {
+		v.MissionInventory = append(v.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, MagicOptions: []uint64{1}})
+	}
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	now := clock.NowMs()
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	q := areaQuery{selects: 24, division: testDivision, caster: a, skill: skill, center: rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now), reach: 50, now: now}
+	if got := rt.areaPlayerCandidates(q); len(got) != 0 {
+		t.Fatalf("the pre-filtered player became an area candidate: %+v", got)
+	}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, v) })
+	candidateAllocs := testing.AllocsPerRun(20, func() { rt.areaPlayerCandidates(q) })
+	t.Logf("allocs: one character copy %.0f, refused candidate walk %.0f", copyAllocs, candidateAllocs)
+	if candidateAllocs >= copyAllocs {
+		t.Fatalf("refused players still pay for their copy: %.0f allocs; one copy is %.0f",
+			candidateAllocs, copyAllocs)
+	}
+}
+
+/*
+================
+TestAreaPlayerPreRefusalOnlyRefusesWhatTheValidationRefuses
+
+Every refusal the field-only pre-filter gives under the door is one
+the full attack validation gives on the same pair, so skipping the
+copy cannot move a verdict. The firing cases keep the pair's admitting
+relation armed (the caster's aggression, which the validation admits
+on later in its order than the pre-filter's facts), and the control
+cases pin the neighbouring facts that must not refuse.
+================
+*/
+func TestAreaPlayerPreRefusalOnlyRefusesWhatTheValidationRefuses(t *testing.T) {
+	attack := enterworld.SkillAttack{Present: true}
+	firing := []struct {
+		name  string
+		skill enterworld.SkillRow
+		arm   func(a, v *enterworld.Character)
+	}{
+		{name: "building row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Building: true}}},
+		{name: "land row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Land: true}}},
+		{name: "dead-body row on a living player",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets:     enterworld.SkillTargets{DeadBody: true},
+				Replacement: statuseffect.ReplacementDescriptor{MatchesExecutionSelector: true}}},
+		{name: "monster-only enemy row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{EnemyM: true}}},
+		{name: "resurrection level cap",
+			skill: enterworld.SkillRow{Attack: attack,
+				Abnormal: abnormal.SkillParams{AdmitDeadParty: true, ResuMaxLevel: 10}},
+			arm: func(a, v *enterworld.Character) { v.Level = testInt64(50) }},
+		{name: "one aggression weight",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+			}},
+		{name: "one aggression weight, selector row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Replacement: statuseffect.ReplacementDescriptor{MatchesExecutionSelector: true}},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+			}},
+	}
+	for _, tc := range firing {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, clock, a, v := newPvpPair(t)
+			if tc.arm != nil {
+				tc.arm(a, v)
+			}
+			if !areaPlayerPreRefusal(v, tc.skill) {
+				t.Fatal("the pre-filter does not refuse")
+			}
+			if code := rt.hostilePlayerRefusalWith(testDivision, a, v, tc.skill, clock.NowMs(), playerAttackArea); code == 0 {
+				t.Fatal("the pre-filter refuses a pair the full validation admits")
+			}
+		})
+	}
+	controls := []struct {
+		name  string
+		skill enterworld.SkillRow
+		arm   func(a, v *enterworld.Character)
+	}{
+		{name: "plain hostile row",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm:   func(a, v *enterworld.Character) { v.Aggressions = nil }},
+		{name: "two aggression weights",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 2}
+			}},
+		{name: "animal building row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Animal: true, Building: true}}},
+		{name: "resurrection under the cap",
+			skill: enterworld.SkillRow{Attack: attack,
+				Abnormal: abnormal.SkillParams{AdmitDeadParty: true, ResuMaxLevel: 10}},
+			arm: func(a, v *enterworld.Character) { v.Level = testInt64(5) }},
+	}
+	for _, tc := range controls {
+		_, _, a, v := newPvpPair(t)
+		if tc.arm != nil {
+			tc.arm(a, v)
+		}
+		if areaPlayerPreRefusal(v, tc.skill) {
+			t.Fatalf("%s: the pre-filter refuses", tc.name)
+		}
 	}
 }
 
