@@ -21,6 +21,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 )
 
 /*
@@ -202,6 +203,61 @@ func TestLearnedProjectionsKeyOnEquipmentOnly(t *testing.T) {
 	}
 	if &first.writes[0] == &broken.writes[0] {
 		t.Fatal("an equipment change kept the cached projections")
+	}
+}
+
+/*
+================
+TestLearnedProjectionsFingerprintIsTwoSided
+
+#1943: the key covers exactly what the projection reads. Every keyed
+field of every equipment slot below inventory.EquipmentSlotEnd misses
+when it moves; every field of a bag row keeps the hit. A future
+projection read of a field the key skips shows up here as a stale hit.
+================
+*/
+func TestLearnedProjectionsFingerprintIsTwoSided(t *testing.T) {
+	skills, items, sword := projectionFixture()
+	seed := func() *domain.Character {
+		c := &domain.Character{ID: 980020, Level: pointer(80), Strength: pointer(300), Intellect: pointer(200),
+			Skills: []uint32{101, 102, 201, 202, 301, 302}}
+		for slot := int64(0); slot < int64(inventory.EquipmentSlotEnd); slot++ {
+			row := domain.InventoryRow{Slot: slot, RefObjID: uint32(500 + slot), Codename: fmt.Sprintf("ITEM_EQUIP_%d", slot), VarianceBits: "0", Durability: 50}
+			if slot == 6 {
+				row = domain.InventoryRow{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90}
+			}
+			c.MissionInventory = append(c.MissionInventory, row)
+		}
+		for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.EquipmentSlotEnd)+3; slot++ {
+			c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: slot, RefObjID: 99, Codename: "ITEM_BAG_THING", VarianceBits: "0", Durability: 5, StackCount: 3})
+		}
+		return c
+	}
+	end := int(inventory.EquipmentSlotEnd)
+	hit := func(step string, mutate func(*domain.Character), want bool) {
+		t.Helper()
+		c := seed()
+		ForgetLearnedProjections(c.ID)
+		defer ForgetLearnedProjections(c.ID)
+		first := assertProjectionFresh(t, step+" (seed)", c, skills, items, 2)
+		mutate(c)
+		again := assertProjectionFresh(t, step, c, skills, items, 2)
+		if got := len(first.writes) > 0 && &first.writes[0] == &again.writes[0]; got != want {
+			t.Errorf("%s: cache hit = %v, want %v", step, got, want)
+		}
+	}
+	for i := 0; i < end; i++ {
+		hit(fmt.Sprintf("equipment %d codename", i), func(c *domain.Character) { c.MissionInventory[i].Codename += "_X" }, false)
+		hit(fmt.Sprintf("equipment %d durability", i), func(c *domain.Character) { c.MissionInventory[i].Durability-- }, false)
+		hit(fmt.Sprintf("equipment %d slot", i), func(c *domain.Character) {
+			c.MissionInventory[i].Slot = int64((i + 1) % end)
+		}, false)
+	}
+	for i := end; i < end+3; i++ {
+		hit(fmt.Sprintf("bag %d count", i), func(c *domain.Character) { c.MissionInventory[i].StackCount++ }, true)
+		hit(fmt.Sprintf("bag %d plus", i), func(c *domain.Character) { c.MissionInventory[i].Plus++ }, true)
+		hit(fmt.Sprintf("bag %d durability", i), func(c *domain.Character) { c.MissionInventory[i].Durability++ }, true)
+		hit(fmt.Sprintf("bag %d codename", i), func(c *domain.Character) { c.MissionInventory[i].Codename = "ITEM_BAG_OTHER" }, true)
 	}
 }
 

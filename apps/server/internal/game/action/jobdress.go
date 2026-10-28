@@ -299,6 +299,22 @@ func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, to
 
 /*
 ================
+ThiefCargoTownAreaEntered
+
+#1985, port-only, not native (SRO_THIEF_CART_TOWN_AREAS, on by default):
+the same thief and transport test as ThiefCargoTownBlocked, against the
+town parts of regioninfo.txt that lie in battlefield regions (townarea).
+Natively the rule sees regions only, so a cart reaches a town's outer
+walls wherever they stand in a battlefield region.
+================
+*/
+func (rt *Runtime) ThiefCargoTownAreaEntered(c *enterworld.Character, from, to worldgeom.RegionXZ) bool {
+	return rt.ThiefCartTownAreas.Len() != 0 && enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) &&
+		rt.ThiefCartTownAreas.EnteredFromBattlefield(from, to)
+}
+
+/*
+================
 battlefieldRegion
 
 A region whose _RefRegion.IsBattleField is set: players may fight there.
@@ -493,7 +509,11 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 			rt.startJobActivation(dress.division, c, now)
 		}
 		if rt.jobDressed(c) != dressed {
+			// #1983: a completed dress or undress changes the owner's public
+			// name, so already-summoned companions respawn with the new
+			// label (alias while suited, real name once bare).
 			rt.reloadJobDress(dress.division, c, now, &result)
+			rt.refreshCompanionOwnerLabels(dress.division, c)
 		}
 		// Port-only, not native: taking the suit off clears the streak.
 		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {

@@ -39,6 +39,7 @@ import (
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
+	"opensro.online/server/internal/game/world/townarea"
 )
 
 /*
@@ -102,7 +103,11 @@ type Runtime struct {
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
 	JobGoodsTeleport bool
-	BerserkRoll      combat.Roll32767
+	// ThiefCartTownAreas, when set, also stops a thief's transport at the
+	// walls of towns that run into battlefield regions (port-only,
+	// SRO_THIEF_CART_TOWN_AREAS; nil is native, jobdress.go).
+	ThiefCartTownAreas *townarea.Areas
+	BerserkRoll        combat.Roll32767
 	// WearRoll is the equipment wear roll's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is the native teleport lookup's rand() for a fortress revival gate; nil is the
@@ -313,6 +318,10 @@ type Runtime struct {
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.
 	UnlimitedItems map[string]bool
 
+	// combatCopy, when set, replaces the combat roots' narrow copy
+	// (characterSnapshotCombat); only the combat-copy differential test
+	// sets it, to the full copy. Nil is the narrow copy.
+	combatCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with

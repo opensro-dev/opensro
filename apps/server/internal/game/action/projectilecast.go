@@ -228,7 +228,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	c := rt.findCharacter(p.divisionID, p.characterName)
 	var snapshot *enterworld.Character
 	if c != nil && c.ID == p.characterID {
-		snapshot = rt.characterSnapshot(p.divisionID, c)
+		snapshot = rt.characterSnapshotCombat(p.divisionID, c)
 	}
 	valid := snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
 	if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea && !p.threatDecrease {

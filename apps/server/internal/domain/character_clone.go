@@ -18,7 +18,7 @@ Every mutable child added to Character must acquire an independent copy here.
 ================
 */
 func cloneCharacter(source *Character) *Character {
-	return cloneCharacterFiltered(source, false)
+	return cloneCharacterFiltered(source, rowsAll)
 }
 
 /*
@@ -34,17 +34,43 @@ so a reader of this copy must never resolve companions.
 ================
 */
 func cloneCharacterEquipment(source *Character) *Character {
-	return cloneCharacterFiltered(source, true)
+	return cloneCharacterFiltered(source, rowsEquipment)
 }
+
+/*
+================
+cloneCharacterCombat
+
+cloneCharacter for the combat stat readers (#1943): the mission
+inventory keeps only its equipment rows, and the avatar inventory is
+copied whole, since the stat projection reads its option rows. The same
+companion rule as cloneCharacterEquipment applies.
+================
+*/
+func cloneCharacterCombat(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsCombat)
+}
+
+// cloneRows names which inventory rows one clone walk detaches.
+type cloneRows int
+
+const (
+	// rowsAll detaches every mission and avatar row.
+	rowsAll cloneRows = iota
+	// rowsEquipment keeps the equipment rows and no avatar inventory.
+	rowsEquipment
+	// rowsCombat keeps the equipment rows and the whole avatar inventory.
+	rowsCombat
+)
 
 /*
 ================
 cloneCharacterFiltered
 
-The one clone walk; equipmentOnly narrows the two inventory children.
+The one clone walk; rows narrows the two inventory children.
 ================
 */
-func cloneCharacterFiltered(source *Character, equipmentOnly bool) *Character {
+func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 	if source == nil {
 		return nil
 	}
@@ -84,10 +110,10 @@ func cloneCharacterFiltered(source *Character, equipmentOnly bool) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	if equipmentOnly {
-		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
-	} else {
+	if rows == rowsAll {
 		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+	} else {
+		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
 	clone.Buyback = cloneSlice(source.Buyback)
 	for i := range clone.Buyback {
@@ -125,7 +151,7 @@ func cloneCharacterFiltered(source *Character, equipmentOnly bool) *Character {
 		}
 	}
 	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
-	if equipmentOnly {
+	if rows == rowsEquipment {
 		clone.AvatarInventory = nil
 	} else {
 		clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)

@@ -63,6 +63,17 @@ const (
 // predictionStaleReason is the refusal a stale or repeated id answers with.
 const predictionStaleReason = "staleCommand"
 
+// predictionSceneReplacedReason is the refusal a command held across a
+// scene replacement answers with (loadingqueue.go): the scene it was
+// clicked in is gone, so it must not execute into the new one. It is
+// also the ledger key the not-executed count lands under; on the wire
+// it degrades to movementRefused like any unlisted reason.
+const predictionSceneReplacedReason = "sceneReplaced"
+
+// predictionSceneClosedReason is the same answer when the session
+// itself closed with commands still held.
+const predictionSceneClosedReason = "sceneClosed"
+
 /*
 ================
 predictionLedger

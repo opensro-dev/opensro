@@ -454,7 +454,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 			if deps.EntryCompanionActionSpeed != nil {
 				actionSpeed = deps.EntryCompanionActionSpeed(divisionID, character, cos)
 			}
-			ownerName, holdType, pvpState := character.Name, uint8(0), uint8(0)
+			ownerName, holdType, pvpState := PartyMemberName(character), uint8(0), uint8(0)
 			if ref.TidWord>>11 == domain.MercenaryBand {
 				ownerName, holdType, pvpState = mercenaryGuildName, DressedJob(character), character.PVPState()
 			}

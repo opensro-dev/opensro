@@ -65,6 +65,9 @@ const NAVIGATION_REJECT = WALK_NAVIGATION_REJECT;
 // one, seen from the predicted start (sameApproachWalk).
 const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
 const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
+// The hard backstop: even with the stream still flowing, a receipt this
+// late is lost - answers are ordered, so it can only be missing (#1978).
+const MOVEMENT_RECEIPT_MAX_WAIT_MS = 90000;
 // What reconcile does when the walk to a server position is blocked
 // (86D9D0's fourth argument): keep the nav cell, find it at the point, or
 // walk from the predicted pose when reachable and otherwise resolve at the
@@ -262,6 +265,10 @@ export function createMovement(
 		sent: number;
 		direction?: number;
 	}>();
+	// Simulation time of the last inbound frame of any kind
+	// (noteInboundProgress): receipts travel in stream order, so while
+	// frames keep arriving a missing receipt is behind them, not lost.
+	let lastInboundAt = 0;
 	// The goal of the last walk requested, the latest measured round trip,
 	// and a walk correctsWalkStart kept while its receipt is outstanding.
 	let lastGoal: Pose | undefined, roundTripMs = DEFAULT_ROUND_TRIP_MS;
@@ -1825,6 +1832,20 @@ receive
 		},
 		/*
 ================
+noteInboundProgress
+
+Records that an inbound frame of any kind arrived at now (gameplay's
+receive path). Receipts travel in stream order, so while frames keep
+arriving a missing receipt is behind them, not lost: step's watchdog
+calls a receipt lost only after a full timeout with no inbound
+progress at all, with the backstop as the outer bound (#1978).
+================
+		*/
+		noteInboundProgress( now: number ) {
+			if ( now > lastInboundAt ) lastInboundAt = now;
+		},
+		/*
+================
 oldestPendingSentAt
 
 When the oldest unanswered movement command left, or undefined.
@@ -1841,12 +1862,21 @@ step
 		step( now: number ) {
 			const oldest = pending.entries().next().value;
 			if ( oldest && now - oldest[1].sent > MOVEMENT_RECEIPT_TIMEOUT_MS ) {
-				throw new Error(
-					`Movement receipt timed out: command ${oldest[0]}, age ${
-						now - oldest[1].sent
-					} ms, pending ${pending.size}`,
-					{ cause: MOVEMENT_RECEIPT_TIMEOUT }
-				);
+				// Receipts are ordered behind the inbound stream: while
+				// frames still arrive this one is in transit behind what
+				// has not been consumed yet, not lost. Only a full
+				// timeout of silence - or the hard backstop - calls it
+				// lost (#1978).
+				const silent = now - lastInboundAt > MOVEMENT_RECEIPT_TIMEOUT_MS;
+				const overdue = now - oldest[1].sent > MOVEMENT_RECEIPT_MAX_WAIT_MS;
+				if ( silent || overdue ) {
+					throw new Error(
+						`Movement receipt timed out: command ${oldest[0]}, age ${
+							now - oldest[1].sent
+						} ms, pending ${pending.size}`,
+						{ cause: MOVEMENT_RECEIPT_TIMEOUT }
+					);
+				}
 			}
 			// A kept walk's receipt is overdue: the server never walked it.
 			// Walk back to the stop it sent instead of staying ahead of it.
@@ -1968,6 +1998,7 @@ clear
 			predicted = null;
 			castHold = null;
 			pending.clear();
+			lastInboundAt = 0;
 			keptWalk = null;
 			lastGoal = undefined;
 			error = null;

@@ -38,6 +38,9 @@ const OFF = Object.freeze( {
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
+	// On by default (owner 2026-10-28, #1976): event notices get their
+	// own chat tab; an explicit false restores the native four tabs.
+	eventChatTab: true,
 	safeLoadingScreen: false,
 	monsterGuide: false,
 	developerDiagnostics: false,

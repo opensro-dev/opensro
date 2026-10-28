@@ -4388,7 +4388,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload.length !== 8 ) throw Error( "Invalid COS transfer result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 8 ).getUint32( 2, true ),
 						record = cosRecords.get( gid );
-					if ( !record ) throw Error( "Absent COS transfer owner" );
+					// Native 756CF0 guards both transfer arms with
+					// CCosDataManager_FindCharData(...) != 0: a result for a
+					// COS with no record (a replay ahead of the re-entry
+					// bootstrap that rebuilds it) is silently dropped.
+					if ( !record ) return true;
 					const next = inventory.cosTransferred( record, frame.payload, cosItemCaps );
 					cosRecords.set( gid, next );
 					cosPickup.spaceChanged();
@@ -5393,6 +5397,9 @@ dispose
 	// the journal: the receive path has many exits, so the check follows it.
 	const receiveFrame = api.receive;
 	api.receive = ( frame, now, chatSender, stallReceipt ) => {
+		// Any frame at all proves the inbound stream is delivering: a
+		// movement receipt still missing is behind it, not lost (#1978).
+		movement.noteInboundProgress( now );
 		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
 		journalClock = now;
 		journalBagChange( now, frame.opcode, frame.payload );

@@ -693,7 +693,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
-			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: c.Name, OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
 	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
 		result.Row.State = 7
 	}
@@ -762,6 +762,29 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 	state.transportWorld = simulation.WorldState{Spawn: pose}
 	state.follower = simulation.NewPetFollower(pet.GID, pose)
 	return state
+}
+
+/*
+================
+refreshCompanionOwnerLabels
+
+A suited owner's companions carry the job alias, not the real name (#1983;
+the native spawn writers read the owner name through the same job rule as
+the player spawn). The peer COS lane only re-sends a pet when its session
+generation moves, so a completed dress or undress bumps every summoned
+companion session of this owner: the lane despawns and respawns each pet
+with the new label.
+================
+*/
+func (rt *Runtime) refreshCompanionOwnerLabels(division string, c *enterworld.Character) {
+	rt.petMu.Lock()
+	for key, state := range rt.petSessions {
+		if key.division != division || key.gid == 0 || state == nil || state.character != c {
+			continue
+		}
+		state.generation++
+	}
+	rt.petMu.Unlock()
 }
 
 // Successful owner re-entry retires motion/pickup from the departed world.

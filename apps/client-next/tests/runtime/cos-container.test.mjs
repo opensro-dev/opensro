@@ -211,7 +211,39 @@ test("player/COS whole transfers await matching authority and preserve both cont
 	state = owner.take();
 	assert.deepEqual( state.inventory, [] );
 	assert.deepEqual( state.cosRecords[0].inventory, before );
-	assert.throws( () => owner.receive( reply, 4 ) );
+	// A replayed copy of the applied result is set aside, not fatal (#1977).
+	assert.doesNotThrow( () => owner.receive( reply, 4 ) );
+	state = owner.take();
+	assert.deepEqual( state.inventory, [] );
+	assert.deepEqual( state.cosRecords[0].inventory, before );
+	assert.equal( state.inventoryPending, false );
+});
+
+test("a replayed COS transfer result after re-entry does not end the session", () => {
+	const { owner } = fixture();
+	// The production frame (#1977): success, 0x1A, COS gid 0x02400143,
+	// source slot 0, destination slot 24. No record for that COS exists
+	// yet on re-entry: native drops it behind the FindCharData guard.
+	const production = {
+		opcode: 0xb06d,
+		payload: Uint8Array.of( 0x01, 0x1a, 0x43, 0x01, 0x40, 0x02, 0x00, 0x18 )
+	};
+	assert.doesNotThrow( () => owner.receive( production, 1 ) );
+	// The same shape against the live COS: applied once with its request,
+	// then replayed with no pending left. State must not move twice.
+	const f = owner.command( { kind: "cos-transfer", gid: 7, toCos: false, source: 0, destination: 24 }, 2, entity );
+	const reply = { opcode: 0xb06d, payload: Uint8Array.from( [ 1, ...f.payload ] ) };
+	owner.receive( reply, 3 );
+	let state = owner.take();
+	assert.equal( state.inventory.find( row => row.slot === 24 )?.quantity, 30 );
+	assert.equal( state.cosRecords[0].inventory.length, 1 );
+	assert.doesNotThrow( () => owner.receive( reply, 4 ) );
+	assert.doesNotThrow( () => owner.receive( production, 5 ) );
+	state = owner.take();
+	assert.equal( state.inventory.find( row => row.slot === 24 )?.quantity, 30 );
+	assert.equal( state.inventory.length, 1 );
+	assert.equal( state.cosRecords[0].inventory.length, 1 );
+	assert.equal( state.inventoryPending, false );
 });
 
 test("failed or timed out transfers cannot consume items or cross the inventory barrier", () => {

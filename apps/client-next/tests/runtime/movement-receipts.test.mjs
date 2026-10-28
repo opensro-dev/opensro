@@ -311,3 +311,54 @@ test("a receipt whose server start escaped a sealed obstacle rebases a wedged cl
 	);
 	movement.clear();
 });
+// #1978: the receipt watchdog keys on inbound silence, not emission
+// age alone - receipts are ordered behind the inbound stream, so one
+// still missing while frames arrive is in transit, not lost.
+test("a receipt lost on a silent link trips the receipt watchdog", async () => {
+	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
+	const movement = createMovement( () => {} ), p = product();
+	p.objects = [];
+	const from = { ...pose, x: 10, y: 0 }, to = { ...pose, x: 110, y: 0 };
+	movement.seed( from );
+	movement.navigation( 257, p );
+	movement.request( to, 0 );
+	assert.throws( () => movement.step( 10001 ), /Movement receipt timed out/ );
+	movement.clear();
+});
+test("a receipt in transit behind a flowing stream does not trip the watchdog", async () => {
+	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
+	const movement = createMovement( () => {} ), p = product();
+	p.objects = [];
+	const from = { ...pose, x: 10, y: 0 }, to = { ...pose, x: 110, y: 0 };
+	movement.seed( from );
+	movement.navigation( 257, p );
+	movement.request( to, 0 );
+	// The inbound stream keeps delivering for 30 s (a long scene
+	// bootstrap still draining): the receipt is behind it, not lost.
+	for ( let now = 1000; now <= 30000; now += 1000 ) {
+		movement.noteInboundProgress( now );
+		movement.step( now );
+	}
+	assert.equal( movement.state().pendingMoves, 1 );
+	movement.receive( receiptAt( from, to ), 30500, 7 );
+	assert.equal( movement.state().pendingMoves, 0 );
+	movement.step( 30516 );
+	movement.clear();
+});
+test("the receipt backstop trips even while the stream keeps flowing", async () => {
+	const { createMovement } = await load( "runtime/simulation/worker/session/world/gameplay/movement/movement.ts" );
+	const movement = createMovement( () => {} ), p = product();
+	p.objects = [];
+	const from = { ...pose, x: 10, y: 0 }, to = { ...pose, x: 110, y: 0 };
+	movement.seed( from );
+	movement.navigation( 257, p );
+	movement.request( to, 0 );
+	// Progress never stops, but 90 s without the receipt itself is
+	// past the hard backstop: the answer can only be missing.
+	for ( let now = 1000; now <= 90000; now += 1000 ) {
+		movement.noteInboundProgress( now );
+		movement.step( now );
+	}
+	assert.throws( () => movement.step( 90001 ), /Movement receipt timed out/ );
+	movement.clear();
+});

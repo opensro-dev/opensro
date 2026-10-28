@@ -192,8 +192,7 @@ import {
 	createNoticeBanner,
 	noticeTiming,
 	notificationBannerPaths,
-	SUN_DROP_BANNER_COLOR,
-	SUN_DROP_BANNER_TEXT_RGB
+	noticeBannerRow
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
@@ -10423,28 +10422,43 @@ export function createUi(
 			================
 			*/
 			function drawTransientBanners( top?: number ) {
+				// Port-only (#1976): only a seal drop's notice pads its
+				// plate and recolours it (noticeBannerRow); every other
+				// notice on this row keeps the native plate untouched.
+				const noticeRow = noticeBannerRow( notificationBanner );
 				const rows = [
 					{
 						value: uniqueBanner.value( hudCopy ),
 						alpha: uniqueBanner.alpha(),
 						paths: uniqueBannerPaths,
 						y: 130,
-						color: [ 0, 52, 92 ] as const
+						color: [ 0, 52, 92 ] as const,
+						textRgb: undefined as readonly [number, number, number] | undefined,
+						padX: 0,
+						padY: 0,
+						plateAlpha: undefined as number | undefined
 					},
 					{
 						value: notificationBanner.value( hudCopy ),
 						alpha: notificationBanner.alpha(),
 						paths: notificationBannerPaths,
 						y: 100,
-						color: notificationBanner.sunDrop() ? SUN_DROP_BANNER_COLOR : ([ 128, 45, 67 ] as const),
-						textRgb: notificationBanner.sunDrop() ? SUN_DROP_BANNER_TEXT_RGB : ([ 1, 1, 1 ] as const)
+						color: noticeRow.color,
+						textRgb: noticeRow.textRgb,
+						padX: noticeRow.padX,
+						padY: noticeRow.padY,
+						plateAlpha: noticeRow.plateAlpha
 					},
 					{
 						value: questBanner.value(),
 						alpha: questBanner.alpha(),
 						paths: questBannerPaths,
 						y: 160,
-						color: [ 0, 91, 66 ] as const
+						color: [ 0, 91, 66 ] as const,
+						textRgb: undefined as readonly [number, number, number] | undefined,
+						padX: 0,
+						padY: 0,
+						plateAlpha: undefined as number | undefined
 					}
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
@@ -10471,10 +10485,13 @@ export function createUi(
 							row.paths,
 							resources.size,
 							y,
-							row.color
+							row.color,
+							row.padX,
+							row.padY,
+							row.plateAlpha
 						)
 					);
-					const textRgb = "textRgb" in row && row.textRgb ? row.textRgb : ([ 1, 1, 1 ] as const);
+					const textRgb = row.textRgb ?? ([ 1, 1, 1 ] as const);
 					lines.forEach( ( value, index ) =>
 						quads.push(
 							...text.quads( value, [ x, y + index * lineHeight, width, lineHeight ], full, [
@@ -12094,6 +12111,7 @@ export function createUi(
 							composing
 						];
 					key.push( experimental.state().saved.noticeLinks );
+					key.push( experimental.state().saved.eventChatTab );
 					for ( const line of lines ) {
 						key.push(
 							line.channel,
@@ -12111,6 +12129,7 @@ export function createUi(
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
 								noticeLinks: experimental.state().saved.noticeLinks,
+								eventTab: experimental.state().saved.eventChatTab,
 								compact: compact ?
 									{
 										bottom: compact.bottom,

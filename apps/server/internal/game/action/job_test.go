@@ -273,3 +273,36 @@ func TestJobSuitStripOutsideTownAnswersAtOnce(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestJobAliasRefusesACharacterName
+
+An alias may not equal another character's name - any casing, and even
+while that character is pending deletion: a suited player speaks under
+the alias, so taking a real name would impersonate its owner. The
+reference server's alias validity never consults character names; that
+impersonation is a native bug we do not copy (owner, 2026-10-28), so
+the refusal is unconditional. A name nobody owns still takes.
+================
+*/
+func TestJobAliasRefusesACharacterName(t *testing.T) {
+	rt, _, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1}
+	other := testCharacter()
+	other.ID, other.Name = 44, "Berk"
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {c, other}}
+	alias := func(name string) OpResult {
+		return rt.HandleJobAlias(testDivision, c, wire.NewWriter(5+len(name)).U32(jobTestNpc).U8(jobAliasModeCreate).Str(name).Payload())
+	}
+	if out := alias("berk"); !bytes.Equal(out.Frames[0].Payload[:2], []byte{2, jobErrAliasTaken}) || c.Job.Alias != "" {
+		t.Fatalf("alias equal to a character name: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
+	}
+	other.DeletePending = true
+	if out := alias("Berk"); !bytes.Equal(out.Frames[0].Payload[:2], []byte{2, jobErrAliasTaken}) || c.Job.Alias != "" {
+		t.Fatalf("alias equal to a deleted-pending name: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
+	}
+	if out := alias("Merchant"); out.Frames[0].Payload[0] != 1 || c.Job.Alias != "Merchant" {
+		t.Fatalf("a free alias refused: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
+	}
+}
