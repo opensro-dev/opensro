@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -81,11 +83,5 @@ func TestMutedRefreshesInTheBackground(t *testing.T) {
 	}
 	now = now.Add(recheckInterval)
 	list.Muted("spammer")
-	deadline := time.Now().Add(5 * time.Second)
-	for !list.Muted("spammer") {
-		if time.Now().After(deadline) {
-			t.Fatal("the stale snapshot was never refreshed")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	wait.Eventually(t, 5*time.Second, "the stale snapshot refreshed", func() bool { return list.Muted("spammer") })
 }
