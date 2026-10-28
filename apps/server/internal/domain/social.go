@@ -93,6 +93,21 @@ func (character *Character) SnapshotEquipment() *Character {
 
 /*
 ================
+SnapshotCombat
+
+Snapshot's normalized view for the combat roots (#1943): the mission
+inventory keeps only its equipment rows, and the avatar inventory is
+copied whole, because the stat projection reads its option rows. Bag
+rows are absent, companions included, so a reader must never resolve
+companions or read a bag row from it.
+================
+*/
+func (character *Character) SnapshotCombat() *Character {
+	return character.snapshotWith(cloneCharacterCombat)
+}
+
+/*
+================
 snapshotWith
 
 The one normalized-copy walk behind Snapshot and SnapshotEquipment:

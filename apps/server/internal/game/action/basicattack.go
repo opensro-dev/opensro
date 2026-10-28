@@ -365,7 +365,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if character == nil || rt.Monsters == nil || engage.TargetGid == 0 {
 		return OpResult{DiagnosticRefusal: "attack-context-unavailable"}
 	}
-	snapshot := rt.characterSnapshot(divisionID, character)
+	snapshot := rt.characterSnapshotCombat(divisionID, character)
 	if snapshot == nil || snapshot.DeletePending {
 		return OpResult{DiagnosticRefusal: "character-unavailable"}
 	}
@@ -431,7 +431,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	if intent.CaptureCast {
 		return rt.advanceCaptureIntent(character, intent, nowMs)
 	}
-	snapshot := rt.characterSnapshot(intent.DivisionID, character)
+	snapshot := rt.characterSnapshotCombat(intent.DivisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}

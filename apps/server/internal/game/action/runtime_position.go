@@ -116,6 +116,37 @@ func (rt *Runtime) characterSnapshotEquipment(
 
 /*
 ==================
+characterSnapshotCombat
+
+characterSnapshot for the combat roots (#1943): equipment rows and the
+whole avatar inventory, no bag rows. A root takes it only when no
+reader of its copy reads a bag row or resolves companions; the
+combat-copy differential test pins each converted root against the full
+copy.
+==================
+*/
+func (rt *Runtime) characterSnapshotCombat(
+	divisionID string,
+	character *enterworld.Character,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	if rt.combatCopy != nil {
+		return rt.combatCopy(divisionID, character)
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		snapshot = character.SnapshotCombat()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterLifeState
 
 The life facts a refused monster strike revalidates - alive, deletion

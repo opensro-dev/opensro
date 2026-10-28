@@ -318,6 +318,10 @@ type Runtime struct {
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.
 	UnlimitedItems map[string]bool
 
+	// combatCopy, when set, replaces the combat roots' narrow copy
+	// (characterSnapshotCombat); only the combat-copy differential test
+	// sets it, to the full copy. Nil is the narrow copy.
+	combatCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with

@@ -232,3 +232,50 @@ func TestSnapshotEquipmentDropsBagRowCompanions(t *testing.T) {
 		t.Fatalf("narrow inventory = %+v", narrow.MissionInventory)
 	}
 }
+
+/*
+================
+benchmarkCombatCharacter
+
+A character shaped like the tick guard's players (#1943): 13 equipment
+rows and a 35-row bag, 48 rows in all, an avatar row and 20 skills.
+================
+*/
+func benchmarkCombatCharacter() *Character {
+	level, hp := int64(80), int64(5000)
+	c := &Character{ID: 1, Name: "bench", Level: &level, CurrentHP: &hp}
+	for slot := int64(0); slot < 48; slot++ {
+		c.MissionInventory = append(c.MissionInventory, InventoryRow{Slot: slot, RefObjID: uint32(1000 + slot), Codename: "ITEM_BENCH", StackCount: 1, MagicOptions: []uint64{1, 2, 3}})
+	}
+	c.AvatarInventory = &AvatarInventory{Rows: []InventoryRow{{Slot: 0, RefObjID: 7, Codename: "ITEM_AVATAR_BENCH"}}}
+	for skill := uint32(1); skill <= 20; skill++ {
+		c.Skills = append(c.Skills, skill)
+	}
+	return c
+}
+
+/*
+================
+BenchmarkSnapshotFull
+================
+*/
+func BenchmarkSnapshotFull(b *testing.B) {
+	c := benchmarkCombatCharacter()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = c.Snapshot()
+	}
+}
+
+/*
+================
+BenchmarkSnapshotCombat
+================
+*/
+func BenchmarkSnapshotCombat(b *testing.B) {
+	c := benchmarkCombatCharacter()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = c.SnapshotCombat()
+	}
+}
