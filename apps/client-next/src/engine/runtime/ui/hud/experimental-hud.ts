@@ -187,6 +187,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Chat timestamps",
 			description: "Show message time on hover."
 		}, {
+			key: "eventChatTab",
+			id: "experimental-event-chat-tab",
+			label: "Event chat tab",
+			description: "Event notices get their own chat tab."
+		}, {
 			key: "predictedRunUp",
 			id: "experimental-predicted-run-up",
 			label: "Predicted run-up",
@@ -211,14 +216,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-web-transport",
 			label: "WebTransport connection",
 			description: "Connect over QUIC/UDP; falls back to WebSocket."
-		}, {
-			// Moved from Notices (#1738): the window fits seven rows a tab
-			// and the break-notice row joins the shard notices; the option,
-			// its key and its default are unchanged.
-			key: "questTrackerMarkers",
-			id: "experimental-quest-tracker-markers",
-			label: "Quest target markers",
-			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -334,6 +331,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-v-hides-companions",
 			label: "V hides pets and transports",
 			description: "Holding V also hides other players' pets and transports."
+		}, {
+			// Moved from Game (#1976): the window fits seven rows a tab
+			// and the Event chat tab row joins Chat and movement; the
+			// option, its key and its default are unchanged.
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{

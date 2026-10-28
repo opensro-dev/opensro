@@ -38,6 +38,7 @@ const OFF = Object.freeze( {
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
+	eventChatTab: false,
 	safeLoadingScreen: false,
 	monsterGuide: false,
 	developerDiagnostics: false,

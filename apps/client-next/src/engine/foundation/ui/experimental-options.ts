@@ -40,6 +40,12 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native (#1976): a fifth chat tab, Event, holding the
+	// shard's channel-7 event notices (seal drops, plus results, item
+	// breaks, job kills) that otherwise land in All. Off unless turned on
+	// (the default is the owner's call, asked in the PR); off is the
+	// native four tabs with notices in All.
+	readonly eventChatTab: boolean;
 	// Port-only, not native: use only the male warrior loading artwork.
 	// Off by default so both original loading backgrounds remain available.
 	readonly safeLoadingScreen: boolean;
@@ -385,6 +391,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		eventChatTab: enabled( "eventChatTab" ),
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
