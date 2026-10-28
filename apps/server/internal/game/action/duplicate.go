@@ -88,7 +88,10 @@ func (rt *Runtime) acceptDuplicate(division string, c, snapshot *enterworld.Char
 		return OpResult{DiagnosticRefusal: "duplicate-admission-refused"}
 	}
 	target := rt.findCharacterByGid(division, cast.TargetGid)
-	view := rt.characterSnapshot(division, target)
+	// The look and every target gate below read only the worn slots,
+	// the shape byte and identity facts of the target, so its copy
+	// keeps just the equipment rows (#1943).
+	view := rt.characterSnapshotEquipment(division, target)
 	if view == nil {
 		return offensiveRefusal(0x3006)
 	}
