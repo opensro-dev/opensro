@@ -416,7 +416,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// its closure before returning, so the slots are reused safely.
 	var dispatch struct {
 		division string
-		actor    behaviorActorSnapshot
+		key      populationKey
+		gid      uint32
 		players  []playerPose
 	}
 	act := func(attack MonsterAttackOperation) {
@@ -424,7 +425,17 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// set. Mutable actor state remains in MonsterState.
 		owned := *ops
 		owned.BasicAttack = attack
-		owned.advanceAndPublish(dispatch.division, dispatch.actor, dispatch.players, nowMs, sessions, push)
+		// Resolve the actor here, inside the action lane's division
+		// lock: a mover set by a slower lane (an abnormal retime, a GM
+		// or impact set) while the leg waited for the lock is then the
+		// value the step starts from, instead of a dispatch-time
+		// snapshot the step's whole-value commits would overwrite
+		// (#2047 review).
+		actor := ops.Monsters.behaviorActorMover(dispatch.key, dispatch.gid)
+		if !actor.ok {
+			return
+		}
+		owned.advanceAndPublish(dispatch.division, actor, dispatch.players, nowMs, sessions, push)
 	}
 	stepped := 0
 	phaseStarted = time.Now()
@@ -446,13 +457,14 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
-			// Read a value snapshot at dispatch so despawn/retaliation between
-			// scheduling and dispatch cannot revive an obsolete actor snapshot.
-			// The mover resolves in the same locked pass (#2029): the step
-			// starts from it instead of re-reading the same gid under a
-			// second lock and a population scan.
-			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
-			if !actor.ok {
+			// All dispatch decides is that the actor is still there: a
+			// despawn between scheduling and dispatch drops it here, and
+			// its instance and mover are read only inside the action
+			// lane, under its division lock (act), so nothing read here
+			// can go stale while the leg waits for that lock (#2047
+			// review). The direct path below resolves at the same
+			// adjacency it always had.
+			if !ops.Monsters.behaviorActorLive(batch.key, gid) {
 				continue
 			}
 			if ops.noteResumed(batch.key, gid) {
@@ -462,8 +474,12 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.actor, dispatch.players = divisionID, actor, players
+				dispatch.division, dispatch.key, dispatch.gid, dispatch.players = divisionID, batch.key, gid, players
 				ops.RunAction(divisionID, act)
+				continue
+			}
+			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
+			if !actor.ok {
 				continue
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)

@@ -281,6 +281,57 @@ func TestMonsterLegActivityGateResolvesSettledBlockOnce(t *testing.T) {
 
 /*
 ================
+TestMonsterLegStepStartsFromTheInterleavedMover
+
+TestMonsterLegStepStartsFromTheInterleavedMover pins where the leg
+resolves a due actor (#2047 review): inside the action lane, not at
+dispatch. The RunAction double stands in for the wired lane's division
+lock and lands a slower lane's mover set - an abnormal-style cadence
+retime put through CommitMover - while the leg "waits for the lock",
+before it lets the step run. Read at dispatch, the step would start
+from the pre-retime mover: the gate would find the cadence due, plan
+the suspension, and only the commit guard (commitActivity's before
+check) would keep the retime from being lost under the step's
+whole-value commits - the actor would end the leg still wandering.
+Read inside the lane, the gate sees the retime (not yet due) and the
+step runs on to the expired wander deadline, ending idle with the
+retimed cadence intact.
+================
+*/
+func TestMonsterLegStepStartsFromTheInterleavedMover(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	legAt := now + 2001
+	retimed := uint32(now + 1500)
+	interleaved := false
+	ops.RunAction = func(_ string, run func(MonsterAttackOperation)) {
+		// The slower lane lands first: the actor's next activity
+		// check is retimed past this leg.
+		m, ok := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+		if !ok {
+			t.Fatal("interleave lost the actor")
+		}
+		m.Activity.LastCheck = retimed
+		if !ops.Monsters.CommitMover(monsterTestDivision, actor.Gid, m) {
+			t.Fatal("interleaved retime was rejected")
+		}
+		interleaved = true
+		run(nil)
+	}
+	ops.RunMonsterLeg(legAt, nil, &fakePusher{})
+	if !interleaved {
+		t.Fatal("the leg never reached the action lane")
+	}
+	stored, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if stored.Activity.LastCheck != retimed {
+		t.Fatalf("the interleaved retime was overwritten: LastCheck %d, want %d", stored.Activity.LastCheck, retimed)
+	}
+	if stored.Mode() != monster.MoverIdle {
+		t.Fatalf("step did not run past the retimed gate to the wander deadline: %v", stored.Mode())
+	}
+}
+
+/*
+================
 BenchmarkMonsterLegSeeded
 
 BenchmarkMonsterLegSeeded runs one 100 ms leg over the seeded 1200-monster

@@ -281,6 +281,23 @@ type behaviorActorSnapshot struct {
 
 /*
 ================
+MonsterState.behaviorActorLive
+
+The dispatch's existence probe: whether the population still holds
+the actor, without building its instance value. The leg's dispatch
+decides only this; the actor itself is read inside the action lane
+(behaviorActorMover), under the lane's division lock (#2047 review).
+================
+*/
+func (s *MonsterState) behaviorActorLive(key populationKey, gid uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(key.division, key.lease)
+	return state != nil && state.instances.contains(gid)
+}
+
+/*
+================
 MonsterState.behaviorActorMover
 
 behaviorActor plus the mover the step is about to read, in the one
@@ -289,7 +306,11 @@ locked pass: the step otherwise re-pays the lock, a population scan
 (#2029). The mover half is MonsterState.Mover's value for this
 population - the stored row, or the synthesized spawn mover when no
 row exists yet - so the step continues with exactly what its own read
-would have returned.
+would have returned. Called from inside the action lane (or the
+adjacent direct dispatch), never ahead of its lock: a mover set by a
+slower lane while the leg waits for the lock must be the value the
+step starts from, or the step's whole-value commits overwrite it
+(#2047 review).
 ================
 */
 func (s *MonsterState) behaviorActorMover(key populationKey, gid uint32) behaviorActorSnapshot {
