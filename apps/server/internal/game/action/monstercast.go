@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
@@ -110,6 +111,13 @@ func (rt *Runtime) advanceMonsterCasts(now int64) []simulation.DivisionFrames {
 /*
 ================
 advanceMonsterCastInDivision
+
+The wait verdict reads the target's life, deletion, companion and
+world-instance facts as values under the read door (the #1820 part C
+contract): the copy's only normalizations feed none of them, so a tick
+that only waits - or retires an invalid cast - never detaches the
+record. Nothing in this lane needs the copy at all: the release stages
+through monsterAttackStage, which re-reads what it commits.
 ================
 */
 func (rt *Runtime) advanceMonsterCastInDivision(p pendingMonsterCast, now int64) []simulation.DivisionFrames {
@@ -117,21 +125,29 @@ func (rt *Runtime) advanceMonsterCastInDivision(p pendingMonsterCast, now int64)
 	defer unlock()
 	attacker, exists := rt.Monsters.Get(p.division, p.instance.Gid)
 	target := rt.findCharacter(p.division, p.characterName)
-	var snapshot *enterworld.Character
-	if target != nil && target.ID == p.characterID {
-		snapshot = rt.characterSnapshot(p.division, target)
+	var targetAlive, petValid bool
+	var targetWorld uint32
+	targetFound := target != nil && target.ID == p.characterID
+	if targetFound {
+		rt.deps.Read(p.division, func() {
+			targetAlive = !target.DeletePending && enterworld.CharacterAlive(target)
+			targetWorld = domain.CharacterWorldInstance(target)
+			if p.cosTarget {
+				pet := target.CompanionByGID(p.target)
+				petValid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
+					pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot && pet.SummonGeneration == p.cosGeneration
+			}
+		})
 	}
-	valid := !p.cancelled && exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
+	valid := !p.cancelled && exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0 && targetFound && targetAlive
 	if p.cosTarget && valid {
-		pet := snapshot.CompanionByGID(p.target)
-		valid = pet != nil && pet.Summoned && pet.GID == p.target && pet.CurrentHP > 0 &&
-			pet.RefObjID == p.cosRefID && pet.InventorySlot == p.cosSlot && pet.SummonGeneration == p.cosGeneration
+		valid = petValid
 	}
 	if p.selfEffect {
 		valid = exists && attacker.CurrentHP > 0 && attacker.Motion.StateAt(now) == 0
 	}
 	if valid && !p.selfEffect {
-		_, valid = rt.characterMonster(p.division, snapshot, attacker.Gid)
+		_, valid = rt.characterMonsterFor(p.division, target.Name, targetWorld, attacker.Gid)
 	}
 	if valid && now < p.releaseAtMs {
 		return nil

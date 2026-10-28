@@ -270,17 +270,43 @@ func Skill(id uint8) (SkillDef, bool) {
 ================
 PetSkills
 
-The skills of one pet, in workbook order (rows, then options).
+The skills of one pet, in workbook order (rows, then options), from
+the per-kind index built once at package init: the workbook is parsed
+once from the embedded design and never changes at runtime, so the
+lists are shared read-only instead of rebuilt on every call. Every
+caller ranges the result and none writes, appends to, sorts or
+retains it (SlottedPassive keeps one element copy, the rest only
+read fields), and the stored slices are capacity-trimmed, so even a
+future caller's append allocates its own backing.
 ================
 */
 func PetSkills(pet string) []SkillDef {
-	var out []SkillDef
-	for _, s := range D.Skills {
-		if s.Pet == pet {
-			out = append(out, s)
-		}
+	return petSkillsByKind[pet]
+}
+
+// The workbook's two skill tables, indexed by pet kind once.
+var (
+	petSkillsByKind  = skillsByKind(D.Skills)
+	treeSkillsByKind = skillsByKind(D.TreeSkills)
+)
+
+/*
+================
+skillsByKind
+
+One pet kind's rows in workbook order, capacity-trimmed so the
+shared slice can never be grown in place.
+================
+*/
+func skillsByKind(rows []SkillDef) map[string][]SkillDef {
+	byKind := make(map[string][]SkillDef)
+	for _, s := range rows {
+		byKind[s.Pet] = append(byKind[s.Pet], s)
 	}
-	return out
+	for kind, skills := range byKind {
+		byKind[kind] = skills[:len(skills):len(skills)]
+	}
+	return byKind
 }
 
 /*
