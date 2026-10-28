@@ -8,13 +8,13 @@ package wire
 // dump carries no such immediates, and the DevKit tree that hardcodes them is
 // a different version.
 //
-//	+STR  CIFPlayerInfo GDR_PI_BTN_ADDHP (id 14) -> sub_59fa80 @0x0059fa80
+//	+STR  CIFPlayerInfo GDR_PI_BTN_ADDHP (id 14) -> CIFPlayerInfo_OnAddStr @0x0059fa80
 //	      -> the client's NetClient_Send7552(0x4b, 1) at client
 //	      client 0x00692B47 -> 0x727A, EMPTY body
-//	+INT  CIFPlayerInfo GDR_PI_BTN_ADDMP (id 15) -> sub_59faa0 @0x0059faa0
+//	+INT  CIFPlayerInfo GDR_PI_BTN_ADDMP (id 15) -> CIFPlayerInfo_OnAddInt @0x0059faa0
 //	      -> the client's NetClient_Send7552(0x4b, 2) at client
 //	      client 0x00692AF2 -> 0x7552, EMPTY body
-//	train CIFSkillPracticeBox confirm sub_5de690 @0x005de771
+//	train CIFSkillPracticeBox_OnConfirm @0x005de771
 //	      -> the client's NetClient_Send7165 -> 0x7165
 //	      [u32 masteryId][u8 amount]
 const (
@@ -201,9 +201,10 @@ const (
 	// ErrCodeMasteryTotalLimit is UIIT_STT_SKILL_LEARN_MASTERY_TOTAL_LIMIT
 	// (07:05): the sum of trained mastery levels would pass the character's
 	// allowance. Enforced by progression.HandleMasteryLevelUp against the
-	// budget the v1.150 client itself displays (sub_58c310 @0x0058c310:
-	// CH flat 300, EU min(2 x level, 240), selected on the native country
-	// byte), pinned from the client's display sites.
+	// budget the v1.150 client itself displays
+	// (CIFSkillBoard_RefreshTotalMasteryLabel @0x0058c310: CH flat 300, EU
+	// min(2 x level, 240), selected on the native country byte), pinned from
+	// the client's display sites.
 	ErrCodeMasteryTotalLimit uint8 = 0x05
 )
 
@@ -228,9 +229,10 @@ func DecodeSkillLearnRequest(payload []byte) (SkillLearnRequest, error) {
 }
 
 // EncodeSkillLearnAck is a successful 0xB2CB: [u8 1][u32 skillId]. The
-// client marks exactly this id learned (sub_75bb20 @0x0075bb48 reads the
-// u32, the client's LearnedSkillMap_AddRecordByHost inserts it), so
-// it must echo the request's id.
+// client marks exactly this id learned
+// (CPSMission_OnSkillLearnResponse0xB2CB @0x0075bb48 reads the u32, the
+// client's LearnedSkillMap_AddRecordByHost inserts it), so it must echo the
+// request's id.
 func EncodeSkillLearnAck(skillID uint32) []byte {
 	return NewWriter(5).U8(ResultSuccess).U32(skillID).Payload()
 }
@@ -372,10 +374,10 @@ func EncodeLevelUpEffect(gid uint32) []byte {
 // player-info pane reads the first eight fields from that singleton, while
 // four later fields are also applied directly to CICPlayer:
 //
-//	MaxHP    -> vtable +0x98 (sub_862990) -> CICPlayer+0x448
-//	MaxMP    -> vtable +0x9c (sub_8629c0) -> CICPlayer+0x44c
-//	StrWord  -> sub_8629f0 -> CICPlayer+0x834  (the equip/tooltip STR)
-//	IntWord  -> sub_862a00 -> CICPlayer+0x836  (the equip/tooltip INT)
+//	MaxHP    -> vtable +0x98 (CICPlayer_SetMaxHPAndAutoPotionThreshold) -> CICPlayer+0x448
+//	MaxMP    -> vtable +0x9c (CICPlayer_SetMaxMPAndAutoPotionThreshold) -> CICPlayer+0x44c
+//	StrWord  -> CICPlayer_SetStrengthWord -> CICPlayer+0x834  (the equip/tooltip STR)
+//	IntWord  -> CICPlayer_SetIntellectWord -> CICPlayer+0x836  (the equip/tooltip INT)
 //
 // TRAP: the +0x14/+0x16 words are NOT the applied STR/INT despite reading
 // like it. cmd/active-probe's former builder wrote the stats there and
@@ -383,9 +385,10 @@ func EncodeLevelUpEffect(gid uint32) []byte {
 // until the progression wave pointed it at this encoder. Any production
 // emission must use StrWord/IntWord below.
 type BaseStats struct {
-	// Combat display fields consumed by CIFPlayerInfo::UpdateStats
-	// (sub_59ffa0). They are not copied onto CICPlayer, but they are live
-	// UI state: zeroing them produces the all-zero attack/defence pane.
+	// Combat display fields consumed by the client's
+	// CIFPlayerInfo_UpdateStats (client 59FFA0). They are not copied onto
+	// CICPlayer, but they are live UI state: zeroing them produces the
+	// all-zero attack/defence pane.
 	PhysicalAttackMin uint32
 	PhysicalAttackMax uint32
 	MagicalAttackMin  uint32

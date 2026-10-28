@@ -350,7 +350,7 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "origin": "https://game.example.com",
   "shard": "global-official",
   "agent_memory_mb": 256,
-  "gameworld_memory_mb": 1024,
+  "gameworld_memory_mb": 3072,
   "stack_sizes": "",
   "public_webhook": "/etc/opensro-release/discord-announcements-webhook",
   "staff_webhook": "/etc/opensro-backup/discord-webhook",

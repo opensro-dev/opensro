@@ -251,8 +251,8 @@ const (
 	ErrCodeStrengthRequired  uint8 = 0x30
 	ErrCodeIntellectRequired uint8 = 0x31
 	// ErrCodeExclusiveArmorMix is the clothes/hard body-armor exclusivity
-	// refusal (bug C): the client's sub_689420 special body @0x0068960a maps
-	// 01:32 to the country-split
+	// refusal (bug C): the client's CGInterface_ShowSystemNotification
+	// special body (client 0x0068960A) maps 01:32 to the country-split
 	// UIIT_MSG_STRGERR_CANT_MIX_EXCLUSIVE_ARMOR_TYPE strings ("Armor and
 	// robe cannot be equipped at the same time."), banner + guide type 5.
 	ErrCodeExclusiveArmorMix uint8 = 0x32

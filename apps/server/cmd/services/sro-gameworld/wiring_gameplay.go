@@ -639,6 +639,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWantedStreakNotice {
 		log.Infof("job: most wanted progress notice per counted kill ON (%s)", action.EnvMostWantedStreakNotice)
 	}
+	// Port-only, not native: a companion's job kill counts for its owner.
+	game.items.MostWantedCOSKills = action.MostWantedCOSKillsFromEnv()
+	if game.items.MostWantedCOSKills {
+		log.Infof("job: most wanted counts companion-delivered job kills ON (%s)", action.EnvMostWantedCOSKills)
+	}
 	// Port-only, not native: a trader's goods stay in the world when the
 	// trader dies riding or disconnects in the field.
 	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()

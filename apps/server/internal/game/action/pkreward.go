@@ -217,8 +217,9 @@ withVictim inside the door), while the actual victim is the COS. An
 ordinary kill books the murder against the owner (RecordMurder on the
 owner's level); a job kill pays job EXP on the owner's level, shared by
 the killer's party, but not the +0x1c * 3 basis EXP, which the reference server gates
-on the actual victim being a player, and not the port-only job-kill or
-Most Wanted notices; a guild-war kill scores from the COS's own level
+on the actual victim being a player, and not the port-only job-kill
+notice; the port-only Most Wanted counts a job kill here only with
+SRO_MOST_WANTED_COS_KILLS on, below. A guild-war kill scores from the COS's own level
 . The death penalty never runs on a COS death, so no PvP EXP is paid. The
 killer's penalty relief for the COS itself stays with
 creditPlayerCOSKill, after this. war is published by the caller after
@@ -242,6 +243,15 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
+		// Port-only, not native (SRO_MOST_WANTED_COS_KILLS): the same
+		// classification line a player kill writes (payPlayerKillInDoor),
+		// so a companion-delivered job kill leaves the same trace.
+		if rt.MostWantedCOSKills {
+			log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": owner.Name,
+				"killerJob": enterworld.DressedJob(killer), "victimJob": enterworld.DressedJob(owner),
+				"strangers": kill.mostWantedStrangers, "mostWanted": rt.MostWanted,
+				"killerAlive": enterworld.CharacterAlive(killer)}).Info("job kill classified")
+		}
 		party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 		if party == nil {
 			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
@@ -262,6 +272,17 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 		}
 	case pk.DeathGuildWar:
 		war = rt.prepareCOSGuildWarCombat(division, killer, owner, cosLevel)
+	}
+	// Port-only, not native: with SRO_MOST_WANTED_COS_KILLS on, a job kill
+	// delivered on a companion runs the same Most Wanted count as a player
+	// kill (mostWantedKillInDoor): the same stranger test, killer-alive
+	// gate and pair limit, credited to the killer this door books - the
+	// companion's owner when a companion dealt the blow.
+	if rt.MostWantedCOSKills && kill.kind == pk.DeathJob {
+		wantedActor, wantedPublic, owed, wanted := rt.mostWantedKillInDoor(division, killer, owner, kill, now)
+		actor, public = append(actor, wantedActor...), append(public, wantedPublic...)
+		after.bounties = append(after.bounties, owed...)
+		after.wanted = append(after.wanted, wanted...)
 	}
 	return actor, public, after, war
 }

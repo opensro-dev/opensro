@@ -190,7 +190,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 			if valid && child != nil && pet.BroodStage == 2 && pet.BroodBook == 3 {
 				rt.broodDeathStorm(key, child, snapshot, pet, now)
 			}
-			rt.deps.Update(state.character, "crow-brood-remove", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-remove", func() bool {
 				kept := state.character.Brood[:0]
 				for _, live := range state.character.Brood {
 					if live.GID != pet.GID {
@@ -209,7 +209,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		}
 		if hatch {
 			var clone *domain.CharacterCOS
-			rt.deps.Update(state.character, "crow-brood-hatch", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-hatch", func() bool {
 				live := state.character.CompanionByGID(pet.GID)
 				if live == nil || live.CurrentHP == 0 || live.BroodStage != 1 {
 					return false
