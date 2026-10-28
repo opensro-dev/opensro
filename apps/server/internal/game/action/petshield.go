@@ -225,7 +225,7 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 			continue
 		}
 		s = current
-		owner := rt.characterSnapshot(s.key.division, rt.findCharacter(s.key.division, s.source.name))
+		owner := rt.characterSnapshotCompanionAdmitted(s.key.division, rt.findCharacter(s.key.division, s.source.name), nil)
 		valid := owner != nil && enterworld.CharacterAlive(owner) && !rt.inTown(s.key.division, owner)
 		if valid {
 			pet := owner.CompanionByGID(s.source.gid)
@@ -234,7 +234,7 @@ func (rt *Runtime) advancePetShields(now int64) []simulation.DivisionFrames {
 		}
 		var recipient *enterworld.Character
 		if valid && s.name != "" {
-			recipient = rt.characterSnapshot(s.key.division, rt.findCharacter(s.key.division, s.name))
+			recipient = rt.characterSnapshotCompanionAdmitted(s.key.division, rt.findCharacter(s.key.division, s.name), nil)
 			valid = recipient != nil && enterworld.CharacterAlive(recipient) &&
 				rt.petExpansionAllowed(recipient, owner.CompanionByGID(s.source.gid)) && !rt.inTown(s.key.division, recipient)
 		}

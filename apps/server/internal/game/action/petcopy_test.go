@@ -17,6 +17,7 @@ package action
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -77,6 +78,107 @@ func TestPetPassReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 		if i >= len(b) || a[i] != b[i] {
 			t.Fatalf("line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[min(i, len(b)-1)])
 		}
+	}
+}
+
+/*
+================
+petShieldTrace
+
+A tier-2 party shield cast on a fattened owner, partly absorbed, then
+advanced past expiry: the shield tick revalidates the owner and the
+recipient through its copy and retires both shields. (The tier-3
+burst settlement runs through the same copies and is covered by
+TestPetShieldTiersAndExpiry and TestPetShieldBurstKillCreditsNoQuest;
+its combat rolls make two fixture runs disagree with each other, so
+it cannot anchor a trace.) Run narrow and forced-full: every batch
+must agree, in any order - the tick walks its rows map.
+================
+*/
+func petShieldTrace(t *testing.T, full bool) string {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	near := nearbyCharacter(rt, c, 21, "shield-near", 50)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	petPeriodicFatten(c)
+	if full {
+		rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			return rt.characterSnapshot(divisionID, character)
+		}
+	}
+	skill := learnPetBook(t, c, 20)
+	result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs())
+	if len(result.Broadcast) < 2 {
+		t.Fatalf("no shields: %+v", result)
+	}
+	self := petShieldKey{testDivision, enterworld.ObjectIDForCharacter(c)}
+	rt.absorbPetShield(testDivision, self.gid, rt.petShields.rows[self].amount-20, clock.NowMs())
+	var lines []string
+	for _, now := range []int64{clock.NowMs() + 4999, clock.NowMs() + 5000} {
+		for _, batch := range rt.advancePetShields(now) {
+			lines = append(lines, fmt.Sprintf("%+v", batch))
+		}
+	}
+	if len(rt.petShields.rows) != 0 {
+		t.Fatal("shield retained; the trace would agree vacuously")
+	}
+	if len(lines) == 0 {
+		t.Fatal("shield tick produced no batches; the trace would agree vacuously")
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+/*
+================
+TestPetShieldTickReadsNothingOutsideTheCompanionCopy
+================
+*/
+func TestPetShieldTickReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	narrow, full := petShieldTrace(t, false), petShieldTrace(t, true)
+	a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
+	if len(a) != len(b) {
+		t.Fatalf("trace lengths diverged: narrow %d lines, full %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[i])
+		}
+	}
+}
+
+/*
+================
+TestPetShieldTickTakesTheCompanionCopy
+
+Routing guard for the shield tick's two copies: the seam must fire
+for the owner (and the recipient) on an advance, so a site reverted
+to the whole-record copy fails here even though its frames agree.
+================
+*/
+func TestPetShieldTickTakesTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	skill := learnPetBook(t, c, 20)
+	if result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs()); len(result.Broadcast) < 2 {
+		t.Fatalf("no shields: %+v", result)
+	}
+	copies := 0
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copies++
+		return rt.characterSnapshot(divisionID, character)
+	}
+	rt.advancePetShields(clock.NowMs() + 5000)
+	if copies == 0 {
+		t.Fatal("the shield tick never took the companion copy (whole-record copy back?)")
 	}
 }
 
