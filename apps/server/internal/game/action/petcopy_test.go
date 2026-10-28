@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -108,5 +109,85 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		len(c.Snapshot().MissionInventory), len(c.SnapshotCompanion().MissionInventory))
 	if narrow >= full/2 {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
+	}
+}
+
+/*
+================
+TestBondRevivalReadsNothingOutsideTheCompanionCopy
+
+The bond revival weighs a dead party member through a detached copy:
+the recipient gate and the combat stats that set the revival HP.
+Production members carry stuffed bags; the stats walk reads
+equipment rows only, so the revived HP must agree on the companion
+copy and on the whole-record copy, and the seam must see the copy.
+================
+*/
+func TestBondRevivalReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	learnPetBook(t, c, 27)
+	near := nearbyCharacter(rt, c, 21, "bond-near", 50)
+	near.ActiveCOS = nil
+	rt.BindPetSession(testDivision, near, 2)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	stuffOwnerInventories(near)
+	narrowSnap, fullSnap := near.SnapshotCompanion(), near.Snapshot()
+	narrowStats, _, narrowErr := rt.playerCombatStats(testDivision, narrowSnap)
+	fullStats, _, fullErr := rt.playerCombatStats(testDivision, fullSnap)
+	if narrowErr != nil || fullErr != nil {
+		t.Fatalf("revival stats errors: companion %v, full %v", narrowErr, fullErr)
+	}
+	// Compare what the revival actually weighs: the vitals the stats
+	// produce for this victim (Stats itself carries a graph pointer
+	// that legitimately differs between any two calls).
+	nHP, nMP, nCHP, nCMP := keeperVitalsFrom(narrowSnap, narrowStats, nil)
+	fHP, fMP, fCHP, fCMP := keeperVitalsFrom(fullSnap, fullStats, nil)
+	if nHP != fHP || nMP != fMP || nCHP != fCHP || nCMP != fCMP {
+		t.Fatalf("revival vitals diverged on the fattened victim: narrow (%d,%d,%d,%d), full (%d,%d,%d,%d)",
+			nHP, nMP, nCHP, nCMP, fHP, fMP, fCHP, fCMP)
+	}
+	key := petOwnerKey{testDivision, c.Name, c.ActiveCOS.GID}
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+
+	revive := func() (int64, string) {
+		near.DeathKind = uint8(pk.DeathMonster)
+		near.CurrentHP = testInt64(0)
+		c.ActiveCOS.Training.PassiveReadyAtMs[1] = 0
+		frames := rt.advancePetBond(key, state, clock.NowMs())
+		if *near.CurrentHP <= 0 || len(frames) == 0 {
+			t.Fatal("dead party member was not revived; the comparison would agree vacuously")
+		}
+		return *near.CurrentHP, fmt.Sprintf("%+v", frames)
+	}
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	narrowHP, narrowFrames := revive()
+	seen := false
+	for _, name := range copied {
+		seen = seen || name == near.Name
+	}
+	if !seen {
+		t.Fatalf("revival never took the companion copy of %s; copied %v", near.Name, copied)
+	}
+
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	fullHP, fullFrames := revive()
+	if narrowHP != fullHP {
+		t.Fatalf("revival HP diverged: companion copy %d, full copy %d (revival stats read outside equipment?)", narrowHP, fullHP)
+	}
+	if narrowFrames != fullFrames {
+		t.Fatalf("revival frames diverged\nnarrow: %.600s\nfull:   %.600s", narrowFrames, fullFrames)
 	}
 }
