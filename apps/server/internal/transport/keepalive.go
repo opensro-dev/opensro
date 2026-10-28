@@ -23,6 +23,21 @@ import "time"
 // game handlers, and counts it as the liveness it is.
 const sceneLoadingPingInterval = 2 * time.Second
 
+/*
+================
+keepalivePingDue
+
+Whether a tick sent since ping ago owes the next PING at cadence. Half a
+tick of slack: the ticker keeps its own schedule, so a late tick followed
+by an on-time one reads a little under the cadence. Without the slack
+that tick is skipped and the 2 s loading cadence silently becomes 4 s
+(the TestKeepalivePingsWhileSceneIsLoading CI flake, 2026-10-28).
+================
+*/
+func keepalivePingDue(since, cadence, tick time.Duration) bool {
+	return since >= cadence-tick/2
+}
+
 // keepaliveLoop pings an attached-but-quiet client and detaches one that
 // has gone silent past the idle timeout, giving it the resume grace window.
 // While a scene is loading the ping cadence shortens to
@@ -77,7 +92,7 @@ func (s *Session) keepaliveLoop() {
 			} else if idle < interval {
 				continue
 			}
-			if now.Sub(lastPing) < cadence {
+			if !keepalivePingDue(now.Sub(lastPing), cadence, tick) {
 				continue
 			}
 			if err := s.Send(OpPing, nil); err == nil {
