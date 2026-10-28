@@ -43,10 +43,12 @@ const (
 // History: f3004434 ticked 1,977,338 B / 5,505 allocs; after #1944,
 // #1945 and #1948 (dd2e3691c) 1,299,000 B / 3,458 allocs; after the
 // crow-brood and pet-spirit owner-copy admissions 1,131,000 B /
-// 2,962 allocs.
+// 2,962 allocs; after the pet-periodic admissions (the pet tick, the
+// persistent-effect pulse, the crow recipient walk and the COS/monster
+// source capture) 984,000 B / 2,380 allocs.
 const (
-	tickBudgetBytesPerTick  = 1245000
-	tickBudgetAllocsPerTick = 3260
+	tickBudgetBytesPerTick  = 984000
+	tickBudgetAllocsPerTick = 2380
 )
 
 /*

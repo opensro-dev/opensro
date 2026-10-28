@@ -254,7 +254,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	hit := cosHit{monsterSource: populationMonster, resolveHits: populationMonster, owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
 		displacement: displacement, displaceAt: displaceAt,
 		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
-	hit.block.sources = rt.captureAbnormalSources(divisionID, hit.block.block, records)
+	hit.block.sources = rt.captureAbnormalSourcesLife(divisionID, hit.block.block, records)
 	if !rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
 		if !rt.applyCOSHitInDoor(divisionID, &hit, nowMs) {
 			return false

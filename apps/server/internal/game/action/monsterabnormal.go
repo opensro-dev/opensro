@@ -76,7 +76,7 @@ func (c monsterAbnormalContext) SourceExists(division string, gid uint32, name s
 		return true
 	}
 	if name == "" && gid != 0 {
-		return c.rt.captureAbnormalSource(division, gid).exists
+		return c.rt.captureAbnormalSourceLife(division, gid).exists
 	}
 	return false
 }
@@ -97,7 +97,7 @@ func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name str
 		return !alive
 	}
 	if name == "" && gid != 0 {
-		return c.rt.captureAbnormalSource(division, gid).dead
+		return c.rt.captureAbnormalSourceLife(division, gid).dead
 	}
 	return false
 }
