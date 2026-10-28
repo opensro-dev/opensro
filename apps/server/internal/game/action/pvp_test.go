@@ -355,6 +355,14 @@ func TestAreaPlayerPreRefusalOnlyRefusesWhatTheValidationRefuses(t *testing.T) {
 			skill: enterworld.SkillRow{Attack: attack,
 				Abnormal: abnormal.SkillParams{AdmitDeadParty: true, ResuMaxLevel: 10}},
 			arm: func(a, v *enterworld.Character) { v.Level = testInt64(5) }},
+		// The permission gate admits DontCare before the dead-body and
+		// enemy columns, so these rows must reach the full validation.
+		{name: "dont-care dead-body row on a living player",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{DontCare: true, DeadBody: true}}},
+		{name: "dont-care monster-only enemy row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{DontCare: true, EnemyM: true}}},
 	}
 	for _, tc := range controls {
 		_, _, a, v := newPvpPair(t)

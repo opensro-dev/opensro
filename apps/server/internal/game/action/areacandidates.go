@@ -125,10 +125,13 @@ func areaPlayerPreRefusal(target *enterworld.Character, skill enterworld.SkillRo
 	if skill.Targets.Present && !skill.Targets.Animal && (skill.Targets.Building || skill.Targets.Land) {
 		return true
 	}
-	if skill.Targets.DeadBody && enterworld.CharacterAlive(target) {
+	// skillTargetPermission admits a DontCare row before it reads the
+	// dead-body and enemy columns, and the columns decode independently,
+	// so those two arms refuse only rows without DontCare.
+	if skill.Targets.DeadBody && !skill.Targets.DontCare && enterworld.CharacterAlive(target) {
 		return true
 	}
-	if skill.Targets.EnemyM && !skill.Targets.EnemyP {
+	if skill.Targets.EnemyM && !skill.Targets.EnemyP && !skill.Targets.DontCare {
 		return true
 	}
 	if skill.Abnormal.AdmitDeadParty && skill.Abnormal.ResuMaxLevel != 0 &&
