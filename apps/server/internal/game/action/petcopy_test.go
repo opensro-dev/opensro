@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
@@ -108,5 +109,55 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		len(c.Snapshot().MissionInventory), len(c.SnapshotCompanion().MissionInventory))
 	if narrow >= full/2 {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
+	}
+}
+
+/*
+================
+TestCrowBroodReadsNothingOutsideTheCompanionCopy
+
+The brood lifecycle resolves its crow through the owner's rows;
+production keeps that record in a bag row behind a stuffed bag. An
+egg laid before the move must hatch on schedule on the companion
+copy exactly as on the whole-record copy, and the seam must see the
+copy happen.
+================
+*/
+func TestCrowBroodReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	hatch := func(t *testing.T, full bool) (string, []string) {
+		rt, clock, c, _, key := tailwindFixture(t, 1)
+		skill := learnPetBook(t, c, 49)
+		rt.castCrowBrood(testDivision, c, key.gid, skill, clock.NowMs())
+		if len(c.Brood) != 1 {
+			t.Fatal("crow cast left no egg; the run would agree vacuously")
+		}
+		movePetToBagRow(c, 100)
+		stuffOwnerInventories(c)
+		copied := []string{}
+		if full {
+			rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+				return rt.characterSnapshot(divisionID, character)
+			}
+		} else {
+			rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+				copied = append(copied, character.Name)
+				return character.SnapshotCompanion()
+			}
+		}
+		clock.now = clock.now.Add(30 * time.Second)
+		frames := rt.advanceCrowBrood(key, clock.NowMs())
+		if len(c.Brood) != 1 || c.Brood[0].BroodStage != 2 {
+			t.Fatalf("egg did not hatch on schedule (full=%v): %+v", full, c.Brood)
+		}
+		return fmt.Sprintf("%+v", frames), copied
+	}
+
+	narrow, copied := hatch(t, false)
+	if len(copied) == 0 {
+		t.Fatal("the brood advance never took the companion copy of its owner")
+	}
+	full, _ := hatch(t, true)
+	if full != narrow {
+		t.Fatalf("brood hatch diverged\nnarrow: %.600s\nfull:   %.600s", narrow, full)
 	}
 }
