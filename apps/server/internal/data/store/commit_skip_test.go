@@ -120,6 +120,63 @@ func TestFailedCommitRetainsNoDigest(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFailedDoorRetainsNoDigest
+
+The door-side twin of TestFailedCommitRetainsNoDigest: an offline door
+writes the character row in its own transaction, then fails before its
+commit (a later write in the door refused). The rollback must take the
+written digest with it. A door that retained at write time would leave
+the store trusting bytes the disk never received: the in-memory change
+to exactly those bytes would then be skipped, and lost on reopen.
+================
+*/
+func TestFailedDoorRetainsNoDigest(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, Options{Now: newTestClock().Now, DefaultSkills: testSkillSeeder})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &enterworld.Character{Name: "Doomed", Gold: int64Ptr(100)}
+	if err := s.CreateCharacter(testDivision, "skip-account", c); err != nil {
+		t.Fatal(err)
+	}
+
+	s.mu.Lock()
+	tx, err := s.beginCharacterTxLocked()
+	if err != nil {
+		s.mu.Unlock()
+		t.Fatal(err)
+	}
+	door := *c
+	door.Gold = int64Ptr(105)
+	if err := tx.upsertCharacter(testDivision, &door); err != nil {
+		s.mu.Unlock()
+		t.Fatal(err)
+	}
+	_ = tx.Rollback()
+	s.mu.Unlock()
+
+	before := s.LockTiming()
+	s.MutateCharacter(c, "the door's change, made in memory", func() { c.Gold = int64Ptr(105) })
+	after := s.LockTiming()
+	if got := after.CharacterRowsWritten - before.CharacterRowsWritten; got != 1 {
+		t.Fatalf("commit after a failed door wrote %d rows, want 1: the rolled-back door must retain no digest (skipped %d)", got, after.CharacterRowsSkipped-before.CharacterRowsSkipped)
+	}
+	s.Close()
+	reopened := openTest(t, dir, newTestClock())
+	for _, loaded := range reopened.Characters().CharactersForDivision(testDivision) {
+		if loaded.ID == c.ID {
+			if got := goldProbe(loaded); got != 105 {
+				t.Fatalf("reopened gold = %d, want 105: the change was skipped against a rolled-back door", got)
+			}
+			return
+		}
+	}
+	t.Fatal("character missing after reopen")
+}
+
 //============================================================================
 
 /*
