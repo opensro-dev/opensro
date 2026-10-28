@@ -20,8 +20,8 @@ const builtTitleIntroNames = [
 	"script/intro/constantinople.txt",
 	"script/intro/china_wharf.txt"
 ];
-// Verified from SRO_Client.exe v1.150 sub_bbb710 static initializer and
-// sub_746fe0's data_cc9f5c..0x00cca11c camera insertion loop. The native title
+// Verified from SRO_Client.exe v1.150 StaticInit_CharCreateConstants static initializer and
+// CIFTitle_HideLoginControls's data_cc9f5c..0x00cca11c camera insertion loop. The native title
 // path uses this compiled table, not the rounded values in script/intro/*.txt.
 const verifiedNativeTitleCameraTables = {
 	constantinople: [

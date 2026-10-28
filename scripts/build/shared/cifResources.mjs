@@ -226,7 +226,7 @@ these through the PK2 at draw time, so the browser build publishes them
 all instead of the hand-carried starter subset in
 runtimeCifImageReferences; referenced icons whose DDJ never shipped in
 this Media.pk2 stay absent and ride the native icon_default fallback
-(CIFSlotWithHelp_SetSpritePathWithFallback sub_55b450), same as retail.
+(CIFSlotWithHelp_SetSpritePathWithFallback CIFSlotWithHelp_SetSpritePathWithFallback), same as retail.
 ================
 */
 async function collectItemDataIconDdjReferences() {
@@ -252,7 +252,7 @@ collectActionWndDataIconDdjReferences
 
 CIFAction record icons, data-driven: the icon .ddj column of every
 actionwnddata.txt record (the 0xcec870 action-data table the REAL
-CIFAction_OnCreate sub_58b720 folds over). Natively these are runtime
+CIFAction_OnCreate CIFAction_OnCreate folds over). Natively these are runtime
 references the record loader resolves through the PK2 at
 SetupActionButton time, so the resinfo copy pass never sees them
 (ifaction.txt authors every slot with DDJ="") - publish them from the
@@ -284,10 +284,10 @@ collectSkillDataIconDdjReferences
 
 CIFSkillSlot icons, data-driven: the UI icon-path column (source column
 61 -> CSkillData GetData()+0x108, the exact column buildSkillDataAsset.mjs
-ships) of every skilldata_*.txt record. Natively the slot bind sub_589050
+ships) of every skilldata_*.txt record. Natively the slot bind CIFSkillSlot_BindSkill
 (@0x005891ca) assigns that path onto the slot's icon child and the sprite
 loader resolves it through the PK2 under the icon\ root, lowercased by the
-parse (sub_811890 flag 1 @0x007f97e2) - publish every icon the shipped
+parse (RefData_AssignResourceStringA flag 1 @0x007f97e2) - publish every icon the shipped
 rows can reference instead of a hand-carried subset. Icons whose DDJ never
 shipped in this Media.pk2 (four europe *_base.ddj) stay absent and ride
 the native icon_default fallback, same as retail.
@@ -675,8 +675,8 @@ function parseCifLayout( text, sourcePath ) {
 		let propertyMatch = /^([A-Za-z0-9_]+)=([A-Z_]+),"([^"]*)"/.exec( line );
 		if ( !propertyMatch ) {
 			// Native tolerance for an UNTERMINATED quote: the property walk
-			// (sub_9bb6a0 @ 0x9bb6a0) allocates the property from the `Key=TYPE,`
-			// prefix FIRST, then the shared quote scanner (sub_9b64b0 @ 0x9b64b0)
+			// (CTDocument_ParseElementList_9BB6A0 @ 0x9bb6a0) allocates the property from the `Key=TYPE,`
+			// prefix FIRST, then the shared quote scanner (CTDocument_ScanQuotedString @ 0x9b64b0)
 			// fills the value - on a missing closing quote it collects characters
 			// to end-of-line/NUL and STILL assigns the collected buffer. Shipped
 			// data holds exactly one such line (ifoption_audio.txt:246,

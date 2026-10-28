@@ -59,9 +59,9 @@ export const returnScrollRuntimeImageReferences = [
 // CIFTargetStatusPanel's native refresh family selects these paths entirely
 // from code, so no resinfo DDJ field can make the resource copy pass discover
 // them:
-// - sub_5814d0 chooses the level-difference and entity-kind gem;
-// - sub_5828e0 chooses the player job mark;
-// - sub_5830f0 chooses the monster-grade mark.
+// - CIFTargetWindow_SetTarget chooses the level-difference and entity-kind gem;
+// - CIFTargetWindow_ShowPlayerJobInfo chooses the player job mark;
+// - CIFTargetMonster_SetTargetAndGrade chooses the monster-grade mark.
 // Keep the complete reachable family together. Splitting out only the four
 // commonly seen monster grades would leave the same publication bug waiting
 // for another target kind or a titan/elite spawn.
@@ -89,7 +89,7 @@ export const targetStatusRuntimeImageReferences = [
 	"interface/targetwindow/tw_icon_elite.ddj"
 ];
 
-// sub_914ae0 constructs the complete CIDamageText sprite-provider tables in
+// CSkillEffectManager_InitializeDamageGlyphsAndEffects constructs the complete CIDamageText sprite-provider tables in
 // code. Each visible glyph is a shadow/face pair: ten hitcount digits plus
 // critical, blocking and resist (the miss result). No resinfo field names
 // these resources, so the normal CIF discovery pass cannot publish them.
@@ -109,7 +109,7 @@ export const damageTextRuntimeImageReferences = [
 	"interface/hitcount/resist_shadow.ddj"
 ];
 
-// CIFPartyMatchSlot::SetSelected (sub_63d470 @ 0x0063d470) swaps the
+// CIFPartyMatchSlot::SetSelected (CIFPartyMatchSlot_SetPendingJoinFlag @ 0x0063d470) swaps the
 // id-5 CIFBarWnd prefix between com_bar01_ and com_bar01select_. Neither
 // prefix's three piece suffixes are authored as complete DDJ paths in
 // resinfo, so the resource graph cannot discover them by parsing layouts.
@@ -131,8 +131,8 @@ export const partyMatchRowRuntimeImageReferences = [
 
 // CPSMission's native reset/death paths select these resources from code,
 // after the static resinfo layouts have been loaded:
-// - sub_7292e0 selects loading_rebirth.ddj for loading mode 1;
-// - CIFMsgBox_ConfigureKindPayload sub_52f460 selects the rebirth dialog and
+// - CPSMission_BeginLoadingScreen selects loading_rebirth.ddj for loading mode 1;
+// - CIFMsgBox_ConfigureKindPayload CIFMessageBox_ConfigureByType selects the rebirth dialog and
 //   its button family for the death-state prompt.
 // They must therefore ride the runtime-reference publication pass. Keeping
 // the button's normal path in runtimeCifButtonImageReferences below also
@@ -189,7 +189,7 @@ export const versionCheckLoadingRuntimeImageReferences = [
 	)
 ];
 
-// CIFChatViewer_OnCreate (sub_6ac4d0 @0x006ac62e/@0x006ac65a)
+// CIFChatViewer_OnCreate (CIFChatViewer_vf24 @0x006ac62e/@0x006ac65a)
 // constructs its four selectable tab areas and assigns chat_tab.ddj from
 // code. ifchatviewer.txt therefore cannot make the resinfo-driven copy pass
 // discover it. The browser's generatedTabs mirror uses the same native art,
@@ -370,25 +370,25 @@ export const runtimeCifImageReferences = [
 	"interface/minimap/mm_sign_otherplayer.ddj",
 	// CIFMinimap APPRENTICESHIP roster/edge pass (@0x0054d24a): a training-camp
 	// member inside the 47px ring draws +0x3a0 mm_sign_apprenticeship 8x8
-	// (@0x0054d4db; name built @0x0054a899 in the sub_54a5a0 init), at/outside
+	// (@0x0054d4db; name built @0x0054a899 in the CIFWnd_LoadTextureSet_54A5A0 init), at/outside
 	// it the +0x3a4 mm_sign_apprenticeshiparrow 32x32 rotated on the ring
 	// (@0x0054d6b7; name built @0x0054a844). Fed by the REAL 0x3AC5 member
 	// plane (ced160+0x2c8); consumed by MissionMinimapApprenticeshipPass.ts.
 	"interface/minimap/mm_sign_apprenticeship.ddj",
 	"interface/minimap/mm_sign_apprenticeshiparrow.ddj",
-	// CIFMinimap HUNTING-POINT pass (sub_54bd90, called @0x0054e9db): every
+	// CIFMinimap HUNTING-POINT pass (Fn_Wraps_CIFWnd_FindChildControlById, called @0x0054e9db): every
 	// tracked object in the CGInterface+0x760 write/track map (+0x18; rows
-	// inserted by the 0xB5ED leg's REAL sub_84f130) draws +0x3cc
+	// inserted by the 0xB5ED leg's REAL CSkillRunTimeManager_RegisterTrackedEntity) draws +0x3cc
 	// wmap_sign_huntingpoint as a 16x16 quad rotated by the record heading
 	// (@0x0054c2a4), ring-clamped at 47px with NO sprite swap. The slot name
-	// is built @0x0054a9ed and stored @0x0054aa04 in the sub_54a5a0 init -
+	// is built @0x0054a9ed and stored @0x0054aa04 in the CIFWnd_LoadTextureSet_54A5A0 init -
 	// NOTE the WORLDMAP directory, not interface/minimap/. Consumed by
 	// MissionMinimapHuntingPass.ts.
 	"interface/worldmap/wmap_sign_huntingpoint.ddj",
 	// CIFMinimap QUEST-TARGET pass (@0x0054e287): each tracked-quest target
 	// inside the 47px ring draws +0x3c4 mm_sign_questnpc 16x16 (@0x0054e3ea,
 	// corners +-8; name built @0x0054a8ee, stored @0x0054a905 in the
-	// sub_54a5a0 init), at/outside it the +0x3c0 mm_sign_questarrow 32x32
+	// CIFWnd_LoadTextureSet_54A5A0 init), at/outside it the +0x3c0 mm_sign_questarrow 32x32
 	// rotated on the ring (@0x0054e5c6, corners +-16; name built @0x0054a943,
 	// stored @0x0054a95a). Fed by the REAL tracked-quest chain (questPlane
 	// +0x398 / +0x18d0 registry) and the npcpos table below; consumed by
@@ -397,12 +397,12 @@ export const runtimeCifImageReferences = [
 	"interface/minimap/mm_sign_questarrow.ddj",
 	// CIFMinimap PARTY roster/edge pass (@0x0054db1e): a party member inside
 	// the 47px ring draws +0x39c mm_sign_party 8x8 (@0x0054dca1, corners +-4;
-	// name built @0x0054a7ef, stored @0x0054a806 in the sub_54a5a0 init),
+	// name built @0x0054a7ef, stored @0x0054a806 in the CIFWnd_LoadTextureSet_54A5A0 init),
 	// at/outside it the +0x36c mm_sign_partyarrow 16x16 rotated on the ring
 	// (@0x0054de7d, corners +-8; name built @0x0054a5f2, stored @0x0054a605 -
 	// the FIRST of the 13 marker sprites). Fed by the REAL 0xB0D5/0x35D6/0x3E58
 	// roster writers (75db30 -> 829f30/822110/828a30); consumed by
-	// MissionMinimapPartyPass.ts. With these two, all 13 sub_54c360 sprites
+	// MissionMinimapPartyPass.ts. With these two, all 13 CIFMinimap_vf30 sprites
 	// are published.
 	"interface/minimap/mm_sign_party.ddj",
 	"interface/minimap/mm_sign_partyarrow.ddj",
@@ -416,7 +416,7 @@ export const runtimeCifImageReferences = [
 	"effect/footstep_sand.ddj",
 	"effect/footstep_snow.ddj",
 	// EventGuide/GameGuide runtime-created controls and zero-sized DDJ statics.
-	// CIFQuestInfoGuide_OnCreate sub_62e090 assigns this blink pair at runtime;
+	// CIFQuestInfoGuide_OnCreate CIFQuestInfoGuide_OnCreate assigns this blink pair at runtime;
 	// the level-up arm creates the control only after the map reveal, so neither
 	// frame can rely on the static resinfo copy pass or a late browser request.
 	"icon/etc/qstinfoic_1.ddj",
@@ -433,7 +433,7 @@ export const runtimeCifImageReferences = [
 	"interface/guide/gd_scroll_line.ddj",
 	"interface/guide/gd_side_tab.ddj",
 	"interface/ifcommon/com_side_button.ddj",
-	// CIFVerticalScroll_OnCreate (sub_545190 @0x545206) assigns the scroll
+	// CIFVerticalScroll_OnCreate (CIFVerticalScroll_OnCreate @0x545206) assigns the scroll
 	// TRACK texture "interface\ifcommon\com_scroll_bar.ddj" to the bar window
 	// itself at runtime; the resinfo VSCROLL nodes carry an empty DDJ field
 	// (e.g. ifsystemmessage.txt GDR_SYETEM_MESSAGE_VSCROLL DDJ=""), so the
@@ -442,14 +442,14 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_scroll_bar.ddj",
 	// CIFMallNotifyWnd root texture is assigned by CGInterface after creation.
 	"interface/mall/mall_communicate.ddj",
-	// CIFInventory_RebuildCapacityAndGold (sub_59df10) creates the bag page
+	// CIFInventory_RebuildCapacityAndGold (CIFInventory_RebuildCapacityAndGold) creates the bag page
 	// tabs (com_tab_off/_on CIFSelectableArea triplet, empty normal) and marks
 	// beyond-capacity slots with pt_block - all runtime references from code.
 	"interface/ifcommon/com_tab_off.ddj",
 	"interface/ifcommon/com_tab_on.ddj",
 	"interface/pet/pt_block.ddj",
 	// CIFInventory pane chrome, authored in resinfo\ifinventory.txt (created by
-	// CIFInventory_OnCreate sub_59a080). The lattice/frame carry a DDJ *prefix*
+	// CIFInventory_OnCreate CIFInventory_OnCreate). The lattice/frame carry a DDJ *prefix*
 	// (multi-piece classes CIFLattice/CIFFrame), so the resinfo copy pass never
 	// sees the concrete piece names - list them as runtime references:
 	//   id 2 GDR_INVENTORY_LATTICE (com_lattice_ 36x36 cells) = socket grid,
@@ -495,15 +495,15 @@ export const runtimeCifImageReferences = [
 	// CIFHelperBubbleWindow (item tooltip, hud control 0x61) row ornaments,
 	// authored in resinfo\ifhelpbubblewindow.txt ids 11-13 (GDR_ITEMNAME_L/R
 	// 12x12 + GDR_ITEMNAME_DIA); AppendRow's indent mode shows/hides them at
-	// runtime (sub_679460). The chrome paths are code-owned by OnCreate
-	// (sub_6792e0), so no resinfo DDJ property can discover them for the
+	// runtime (CIFHelperBubbleWindow_AddMessageLine). The chrome paths are code-owned by OnCreate
+	// (CIFHelperBubbleWindow_OnCreate), so no resinfo DDJ property can discover them for the
 	// process-global sprite catalog.
 	"interface/ifcommon/com_itemsign.ddj",
 	"interface/ifcommon/com_diamond.ddj",
 	"interface/ifcommon/com_tooltip_corner.ddj",
 	"interface/ifcommon/com_tooltip_edge.ddj",
 	// CIFNotify (notice banners, hud controls 0x14/0x23/0x2a) chrome:
-	// OnCreate sub_6b32b0 loads com_notice_* as the class default (@0x6b3341
+	// OnCreate CIFNotify_OnCreate loads com_notice_* as the class default (@0x6b3341
 	// edge, @0x6b3363 edge2, @0x6b33e2 corner). CGInterface's HUD-create
 	// owner retains that family for 0x14, overrides 0x23 with com_warning_*
 	// (@0x68e841..0x68e922), and overrides 0x2a with com_quest_*
@@ -519,11 +519,11 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_quest_corner.ddj",
 	"interface/ifcommon/com_quest_edge.ddj",
 	"interface/ifcommon/com_quest_edge2.ddj",
-	// CIFMessageBox chrome (resinfo\ifmessagebox.txt / OnCreate sub_527990):
+	// CIFMessageBox chrome (resinfo\ifmessagebox.txt / OnCreate CIFMessageBox_OnCreate):
 	// the msgbox2_window_ 8-piece frame prefix bound at create, the authored
 	// StoreMoney (kind 3) boards, the com_button state family (Simple kind 9
 	// YES/NO + StoreMoney CONFIRM/CANCEL), and the drop-gold icon the
-	// inventory opener (sub_59a260) loads at runtime.
+	// inventory opener (CIFInventory_OpenShopSellQuantityDialog) loads at runtime.
 	"interface/messagebox/msgbox2_window_left_up.ddj",
 	"interface/messagebox/msgbox2_window_mid_up.ddj",
 	"interface/messagebox/msgbox2_window_right_up.ddj",
@@ -547,14 +547,14 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_button_disable.ddj",
 	// CIFGuild donate button (resinfo\ifguild.txt id 45
 	// GDR_GUILD_INFO_GUILD_POINT_BTN at {410,72}; shown IN-GUILD by the
-	// sub_5e3090 mode-1 leg, tooltip UIIT_MSG_GUILD_SP_GP_TOOLTIP): the
+	// CIFGuildMember_SetMode mode-1 leg, tooltip UIIT_MSG_GUILD_SP_GP_TOOLTIP): the
 	// three authored state arts (no _disable variant ships in the PK2).
 	"interface/ifcommon/com_donation_button.ddj",
 	"interface/ifcommon/com_donation_button_focus.ddj",
 	"interface/ifcommon/com_donation_button_press.ddj",
 	"icon/mini_gold_icon.ddj",
 	// CIFEquipment pane chrome (resinfo\ifequipment.txt / CIFEquipment_OnCreate
-	// sub_593a80): the 17 socket sprites are runtime DDJ loads (sub_4ba2c0 with
+	// CIFEquipment_CreateFromLayout): the 17 socket sprites are runtime DDJ loads (ResourceManager_GetTextureByPath with
 	// built path strings, +0x50c..+0x554), and the rotate/view buttons author
 	// per-state art the resinfo copy pass resolves from the button base name.
 	"interface/equipment/equip_slot_helm.ddj",
@@ -579,7 +579,7 @@ export const runtimeCifImageReferences = [
 	"interface/equipment/equip_slot_avata_button.ddj",
 	"interface/equipment/equip_slot_equipment_button.ddj",
 	// CIFAction pane chrome (resinfo\ifaction.txt / CIFAction::OnCreate
-	// sub_58b720): the four CIFSubFrame group boxes carry the DDJ *prefix*
+	// CIFAction_OnCreate): the four CIFSubFrame group boxes carry the DDJ *prefix*
 	// interface\frame\sframe_wnd_ (8-piece ring, 36px top band), so the copy
 	// pass never sees the concrete piece names. The pane's com_lattice_ /
 	// com_lattice_outline_ pieces are already listed above; com_bg_tile_b is
@@ -597,7 +597,7 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/bg_tile/com_bg_tile_b.ddj",
 	// CIFPlayerInfo pane chrome (resinfo\ifplayerinfo_trijob2.txt - the ONE
 	// resinfo the v1.150 binary references, string @0x00bdc514, loaded by
-	// CIFPlayerInfo::OnCreate sub_59fb70): another hand-mirrored pane, so its
+	// CIFPlayerInfo::OnCreate CIFPlayerInfo_OnCreate): another hand-mirrored pane, so its
 	// authored art rides this list. chr_window_mid_up/mid_down ship with the
 	// set but are only authored in the dead base ifplayerinfo.txt - carried
 	// for completeness of the chr_window family.
@@ -613,16 +613,16 @@ export const runtimeCifImageReferences = [
 	"interface/character/chr_window_mid_mid01.ddj",
 	"interface/character/chr_window_mid_mid02.ddj",
 	// GDR_PI_BTN_ADDHP/ADDMP authored art + the disabled texture OnCreate
-	// assigns at runtime (sub_59fb70 @0x59fdad/0x59fdda -> sub_540ec0).
+	// assigns at runtime (CIFPlayerInfo_OnCreate @0x59fdad/0x59fdda -> CIFButton_SetTexture390).
 	"interface/ifcommon/com_plus_button.ddj",
 	"interface/ifcommon/com_plus_button_disable.ddj",
-	// Job icons the OnUpdate job branch assigns at runtime (sub_59ffa0
+	// Job icons the OnUpdate job branch assigns at runtime (CIFPlayerInfo_UpdateStats
 	// @0x5a0972/0x5a0a17/0x5a0abc).
 	"interface/ifcommon/com_job_merchant.ddj",
 	"interface/ifcommon/com_job_thief.ddj",
 	"interface/ifcommon/com_job_hunter.ddj",
 	// CIFAction toolbar icons: runtime references written onto the buttons by
-	// CIFAction_SetupActionButton (sub_58bbc0 jump table - the four paths are
+	// CIFAction_SetupActionButton (CIFActionTabPanel_SetMotionStateIcon jump table - the four paths are
 	// the fold's own string constants). The wider 0xcec870 action-data record
 	// icons (emote row etc.) land with the bridge host's record seeding.
 	"icon/action/icon_cha_sit.ddj",
@@ -631,20 +631,20 @@ export const runtimeCifImageReferences = [
 	"icon/action/icon_cha_stand.ddj",
 	// CIFCommunity window chrome ('U' hotkey, ginterface id 23): the six
 	// CIFSelectableArea tabs are built in code by CIFCommunity::OnCreate
-	// (sub_5dfba0, texture strings @0x005dfdcf off / @0x005dfdfc on), so the
+	// (CIFCommunity_CreateControls, texture strings @0x005dfdcf off / @0x005dfdfc on), so the
 	// resinfo copy pass never sees them. The window frame (mframe_wnd_) and
 	// the sub-panel ring (equip_window_) are already listed above; the panel
 	// interiors are a hand-mirrored-frontier (communityPlane.ts).
 	"interface/ifcommon/com_long_tab_off.ddj",
 	"interface/ifcommon/com_long_tab_on.ddj",
 	// CIFFriend panel interior (community panel member +0x7dc, layout id 13;
-	// resinfo\iffriend.txt bound by CIFFriend::OnCreate sub_6054d0
+	// resinfo\iffriend.txt bound by CIFFriend::OnCreate CIFFriend_OnCreate
 	// @0x006054ed; hand-mirrored - hudLayerCommunityFriend.tsx).
 	// frameg01_wnd_ is the authored CIFFrame *prefix* (id 1) so the resinfo
 	// copy pass never sees the piece names; gil_bar02_deselect is the
-	// filler-row art the pad leg sub_604830 binds in code (@0x006048cd);
+	// filler-row art the pad leg CGWndBase_Str_interface_guild_gil_bar02_deselect_ddj_604830 binds in code (@0x006048cd);
 	// gil_subj_button04/09 are the FriendList header (id 21 static / id 22
-	// CIFButton with the sub_5419c0 _focus/_press state family). gil_shape /
+	// CIFButton with the CIFCloseButton_OnCreate _focus/_press state family). gil_shape /
 	// com_mid_button* / com_bg_tile_b / com_blacksquare_* / com_scroll_* are
 	// already listed.
 	"interface/frame/frameg01_wnd_left_up.ddj",
@@ -656,14 +656,14 @@ export const runtimeCifImageReferences = [
 	"interface/frame/frameg01_wnd_mid_down.ddj",
 	"interface/frame/frameg01_wnd_right_down.ddj",
 	"interface/guild/gil_bar02_deselect.ddj",
-	// CIFGuildMemberSlot selected-state board (the sub_5f3c60 swap
+	// CIFGuildMemberSlot selected-state board (the Fn_Str_interface_guild_gil_bar02_deselect_ddj swap
 	// @0x005f3c85: arg truthy binds _select, else _deselect) - the guild
 	// pane's kick route needs a selectable member row.
 	"interface/guild/gil_bar02_select.ddj",
 	// CIFFriendSlot contact icon (iffriendslot.txt id 10, authored default
-	// gil_contact_off; the sub_605880 swap binds _on for state byte 0
+	// gil_contact_off; the CIFGuildMemberSlot_SetContactIcon swap binds _on for state byte 0
 	// @0x006058b4 and _off for 1 @0x006058a0 - the friend roster plane's
-	// live rows). com_kindred_*16 (the slot race mark, sub_605940
+	// live rows). com_kindred_*16 (the slot race mark, CIFGuildMemberSlot_Populate
 	// @0x006059fa) is already listed with the party pane set.
 	"interface/guild/gil_contact_on.ddj",
 	"interface/guild/gil_contact_off.ddj",
@@ -681,12 +681,12 @@ export const runtimeCifImageReferences = [
 	// header art (ifguild.txt id 3), gil_bar01/gil_point the GP bar+gauge
 	// (ids 31/32), gil_shape01 + gil_subj_button01/02 (+ the 04 state family;
 	// base 04 already listed) the SortBtn header row, gil_subj_tab_off/_on
-	// the relations/warstate tabs the OnCreates build in code (sub_5fba50
-	// @0x005fbbdf / sub_619ec0 @0x0061a02b), gil_subj_button11/12 the
+	// the relations/warstate tabs the OnCreates build in code (CIFGuildRelations_OnCreate
+	// @0x005fbbdf / CIFWarState_OnCreate @0x0061a02b), gil_subj_button11/12 the
 	// ifguildwar.txt header buttons, stl_condition* the guild sort-condition
 	// button (ifguild.txt id 126), and com_bar01_* the CIFBarWnd 3-piece bar
-	// the alliance/hostile pad legs bind in code (sub_5fa2f0 @0x005fa390 /
-	// sub_5ff670 @0x005ff710) and the authored ifguildwar.txt slots carry.
+	// the alliance/hostile pad legs bind in code (CIFGuildRelations_InsertRow @0x005fa390 /
+	// CIFHostileGuild_CreateRows @0x005ff710) and the authored ifguildwar.txt slots carry.
 	"interface/guild/gil_windo01.ddj",
 	"interface/guild/gil_bar01.ddj",
 	"interface/guild/gil_point.ddj",
@@ -723,7 +723,7 @@ export const runtimeCifImageReferences = [
 	// (ifletter.txt, ifblocking.txt + ifwhisperblocking/ifchattingblocking
 	// satellites) now publish as layouts. Direct hand-mirror references remain
 	// cataloged here: gil_subj_button10 (+ the
-	// sub_5419c0 _focus/_press family; no _disable ships) is the letter
+	// CIFCloseButton_OnCreate _focus/_press family; no _disable ships) is the letter
 	// sender/time sort header pair (ifletter.txt ids 21/22, natural 156x24),
 	// com_question_button_focus the blocking lists' id-24 tooltip end shape
 	// (natural 16x24). frameg01_wnd_ / com_blacksquare_* / com_bg_tile_b/_e /
@@ -735,18 +735,18 @@ export const runtimeCifImageReferences = [
 	"interface/guild/gil_subj_button10_press.ddj",
 	"interface/ifcommon/com_question_button_focus.ddj",
 	// CIFPartyMatch window chrome ('E' hotkey, ginterface Section=PartyMatch
-	// id 130/0x82, REAL sub_69deb0 toggle; hand-mirrored window -
+	// id 130/0x82, REAL CGInterface_ToggleGuildWindow toggle; hand-mirrored window -
 	// partyMatchPlane.ts / hudLayerPartyMatch.tsx). The interior authoring is
-	// resinfo\ifpartymatch.txt (window OnCreate sub_637400 creates its
+	// resinfo\ifpartymatch.txt (window OnCreate CIFPartyMatch_OnCreate creates its
 	// Create/SearchInfo/SlotListButton/SlotList sections): the frameg_wnd_
 	// search-bar ring (id 5), the com_blacksquare_ stretch family (slot-list
 	// backdrop id 6, search edit boxes ids 30..32, and the CIFComboBox
-	// OnCreate sub_51dc80 closed-box backdrop @0x0051dd6f), com_bg_tile_e
+	// OnCreate CIFComboBox_OnCreate closed-box backdrop @0x0051dd6f), com_bg_tile_e
 	// edit-line tiles (ids 35..37), the gil_subj_button* header row + the
 	// gil_shape "L" dummy (SlotListButton section), the com_bar02_ subject
 	// bar (id 64), the spin-control arrows (CIFSpinButtonCtrl OnCreate
-	// sub_542a20 -> resinfo\ifspincontrol.txt) and the combo drop-arrow
-	// (sub_51dc80 @0x0051dd0d). mframe_wnd_ / int_window_ / com_bg_tile_b /
+	// CIFSpinButtonCtrl_OnCreate -> resinfo\ifspincontrol.txt) and the combo drop-arrow
+	// (CIFComboBox_OnCreate @0x0051dd0d). mframe_wnd_ / int_window_ / com_bg_tile_b /
 	// com_mid_button* / com_scroll_* / chat_arrow_* are already listed.
 	"interface/frame/frameg_wnd_left_up.ddj",
 	"interface/frame/frameg_wnd_mid_up.ddj",
@@ -789,41 +789,41 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_qst_downarrow_button_focus.ddj",
 	"interface/ifcommon/com_qst_downarrow_button_press.ddj",
 	// CIFMentorMatch window chrome (the Academy pane's Matching button,
-	// ginterface Section=MentorMatch id 153/0x99, REAL sub_69e150 toggle;
+	// ginterface Section=MentorMatch id 153/0x99, REAL CGInterface_ToggleWindow99 toggle;
 	// hand-mirrored window - mentorMatchPlane.ts / hudLayerMentorMatch.tsx).
 	// The interior authoring is resinfo\ifmentormatch.txt (window OnCreate
-	// sub_672ed0 creates Create/SearchInfo/SlotListButton/SlotList): every
+	// CIFMentorMatch_OnCreate creates Create/SearchInfo/SlotListButton/SlotList): every
 	// piece is shared with the party-match set directly above (frameg_wnd_,
 	// com_blacksquare_*, com_bg_tile_b/_e, com_mid_button* incl. the
-	// sub_671a50 disabled state via the _focus/_press/_disable suffix
+	// CIFMentorMatch_RefreshButtonState disabled state via the _focus/_press/_disable suffix
 	// expansion, gil_subj_button03/05/06/08, gil_shape, com_bar02_*, the
 	// spin arrows, the combo drop-arrow and com_scroll_*/chat_arrow_*) -
 	// zero new files; this note records the dependency.
 	// CIFCompositeItemWnd window (ginterface Section=CompositeItem id 36/0x24,
-	// REAL sub_69f0f0 toggle; compositeItemPlane.ts / hudLayerCompositeItem
+	// REAL CGInterface_ShowCompositeItemWnd toggle; compositeItemPlane.ts / hudLayerCompositeItem
 	// .tsx). The interior authoring is resinfo\ifcompositeitemwnd.txt (window
-	// OnCreate sub_6af680 creates "Create": the int_window_ ring and
+	// OnCreate CIFCompositeItemWnd_OnCreate creates "Create": the int_window_ ring and
 	// com_bg_tile_b floor are already listed above). The sys_button family is
-	// the sub_6af780 option-button skin, assigned in CODE (@0x006af8f7, with
-	// the sub_5419c0 _focus/_press/_disable suffix expansion) so the resinfo
+	// the CIFCompositeItemWnd_Populate option-button skin, assigned in CODE (@0x006af8f7, with
+	// the CIFCloseButton_OnCreate _focus/_press/_disable suffix expansion) so the resinfo
 	// copy pass never sees it - listed as runtime references.
 	"interface/system/sys_button.ddj",
 	"interface/system/sys_button_focus.ddj",
 	"interface/system/sys_button_press.ddj",
 	"interface/system/sys_button_disable.ddj",
 	// CIFCOS window page interiors (ginterface Section=COSWnd id 120/0x78,
-	// REAL sub_69d920 toggle; cosWindowPlane.ts / hudLayerCosWindow.tsx).
+	// REAL CGInterface_SetCosInventoryVisible toggle; cosWindowPlane.ts / hudLayerCosWindow.tsx).
 	// The pages attach resinfo\ifcosinfo.txt / ifcosinventory.txt /
-	// ifcossetup.txt in their OnCreates (sub_6a5750 / sub_6a8c60 /
-	// sub_6a9a10). Those files now publish; the explicit runtime list continues
+	// ifcossetup.txt in their OnCreates (CIFCOSInfo_OnCreate / CIFCos_InitializeCommandSlots /
+	// CIFCOSSetup_vf24). Those files now publish; the explicit runtime list continues
 	// to serve the hand-mirrored plane: the info page's pt_* statics and the three CIFGauge
 	// fill strips (ids 30..32/35..37/50), the com_mall_button rename button
-	// (id 26, sub_5419c0 _focus/_press/_disable state family), the trade-pet
+	// (id 26, CIFCloseButton_OnCreate _focus/_press/_disable state family), the trade-pet
 	// com_star level markers (ifcosinventory TradeInfo ids 26..30), and the
 	// ifcossetup opt_video_tab row headers (ids 10/12/14). The radio-unit
-	// skins (com_radiobutton_off/_on, sub_5424c0 @0x54262b/@0x542657), the
+	// skins (com_radiobutton_off/_on, CIFRadioButton_InitUnits @0x54262b/@0x542657), the
 	// checkbox pair (com_checkbutton_off/_on), the spin-control chrome
-	// (com_left/right_arrow + the sub_542a20 str_slot_02 backdrop @0x542ac2),
+	// (com_left/right_arrow + the CIFSpinButtonCtrl_OnCreate str_slot_02 backdrop @0x542ac2),
 	// the lattice/outline pieces, opt_inner_box_/int_window_/frameg_wnd_
 	// rings and com_bg_tile_b/_e already ship above - only str_slot_02 is
 	// new from that set.
@@ -840,8 +840,8 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_star.ddj",
 	"interface/option/opt_video_tab.ddj",
 	"interface/store/str_slot_02.ddj",
-	// The COS mini-list strip (durable control 0x27; REAL sub_6aa290 fill /
-	// sub_6a39e0 command build / sub_6a1be0 per-kind icon map - all runtime
+	// The COS mini-list strip (durable control 0x27; REAL CIFCOSStatus_BindCompanion fill /
+	// CIFCOSCommand_AddCommandButton command build / CosCommand_ResolveIconPathByKind per-kind icon map - all runtime
 	// CODE references the resinfo pass never sees; ifcosstatus/ifcoscommand
 	// author EMPTY DDJ fields for these slots). Ships the am_* row chrome,
 	// the row-select outlines and the full cos_cmd_* icon family (base +
@@ -891,16 +891,16 @@ export const runtimeCifImageReferences = [
 	"icon/action/cos_cmd_unsummon.ddj",
 	"icon/action/cos_cmd_unsummon_disable.ddj",
 	// CIFSkill pane chrome (hand-mirrored pane; popup tab 0x49): the pane
-	// resinfo resinfo\ifskill.txt is loaded by CIFSkill::OnCreate sub_58de80
-	// (@0x0058de9e) and its satellites by CIFSkillBoard::OnCreate sub_5840c0
-	// (ifskillboard.txt @0x005840db), CIFSkillMastery sub_5874a0
+	// resinfo resinfo\ifskill.txt is loaded by CIFSkill::OnCreate CIFSkill_OnCreate
+	// (@0x0058de9e) and its satellites by CIFSkillBoard::OnCreate CIFSkillBoard_OnCreate
+	// (ifskillboard.txt @0x005840db), CIFSkillMastery CIFSkillMastery_OnCreate
 	// (ifskill_mastery.txt @0x005874b2) and CIFSkillGroup (ifskill_group.txt
-	// @0x00585bc2). The board fill sub_585370 assigns skl_mastery_bar per
-	// group row (@0x00585475), the empty-column filler sub_586b40 assigns
-	// skl_mastery_nothing (@0x00586e11), the mastery tab flip sub_587500
+	// @0x00585bc2). The board fill CIFSkillBoard_CreateMasteryRows assigns skl_mastery_bar per
+	// group row (@0x00585475), the empty-column filler CIFSkillMasteryRow_CreateSkillCells assigns
+	// skl_mastery_nothing (@0x00586e11), the mastery tab flip CIFSkillMastery_SetSelectedAppearance
 	// swaps skl_mastery_tab_on/_off (@0x0058752b/0x0058754b), and the frame /
 	// board rings (equip_window_ / int_window_) plus com_bg_tile_d and
-	// com_tab_off/_on (the runtime tab-group check-tabs, sub_592030
+	// com_tab_off/_on (the runtime tab-group check-tabs, CIFSkill_RebuildMasteryPages
 	// @0x00592512/0x0059253c) are already listed above.
 	"interface/skill/skl_mastery_tab_off.ddj",
 	"interface/skill/skl_mastery_tab_on.ddj",
@@ -911,11 +911,11 @@ export const runtimeCifImageReferences = [
 	"interface/skill/skl_mastery_levelup_press.ddj",
 	"interface/skill/skl_mastery_nothing.ddj",
 	"interface/skill/skl_wnd_box.ddj",
-	// CIFSkillSlot art: the bind's not-learnable fallback icon (sub_589050
+	// CIFSkillSlot art: the bind's not-learnable fallback icon (CIFSkillSlot_BindSkill
 	// @0x00589197 "interface\skill\skl_mastery_disable.ddj"), the level-tab
 	// board (ifskill_slot.txt id 3 skl_level_tab.ddj) and the runtime
 	// "interface\skill\skl_lv_number_%d.ddj" digit textures the level-digit
-	// refresh formats (sub_588620 @0x005886f3/0x0058873f).
+	// refresh formats (CIFSkillSlot_UpdateLevelDigits @0x005886f3/0x0058873f).
 	"interface/skill/skl_mastery_disable.ddj",
 	"interface/skill/skl_level_tab.ddj",
 	"interface/skill/skl_lv_number_0.ddj",
@@ -929,15 +929,15 @@ export const runtimeCifImageReferences = [
 	"interface/skill/skl_lv_number_8.ddj",
 	"interface/skill/skl_lv_number_9.ddj",
 	// The per-slot add-button arts (ifskill_slot.txt id 2 GDR_STMS_BTN_LEVELUP;
-	// sub_588af0 picks skl_button_add @0x00588f83 for a state-8 learn,
+	// CIFSkillSlot_UpdateLevelUpButton picks skl_button_add @0x00588f83 for a state-8 learn,
 	// skl_button_up @0x00588e68 for a state-0 next-level train and
 	// skl_level_max @0x00588c6b for a maxed group).
 	"interface/skill/skl_button_add.ddj",
 	"interface/skill/skl_button_up.ddj",
 	"interface/skill/skl_level_max.ddj",
 	// CIFSkillPracticeBox chrome (resinfo\ifskillpracticebox.txt; the msgbox2
-	// learn-confirm box sub_682d10 kind 0 creates over runtime class
-	// data_ce9f50 and sub_5de040 configures): the authored msgbox_blackbox /
+	// learn-confirm box CGameInterface_CreateSkillPracticeBox kind 0 creates over runtime class
+	// data_ce9f50 and CIFSkillPracticeBox_ConfigureRecord configures): the authored msgbox_blackbox /
 	// npc_mastery_namebox statics and the com_square_ 6-piece CIFStretchWnd
 	// description ring. The msgbox2_window_ ring, com_bg_tile_b,
 	// msgbox_itemwindow and the com_button family already ship above.
@@ -954,12 +954,12 @@ export const runtimeCifImageReferences = [
 	// shipped skillmasterydata.txt and skillgroup.txt tables, covering China,
 	// Europe, and future data rows without a race-specific allowlist.
 	// CIFParty pane chrome (hand-mirrored pane; popup tab 0x48): the pane
-	// resinfo resinfo\ifparty.txt is loaded by CIFParty::OnCreate sub_5b8ce0
-	// (@0x005b8d21) and the slot rows by CIFPartySlot::OnCreate sub_5b9900
+	// resinfo resinfo\ifparty.txt is loaded by CIFParty::OnCreate CIFParty_vf24
+	// (@0x005b8d21) and the slot rows by CIFPartySlot::OnCreate CIFPartySlot_vf24
 	// (ifpartyslot.txt @0x005b9935). pt_face is the OnCreate picture texture
 	// (@0x005b8e80 pane / @0x005b99f8 slot), pt_hp_disable/pt_mp_disable are
-	// the sub_5b8a20 no-party gauge swaps (@0x005b8c2d/0x005b8c64), the
-	// kindred 16px marks are the sub_81d5b0 race-byte pick (@0x005b8533 /
+	// the CIFParty_ResetControls no-party gauge swaps (@0x005b8c2d/0x005b8c64), the
+	// kindred 16px marks are the CharKindredIcon_GetPath race-byte pick (@0x005b8533 /
 	// @0x005b9502; both races carried), and com_pt_leader is the authored
 	// leader crown (ifparty.txt id 14). sframe_wnd_ / com_bg_tile_b /
 	// com_diamond / com_button* are already listed above.
@@ -990,13 +990,13 @@ export const runtimeCifImageReferences = [
 	"interface/party/pt_button_press.ddj",
 	"interface/party/pt_button_disable.ddj",
 	// CIFPartyMatchSlot type-mark art (ifpartymatchslot.txt child 11, the
-	// sub_63d500 flag0b-bit0 pick @0x0063d97a/@0x0063d9c9): pt_eachone =
+	// CIFPartyMatch_ApplyRecordToSlot flag0b-bit0 pick @0x0063d97a/@0x0063d9c9): pt_eachone =
 	// each-one distribution (/4), pt_association = union party (/8).
 	"interface/party/pt_eachone.ddj",
 	"interface/party/pt_association.ddj",
 	// CIFApprenticeShip pane chrome (hand-mirrored pane; popup tab 0x4d): the
 	// pane resinfo resinfo\ifapprenticeship.txt is loaded by
-	// CIFApprenticeShip::OnCreate sub_5c5b60 (@0x005c5b96, plus NotifySubBox)
+	// CIFApprenticeShip::OnCreate CIFApprenticeShip_OnCreate (@0x005c5b96, plus NotifySubBox)
 	// and the slot rows by CIFApprenticeShipSlot::OnCreate (ifapprenticeshipslot
 	// .txt @0x005c79b5). pt_slot_co/pt_slot_re are the authored sub-mentor/
 	// apprentice row art (ifapprenticeship.txt ids 30..36); pt_no_face is the
@@ -1028,8 +1028,8 @@ export const runtimeCifImageReferences = [
 	"interface/stall/stl_edit_button_press.ddj",
 	"interface/stall/stl_edit_button_disable.ddj",
 	// CIFGuildNotifyWrite window chrome (resinfo\ifguildnotifywrite.txt,
-	// opened by the Academy pane's notify-edit route sub_5c50b0 ->
-	// sub_69cf00(gi, 1, 2)): frame_msg_ is the subject-edit CIFFrame ring
+	// opened by the Academy pane's notify-edit route CIFApprenticeShip_OnNoticeEditBtn ->
+	// CGInterface_SetCommunityNoticeEditorVisible(gi, 1, 2)): frame_msg_ is the subject-edit CIFFrame ring
 	// (id 3, 4x4 pieces). msgbox2_window_ / com_bg_tile_b/_e /
 	// com_blacksquare_* / com_button* are already listed; the NotifyContents
 	// window (ifguildnotifycontents.txt) rides int_window_ / com_scroll_*,
@@ -1043,14 +1043,14 @@ export const runtimeCifImageReferences = [
 	"interface/frame/frame_msg_right_side.ddj",
 	"interface/frame/frame_msg_right_down.ddj",
 	// CIFQuest pane chrome (hand-mirrored pane; popup tab 0x4c): the pane
-	// resinfo resinfo\ifquest.txt is loaded by CIFQuest::OnCreate sub_5bf4b0
-	// (@0x005bf4c2); the 12-row blank fill sub_5c0ff0 spawns base CIFQuestSlot
+	// resinfo resinfo\ifquest.txt is loaded by CIFQuest::OnCreate CIFQuest_OnCreate
+	// (@0x005bf4c2); the 12-row blank fill CIFQuest_Calls_CGWndBase_CreateChildControlInstance spawns base CIFQuestSlot
 	// rows (ifquestslot.txt @0x005c25d2, qst_blankwindo art) and the live-quest
 	// rows are CIFQuestSlotMain (ifquestslotmain.txt @0x005c3773:
 	// qst_subjectwindo base, qst_colorbar_blue authored title bar,
 	// com_qst_rightarrow_button dropdown, qst_contentview_button, and the
 	// qst_subjectwindo_select tracked bar). The green/red/lightgreen colorbar
-	// swaps are the sub_5c3f90 record+0x09 picks (@0x005c4018/0x005c4040/
+	// swaps are the CIFQuest_ShowQuestContent record+0x09 picks (@0x005c4018/0x005c4040/
 	// 0x005c4068). com_bg_tile_c is the authored separator/divider tile art
 	// (ifquest.txt ids 5, 10..20). sframe_wnd_ / com_scroll_bar are already
 	// listed above.
@@ -1060,7 +1060,7 @@ export const runtimeCifImageReferences = [
 	"interface/quest/qst_subjectwindo.ddj",
 	"interface/quest/qst_subjectwindo_select.ddj",
 	"interface/quest/qst_contentview_button.ddj",
-	// sub_5c3840 content-button level-delta swaps (@0x005c389d: player 10+
+	// CIFQuest_UpdateContentViewButton content-button level-delta swaps (@0x005c389d: player 10+
 	// levels above the quest = blue, below the quest level = red).
 	"interface/quest/qst_contentviewblue_button.ddj",
 	"interface/quest/qst_contentviewred_button.ddj",
@@ -1068,15 +1068,15 @@ export const runtimeCifImageReferences = [
 	"interface/quest/qst_colorbar_green.ddj",
 	"interface/quest/qst_colorbar_red.ddj",
 	"interface/quest/qst_colorbar_lightgreen.ddj",
-	// CIFQuestSlotSub detail expansion (sub_5c44c0, ifquestslotsub.txt id 1
+	// CIFQuestSlotSub detail expansion (CIFQuestSlotSub_ExpandDetail, ifquestslotsub.txt id 1
 	// GDR_QUESTSLOT_SUB_WND): the qst_detailwindo row base. The dropdown
 	// button's DROPPED art is com_qst_downarrow_button (CIFQuestSlotMain
-	// OnCreate sub_5c3760 @0x005c3816 stores it at button+0x3d4; the
-	// CIFDropDownButton state swap sub_541c40 picks it when +0x428 is set).
+	// OnCreate CIFQuestSlotMain_OnCreate @0x005c3816 stores it at button+0x3d4; the
+	// CIFDropDownButton state swap CIFDropDownButton_SetOpenState picks it when +0x428 is set).
 	"interface/quest/qst_detailwindo.ddj",
 	"interface/ifcommon/com_qst_downarrow_button.ddj",
 	// CIFQuestReward (the content-view popup, resinfo\ifquestreward.txt +
-	// OnCreate sub_5c20b0): the authored qst_subwindow_title deco (id 12) and
+	// OnCreate CIFQuestReward_OnCreate): the authored qst_subwindow_title deco (id 12) and
 	// the runtime-assigned qst_scroll_line scroll track (@0x005c2240 onto the
 	// id-15 CIFVerticalScroll; the id-14 SCROLLBOARD static authors the same
 	// art). gd_paper / gd_scroll_* / sys_button* are already listed above.
@@ -1084,7 +1084,7 @@ export const runtimeCifImageReferences = [
 	"interface/quest/qst_scroll_line.ddj",
 	// Wire-item icons (RefItemData icon column under the native icon\ root) +
 	// the icon_default fallback (CIFSlotWithHelp_SetSpritePathWithFallback
-	// sub_55b450). The mission starter roster derives from the character's
+	// CIFSlotWithHelp_SetSpritePathWithFallback). The mission starter roster derives from the character's
 	// visual loadout (weapon kind + CH clothes garment pieces), so carry every
 	// CH starter weapon and both gendered clothes-01 piece sets.
 	"icon/icon_default.ddj",
@@ -1165,11 +1165,11 @@ export const runtimeCifImageReferences = [
 	"interface/option/opt_inner_box_right_down.ddj",
 	"interface/ifcommon/com_radiobutton_on.ddj",
 	// CIFOption page-interior slot rows, all assigned from OnCreate code:
-	// CIFGameOptionSlot rows take opt_key02 (sub_5cb7f0 @0x005cb99b),
-	// CIFKeyOptionSlot rows take opt_key (sub_5cc8c0 @0x005ccaa8) with the
-	// opt_key_select overlay under the selected slot's key cell (sub_5c9020
+	// CIFGameOptionSlot rows take opt_key02 (CIFOption_Game_OnCreate @0x005cb99b),
+	// CIFKeyOptionSlot rows take opt_key (CIFFrame_Uses_UIIT_STT_USE_WHEEL_TO_CHANGE_SIGHT @0x005ccaa8) with the
+	// opt_key_select overlay under the selected slot's key cell (CIFOptionKeySlot_SetSelected
 	// @0x005c904d), and CIFVideoOptionSlot rows take opt_video_control_02
-	// (sub_5ce410 @0x005ce9c5). The game-slot checkbox pair rides the
+	// (CIFOption_Video_OnCreate @0x005ce9c5). The game-slot checkbox pair rides the
 	// authored ifgameoptionslot.txt com_checkbutton_off + its _on sibling.
 	// The three slot resinfos are generated layouts; these row backgrounds
 	// remain explicit because their parent OnCreate code assigns them.
@@ -1193,7 +1193,7 @@ export const runtimeCifImageReferences = [
 	"icon/etc/mark_defensive2.ddj",
 	"icon/etc/mark_defensive3.ddj",
 	// Fortress-war EMBLEM sprites (a different lane from the mark_* status
-	// icons above): sub_914ae0 walks the CSiegeFortressData records
+	// icons above): CSkillEffectManager_InitializeDamageGlyphsAndEffects walks the CSiegeFortressData records
 	// (GlobalDataManager map488 off 0xcec870, stride 0xb8) parsed from
 	// textdata\siegefortress.txt, DDJ_SpriteCreate's each record's CrestPath128
 	// (record+0x9c, rooted under icon\) and inserts the sprite into the
@@ -1212,7 +1212,7 @@ export const runtimeCifImageReferences = [
 	"icon/etc/fort_hotan.ddj",
 	"icon/etc/fort_bijeokdan.ddj"
 ];
-// CPSCharacterCreate sub_730d00 @ 0x00730d00 swaps GDR_BTN_ZOOM art at runtime
+// CPSCharacterCreate CPSCharacterCreate_SetZoomButtonArt @ 0x00730d00 swaps GDR_BTN_ZOOM art at runtime
 // (zoomin.ddj on create, zoomout.ddj after first click). Layout only references zoomin.
 /*
 ================
@@ -1245,7 +1245,7 @@ export const runtimeCifButtonImageReferences = [
 	"interface/outer/zoomout.ddj",
 	"interface/mall/mall_communicate_direct.ddj",
 	"interface/mall/mall_communicate_close.ddj",
-	// CIFCloseButton (sub_5419c0 OnCreate): the frame chrome close button -
+	// CIFCloseButton (CIFCloseButton_OnCreate OnCreate): the frame chrome close button -
 	// created programmatically for every style-0x40 frame window, so no
 	// resinfo references it; copyButtonStateImages probes every state sibling
 	// SetDdjStateTexturesFromPath derives. This media ships _focus/_press but

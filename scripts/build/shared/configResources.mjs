@@ -26,7 +26,7 @@ export async function buildConfigResources() {
 	await writeJson( path.join( publicRoot, "assets", "config", "option.json" ), optionConfig );
 	await writeJson( path.join( publicRoot, "assets", "config", "cameradata.json" ), missionCameraData );
 
-	// Native sub_68d9c0 / CGInterface_LoadCommandBindings reads config\command.txt
+	// Native CGInterface_LoadCommandBindings / CGInterface_LoadCommandBindings reads config\command.txt
 	// through the GFXFileManager; the browser twin fetches the same bytes as a
 	// public asset. Copied raw (the WIP twin performs the native token-stream
 	// parse itself, comments and all).
@@ -67,8 +67,8 @@ async function buildClientOptionConfig() {
 		introBgmPublicPath: introBgm ? resolveMusicPublicPath( introBgm ) : undefined,
 		titleScenes,
 		nativeOptions: {
-			// sub_5cb550 initializes the CIFOption_Game control at +0x20 to 1; sub_5cb180 copies
-			// that value into sub_4b3890()+0xA, and sub_722e20 gates StartEuropIntroScript on it.
+			// CIFOption_Hotkey_OnDefault initializes the CIFOption_Game control at +0x20 to 1; CIFOption_Hotkey_OnApply copies
+			// that value into CGame_GetGraphicsConfigStruct()+0xA, and Client_LoadGameDataTables gates StartEuropIntroScript on it.
 			europeIntroScript: true
 		}
 	};

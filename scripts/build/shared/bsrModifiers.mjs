@@ -9,7 +9,7 @@ function skipCountedString( buf, p ) {
 }
 
 // One IModData payload, dispatched on the u32 typeId exactly as the native factory
-// ModData_CreateByTypeId (sub_a75980) does: hi16 = class, lo16 = subclass.
+// ModData_CreateByTypeId (ModData_CreateByTypeId) does: hi16 = class, lo16 = subclass.
 function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 	const baseOffset = p;
 	if ( p + 28 > buf.length ) throw new Error( "truncated IModData base" );
@@ -19,7 +19,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 	});
 	p += 28; // IModData_LoadBase: 6x u32 + 4x u8
 	const hi = typeId >>> 16, lo = typeId & 0xffff;
-	if ( hi === 0 && lo === 0 ) { // ModDataMtrl (sub_acb7e0)
+	if ( hi === 0 && lo === 0 ) { // ModDataMtrl (ModDataMtrl_Load)
 		const field24 = buf.readUInt32LE( p ), flags = buf.readUInt32LE( p + 4 ), mode = buf.readUInt32LE( p + 8 );
 		p += 12;
 		const count = buf.readUInt32LE( p );
@@ -60,7 +60,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 			bytes60,
 			field70
 		} );
-	} else if ( hi === 1 && lo === 0 ) { // ModDataTexAni (sub_ac58b0)
+	} else if ( hi === 1 && lo === 0 ) { // ModDataTexAni (ModDataTexAni_ReadBody)
 		if ( p + 84 > buf.length ) throw Error( "Truncated texture animation" );
 		modifiers.textureModifiers.push( {
 			...setMeta,
@@ -73,7 +73,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 		p += 4;
 		p = skipCountedString( buf, p );
 		p += 4;
-	} else if ( hi === 3 && lo === 0 ) { // ModDataParticle (sub_acd4d0)
+	} else if ( hi === 3 && lo === 0 ) { // ModDataParticle (CModDataParticle_Load_ACD4D0)
 		const n = buf.readUInt32LE( p );
 		p += 4;
 		const entries = [];
@@ -115,7 +115,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 			baseBytes: Array.from( buf.subarray( baseOffset + 24, baseOffset + 28 ) ),
 			entries
 		} );
-	} else if ( hi === 4 && lo === 0 ) { // ModDataEnvMap (sub_ac57f0)
+	} else if ( hi === 4 && lo === 0 ) { // ModDataEnvMap (ModDataEnvMap_Load)
 		if ( p + 16 > buf.length ) throw Error( "Truncated environment-map modifier" );
 		modifiers.environmentModifiers.push( {
 			...setMeta,
@@ -123,7 +123,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 			words24: Array.from( { length: 4 }, ( _, i ) => buf.readUInt32LE( p + i * 4 ) )
 		} );
 		p += 16;
-	} else if ( hi === 4 && lo === 1 ) { // ModDataBumpEnv (sub_acbe10)
+	} else if ( hi === 4 && lo === 1 ) { // ModDataBumpEnv (ModDataEnvMapAni_Load)
 		p += 16 + 24;
 		const n = buf.readUInt32LE( p );
 		p += 4;
@@ -132,12 +132,12 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 			p += 1;
 			if ( flag === 1 ) p = skipCountedString( buf, p );
 		}
-	} else if ( hi === 5 && lo === 0 ) { // ModDataSound (sub_acd050)
+	} else if ( hi === 5 && lo === 0 ) { // ModDataSound (ModDataSound_Load)
 		const n = buf.readUInt32LE( p );
 		p += 4;
 		const entries = [];
 		if ( n > 0 ) {
-			p += 44; // ModDataSound_ReadParams (sub_a2bab0)
+			p += 44; // ModDataSound_ReadParams (ModDataSound_ReadParams)
 			for ( let i = 0; i < n; i += 1 ) {
 				const animationName = readStr( buf, p );
 				p = animationName.nextOffset;
@@ -173,7 +173,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 	return p;
 }
 
-// CModDataSet_Load (sub_a75b60): u32, u32, counted name, u32 nMods, mods.
+// CModDataSet_Load (CModDataSet_Load): u32, u32, counted name, u32 nMods, mods.
 function skipModDataSet( buf, p, modifiers ) {
 	const kind = buf.readUInt32LE( p );
 	p += 4;
@@ -202,7 +202,7 @@ function skipModDataSet( buf, p, modifiers ) {
 	return p;
 }
 
-// CModDataSetList_Load (sub_a75c60): u32 countA entries, u32 countB entries,
+// CModDataSetList_Load (CResObject_LoadFromArchive_Then_CJArchiveFm_RefillBuffer): u32 countA entries, u32 countB entries,
 // both lists use the same CModDataSet_Load record shape.
 export function parseModDataSection( buf, off ) {
 	let p = off;

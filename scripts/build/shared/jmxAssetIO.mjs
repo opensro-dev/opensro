@@ -65,7 +65,7 @@ export async function loadMaterialTextures( materialPaths, options = {} ) {
 					// Native D3D ALPHAREF (BMT float, 0..255 scale; 0 = discard nothing).
 					alphaRef: mat.alphaRef ?? 0,
 					// Native CPrimMtrl colours. Character-create CRT materials feed ambient/diffuse
-					// directly into sub_a91970 (c10/c11), so exporters must preserve them instead of
+					// directly into RenderState_ApplyTintedMaterialColor (c10/c11), so exporters must preserve them instead of
 					// treating every textured glTF material as white.
 					colors: mat.colors
 				} );

@@ -3,11 +3,11 @@
 
 characterInfo.mjs - #section characterInfo parsing and RefObj inheritance
 
-Native sub_920020 #section characterInfo. This is one record, not separate
-sound and mount catalogs: sub_856480 binds it at CICharactor+0x710;
+Native CSkillEffectManager_LoadSkillEffectTextData #section characterInfo. This is one record, not separate
+sound and mount catalogs: CICharactor_AttachVisualModel binds it at CICharactor+0x710;
 ResourceTypeName feeds the sound callbacks, Ride Type lands at +0x18,
-the optional second BSR lands at +0x24 for sub_861b00's CICRide branch,
-and column 5 lands at +0x28 for sub_8e64f0's death model swap.
+the optional second BSR lands at +0x24 for CICMonster_DeserializeSpawnPacket's CICRide branch,
+and column 5 lands at +0x28 for CICharactor_Action_KnockdownDie's death model swap.
 
 ===========================================================================
 */
@@ -21,7 +21,7 @@ import { splitTextDataRow } from "./textDataIo.mjs";
 ================
 expandCharacterInfoCodenames
 
-Mirror SkillEffectCharacterInfo_ParseRow (sub_91b830): a characterInfo key
+Mirror SkillEffectCharacterInfo_ParseRow (CharacterInfo_ParseAndRegisterRow): a characterInfo key
 whose final seven characters are NNN~NNN denotes an inclusive family. The
 native loader registers one action-effect context for every expanded RefObj
 name. Keep this expansion at the data boundary; consumers must never need to
