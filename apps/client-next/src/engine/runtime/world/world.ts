@@ -454,7 +454,14 @@ export function createWorldStream(
 		}
 		terrain.poll();
 		if ( outdoor && transaction.phase === "loading" ) {
-			terrain.request( outdoor.regions );
+			// No pose means the player has left this scene (the dock, the
+			// title): the retained scene takes what already landed but
+			// issues no new work. The incoming scene's stage may only ask
+			// for an asset slot at its own step, ahead of this one in the
+			// frame, and a stream that refills behind it every frame
+			// leaves it none until the whole queue drains (#1975). The
+			// stream resumes with the next world pose.
+			if ( pose ) terrain.request( outdoor.regions );
 			if ( waiting && terrain.ready( outdoor.regions ) ) {
 				const result = waiting;
 				waiting = null;
@@ -462,13 +469,15 @@ export function createWorldStream(
 			}
 		}
 		if ( future && !failedFuture && future.anchor === terrain.anchorFor( future.region ) ) {
-			terrain.request( future.outdoor.regions, 1 );
+			if ( pose ) terrain.request( future.outdoor.regions, 1 );
 		}
 		if ( transaction.phase === "loading" || transaction.phase === "ready" ) {
 			const neededTextures = renderer.neededWorldTextures();
-			for ( const path of neededTextures ) {
-				if ( jobs.size >= 3 || assets.available() === 0 ) break;
-				if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
+			if ( pose ) {
+				for ( const path of neededTextures ) {
+					if ( jobs.size >= 3 || assets.available() === 0 ) break;
+					if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
+				}
 			}
 			const stats = renderer.worldStats();
 			if (
