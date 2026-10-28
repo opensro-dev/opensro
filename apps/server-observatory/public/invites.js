@@ -2,10 +2,13 @@
 ===========================================================================
 invites.js - the Invite keys page: make, find and revoke the website's keys
 
-Keys are shown in full only in the answer that made them (the website
-stores hashes), so the made-keys panel is the one chance to copy them. A
+The website stores hashes, so a key's code is shown in full in the
+answer that made it (the made-keys panel). A console-made, non-member
+key also keeps its code encrypted on the website, so its row can Reveal
+it again - every reveal is audited there under the operator's name. A
 key for a Discord member is a grant the member collects from the bot, so
-it shows no code at all (invite-made.js).
+it shows no code at all (invite-made.js), and neither does a key made
+before codes were kept.
 Revoking takes two clicks on the same button. Nothing here sees the
 console's secret: the page talks to /api/invites on this console.
 ===========================================================================
@@ -46,6 +49,44 @@ function setStatus( text ) {
 	byID( "status" ).textContent = text;
 }
 
+const STATUS_FILTERS = [
+	[ "", "All" ],
+	[ "unused", "Unused" ],
+	[ "partial", "Partly used" ],
+	[ "used", "Used" ],
+	[ "revoked", "Revoked" ],
+	[ "expired", "Expired" ]
+];
+
+// The rows on screen and the counts the last load answered with. Revealed
+// codes live only here and are dropped on every load: re-revealing is one
+// click, and a code never lingers on screen across refreshes.
+let current = [];
+let currentCounts = null;
+const revealed = new Map();
+
+/*
+================
+keyCellHTML
+
+The key's cell: its last four by default, the whole code while revealed,
+and the buttons a kept code earns. A member's key and a key made before
+codes were kept have no code to offer.
+================
+*/
+function keyCellHTML( key ) {
+	const code = revealed.get( key.id );
+	const shown = code ? `<code class="invites-code">${escape( code )}</code>` : `…${escape( key.hint )}`;
+	if ( !key.revealable ) {
+		const why = key.discordUserId ? "via the bot" : "code not kept";
+		return `${shown} <span class="muted">(${why})</span>`;
+	}
+	const toggle = code ? "Hide" : "Reveal";
+	return `${shown}
+		<button class="button invites-reveal" type="button" data-id="${escape( key.id )}">${toggle}</button>
+		<button class="button invites-copy" type="button" data-id="${escape( key.id )}">Copy</button>`;
+}
+
 /*
 ================
 rowHTML
@@ -56,7 +97,7 @@ function rowHTML( key ) {
 		`<button class="button invites-revoke" type="button" data-id="${escape( key.id )}">Revoke</button>` :
 		"";
 	return `<tr data-state="${escape( key.status )}">
-		<td class="invites-hint">…${escape( key.hint )}</td>
+		<td class="invites-hint">${keyCellHTML( key )}</td>
 		<td>${escape( key.note ) || NONE}</td>
 		<td><span class="tag invites-tag" data-state="${escape( key.status )}">${
 		STATUS_TAG[key.status] ?? escape( key.status )
@@ -71,24 +112,139 @@ function rowHTML( key ) {
 
 /*
 ================
+dayStart
+
+A date field's value as an instant `days` later, for the [from, to)
+windows the website filters by. Empty stays empty.
+================
+*/
+function dayStart( value, days = 0 ) {
+	if ( !value ) return "";
+	const at = new Date( value + "T00:00:00.000Z" );
+	at.setUTCDate( at.getUTCDate() + days );
+	return at.toISOString();
+}
+
+/*
+================
+filters
+
+The filter form as the query the console and the website understand.
+================
+*/
+function filters() {
+	const member = byID( "filter-id" ).value.trim();
+	const chosen = {
+		discordUserId: member,
+		status: byID( "filter-status" ).value,
+		source: byID( "filter-source" ).value,
+		createdFrom: dayStart( byID( "filter-created-from" ).value ),
+		createdTo: dayStart( byID( "filter-created-to" ).value, 1 ),
+		expiresFrom: dayStart( byID( "filter-expires-from" ).value ),
+		expiresTo: dayStart( byID( "filter-expires-to" ).value, 1 )
+	};
+	const params = new URLSearchParams();
+	for ( const [name, value] of Object.entries( chosen ) ) {
+		if ( value ) params.set( name, value );
+	}
+	return { member, query: params.toString() ? "?" + params : "" };
+}
+
+/*
+================
+syncFilterOptions
+
+The counts written into the filter choices: each status and source
+carries how many keys choosing it would show (the website counts them
+under the other filters). A choice the counts no longer offer stays
+listed while it is the chosen one, so the form never lies about what is
+being asked.
+================
+*/
+function syncFilterOptions() {
+	if ( !currentCounts ) return;
+	const status = byID( "filter-status" );
+	const keptStatus = status.value;
+	status.innerHTML = STATUS_FILTERS.map( ( [value, label] ) => {
+		const count = value ? currentCounts.status[value] : currentCounts.total;
+		return `<option value="${value}">${label} (${count})</option>`;
+	} ).join( "" );
+	status.value = keptStatus;
+
+	const source = byID( "filter-source" );
+	const keptSource = source.value;
+	const offered = currentCounts.sources.map( entry =>
+		`<option value="${escape( entry.source )}">${escape( entry.source ) || "(no note)"} (${entry.count})</option>`
+	);
+	source.innerHTML = `<option value="">All sources</option>` + offered.join( "" );
+	source.value = keptSource;
+	if ( source.value !== keptSource && keptSource ) {
+		source.insertAdjacentHTML(
+			"beforeend",
+			`<option value="${escape( keptSource )}" selected>${escape( keptSource )} (0)</option>`
+		);
+	}
+}
+
+/*
+================
+render
+
+The table and the status line for what the last load brought. A website
+older than filters answers no counts; the line then falls back to the
+rows on screen.
+================
+*/
+function render() {
+	byID( "rows" ).innerHTML = current.length ?
+		current.map( rowHTML ).join( "" ) :
+		`<tr><td colspan="8" class="muted">No keys match.</td></tr>`;
+	const member = byID( "filter-id" ).value.trim();
+	if ( currentCounts ) {
+		const open = currentCounts.status.unused + currentCounts.status.partial;
+		setStatus(
+			member ?
+				`Discord member ${member}: ${currentCounts.total} keys, ${open} open.` :
+				`${currentCounts.total} keys, ${open} open.`
+		);
+	} else {
+		const open = current.filter( key => key.status === "active" ).length;
+		setStatus( member ? `Discord member ${member}: ${current.length} keys, ${open} open.` : `${open} open keys.` );
+	}
+	syncFilterOptions();
+}
+
+/*
+================
 load
 
-The key list, all keys or one Discord member's.
+The key list under the filter form's query.
 ================
 */
 async function load() {
-	const member = byID( "filter-id" ).value.trim();
-	const query = member ? "?" + new URLSearchParams( { discordUserId: member } ) : "";
 	try {
-		const { invites } = await requestJSON( "/api/invites" + query );
-		byID( "rows" ).innerHTML = invites.length ?
-			invites.map( rowHTML ).join( "" ) :
-			`<tr><td colspan="8" class="muted">${member ? "This member has no keys." : "No keys yet."}</td></tr>`;
-		const open = invites.filter( key => key.status === "active" ).length;
-		setStatus( member ? `Discord member ${member}: ${invites.length} keys, ${open} open.` : `${open} open keys.` );
+		const { query } = filters();
+		const answer = await requestJSON( "/api/invites" + query );
+		current = answer.invites;
+		currentCounts = answer.counts ?? null;
+		revealed.clear();
+		render();
 	} catch ( error ) {
 		setStatus( error.message );
 	}
+}
+
+/*
+================
+fetchCode
+
+One key's whole code, shown once per call by the website and audited
+there under the operator's name.
+================
+*/
+async function fetchCode( id ) {
+	const answer = await postJSON( `/api/invites/${encodeURIComponent( id )}/reveal`, {} );
+	return answer.code;
 }
 
 /*
@@ -171,7 +327,60 @@ byID( "filter" ).addEventListener( "submit", event => {
 	load();
 } );
 
+byID( "filter-clear" ).addEventListener( "click", () => {
+	for (
+		const id of [
+			"filter-id",
+			"filter-status",
+			"filter-source",
+			"filter-created-from",
+			"filter-created-to",
+			"filter-expires-from",
+			"filter-expires-to"
+		]
+	) {
+		byID( id ).value = "";
+	}
+	load();
+} );
+
 byID( "rows" ).addEventListener( "click", async event => {
+	const revealButton = event.target.closest( ".invites-reveal" );
+	if ( revealButton ) {
+		const id = revealButton.dataset.id;
+		if ( revealed.has( id ) ) {
+			revealed.delete( id );
+			render();
+			return;
+		}
+		revealButton.disabled = true;
+		try {
+			revealed.set( id, await fetchCode( id ) );
+			render();
+		} catch ( error ) {
+			setStatus( error.message );
+			revealButton.disabled = false;
+		}
+		return;
+	}
+	const copyButton = event.target.closest( ".invites-copy" );
+	if ( copyButton ) {
+		const id = copyButton.dataset.id;
+		copyButton.disabled = true;
+		try {
+			const code = revealed.get( id ) ?? (await fetchCode( id ));
+			await navigator.clipboard.writeText( code );
+			copyButton.textContent = "Copied";
+			setTimeout( () => {
+				copyButton.textContent = "Copy";
+				copyButton.disabled = false;
+			}, 1200 );
+		} catch ( error ) {
+			setStatus( error.message );
+			copyButton.disabled = false;
+		}
+		return;
+	}
 	const button = event.target.closest( ".invites-revoke" );
 	if ( !button ) return;
 	if ( button.dataset.confirm !== "1" ) {

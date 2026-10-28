@@ -87,9 +87,52 @@ test("creating refuses a malformed Discord user id before calling the site", asy
 test("listing filters by a Discord member and refuses a malformed id", async () => {
 	const { calls, fetcher } = recording( 200, { invites: [] } );
 	const keys = createInviteKeys( SITE, SECRET, fetcher );
-	await keys.list( "operator", MEMBER );
+	await keys.list( "operator", { discordUserId: MEMBER } );
 	assert.equal( calls[0].url, `http://127.0.0.1:3000/internal/admin/invites?discordUserId=${MEMBER}` );
-	assert.equal( (await keys.list( "operator", "12&x=1" )).status, 400 );
+	assert.equal( (await keys.list( "operator", { discordUserId: "12&x=1" } )).status, 400 );
+	assert.equal( calls.length, 1 );
+});
+
+test("listing sends every filter to the site and refuses a malformed one", async () => {
+	const { calls, fetcher } = recording( 200, { invites: [], counts: { total: 0 } } );
+	const keys = createInviteKeys( SITE, SECRET, fetcher );
+	await keys.list( "operator", {
+		status: "unused",
+		source: "reddit",
+		createdFrom: "2026-10-01T00:00:00.000Z",
+		createdTo: "2026-11-01T00:00:00.000Z",
+		expiresFrom: "2026-11-01T00:00:00.000Z",
+		expiresTo: "2026-12-01T00:00:00.000Z"
+	} );
+	assert.equal(
+		calls[0].url,
+		"http://127.0.0.1:3000/internal/admin/invites?status=unused&source=reddit" +
+			"&createdFrom=2026-10-01T00%3A00%3A00.000Z&createdTo=2026-11-01T00%3A00%3A00.000Z" +
+			"&expiresFrom=2026-11-01T00%3A00%3A00.000Z&expiresTo=2026-12-01T00%3A00%3A00.000Z"
+	);
+	for ( const filters of [
+		{ status: "stale" },
+		{ createdFrom: "next week" },
+		{ source: "x".repeat( 201 ) }
+	] ) {
+		assert.equal( (await keys.list( "operator", filters )).status, 400, JSON.stringify( filters ) );
+	}
+	assert.equal( calls.length, 1 );
+});
+
+test("revealing asks the site for one key's code and refuses a malformed id", async () => {
+	const { calls, fetcher } = recording( 200, { code: "SRO-AAAA-BBBB-CCCC" } );
+	const keys = createInviteKeys( SITE, SECRET, fetcher );
+	const id = "0b0e1c4e-6f2d-4d6b-9a3f-2b7c9d1e5a10";
+	const answer = await keys.reveal( "operator", id );
+	assert.equal( answer.status, 200 );
+	assert.deepEqual( answer.body, { code: "SRO-AAAA-BBBB-CCCC" } );
+	assert.equal( calls[0].url, `http://127.0.0.1:3000/internal/admin/invites/${id}/reveal` );
+	assert.equal( calls[0].options.method, "POST" );
+	assert.equal( calls[0].options.headers.Authorization, "Bearer " + SECRET );
+	for ( const bad of [ "../discord-invite", id + "/../../x", "" ] ) {
+		assert.equal( (await keys.reveal( "operator", bad )).status, 400 );
+	}
 	assert.equal( calls.length, 1 );
 });
 
