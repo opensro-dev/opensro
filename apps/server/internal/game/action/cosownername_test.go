@@ -17,7 +17,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -158,5 +160,65 @@ func TestRefreshCompanionOwnerLabelsBumpsOnlyTheOwnersPets(t *testing.T) {
 	}
 	if got, _ := generationOf(other); got != otherBefore {
 		t.Fatalf("another owner's pet generation moved %d -> %d", otherBefore, got)
+	}
+}
+
+/*
+================
+TestCompletedSuitMoveRepublishesTheOwnersPets
+
+The dress door itself republishes: a suit put on while a pet is out bumps
+that pet's presentation generation once, so viewers respawn it with the
+alias. A suit move refused at its timer (the owner left the job) changes
+no label and republishes nothing.
+================
+*/
+func TestCompletedSuitMoveRepublishesTheOwnersPets(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		leaveJob bool
+		bump     uint64
+	}{
+		{"completed dress", false, 1},
+		{"dress refused at the timer", true, 0},
+	} {
+		c, refs := persistentSummonFixture()
+		suit := &enterworld.ItemRef{RefObjID: 9101, Codename: "ITEM_CH_M_TRADE_TRADER_04", Country: 3,
+			TypeIDs: [4]int64{3, 1, 7, 1}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, RequiredSex: 2,
+			Combat: &enterworld.ItemCombatRef{}}
+		refs.staticItemSource[suit.Codename] = suit
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(jobTestSuitSlot),
+			RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
+		c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+		// The summon fixture raises the level to 5; the cap must follow, or
+		// the equip gate refuses the suit at the timer.
+		c.MaxLevel = c.Level
+		rt, clock := newTestRuntime(c, refs)
+		rt.CompanionRoll = func() (uint32, error) { return 0, nil }
+		rt.BindPetSession(testDivision, c, 101)
+		useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
+		pets := rt.CompanionPresentations(testDivision, c.Name)
+		if len(pets) != 1 {
+			t.Fatalf("%s: %d companion presentations, want 1", tc.name, len(pets))
+		}
+		before := pets[0].Generation
+
+		wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+		rt.HandleItemMove(testDivision, c, wear)
+		if tc.leaveJob {
+			c.Job = domain.CharacterJob{}
+		}
+		rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+		rt.PushDivisionPeerFrames = func(_, _ string, _ []wire.Frame) {}
+		clock.now = clock.now.Add(jobDressSeconds * time.Second)
+		rt.advanceJobDresses(clock.NowMs())
+
+		pets = rt.CompanionPresentations(testDivision, c.Name)
+		if len(pets) != 1 {
+			t.Fatalf("%s: %d companion presentations after the timer, want 1", tc.name, len(pets))
+		}
+		if got := pets[0].Generation; got != before+tc.bump {
+			t.Fatalf("%s: pet generation %d -> %d, want +%d", tc.name, before, got, tc.bump)
+		}
 	}
 }
