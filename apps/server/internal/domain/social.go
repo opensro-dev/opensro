@@ -82,7 +82,9 @@ Snapshot's normalized view for readers that never leave the worn
 equipment and never read the avatar inventory: the mission inventory
 keeps only its equipment rows and AvatarInventory is nil. Each caller
 must be cleared for the narrow copy root by root - a reader of bag or
-avatar rows would silently see them missing.
+avatar rows would silently see them missing. Companion resolution
+walks bag rows - a SnapshotEquipment reader must never resolve
+companions.
 ================
 */
 func (character *Character) SnapshotEquipment() *Character {
