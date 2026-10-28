@@ -110,11 +110,13 @@ test("listing sends every filter to the site and refuses a malformed one", async
 			"&createdFrom=2026-10-01T00%3A00%3A00.000Z&createdTo=2026-11-01T00%3A00%3A00.000Z" +
 			"&expiresFrom=2026-11-01T00%3A00%3A00.000Z&expiresTo=2026-12-01T00%3A00%3A00.000Z"
 	);
-	for ( const filters of [
-		{ status: "stale" },
-		{ createdFrom: "next week" },
-		{ source: "x".repeat( 201 ) }
-	] ) {
+	for (
+		const filters of [
+			{ status: "stale" },
+			{ createdFrom: "next week" },
+			{ source: "x".repeat( 201 ) }
+		]
+	) {
 		assert.equal( (await keys.list( "operator", filters )).status, 400, JSON.stringify( filters ) );
 	}
 	assert.equal( calls.length, 1 );
