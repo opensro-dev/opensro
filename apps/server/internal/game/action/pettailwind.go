@@ -82,7 +82,10 @@ func (rt *Runtime) advanceTailwind(key petOwnerKey, now int64) {
 	var level uint8
 	eligible := false
 	if state != nil {
-		step, eligible = rt.elementalCompanionEligibility(key.division, state.character, key.gid, "Crow", now, true)
+		// A crow without Tailwind slotted is refused before its owner is
+		// copied: the Passive check below would refuse it anyway (#1943).
+		q := elementalQuery{gid: key.gid, kind: "Crow", allowTown: true, passive: "Tailwind"}
+		step, eligible = rt.elementalCompanionMatching(key.division, state.character, q, now)
 		if eligible {
 			skill, level, eligible = companion.Passive(step.pet, "Tailwind", companion.ModifiersFor(step.pet))
 		}

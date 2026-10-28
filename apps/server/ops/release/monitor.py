@@ -9,6 +9,13 @@ processes. An external Actions check watches this heartbeat and HTTPS edge so
 a dead host cannot silently disable its own alarm. Notification acknowledgement
 is recorded only after Discord accepts it; failed delivery is retried.
 
+The WebTransport leg is checked from outside (#1984): an off-host runner
+(wtprobe_verdict.py) runs sro-wtprobe -health and leaves one verdict file
+here, and the wtprobe kind turns it into observations. Thresholds count
+probe runs, not re-polls of the same verdict, and a stale or unreadable
+verdict is a failed observation of the probe pipeline itself, so a dead
+runner pages instead of going quiet.
+
 ===========================================================================
 """
 
@@ -31,6 +38,9 @@ FAILURE_THRESHOLD = 2
 RECOVERY_THRESHOLD = 2
 MAX_MAINTENANCE_SECONDS = 600
 MAX_HEARTBEAT_AGE_SECONDS = 180
+# A WebTransport probe verdict older than this is no evidence either way:
+# the probe pipeline itself counts as failed, so a silent runner pages.
+MAX_VERDICT_AGE_SECONDS = 180
 # The release protocol handshake (internal/releaseprotocol): a request without
 # the live protocol is refused with 426 and a body naming the protocol.
 PROTOCOL_HEADER = "X-OpenSRO-Protocol"
@@ -136,18 +146,52 @@ def check(config, now, request=get_status):
 
 
 # ================
+# check_wtprobe
+#
+# The off-host probe's verdict file as one observation. A fresh verdict
+# is the WebTransport leg seen from outside; a stale, missing or
+# unreadable one is an observation of the probe pipeline instead. Returns
+# the observation, the verdict's own probe time (None when unreadable),
+# and whether the verdict was fresh.
+# ================
+def check_wtprobe(config, now):
+	try:
+		verdict = json.loads(Path(config["verdict"]).read_text())
+		checked_at = verdict["checkedAt"]
+		if not isinstance(verdict.get("ok"), bool) or isinstance(checked_at, bool) or not isinstance(checked_at, (int, float)):
+			raise ValueError("verdict has no usable result")
+	except Exception:
+		return {"healthy": False, "detail": "webtransport probe verdict unreadable"}, None, False
+	age = now - checked_at
+	if age < -MAX_VERDICT_AGE_SECONDS or age > MAX_VERDICT_AGE_SECONDS:
+		detail = "webtransport probe verdict stale"
+		if verdict.get("detail"):
+			detail += "; last probe result: " + str(verdict["detail"])
+		return {"healthy": False, "detail": detail[:240]}, checked_at, False
+	if verdict["ok"]:
+		return {"healthy": True, "detail": "available"}, checked_at, True
+	return {"healthy": False, "detail": str(verdict.get("detail") or "webtransport probe failed")[:240]}, checked_at, True
+
+
+# ================
 # transition
 #
 # Require consecutive observations to avoid one-packet alert noise. Planned
 # maintenance suppresses delivery only for a bounded window, never forever.
+# An uncounted observation (the same probe run read again) moves the
+# heartbeat but not the counters, while a pending alert still retries.
 # ================
-def transition(previous, observation, now, maintenance_until=0):
+def transition(previous, observation, now, maintenance_until=0, counted=True):
 	state = dict(previous)
 	healthy = observation["healthy"]
 	state["checkedAt"] = now
 	state["detail"] = observation["detail"]
-	state["successes"] = previous.get("successes", 0) + 1 if healthy else 0
-	state["failures"] = previous.get("failures", 0) + 1 if not healthy else 0
+	if counted:
+		state["successes"] = previous.get("successes", 0) + 1 if healthy else 0
+		state["failures"] = previous.get("failures", 0) + 1 if not healthy else 0
+	else:
+		state["successes"] = previous.get("successes", 0)
+		state["failures"] = previous.get("failures", 0)
 	phase = previous.get("phase", "unknown")
 	if state["failures"] >= FAILURE_THRESHOLD:
 		phase = "down"
@@ -215,7 +259,16 @@ def poll(config, now, request=get_status, notify=announce):
 	if config.get("production_state"):
 		production = json.loads(Path(config["production_state"]).read_text())
 		maintenance_until = maintenance_window(production.get("operation"))
-	state, event = transition(previous, check(config, now, request), now, maintenance_until)
+	if config["kind"] == "wtprobe":
+		observation, verdict_at, fresh = check_wtprobe(config, now)
+		# A fresh verdict counts once per probe run: the timer re-reads it
+		# every poll, and one bad run must not reach the threshold alone.
+		counted = not (fresh and verdict_at is not None and previous.get("verdictCheckedAt") == verdict_at)
+		state, event = transition(previous, observation, now, maintenance_until, counted)
+		if verdict_at is not None:
+			state["verdictCheckedAt"] = verdict_at
+	else:
+		state, event = transition(previous, check(config, now, request), now, maintenance_until)
 	if event:
 		state["deliveryPending"] = event
 	write_state(path, state)

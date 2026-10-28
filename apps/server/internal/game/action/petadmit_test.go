@@ -126,6 +126,55 @@ func TestPetAdvancesKeepTheirVerdictsWithoutCopyingRejectedOwners(t *testing.T) 
 
 /*
 ================
+TestCrowPassiveTicksRefuseUnslottedCrowsBeforeTheCopy
+
+advanceTailwind and advanceCrowKit run per crow per tick and copied the
+owner before learning the crow had no Tailwind or Guiding Feathers
+slotted (#1943). An unslotted crow is refused below the copy and keeps
+no Tailwind source or kit; a slotted crow still charges Tailwind.
+================
+*/
+func TestCrowPassiveTicksRefuseUnslottedCrowsBeforeTheCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	gid, now := c.ActiveCOS.GID, clock.NowMs()
+	if hasPassive(c.ActiveCOS, "Tailwind") || hasPassive(c.ActiveCOS, "Guiding Feathers") {
+		t.Fatal("fixture crow has a passive slotted")
+	}
+	step, ok := rt.elementalCompanion(testDivision, c, gid, "Crow", now)
+	if !ok {
+		t.Fatal("unslotted crow lost crow eligibility")
+	}
+	rt.advanceTailwind(step.key, now)
+	rt.advanceCrowKit(step.key, now)
+	if _, found := rt.tailwinds.sources[step.key]; found {
+		t.Fatal("unslotted crow became a Tailwind source")
+	}
+	if kit := step.state.crow; len(kit.precision) != 0 || len(kit.views) != 0 {
+		t.Fatal("unslotted crow kept a Guiding Feathers kit")
+	}
+
+	// The admitted lane keeps its verdict: a Tailwind crow charges.
+	windRT, windClock, _, _, windKey := tailwindFixture(t, 1)
+	chargeTailwind(windRT, windClock, windKey, 2)
+	if len(windRT.tailwinds.sources[windKey]) == 0 {
+		t.Fatal("slotted crow lost its Tailwind source")
+	}
+
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	windAllocs := testing.AllocsPerRun(20, func() { rt.advanceTailwind(step.key, now) })
+	kitAllocs := testing.AllocsPerRun(20, func() { rt.advanceCrowKit(step.key, now) })
+	t.Logf("allocs: one owner copy %.0f, refused Tailwind tick %.0f, refused crow-kit tick %.0f", copyAllocs, windAllocs, kitAllocs)
+	if windAllocs >= copyAllocs || kitAllocs >= copyAllocs {
+		t.Fatalf("refused crow passive ticks still copy the owner: Tailwind %.0f, kit %.0f allocs; one copy is %.0f",
+			windAllocs, kitAllocs, copyAllocs)
+	}
+}
+
+/*
+================
 stuffOwnerInventories
 
 Fill the owner's bag and avatar rows with content no equipment reader

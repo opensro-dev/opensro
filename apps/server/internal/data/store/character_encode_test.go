@@ -19,6 +19,8 @@ package store
 import (
 	"bytes"
 	"encoding/json"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -81,12 +83,12 @@ func TestEncodeCharacterBorrowedAllocatesLess(t *testing.T) {
 	if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
 		t.Fatal(err)
 	}
-	borrowed := testing.AllocsPerRun(100, func() {
+	borrowed := fewestAllocsPerRun(func() {
 		if _, err := encodeCharacterBorrowed(&scratch, testDivision, c); err != nil {
 			t.Fatal(err)
 		}
 	})
-	owned := testing.AllocsPerRun(100, func() {
+	owned := fewestAllocsPerRun(func() {
 		if _, err := encodeCharacter(testDivision, c); err != nil {
 			t.Fatal(err)
 		}
@@ -94,4 +96,37 @@ func TestEncodeCharacterBorrowedAllocatesLess(t *testing.T) {
 	if borrowed > owned {
 		t.Fatalf("borrowed encode allocated %.1f per call, Marshal %.1f", borrowed, owned)
 	}
+}
+
+/*
+================
+fewestAllocsPerRun
+
+The fewest allocations per run over a handful of trials. One
+AllocsPerRun window counts whatever else the process allocates while
+it runs - a collection clearing the sync.Pool the encoder borrows its
+working state from, a background goroutine waking - and on a loaded
+machine that noise once read borrowed 4.0 against Marshal's 3.0 and
+failed a sound encoder. Noise only ever adds allocations, never
+removes them, so the minimum over trials is the encoder's own floor,
+and the floor is what the never-allocate-more contract compares.
+================
+*/
+func fewestAllocsPerRun(f func()) float64 {
+	// Warm the scratch and the encoder pool, collect, and warm again,
+	// so every window starts from the same steady state; then hold
+	// the collector off while measuring, because a mid-window
+	// collection empties the pool both encodes borrow from.
+	f()
+	runtime.GC()
+	f()
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+
+	fewest := testing.AllocsPerRun(100, f)
+	for range 4 {
+		if got := testing.AllocsPerRun(100, f); got < fewest {
+			fewest = got
+		}
+	}
+	return fewest
 }

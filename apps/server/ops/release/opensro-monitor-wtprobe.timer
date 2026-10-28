@@ -1,0 +1,11 @@
+[Unit]
+Description=Read the OpenSRO WebTransport probe verdict every thirty seconds
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+AccuracySec=1
+Unit=opensro-monitor-wtprobe.service
+
+[Install]
+WantedBy=timers.target
