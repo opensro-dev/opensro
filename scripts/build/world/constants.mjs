@@ -108,7 +108,7 @@ export const CHARACTER_SELECT_CREATE_CAMERA_KEYFRAMES = Object.freeze([
 // StartCreateCamera inserts key i at t = i * (5/3); controller targetTime = 5.0s, raw frame delta.
 export const CHARACTER_SELECT_CREATE_CAMERA_KEY_INTERVAL_SECONDS = 5 / 3;
 
-// CPSCharacterSelect::OnCreate (sub_73c930 .. sub_73cb6a) loads the foreground
+// CPSCharacterSelect::OnCreate (CPSCharacterSelect_OnCreate at 0x73c930..0x73cb6a) loads the foreground
 // interface props as CInterfaceModel instances (NOT SWorld objects):
 //   CCObjAnimation_LoadModel(model, "res\interface\<bsr>", 1) // CInterfaceModel::Load
 //   CCObjCharacter_ForwardVSlot28(model, &pos)                      // SetPosition (region-local)

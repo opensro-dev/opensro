@@ -1,4 +1,4 @@
-// Native sub_440b64 MapLoader runtime-metadata corner read order (must be
+// Native CMapLoader_LoadMapAndO2ForNavMeshBuilder at 0x440b64 MapLoader runtime-metadata corner read order (must be
 // preserved by callers). This fold does not choose the SWorld near-terrain
 // diffuse association; SWorldCell_BuildTerrainMeshLOD owns that draw path.
 //   [0] = vertex(tileZ,     tileX)     @ [edi - 0x77]  (0x00440b64)

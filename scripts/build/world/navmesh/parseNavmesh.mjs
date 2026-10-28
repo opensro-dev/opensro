@@ -1,6 +1,6 @@
 // Parser for the Silkroad region navmesh (JMXVNVM 1000, extracted/.../navmesh/nv_XXXX.nvm).
 //
-// Layout (verified against the client serializer navmeshbuilder.cpp sub_0045d499 and
+// Layout (verified against the client serializer navmeshbuilder.cpp NavMeshBuilder_WriteNVM at 0x45d499 and
 // the SilkroadDoc JMXVNVM spec):
 //
 //   char[12] "JMXVNVM 1000"
