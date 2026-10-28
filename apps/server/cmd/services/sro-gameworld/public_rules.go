@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
@@ -364,6 +365,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",
 				Why:    "Picked for the beta by the community's balance advisor; the original look returns with one setting."},
+			{Flag: chat.EnvWhisperJobAlias, On: chat.WhisperJobAliasEnabled(),
+				Native: "A whisper resolves its target by character name only; a job alias cannot be whispered to.",
+				Now:    "A whisper typed to the job alias of a player wearing their job suit reaches that player.",
+				Why:    "Every name a player can see should be a name the server can route to."},
 			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",
@@ -482,6 +487,9 @@ func publicRules() publicstats.RulesResponse {
 			{Title: "Storage Ctrl+click",
 				Native: "Items move between bag and storage by dragging.",
 				Now:    "Ctrl+click also moves an item between bag and storage."},
+			{Title: "Job alias names",
+				Native: "A job alias may equal another character's name, and a new character may take a name that equals an existing job alias.",
+				Now:    "Both are refused: an alias may not equal another character's name when set, and a character name may not equal an existing job alias at creation."},
 			{Title: "Double-click attack",
 				Native: "A second click on a monster that drifted can miss it.",
 				Now:    "A second press on the same monster within half a second attacks it."},
