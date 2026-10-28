@@ -13,6 +13,7 @@ object still pays the second.
 package action
 
 import (
+	"runtime"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -90,6 +91,58 @@ func TestSkillObjectQuietPassCopiesTheRegistryOnce(t *testing.T) {
 	t.Logf("quiet AdvanceSkillObjects over 120 objects: %.0f allocs/run", allocs)
 	if allocs > quietPassAllocBound {
 		t.Fatalf("quiet pass allocated %.0f per run, bound %d (the second registry copy is back)", allocs, quietPassAllocBound)
+	}
+}
+
+/*
+================
+TestSkillObjectOwnerCopyIsCombat
+
+Guard for the #1943 skill-object slice: the per-object owner copy is
+the combat copy, not the whole record. The owner's bag is bulked to
+44 plain rows past loadCombatBag, where the copies actually differ:
+a quiet pass over the 120 objects below measures 487,597 allocated
+bytes through the combat copy and 1,098,159 through the full copy
+(2,045 vs 2,405 allocs), so the bound sits between them. On an
+unloaded bag the two copies cost the same, which is why this guard
+bulks the bag instead of reusing the quiet-pass fixture's owner.
+================
+*/
+func TestSkillObjectOwnerCopyIsCombat(t *testing.T) {
+	rt, clock, c, planted := plantedTrapRuntime(t, 300000, 300)
+	loadCombatBag(c)
+	for slot := int64(20); slot < 60; slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: slot, RefObjID: 9999, Codename: "ITEM_QSP_TEST_01", StackCount: 1})
+	}
+	for i := 0; i < 119; i++ {
+		_, err := rt.SkillObjects.Create(skillobject.Object{
+			Division: testDivision, Population: planted.Population,
+			OwnerGID: enterworld.ObjectIDForCharacter(c), OwnerName: c.Name, CreatedMs: clock.NowMs(),
+			Program: skillobject.Program{SkillID: 7108, DurationMs: 300000, ScanMs: 300, Radius: 20},
+			Spawn:   planted.Spawn,
+			Tracked: []skillobject.FieldRecipient{{Name: c.Name, GID: enterworld.ObjectIDForCharacter(c)}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := clock.NowMs() + 100 // before every object's first scan
+	run := func() {
+		if out := rt.AdvanceSkillObjects(at, nil); len(out) != 0 {
+			t.Fatalf("quiet pass produced output: %+v", out)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		run()
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for i := 0; i < 50; i++ {
+		run()
+	}
+	runtime.ReadMemStats(&after)
+	if got := (after.TotalAlloc - before.TotalAlloc) / 50; got > 750000 {
+		t.Fatalf("quiet pass allocated %d bytes/run, want <= 750000 (whole-record owner copy back?)", got)
 	}
 }
 

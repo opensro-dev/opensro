@@ -228,10 +228,17 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	// The presence verdict weighs only record facts the copy carries
 	// verbatim, so the copy is admitted on those facts: an absent
 	// owner retires its object in the registry before any reader
-	// touches the snapshot (#1943).
+	// touches the snapshot (#1943). The copy is the combat copy:
+	// every reader below weighs the owner's name, GID, pose, world
+	// instance, guild and combat stats - victim selection, the field
+	// and trap strikes and the trap explosion read nothing from the
+	// bag and resolve none of the owner's companions (the two
+	// downstream re-copies, screamMaskPlayer's attacker view and
+	// returnDamageToPlayer's attacker, read only stats, pose and
+	// GID of theirs).
 	var snapshot *enterworld.Character
 	if present && lease == object.Population {
-		snapshot = rt.characterSnapshotAdmitted(object.Division, c, func(live *enterworld.Character) bool {
+		snapshot = rt.characterSnapshotCombatAdmitted(object.Division, c, func(live *enterworld.Character) bool {
 			return !live.DeletePending && enterworld.CharacterAlive(live) &&
 				live.NativeTeleportMode == 0 &&
 				enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&

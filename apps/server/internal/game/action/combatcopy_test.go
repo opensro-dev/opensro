@@ -4,9 +4,9 @@
 combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
-release and the periodic pulse take the narrow combat copy: equipment
-rows and the avatar inventory, no bag rows. Each scenario here runs
-twice on a bag loaded
+release, the periodic pulse, the pulse area and the skill-object owner
+pass take the narrow combat copy: equipment rows and the avatar
+inventory, no bag rows. Each scenario here runs twice on a bag loaded
 with everything a root could trip on - spare ammunition, an attack pet's
 summon row, a quest item - once on the narrow copy and once forced onto
 the full copy, and every frame and the end state must agree. A root that
@@ -230,6 +230,34 @@ func TestPulseAreaReadsTheCombatCopy(t *testing.T) {
 
 /*
 ================
+skillObjectTrace
+
+A planted fire trap scanned until it explodes on the monster beside
+its planter, on a loaded bag. The skill-object pass takes the combat
+copy of the owner once per object per tick; the bag carries an attack
+pet's summon row, so an object tick that resolved the owner's
+companions through its copy would diverge on the narrow root.
+================
+*/
+func skillObjectTrace(t *testing.T, full bool) string {
+	rt, clock, c, skill, gid := combatTrapFixture(t)
+	loadCombatBag(c)
+	if full {
+		forceFullCombatCopy(rt)
+	}
+	before, _ := rt.Monsters.Get(testDivision, gid)
+	release := plantCombatTrap(t, rt, clock, c, skill, clock.NowMs())
+	trace := fmt.Sprintf("%+v\n", rt.drainSkillFinalizes(release+int64(skill.ActionDurationMs)))
+	trace += fmt.Sprintf("%+v\n", rt.AdvanceSkillObjects(release+int64(enterworld.CombatTrapScanMs), nil))
+	after, _ := rt.Monsters.Get(testDivision, gid)
+	if after.CurrentHP >= before.CurrentHP || len(rt.SkillObjects.Snapshot()) != 0 {
+		t.Fatal("trap never exploded; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -237,7 +265,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
