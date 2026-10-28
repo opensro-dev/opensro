@@ -38,7 +38,8 @@ over auth, domain, store, and the dependency-free readiness gate. The
 privatepath leaf is shared only by the two packages that own service-private
 files: store and transport. The latency leaf (fixed-bucket histograms) is
 shared by the same two: transport times handlers and ticks with it, store its
-authority lock.
+authority lock. The jsonscratch leaf (a reusable JSON encode buffer) is
+dependency-free; store encodes its commit records through it.
 ================================================================================
 */
 
@@ -87,9 +88,11 @@ func TestCorePackageBoundaries(t *testing.T) {
 	checkPackageImports(t, root, modulePath, "internal/security/workload", nil, true)
 	checkPackageImports(t, root, modulePath, "internal/platform/readiness", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/platform/latency", nil, false)
+	checkPackageImports(t, root, modulePath, "internal/platform/jsonscratch", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/data/store", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/domain/charactervitals": true,
+		modulePath + "/internal/platform/jsonscratch":   true,
 		modulePath + "/internal/platform/latency":       true,
 		modulePath + "/internal/platform/privatepath":   true,
 	}, true)
