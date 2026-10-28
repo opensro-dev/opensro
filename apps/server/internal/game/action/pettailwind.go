@@ -49,8 +49,11 @@ func (rt *Runtime) crowSupportRecipients(step petCombatStep, party, allowTown bo
 		member := rt.findCharacterByGid(step.key.division, gid)
 		// A dead or deletion-pending member is refused on its live
 		// facts; only an admitted member pays for the copy the runtime
-		// checks below read (#1943).
-		snapshot := rt.characterSnapshotAdmitted(step.key.division, member, func(live *enterworld.Character) bool {
+		// checks below read (#1943). The copy is the companion copy:
+		// those checks (expansion gate, town, session name, spawn)
+		// read equipment rows and scalars, never plain bag or avatar
+		// rows (#2030; TestTailwindRecipientsReadNothingOutsideTheCompanionCopy).
+		snapshot := rt.characterSnapshotCompanionAdmitted(step.key.division, member, func(live *enterworld.Character) bool {
 			return !live.DeletePending && enterworld.CharacterAlive(live)
 		})
 		if snapshot == nil || !rt.petExpansionAllowed(snapshot, step.pet) || !allowTown && rt.inTown(step.key.division, snapshot) {
