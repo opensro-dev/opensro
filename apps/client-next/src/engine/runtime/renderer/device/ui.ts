@@ -110,8 +110,13 @@ const TEXEL_EPSILON = 0.01;
 fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 	let size = vec2f( textureDimensions( tex ) );
 	// The quad's own texels: an atlas glyph never averages its neighbour.
-	let lowEdge = rect.xy * size;
-	let highEdge = ( rect.xy + rect.zw ) * size;
+	// A mirrored quad (the tooltip's right edge, uv 1,1,-1,-1) runs its uv
+	// backwards; order the ends, or clamp() collapses to one edge and the
+	// quad samples nothing (#1973).
+	let start = rect.xy * size;
+	let end = ( rect.xy + rect.zw ) * size;
+	let lowEdge = min( start, end );
+	let highEdge = max( start, end );
 	let lo = clamp( t - d * 0.5, lowEdge, highEdge );
 	let hi = clamp( t + d * 0.5, lowEdge, highEdge );
 	let first = floor( lo );
@@ -178,7 +183,8 @@ vs
 	// Pad only a quad whose texels miss whole pixels: at 100% and at whole
 	// enlargements nothing is padded and the default path shades no extra
 	// fragments. viewport.z is pixels per UI unit (0 = unknown: pad).
-	var texels = q.uv.zw * vec2f( textureDimensions( tex ) );
+	// A mirrored quad's uv extent is negative; its texel count is not.
+	var texels = abs( q.uv.zw ) * vec2f( textureDimensions( tex ) );
 	if ( q.effects.x % 2 == 1 ) {
 		texels = texels.yx;
 	}

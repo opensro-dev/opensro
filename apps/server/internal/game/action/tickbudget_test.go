@@ -4,8 +4,10 @@
 tickbudget_test.go - the synthetic-shard tick allocation guard (#1943)
 
 One benchmarked tick of a synthetic shard: players with realistic
-inventories and attack pets out, a monster population advancing, NPC
-patrol frames building, and a ground plane snapshotting. The guard test
+inventories and attack pets out, two crow broods laid (one hatching
+mid-window) and a periodic pulse riding on one raven, a monster
+population advancing, NPC patrol frames building, and a ground plane
+snapshotting. The guard test
 fails when a tick allocates more than the pinned budget, so a change
 that reintroduces per-tick copying lands red instead of back on the
 live shard. The budgets are today's main plus ten percent; every #1943
@@ -24,7 +26,9 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -43,10 +47,12 @@ const (
 // History: f3004434 ticked 1,977,338 B / 5,505 allocs; after #1944,
 // #1945 and #1948 (dd2e3691c) 1,299,000 B / 3,458 allocs; after the
 // crow-brood and pet-spirit owner-copy admissions 1,131,000 B /
-// 2,962 allocs.
+// 2,962 allocs; with crow broods and a periodic COS pulse seeded into
+// the shard (a heavier workload, not a regression) 1,642,000 B /
+// 3,588 allocs.
 const (
-	tickBudgetBytesPerTick  = 1245000
-	tickBudgetAllocsPerTick = 3260
+	tickBudgetBytesPerTick  = 1807000
+	tickBudgetAllocsPerTick = 3950
 )
 
 /*
@@ -94,7 +100,8 @@ func newSyntheticShard(tb testing.TB) *syntheticShard {
 	monsters.StartDivision(testDivision)
 	deps := &enterworld.Deps{
 		Characters: enterworld.StaticCharacterSource{testDivision: chars},
-		Items:      testItems(),
+		Items:      syntheticShardItems(),
+		Skills:     syntheticShardSkills(),
 		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
 	}
 	rt := NewRuntime(deps, monsters)
@@ -103,6 +110,7 @@ func newSyntheticShard(tb testing.TB) *syntheticShard {
 	rt.WearRoll = func() (uint32, error) { return 99, nil }
 	rt.CombatRoll = func() (uint32, error) { return 0, nil }
 	rt.AttackPetExpansion = true
+	placeSeededPlayers(chars)
 	for _, c := range chars {
 		rt.BindPetSession(testDivision, c, 1)
 		rt.BindRecoverySession(testDivision, c, 1)
@@ -110,7 +118,147 @@ func newSyntheticShard(tb testing.TB) *syntheticShard {
 	for i := 0; i < tickBudgetGroundDrops; i++ {
 		rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 3117, StackCount: 1, MagicOptions: []uint64{uint64(i)}, DroppedBy: "hunter"})
 	}
-	return &syntheticShard{rt: rt, clock: clock, hook: rt.TickHook(), roster: simulation.DefaultNpcRoster(), anchor: simulation.NpcShopSpawn()}
+	shard := &syntheticShard{rt: rt, clock: clock, hook: rt.TickHook(), roster: simulation.DefaultNpcRoster(), anchor: simulation.NpcShopSpawn()}
+	seedSyntheticPets(tb, shard, chars)
+	return shard
+}
+
+// The seeded COS reference every involved raven resolves through, and
+// the vitals that keep it alive under the seeded pulse.
+const (
+	syntheticRavenRefObjID = 9
+	syntheticRavenMaxHP    = 100000
+)
+
+// syntheticFieldRegion is the battlefield tile beside the synthetic
+// town tile (regioncombat_generated.go): the seeded casts and hits are
+// town-gated, so their owners stand here.
+const syntheticFieldRegion = 0x62AA
+
+/*
+================
+placeSeededPlayers
+
+Stand the pulse source, its victim and the two brood owners on the
+battlefield tile before their sessions bind: followers settle beside
+owners who are already where the tick keeps them.
+================
+*/
+func placeSeededPlayers(chars []*enterworld.Character) {
+	for _, i := range []int{0, 1, 2, 3} {
+		*chars[i].World.Spawn.RegionID = syntheticFieldRegion
+	}
+}
+
+/*
+================
+syntheticShardItems
+
+The harness item source plus the one COS reference the seeded pets
+resolve through. Only the seeded ravens carry its RefObjID; the other
+thirteen still resolve nothing, exactly as before.
+================
+*/
+func syntheticShardItems() cosTestItemSource {
+	return cosTestItemSource{
+		staticItemSource: testItems(),
+		characters: map[string]*enterworld.CharacterRef{
+			"COS_P_RAVEN_040": {
+				RefObjID: syntheticRavenRefObjID, Codename: "COS_P_RAVEN_040",
+				TidWord: attackPetBand<<11 | 0x1c6, Level: 90,
+				MaxHP: syntheticRavenMaxHP, MaxMP: 600, WalkSpeed: 20, RunSpeed: 80,
+				Parameters: monster.MonsterRef{CombatPinned: true, BodyRadius: 10, HitRate: 10},
+			},
+		},
+	}
+}
+
+/*
+================
+syntheticShardSkills
+
+The one skill row the seeded periodic pulse casts: a linked attack on
+a two-second period that outlives the measured window.
+================
+*/
+func syntheticShardSkills() staticSkillSource {
+	return staticSkillSource{testPeriodicSkillID: {
+		ID: testPeriodicSkillID, Group: 900, Codename: "TEST_LINKED_ATTACK",
+		ActionDurationMs: 500, EffectRider: true,
+		Consumption: enterworld.SkillConsumption{Pinned: true, MP: 5},
+		TimedEffect: enterworld.SkillTimedEffect{Periodic: enterworld.SkillPeriodicEffect{
+			Pinned: true, DurationMs: 120000, PeriodMs: 2000,
+			Link:   enterworld.SkillEffectLink{Present: true, Group: 9, MaxOutgoing: 2},
+			Attack: enterworld.SkillAttack{Present: true, Flags: 8, Percent: 37, Min: 4, Max: 6, ImpactCount: 1}}},
+	}}
+}
+
+/*
+================
+seedSyntheticPets
+
+Two behaviours the plain roster never reaches. Two crows lay real
+brood eggs through the real cast - one rides the window out as an
+egg, the other was laid 22 s before it and hatches inside - and
+shard00's periodic effect rides on shard01's raven, pulsing every two
+seconds. Everything is installed the way production installs it, and
+a cast or install that refuses fails the fixture loudly here instead
+of silently measuring nothing.
+================
+*/
+func seedSyntheticPets(tb testing.TB, s *syntheticShard, chars []*enterworld.Character) {
+	tb.Helper()
+	// The pulse caster's stats must project. The synthetic band wears
+	// a sword codename at five sockets, which is not one weapon, and
+	// the harness wires no magic-option source: the caster keeps only
+	// its slot-6 sword, options stripped. Every other player keeps
+	// the rows (and the refusals) it has today.
+	kept := make([]enterworld.InventoryRow, 0, len(chars[0].MissionInventory))
+	for _, row := range chars[0].MissionInventory {
+		if row.Slot >= 0 && row.Slot < int64(inventory.EquipmentSlotEnd) && row.Codename == "ITEM_CH_SWORD_01_A_RARE" {
+			if row.Slot != 6 {
+				continue
+			}
+			row.MagicOptions = nil
+		}
+		kept = append(kept, row)
+	}
+	chars[0].MissionInventory = kept
+	// The involved ravens are alive and resolvable before any tick
+	// runs: a dead pet loses its session to the first advance.
+	for _, i := range []int{1, 2, 3} {
+		chars[i].ActiveCOS.RefObjID = syntheticRavenRefObjID
+		chars[i].ActiveCOS.CurrentHP = syntheticRavenMaxHP
+		chars[i].ActiveCOS.CurrentMP = 600
+	}
+	// Settle the followers where the tick keeps them before the cast's
+	// adjacency gate looks.
+	for range 5 {
+		s.clock.Advance(100 * time.Millisecond)
+		_ = s.hook(s.clock.NowMs())
+	}
+	now := s.clock.NowMs()
+	for _, i := range []int{2, 3} {
+		c := chars[i]
+		skill := learnPetBook(tb, c, 49)
+		s.rt.castCrowBrood(testDivision, c, c.ActiveCOS.GID, skill, now)
+		if len(c.Brood) != 1 {
+			tb.Fatalf("synthetic crow %d laid no egg", i)
+		}
+	}
+	// The second egg was laid 22 s before the window: it hatches
+	// inside the measured ticks and the clone rides them out.
+	chars[3].Brood[0].BroodUntil = now + 8000
+	effect := linkedpulse.Effect{
+		Division: testDivision, SourceName: chars[0].Name,
+		SourceGID: enterworld.ObjectIDForCharacter(chars[0]), TargetGID: chars[1].ActiveCOS.GID,
+		SourceToken: 0xB00001, TargetToken: 0xB00002,
+		SkillID: testPeriodicSkillID, LinkGroup: 9, MaxPerTarget: 2,
+		StartedMs: now, DurationMs: 120000, PeriodMs: 2000,
+	}
+	if code := s.rt.periodicEffects.Install(effect); code != 0 {
+		tb.Fatalf("synthetic pulse refused: %d", code)
+	}
 }
 
 /*
@@ -223,5 +371,37 @@ func TestTickAllocationBudget(t *testing.T) {
 	}
 	if allocsPerTick > tickBudgetAllocsPerTick {
 		t.Fatalf("tick made %.0f allocations, budget %d (lower the budget only with a measured fix)", allocsPerTick, tickBudgetAllocsPerTick)
+	}
+}
+
+/*
+================
+TestSyntheticShardSeedsReachTheTick
+
+The seeded behaviours must actually fire inside the measured window:
+the early egg hatches, and the periodic pulse takes HP off the victim
+raven. A seed that silently refused would leave the guard measuring
+the plain roster while claiming otherwise.
+================
+*/
+func TestSyntheticShardSeedsReachTheTick(t *testing.T) {
+	s := newSyntheticShard(t)
+	for i := int64(0); i < 100; i++ {
+		s.tick(i)
+	}
+	victim := s.rt.findCharacter(testDivision, "shard01")
+	egglayer := s.rt.findCharacter(testDivision, "shard02")
+	hatcher := s.rt.findCharacter(testDivision, "shard03")
+	if victim == nil || egglayer == nil || hatcher == nil {
+		t.Fatal("seeded characters vanished")
+	}
+	if len(egglayer.Brood) != 1 || egglayer.Brood[0].BroodStage != 1 {
+		t.Fatalf("riding egg = %+v", egglayer.Brood)
+	}
+	if len(hatcher.Brood) != 1 || hatcher.Brood[0].BroodStage != 2 {
+		t.Fatalf("hatched brood = %+v", hatcher.Brood)
+	}
+	if victim.ActiveCOS.CurrentHP >= syntheticRavenMaxHP {
+		t.Fatalf("pulse never landed: victim raven HP %d", victim.ActiveCOS.CurrentHP)
 	}
 }

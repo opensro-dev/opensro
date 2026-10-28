@@ -29,6 +29,7 @@ import time
 from urllib.parse import urlsplit
 
 from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
+from module_inputs import copy_inputs, restore_inputs, snapshot_inputs
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
 import quic_host
@@ -322,26 +323,6 @@ def without_undefined_wt_arguments(executable, arguments):
 # ================
 def run(arguments, *, cwd=None, env=None, capture=False):
 	return subprocess.run(arguments, cwd=cwd, env=env, check=True, capture_output=capture, text=True)
-
-
-# ================
-# copy_inputs
-#
-# Task binaries already live in Nomad's immutable release tree. Replacing
-# deployer inputs therefore does not modify a running executable. A file the
-# deployed release does not carry (a revert to a release built before it was
-# added) is removed, so the module holds exactly that release's inputs.
-# ================
-def copy_inputs(source, module, names):
-	for name in names:
-		target = module / name
-		target.parent.mkdir(parents=True, exist_ok=True)
-		temporary = target.with_name(target.name + ".incoming")
-		shutil.copyfile(source / name, temporary)
-		temporary.chmod(0o755 if FILES[name].startswith("bin/") else 0o644)
-		os.replace(temporary, target)
-	for name in set(FILES) - set(names):
-		(module / name).unlink(missing_ok=True)
 
 
 # ================
@@ -797,6 +778,15 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	run(["/usr/local/sbin/opensro-backup", "run"], env=CLEAN_ENV)
 	management, token, environment, arguments = deployer(config, stack_sizes)
 	executable = str(module / "sro-nomad")
+	# A refusal before the fleet is touched must leave the module as it was.
+	# On 2026-10-27 a revert copied the retained release's inputs, its
+	# sro-nomad then refused, and the module kept those bytes under the live
+	# release's release.json: retain_server refused the next publish.
+	# touched turns true at the first step that changes what Nomad runs
+	# (stop, store upgrade or restore, game data install, deploy); from then
+	# the inputs stay, since they are what the submitted jobs were built from.
+	previous = snapshot_inputs(module)
+	touched = False
 	try:
 		copy_inputs(staging, module, names)
 		# The staged binary is the verdict on which arguments it takes: a
@@ -842,8 +832,10 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			# plain validate must now pass.
 			if restore:
 				verify_restore(module, restore)
+			touched = True
 			run([executable, "stop", *arguments], cwd=module, env=environment)
 			materialize(config, module, executable, arguments, environment)
+		touched = True
 		if upgrade:
 			upgrade_authorities(module, executable, arguments, environment, on_upgrade)
 		if restore:
@@ -862,7 +854,17 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 		# The independent monitor announces recovery after the journal commits.
 		# Discord availability cannot turn a healthy rollout into a failed one.
 		print("Server release " + manifest["commit"] + " passed Nomad deployment health checks.", flush=True)
+	except BaseException:
+		if not touched:
+			try:
+				restore_inputs(module, previous)
+			except Exception as error:
+				# Never hide the refusal; an operator restores from the
+				# retained release (retention.py) if this ever fails.
+				print("Deployment inputs could not be restored: " + type(error).__name__, file=sys.stderr, flush=True)
+		raise
 	finally:
+		shutil.rmtree(previous[0], ignore_errors=True)
 		revoke(management, token)
 
 

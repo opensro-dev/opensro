@@ -89,7 +89,10 @@ func (rt *Runtime) huntingReport(division, sourceName, targetName string, target
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	source := rt.findCharacter(division, sourceName)
-	target := rt.characterSnapshot(division, rt.findCharacter(division, targetName))
+	// The mark's identity facts (the object id from the character id)
+	// never change after creation, so the live record answers them;
+	// no copy of the marked player is detached per report (#1943).
+	target := rt.findCharacter(division, targetName)
 	if source == nil || target == nil || enterworld.ObjectIDForCharacter(target) != targetGID {
 		return simulation.DivisionFrames{}, false
 	}
