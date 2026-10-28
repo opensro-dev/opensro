@@ -40,6 +40,7 @@ import (
 	"strings"
 
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // EnvThiefCartTownAreas names the switch: "on" (the default) or "off".
@@ -301,7 +302,7 @@ Whether the point lies in a town part. Dungeon points never do.
 ================
 */
 func (a *Areas) Contains(p worldgeom.RegionXZ) bool {
-	if a == nil || worldgeom.IsDungeonRegion(p.RegionID) {
+	if a == nil || simulation.PlaneKindOf(p.RegionID) != simulation.PlaneOutdoor {
 		return false
 	}
 	return a.containsGrid(worldgeom.ExpandGrid(p))
@@ -333,7 +334,8 @@ part is town to town and passes, as does one that starts inside a part.
 ================
 */
 func (a *Areas) EnteredFromBattlefield(from, to worldgeom.RegionXZ) bool {
-	if a.Len() == 0 || worldgeom.IsDungeonRegion(from.RegionID) || worldgeom.IsDungeonRegion(to.RegionID) {
+	if a.Len() == 0 || simulation.PlaneKindOf(from.RegionID) != simulation.PlaneOutdoor ||
+		simulation.PlaneKindOf(to.RegionID) != simulation.PlaneOutdoor {
 		return false
 	}
 	p0, p1 := worldgeom.ExpandGrid(from), worldgeom.ExpandGrid(to)
