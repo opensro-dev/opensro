@@ -1,0 +1,283 @@
+/*
+===========================================================================
+
+projectioncache_test.go - tests for projectioncache.go
+
+The cache must be invisible: every answer equals a fresh computation
+over the uncached rank rows, whatever writer changed the skill list or
+the equipment, from any number of goroutines.
+
+===========================================================================
+*/
+package combat
+
+import (
+	"fmt"
+	"reflect"
+	"slices"
+	"sync"
+	"testing"
+
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/enterworld"
+)
+
+/*
+================
+projectionFixture
+
+Three passive groups learned to rank 2: setv power and reat in group 1,
+a real resistance gated by the sword's reqi in group 2, damage return
+and a weapon-kind critical in group 3.
+================
+*/
+func projectionFixture() (passiveSkills, itemRefs, *enterworld.ItemRef) {
+	sword := &enterworld.ItemRef{RefObjID: 71, Codename: "ITEM_PC_SWORD", TypeIDs: [4]int64{3, 1, 6, 2}, Combat: &enterworld.ItemCombatRef{}}
+	power := func(value uint32) enterworld.SkillPassiveParameters {
+		return enterworld.SkillPassiveParameters{Pinned: true,
+			Mask: 1 << enterworld.ParameterTwoHandPower,
+			Values: enterworld.SkillParameterValues{
+				enterworld.ParameterTwoHandPower: value,
+			}}
+	}
+	gated := power(0)
+	gated.Real = enterworld.SkillPassiveReal{Mask: 0x17fafc0, Flat: 50, Grade: 9}
+	skills := passiveSkills{
+		101: {ID: 101, Group: 1, Level: 1, PassiveParameters: power(5)},
+		102: {ID: 102, Group: 1, Level: 2, PassiveParameters: func() enterworld.SkillPassiveParameters {
+			p := power(7)
+			p.Reat = enterworld.SkillPassiveReat{Mask: 0x3, Value: 11}
+			return p
+		}()},
+		201: {ID: 201, Group: 2, Level: 1, PassiveParameters: gated},
+		202: {ID: 202, Group: 2, Level: 2, PassiveParameters: gated,
+			Reqi: enterworld.SkillReqi{Present: true, Count: 1, Pairs: [5]enterworld.SkillReqiPair{{Kind: 6, Value: 2}}}},
+		301: {ID: 301, Group: 3, Level: 1},
+		302: {ID: 302, Group: 3, Level: 2,
+			PassiveParameters: enterworld.SkillPassiveParameters{Pinned: true, DamageReturn: enterworld.SkillDamageReturn{Present: true, Chance: 20, Physical: 15, Magical: 10, Range: 3}},
+			PassiveCritical:   enterworld.SkillPassiveCritical{Pinned: true, Flat: 5, WeaponKind: 2}},
+	}
+	return skills, itemRefs{sword.Codename: sword}, sword
+}
+
+/*
+================
+freshProjection
+
+The cache's reference answer: the three projections over freshly built
+rank rows, with no cache in between.
+================
+*/
+func freshProjection(c *domain.Character, skills enterworld.SkillDataSource, items enterworld.ItemRefSource, weaponKind uint8) learnedProjection {
+	rows := learnedRankRows(c, skills, nil)
+	writes, power, err := learnedPassivesFrom(c, rows, items, weaponKind)
+	want := learnedProjection{writes: writes, power: power, err: err}
+	if err == nil {
+		want.resistance = learnedStatusResistanceFrom(c, rows, items)
+		want.damageReturn, want.damageReturnSkill = learnedDamageReturnFrom(c, rows, items)
+	}
+	return want
+}
+
+/*
+================
+assertProjectionFresh
+================
+*/
+func assertProjectionFresh(t *testing.T, step string, c *domain.Character, skills enterworld.SkillDataSource, items enterworld.ItemRefSource, weaponKind uint8) learnedProjection {
+	t.Helper()
+	got := learnedProjections(c, skills, items, weaponKind)
+	want := freshProjection(c, skills, items, weaponKind)
+	if !reflect.DeepEqual(got.writes, want.writes) || !reflect.DeepEqual(got.power, want.power) ||
+		got.resistance != want.resistance || got.damageReturn != want.damageReturn ||
+		got.damageReturnSkill != want.damageReturnSkill || (got.err == nil) != (want.err == nil) {
+		t.Fatalf("%s: cached %+v, fresh %+v", step, got, want)
+	}
+	return got
+}
+
+/*
+================
+TestLearnedProjectionsFollowEveryContentWriter
+
+Each way the inputs move - learning, overwriting and deleting skills,
+breaking or swapping the gated equipment, another weapon kind, another
+source, a character without an ID - the cached answer equals a fresh
+one, and a repeated read is served by the same backing store.
+================
+*/
+func TestLearnedProjectionsFollowEveryContentWriter(t *testing.T) {
+	skills, items, sword := projectionFixture()
+	c := &domain.Character{ID: 980001, Level: pointer(80), Strength: pointer(300), Intellect: pointer(200),
+		Skills: []uint32{101, 102, 201, 202, 301, 302},
+		MissionInventory: []domain.InventoryRow{
+			{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90},
+		}}
+	defer ForgetLearnedProjections(c.ID)
+
+	first := assertProjectionFresh(t, "seeded", c, skills, items, 2)
+	again := assertProjectionFresh(t, "repeat (hit)", c, skills, items, 2)
+	if len(first.writes) == 0 || &first.writes[0] != &again.writes[0] {
+		t.Fatal("a repeated read recomputed the projections")
+	}
+	if first.resistance == ([17]abnormal.Resistance{}) {
+		t.Fatal("the gated resistance never landed; the fixture is broken")
+	}
+
+	c.Skills = append(c.Skills, 103)
+	skills[103] = enterworld.SkillRow{ID: 103, Group: 1, Level: 3, PassiveParameters: enterworld.SkillPassiveParameters{
+		Pinned: true, Mask: 1 << enterworld.ParameterTwoHandPower,
+		Values: enterworld.SkillParameterValues{enterworld.ParameterTwoHandPower: 9}}}
+	learned := assertProjectionFresh(t, "learn appends", c, skills, items, 2)
+	if learned.power == first.power {
+		t.Fatal("the learned rank left the cached power unchanged")
+	}
+	c.Skills[len(c.Skills)-1] = 102
+	assertProjectionFresh(t, "learn overwritten back", c, skills, items, 2)
+	c.Skills = slices.Delete(c.Skills, 0, 1)
+	assertProjectionFresh(t, "skill deleted", c, skills, items, 2)
+
+	c.MissionInventory[0].Durability = 0
+	broken := assertProjectionFresh(t, "gating weapon broken", c, skills, items, 2)
+	if broken.resistance != ([17]abnormal.Resistance{}) {
+		t.Fatalf("a broken sword still gates the resistance in: %+v", broken.resistance)
+	}
+	c.MissionInventory[0].Durability = 90
+	assertProjectionFresh(t, "gating weapon repaired", c, skills, items, 2)
+	staff := &enterworld.ItemRef{RefObjID: 72, Codename: "ITEM_PC_STAFF", TypeIDs: [4]int64{3, 1, 6, 9}, Combat: &enterworld.ItemCombatRef{}}
+	items[staff.Codename] = staff
+	c.MissionInventory[0] = domain.InventoryRow{Slot: 6, RefObjID: staff.RefObjID, Codename: staff.Codename, TypeFlags: staff.TypeFlags(), VarianceBits: "0", Durability: 90}
+	assertProjectionFresh(t, "gating weapon swapped", c, skills, items, 2)
+
+	assertProjectionFresh(t, "a staff's kind", c, skills, items, 9)
+	assertProjectionFresh(t, "no weapon kind", c, skills, items, 0)
+
+	other := projectionFixtureSkillsWithPower(t, skills, 42)
+	assertProjectionFresh(t, "another skill source", c, other, items, 2)
+	anonymous := *c
+	anonymous.ID = 0
+	assertProjectionFresh(t, "no character ID", &anonymous, skills, items, 2)
+}
+
+/*
+================
+projectionFixtureSkillsWithPower
+
+The fixture's skill source with group 1's rank-2 power replaced, standing
+for a reload that brings different rows behind the same identity slot.
+================
+*/
+func projectionFixtureSkillsWithPower(t *testing.T, skills passiveSkills, value uint32) passiveSkills {
+	t.Helper()
+	other := passiveSkills{}
+	for id, row := range skills {
+		other[id] = row
+	}
+	row := other[102]
+	row.PassiveParameters.Values = enterworld.SkillParameterValues{enterworld.ParameterTwoHandPower: value}
+	other[102] = row
+	return other
+}
+
+/*
+================
+TestLearnedProjectionsSharedResultsSurviveStatsCalls
+
+The cached writes are shared: two full stat snapshots must leave them
+byte for byte as computed.
+================
+*/
+func TestLearnedProjectionsSharedResultsSurviveStatsCalls(t *testing.T) {
+	skills, items, sword := projectionFixture()
+	c := &domain.Character{ID: 980002, Level: pointer(80), MaxLevel: pointer(80), Strength: pointer(300), Intellect: pointer(200),
+		Skills:           []uint32{101, 102, 201, 202, 301, 302},
+		MissionInventory: []domain.InventoryRow{{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90}}}
+	defer ForgetLearnedProjections(c.ID)
+	before := assertProjectionFresh(t, "seeded", c, skills, items, 2)
+	stored := slices.Clone(before.writes)
+	for i := range 2 {
+		stats, _, err := PlayerStats(c, Catalogs{Items: items, Skills: skills})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.StatusResistance != before.resistance || stats.DamageReturn != before.damageReturn ||
+			stats.DamageReturnSkill != before.damageReturnSkill || stats.SkillParameters != before.power {
+			t.Fatalf("call %d: stats %+v, projection %+v", i, stats, before)
+		}
+	}
+	after := assertProjectionFresh(t, "after stats", c, skills, items, 2)
+	if !reflect.DeepEqual(after.writes, stored) {
+		t.Fatal("a stats call mutated the shared cached writes")
+	}
+}
+
+/*
+================
+TestLearnedProjectionsAreSafeForConcurrentReaders
+
+Readers on many goroutines, each with its own snapshot of one character,
+while the snapshots keep changing the list (run under -race).
+================
+*/
+func TestLearnedProjectionsAreSafeForConcurrentReaders(t *testing.T) {
+	skills, items, sword := projectionFixture()
+	const id = 980003
+	defer ForgetLearnedProjections(id)
+	lists := [][]uint32{{101}, {101, 201}, {102, 202}, {103, 203}, {302}}
+	skills[103] = enterworld.SkillRow{ID: 103, Group: 1, Level: 3}
+	skills[203] = enterworld.SkillRow{ID: 203, Group: 2, Level: 3}
+	var wait sync.WaitGroup
+	errors := make(chan string, 64)
+	for reader := range 16 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			for i := range 200 {
+				c := &domain.Character{ID: id, Skills: slices.Clone(lists[(reader+i)%len(lists)]),
+					MissionInventory: []domain.InventoryRow{{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90}}}
+				got, want := learnedProjections(c, skills, items, 2), freshProjection(c, skills, items, 2)
+				if !reflect.DeepEqual(got.writes, want.writes) || got.resistance != want.resistance {
+					errors <- fmt.Sprintf("list %v: cached %+v, fresh %+v", c.Skills, got, want)
+					return
+				}
+			}
+		}()
+	}
+	wait.Wait()
+	close(errors)
+	for message := range errors {
+		t.Fatal(message)
+	}
+}
+
+/*
+================
+TestLearnedProjectionsEvictAndForget
+================
+*/
+func TestLearnedProjectionsEvictAndForget(t *testing.T) {
+	skills := rankFixture()
+	const first = 990000
+	for i := range projectionCacheMax + 1 {
+		learnedProjections(&domain.Character{ID: first + int64(i), Skills: []uint32{101}}, skills, itemRefs{}, 0)
+	}
+	projections.mu.Lock()
+	_, evicted := projections.entries[first]
+	_, kept := projections.entries[first+projectionCacheMax]
+	size := projections.order.Len()
+	projections.mu.Unlock()
+	if evicted || !kept || size > projectionCacheMax {
+		t.Fatalf("LRU: oldest kept=%v newest kept=%v size=%d (max %d)", evicted, kept, size, projectionCacheMax)
+	}
+	ForgetLearnedProjections(first + projectionCacheMax)
+	projections.mu.Lock()
+	_, still := projections.entries[first+projectionCacheMax]
+	projections.mu.Unlock()
+	if still {
+		t.Fatal("ForgetLearnedProjections kept the entry")
+	}
+	for i := range projectionCacheMax + 1 {
+		ForgetLearnedProjections(first + int64(i))
+	}
+}

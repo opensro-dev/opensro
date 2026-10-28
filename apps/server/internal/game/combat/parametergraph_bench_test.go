@@ -13,6 +13,7 @@ links and level-80 base writes.
 package combat
 
 import (
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -205,6 +206,151 @@ func BenchmarkPlayerStatsWithModifiersLevel80(b *testing.B) {
 			b.Fatal(err)
 		}
 		benchmarkStatsSink = stats
+	}
+}
+
+/*
+================
+learnedSkillsBenchFixture
+
+A level-80 character with twelve passive groups learned to their third
+rank (36 learned ids), seven worn pieces and a sword: the shape whose
+stats the tick rebuilds per hit and per effect refresh.
+================
+*/
+func learnedSkillsBenchFixture(b *testing.B) (*domain.Character, Catalogs) {
+	b.Helper()
+	skills := passiveSkills{}
+	var learned []uint32
+	for group := uint32(1); group <= 12; group++ {
+		for rank := int64(1); rank <= 3; rank++ {
+			id := group*100 + uint32(rank)
+			learned = append(learned, id)
+			row := enterworld.SkillRow{ID: id, Group: group, Level: rank}
+			if rank == 3 {
+				params := enterworld.SkillPassiveParameters{
+					Pinned: true,
+					Mask:   1 << enterworld.ParameterTwoHandPower,
+					Values: enterworld.SkillParameterValues{enterworld.ParameterTwoHandPower: 100 + group},
+				}
+				switch group % 4 {
+				case 0:
+					params.Reat = enterworld.SkillPassiveReat{Mask: 0x3f, Value: 40}
+				case 1:
+					params.Real = enterworld.SkillPassiveReal{Mask: 0x17fafc0, Flat: 50, Grade: 9}
+				case 2:
+					params.MaxHP = enterworld.SkillFlatRate{Present: true, Flat: 1500}
+				case 3:
+					params.DamageReturn = enterworld.SkillDamageReturn{Present: true, Chance: 20, Physical: 15, Magical: 10, Range: 3}
+				}
+				row.PassiveParameters = params
+				if group == 11 {
+					row.PassiveCritical = enterworld.SkillPassiveCritical{Pinned: true, Flat: 5, WeaponKind: 2}
+				}
+				if group == 12 {
+					row.PassiveDefense = enterworld.SkillPassiveDefense{Pinned: true, Physical: 30, Magical: 25}
+				}
+				if group == 1 {
+					row.Reqi = enterworld.SkillReqi{Present: true, Count: 1, Pairs: [5]enterworld.SkillReqiPair{{Kind: 6, Value: 2}}}
+				}
+				if group == 5 {
+					row.Reqi = enterworld.SkillReqi{Present: true, Count: 1, Pairs: [5]enterworld.SkillReqiPair{{Kind: 6, Value: 9}}}
+				}
+			}
+			skills[id] = row
+		}
+	}
+	sword := &enterworld.ItemRef{
+		RefObjID: 71,
+		Codename: "ITEM_CH_SWORD_01_A",
+		TypeIDs:  [4]int64{3, 1, 6, 2},
+		Combat:   &enterworld.ItemCombatRef{ActionRange: 6},
+	}
+	refs := itemRefs{sword.Codename: sword}
+	inventory := []domain.InventoryRow{{Slot: 6, RefObjID: sword.RefObjID, Codename: sword.Codename, TypeFlags: sword.TypeFlags(), VarianceBits: "0", Durability: 90, StackCount: 1}}
+	for slot := int64(0); slot < 6; slot++ {
+		piece := &enterworld.ItemRef{
+			RefObjID: 100 + uint32(slot),
+			Codename: fmt.Sprintf("ITEM_CH_M_HEAVY_01_%d", slot),
+			TypeIDs:  [4]int64{3, 1, 1, 1},
+			Combat:   &enterworld.ItemCombatRef{},
+		}
+		refs[piece.Codename] = piece
+		inventory = append(inventory, domain.InventoryRow{Slot: slot, RefObjID: piece.RefObjID, Codename: piece.Codename, TypeFlags: piece.TypeFlags(), VarianceBits: "0", Durability: 90, StackCount: 1})
+	}
+	character := &domain.Character{
+		ID:               970001,
+		Level:            pointer(80),
+		MaxLevel:         pointer(80),
+		Strength:         pointer(300),
+		Intellect:        pointer(200),
+		Skills:           learned,
+		MissionInventory: inventory,
+	}
+	return character, Catalogs{Items: refs, Skills: skills}
+}
+
+/*
+================
+BenchmarkPlayerStatsWithLearnedSkills
+
+The same end-to-end snapshot as BenchmarkPlayerStatsWithModifiersLevel80
+for a character whose learned passives actually project: every call used
+to re-walk the selected rank rows (three projections, a reqi equipment
+walk per gated row) although neither the skill list nor the equipment
+moved between calls.
+================
+*/
+func BenchmarkPlayerStatsWithLearnedSkills(b *testing.B) {
+	character, catalogs := learnedSkillsBenchFixture(b)
+	if _, _, err := PlayerStatsWithModifiers(character, catalogs, nil, nil); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		stats, _, err := PlayerStatsWithModifiers(character, catalogs, nil, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkStatsSink = stats
+	}
+}
+
+var benchmarkProjectionSink learnedProjection
+
+/*
+================
+BenchmarkLearnedProjectionsFresh
+
+The three learned projections computed on every call, the pre-cache
+shape of a stats snapshot's passive phase.
+================
+*/
+func BenchmarkLearnedProjectionsFresh(b *testing.B) {
+	character, catalogs := learnedSkillsBenchFixture(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkProjectionSink = computeLearnedProjection(character, catalogs.Skills, catalogs.Items, 2)
+	}
+}
+
+/*
+================
+BenchmarkLearnedProjectionsCached
+
+The same projections served from the content-keyed cache: the shape of
+every stats call after the first for unchanged skills and equipment.
+================
+*/
+func BenchmarkLearnedProjectionsCached(b *testing.B) {
+	character, catalogs := learnedSkillsBenchFixture(b)
+	benchmarkProjectionSink = learnedProjections(character, catalogs.Skills, catalogs.Items, 2)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkProjectionSink = learnedProjections(character, catalogs.Skills, catalogs.Items, 2)
 	}
 }
 
