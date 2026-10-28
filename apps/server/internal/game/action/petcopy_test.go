@@ -21,7 +21,10 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -149,6 +152,87 @@ func TestPetShieldTickReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 		if a[i] != b[i] {
 			t.Fatalf("line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[i])
 		}
+	}
+}
+
+/*
+================
+petCounterTrace
+
+Ten grouped hits charge the bear counter and the tenth stuns, on a
+scripted roll (draw 4999, fully deterministic). The owner record is
+fattened after the fixture's setup: the bear lives in a bag row, so
+the counter resolves it through the companion walk either way.
+================
+*/
+func petCounterTrace(t *testing.T, full bool) string {
+	rt, clock, c, original := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	ref := original.Ref
+	ref.Level = 90
+	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{ref.RefObjID: ref}, nil))
+	rt.Monsters.SetAbnormalContext(monsterAbnormalContext{rt})
+	rt.Monsters.SetTimeSource(clock.Now)
+	rt.Monsters.StartDivision(testDivision)
+	first := roarField(t, rt, c, clock)
+	learnPetBook(t, c, 30)
+	at := rt.LiveSpawnFor(testDivision, c)
+	lease, _ := rt.casterPopulation(testDivision, c)
+	gids := []uint32{first.Gid}
+	for _, distance := range []float64{40, 50, 60, 70, 81} {
+		point := at
+		point.X += distance
+		rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{Division: testDivision, Population: lease, RefObjID: ref.RefObjID, Count: 1, Position: point, NowMs: clock.NowMs()})
+		rows := rt.Monsters.CombatCandidatesInPopulation(testDivision, lease, point, 1, clock.NowMs(), true)
+		if len(rows) != 1 {
+			t.Fatal("missing group fixture")
+		}
+		gids = append(gids, rows[0].Gid)
+	}
+	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
+	bearAt := at
+	bearAt.X += 300
+	state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, bearAt)
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, Summon: c.ActiveCOS}}
+	c.ActiveCOS = nil
+	petPeriodicFatten(c)
+	rt.CombatRoll = func() (uint32, error) { return 4999, nil }
+	if full {
+		rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			return rt.characterSnapshot(divisionID, character)
+		}
+	}
+	hit := petCounterHit{division: testDivision, owner: c, victim: enterworld.ObjectIDForCharacter(c), formulas: []combat.Result{{Damage: 1}}, now: clock.NowMs()}
+	trace := ""
+	for i := 0; i < 9; i++ {
+		hit.attacker = gids[i%4]
+		trace += fmt.Sprintf("%+v\n", rt.petCounterStun(hit))
+	}
+	hit.attacker = gids[4]
+	trace += fmt.Sprintf("%+v\n", rt.petCounterStun(hit))
+	stunned := 0
+	for _, gid := range gids {
+		mob, _ := rt.Monsters.Get(testDivision, gid)
+		if mob.Abnormal != nil && mob.Abnormal.Slots[abnormal.Stun].Active {
+			stunned++
+		}
+	}
+	if stunned == 0 {
+		t.Fatal("counter never stunned; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("stunned=%d hits=%v", stunned, state.trained.counterHits)
+}
+
+/*
+================
+TestPetCounterReadsNothingOutsideTheCompanionCopy
+================
+*/
+func TestPetCounterReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	narrow, full := petCounterTrace(t, false), petCounterTrace(t, true)
+	if narrow != full {
+		t.Fatalf("counter traces diverged\nnarrow: %.900s\nfull:   %.900s", narrow, full)
 	}
 }
 
