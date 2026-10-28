@@ -9,7 +9,7 @@ function skipCountedString( buf, p ) {
 }
 
 // One IModData payload, dispatched on the u32 typeId exactly as the native factory
-// ModData_CreateByTypeId (ModData_CreateByTypeId) does: hi16 = class, lo16 = subclass.
+// ModData_CreateByTypeId does: hi16 = class, lo16 = subclass.
 function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 	const baseOffset = p;
 	if ( p + 28 > buf.length ) throw new Error( "truncated IModData base" );
@@ -137,7 +137,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 		p += 4;
 		const entries = [];
 		if ( n > 0 ) {
-			p += 44; // ModDataSound_ReadParams (ModDataSound_ReadParams)
+			p += 44; // ModDataSound_ReadParams
 			for ( let i = 0; i < n; i += 1 ) {
 				const animationName = readStr( buf, p );
 				p = animationName.nextOffset;
@@ -173,7 +173,7 @@ function skipModPayload( buf, p, typeId, modifiers, setMeta ) {
 	return p;
 }
 
-// CModDataSet_Load (CModDataSet_Load): u32, u32, counted name, u32 nMods, mods.
+// CModDataSet_Load: u32, u32, counted name, u32 nMods, mods.
 function skipModDataSet( buf, p, modifiers ) {
 	const kind = buf.readUInt32LE( p );
 	p += 4;

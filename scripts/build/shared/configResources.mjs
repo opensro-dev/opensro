@@ -26,7 +26,7 @@ export async function buildConfigResources() {
 	await writeJson( path.join( publicRoot, "assets", "config", "option.json" ), optionConfig );
 	await writeJson( path.join( publicRoot, "assets", "config", "cameradata.json" ), missionCameraData );
 
-	// Native CGInterface_LoadCommandBindings / CGInterface_LoadCommandBindings reads config\command.txt
+	// Native CGInterface_LoadCommandBindings reads config\command.txt
 	// through the GFXFileManager; the browser twin fetches the same bytes as a
 	// public asset. Copied raw (the WIP twin performs the native token-stream
 	// parse itself, comments and all).

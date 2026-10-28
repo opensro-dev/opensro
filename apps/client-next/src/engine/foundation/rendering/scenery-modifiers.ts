@@ -71,7 +71,7 @@ export function sceneryMaterial(
 			warn( "Malformed scenery material state" );
 			continue;
 		}
-		// CRTModMtrl_BeginStates (CRTModMtrl_BeginStates) applies the +0x60 block under its
+		// CRTModMtrl_BeginStates applies the +0x60 block under its
 		// four words: +0x50 alpha test (ALPHAREF b8, ALPHAFUNC b9); +0x54 alpha
 		// blending (SRCBLEND b0, DESTBLEND b1) and stage 0's COLOROP/ARG1/ARG2
 		// and ALPHAOP/ARG1/ARG2 (b2..b7), with +0x5c adding TEXTUREFACTOR from

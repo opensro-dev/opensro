@@ -1,6 +1,6 @@
 // Action-pane commands on the motion lane: the 0x324B emote/action channel.
 // The request originates from the same client dispatcher as sit/stand and
-// run/walk (CGInterface_ExecuteActionCommand / CGInterface_ExecuteActionCommand), and the emote's
+// run/walk (CGInterface_ExecuteActionCommand), and the emote's
 // whole effect is a
 // SetMotionState on every viewing client - the same plane the rest of this
 // package drives - so they live here rather than in the item or stat lanes

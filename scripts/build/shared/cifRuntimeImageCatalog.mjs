@@ -416,7 +416,7 @@ export const runtimeCifImageReferences = [
 	"effect/footstep_sand.ddj",
 	"effect/footstep_snow.ddj",
 	// EventGuide/GameGuide runtime-created controls and zero-sized DDJ statics.
-	// CIFQuestInfoGuide_OnCreate CIFQuestInfoGuide_OnCreate assigns this blink pair at runtime;
+	// CIFQuestInfoGuide_OnCreate assigns this blink pair at runtime;
 	// the level-up arm creates the control only after the map reveal, so neither
 	// frame can rely on the static resinfo copy pass or a late browser request.
 	"icon/etc/qstinfoic_1.ddj",
@@ -433,7 +433,7 @@ export const runtimeCifImageReferences = [
 	"interface/guide/gd_scroll_line.ddj",
 	"interface/guide/gd_side_tab.ddj",
 	"interface/ifcommon/com_side_button.ddj",
-	// CIFVerticalScroll_OnCreate (CIFVerticalScroll_OnCreate @0x545206) assigns the scroll
+	// CIFVerticalScroll_OnCreate (at 0x545206) assigns the scroll
 	// TRACK texture "interface\ifcommon\com_scroll_bar.ddj" to the bar window
 	// itself at runtime; the resinfo VSCROLL nodes carry an empty DDJ field
 	// (e.g. ifsystemmessage.txt GDR_SYETEM_MESSAGE_VSCROLL DDJ=""), so the
@@ -442,14 +442,14 @@ export const runtimeCifImageReferences = [
 	"interface/ifcommon/com_scroll_bar.ddj",
 	// CIFMallNotifyWnd root texture is assigned by CGInterface after creation.
 	"interface/mall/mall_communicate.ddj",
-	// CIFInventory_RebuildCapacityAndGold (CIFInventory_RebuildCapacityAndGold) creates the bag page
+	// CIFInventory_RebuildCapacityAndGold creates the bag page
 	// tabs (com_tab_off/_on CIFSelectableArea triplet, empty normal) and marks
 	// beyond-capacity slots with pt_block - all runtime references from code.
 	"interface/ifcommon/com_tab_off.ddj",
 	"interface/ifcommon/com_tab_on.ddj",
 	"interface/pet/pt_block.ddj",
 	// CIFInventory pane chrome, authored in resinfo\ifinventory.txt (created by
-	// CIFInventory_OnCreate CIFInventory_OnCreate). The lattice/frame carry a DDJ *prefix*
+	// CIFInventory_OnCreate). The lattice/frame carry a DDJ *prefix*
 	// (multi-piece classes CIFLattice/CIFFrame), so the resinfo copy pass never
 	// sees the concrete piece names - list them as runtime references:
 	//   id 2 GDR_INVENTORY_LATTICE (com_lattice_ 36x36 cells) = socket grid,

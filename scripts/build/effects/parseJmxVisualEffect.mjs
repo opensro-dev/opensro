@@ -4,7 +4,7 @@
 parseJmxVisualEffect.mjs - JMXVEFF 0010..0013 binary effect reader
 
 The tree-level layout (dataOffset u32, name, controllers, child recursion)
-follows native CEFStoredEffect_DeserializeTree (CEFStoredEffect_DeserializeTree / CEFStoredEffect_LoadFile).
+follows native CEFStoredEffect_DeserializeTree / CEFStoredEffect_LoadFile.
 The inner member layout (globalData, programs, life/view/render commands,
 resource, trailing/render programs) follows CEFStoredEffect_Deserialize
 (CEFStoredEffect_ReadPayload, vtable slot +0x1c). Payload shapes for controllers and

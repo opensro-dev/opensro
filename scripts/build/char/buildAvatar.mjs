@@ -321,7 +321,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
       return fi;
     });
     if (unresolvedBone !== null && options.rigidUnboundMeshes && resolvedBoneCount === 0) {
-      // Native PrimGeometry_BakeSkinBlendWeights (PrimGeometry_BakeSkinBlendWeights) leaves names
+      // Native PrimGeometry_BakeSkinBlendWeights leaves names
       // that cannot bind to the compound skeleton at the 0xff rigid sentinel.
       // This is how authored model-local props such as the West-China smith
       // hammer remain drawable without becoming a build-fatal fake bone.

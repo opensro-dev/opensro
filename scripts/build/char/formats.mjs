@@ -53,7 +53,7 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 
 	// Skeleton section @ptr[2]: u32 count, then count x {string bskPath, string attachBone}.
 	// attachBone is the WEARER bone the item's whole bone branch is parented to (RE:
-	// CRTBranch_LinkToParentBranch CRTBranch_LinkToParentBranch reads the string the loader stashed at
+	// CRTBranch_LinkToParentBranch reads the string the loader stashed at
 	// CResSkeleton+0x58 and links the branch root socket under the wearer socket of that
 	// name). Ornament items (shoulder orbs...) carry "Bip01 Neck1"/"Bip01 Neck"; plain
 	// characters and most items leave it empty.
@@ -111,7 +111,7 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 // Native animation-set section @ptr[5]. RE:
 //   CRes_LoadAnimationSetGroups -> CResAnimationSet_LoadStateRecords.
 // Each named set owns state records. The first two fields are the state id and
-// animation slot. CAnimationState_ReadTransitionMap (CAnimationState_ReadTransitionMap) loads the next
+// animation slot. CAnimationState_ReadTransitionMap loads the next
 // 16-byte records into CResAnimationStateTable+0x04; CRTAniInstallation_DispatchSoundRange walks that map
 // and raises the authored animation events. The final vector/scalar is the
 // normalized-time warp curve consumed by CRTAniInstallation_DispatchEventRange, not another event list.
@@ -226,7 +226,7 @@ function parseAnimationSets( buf, ptr, animationPaths ) {
 // CResObject_LoadFromArchive_Then_CJArchiveFm_RefillBuffer), leaving the stream cursor right where the part-link tail starts. There
 // is no header pointer to the tail, so the only correct way to locate it is to walk
 // section 6 byte-exactly the way the client does. Every IModData subclass Load was
-// RE'd for this (IModData_LoadBase IModData_LoadBase + 12 typed payload readers); the walk
+// RE'd for this (IModData_LoadBase + 12 typed payload readers); the walk
 // below lands exactly at EOF(-trailing) on 3929/3930 BSRs in the corpus (lone
 // exception: npc/npc/tt.bsr, a leftover authored "JMXVRES 0107" test file).
 /*
@@ -314,7 +314,7 @@ export function parseSkinnedBms( buf, where = "<bms>" ) {
 	}
 
 	// skin @ptr[1]: u32 boneCount, counted bone names, then 6 bytes/vertex.
-	// Native MeshBatch_BuildVertexRunsType1Skinned (MeshBatch_BuildVertexRunsType1Skinned) treats an
+	// Native MeshBatch_BuildVertexRunsType1Skinned treats an
 	// absent/empty weight table as rigid geometry. Several shipped NPC props
 	// use exactly ptr[1] == ptr[2] - 4: the zero count is the entire section.
 	const boneNames = [];

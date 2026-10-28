@@ -226,7 +226,7 @@ these through the PK2 at draw time, so the browser build publishes them
 all instead of the hand-carried starter subset in
 runtimeCifImageReferences; referenced icons whose DDJ never shipped in
 this Media.pk2 stay absent and ride the native icon_default fallback
-(CIFSlotWithHelp_SetSpritePathWithFallback CIFSlotWithHelp_SetSpritePathWithFallback), same as retail.
+(CIFSlotWithHelp_SetSpritePathWithFallback), same as retail.
 ================
 */
 async function collectItemDataIconDdjReferences() {
@@ -252,7 +252,7 @@ collectActionWndDataIconDdjReferences
 
 CIFAction record icons, data-driven: the icon .ddj column of every
 actionwnddata.txt record (the 0xcec870 action-data table the REAL
-CIFAction_OnCreate CIFAction_OnCreate folds over). Natively these are runtime
+CIFAction_OnCreate folds over). Natively these are runtime
 references the record loader resolves through the PK2 at
 SetupActionButton time, so the resinfo copy pass never sees them
 (ifaction.txt authors every slot with DDJ="") - publish them from the

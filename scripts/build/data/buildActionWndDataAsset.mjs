@@ -2,7 +2,7 @@
 // CGlobalDataManager loads this file at client boot (loader tag 9 @0x723346
 // in Client_LoadGameDataTables; producer CGlobalDataManager_LoadTextDataFile case 9) and parses each record line
 // with CActionWndData_ParseTextRow / CActionWndData_ParseRecordBody into the action-record
-// map at data_cec870+0x258 - the table CIFAction_OnCreate (CIFAction_OnCreate)
+// map at data_cec870+0x258 - the table CIFAction_OnCreate
 // iterates to populate the Action pane's command-id -> slot map.
 //
 // NO field decoding happens here (the worldmap_localinfo raw-rows

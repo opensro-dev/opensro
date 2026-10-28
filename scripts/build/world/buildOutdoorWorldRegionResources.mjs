@@ -158,7 +158,7 @@ discoverOutdoorWorldSectors
 */
 /**
  * Discover exactly the retail outdoor sectors enabled by navmesh/mapinfo.mfo,
- * the availability bitmap consumed by CMapLoader_ReadMapInfoMfo (CMapLoader_ReadMapInfoMfo)
+ * the availability bitmap consumed by CMapLoader_ReadMapInfoMfo
  * and MapLoader_CanLoadTerrainNvmRegion (CMapLoader_TerrainNavMeshExists). Every enabled bit must
  * have the complete MAPM/MAPT/MAPO2/JMXVNVM data plane.
  */
