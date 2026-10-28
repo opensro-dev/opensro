@@ -155,6 +155,11 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		r.counter = domain.MaxGroundItemGIDCounter
 	}
 	r.revision++
+	// The plane is replaced wholesale: rows the snapshot holds but the
+	// registry drops (retired populations, unkeyable gids) are known to
+	// no stamp, so the next commit diffs the whole plane.
+	r.changes = changeJournal{}
+	r.resyncLocked()
 	for divisionID, rows := range s.Divisions {
 		items := make(map[uint32]Item, len(rows))
 		for _, row := range rows {

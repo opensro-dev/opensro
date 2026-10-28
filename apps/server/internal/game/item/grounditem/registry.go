@@ -164,6 +164,9 @@ type Registry struct {
 	// it to skip re-persisting ground rows on commits that never touched
 	// the ground plane.
 	revision uint64
+	// changes stamps every gid a mutation touched, for the store's
+	// commit to persist only those rows (changes.go).
+	changes changeJournal
 }
 
 // Revision reports the mutation counter. Two equal reads with no
@@ -186,7 +189,9 @@ NewRegistry
 ================
 */
 func NewRegistry() *Registry {
-	return &Registry{byDivision: make(map[string]map[uint32]Item)}
+	// No store has persisted this registry yet: its first commit
+	// diffs the whole plane (changes.go).
+	return &Registry{byDivision: make(map[string]map[uint32]Item), changes: changeJournal{full: true}}
 }
 
 // division returns the division's map, creating it on first use. Callers must
@@ -230,6 +235,7 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	r.division(divisionID)[item.Gid] = item
+	r.stampLocked(divisionID, item.Gid)
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	return item
@@ -314,6 +320,7 @@ func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 	}
 	delete(items, gid)
 	r.revision++
+	r.stampLocked(divisionID, gid)
 	return item, true
 }
 
@@ -341,6 +348,7 @@ func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bo
 	item.StackCount = count
 	items[gid] = item
 	r.revision++
+	r.stampLocked(divisionID, gid)
 	return true
 }
 
@@ -369,6 +377,9 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 	}
 	if len(expired) > 0 {
 		r.revision++
+		for _, item := range expired {
+			r.stampLocked(divisionID, item.Gid)
+		}
 	}
 	sort.Slice(expired, func(a, b int) bool { return expired[a].Gid < expired[b].Gid })
 	return expired
@@ -400,6 +411,9 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 	}
 	if len(released) > 0 {
 		r.revision++
+		for _, item := range released {
+			r.stampLocked(divisionID, item.Gid)
+		}
 	}
 	sort.Slice(released, func(a, b int) bool { return released[a].Gid < released[b].Gid })
 	return released
@@ -494,6 +508,10 @@ func (r *Registry) Clear(divisionID string) {
 
 	if items, ok := r.byDivision[divisionID]; ok && len(items) > 0 {
 		r.revision++
+		// Every gid of the vanished division is a delete.
+		for gid := range items {
+			r.stampLocked(divisionID, gid)
+		}
 	}
 	delete(r.byDivision, divisionID)
 }

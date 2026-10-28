@@ -103,6 +103,11 @@ GroundSnapshotSource
 type GroundSnapshotSource interface {
 	Revision() uint64
 	Snapshot() domain.GroundSnapshot
+	// Changes reports the rows changed since the last acknowledged
+	// commit; Acknowledge is called only once that commit is durable
+	// (ground_changes.go).
+	Changes() domain.GroundChanges
+	Acknowledge(revision uint64)
 }
 
 // AttachGround installs the live ground snapshot source for later commits.

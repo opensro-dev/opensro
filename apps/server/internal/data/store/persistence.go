@@ -79,16 +79,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		return fmt.Errorf("authority database is not open")
 	}
 
-	// The ground plane re-persists only when its revision advanced.
-	var groundSnapshot *domain.GroundSnapshot
-	groundRev := uint64(0)
-	if s.ground.source != nil {
-		groundRev = s.ground.source.Revision()
-		if !s.ground.revisionRecorded || groundRev != s.ground.committedRev {
-			snapshot := s.ground.source.Snapshot()
-			groundSnapshot = &snapshot
-		}
-	}
+	// The ground plane re-persists only when its revision advanced, and
+	// then only the rows that changed (ground_changes.go).
+	ground := s.takeGroundChangesLocked()
 
 	begun := s.mu.now()
 	tx, err := s.db.Begin()
@@ -234,11 +227,8 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		}
 	}
 
-	if groundSnapshot != nil {
-		if _, _, err := writeGroundDiffTx(tx, &s.encodeScratch, s.ground.loadedRecords, groundSnapshot.Divisions); err != nil {
-			return err
-		}
-		if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", groundSnapshot.GidCounter)); err != nil {
+	if ground != nil {
+		if err := writeGroundChangesTx(tx, &s.encodeScratch, s.ground.loadedRecords, ground); err != nil {
 			return err
 		}
 	}
@@ -261,11 +251,8 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
 
-	if groundSnapshot != nil {
-		s.ground.loadedGidCounter = groundSnapshot.GidCounter
-		s.ground.loadedRecords = groundSnapshot.Divisions
-		s.ground.committedRev = groundRev
-		s.ground.revisionRecorded = true
+	if ground != nil {
+		s.retainGroundChangesLocked(ground)
 	}
 	return nil
 }
