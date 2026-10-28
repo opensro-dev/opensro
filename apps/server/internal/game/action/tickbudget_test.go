@@ -54,10 +54,12 @@ const (
 // source capture) on that same seeded shard, measured 1,019,000 B /
 // 2,719 allocs; with the test-only refusal audit out of the measured
 // window (it never runs in production, and its two encodes per door were
-// 58% of the counted bytes), measured 422,144 B / 2,541 allocs.
+// 58% of the counted bytes), measured 422,144 B / 2,541 allocs; with a
+// brood-free crow taking no owner copy on its tick, measured 275,466 B /
+// 2,099 allocs.
 const (
-	tickBudgetBytesPerTick  = 464400
-	tickBudgetAllocsPerTick = 2795
+	tickBudgetBytesPerTick  = 303000
+	tickBudgetAllocsPerTick = 2309
 )
 
 /*

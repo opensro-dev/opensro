@@ -85,6 +85,32 @@ func TestCrowBroodLifecycle(t *testing.T) {
 
 /*
 ================
+TestCrowWithoutBroodStillRecharges
+
+#1943: a crow with no brood out takes no owner copy on its tick, but its
+brood charges still recharge and publish, as they did when every crow
+copied its owner.
+================
+*/
+func TestCrowWithoutBroodStillRecharges(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	learnPetBook(t, c, 51)
+	now := clock.NowMs()
+	c.ActiveCOS.Training.Rows[1] = domain.PetRowCooldown{Kind: companion.ChargeKind, Capacity: 3, Charges: 0, RechargeMs: 300000, ReadyAtMs: now + 1000}
+	if len(c.Brood) != 0 {
+		t.Fatal("the fixture laid a brood")
+	}
+	frames := rt.advanceCrowBrood(key, now+1000)
+	if c.ActiveCOS.Training.Rows[1].Charges == 0 {
+		t.Fatalf("no charge came back: %+v", c.ActiveCOS.Training.Rows[1])
+	}
+	if len(frames) == 0 {
+		t.Fatal("the recharge published nothing")
+	}
+}
+
+/*
+================
 TestCrowBroodDestroyedEggAndCaps
 ================
 */

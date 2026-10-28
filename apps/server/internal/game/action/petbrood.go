@@ -153,6 +153,22 @@ func crowBroodSource(c *enterworld.Character, gid uint32) *domain.CharacterCOS {
 
 /*
 ================
+hasBroodFrom
+
+Whether any brood pet of c was laid by the crow gid.
+================
+*/
+func hasBroodFrom(c *enterworld.Character, gid uint32) bool {
+	for _, pet := range c.Brood {
+		if pet.BroodSource == gid {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -166,19 +182,23 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	}
 	// Runs for every pet per tick: copy the owner only when the check
 	// below would let this gid through - every other pet (and every
-	// brood-space gid) is refused before any state moves (#1943).
+	// brood-space gid) is refused before any state moves (#1943). A crow
+	// with no brood out needs no copy at all: only the recharge below
+	// runs for it, and that reads the live record inside its own door.
+	crow := false
 	snapshot := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		source := crowBroodSource(c, key.gid)
-		return key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+		crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+		return crow && hasBroodFrom(c, key.gid)
 	})
-	if snapshot == nil {
+	if !crow {
 		return nil
 	}
-	source := crowBroodSource(snapshot, key.gid)
-	if source != nil && companion.PetKind(source.Codename) != "Crow" || key.gid >= broodGIDBase {
-		return nil
+	valid := false
+	if snapshot != nil {
+		source := crowBroodSource(snapshot, key.gid)
+		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
 	}
-	valid := source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
 	var output []wire.Frame
 	var reuse []wire.Frame
 	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
@@ -199,6 +219,9 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		reuse = rt.petTrainingStateFrames(live, now)
 		return true
 	})
+	if snapshot == nil {
+		return simFrames(reuse)
+	}
 	for _, pet := range snapshot.Brood {
 		if pet.BroodSource != key.gid {
 			continue
