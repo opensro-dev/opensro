@@ -166,3 +166,39 @@ func TestSpiritTickTakesThePetOwnerView(t *testing.T) {
 		t.Fatalf("the spirit tick saves %d B/run over the whole copy, want at least %d", full-narrow, saving/2)
 	}
 }
+
+/*
+================
+TestElementalLanesTakeThePetOwnerView
+
+The elemental lanes (wolf, crow kit, tailwind, plume, gear, penguin)
+copy the owner through elementalCompanionMatching once a pet passes
+admission, and take the pet-owner view: a Tailwind crow's tick on an
+owner fattened with plain bag rows allocates less than the same tick
+forced onto the whole copy by at least half the copies' difference.
+Restoring the whole copy (the mutation this guards) saves nothing.
+================
+*/
+func TestElementalLanesTakeThePetOwnerView(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	petPeriodicFatten(c)
+	now := clock.NowMs()
+	bytesPerRun := func(run func()) int64 {
+		return testing.Benchmark(func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				run()
+			}
+		}).AllocedBytesPerOp()
+	}
+	saving := bytesPerRun(func() { c.Snapshot() }) - bytesPerRun(func() { c.SnapshotCompanion() })
+	narrow := bytesPerRun(func() { rt.advanceTailwind(key, now) })
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	full := bytesPerRun(func() { rt.advanceTailwind(key, now) })
+	t.Logf("tailwind tick %d B/run on the view, %d B/run on the whole copy; the copies differ by %d B", narrow, full, saving)
+	if full-narrow < saving/2 {
+		t.Fatalf("the tailwind tick saves %d B/run over the whole copy, want at least %d", full-narrow, saving/2)
+	}
+}
