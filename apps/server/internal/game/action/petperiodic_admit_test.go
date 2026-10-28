@@ -105,6 +105,50 @@ func TestAdvancePetRefusedCompanionSkipsOwnerCopy(t *testing.T) {
 
 /*
 ================
+TestAdvancePetBagRowCompanionAdmitsAndRefuses
+
+Production pets live as summon records in bag rows, not parked on
+ActiveCOS (the #1963 regression class). The tick's admission resolves
+the companion through the same bag walk: a living summoned row pet
+takes up its follow, and once it falls the refusal is read off the live
+row without detaching the owner.
+================
+*/
+func TestAdvancePetBagRowCompanionAdmitsAndRefuses(t *testing.T) {
+	c := testCharacter()
+	c.ID, c.Name = 77, "bagowner"
+	refs := testCosSource(testItems())
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 80}
+	rt, _ := newTestRuntime(c, refs)
+	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
+	rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	const petGID = uint32(60001)
+	pet := &enterworld.CharacterCOS{GID: petGID, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 13, Summon: pet})
+	rt.BindPetSession(testDivision, c, 101)
+	petPeriodicFatten(c)
+	key := petOwnerKey{division: testDivision, name: strings.ToLower(c.Name), gid: petGID}
+
+	rt.advancePet(key, 1000)
+	if state := rt.petSessionFor(testDivision, c.Name, petGID); state == nil || state.follower == nil {
+		t.Fatal("bag-row pet did not take up its follow")
+	}
+	pet.CurrentHP = 0
+	rt.advancePet(key, 1100) // settle: combat cancels, the follower stops and clears
+	refused := testing.AllocsPerRun(20, func() { rt.advancePet(key, 1200) })
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	t.Logf("dead bag-row pet tick %.1f allocs vs owner copy %.1f", refused, copyAllocs)
+	if refused >= copyAllocs/2 {
+		t.Fatalf("dead bag-row pet tick allocs %.1f, want under half the %.1f-alloc owner copy", refused, copyAllocs)
+	}
+	if frames := rt.advancePet(key, 1200); len(frames) != 0 {
+		t.Fatal("dead bag-row pet produced frames", frames)
+	}
+}
+
+/*
+================
 TestPeriodicDeadSourceSkipsRecordCopy
 
 A living source's pulse lands; once the source falls, the next due pulse
