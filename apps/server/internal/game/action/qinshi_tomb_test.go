@@ -348,6 +348,61 @@ func TestQinShiTombClosedLinkGraph(t *testing.T) {
 
 /*
 ================
+TestQinShiTombEveryFloorReachable
+
+The closed-graph test proves every tomb link lands somewhere real; this
+proves the chain is walkable end to end (#1800 step 2): from the Jangan
+door's landing on Floor 1 (0x8007), following tomb link edges region to
+region, every one of the six floors (0x8002..0x8007) is reachable. The
+qinshi family's nests stand on those floors; a floor no edge reaches
+would be population no player can ever meet. Intra-floor walking is the
+dungeon navmesh's proof (movement.TestPublishedDungeonPortalTraversal),
+not this one's.
+================
+*/
+func TestQinShiTombEveryFloorReachable(t *testing.T) {
+	licensed.RequireGameData(t)
+	t.Setenv(monster.EnvQinShiTomb, "on")
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	if err != nil {
+		t.Fatalf("loadPortalCatalog(on): %v", err)
+	}
+	edges := map[uint16][]uint16{}
+	for _, link := range catalog.links {
+		src, srcOK := catalog.destinations[link.source]
+		dst, dstOK := catalog.destinations[link.target]
+		if !srcOK || !dstOK {
+			t.Fatalf("link %d>%d misses a destination", link.source, link.target)
+		}
+		if !strings.HasPrefix(src.code, "GATE_JINSI") && !strings.HasPrefix(dst.code, "GATE_JINSI") {
+			continue
+		}
+		from, to := src.spawn.RegionID, dst.spawn.RegionID
+		if from != 0 && to != 0 && from != to {
+			edges[from] = append(edges[from], to)
+		}
+	}
+	reached := map[uint16]bool{0x8007: true}
+	queue := []uint16{0x8007}
+	for len(queue) > 0 {
+		region := queue[0]
+		queue = queue[1:]
+		for _, next := range edges[region] {
+			if !reached[next] {
+				reached[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+	for floor := uint16(0x8002); floor <= 0x8007; floor++ {
+		if !reached[floor] {
+			t.Fatalf("floor %#x is not reachable from the tomb door's landing on 0x8007", floor)
+		}
+	}
+}
+
+/*
+================
 placeTombDoorWalker
 
 Stands the player at the tomb door's zone (region 0x66AC).
