@@ -64,7 +64,7 @@ export function fortressTaxAmount( draft: string, gold: string ): string {
 createFortressTaxHud
 
 A window belongs to the manager it was opened at; changing target or
-ending the conversation closes it (sub_5dbe00 hides it with the talk
+ending the conversation closes it (CIF_NPCWindow_CloseFortressWindows hides it with the talk
 window).
 ================
 */

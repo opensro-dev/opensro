@@ -7,7 +7,7 @@ The native renderer draws with one texture stage, configured from the
 resource: CEFEffect_Render (B153A0) sets COLOROP/ARG1/ARG2 and
 ALPHAOP/ARG1/ARG2 from an effect resource (+0x1B0..+0x1C4), and a BSR
 material modifier sets the same six states from its +0x62..+0x67 bytes
-(sub_aed240). This module is the reference the geometry shader mirrors
+(CRTModMtrl_BeginStates). This module is the reference the geometry shader mirrors
 (pipelines.ts): stageColor evaluates stage 0 exactly as the fixed-function
 pipeline defines each op, on rgba values in [0, 1], saturating the result.
 

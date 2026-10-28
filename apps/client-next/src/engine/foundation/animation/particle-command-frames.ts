@@ -4,7 +4,7 @@
 particle-command-frames.ts - native EFP source-line schedule frame expansion
 
 Expands a CEESourceListLineState schedule (start, spacing, end and byte1
-mode flags, native sub_b0c290 / sub_b143c0) into the discrete integer frames
+mode flags, native CEESourceListLineState_ResolveFrameWindow / CEESourceListLineState_ScheduleCommands) into the discrete integer frames
 within an element's lifetime at which the particle command fires.
 
 ===========================================================================

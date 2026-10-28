@@ -90,7 +90,7 @@ export interface EffectStage {
 	readonly phase?: string;
 	readonly movement?: { readonly delayMs: number; readonly startSpeed: number; readonly endSpeed: number; };
 	readonly targetBone?: string | null;
-	/** Target binding +0x08 / +0x09 (sub_91e720 tokens '@Bone' / '*'). */
+	/** Target binding +0x08 / +0x09 (CSkillEffectManager_ParseSkillEffectRecord tokens '@Bone' / '*'). */
 	readonly targetKeepRotation?: boolean;
 	readonly targetAddHeight?: boolean;
 	readonly targetOffset?: readonly [number, number, number];

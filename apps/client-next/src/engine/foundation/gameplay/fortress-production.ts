@@ -4,9 +4,9 @@
 fortress-production.ts - the fortress smith's and trainer's production
 
 CIFFortressMakeItemWnd serves both staff members (+0x7DF: 1 smith, 2
-trainer). Its item list is the forge group's vectors (sub_64b440 +0x00
-smith, sub_64b450 +0x10 trainer); a row's price and time come from the
-client's own siegefortressitemforge row (sub_64d3e0: +0xC gold, +0x10
+trainer). Its item list is the forge group's vectors (FortressServiceEntry_GetList0 +0x00
+smith, FortressServiceEntry_GetList10 +0x10 trainer); a row's price and time come from the
+client's own siegefortressitemforge row (SiegeFortressItemForge_GetRowCost: +0xC gold, +0x10
 guild points, +0x14 minutes), which the bootstrap carries here. The
 0xB1E1 answers (754A40 cases 0x0D..0x14) fill one order per staff member.
 

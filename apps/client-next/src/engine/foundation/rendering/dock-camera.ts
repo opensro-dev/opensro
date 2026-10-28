@@ -1,7 +1,7 @@
 import {dockSlot} from "./dock-slots";
 import type {CharacterRecord} from "@/engine/contracts/session";
 import type {FrontendCameraKey} from "@/engine/contracts/frontend";
-// sub_738A90: slot target + (2,0,2), native yaw (before GLB conversion),
+// CPSCharacterSelect_SetSelectionControlsVisible: slot target + (2,0,2), native yaw (before GLB conversion),
 // body-height-dependent focus and eight-unit camera distance.
 export function selectedDockCamera(row:CharacterRecord,index:number,count:number):FrontendCameraKey {
  const slot=dockSlot(index,count),height=row.visualLoadout.heightScale;

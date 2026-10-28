@@ -1,6 +1,6 @@
 import type {WorldGroup} from '@/engine/contracts/scene';
 import {identity} from '@/engine/foundation/rendering/world-math';
-// sub_8cbe10: octahedron, four midpoint-normalize subdivisions, R=20000.
+// CSkyDome_BuildGeodesicSphere: octahedron, four midpoint-normalize subdivisions, R=20000.
 // Pure worker-side construction; no frame observers or GPU ownership here.
 export function skyGroups(sky:{cloudTexturePublicPath?:string;sunTexturePublicPath?:string;moonTexturePublicPaths?:readonly string[];starPrimitive?:{vertices:readonly {x:number;y:number;z:number;colorArgb:number}[]}}):WorldGroup[]{
  const groups:WorldGroup[]=[];

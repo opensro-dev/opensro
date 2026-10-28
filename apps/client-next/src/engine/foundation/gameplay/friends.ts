@@ -7,7 +7,7 @@ Pure decoders and encoders for the native v1.150 friend packets, read the
 way the original client reads them:
 
 	S->C 0x3769 roster seed      {u8 n, n x (u32 jid, sized name, u32 model,
-	                              u8 state)}           (sub_828ea0)
+	                              u8 state)}           (CharacterDependentData_ReadFriendRoster)
 	S->C 0x3F9A friend event     u8 2 add / 3 delete / 4 state (760FB0);
 	                              8 and 9 are the letter lane's
 	S->C 0x7164 request prompt   {u32 jid, u32 serial, sized name} (760C90)
@@ -34,7 +34,7 @@ export const FRIEND_DELETE_RESULT_OPCODE = 0xb5db;
 export const FRIEND_CONSENT_OPCODE = 0x3012;
 
 // The friend list's row cap: the 0x14 of the panel's ": %d / %d" count
-// (sub_600f80) and v1.188's CMessengerMgr add check.
+// (CIFFriendList_WriteCountLabel) and v1.188's CMessengerMgr add check.
 export const FRIEND_LIST_LIMIT = 20;
 
 // CMessengerMgr add's name bound (v1.188 5D7620: 1..0x20 bytes).

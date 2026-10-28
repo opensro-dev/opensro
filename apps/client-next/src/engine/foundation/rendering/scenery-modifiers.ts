@@ -3,8 +3,8 @@
 
 scenery-modifiers.ts - a BSR model's material and texture modifiers
 
-The native ModDataMtrl and ModDataTexAni records (loaded by sub_acb7e0 and
-sub_ac58b0) override a material while their animation set plays: colour
+The native ModDataMtrl and ModDataTexAni records (loaded by ModDataMtrl_Load and
+ModDataTexAni_ReadBody) override a material while their animation set plays: colour
 timelines, blend and stage-0 state, alpha test, UV animation and atlases.
 sceneryMaterial applies the ported states; any other state is reported to
 the caller instead of being approximated.
@@ -71,11 +71,11 @@ export function sceneryMaterial(
 			warn( "Malformed scenery material state" );
 			continue;
 		}
-		// sub_aed240 (CRTModMtrl_BeginStates) applies the +0x60 block under its
+		// CRTModMtrl_BeginStates (CRTModMtrl_BeginStates) applies the +0x60 block under its
 		// four words: +0x50 alpha test (ALPHAREF b8, ALPHAFUNC b9); +0x54 alpha
 		// blending (SRCBLEND b0, DESTBLEND b1) and stage 0's COLOROP/ARG1/ARG2
 		// and ALPHAOP/ARG1/ARG2 (b2..b7), with +0x5c adding TEXTUREFACTOR from
-		// the pulse channel (b10..b15, sub_aecab0); +0x58 depth writes off.
+		// the pulse channel (b10..b15, CRTModMtrl_AdvancePulseChannel); +0x58 depth writes off.
 		const blendPair = { source: b[0]!, destination: b[1]! };
 		const stage: TextureStage = {
 			colorOp: b[2]!,

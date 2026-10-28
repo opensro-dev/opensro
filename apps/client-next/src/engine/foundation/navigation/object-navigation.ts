@@ -16,7 +16,7 @@ import { cellEntry, edgeResponse, slideNormal } from "./contact-response";
 import type { NavPassage } from "./topology";
 import type { NavMesh, NavPlacement, ObjectNavWire } from "@/engine/contracts/navigation";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
-// Native BMS offset 7: sub_4265b0, sub_426160. Header word 11 is flags, not an offset.
+// Native BMS offset 7: CRTNavMeshObj_Load, CRTNavMeshObj_ReadEdges. Header word 11 is flags, not an offset.
 /*
 ================
 objectNavigation

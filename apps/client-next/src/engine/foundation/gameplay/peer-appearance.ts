@@ -13,7 +13,7 @@ import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { equipmentHoldType } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityEquipment, EntityState } from "@/engine/contracts/world";
-// Native sub_868a80 slot table; wire authority: server/item/wire/playerspawnrow.go.
+// Native ItemRecord_GetEquipSlotIndex slot table; wire authority: server/item/wire/playerspawnrow.go.
 /*
 ================
 equipmentBand

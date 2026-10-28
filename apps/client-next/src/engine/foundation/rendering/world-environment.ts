@@ -19,7 +19,7 @@ const SUN_TWILIGHT_HEIGHT = 0.2;
 // (0x00AD8090 at 0x00AD8181) overwrites it from the .dof block record.
 export const DEFAULT_DUNGEON_AMBIENT_COLOR = 0xff1e1e1e;
 
-// Retail sub_4dc920/sub_4dcab0: clamped endpoints, linear interpolation,
+// Retail EnvironmentVectorTrack_SampleAtTime/EnvironmentScalarTrack_SampleAtTime: clamped endpoints, linear interpolation,
 // and a lower-key step for spans below the native epsilon.
 /*
 ================

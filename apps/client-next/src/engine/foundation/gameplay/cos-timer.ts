@@ -72,7 +72,7 @@ function clamp(value: number) { return Math.min(1, Math.max(0, value)); }
 // increments its elapsed accumulator unconditionally on every frame delta
 // without gating on pet presence. The second bar runs the +0x2A4 aux against
 // the low u16 of the packed extra, which 6E6AA0 decrements only while
-// sub_868730(localPlayer) == 1 (localPlayer + 0x781, set by 0x3122 channel 8
+// CICUser_IsInCombat(localPlayer) == 1 (localPlayer + 0x781, set by 0x3122 channel 8
 // StateChannelBattle, i.e. in-combat state). For pet skill items with aux -1,
 // the second bar remains full (1.0).
 export function cosTimerBars(timer: CosItemWindow, reference: CosItemWindowReference, nowMs: number) {

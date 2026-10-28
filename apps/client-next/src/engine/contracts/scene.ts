@@ -31,7 +31,7 @@ export interface WorldMaterial {
 	/** D3DRS_TEXTUREFACTOR rgba in [0, 1] for a stage's TFACTOR argument; default white. */
 	readonly textureFactor?: readonly [number, number, number, number];
 	/**
-	 * A BSR material modifier's TEXTUREFACTOR pulse (sub_aecab0): an alpha
+	 * A BSR material modifier's TEXTUREFACTOR pulse (CRTModMtrl_AdvancePulseChannel): an alpha
 	 * byte oscillating between low and high at rate * delta ms * 0.01.
 	 */
 	readonly textureFactorPulse?: { readonly low: number; readonly high: number; readonly rate: number; };
@@ -82,7 +82,7 @@ export interface WorldMaterial {
 	 * fixed-function vertex diffuse (effects).
 	 */
 	readonly shaderDiffuse?: boolean;
-	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers sub_aed240). */
+	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers CRTModMtrl_BeginStates). */
 	readonly textureStage?: import("@/engine/foundation/rendering/texture-stage").TextureStage;
 }
 /*
