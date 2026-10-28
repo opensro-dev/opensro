@@ -902,3 +902,4 @@ class RehearsalTests(unittest.TestCase):
 			self.assertEqual(deploy.rehearse({}, Path("unused"), {"files": {}}), [])
 			self.assertEqual(deploy.rehearse({"module": "/nonexistent-module"}, Path("unused"), {"files": {}}), [])
 			execute.assert_not_called()
+
