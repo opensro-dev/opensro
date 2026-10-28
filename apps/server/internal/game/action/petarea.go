@@ -95,7 +95,11 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 			continue
 		}
 		owner := rt.findCharacterByGid(step.key.division, present.GID)
-		snapshot := rt.characterSnapshotAdmitted(step.key.division, owner, admitPlayer)
+		// The copy is the companion copy: the refusal chains and the
+		// body-radius door below read the victim's slot-8 cape/job
+		// equipment, relation scalars and model ref - never plain bag
+		// or avatar rows (#2030; TestPetAreaVictimsReadNothingOutsideTheCompanionCopy).
+		snapshot := rt.characterSnapshotCompanionAdmitted(step.key.division, owner, admitPlayer)
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}

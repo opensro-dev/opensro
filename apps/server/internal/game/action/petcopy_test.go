@@ -110,3 +110,107 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 		t.Fatalf("companion copy allocates %d B/run, want under half the %d B full copy", narrow, full)
 	}
 }
+
+/*
+================
+TestPetAreaVictimsReadNothingOutsideTheCompanionCopy
+
+The area selector copies every present player to run its refusal
+chains. A fattened victim (stuffed bag, avatar rows, slot-8 cape)
+must be selected under a different cape and refused under the same
+cape identically on the companion copy and on the whole-record copy,
+and the seam must see the victim's copy.
+================
+*/
+func TestPetAreaVictimsReadNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, owner, victim := newPvpPair(t)
+	ref := equipCombatTestPet(t, rt, owner, attackPetBand)
+	rt.BindPetSession(testDivision, owner, 1)
+	pet := *owner.ActiveCOS
+	var valid bool
+	pet.GID, valid = enterworld.CosObjectIDForCharacter(victim)
+	if !valid {
+		t.Fatal("victim has no companion identity")
+	}
+	victim.ActiveCOS = &pet
+	rt.BindPetSession(testDivision, victim, 1)
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	owner.Level, victim.Level = testInt64(playerCombatMinimumLevel), testInt64(playerCombatMinimumLevel)
+	victim.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(owner): playerAggressionTicks}
+	items := rt.deps.ItemReferences().(cosTestItemSource).staticItemSource
+	capes := map[int]*enterworld.ItemRef{}
+	for color := 1; color <= 2; color++ {
+		cape := &enterworld.ItemRef{
+			RefObjID: uint32(63000 + color), Codename: fmt.Sprintf("AREA_CAPE_%d", color),
+			TypeIDs:      [4]int64{3, 1, 7, 5},
+			NativeFields: enterworld.NewNativeFields(map[string]float64{freeBattleGroupField: float64(color)}),
+		}
+		items[cape.Codename], capes[color] = cape, cape
+	}
+	setCape := func(actor *enterworld.Character, color int) {
+		var inventory []enterworld.InventoryRow
+		for _, row := range actor.MissionInventory {
+			if row.Slot != int64(jobSuitSlot) {
+				inventory = append(inventory, row)
+			}
+		}
+		if cape := capes[color]; cape != nil {
+			inventory = append(inventory, enterworld.InventoryRow{
+				Slot: int64(jobSuitSlot), RefObjID: cape.RefObjID, Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1,
+			})
+		}
+		actor.MissionInventory = inventory
+	}
+	stuffOwnerInventories(victim)
+	state := rt.petSessionFor(testDivision, owner.Name, owner.ActiveCOS.GID)
+	at := rt.liveSpawn(simulation.WorldKey(testDivision, owner.Name), owner, clock.NowMs())
+	state.follower = simulation.NewPetFollower(owner.ActiveCOS.GID, at)
+	step := petCombatStep{
+		key:   petOwnerKey{division: testDivision, name: owner.Name, gid: owner.ActiveCOS.GID},
+		state: state, snapshot: owner, pet: owner.ActiveCOS, ref: ref, nowMs: clock.NowMs(),
+	}
+	primary := petCombatTarget{combatTarget: combatTarget{gid: 999999, at: at}}
+	skill := enterworld.SkillRow{ActionArea: enterworld.SkillOffensiveArea{Shape: 2, Radius: 20, MaxTargets: 3, Select: 24}}
+	selectVictim := func() (bool, bool) {
+		found, foundPet := false, false
+		for _, target := range rt.petAreaTargets(step, primary, skill) {
+			found = found || target.gid == enterworld.ObjectIDForCharacter(victim)
+			foundPet = foundPet || target.gid == pet.GID
+		}
+		return found, foundPet
+	}
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	setCape(owner, 1)
+	setCape(victim, 2)
+	if found, foundPet := selectVictim(); !found || !foundPet {
+		t.Fatalf("different-cape victim not selected on the companion copy: player=%t companion=%t", found, foundPet)
+	}
+	seen := false
+	for _, name := range copied {
+		seen = seen || name == victim.Name
+	}
+	if !seen {
+		t.Fatalf("area selector never took the companion copy of %s; copied %v", victim.Name, copied)
+	}
+	setCape(victim, 1)
+	if found, foundPet := selectVictim(); found || foundPet {
+		t.Fatalf("same-cape victim selected on the companion copy: player=%t companion=%t", found, foundPet)
+	}
+
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	setCape(victim, 2)
+	if found, foundPet := selectVictim(); !found || !foundPet {
+		t.Fatalf("different-cape victim not selected on the full copy: player=%t companion=%t", found, foundPet)
+	}
+	setCape(victim, 1)
+	if found, foundPet := selectVictim(); found || foundPet {
+		t.Fatalf("same-cape victim selected on the full copy: player=%t companion=%t", found, foundPet)
+	}
+}
