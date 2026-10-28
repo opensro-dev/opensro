@@ -41,7 +41,7 @@ func (rt *Runtime) ReleaseExpiredOwnership(nowMs int64) []simulation.DivisionFra
 
 func (rt *Runtime) hasExpiredOwner(now time.Time) bool {
 	for _, divisionID := range rt.Ground.DivisionIDs() {
-		for _, item := range rt.Ground.All(divisionID) {
+		for _, item := range rt.groundDivisionSnapshot(divisionID).items {
 			if item.OwnerJID != 0 && !item.DroppedAt.IsZero() &&
 				now.Sub(item.DroppedAt) >= grounditem.OwnerLifetime {
 				return true

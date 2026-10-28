@@ -133,10 +133,13 @@ type Runtime struct {
 	// guild manager. Memory only, as native's pc+0x1D88 record is.
 	storageSessions sync.Map
 	criticals       criticalHistory
-	deps            Dependencies
-	Ground          *grounditem.Registry
-	Pending         *grounditem.PendingTracker
-	Worlds          *simulation.WorldStore
+	// groundDrops is the per-tick ground pass's placed-drop cache
+	// (ground_scope.go).
+	groundDrops groundDropCache
+	deps        Dependencies
+	Ground      *grounditem.Registry
+	Pending     *grounditem.PendingTracker
+	Worlds      *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
 	Steps simulation.StepTimer
 	// PublicationHold receives publication-gate holds at or above the

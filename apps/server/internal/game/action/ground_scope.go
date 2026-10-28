@@ -19,6 +19,7 @@ package action
 
 import (
 	"sort"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -57,6 +58,98 @@ func placeDrops(items []grounditem.Item) []placedDrop {
 		})}
 	}
 	return out
+}
+
+/*
+================
+groundDivisionDrops, groundDropCache
+
+One division's drops as of one registry revision: the deep copy and, per
+population, its placement. The registry deep-copies on every read, so the
+per-tick pass paid that copy per population per tick (#1943); the cache
+pays it once per revision. Revision is one counter across divisions, so
+an entry is rebuilt whenever the counter has moved, even by another
+division's edit - correct, at worst an extra copy on a changed tick.
+
+The stamp is read BEFORE the copy: a mutation racing the copy raises the
+revision past the stamp, so the next pass rebuilds. The stamp is never
+newer than the content, so stale content is never served as current.
+================
+*/
+type groundDivisionDrops struct {
+	revision uint64
+	items    []grounditem.Item
+	placed   map[grounditem.Population][]placedDrop
+}
+
+type groundDropCache struct {
+	mu        sync.Mutex
+	divisions map[string]*groundDivisionDrops
+}
+
+/*
+================
+groundDivisionLocked
+
+The division's cached drops, rebuilt under the cache lock when the
+registry revision moved. The caller holds groundDrops.mu.
+================
+*/
+func (rt *Runtime) groundDivisionLocked(division string, revision uint64) *groundDivisionDrops {
+	entry := rt.groundDrops.divisions[division]
+	if entry == nil || entry.revision != revision {
+		entry = &groundDivisionDrops{revision: revision, items: rt.Ground.All(division)}
+		if rt.groundDrops.divisions == nil {
+			rt.groundDrops.divisions = make(map[string]*groundDivisionDrops)
+		}
+		rt.groundDrops.divisions[division] = entry
+	}
+	return entry
+}
+
+/*
+================
+groundDivisionSnapshot
+
+The division's cached drops. The returned entry is shared; callers read
+it and never mutate it.
+================
+*/
+func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops {
+	revision := rt.Ground.Revision()
+	rt.groundDrops.mu.Lock()
+	defer rt.groundDrops.mu.Unlock()
+	return rt.groundDivisionLocked(division, revision)
+}
+
+/*
+================
+groundPlacedDrops
+
+The population's placed drops from the division's cached copy, placed
+once per revision and shared by every viewer of the population.
+================
+*/
+func (rt *Runtime) groundPlacedDrops(division string, population grounditem.Population) []placedDrop {
+	revision := rt.Ground.Revision()
+	rt.groundDrops.mu.Lock()
+	defer rt.groundDrops.mu.Unlock()
+	entry := rt.groundDivisionLocked(division, revision)
+	if drops, ok := entry.placed[population]; ok {
+		return drops
+	}
+	mine := make([]grounditem.Item, 0, len(entry.items))
+	for _, item := range entry.items {
+		if item.Population == population {
+			mine = append(mine, item)
+		}
+	}
+	drops := placeDrops(mine)
+	if entry.placed == nil {
+		entry.placed = make(map[grounditem.Population][]placedDrop)
+	}
+	entry.placed[population] = drops
+	return drops
 }
 
 /*
@@ -238,17 +331,12 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 ) {
 	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
-	placed := make(map[grounditem.Population][]placedDrop)
 	for _, session := range sessions {
 		population, ok := sessionGroundPopulation(session)
 		if !ok {
 			continue
 		}
-		drops, cached := placed[population]
-		if !cached {
-			drops = placeDrops(rt.Ground.AllInPopulation(division, population))
-			placed[population] = drops
-		}
+		drops := rt.groundPlacedDrops(division, population)
 		spawn, despawn := groundScope(drops, viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects)
 		if len(spawn) == 0 && len(despawn) == 0 {
 			continue
