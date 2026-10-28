@@ -90,8 +90,11 @@ Read source life state from its authority before assigning periodic damage credi
 */
 func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name string) bool {
 	if character := c.caster(division, gid, name); character != nil {
-		snapshot := c.rt.characterSnapshot(division, character)
-		return snapshot == nil || !enterworld.CharacterAlive(snapshot)
+		// Only the life fact is weighed, so read it as a value under
+		// the read door instead of detaching the whole record (#1943);
+		// the snapshot's nil case is the nil character excluded above.
+		alive, _, _ := c.rt.characterLifeState(division, character)
+		return !alive
 	}
 	if name == "" && gid != 0 {
 		return c.rt.captureAbnormalSource(division, gid).dead
