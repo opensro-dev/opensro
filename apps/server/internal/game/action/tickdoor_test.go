@@ -290,3 +290,43 @@ func TestTickSkillPathsTakeDeferredDoors(t *testing.T) {
 		t.Fatalf("tick continuation took the immediate player-basic-attack door %v; every tick hit would commit its own transaction", immediate.labels)
 	}
 }
+
+/*
+================
+TestHandlerCommandsNeverTakeADeferredDoor
+
+The lane rule as one table (#2036 review): whatever a target-interact
+handler answers - an engage, or a follow that walks into range and
+strikes - commits through the immediate doors and touches no deferred
+seam, because its answer would otherwise precede the commit.
+================
+*/
+func TestHandlerCommandsNeverTakeADeferredDoor(t *testing.T) {
+	for _, command := range []struct {
+		name  string
+		setup func(t *testing.T) (*Runtime, *enterworld.Character, []byte)
+	}{
+		{"engage", func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+			rt, _, character, target := newCombatTestRuntime(t, 100000)
+			return rt, character, wire.BasicAttackEngage{TargetGid: target.Gid}.Encode()
+		}},
+		{"follow", func(t *testing.T) (*Runtime, *enterworld.Character, []byte) {
+			rt, _, character, target := followFixture(t)
+			return rt, character, wire.FollowTarget{TargetGid: enterworld.ObjectIDForCharacter(target)}.Encode()
+		}},
+	} {
+		t.Run(command.name, func(t *testing.T) {
+			rt, character, payload := command.setup(t)
+			installStoreDoor(t, rt)
+			immediate, deferred := watchFixtureDoors(rt)
+
+			rt.HandleTargetInteract(testDivision, character, payload)
+			if len(immediate.labels) == 0 {
+				t.Fatal("handler committed nothing; the table no longer reaches a commit")
+			}
+			if len(deferred.labels) != 0 {
+				t.Fatalf("handler took deferred door(s) %v (immediate %v); its answer would precede the commit", deferred.labels, immediate.labels)
+			}
+		})
+	}
+}

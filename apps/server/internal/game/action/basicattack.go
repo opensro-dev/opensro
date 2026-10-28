@@ -423,13 +423,13 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
 	}
 	if intent.FollowTarget {
-		return rt.advanceFollowIntent(character, intent, nowMs)
+		return rt.advanceFollowIntent(character, intent, nowMs, doors)
 	}
 	if intent.SupportCast {
-		return rt.advanceSupportCastIntent(character, intent, nowMs)
+		return rt.advanceSupportCastIntent(character, intent, nowMs, doors)
 	}
 	if intent.CaptureCast {
-		return rt.advanceCaptureIntent(character, intent, nowMs)
+		return rt.advanceCaptureIntent(character, intent, nowMs, doors)
 	}
 	snapshot := rt.characterSnapshotCombat(intent.DivisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
