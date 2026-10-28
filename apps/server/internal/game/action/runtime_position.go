@@ -114,6 +114,34 @@ func (rt *Runtime) characterLifeState(
 
 /*
 ==================
+characterPartyJobClass
+
+The party job class a job-admission refusal weighs, read as a value
+under the authority read door. A COS target answers the job test with
+its owner's state, and the owner's whole record used to be detached
+for this one byte (#1943): the class derives from the dressed job
+suit row, a record field the copy would carry unchanged.
+==================
+*/
+func (rt *Runtime) characterPartyJobClass(
+	divisionID string,
+	character *enterworld.Character,
+) uint8 {
+	if character == nil {
+		return enterworld.NoJobClass
+	}
+
+	class := enterworld.NoJobClass
+
+	rt.deps.Read(divisionID, func() {
+		class = enterworld.PartyJobClass(character)
+	})
+
+	return class
+}
+
+/*
+==================
 writeBackWorld
 
 writeBackWorld persists the accepted ground pose onto the character record.

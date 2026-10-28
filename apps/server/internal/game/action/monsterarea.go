@@ -221,7 +221,17 @@ primary of its kind.
 ================
 */
 func (rt *Runtime) strikeMonsterAreaVictim(in monsterStrikeInput, victim monsterAreaVictim) monsterStrikeOutcome {
-	snapshot := rt.characterSnapshot(in.division, victim.owner)
+	// A companion victim is refused on its pet's summons and life -
+	// record fields - so a refused pet never pays for its owner's
+	// detached copy (#1943). A player victim's copy feeds its combat
+	// stats below, as the detached record did.
+	snapshot := rt.characterSnapshotAdmitted(in.division, victim.owner, func(live *enterworld.Character) bool {
+		if !victim.companion {
+			return true
+		}
+		pet := live.CompanionByGID(victim.gid)
+		return pet != nil && pet.Summoned && pet.CurrentHP != 0
+	})
 	if snapshot == nil {
 		return monsterStrikeOutcome{}
 	}

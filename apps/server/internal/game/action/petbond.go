@@ -236,8 +236,15 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 	gids = append(gids, party...)
 	for _, gid := range gids {
 		target := rt.findCharacterByGid(key.division, gid)
-		snapshot := rt.characterSnapshot(key.division, target)
-		if snapshot == nil || enterworld.CharacterAlive(snapshot) || snapshot.DeathKind != uint8(pk.DeathMonster) || rewardLevel(snapshot) > int64(pet.Level)+10 || !rt.bondRecipient(key, owner, snapshot, pet, skill, now) {
+		// Revival weighs a dead, monster-killed, in-band target; all
+		// three are record fields, so a living or out-of-band member
+		// never pays for its detached copy (#1943). The admitted copy
+		// feeds the recipient gate and the revival stats, as before.
+		snapshot := rt.characterSnapshotAdmitted(key.division, target, func(live *enterworld.Character) bool {
+			return !enterworld.CharacterAlive(live) && live.DeathKind == uint8(pk.DeathMonster) &&
+				rewardLevel(live) <= int64(pet.Level)+10
+		})
+		if snapshot == nil || !rt.bondRecipient(key, owner, snapshot, pet, skill, now) {
 			continue
 		}
 		stats, _, err := rt.playerCombatStats(key.division, snapshot)
