@@ -11,12 +11,12 @@ list, regioninfo.txt, names those parts as RECT areas of a #TOWN section.
 the thief rule also treats those parts as town, so a cart stops at the
 wall of such a town rather than at its protected core. Off is native.
 
-The file format, from v1.150 CRegionManager_LoadRegionInfo (412D80):
+The file format, from the v1.150 client's region-info loader (412D80):
 a "#TOWN" or "#FIELD" header line starts a section, and each row is
 "x z ALL" (the whole region) or "x z RECT x0 z0 x1 z1". The four RECT
 numbers are corners, not a size: the client's point test (414030) checks
-x0 <= x <= x1 and z0 <= z <= z1, inclusive, and the parser (4133EA) keeps
-the tokens as written. Several rows are lines (z0 == z1), which hold no
+x0 <= x <= x1 and z0 <= z <= z1, inclusive,
+and the client's parser (4133EA) keeps the tokens as written. Several rows are lines (z0 == z1), which hold no
 ground; they are skipped.
 
 Only towns are kept, and only their parts outside protected regions (the
