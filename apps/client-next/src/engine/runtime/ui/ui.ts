@@ -192,9 +192,7 @@ import {
 	createNoticeBanner,
 	noticeTiming,
 	notificationBannerPaths,
-	SUN_DROP_BANNER_COLOR,
-	SUN_DROP_BANNER_TEXT_RGB,
-	sealBannerColors
+	noticeBannerRow
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
@@ -10424,11 +10422,10 @@ export function createUi(
 			================
 			*/
 			function drawTransientBanners( top?: number ) {
-				// Port-only (#1976): a seal drop's notice wears its tier's
-				// colours on a padded, more opaque plate; other notices keep
-				// the crimson plate, Sun drops their shipped gold.
-				const sealTier = notificationBanner.sealTier(),
-					sealColors = sealTier === undefined ? undefined : sealBannerColors( sealTier );
+				// Port-only (#1976): only a seal drop's notice pads its
+				// plate and recolours it (noticeBannerRow); every other
+				// notice on this row keeps the native plate untouched.
+				const noticeRow = noticeBannerRow( notificationBanner );
 				const rows = [
 					{
 						value: uniqueBanner.value( hudCopy ),
@@ -10446,13 +10443,11 @@ export function createUi(
 						alpha: notificationBanner.alpha(),
 						paths: notificationBannerPaths,
 						y: 100,
-						color: sealColors?.plate ??
-							(notificationBanner.sunDrop() ? SUN_DROP_BANNER_COLOR : ([ 128, 45, 67 ] as const)),
-						textRgb: sealColors?.textRgb ??
-							(notificationBanner.sunDrop() ? SUN_DROP_BANNER_TEXT_RGB : ([ 1, 1, 1 ] as const)),
-						padX: 16,
-						padY: 6,
-						plateAlpha: 0.8
+						color: noticeRow.color,
+						textRgb: noticeRow.textRgb,
+						padX: noticeRow.padX,
+						padY: noticeRow.padY,
+						plateAlpha: noticeRow.plateAlpha
 					},
 					{
 						value: questBanner.value(),

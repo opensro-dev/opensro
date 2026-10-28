@@ -94,6 +94,44 @@ export function sealBannerColors( tier: 0 | 1 | 2 ): SealBannerColors {
 	return SEAL_BANNER_COLORS[tier]!;
 }
 
+// A seal notice's plate grows past its caption and sits more opaque
+// than the shipped plate (port-only, #1976).
+const SEAL_ROW_PAD_X = 16, SEAL_ROW_PAD_Y = 6, SEAL_ROW_PLATE_ALPHA = 0.8;
+
+/*
+================
+noticeBannerRow
+
+The notification row's plate choice (port-only, #1976): a line that
+announces a seal drop wears its tier's colours (Sun's tier keeps the
+shipped gold) on the padded, more opaque plate. Every other notice -
+academy, guild war, friends, letters, plain server notices - keeps the
+native plate exactly: crimson, hugging the caption, the shipped alpha.
+================
+*/
+export function noticeBannerRow(
+	banner: Pick<ReturnType<typeof createNoticeBanner>, "sealTier">
+): {
+	readonly color: readonly [number, number, number];
+	readonly textRgb: readonly [number, number, number];
+	readonly padX: number;
+	readonly padY: number;
+	readonly plateAlpha: number | undefined;
+} {
+	const tier = banner.sealTier();
+	if ( tier !== undefined ) {
+		const colors = sealBannerColors( tier );
+		return {
+			color: colors.plate,
+			textRgb: colors.textRgb,
+			padX: SEAL_ROW_PAD_X,
+			padY: SEAL_ROW_PAD_Y,
+			plateAlpha: SEAL_ROW_PLATE_ALPHA
+		};
+	}
+	return { color: [ 128, 45, 67 ], textRgb: [ 1, 1, 1 ], padX: 0, padY: 0, plateAlpha: undefined };
+}
+
 // The banner's alpha steps (the native quad alpha byte).
 const ALPHA_STEPS = 255;
 
