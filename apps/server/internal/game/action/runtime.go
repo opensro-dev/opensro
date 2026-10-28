@@ -325,6 +325,11 @@ type Runtime struct {
 	// (characterSnapshotCombat); only the combat-copy differential test
 	// sets it, to the full copy. Nil is the narrow copy.
 	combatCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// companionCopy, when set, replaces the pet pass's narrow copy
+	// (characterSnapshotCompanionAdmitted); only the pet-copy
+	// differential test sets it, to the full copy. Nil is the narrow
+	// copy.
+	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with
