@@ -19,8 +19,8 @@ import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
 // state-id -> clip-path authority. Locomotion resolves by exact default-set
 // motion ids (0 stand, 1 walk, 7 run), never by filename. The raw .ban
 // BYTES are shipped untouched - the browser parses them with the REAL WIP
-// CResAnimationClip loader chain (sub_a6c500 -> sub_a6c2d0 -> sub_a673e0 ->
-// sub_a6c150) over ArrayBuffer-backed CJArchiveFm ops.
+// CResAnimationClip loader chain (CResChar_ForEachLinkedItem_Helper -> CResAnimationClip_LoadBan -> CJArchiveFm_ReadBlock1K_A673E0 ->
+// CResAnimationClip_ReadBody) over ArrayBuffer-backed CJArchiveFm ops.
 //
 // Output:
 //   .generated/client-public/assets/anim/<game-relative path>.ban   (raw bytes)
@@ -93,8 +93,8 @@ function collectRequiredSkillMotionIdsBySetName() {
 	return requiredSkillMotionIdsBySetName;
 }
 
-// Native sub_920020 / SkillEffectData_LoadAll selects #section
-// `characterInfo`, then sub_91b830 / SkillEffectCharacterInfo_ParseRow
+// Native CSkillEffectManager_LoadSkillEffectTextData / SkillEffectData_LoadAll selects #section
+// `characterInfo`, then CharacterInfo_ParseAndRegisterRow / SkillEffectCharacterInfo_ParseRow
 // interns column 2 (`ResourceTypeName`) into action-effect record +0x04.
 // CICharactor_BindRecords copies that pointer to CICharactor+0x64c, where
 // the CGEffSound profile handlers use it as the first lookup-key component.
@@ -186,7 +186,7 @@ export async function buildLocomotionBanAssets() {
 		const standPath = pickDefaultSetStateClip( bsr, 0 );
 		const walkPath = pickDefaultSetStateClip( bsr, 1 );
 		const runPath = pickDefaultSetStateClip( bsr, 7 );
-		// ANI_ATTACK1..4 resolve through sub_8719d0 to motions 2/5/0x10/0x11.
+		// ANI_ATTACK1..4 resolve through CICScriptObjManager_RegisterAnimationAliases to motions 2/5/0x10/0x11.
 		// SkillEffectObj_Init selects these authored names from skilleffect records,
 		// then the state-2 motion bracket plays the resolved one-shot. Human-player
 		// BSRs author SND_SWING1 in each corresponding ModDataSound state.
@@ -194,10 +194,10 @@ export async function buildLocomotionBanAssets() {
 		const attack2Path = pickDefaultSetStateClip( bsr, 5 );
 		const attack3Path = pickDefaultSetStateClip( bsr, 0x10 );
 		const attack4Path = pickDefaultSetStateClip( bsr, 0x11 );
-		// Motion 0x26 = the pickup scoop (ANI_PICK, state-10 enter sub_8e6150);
+		// Motion 0x26 = the pickup scoop (ANI_PICK, state-10 enter CICharactor_Action_PickupItem);
 		// resolved from the .bsr default set state 0x26, not a filename heuristic.
 		const pickPath = pickDefaultSetStateClip( bsr, 0x26 );
-		// Motion 3 = the ordinary state-11 hit reaction (sub_8e6260). Every
+		// Motion 3 = the ordinary state-11 hit reaction (CICharactor_Action_DamageFlinch). Every
 		// published character BSR authors VOC_MOAN at cursor 0 on this state.
 		const hitPath = pickDefaultSetStateClip( bsr, 3 );
 		const hit2Path = pickDefaultSetStateClip( bsr, 9 );
@@ -208,15 +208,15 @@ export async function buildLocomotionBanAssets() {
 		const downDamagePath = pickDefaultSetStateClip( bsr, 0x40 );
 		const wakeupPath = pickDefaultSetStateClip( bsr, 0x41 );
 		// Motions 0x0d/0x0e/0x0f = the sit trio (sit-down / sit / stand-up):
-		// state-6 enter sub_8e6a90 plays 0x0e (quirk branch adds 0x0d) and the
-		// Stall3 sit->stand enter sub_8e6980 plays 0x0f through vt+0xb8
+		// state-6 enter CICharactor_Action_SitDown plays 0x0e (quirk branch adds 0x0d) and the
+		// Stall3 sit->stand enter CICharactor_Action_StandUp plays 0x0f through vt+0xb8
 		// PlayMotionBlend. Same default-set state-id resolution as the pickup -
 		// these are the NATIVE_CHARACTER_SELECT_STATE_IDS trio the GLB pipeline
 		// already picks for the char-select campfire.
 		const sitDownPath = pickDefaultSetStateClip( bsr, 0x0d );
 		const sitPath = pickDefaultSetStateClip( bsr, 0x0e );
 		const standUpPath = pickDefaultSetStateClip( bsr, 0x0f );
-		// State-1 death enter (sub_8e64f0) plays motion 0x24, optionally follows
+		// State-1 death enter (CICharactor_Action_KnockdownDie) plays motion 0x24, optionally follows
 		// with motion 4 when states 2/3 were active, and uses 0x42 for the native
 		// quick-death branch. The authored SND_DEATH/VOC_DEATH ModDataSound tracks
 		// live on motion 4, so publish the complete trio from their native state ids.
@@ -230,7 +230,7 @@ export async function buildLocomotionBanAssets() {
 			);
 		}
 		const entry = { soundProfileName };
-		// Motion 0 = the state-8 fallback/idle overlay (sub_8e5a60 plays it via
+		// Motion 0 = the state-8 fallback/idle overlay (CICharactor_UpdateCombatStanceAnimation plays it via
 		// the REAL PlayMotionBlend chain at spawn and after every walk arrival).
 		if ( standPath ) {
 			entry.stand = {
@@ -368,7 +368,7 @@ export async function buildLocomotionBanAssets() {
 		// skillaniset/skillaniset2 rows
 		// are the native consumers of these set/state pairs; every authored
 		// Ready/Wait/Shot ANI_* token is resolved through native data_ccd620 (the
-		// same map sub_91dae0 queries), then joined to the exact BSR set state. This replaces the old
+		// same map CSkillEffectManager_ParseSkillLightRecord queries), then joined to the exact BSR set state. This replaces the old
 		// runtime shortcut that collapsed every AniGroup to DEFAULT.
 		for ( const motion of pickAttachedMotionClips( bsr ) ) {
 			const clip = parseBan( await loadDataAsset( motion.path ), motion.path );

@@ -33,7 +33,7 @@ export const TITLE_REGION_694E = Object.freeze({
   sectorY: 0x69
 });
 
-// CPSCharacterSelect::OnCreate (sub_73bf00 @ 0x0073c8e8) switches the world to a
+// CPSCharacterSelect::OnCreate (CPSCharacterSelect_OnCreate @ 0x0073c8e8) switches the world to a
 // dedicated stage region BEFORE placing the camera/pedestal/idols:
 //   (uint16_t)region = 0x6951; (data_effe90 + 4)(region);  // SetWorldRegion
 //   ref = (920, 0, 920);       (*data_effe90)(region, &ref) // stream reference
@@ -51,7 +51,7 @@ export const CHARACTER_SELECT_REGION_6951 = Object.freeze({
 // so the wharf geometry that spills into the neighbouring sectors stays loaded.
 export const CHARACTER_SELECT_TERRAIN_SECTOR_MARGIN = 1;
 
-// sub_bbb050 (data_cc995c) - the verified char-select camera keyframe table, in
+// StaticInit_CharSelectCameraKeys (data_cc995c) - the verified char-select camera keyframe table, in
 // the 0x6951 region-local frame. Kept here so the build manifest and the client
 // stay in lock-step on the single source of native truth.
 export const CHARACTER_SELECT_CAMERA_KEYFRAMES = Object.freeze([
@@ -59,15 +59,15 @@ export const CHARACTER_SELECT_CAMERA_KEYFRAMES = Object.freeze([
   Object.freeze({ position: { x: 60, y: -15, z: 660 }, rotation: { x: 0.100000001, y: 3, z: 0 }, mode: 30 })
 ]);
 
-// CPSCharacterSelect adds the two keys at t = keyIndex*2 (sub_738600) with a
+// CPSCharacterSelect adds the two keys at t = keyIndex*2 (CPSCharacterSelect_BuildCameraPath) with a
 // controller targetTime of 2.0s; the dolly is advanced by raw frame delta.
 export const CHARACTER_SELECT_CAMERA_KEY_INTERVAL_SECONDS = 2;
 export const CHARACTER_SELECT_REFERENCE_POSITION = Object.freeze({ x: 920, y: 0, z: 920 });
 
 // CRITICAL: CPSCharacterCreate*_OnCreate streams a race-specific customize
 // backdrop, not the character-select wharf and not a single shared Europe scene.
-//   China  sub_72d070: region 0x62a8, camera/world anchor (960.418884, 50, 458.259766)
-//   Europe sub_730e40: region 0x694f, camera/world anchor (335, 140, 1460)
+//   China  CPSCharacterCreateChina_OnCreate: region 0x62a8, camera/world anchor (960.418884, 50, 458.259766)
+//   Europe CPSCharacterCreateEurope_OnCreate: region 0x694f, camera/world anchor (335, 140, 1460)
 // The CInterfaceModel_SetPreviewTransform(3,0.5,0,0) that follows is local to the
 // CIF character model control; do not reinterpret it as terrain/world placement.
 export const CHARACTER_CREATE_REGIONS = Object.freeze({
@@ -93,9 +93,9 @@ export const CHARACTER_CREATE_REGIONS = Object.freeze({
 // character-select/title CPS stages.
 export const CHARACTER_CREATE_TERRAIN_SECTOR_MARGIN = 1;
 
-// sub_bbb150 (data_cc999c table) - the verified CREATE sub-mode camera keyframes, in the same
-// 0x6951 region-local frame. CPSCharacterSelect::StartCreateCamera (sub_739890 @ 0x00739b30)
-// inserts these 4 keys via sub_4e1d10 at t = index * (5.0/3.0) and sets the controller targetTime
+// StaticInit_CharCreateCameraKeys (data_cc999c table) - the verified CREATE sub-mode camera keyframes, in the same
+// 0x6951 region-local frame. CPSCharacterSelect::StartCreateCamera (CPSCharacterSelect_EnterCreateView @ 0x00739b30)
+// inserts these 4 keys via CCameraPath_Evaluate at t = index * (5.0/3.0) and sets the controller targetTime
 // to 5.0s. Key 0 == the select-mode resting pose (60,-15,660), so the fly is continuous; the
 // camera swings right/down toward the creation pedestal. Values are verbatim native floats.
 export const CHARACTER_SELECT_CREATE_CAMERA_KEYFRAMES = Object.freeze([
@@ -110,9 +110,9 @@ export const CHARACTER_SELECT_CREATE_CAMERA_KEY_INTERVAL_SECONDS = 5 / 3;
 
 // CPSCharacterSelect::OnCreate (sub_73c930 .. sub_73cb6a) loads the foreground
 // interface props as CInterfaceModel instances (NOT SWorld objects):
-//   sub_8e7d10(model, "res\interface\<bsr>", 1) // CInterfaceModel::Load
-//   sub_8e70a0(model, &pos)                      // SetPosition (region-local)
-//   sub_8e70e0(model, yaw)                       // SetYaw (radians, about +Y)
+//   CCObjAnimation_LoadModel(model, "res\interface\<bsr>", 1) // CInterfaceModel::Load
+//   CCObjCharacter_ForwardVSlot28(model, &pos)                      // SetPosition (region-local)
+//   CCObjCharacter_ForwardVSlot30(model, yaw)                       // SetYaw (radians, about +Y)
 //   (*model + 0xc)(0,0,0,0, 1.0, 1.0)            // SetScale
 // The pedestal lives at self+0x1f0; the three race idols are a 3-entry array at
 // self+0x160 (stride 0xc). Positions/yaws are verbatim from the native floats.

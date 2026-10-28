@@ -53,7 +53,7 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 
 	// Skeleton section @ptr[2]: u32 count, then count x {string bskPath, string attachBone}.
 	// attachBone is the WEARER bone the item's whole bone branch is parented to (RE:
-	// CRTBranch_LinkToParentBranch sub_abc680 reads the string the loader stashed at
+	// CRTBranch_LinkToParentBranch CRTBranch_LinkToParentBranch reads the string the loader stashed at
 	// CResSkeleton+0x58 and links the branch root socket under the wearer socket of that
 	// name). Ornament items (shoulder orbs...) carry "Bip01 Neck1"/"Bip01 Neck"; plain
 	// characters and most items leave it empty.
@@ -111,10 +111,10 @@ export function parseCharacterBsr( buf, where = "<bsr>" ) {
 // Native animation-set section @ptr[5]. RE:
 //   CRes_LoadAnimationSetGroups -> CResAnimationSet_LoadStateRecords.
 // Each named set owns state records. The first two fields are the state id and
-// animation slot. CAnimationState_ReadTransitionMap (sub_a6b360) loads the next
-// 16-byte records into CResAnimationStateTable+0x04; sub_ae0280 walks that map
+// animation slot. CAnimationState_ReadTransitionMap (CAnimationState_ReadTransitionMap) loads the next
+// 16-byte records into CResAnimationStateTable+0x04; CRTAniInstallation_DispatchSoundRange walks that map
 // and raises the authored animation events. The final vector/scalar is the
-// normalized-time warp curve consumed by sub_adf080, not another event list.
+// normalized-time warp curve consumed by CRTAniInstallation_DispatchEventRange, not another event list.
 /*
 ================
 parseAnimationSets
@@ -172,8 +172,8 @@ function parseAnimationSets( buf, ptr, animationPaths ) {
 				if ( p + 4 + timeWarpPointCount * 8 > end ) {
 					throw new Error( `truncated animation time-warp curve in ${stateId}` );
 				}
-				// sub_a6ad40 uses FLD/FSTP for the scalar and memcpy-loads `count`
-				// pairs into the float curve evaluated by sub_a66a40.
+				// CResAnimation_ReadScalarKeys uses FLD/FSTP for the scalar and memcpy-loads `count`
+				// pairs into the float curve evaluated by CResAnimation_CollectEventsInRange.
 				timeWarpScale = buf.readFloatLE( p );
 				p += 4;
 				for ( let pointIndex = 0; pointIndex < timeWarpPointCount; pointIndex += 1 ) {
@@ -202,31 +202,31 @@ function parseAnimationSets( buf, ptr, animationPaths ) {
 
 // ------------------------------------------------- attach part-link tail (native dress)
 //
-// RE (SRO_Client v1.150): CResAttachable::Load (sub_a508a0) reads, after all other
+// RE (SRO_Client v1.150): CResAttachable::Load (CResAttachable_Load) reads, after all other
 // sections, `u32 a, u32 b, u32 c, u32 count, count x {u32 key, u32 value}` into a
 // per-resource vector (header lands at this[0xc3..0xc5], entries are 12-byte runtime
-// triplets {key, value, &this[0xc3]}). CCompChar::OnAttachItem (sub_a89bd0, via attach
-// vfunc sub_a89ed0) then walks the worn item's pairs and HIDES (sub_aa0d40) every char
-// prim whose pair key matches; detach (sub_a89cd0) re-shows everything and re-applies
+// triplets {key, value, &this[0xc3]}). CCompChar::OnAttachItem (CCompChar_ApplyItemCovers, via attach
+// vfunc CCompChar_AttachItemAndApplyCovers) then walks the worn item's pairs and HIDES (CRTBranch_SetMeshInstanceVisible) every char
+// prim whose pair key matches; detach (CCompChar_RebuildBaseMeshCovers) re-shows everything and re-applies
 // the remaining items. So:
 //   - char .bsr tail pairs  = { coverKey -> prim index } (its hideable skin prims;
 //     face carries no key and can never be hidden),
 //   - item .bsr tail pairs  = { coverKey -> 0 } (the body regions this item covers),
 //   - `b` on items is the equip slot id (HA=0 BA=1 LA=2 FA=3 SA=4 AA=5),
-//   - `c` is the GATE sub_a89bd0 actually checks (result_2[2] == this[0xc5]): the
+//   - `c` is the GATE CCompChar_ApplyItemCovers actually checks (result_2[2] == this[0xc5]): the
 //     cover MODE. c=1 = replacement armor -> hide matching skin prims; c=2 = layered
 //     accessory (bracers AA, shoulder pads SA) -> drawn OVER the skin, hides NOTHING.
-//   - `a` is always 1 on items and is NOT the gate (an earlier read of sub_a89bd0
+//   - `a` is always 1 on items and is NOT the gate (an earlier read of CCompChar_ApplyItemCovers
 //     mistook it for one; it only "worked" because most parts also have c=1).
-// Char resources (CResChar::Load sub_a89410) read one extra trailing u32 (nComboNum,
+// Char resources (CResChar::Load CResChar_Load) read one extra trailing u32 (nComboNum,
 // asserted 0) after the table; items end exactly at the table.
 //
-// The native loader reads the tail SEQUENTIALLY: CRes_LoadSections (sub_a4ff00) ends
+// The native loader reads the tail SEQUENTIALLY: CRes_LoadSections (CResObject_LoadFromArchive) ends
 // by seeking ptr[6] and reading the ModDataSet section (CModDataSetList_Load
-// sub_a75c60), leaving the stream cursor right where the part-link tail starts. There
+// CResObject_LoadFromArchive_Then_CJArchiveFm_RefillBuffer), leaving the stream cursor right where the part-link tail starts. There
 // is no header pointer to the tail, so the only correct way to locate it is to walk
 // section 6 byte-exactly the way the client does. Every IModData subclass Load was
-// RE'd for this (IModData_LoadBase sub_ac55b0 + 12 typed payload readers); the walk
+// RE'd for this (IModData_LoadBase IModData_LoadBase + 12 typed payload readers); the walk
 // below lands exactly at EOF(-trailing) on 3929/3930 BSRs in the corpus (lone
 // exception: npc/npc/tt.bsr, a leftover authored "JMXVRES 0107" test file).
 /*
@@ -314,7 +314,7 @@ export function parseSkinnedBms( buf, where = "<bms>" ) {
 	}
 
 	// skin @ptr[1]: u32 boneCount, counted bone names, then 6 bytes/vertex.
-	// Native MeshBatch_BuildVertexRunsType1Skinned (sub_a4ecb0) treats an
+	// Native MeshBatch_BuildVertexRunsType1Skinned (MeshBatch_BuildVertexRunsType1Skinned) treats an
 	// absent/empty weight table as rigid geometry. Several shipped NPC props
 	// use exactly ptr[1] == ptr[2] - 4: the zero count is the entire section.
 	const boneNames = [];

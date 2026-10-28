@@ -101,7 +101,7 @@ export function parseJmxBmsStaticMesh( buffer, sourcePath = "<memory>" ) {
 	const triangles = readBmsTriangleIndices( buffer, headerOffsets[2], headerOffsets[3], sourcePath );
 	// headerOffsets[4] holds the cloth constraints; the 24-byte AABB lives at
 	// headerOffsets[5]. Reading at [4] shifts the box by one float and yields invalid boxes
-	// (max < min), which broke the native visibility radius (sub_8c4c00 parity).
+	// (max < min), which broke the native visibility radius (CVisibility_ComputeRadius parity).
 	const bounds = readBmsBounds( buffer, headerOffsets[5], sourcePath );
 	const nativePayloads = readBmsNativePayloads( buffer, headerOffsets, sourcePath );
 
@@ -165,8 +165,8 @@ export function parseJmxBmtMaterialSet( buffer, sourcePath = "<memory>" ) {
 		}
 
 		ensureAvailable( buffer, offset, 8, sourcePath );
-		// Native CPrimMtrl serializer (sub_a62d90 @00a62e94) writes this slot as a FLOAT
-		// (struct +0x50, init default 0.5 in sub_a63350): the material alpha reference.
+		// Native CPrimMtrl serializer (CPrimMtrl_Serialize @00a62e94) writes this slot as a FLOAT
+		// (struct +0x50, init default 0.5 in CPrimMtrl_Construct): the material alpha reference.
 		const field0 = buffer.readUInt32LE( offset );
 		const alphaRef = cleanFloat( buffer.readFloatLE( offset ) );
 		offset += 4;

@@ -560,7 +560,7 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 				);
 			}
 			// Native CPrimAnimation stores every BSR-authored path but opens each
-			// BAN lazily (sub_a6c500 -> sub_a6c2d0). An archive miss returns 0 for
+			// BAN lazily (CResChar_ForEachLinkedItem_Helper -> CResAnimationClip_LoadBan). An archive miss returns 0 for
 			// that clip; it does not invalidate the model or its other states. Keep
 			// the required stand/walk/run lane strict above, while preserving that
 			// per-optional-clip failure boundary here. This matters for shipped data

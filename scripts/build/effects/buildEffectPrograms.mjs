@@ -25,7 +25,7 @@ import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
  * This is deliberately resource-driven. skilleffect.txt selects EFP files;
  * JMXVEFF selects its own BMS geometry, DDJ textures, blend state, emission
  * counts and per-frame curves. No effect is recreated with hand-picked CSS or
- * Babylon constants. The binary reader follows the folded sub_b29e30/sub_b298f0
+ * Babylon constants. The binary reader follows the folded CEFStoredEffect_DeserializeTree/CEFStoredEffect_ReadPayload
  * persistence order in parseJmxVisualEffect.mjs; the static mesh reader is shared with the
  * world-resource pipeline.
  */
@@ -178,9 +178,9 @@ export function collectEffectReferences() {
 		if ( normalized.endsWith( ".efp" ) ) recordReferences.add( normalized );
 	};
 
-	// Follow the same reachability join as native: sub_920020 first filters
-	// skillaniset2 rows by Service, sub_91dae0 constructs enabled records, and
-	// sub_9169d0 joins only resolvable SkillData/built-in names.  A raw scan of
+	// Follow the same reachability join as native: CSkillEffectManager_LoadSkillEffectTextData first filters
+	// skillaniset2 rows by Service, CSkillEffectManager_ParseSkillLightRecord constructs enabled records, and
+	// GlobalDataManager_FindOrRegisterSkillIdByName joins only resolvable SkillData/built-in names.  A raw scan of
 	// every skilleffectset row crosses that ownership boundary and incorrectly
 	// promotes disabled/future authoring residue into runtime asset debt.
 	for ( const record of [ ...Object.values( table ), ...Object.values( namedTable ) ] ) {

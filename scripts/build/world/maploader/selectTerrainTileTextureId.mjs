@@ -1,6 +1,6 @@
 // Native sub_440b64 MapLoader runtime-metadata corner read order (must be
 // preserved by callers). This fold does not choose the SWorld near-terrain
-// diffuse association; sub_8b3aa0 owns that draw path.
+// diffuse association; SWorldCell_BuildTerrainMeshLOD owns that draw path.
 //   [0] = vertex(tileZ,     tileX)     @ [edi - 0x77]  (0x00440b64)
 //   [1] = vertex(tileZ + 1, tileX)     @ [edi]         (0x00440ba5)
 //   [2] = vertex(tileZ + 1, tileX + 1) @ [edi + 0x07]  (0x00440bee)

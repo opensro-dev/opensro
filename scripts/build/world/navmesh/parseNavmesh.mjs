@@ -11,7 +11,7 @@
 //     linkEdge row = { u16 neighborObjectIndex (into THIS region's object list,
 //     0xffff = one-sided); u16 neighborOutlineEdgeIndex; u16 myOutlineEdgeIndex }.
 //     Native: read into NavMeshInstance+0xa0 by CRTNavMeshTerrain_LoadFromNvm
-//     (sub_4033e0); consumed by the sub_403fb0 @0x0040429c edge-object
+//     (CRTNavMeshTerrain_Load); consumed by the CRTNavMeshTerrain_StepPlacedObject @0x0040429c edge-object
 //     continuation (multi-object bridge chains). Reciprocal across the corpus.
 //   u32 totalCellCount; u32 openCellCount;
 //   cell[totalCellCount]: { f32 minX,minZ,maxX,maxZ; u8 objIdxCount; u16[objIdxCount] }

@@ -5,8 +5,8 @@ skillEffectStage.ts - the authored 0xa0-byte skill-effect stage record
 
 Owned by the asset pipeline: v1.150 data-format tables recovered from the
 native client; keep behaviour identical to the published assets. Grounded in
-the v1.150 bytes at sub_91e720 (field producer), sub_8fd510 (copy ctor, the
-complete field census) and sub_8d8e30 / sub_8dca40 / sub_8ddde0 (runtime
+the v1.150 bytes at CSkillEffectManager_ParseSkillEffectRecord (field producer), SSkillEffectData_CopyConstructor (copy ctor, the
+complete field census) and CIDecoSkillEffectEntity_Initialize / CIDecoSkill_ExecuteStageEffects / CIDecoSkill_ExecuteStageCommandList (runtime
 consumers). The ranges +0x3c..+0x53 and +0x54..+0x6b are complete attachment
 records, not four independent bone/offset fields; keeping that boundary
 explicit prevents source and target offsets from being swapped.
@@ -19,7 +19,7 @@ type uint8 = number;
 
 export type SkillEffectStageVector3 = [number, number, number];
 
-/** Minimal semantic anchor view consumed by sub_8d6330. */
+/** Minimal semantic anchor view consumed by Animation_CalculateBoneSocketWorldPosition. */
 export interface SkillEffectStageAttachAnchor {
 	/** Native +0x00 atom/key. `null` anchors at the model root. */
 	boneName: string | null;
@@ -34,7 +34,7 @@ export interface SkillEffectStageAttachmentRecord extends SkillEffectStageAttach
 	/** Same native +0x04 slot in the matrix-builder vocabulary. */
 	offset4: SkillEffectStageVector3 | null;
 	/** Native +0x08: keep the bone rotation; 8D6880 resets it to identity when
-	 * zero. sub_91e720 clears it for an '@Bone' token. */
+	 * zero. CSkillEffectManager_ParseSkillEffectRecord clears it for an '@Bone' token. */
 	keepRotation8: boolean;
 	/** Native +0x09: the '*' token; 8D6880 adds CICharactor_GetHeight to Y. */
 	addHeight9: boolean;
@@ -44,7 +44,7 @@ export interface SkillEffectStageAttachmentRecord extends SkillEffectStageAttach
 export const SkillEffectSpineBaseSocketNameAddress = 0x00ccc89c;
 export const g_skillEffectSpineBaseSocketName = "Spine_Base";
 
-/** Name/id tables registered by sub_bbe6f0..sub_bbea60. */
+/** Name/id tables registered by EffectSyntax_AniType_Register..EffectSyntax_SkillCameraFlags_Register. */
 export const SKILL_EFFECT_PHASE_ID_BY_NAME = new Map<string, number>( [
 	[ "READY", 0 ],
 	[ "WAIT", 1 ],

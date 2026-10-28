@@ -7,7 +7,7 @@ type StdString = { readonly text?: string };
 
 /**
  * Native v1.150 global std::string objects initialized by
- * sub_bbdb70 / InitGlobalAnimationSetNameStrings.
+ * CRT_InitWeaponAnimationPrefixStrings / InitGlobalAnimationSetNameStrings.
  *
  * These values are addresses of std::string OBJECTS, not enum ordinals.
  * Native animation-set maps compare the pointed-to string contents, so callers

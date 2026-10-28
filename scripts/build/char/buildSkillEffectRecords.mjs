@@ -1,7 +1,7 @@
 // Publish the skill-effect DATA plane as a browser-fetchable asset: the
 // f0902c GlobalEffectManager effect-record table (skilldata numeric id ->
 // CIDecoSkillRecord), which the WIP skill folds read through
-// sub_917240 GlobalEffectManager_FindEffectRecordBySkillId.
+// GlobalEffectManager_FindSkillMotionMetadata GlobalEffectManager_FindEffectRecordBySkillId.
 //
 // Source join:
 //   SkillData_*.txt col[1] numeric id + (col[5] base name OR exact col[3]) x
@@ -63,7 +63,7 @@ export async function buildSkillEffectRecordsAsset() {
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, "effectRecords.json");
   // The asset is a plain { id -> record } map. Positive keys are SkillData
-  // ids; built-ins use the signed int32 representation read by sub_917240.
+  // ids; built-ins use the signed int32 representation read by GlobalEffectManager_FindSkillMotionMetadata.
   writeJsonIfChangedSync(outPath, table);
   const namedPath = path.join(outDir, "namedEffectRecords.json");
   writeJsonIfChangedSync(namedPath, namedTable);

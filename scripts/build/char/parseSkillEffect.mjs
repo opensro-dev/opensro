@@ -13,16 +13,16 @@ before they can be translated into that version's execution vocabulary.
 
 // Parser for the skill-effect DATA plane: the f0902c GlobalEffectManager
 // effect-record map the WIP skill folds read through
-// sub_917240 GlobalEffectManager_FindEffectRecordBySkillId.
+// GlobalEffectManager_FindSkillMotionMetadata GlobalEffectManager_FindEffectRecordBySkillId.
 //
 // RE (Revtool SkillEffectData_LoadAll / SkillAnimationSet_ParseRow; Rizin
 // 0x0092008f and 0x00920304..0x00920465, audited 2026-08-05):
-//   The native loader sub_920020 opens textdata\skilleffect.txt. Both
-//   #section skillaniset and #section skillaniset2 dispatch to sub_91dae0;
+//   The native loader CSkillEffectManager_LoadSkillEffectTextData opens textdata\skilleffect.txt. Both
+//   #section skillaniset and #section skillaniset2 dispatch to CSkillEffectManager_ParseSkillLightRecord;
 //   the latter is the service-column form shipped by this v1.150 archive.
 //   The parser inserts a CIDecoSkillRecord into the f0902c std::map per
-//   enabled row, keyed by the id sub_9169d0 assigns the row's skill NAME.
-//   The record fields sub_8e06e0 SkillEffectObj_Init
+//   enabled row, keyed by the id GlobalDataManager_FindOrRegisterSkillIdByName assigns the row's skill NAME.
+//   The record fields CIDecoSkill_InitializeCast SkillEffectObj_Init
 //   consumes: +0x04 anim-slot key (AniGroup), +0x08/+0x09/+0x0a per-phase
 //   anim-table COUNTS + +0x0e/+0x16/+0x1e the tables (AniReady/AniWait/
 //   AniShot), +0x3e target count, +0x02 flags.
@@ -75,9 +75,9 @@ const SKILLDATA_COL_ORIGINAL = 6;
 
 /**
  * Native data_ccdca8: the built-in effect-name/id pairs registered into the
- * same name resolver as ordinary skill effects by sub_bbeab0.  The ids are
+ * same name resolver as ordinary skill effects by StaticInit_RegisterSkillEffectNames.  The ids are
  * signed int32 keys in g_effectRecordMap; keeping that representation here is
- * important because sub_917240 deliberately skips the positive-SkillData
+ * important because GlobalEffectManager_FindSkillMotionMetadata deliberately skips the positive-SkillData
  * override for them.
  */
 export const BUILTIN_EFFECT_NAME_ID_PAIRS = Object.freeze( [
@@ -273,7 +273,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 				continue;
 			}
 		}
-		// Native sub_9169d0 resolves the authored name; it is not restricted to
+		// Native GlobalDataManager_FindOrRegisterSkillIdByName resolves the authored name; it is not restricted to
 		// the player SKILL_ namespace. MSKILL_ and PSKILL_ rows share this table.
 		if ( !baseName ) continue;
 		// Native 0x91def3..0x91df0a resolves each comma token through the
@@ -317,7 +317,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 			arrowForceEffectPath: optionalResourcePath( c[ANI_COL.arrowForceEffect] ),
 			hideWeapon: Number( c[ANI_COL.hideWeapon] ) || 0,
 			spineAimAxis: spineAimAxis( baseName, c[ANI_COL.spineAimAxis] ),
-			// sub_91dae0 @0x91e6f4 stores the final authored byte at record+0xbe.
+			// CSkillEffectManager_ParseSkillLightRecord @0x91e6f4 stores the final authored byte at record+0xbe.
 			// Single-projectile 8ddde0 snapshots that record into stage+0x1b4;
 			// 8d7fd0 uses +0xbe to gate the target's secondary action effect.
 			attackSkillFlagBe: Number( c[ANI_COL.attackSkillFlagBe] ) || 0
@@ -330,7 +330,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 ================
 parseSkillEffectSet
 
- * Parse the native `skilleffectset` section through the folded sub_91e720
+ * Parse the native `skilleffectset` section through the folded CSkillEffectManager_ParseSkillEffectRecord
  * field reader.  The output map preserves file order because rows sharing one
  * SkillEffectID are ordered stages, not a last-write-wins table.
 ================
@@ -507,7 +507,7 @@ function spineAimRecord( axis, authoredStages ) {
 ================
 deriveTargetResultCapacity
 
- * Reproduce sub_916aa0's post-load damage-stage census for
+ * Reproduce GlobalEffectManager_ValidateDamageEffectEntry's post-load damage-stage census for
  * CIDecoSkillRecord+0x3e. Retail scans animation phases 0..9, rejects more
  * than one damage row in any phase, then stores the total in one byte.
 ================
@@ -639,7 +639,7 @@ export function buildEffectRecordTable(
   ================
   */
 	const addRecord = ( id, ani, destination = table ) => {
-		// Native sub_91dae0 appends every comma-separated ANI_* token into one
+		// Native CSkillEffectManager_ParseSkillLightRecord appends every comma-separated ANI_* token into one
 		// of six fixed four-word tables.  At 0x91defd it reads the table's byte
 		// count from record+0x08[index], writes the next u16 at
 		// record+0x0e + (index * 4 + count) * 2, then increments that SAME count
@@ -725,7 +725,7 @@ export function buildEffectRecordTable(
 		addRecord( row.id, ani );
 	}
 
-	// sub_bbeab0 registers these names before sub_91e720 parses
+	// StaticInit_RegisterSkillEffectNames registers these names before CSkillEffectManager_ParseSkillEffectRecord parses
 	// skilleffectset. They do not have positive SkillData rows, so joining only
 	// through SkillData silently dropped the complete SYSTEM_* record family.
 	// A registered name without a v1.150 skillaniset row remains absent, just

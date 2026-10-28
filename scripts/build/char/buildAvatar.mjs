@@ -46,7 +46,7 @@ export function weaponAttackAnimationRoleForSetName(role, setName) {
 
 export const NATIVE_CHARACTER_SELECT_STATE_IDS = [13, 14, 15];
 
-// State-1 death enter in sub_8e64f0 uses this complete default-set trio:
+// State-1 death enter in CICharactor_Action_KnockdownDie uses this complete default-set trio:
 // held corpse pose, ordinary death strike, and the quick-death one-shot.
 // Keep the native state ids beside the exported roles so every generated
 // player GLB exposes exactly the names the mission actor resolves.
@@ -193,8 +193,8 @@ export function pickAttackStateClips(bsr) {
 
 /**
  * Pick the pickup/scoop clip: animation-set state 0x26 (native motion id
- * 0x26 = ANI_PICK, played by the state-10 pickup enter sub_8e6150 via
- * PlayMotionBlend). Resolved from the "default" set - the sub_8e7150
+ * 0x26 = ANI_PICK, played by the state-10 pickup enter CICharactor_Action_PickupItem via
+ * PlayMotionBlend). Resolved from the "default" set - the CCObjCharacter_PlayAnimationWithFallback
  * fallback key (0x00ccccc0) the runtime animation plane resolves through
  * (player .bsr files map every set's state 0x26 to the same
  * chinaman/chinawoman_pickup.ban).
@@ -216,8 +216,8 @@ export const primSlot = (primIndex) => `prim${primIndex}`;
  * Pre-transform (in place) every vertex fully weighted to a "baked" local bone by that
  * bone's bake transform {q,t}. Used for item-private bone BRANCHES: natively the whole
  * branch is parented under a named wearer bone in attach mode (+0xa0=1; CRTBranch_
- * LinkToParentBranch sub_abc680) and the root's update (CRTSocket_UpdateMatrices-
- * AttachRoot sub_ab5870) composes with the attach bone's SKIN matrix (bind-relative
+ * LinkToParentBranch CRTBranch_LinkToParentBranch) and the root's update (CRTSocket_UpdateMatrices-
+ * AttachRoot CRTSocket_UpdateAttachRootMatrices) composes with the attach bone's SKIN matrix (bind-relative
  * delta) re-translated to the attach bone's world position - the attach BIND rotation
  * is cancelled. With branch bones at bind pose the whole item reduces to
  *   v_world = attachDelta * (v_model + attachBindWorld.t)
@@ -304,7 +304,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
       }
       // Bone the export skeleton doesn't know (item dangle bones: capes "Bone05",
       // tassets...). Native never drops the mesh: the item gets its own CRTBranch
-      // (RTSkeleton.cpp CRTBranch_Build sub_abe900) and a bone with no animation track
+      // (RTSkeleton.cpp CRTBranch_Build CAnimManager_Str_Skeleton_Create_Failed_s) and a bone with no animation track
       // holds its bind-local pose under its animated ancestors, which makes its skin
       // matrix EQUAL to the nearest known ancestor's (world*invBind telescopes). Let the
       // caller resolve the bone via the item's OWN skeleton hierarchy - either to a
@@ -321,7 +321,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
       return fi;
     });
     if (unresolvedBone !== null && options.rigidUnboundMeshes && resolvedBoneCount === 0) {
-      // Native PrimGeometry_BakeSkinBlendWeights (sub_a85490) leaves names
+      // Native PrimGeometry_BakeSkinBlendWeights (PrimGeometry_BakeSkinBlendWeights) leaves names
       // that cannot bind to the compound skeleton at the 0xff rigid sentinel.
       // This is how authored model-local props such as the West-China smith
       // hammer remain drawable without becoming a build-fatal fake bone.
@@ -349,7 +349,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
   // Clips baked into the GLB so the runtime can pose per use: 'walk'/'run' for
   // PathCtl speed channels 0/1, 'stand' for idle (native ANI_STAND1 between move
   // commands), 'ride' (the exact "cart" animation-set state 0 selected by
-  // Bionic_MountRider sub_871420), the four native basic-attack states, and the native
+  // Bionic_MountRider CICharactor_MountRider), the four native basic-attack states, and the native
   // reaction/down family, and death/deathloop/deathquick state-1 trio.
   // Dress-item GLBs carry NO clips: their meshes reuse the WEARER's baked VAT matrices
   // (same skeleton file, same joint order), so embedded animation would be dead weight.

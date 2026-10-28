@@ -76,7 +76,7 @@ import {
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
 import { claimPublicPaths, withPublication } from "../shared/publicationLedger.mjs";
 
-// The CIFButton state family (sub_5419c0) for the quickslot and return-scroll
+// The CIFButton state family (CIFCloseButton_OnCreate) for the quickslot and return-scroll
 // buttons; none of these ships a _disable.
 const BUTTON_STATES = [ "", "_focus", "_press" ];
 const SPRITE_CATALOG = "/assets/cif/cif-sprite-catalog.json";

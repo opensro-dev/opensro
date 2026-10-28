@@ -4,12 +4,12 @@
 parseJmxVisualEffect.mjs - JMXVEFF 0010..0013 binary effect reader
 
 The tree-level layout (dataOffset u32, name, controllers, child recursion)
-follows native CEFStoredEffect_DeserializeTree (sub_b29e30 / sub_b1f270).
+follows native CEFStoredEffect_DeserializeTree (CEFStoredEffect_DeserializeTree / CEFStoredEffect_LoadFile).
 The inner member layout (globalData, programs, life/view/render commands,
 resource, trailing/render programs) follows CEFStoredEffect_Deserialize
-(sub_b298f0, vtable slot +0x1c). Payload shapes for controllers and
+(CEFStoredEffect_ReadPayload, vtable slot +0x1c). Payload shapes for controllers and
 parameters were cross-checked against the native registries in
-ParticleScriptSystem_Init (sub_b0b850) and the public JMXVEFF format
+ParticleScriptSystem_Init (CEEGlobalData_RegisterCommands) and the public JMXVEFF format
 documented by JMX File Editor (Copyright 2021 Engels Quintero, MIT).
 
 ===========================================================================
@@ -299,7 +299,7 @@ function readCommandParameter( reader, commandName ) {
 		case "NeverExtinct":
 		case "NormalTimeExtinct":
 		case "NormalTimeLoop":
-		case "NormalTimeLife": // Note: NormalTimeLife is a controller name (sub_b0b4c0), not one of the 37 native commands (sub_b13490); harmless compatibility fallback
+		case "NormalTimeLife": // Note: NormalTimeLife is a controller name (CEEGlobalData_RegisterControllerNames), not one of the 37 native commands (CEEGlobalData_RegisterCommandDescriptor); harmless compatibility fallback
 		case "ViewNone":
 		case "ViewBillboard":
 		case "ViewVBillboard":
@@ -522,7 +522,7 @@ export function parseJmxVisualEffect( buffer, sourceName = "<buffer>" ) {
 	if ( !Number.isInteger( version ) || version < 10 || version > 13 ) {
 		throw new Error( `${sourceName}: unsupported JMXVEFF version ${JSON.stringify( versionText )}` );
 	}
-	// In retail v1.150 SRO_Client.exe (sub_b1f270), all 651 corpus files are version 0011.
+	// In retail v1.150 SRO_Client.exe (CEFStoredEffect_LoadFile), all 651 corpus files are version 0011.
 	// The scale (v12+) and version13 header payloads are derived from Engels Quintero's
 	// JMX File Editor format specification (dead code against the v1.150 corpus).
 	if ( version !== 11 ) {

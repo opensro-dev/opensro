@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skillEffectSetParseRow.ts - one skilleffectset row, folded from sub_91e720
+skillEffectSetParseRow.ts - one skilleffectset row, folded from CSkillEffectManager_ParseSkillEffectRecord
 
 Owned by the asset pipeline: a v1.150 data-format table recovered from the
 native client; keep behaviour identical to the published assets. This is a
@@ -111,7 +111,7 @@ interface SkillEffectSetBinding {
 ================
 bindingAt
 
-The bone token arms of sub_91e720 (0x91f3b2 start, 0x91f520 target) over a
+The bone token arms of CSkillEffectManager_ParseSkillEffectRecord (0x91f3b2 start, 0x91f520 target) over a
 record that 0x91eaca memsets to zero: "none" leaves the zero binding, "*"
 keeps rotation and adds the character height with no bone, "@Name" binds
 Name without its rotation, and a plain name binds it with its rotation.
@@ -183,7 +183,7 @@ function resourcePath( directory: string | null, name: string | null ): string |
 ================
 SkillEffectSet_ParseRow
 
-Fold of sub_91e720's field-reader body.  The caller supplies either the
+Fold of CSkillEffectManager_ParseSkillEffectRecord's field-reader body.  The caller supplies either the
 original 28-column tab row or those columns already split.  Delimiter
 sub-records preserve their native arity: fade(2), move(4), param(3),
 action options(6), and both offsets(3).
