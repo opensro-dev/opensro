@@ -38,6 +38,7 @@ test(
 				const boot = Array.from( document.scripts ).find(
 					s => s.src && new URL( s.src ).pathname === "/src/bootstrap.ts"
 				);
+				if ( !boot ) throw Error( "bootstrap script not found" );
 				const { runtime } = await import( boot.src );
 				runtime.dispose();
 				const { createUi } = await import( "/src/engine/runtime/ui/ui.ts" ),
@@ -144,7 +145,7 @@ test(
 					}
 					throw Error( "skill window probe did not settle: " + JSON.stringify( ui.stats() ) );
 				};
-				window.skillTabFixture = {
+				/** @type {any} */ (window).skillTabFixture = {
 					ui,
 					platform,
 					renderer,
@@ -159,7 +160,7 @@ test(
 
 			const openAndRead = async () =>
 				page.evaluate( async () => {
-					const f = window.skillTabFixture;
+					const f = /** @type {any} */ (window).skillTabFixture;
 					f.ui.event( { kind: "activate", id: "open-window:Skills" } );
 					await f.settle();
 					const controls = f.semantics().controls;
@@ -180,12 +181,12 @@ test(
 			assert.deepEqual( first.masteries, [ "skill-mastery:257" ], "tab 0 draws the weapon mastery" );
 
 			await page.evaluate( async () => {
-				const f = window.skillTabFixture;
+				const f = /** @type {any} */ (window).skillTabFixture;
 				f.ui.event( { kind: "activate", id: "skill-tab:1" } );
 				await f.settle();
 			} );
 			const switched = await page.evaluate( () => {
-				const controls = window.skillTabFixture.semantics().controls;
+				const controls = /** @type {any} */ (window).skillTabFixture.semantics().controls;
 				return {
 					selectedTab: controls.find( c => c.id.startsWith( "skill-tab:" ) && c.selected )?.id ?? null,
 					masteries: controls.filter( c => c.id.startsWith( "skill-mastery:" ) ).map( c => c.id )
@@ -195,7 +196,7 @@ test(
 			assert.deepEqual( switched.masteries, [ "skill-mastery:273" ], "tab 1 draws the force mastery" );
 
 			await page.evaluate( async () => {
-				const f = window.skillTabFixture;
+				const f = /** @type {any} */ (window).skillTabFixture;
 				f.ui.event( { kind: "key", code: "Escape" } );
 				f.draw();
 				f.ui.event( { kind: "activate", id: "open-window:Character" } );
@@ -215,7 +216,7 @@ test(
 			assert.deepEqual( errors, [] );
 		} finally {
 			await page.evaluate( () => {
-				const f = window.skillTabFixture;
+				const f = /** @type {any} */ (window).skillTabFixture;
 				if ( f ) {
 					f.ui.dispose();
 					f.platform.dispose();
