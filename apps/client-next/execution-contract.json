@@ -86,7 +86,8 @@
 				"receiveLifecycle",
 				"step",
 				"ready",
-				"error"
+				"error",
+				"failure"
 			]
 		},
 		{

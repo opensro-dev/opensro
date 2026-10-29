@@ -697,6 +697,10 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 		result.Refusal = simulation.MonsterAttackApproachRequired
 		return result
 	}
+	if release == nil && rt.monsterLineBlocked(mover, petPose, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
+		return result
+	}
 	attacker, err := combat.MonsterInstanceStats(instance)
 	if err != nil {
 		return result
