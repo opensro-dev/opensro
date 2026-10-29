@@ -30,7 +30,9 @@ const { interactionApproach, interactionApproachTransition } = await import(
 test( "primary portal menu resolves selected reference and authored destination IDs", NATIVE_ONLY, () => {
 	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/teleportData.json", "utf8" ) ),
 		catalog = decodePortalCatalog( raw );
-	assert.equal( catalog.links.length, 85 );
+	// 85 retail links plus the 5 between the Qin-Shi tomb floors' gates
+	// (GATE_JINSI_*, baked since #2043).
+	assert.equal( catalog.links.length, 90 );
 	const text = {
 		"UIIT_CTL_TELEPORT_RESULT": "Teleport to [%s]area. [%d]gold",
 		"UIIT_CTL_TELEPORT_FREE_RESULT": "Teleport to [%s]area.",

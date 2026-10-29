@@ -64,7 +64,8 @@ test( "published stage decoding retains lifecycle controls and negative fade sen
 		} );
 	}
 	assert.ok( negative > 0 );
-	assert.equal( kills, 1024 );
+	// 1024 retail kill stages plus the Qin-Shi tomb monsters' skills (#2024).
+	assert.equal( kills, 1180 );
 } );
 
 test("real sword stage waits for native anchor metadata, renders at the target anchor, and reports other script branches explicitly", () => {

@@ -15,9 +15,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readPublishedAssetJsonSync, readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
-import { loadDataAsset } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
 import { entityMaterialMetadata } from "../../../../scripts/build/char/entityMaterialMetadata.mjs";
+import { entitySource } from "../../../../scripts/build/char/publishEntityBsrModifiers.mjs";
 import { CROW_EGG_BSR } from "../../../../scripts/build/char/crowEgg.mjs";
 import { PORT_PET_DROP_MODEL } from "../../../../scripts/build/shared/portItemRows.mjs";
 import { npcManifestModels } from "../../../../scripts/build/shared/npcManifest.mjs";
@@ -43,8 +43,11 @@ test("every original entity material modifier binds through GLB publication and 
 			) continue; // Owned procedural asset has no native BSR.
 			if ( seen.has( row.glb ) ) continue;
 			seen.add( row.glb );
-			const source = row.bsr ?? "res/" + key,
-				bytes = await loadDataAsset( source ),
+			// A compound entity (.cpd) reads through its body branch, as the
+			// modifier refresh does (#2088).
+			const entity = await entitySource( row.bsr ?? "res/" + key ),
+				source = entity.path,
+				bytes = entity.buffer,
 				bsr = parseCharacterBsr( bytes, source );
 			if ( !bsr.materialModifiers.length && !bsr.textureModifiers.length ) continue;
 			for (
