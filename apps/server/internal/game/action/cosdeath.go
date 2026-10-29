@@ -5,8 +5,11 @@ cosdeath.go - what a companion's death leaves behind, by kind
 
 Every character death runs the reference server's kill credit, whose
 vtable+0x638 drops a COS's transport cargo: a
-transport's goods go offline and publish unowned, the way a monster's
-drops do. The COS death then releases a vehicle
+transport's goods go offline and publish the way a monster's drops do,
+reserved to the winner when the winner is a player. Native keeps a
+damage table and credits its top dealer; the port credits the fatal
+dealer, so a death finished by a damage-over-time tick has no dealer on
+record and publishes unowned. The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
 keep theirs on the summoner item for revival (cosabnormal.go). A
 captured quest monster is gone with its death, and
@@ -18,6 +21,8 @@ package action
 
 import (
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -68,11 +73,15 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 ================
 dropTransportCargo
 
-Natively the cargo scatters around the dead transport, owned by no one.
+Natively the cargo scatters around the dead transport:
+PublishDropsWithGoldBonus resets each bag's ground owner to the winner
+(CGItem_ResetGroundOwnerAndDropTimer), so a player winner holds the
+bags for the native ownership window and a monster winner leaves them
+unowned.
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
-	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now)...)
+	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now, "death", o.winnerName)...)
 }
 
 /*
@@ -80,21 +89,31 @@ func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
 scatterTransportCargo
 
 The native cargo drop, shared with the port-only trader rule (tradercargodrop.go):
-every row of pet's container lands unowned around the transport, and the
-container empties. A row the ground owner refuses stays lost with the
-vehicle. The caller holds c's door; returns the drops' public frames.
+every row of pet's container lands around the transport, reserved to
+winnerName ("" leaves it unowned), and the container empties. A row the
+ground owner refuses stays lost with the vehicle - the scatter log
+line below is the only trace it leaves. The caller holds c's door;
+returns the drops' public frames.
 ================
 */
-func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64) []wire.Frame {
+func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64, cause, winnerName string) []wire.Frame {
 	at := rt.companionLiveSpawn(division, c, pet, nowMs)
 	now := time.UnixMilli(nowMs)
 	var dropped []grounditem.Item
 	for _, item := range invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity)) {
-		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, "", now), at, cosCargoRarity)
+		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, winnerName, now), at, cosCargoRarity)
 		if added := rt.addCharacterGround(division, c, planned); added.Gid != 0 {
 			dropped = append(dropped, added)
 		}
 	}
+	killerKind := "none"
+	if winnerName != "" {
+		killerKind = "player"
+	}
+	log.WithFields(log.Fields{
+		"cause": cause, "killer": killerKind, "winner": winnerName,
+		"owner": c.Name, "bags": len(dropped),
+	}).Info("trade: transport cargo scattered")
 	pet.Container.Rows = nil
 	if len(dropped) == 0 {
 		return nil
