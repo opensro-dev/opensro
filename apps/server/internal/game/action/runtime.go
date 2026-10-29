@@ -33,6 +33,7 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -706,6 +707,14 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
+	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// port-only, not native): its Global Chatting line reaches only
+	// itself. Nil mutes no one.
+	ChatShadowMuted func(accountID string) bool
+	// ModerationLog keeps the Global Chatting line for the staff
+	// (chatlog, port-only, not native), muted lines included and
+	// marked. Record only queues the line; nil keeps no log.
+	ModerationLog *chatlog.Log
 
 	// HonorPoints returns the character's usable Training Camp honor points
 	// (the reference server's Training Camp member record, [member+0x34]+0x54). Nil reports 0.

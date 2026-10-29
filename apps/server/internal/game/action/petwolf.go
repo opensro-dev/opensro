@@ -136,8 +136,10 @@ func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld
 	}
 	gid, kind, allowTown := q.gid, q.kind, q.allowTown
 	// Runs per pet per tick: copy the owner only when a pet could pass the
-	// record filters below (#1943).
-	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+	// record filters below (#1943), and then only the pet-owner view
+	// (#2030): the walk and every elemental lane reading step.snapshot
+	// read companions, life, town, world, party and the relation facts.
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(c *enterworld.Character) bool {
 		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
 	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
