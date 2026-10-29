@@ -320,6 +320,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		result.Refusal = simulation.MonsterAttackApproachRequired
 		return result
 	}
+	if release == nil && rt.monsterLineBlocked(mover, playerPose, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
+		return result
+	}
 	attacker, err := combat.MonsterInstanceStats(instance)
 	if err != nil {
 		return result
@@ -362,4 +366,28 @@ func (rt *Runtime) findCharacterByGid(divisionID string, gid uint32) *enterworld
 		}
 	}
 	return nil
+}
+
+/*
+================
+monsterLineBlocked
+
+The line-of-sight check of a monster's skill command. The original server
+validates every skill command, a monster's included, with the same checks
+as a player's cast; one of them asks the region manager's line-of-sight
+query and refuses 0x3010 when the line is blocked. A monster on another
+cave floor or behind a wall therefore never strikes through it: the
+command is refused, and the AI keeps its target and retries on its next
+tick, as for any refused command. Only the command is judged; an owned
+cast's release is not, since the original's later cast checks leave line
+of sight out. Notes: ../research/investigations/world/monster-line-of-sight-20261029.md.
+================
+*/
+func (rt *Runtime) monsterLineBlocked(mover monster.MoverState, to simulation.Spawn, nowMs int64) bool {
+	if rt.LineOfSight == nil {
+		return false
+	}
+	pose := mover.LivePoseAt(nowMs, nil)
+	from := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	return !rt.LineOfSight(from, mover.LiveNavOwner(nowMs), to)
 }

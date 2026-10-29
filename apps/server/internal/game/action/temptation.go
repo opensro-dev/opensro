@@ -108,6 +108,10 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		result.Refusal = simulation.MonsterAttackApproachRequired
 		return result
 	}
+	if rt.monsterLineBlocked(actorMover, to, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
+		return result
+	}
 	attacker, err := combat.MonsterInstanceStats(instance)
 	if err != nil {
 		return simulation.MonsterAttackResult{}
