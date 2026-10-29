@@ -121,16 +121,32 @@ func loadJobRankings(db *sql.DB) (map[string]domain.JobRankings, error) {
 
 /*
 ================
+jobRankingsRecord
+
+The meta row's bytes for the rankings plane; empty when no week has
+closed, in which case no writer puts a row down.
+================
+*/
+func jobRankingsRecord(rankings map[string]domain.JobRankings) (string, error) {
+	if len(rankings) == 0 {
+		return "", nil
+	}
+	raw, err := json.Marshal(rankings)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+/*
+================
 writeJobRankings
 ================
 */
 func writeJobRankings(tx *sql.Tx, rankings map[string]domain.JobRankings) error {
-	if len(rankings) == 0 {
-		return nil
-	}
-	raw, err := json.Marshal(rankings)
-	if err != nil {
+	record, err := jobRankingsRecord(rankings)
+	if err != nil || record == "" {
 		return err
 	}
-	return upsertMetaTx(tx, metaKeyJobRankings, string(raw))
+	return upsertMetaTx(tx, metaKeyJobRankings, record)
 }

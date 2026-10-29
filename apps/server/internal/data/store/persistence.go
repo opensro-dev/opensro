@@ -91,8 +91,10 @@ skipped because their bytes still matched the last committed digest.
 ================
 */
 type commitRowCounts struct {
-	written int64
-	skipped int64
+	written     int64
+	skipped     int64
+	metaWritten int64
+	metaSkipped int64
 }
 
 /*
@@ -118,18 +120,34 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := writeTradeRewards(tx, s.meta.TradeRewards); err != nil {
+	// The trade and job planes marshal whole on every commit, changed
+	// or not; like the character rows below, a plane whose bytes still
+	// match its last committed digest is not rewritten (#1943 W2).
+	// Digests stage here and are retained only once the transaction
+	// commits (below). The updated-at stamp is the commit's own time
+	// and is written every time; the schema and layout stamps are
+	// build constants and take the same skip.
+	stagedMeta := map[string][32]byte{}
+	if record, err := tradeRewardsRecord(s.meta.TradeRewards); err != nil {
 		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyTradeRewards, record); err != nil {
+			return err
+		}
 	}
-	if err := writeJobRankings(tx, s.meta.JobRankings); err != nil {
+	if record, err := jobRankingsRecord(s.meta.JobRankings); err != nil {
 		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyJobRankings, record); err != nil {
+			return err
+		}
 	}
 
-	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
 	}
 	// The layout stamp rides every commit like the schema stamp above.
-	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {
@@ -291,6 +309,34 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	for key, digest := range stagedDigests {
 		s.committedDigests[key] = digest
 	}
+	for key, digest := range stagedMeta {
+		s.committedMetaDigests[key] = digest
+	}
+	return nil
+}
+
+/*
+================
+upsertMetaRowTx
+
+One meta row of a plane the commit rewrites whole: written only when
+its bytes differ from the key's last committed digest, and then staged
+so the digest is retained only if the transaction commits - the
+character rows' discipline (commitRowCommit), so a rolled-back commit
+leaves no digest describing bytes the disk does not hold.
+================
+*/
+func (s *Store) upsertMetaRowTx(tx *sql.Tx, staged map[string][32]byte, rows *commitRowCounts, key, value string) error {
+	digest := sha256.Sum256([]byte(value))
+	if committed, ok := s.committedMetaDigests[key]; ok && committed == digest {
+		rows.metaSkipped++
+		return nil
+	}
+	if err := upsertMetaTx(tx, key, value); err != nil {
+		return err
+	}
+	rows.metaWritten++
+	staged[key] = digest
 	return nil
 }
 
