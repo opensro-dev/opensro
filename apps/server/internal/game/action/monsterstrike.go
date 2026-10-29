@@ -170,7 +170,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
 	// The shares fence and Pain Quota links took off the hits land on their
 	// takers as this monster's hits (linkeddamage.go).
-	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs))
+	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs, rt.tickDoors()))
 	// A Scream Mask on the victim rolls its statuses on this monster (screammask.go).
 	returned = mergeOpResults(returned, rt.screamMaskMonster(divisionID, character, instance, in.from, nowMs))
 	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)

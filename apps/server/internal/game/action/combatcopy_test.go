@@ -114,7 +114,7 @@ func projectileTrace(t *testing.T, full bool) string {
 		forceFullCombatCopy(rt)
 	}
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
-	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 	trace := fmt.Sprintf("%+v %v\n", start, decision)
 	for _, at := range []int64{now + 300, now + 971, now + 2000} {
 		trace += fmt.Sprintf("%+v\n", rt.advanceProjectileCasts(at))

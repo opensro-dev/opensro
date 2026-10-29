@@ -153,7 +153,7 @@ queued context (+0x70) is not a hit outcome, so the attacker's own wall
 does not split it.
 ================
 */
-func (rt *Runtime) returnDamageToPlayer(division string, c, attacker *enterworld.Character, attackSkill uint32, defender combat.Stats, hits []combat.Result, now int64) OpResult {
+func (rt *Runtime) returnDamageToPlayer(division string, c, attacker *enterworld.Character, attackSkill uint32, defender combat.Stats, hits []combat.Result, now int64, doors characterDoors) OpResult {
 	snapshot := rt.characterSnapshot(division, c)
 	if snapshot == nil || attacker == nil {
 		return OpResult{}
@@ -179,7 +179,7 @@ func (rt *Runtime) returnDamageToPlayer(division string, c, attacker *enterworld
 	}
 	formula := combat.Result{Damage: min(damage, wire.MaxSkillActionDamage), ResultFlags: 1}
 	hit, result, landed := rt.creditPlayerHit(playerHitInput{division: division, caster: c, snapshot: snapshot,
-		attacker: stats, skill: row, target: target, impacts: 1, fixed: &formula, now: now})
+		attacker: stats, skill: row, target: target, impacts: 1, fixed: &formula, now: now}, doors)
 	if !landed {
 		return OpResult{}
 	}

@@ -11,6 +11,7 @@ runtime orders public history with live messages; presence owns private peers.
 package chat
 
 import (
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -65,10 +66,17 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 			return
 		}
 		outcome := HandleChat(deps, Views{Presence: presence, Parties: parties, Unions: rt.Unions, Stalls: rt.Stalls}, divisionID, character, payload)
+		// Port-only, not native: a shadow-muted author's lines reach only
+		// the author, who sees the same echo and acknowledgement as ever.
+		muted := rt.ShadowMuted != nil && rt.ShadowMuted(character.AccountID)
 		if outcome.Refusal == "" && outcome.Broadcast != nil && ClosedBetaGlobalChat {
 			// The author's echo precedes the keyed receipt on the same reliable
 			// stream, so presentation uses the server's channel exactly once.
-			rt.publish(divisionID, character.Name, outcome.Broadcast)
+			if muted {
+				_ = s.Send(OpChatBroadcast, outcome.Broadcast)
+			} else {
+				rt.publish(divisionID, character.Name, outcome.Broadcast)
+			}
 		}
 		if outcome.Ack != nil {
 			_ = s.Send(OpChatAck, outcome.Ack)
@@ -77,13 +85,16 @@ func (rt *Runtime) chatHubHandler(hub *transport.Hub, deps Dependencies, presenc
 			log.Debugf("chat: 0x7367 refused for %s: %s", character.Name, outcome.Refusal)
 			return
 		}
-		if outcome.Broadcast != nil && !ClosedBetaGlobalChat {
+		if outcome.Broadcast != nil && !ClosedBetaGlobalChat && !muted {
 			hub.BroadcastObserved(divisionID, s.ID, enterworld.ObjectIDForCharacter(character), []transport.Frame{{Opcode: OpChatBroadcast, Payload: outcome.Broadcast}})
 		}
 		if presence == nil {
 			return
 		}
 		for _, delivery := range outcome.Deliveries {
+			if muted && !strings.EqualFold(delivery.TargetName, character.Name) {
+				continue
+			}
 			if peer, online := presence.SessionByName(divisionID, delivery.TargetName); online {
 				_ = peer.Send(OpChatBroadcast, delivery.Payload)
 			}

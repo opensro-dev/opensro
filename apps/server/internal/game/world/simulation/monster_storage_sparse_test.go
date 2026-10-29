@@ -166,6 +166,52 @@ func TestLocateObjectMatchesTwoStepSearch(t *testing.T) {
 
 /*
 ================
+TestPopulationForObjectHintNeverStale
+
+The popHint populationForObject remembers (#2029) must only ever repeat
+the scan's own answer: repeated reads agree, an actor moved to another
+world population resolves there (not to the hinted population), and a
+retired actor stops resolving to it.
+================
+*/
+func TestPopulationForObjectHintNeverStale(t *testing.T) {
+	s := lookupBenchmarkState()
+	gid := uint32(benchWorldGIDOffset + (benchWorldCount-1)*benchWorldActors)
+	last := s.populationForObject(benchDivision, gid)
+	if last == nil || last.lease.ID != instance.ID(benchWorldCount+1) {
+		t.Fatalf("actor resolved to lease %v, want the last world population", last)
+	}
+	for i := 0; i < 3; i++ {
+		if got := s.populationForObject(benchDivision, gid); got != last {
+			t.Fatal("repeated read changed its answer")
+		}
+	}
+	first := s.worldPopulations[populationKey{benchDivision, instance.Lease{ID: 2, Generation: 1}}]
+	actor, _ := last.instances.lookup(gid)
+	last.instances.remove(gid)
+	first.instances.set(gid, actor)
+	if got := s.populationForObject(benchDivision, gid); got != first {
+		t.Fatal("moved actor still resolves to the hinted population")
+	}
+	first.instances.remove(gid)
+	if got := s.populationForObject(benchDivision, gid); got == first || got == last {
+		t.Fatal("retired actor still resolves to a world population")
+	}
+	// A population struck from the registry while its storage still
+	// holds the actor (ReleasePopulation's shape) must not resolve
+	// either: the scan could never return it again.
+	last.instances.set(gid, actor)
+	if got := s.populationForObject(benchDivision, gid); got != last {
+		t.Fatal("actor did not resolve back to the last world population")
+	}
+	delete(s.worldPopulations, populationKey{benchDivision, last.lease})
+	if got := s.populationForObject(benchDivision, gid); got == last {
+		t.Fatal("unregistered population still resolves through the hint")
+	}
+}
+
+/*
+================
 TestGetInWorldFinishesExpiredSummonActionOnce
 
 The cheap expiry test keeps the write-back: an expired action is cleared in

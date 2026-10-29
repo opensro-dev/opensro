@@ -54,7 +54,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	before, _ := rt.Monsters.Get(testDivision, target)
-	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 	if decision != skillCastAccepted || len(start.Frames) != 1 || len(start.Frames[0].Payload) != 19 || start.Frames[0].Payload[18] != 0 {
 		t.Fatalf("start must carry no premature damage: %+v", start)
 	}
@@ -71,7 +71,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	if enterworld.CurrentMP(c) != 100 || c.MissionInventory[1].StackCount != 2 || len(rt.criticals.actors) != 0 {
 		t.Fatal("preparation changed cost/history")
 	}
-	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+300); decision != skillCastDeferred {
+	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+300, rt.handlerDoors()); decision != skillCastDeferred {
 		t.Fatal("duplicate preparation accepted")
 	}
 	frames := rt.advanceProjectileCasts(now + 971)
@@ -124,7 +124,7 @@ func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 			if branch == "wrong-ammo" {
 				rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[1].Codename].TypeIDs[3] = 2
 			}
-			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 			if branch == "missing-ammo" || branch == "wrong-ammo" {
 				if decision != skillCastRefused || len(rt.pendingProjectileCasts) != 0 {
 					t.Fatal("bad ammunition admitted")
@@ -214,7 +214,7 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	for shot := int64(0); shot < 2; shot++ {
 		at := now + shot*5000
-		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, at)
+		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, at, rt.handlerDoors())
 		if decision != skillCastAccepted {
 			t.Fatal("repeat refused", shot)
 		}
@@ -236,7 +236,7 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 			t.Fatal("empty ammunition socket retained")
 		}
 	}
-	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+10000)
+	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+10000, rt.handlerDoors())
 	if decision != skillCastRefused || enterworld.CurrentMP(c) != 58 {
 		t.Fatal("empty quiver became a free cast")
 	}
@@ -251,7 +251,7 @@ func TestPreparedOffenseRejectedCooldownCommitPublishesNothing(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	rt.deps.(*enterworld.Deps).UpdateCharacter = func(*enterworld.Character, string, func() bool) bool { return false }
 	before, _ := rt.Monsters.Get(testDivision, target)
-	r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now)
+	r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now, rt.handlerDoors())
 	after, _ := rt.Monsters.Get(testDivision, target)
 	if decision != skillCastRefused || len(r.Broadcast) != 0 || rt.castTokenCounter != 0 || len(rt.pendingProjectileCasts) != 0 || len(c.OffensiveSkillCooldowns) != 0 || enterworld.CurrentMP(c) != 100 || c.MissionInventory[1].StackCount != 2 || after.CurrentHP != before.CurrentHP {
 		t.Fatal("failed cooldown commit published or changed combat", r)

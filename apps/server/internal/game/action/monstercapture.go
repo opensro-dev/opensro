@@ -67,7 +67,8 @@ func (rt *Runtime) acceptMonsterCapture(division string, c, snapshot *enterworld
 	}
 	intent := basicAttackIntent{CaptureCast: true, DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID}
 	rt.setCombatIntent(intent)
-	return rt.advanceCaptureIntent(c, intent, rt.Now().UnixMilli())
+	// The cast handler accepts the capture: its commits are immediate.
+	return rt.advanceCaptureIntent(c, intent, rt.Now().UnixMilli(), rt.handlerDoors())
 }
 
 /*
@@ -77,7 +78,7 @@ advanceCaptureIntent
 Walks to the corpse like any targeted command, then executes.
 ==================
 */
-func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAttackIntent, now int64) OpResult {
+func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAttackIntent, now int64, doors characterDoors) OpResult {
 	division := intent.DivisionID
 	snapshot := rt.characterSnapshot(division, c)
 	skills := rt.deps.SkillData()
@@ -111,11 +112,11 @@ func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAtt
 		if !rt.pursuitSteerDue(intent, worldKey, snapshot, to, now) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now)
+		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now, doors)
 	}
 
 	rt.ClearCombatIntent(division, intent.CharacterName)
-	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now)
+	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now, doors)
 	if !transitioned {
 		return OpResult{}
 	}
