@@ -101,3 +101,79 @@ func TestBasicAttackOnOrdinaryMonsterIgnoresJobSuits(t *testing.T) {
 		t.Fatal("the suited attack on an ordinary monster never landed")
 	}
 }
+
+/*
+================
+TestBasicAttackRefusesOwnSideBanditAtTheCommand
+
+The basic-attack door: a suited thief engaging a thief bandit from
+out of reach is refused 0x3006 at the command itself - the refusal
+answers at once, no approach intent is left walking, and the bandit
+is untouched. (In reach, the skill-stage refusal would answer the
+swing instead, which is the behaviour this door exists to pre-empt.)
+The same thief engaging a hunter bandit in reach is admitted.
+================
+*/
+func TestBasicAttackRefusesOwnSideBanditAtTheCommand(t *testing.T) {
+	rt, _, c, bandit := newCombatTestRuntimeBandit(t, 10000, 2)
+	if !bandit.ThiefMonster() {
+		t.Fatal("the fixture target is not a thief bandit")
+	}
+	dressJobSuit(t, rt, c, domain.JobThief)
+	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	*c.World.Spawn.X = 900 // the bandit stands at 963: far out of reach
+	out := rt.HandleTargetInteract(testDivision, c, wire.BasicAttackEngage{TargetGid: bandit.Gid}.Encode())
+	refusal, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(refusal.Payload) != 2 || refusal.Payload[0] != 2 || refusal.Payload[1] != 0x06 {
+		t.Fatalf("own-side engage answer: %+v", out.Frames)
+	}
+	if _, intent := rt.combatIntentFor(testDivision, c.Name); intent {
+		t.Fatal("the refused engage left an approach intent behind")
+	}
+	after, _ := rt.Monsters.Get(testDivision, bandit.Gid)
+	if after.CurrentHP != bandit.CurrentHP {
+		t.Fatal("the refused engage damaged the bandit")
+	}
+
+	rt2, _, c2, hunter := newCombatTestRuntimeBandit(t, 10000, 3)
+	dressJobSuit(t, rt2, c2, domain.JobThief)
+	rt2.CombatRoll = func() (uint32, error) { return 0, nil }
+	rt2.HandleTargetInteract(testDivision, c2, wire.BasicAttackEngage{TargetGid: hunter.Gid}.Encode())
+	after2, _ := rt2.Monsters.Get(testDivision, hunter.Gid)
+	if after2.CurrentHP >= hunter.CurrentHP {
+		t.Fatal("the cross-side engage never landed")
+	}
+}
+
+/*
+================
+TestTargetedSkillRefusesOwnSideBandit
+
+The targeted-skill door: a suited thief's targeted skill at a thief
+bandit is refused 0x3006 and lands nothing; at a hunter bandit it
+casts and lands.
+================
+*/
+func TestTargetedSkillRefusesOwnSideBandit(t *testing.T) {
+	rt, _, c, bandit := newCombatTestRuntimeBandit(t, 10000, 2)
+	dressJobSuit(t, rt, c, domain.JobThief)
+	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: bandit.Gid}.Encode())
+	refusal, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(refusal.Payload) != 2 || refusal.Payload[0] != 2 || refusal.Payload[1] != 0x06 {
+		t.Fatalf("own-side skill answer: %+v", out.Frames)
+	}
+	after, _ := rt.Monsters.Get(testDivision, bandit.Gid)
+	if after.CurrentHP != bandit.CurrentHP {
+		t.Fatal("the refused skill damaged the bandit")
+	}
+
+	rt2, _, c2, hunter := newCombatTestRuntimeBandit(t, 10000, 3)
+	dressJobSuit(t, rt2, c2, domain.JobThief)
+	rt2.CombatRoll = func() (uint32, error) { return 0, nil }
+	rt2.HandleTargetInteract(testDivision, c2, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: hunter.Gid}.Encode())
+	after2, _ := rt2.Monsters.Get(testDivision, hunter.Gid)
+	if after2.CurrentHP >= hunter.CurrentHP {
+		t.Fatal("the cross-side skill never landed")
+	}
+}
