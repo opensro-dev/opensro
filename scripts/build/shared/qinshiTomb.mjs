@@ -27,6 +27,9 @@ import { serverSourceRoot } from "../world/paths.mjs";
 // The switch, its deployed profile, and the shard settings registry
 // that holds its default (shardsettings.go, the server's one owner).
 const QINSHI_TOMB_ENV = "SRO_QINSHI_TOMB";
+
+// A degree-10 compound branch: heavy_10_aa.bsr, spear_10.bsr.
+const DEGREE_10_BRANCH = /_10(?=(?:_[a-z]+)?\.bsr$)/i;
 const SHARD_PROFILE = path.join( "ops", "release", "shard-settings.json" );
 const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
 
@@ -83,6 +86,25 @@ export function qinshiTombEnabled() {
 		return flagWordOn( value );
 	}
 	return flagWordOn( qinshiTombShardPosture() );
+}
+
+/*
+================
+qinshiTombBranchFallback
+
+The degree-9 stand-in for a compound branch v1.150 does not ship, or
+null. Port-only, not native: shinmu.cpd (the tomb flamemaster) names
+degree-10 armor and spear BSRs that Data.pk2 lacks because v1.150 caps at
+degree 9; with the tomb on, the matching _09 BSR from the same directory
+stands in so the Floor 5 boss can assemble. The bake and the effect
+references both take it, so they see the same branches.
+================
+*/
+export function qinshiTombBranchFallback( branchPath ) {
+	if ( !qinshiTombEnabled() || !DEGREE_10_BRANCH.test( branchPath ) ) {
+		return null;
+	}
+	return branchPath.replace( DEGREE_10_BRANCH, "_09" );
 }
 
 /*
