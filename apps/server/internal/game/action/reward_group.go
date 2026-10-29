@@ -77,7 +77,16 @@ authoritative character pointers, then enter a single UpdateMany transaction.
 ================
 */
 func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Character, now int64) rewardRoster {
-	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor)}
+	// The division list is taken before the read door: CharactersForDivision
+	// takes the store's read lock itself, and a second read lock inside the
+	// door waits behind any queued writer while the door holds that writer
+	// off. The slice is a fresh copy of the live pointers, so
+	// the field reads below stay inside the door.
+	characters := rt.deps.CharactersForDivision(division)
+	// Sized for the whole division: the roster runs per credited hit, and
+	// growing the map and slice from empty was most of its cost (#2031).
+	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor, len(characters)),
+		characters: make([]*enterworld.Character, 0, len(characters))}
 	parties := []RewardParty(nil)
 	if rt.RewardParties != nil {
 		parties = rt.RewardParties(division)
@@ -88,12 +97,6 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 			memberParty[gid] = &parties[i]
 		}
 	}
-	// The division list is taken before the read door: CharactersForDivision
-	// takes the store's read lock itself, and a second read lock inside the
-	// door waits behind any queued writer while the door holds that writer
-	// off. The slice is a fresh copy of the live pointers, so
-	// the field reads below stay inside the door.
-	characters := rt.deps.CharactersForDivision(division)
 	rt.deps.Read(division, func() {
 		for _, c := range characters {
 			if c == nil || c.DeletePending {

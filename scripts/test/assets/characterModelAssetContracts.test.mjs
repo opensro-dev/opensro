@@ -593,7 +593,7 @@ test("Qin-Shi Emperor Tomb .cpd compound models and skillaniset2 overlay bake cl
 	const scratchRoot = fs.mkdtempSync( path.join( os.tmpdir(), "sro-tomb-cpd-contract-" ) );
 	const skillEffectPath = path.join( textdataDir, "skilleffect.txt" );
 	try {
-		delete process.env.SRO_QINSHI_TOMB;
+		process.env.SRO_QINSHI_TOMB = "off";
 		const offEffectTable = buildEffectRecordTable( textdataDir, skillEffectPath );
 		const tombSkillRows = loadQinShiTombSkillRows().rows;
 		for ( const cols of tombSkillRows ) {

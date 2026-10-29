@@ -17,6 +17,24 @@ from unittest.mock import patch
 
 from bundle import FILES
 import deploy
+from gameworld_memory import gameworld_memory_mb
+
+
+# ================
+# write_shards / rendered_job
+#
+# One enabled shard, and the job Nomad registers for it: the task's
+# reservation and the GOMEMLIMIT the job's env formula renders from it.
+# ================
+def write_shards(module):
+	(module / "config").mkdir(parents=True, exist_ok=True)
+	(module / "config/shards.json").write_text(json.dumps({"shards": [{"id": "global-official", "enabled": True}]}))
+
+
+def rendered_job(memory, limit=None):
+	task = {"Name": "gameworld", "Env": {"GOMEMLIMIT": limit or str(memory * 3 // 4) + "MiB", "GOGC": "200"},
+		"Resources": {"MemoryMB": memory}}
+	return {"Job": {"ID": "sro-gameworld-global-official", "TaskGroups": [{"Name": "gameworld", "Tasks": [task]}]}}
 
 
 # ================
@@ -236,6 +254,7 @@ class DeployTests(unittest.TestCase):
 				root = Path(directory)
 				staging, module = root / "staging", root / "module"
 				(module / ".state/cluster").mkdir(parents=True)
+				write_shards(module)
 				for name in FILES:
 					path = staging / name
 					path.parent.mkdir(parents=True, exist_ok=True)
@@ -246,7 +265,7 @@ class DeployTests(unittest.TestCase):
 					"module": str(module), "game_data": str(root / "server.srogz"),
 					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
 					"origin": "https://example.test", "agent_memory_mb": 256,
-					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture", "staff_webhook": "staff-fixture",
+					"gameworld_memory_mb": 3072, "public_webhook": "public-fixture", "staff_webhook": "staff-fixture",
 				}
 				calls = []
 				if stack_sizes is not None:
@@ -263,6 +282,8 @@ class DeployTests(unittest.TestCase):
 					if arguments[:4] == ["nomad", "acl", "token", "create"]:
 						self.assertEqual(options["env"]["NOMAD_TOKEN"], "management-fixture")
 						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped-fixture", "AccessorID": "accessor-fixture"}))
+					if arguments[:3] == ["nomad", "job", "inspect"]:
+						return SimpleNamespace(stdout=json.dumps(rendered_job(3072)))
 					if arguments[0].endswith("sro-nomad"):
 						self.assertEqual(options["env"]["NOMAD_TOKEN"], "scoped-fixture")
 						self.assertEqual(options["env"]["SRO_STACK_SIZES"], stack_sizes or "")
@@ -289,6 +310,26 @@ class DeployTests(unittest.TestCase):
 					else:
 						self.assertEqual(len(deployment_calls), 1)
 					self.assertEqual((module / "release.json").exists(), failure is None)
+					inspected = [call for call in calls if call[:3] == ["nomad", "job", "inspect"]]
+					self.assertEqual(inspected, [["nomad", "job", "inspect", "-namespace", "sro", "-json", "sro-gameworld-global-official"]]
+						if failure is None else [])
+
+	# ================
+	# test_gameworld_memory_never_falls_below_the_job_default
+	#
+	# The host config may raise the reservation, never lower it: the 1024
+	# left behind after #1946 kept the live soft limit at 768MiB (#2027).
+	# A low value refuses before the backup runs or anything is touched.
+	# ================
+	def test_gameworld_memory_never_falls_below_the_job_default(self):
+		self.assertEqual(gameworld_memory_mb({}), 3072)
+		self.assertEqual(gameworld_memory_mb({"gameworld_memory_mb": 4096}), 4096)
+		for value in (1024, 3071, "3072", True, 3072.0):
+			with self.subTest(value=value), self.assertRaisesRegex(ValueError, "gameworld_memory_mb"):
+				gameworld_memory_mb({"gameworld_memory_mb": value})
+		with patch.object(deploy, "run") as run, self.assertRaisesRegex(ValueError, "gameworld_memory_mb"):
+			deploy.deploy({"gameworld_memory_mb": 1024, "module": "/nonexistent"}, None, {})
+		run.assert_not_called()
 
 	# ================
 	# test_validation_runs_before_any_stop_and_only_credentials_stop_first
@@ -306,6 +347,7 @@ class DeployTests(unittest.TestCase):
 				root = Path(directory)
 				staging, module = root / "staging", root / "module"
 				(module / ".state/cluster").mkdir(parents=True)
+				write_shards(module)
 				for name in FILES:
 					path = staging / name
 					path.parent.mkdir(parents=True, exist_ok=True)
@@ -316,7 +358,7 @@ class DeployTests(unittest.TestCase):
 					"module": str(module), "game_data": str(root / "server.srogz"),
 					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
 					"origin": "https://example.test", "agent_memory_mb": 256,
-					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+					"gameworld_memory_mb": 3072, "public_webhook": "public-fixture",
 				}
 				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 				calls, registered = [], [True]
@@ -333,6 +375,8 @@ class DeployTests(unittest.TestCase):
 						return SimpleNamespace(stdout="Nomad v2.0.7\n")
 					if arguments[:4] == ["nomad", "acl", "token", "create"]:
 						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+					if arguments[:3] == ["nomad", "job", "inspect"]:
+						return SimpleNamespace(stdout=json.dumps(rendered_job(3072)))
 					if arguments[0].endswith("sro-nomad") and arguments[1] == "stop":
 						registered[0] = False
 					if arguments[0].endswith("sro-nomad") and arguments[1] == "validate":
@@ -379,6 +423,7 @@ class DeployTests(unittest.TestCase):
 				root = Path(directory)
 				staging, module = root / "staging", root / "module"
 				(module / ".state/cluster").mkdir(parents=True)
+				write_shards(module)
 				for name in FILES:
 					path = staging / name
 					path.parent.mkdir(parents=True, exist_ok=True)
@@ -389,7 +434,7 @@ class DeployTests(unittest.TestCase):
 					"module": str(module), "game_data": str(root / "server.srogz"),
 					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
 					"origin": "https://example.test", "agent_memory_mb": 256,
-					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+					"gameworld_memory_mb": 3072, "public_webhook": "public-fixture",
 				}
 				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 				calls = []
@@ -403,6 +448,8 @@ class DeployTests(unittest.TestCase):
 						return SimpleNamespace(stdout="Nomad v2.0.7")
 					if arguments[:4] == ["nomad", "acl", "token", "create"]:
 						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+					if arguments[:3] == ["nomad", "job", "inspect"]:
+						return SimpleNamespace(stdout=json.dumps(rendered_job(3072)))
 					if arguments[0].endswith("sro-nomad") and "-assume-stopped" in arguments:
 						raise subprocess.CalledProcessError(2, arguments, stderr="flag provided but not defined: -assume-stopped")
 					return SimpleNamespace(stdout="")
@@ -458,7 +505,7 @@ class DeployTests(unittest.TestCase):
 				"module": str(module), "game_data": str(root / "server.srogz"),
 				"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
 				"origin": "https://example.test", "agent_memory_mb": 256,
-				"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+				"gameworld_memory_mb": 3072, "public_webhook": "public-fixture",
 			}
 			manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 			calls = []
@@ -769,7 +816,7 @@ class RehearsalTests(unittest.TestCase):
 		config = {
 			"module": str(module), "game_data": str(root / "server.srogz"),
 			"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
-			"origin": "https://example.test", "agent_memory_mb": 256, "gameworld_memory_mb": 1024,
+			"origin": "https://example.test", "agent_memory_mb": 256, "gameworld_memory_mb": 3072,
 		}
 		manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 		return staging, module, config, manifest

@@ -57,10 +57,12 @@ const (
 // 58% of the counted bytes), measured 422,144 B / 2,541 allocs; with a
 // brood-free crow taking no owner copy on its tick, measured 275,466 B /
 // 2,099 allocs; with crows lacking Tailwind or Guiding Feathers refused
-// before the owner copy on those ticks, measured 208,183 B / 1,862 allocs.
+// before the owner copy on those ticks, measured 208,183 B / 1,862 allocs;
+// with the commit's ground read taking only the changed rows instead of
+// a whole-plane snapshot (#2040), measured 142,251 B / 1,457 allocs.
 const (
-	tickBudgetBytesPerTick  = 229000
-	tickBudgetAllocsPerTick = 2048
+	tickBudgetBytesPerTick  = 156500
+	tickBudgetAllocsPerTick = 1603
 )
 
 /*
@@ -317,7 +319,9 @@ func syntheticPlayer(i int) *enterworld.Character {
 tick
 
 One full tick: the action runtime's whole step list, the NPC patrol
-frames, and one ground snapshot on the commit cadence.
+frames, and the commit door's ground read on the commit cadence: the
+changed rows and, once durable, their acknowledgement (store
+ground_changes.go, #2040).
 ================
 */
 func (s *syntheticShard) tick(tick int64) {
@@ -325,7 +329,8 @@ func (s *syntheticShard) tick(tick int64) {
 	now := s.clock.NowMs()
 	_ = s.hook(now)
 	_ = simulation.NpcMoveFrames(s.roster, s.anchor, tick)
-	_ = s.rt.Ground.Snapshot()
+	changes := s.rt.Ground.Changes()
+	s.rt.Ground.Acknowledge(changes.Revision)
 }
 
 /*

@@ -141,10 +141,13 @@ type Runtime struct {
 	// groundDrops is the per-tick ground pass's placed-drop cache
 	// (ground_scope.go).
 	groundDrops groundDropCache
-	deps        Dependencies
-	Ground      *grounditem.Registry
-	Pending     *grounditem.PendingTracker
-	Worlds      *simulation.WorldStore
+	// staticRefs is the published static reference set
+	// (ground_references.go).
+	staticRefs staticRefCache
+	deps       Dependencies
+	Ground     *grounditem.Registry
+	Pending    *grounditem.PendingTracker
+	Worlds     *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
 	Steps simulation.StepTimer
 	// PublicationHold receives publication-gate holds at or above the
@@ -322,6 +325,11 @@ type Runtime struct {
 	// (characterSnapshotCombat); only the combat-copy differential test
 	// sets it, to the full copy. Nil is the narrow copy.
 	combatCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// companionCopy, when set, replaces the pet pass's narrow copy
+	// (characterSnapshotCompanionAdmitted); only the pet-copy
+	// differential test sets it, to the full copy. Nil is the narrow
+	// copy.
+	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with
@@ -698,6 +706,10 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
+	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// port-only, not native): its Global Chatting line reaches only
+	// itself. Nil mutes no one.
+	ChatShadowMuted func(accountID string) bool
 
 	// HonorPoints returns the character's usable Training Camp honor points
 	// (the reference server's Training Camp member record, [member+0x34]+0x54). Nil reports 0.

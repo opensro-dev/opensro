@@ -71,19 +71,19 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 	if err != nil {
 		return 2, err
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return 2, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = upsertCharacterTx(tx, division, &next); err != nil {
+	if err = tx.upsertCharacter(division, &next); err != nil {
 		return 2, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, "fortress-staff", division, actor, gold)
+	settle, err := s.ledgerOwnTxLocked(tx.Tx, "fortress-staff", division, actor, gold)
 	if err != nil {
 		return 2, err
 	}
-	if err = replaceGuildTx(tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
+	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
 		return 2, err
 	}
 	if _, err = tx.Exec("INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record", division, record.FortressID, string(raw)); err != nil {

@@ -385,6 +385,13 @@ and install it as root-only `/etc/opensro-release/config.json`:
 }
 ```
 
+`gameworld_memory_mb` is optional and defaults to the GameWorld job's own
+3072. A host may raise it, never lower it: `deploy.py` refuses a smaller
+value before the backup runs, and the staging rehearsal reaches the same
+refusal. After Nomad's health checks pass, and before the release is
+recorded, every enabled shard's registered job must reserve that memory
+and render `GOMEMLIMIT` as three quarters of it in MiB (#2027).
+
 The four `webtransport_public` / `transport_*` keys are the public
 WebTransport posture (#1447, `deploy.py` `webtransport_deployer`). They are
 all or nothing: `webtransport_public` is `on`, `off` or absent; `on` needs

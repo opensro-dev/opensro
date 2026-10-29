@@ -135,6 +135,10 @@ the longest attempt's label and phases.
 type commitTiming struct {
 	phases  [commitPhases]latency.Live
 	longest atomic.Pointer[LongestCommit]
+	// Character rows written, and dirty rows skipped because their
+	// bytes still matched the last committed digest (persistence.go).
+	charactersWritten atomic.Int64
+	charactersSkipped atomic.Int64
 }
 
 /*
@@ -152,7 +156,9 @@ Records one attempt. Only an attempt that sets a new total maximum
 allocates, to keep what it was.
 ================
 */
-func (t *commitTiming) record(label string, d commitPhaseDurations) {
+func (t *commitTiming) record(label string, d commitPhaseDurations, rows commitRowCounts) {
+	t.charactersWritten.Add(rows.written)
+	t.charactersSkipped.Add(rows.skipped)
 	for i := range d {
 		if t.phases[i].Add(d[i]) && i == commitPhaseTotal {
 			longest := &LongestCommit{Label: label}
@@ -193,6 +199,11 @@ type LockTiming struct {
 	WriteHoldMs    latency.Histogram            `json:"write_hold_ms"`
 	CommitMs       map[string]latency.Histogram `json:"commit_ms"`
 	LongestCommit  *LongestCommit               `json:"longest_commit,omitempty"`
+	// CharacterRowsWritten / CharacterRowsSkipped: the write skip's
+	// running ratio (persistence.go), so a profile can see how much
+	// of the dirty set a commit actually had to write.
+	CharacterRowsWritten int64 `json:"character_rows_written"`
+	CharacterRowsSkipped int64 `json:"character_rows_skipped"`
 }
 
 /*
@@ -205,12 +216,14 @@ never waits behind the commit it is measuring.
 */
 func (s *Store) LockTiming() LockTiming {
 	out := LockTiming{
-		ReadersWaiting: s.mu.readersWaiting.Load(),
-		ReadWaitMs:     s.mu.readWait.Snapshot(),
-		WriteWaitMs:    s.mu.writeWait.Snapshot(),
-		WriteHoldMs:    s.mu.writeHold.Snapshot(),
-		CommitMs:       make(map[string]latency.Histogram, commitPhases),
-		LongestCommit:  s.commits.longest.Load(),
+		ReadersWaiting:       s.mu.readersWaiting.Load(),
+		ReadWaitMs:           s.mu.readWait.Snapshot(),
+		WriteWaitMs:          s.mu.writeWait.Snapshot(),
+		WriteHoldMs:          s.mu.writeHold.Snapshot(),
+		CommitMs:             make(map[string]latency.Histogram, commitPhases),
+		LongestCommit:        s.commits.longest.Load(),
+		CharacterRowsWritten: s.commits.charactersWritten.Load(),
+		CharacterRowsSkipped: s.commits.charactersSkipped.Load(),
 	}
 	for i, name := range commitPhaseNames {
 		out.CommitMs[name] = s.commits.phases[i].Snapshot()

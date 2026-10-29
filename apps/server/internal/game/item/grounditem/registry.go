@@ -20,6 +20,7 @@ registry.go - owns registry behavior and its checked data boundaries
 package grounditem
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -163,6 +164,9 @@ type Registry struct {
 	// it to skip re-persisting ground rows on commits that never touched
 	// the ground plane.
 	revision uint64
+	// changes stamps every gid a mutation touched, for the store's
+	// commit to persist only those rows (changes.go).
+	changes changeJournal
 }
 
 // Revision reports the mutation counter. Two equal reads with no
@@ -185,7 +189,9 @@ NewRegistry
 ================
 */
 func NewRegistry() *Registry {
-	return &Registry{byDivision: make(map[string]map[uint32]Item)}
+	// No store has persisted this registry yet: its first commit
+	// diffs the whole plane (changes.go).
+	return &Registry{byDivision: make(map[string]map[uint32]Item), changes: changeJournal{full: true}}
 }
 
 // division returns the division's map, creating it on first use. Callers must
@@ -229,6 +235,7 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	r.division(divisionID)[item.Gid] = item
+	r.stampLocked(divisionID, item.Gid)
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	return item
@@ -313,6 +320,7 @@ func (r *Registry) Remove(divisionID string, gid uint32) (Item, bool) {
 	}
 	delete(items, gid)
 	r.revision++
+	r.stampLocked(divisionID, gid)
 	return item, true
 }
 
@@ -340,6 +348,7 @@ func (r *Registry) SetStackCount(divisionID string, gid uint32, count uint16) bo
 	item.StackCount = count
 	items[gid] = item
 	r.revision++
+	r.stampLocked(divisionID, gid)
 	return true
 }
 
@@ -368,6 +377,9 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 	}
 	if len(expired) > 0 {
 		r.revision++
+		for _, item := range expired {
+			r.stampLocked(divisionID, item.Gid)
+		}
 	}
 	sort.Slice(expired, func(a, b int) bool { return expired[a].Gid < expired[b].Gid })
 	return expired
@@ -399,6 +411,9 @@ func (r *Registry) ReleaseExpiredOwners(divisionID string, now time.Time, lifeti
 	}
 	if len(released) > 0 {
 		r.revision++
+		for _, item := range released {
+			r.stampLocked(divisionID, item.Gid)
+		}
 	}
 	sort.Slice(released, func(a, b int) bool { return released[a].Gid < released[b].Gid })
 	return released
@@ -439,13 +454,33 @@ func (r *Registry) All(divisionID string) []Item {
 
 	items := r.byDivision[divisionID]
 	out := make([]Item, 0, len(items))
-	for _, item := range items {
+	for _, gid := range sortedGids(items) {
+		item := items[gid]
 		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 		item.Summon = domain.CloneCOS(item.Summon)
 		out = append(out, item)
 	}
-	sort.Slice(out, func(a, b int) bool { return out[a].Gid < out[b].Gid })
 	return out
+}
+
+/*
+================
+sortedGids
+
+A division's gids in ascending order. All and the persisted snapshot
+read their items in this order: sorting the gids and then reading the
+map moves 4-byte keys, where sorting the copied rows moved whole items
+through sort.Slice's reflective swapper - 17% of the synthetic tick's
+CPU in the per-commit snapshot (#2031).
+================
+*/
+func sortedGids(items map[uint32]Item) []uint32 {
+	gids := make([]uint32, 0, len(items))
+	for gid := range items {
+		gids = append(gids, gid)
+	}
+	slices.Sort(gids)
+	return gids
 }
 
 // Count reports how many entries a division holds.
@@ -473,6 +508,10 @@ func (r *Registry) Clear(divisionID string) {
 
 	if items, ok := r.byDivision[divisionID]; ok && len(items) > 0 {
 		r.revision++
+		// Every gid of the vanished division is a delete.
+		for gid := range items {
+			r.stampLocked(divisionID, gid)
+		}
 	}
 	delete(r.byDivision, divisionID)
 }

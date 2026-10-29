@@ -65,7 +65,7 @@ class DeployInputsTests(unittest.TestCase):
 			"module": str(module), "game_data": str(root / "server.srogz"),
 			"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
 			"origin": "https://example.test", "agent_memory_mb": 256,
-			"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+			"gameworld_memory_mb": 3072, "public_webhook": "public-fixture",
 			"candidate_records": str(root / "records/candidates"),
 		}
 		retained = {"commit": "e" * 40, "files": {name: "digest" for name in FILES if name != self.DROPPED}}

@@ -253,6 +253,40 @@ func resolveShardSettings() error {
 
 /*
 ================
+shardPopulation
+
+The monster template the shard spawns from, for the catalogue: the
+retail population plus every switch-gated family the server's bootstrap
+appends (enterworld/devdeps.go), with the switches resolved to their
+deployment defaults (resolveShardSettings). The shipped Qin-Shi tomb
+(SRO_QINSHI_TOMB, default on) was missing here, so its 79 species and
+their uniques had no catalogue page (#2025).
+================
+*/
+func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
+	template, err := monster.AppendCap110(monster.LoadTemplate(dir), dir, cap110)
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue population: %w", err)
+	}
+	template, err = monster.AppendPharaohTomb(template, dir, monster.PharaohTombEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue tomb population: %w", err)
+	}
+	template, err = monster.AppendQinshi(template, dir, monster.QinshiEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue qinshi population: %w", err)
+	}
+	if monster.QinShiTombFromEnv() {
+		template, err = template.WithQinShiTomb(dir)
+		if err != nil {
+			return monster.Template{}, fmt.Errorf("catalogue qinshi tomb population: %w", err)
+		}
+	}
+	return template, nil
+}
+
+/*
+================
 run
 ================
 */
@@ -313,17 +347,9 @@ func run(out, release, textdata string) error {
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
 		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
 	skillData := enterworld.NewTextdataSkills(dir)
-	template, err := monster.AppendCap110(monster.LoadTemplate(dir), dir, cap110)
+	template, err := shardPopulation(dir, cap110)
 	if err != nil {
-		return fmt.Errorf("catalogue population: %w", err)
-	}
-	template, err = monster.AppendPharaohTomb(template, dir, monster.PharaohTombEnabled())
-	if err != nil {
-		return fmt.Errorf("catalogue tomb population: %w", err)
-	}
-	template, err = monster.AppendQinshi(template, dir, monster.QinshiEnabled())
-	if err != nil {
-		return fmt.Errorf("catalogue qinshi population: %w", err)
+		return err
 	}
 	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: template, ItemID: dropItemID,
 		Skills: skillData})

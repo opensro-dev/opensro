@@ -73,10 +73,14 @@ TestEncodeCharacterBorrowedAllocatesLess
 The encoder's working allocations are shared by both paths; the
 borrowed encode must never allocate more than the Marshal it replaces
 (and in bytes moved it is far cheaper - BenchmarkEncodeCharacter and
-BenchmarkEncodeCharacterBorrowed carry the numbers).
+BenchmarkEncodeCharacterBorrowed carry the numbers). Plain builds only:
+the race detector's instrumentation allocates on its own.
 ================
 */
 func TestEncodeCharacterBorrowedAllocatesLess(t *testing.T) {
+	if raceDetectorOn {
+		t.Skip("the race detector's instrumentation allocates on its own")
+	}
 	c := seededCharacter()
 	c.Aggressions = map[uint32]uint32{300: 3, 20: 2, 1: 1}
 	var scratch jsonscratch.Scratch

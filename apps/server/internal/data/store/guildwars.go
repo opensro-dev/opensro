@@ -220,7 +220,7 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 		gold := *actor.Gold - int64(war.Stake/2)
 		next[side].Gold = &gold
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return record, 2, err
 	}
@@ -237,15 +237,15 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 		return record, 2, errors.New("guild war: exhausted native ID space")
 	}
 	war.ID = uint32(id)
-	if err = writeGuildWarTx(tx, division, war); err != nil {
+	if err = writeGuildWarTx(tx.Tx, division, war); err != nil {
 		return record, 2, err
 	}
 	var settles [2]func()
 	for i := range next {
-		if err = upsertCharacterTx(tx, division, &next[i]); err != nil {
+		if err = tx.upsertCharacter(division, &next[i]); err != nil {
 			return record, 2, err
 		}
-		if settles[i], err = s.ledgerOwnTxLocked(tx, "guild-war-begin", division, actors[i], *next[i].Gold); err != nil {
+		if settles[i], err = s.ledgerOwnTxLocked(tx.Tx, "guild-war-begin", division, actors[i], *next[i].Gold); err != nil {
 			return record, 2, err
 		}
 	}

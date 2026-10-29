@@ -229,22 +229,22 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	gold -= start.Gold
 	next.Gold = &gold
 	guild.GP -= start.GP
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = upsertCharacterTx(tx, division, &next); err != nil {
+	if err = tx.upsertCharacter(division, &next); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, "fortress-item-forge", division, actor, gold)
+	settle, err := s.ledgerOwnTxLocked(tx.Tx, "fortress-item-forge", division, actor, gold)
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	if err = replaceGuildTx(tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
+	if err = replaceGuildTx(tx.Tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	if err = saveFortressItemForgeTx(tx, division, start.Forge, true); err != nil {
+	if err = saveFortressItemForgeTx(tx.Tx, division, start.Forge, true); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -288,15 +288,15 @@ func (door storeFortressDoor) CollectFortressItemForge(division string, collect 
 	}
 	next := *actor
 	next.MissionInventory = append(append([]domain.InventoryRow(nil), actor.MissionInventory...), collect.Item)
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = upsertCharacterTx(tx, division, &next); err != nil {
+	if err = tx.upsertCharacter(division, &next); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
-	if err = saveFortressItemForgeTx(tx, division, collect.Forge, collect.Forge.Count != 0); err != nil {
+	if err = saveFortressItemForgeTx(tx.Tx, division, collect.Forge, collect.Forge.Count != 0); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
 	if err = tx.Commit(); err != nil {

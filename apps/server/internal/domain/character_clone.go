@@ -51,6 +51,24 @@ func cloneCharacterCombat(source *Character) *Character {
 	return cloneCharacterFiltered(source, rowsCombat)
 }
 
+/*
+================
+cloneCharacterCompanion
+
+cloneCharacter for the per-tick pet pass (#2030): the mission
+inventory keeps its equipment rows and every row carrying a companion
+(Summon), so companion resolution (VisitCompanions) walks exactly the
+companions the full copy walks; plain bag rows and the avatar
+inventory are not copied. A reader of this copy must never read a
+non-summon bag row or an avatar row - it would silently see them
+missing. Every other child detaches exactly as cloneCharacter
+detaches it.
+================
+*/
+func cloneCharacterCompanion(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsCompanion)
+}
+
 // cloneRows names which inventory rows one clone walk detaches.
 type cloneRows int
 
@@ -61,6 +79,9 @@ const (
 	rowsEquipment
 	// rowsCombat keeps the equipment rows and the whole avatar inventory.
 	rowsCombat
+	// rowsCompanion keeps the equipment rows and the companion rows,
+	// and no avatar inventory.
+	rowsCompanion
 )
 
 /*
@@ -110,9 +131,12 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	if rows == rowsAll {
+	switch rows {
+	case rowsAll:
 		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
-	} else {
+	case rowsCompanion:
+		clone.MissionInventory = cloneCompanionRows(source.MissionInventory)
+	default:
 		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
 	clone.Buyback = cloneSlice(source.Buyback)
@@ -151,7 +175,7 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 		}
 	}
 	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
-	if rows == rowsEquipment {
+	if rows == rowsEquipment || rows == rowsCompanion {
 		clone.AvatarInventory = nil
 	} else {
 		clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
@@ -258,6 +282,40 @@ func cloneEquipmentRows(source []InventoryRow) []InventoryRow {
 	clone := make([]InventoryRow, 0, EquipmentSlotEnd)
 	for _, row := range source {
 		if row.Slot < 0 || row.Slot >= EquipmentSlotEnd {
+			continue
+		}
+		row.Summon = CloneCOS(row.Summon)
+		row.MagicOptions = cloneSlice(row.MagicOptions)
+		clone = append(clone, row)
+	}
+	return clone
+}
+
+/*
+================
+cloneCompanionRows
+
+The pet pass's rows: equipment rows plus every row carrying a
+companion, each deep-copied in order exactly as cloneInventoryRows
+copies it; the remaining bag rows are dropped, and a nil inventory
+stays nil so absence keeps its meaning. VisitCompanions over the
+kept rows visits the same companions in the same order as over the
+full inventory, because the dropped rows carry no Summon.
+================
+*/
+func cloneCompanionRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	kept := 0
+	for _, row := range source {
+		if row.Summon != nil || (row.Slot >= 0 && row.Slot < EquipmentSlotEnd) {
+			kept++
+		}
+	}
+	clone := make([]InventoryRow, 0, kept)
+	for _, row := range source {
+		if row.Summon == nil && (row.Slot < 0 || row.Slot >= EquipmentSlotEnd) {
 			continue
 		}
 		row.Summon = CloneCOS(row.Summon)

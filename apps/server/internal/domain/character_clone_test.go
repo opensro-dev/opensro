@@ -202,7 +202,7 @@ func TestSnapshotEquipmentKeepsOnlyWornRows(t *testing.T) {
 TestSnapshotEquipmentDropsBagRowCompanions
 
 A persistent pet's record rides in the mission row of its own item:
-companion resolution walks bag rows (visitCompanions reaches the row
+companion resolution walks bag rows (VisitCompanions reaches the row
 Summon records), so the narrow copy cannot see a summoned pet stored
 in the bag. This pins the trap - a SnapshotEquipment reader must never
 resolve companions.

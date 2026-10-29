@@ -67,6 +67,25 @@ func BenchmarkPetTickOwnerSnapshot(b *testing.B) {
 
 /*
 ================
+BenchmarkPetTickOwnerCompanionSnapshot
+
+The narrow copy advancePet takes per summoned pet per tick since
+#2030 (Character.SnapshotCompanion): the same fixture as
+BenchmarkPetTickOwnerSnapshot.
+================
+*/
+func BenchmarkPetTickOwnerCompanionSnapshot(b *testing.B) {
+	c := petTickBenchOwner(1)
+	b.ReportAllocs()
+	for b.Loop() {
+		if c.SnapshotCompanion() == nil {
+			b.Fatal("no snapshot")
+		}
+	}
+}
+
+/*
+================
 BenchmarkPetTickOwnerByCosGID
 
 characterByCosGID over a division of petTickBenchCharacters, the owner last.

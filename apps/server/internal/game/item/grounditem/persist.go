@@ -15,7 +15,6 @@ package grounditem
 // the domain-owned persistence values.
 
 import (
-	"sort"
 	"strconv"
 	"time"
 
@@ -127,10 +126,9 @@ func (r *Registry) snapshotLocked() domain.GroundSnapshot {
 			continue
 		}
 		rows := make([]domain.GroundItemRecord, 0, len(items))
-		for _, item := range items {
-			rows = append(rows, persistedFromItem(item))
+		for _, gid := range sortedGids(items) {
+			rows = append(rows, persistedFromItem(items[gid]))
 		}
-		sort.Slice(rows, func(a, b int) bool { return rows[a].Gid < rows[b].Gid })
 		divisions[divisionID] = rows
 	}
 	return domain.GroundSnapshot{Version: domain.GroundSnapshotVersion, GidCounter: r.counter, Divisions: divisions}
@@ -157,6 +155,11 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		r.counter = domain.MaxGroundItemGIDCounter
 	}
 	r.revision++
+	// The plane is replaced wholesale: rows the snapshot holds but the
+	// registry drops (retired populations, unkeyable gids) are known to
+	// no stamp, so the next commit diffs the whole plane.
+	r.changes = changeJournal{}
+	r.resyncLocked()
 	for divisionID, rows := range s.Divisions {
 		items := make(map[uint32]Item, len(rows))
 		for _, row := range rows {

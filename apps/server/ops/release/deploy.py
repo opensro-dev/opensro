@@ -32,6 +32,7 @@ from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
 from module_inputs import copy_inputs, restore_inputs, snapshot_inputs
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
+from gameworld_memory import gameworld_memory_mb, verify_memory_limit
 import quic_host
 import server_data
 
@@ -681,7 +682,7 @@ def deployer(config, stack_sizes):
 	# the deployment derives, so none of them can be overridden here.
 	environment.update(settings)
 	arguments = ["-namespace", "sro", "-task-user", TASK_USER, "-allowed-origins", config["origin"],
-		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"]),
+		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(gameworld_memory_mb(config)),
 		*wt_arguments]
 	return management, token, environment, arguments
 
@@ -764,6 +765,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	stack_sizes = config.get("stack_sizes", "")
 	if not isinstance(stack_sizes, str):
 		raise ValueError("stack_sizes must be a string")
+	memory = gameworld_memory_mb(config)
 	module = Path(config["module"])
 	names = release_files(manifest["files"])
 	if upgrade and "sro-authority-upgrade" not in names:
@@ -845,6 +847,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			materialize(config, module, executable, arguments, environment)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
+		verify_memory_limit(enabled_shards(module), environment, memory, run)
 		write_state(module / "release.json", manifest)
 		if config.pop("bootstrap_notice", False):
 			temporary = CONFIG.with_suffix(".incoming")

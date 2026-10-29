@@ -8,6 +8,7 @@ persistence.go - durable authority commits, write health and backups
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"os"
@@ -59,11 +60,39 @@ recorded under label (lock_timing.go), success or not.
 */
 func (s *Store) commitOnceLocked(label string) error {
 	var phases commitPhaseDurations
+	var rows commitRowCounts
 	start := s.mu.now()
-	err := s.commitTxLocked(&phases)
+	err := s.commitTxLocked(&phases, &rows)
 	phases[commitPhaseTotal] = s.mu.now().Sub(start)
-	s.commits.record(label, phases)
+	s.commits.record(label, phases, rows)
 	return err
+}
+
+/*
+================
+committedCharacterKey
+
+One character row's identity for the committed-record digests: stable
+across the record replacement an offline door performs, unlike the
+record pointer.
+================
+*/
+type committedCharacterKey struct {
+	division string
+	id       int64
+}
+
+/*
+================
+commitRowCounts
+
+The character rows one commit attempt wrote, and the dirty rows it
+skipped because their bytes still matched the last committed digest.
+================
+*/
+type commitRowCounts struct {
+	written int64
+	skipped int64
 }
 
 /*
@@ -71,7 +100,7 @@ func (s *Store) commitOnceLocked(label string) error {
 commitTxLocked
 ================
 */
-func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
+func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCounts) error {
 	if s.commitFail != nil {
 		return s.commitFail
 	}
@@ -79,16 +108,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		return fmt.Errorf("authority database is not open")
 	}
 
-	// The ground plane re-persists only when its revision advanced.
-	var groundSnapshot *domain.GroundSnapshot
-	groundRev := uint64(0)
-	if s.ground.source != nil {
-		groundRev = s.ground.source.Revision()
-		if !s.ground.revisionRecorded || groundRev != s.ground.committedRev {
-			snapshot := s.ground.source.Snapshot()
-			groundSnapshot = &snapshot
-		}
-	}
+	// The ground plane re-persists only when its revision advanced, and
+	// then only the rows that changed (ground_changes.go).
+	ground := s.takeGroundChangesLocked()
 
 	begun := s.mu.now()
 	tx, err := s.db.Begin()
@@ -114,10 +136,15 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		return err
 	}
 
+	// Digests of the character rows this attempt writes, staged here
+	// and retained only once the transaction commits (below).
+	stagedDigests := map[committedCharacterKey][32]byte{}
+	rowCommit := characterRowCommit{tx: tx, scratch: &s.encodeScratch, committed: s.committedDigests,
+		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode]}
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
-				if err := upsertTimedTx(tx, &s.encodeScratch, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
+				if err := upsertTimedTx(&rowCommit, divisionID, c); err != nil {
 					return err
 				}
 			}
@@ -134,7 +161,7 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 			if !known {
 				return fmt.Errorf("dirty character %q has no division binding", c.Name)
 			}
-			if err := upsertTimedTx(tx, &s.encodeScratch, divisionID, c, s.mu.now, &phases[commitPhaseEncode]); err != nil {
+			if err := upsertTimedTx(&rowCommit, divisionID, c); err != nil {
 				return err
 			}
 		}
@@ -234,11 +261,8 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 		}
 	}
 
-	if groundSnapshot != nil {
-		if _, _, err := writeGroundDiffTx(tx, &s.encodeScratch, s.ground.loadedRecords, groundSnapshot.Divisions); err != nil {
-			return err
-		}
-		if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", groundSnapshot.GidCounter)); err != nil {
+	if ground != nil {
+		if err := writeGroundChangesTx(tx, &s.encodeScratch, s.ground.loadedRecords, ground); err != nil {
 			return err
 		}
 	}
@@ -261,11 +285,11 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations) error {
 	s.countLedgerRows(s.ledger.pending)
 	s.ledger.pending = nil
 
-	if groundSnapshot != nil {
-		s.ground.loadedGidCounter = groundSnapshot.GidCounter
-		s.ground.loadedRecords = groundSnapshot.Divisions
-		s.ground.committedRev = groundRev
-		s.ground.revisionRecorded = true
+	if ground != nil {
+		s.retainGroundChangesLocked(ground)
+	}
+	for key, digest := range stagedDigests {
+		s.committedDigests[key] = digest
 	}
 	return nil
 }
@@ -396,17 +420,57 @@ func (s *Store) DivisionIDs() []string {
 
 /*
 ================
-upsertTimedTx
+characterRowCommit
 
-upsertCharacterTx for the commit: the encoding's time is added to encode.
+The character-row half of one commit attempt: the transaction, the
+encoder scratch, the committed and staged digests, the row counts and
+the encode clock every upsertTimedTx call of the attempt shares.
 ================
 */
-func upsertTimedTx(tx *sql.Tx, scratch *jsonscratch.Scratch, division string, c *domain.Character, now func() time.Time, encode *time.Duration) error {
-	start := now()
-	record, err := encodeCharacterBorrowed(scratch, division, c)
-	*encode += now().Sub(start)
+type characterRowCommit struct {
+	tx        *sql.Tx
+	scratch   *jsonscratch.Scratch
+	committed map[committedCharacterKey][32]byte
+	staged    map[committedCharacterKey][32]byte
+	rows      *commitRowCounts
+	now       func() time.Time
+	encode    *time.Duration
+}
+
+/*
+================
+upsertTimedTx
+
+The commit's character-row write (a door's own transaction writes
+through characterRowTx, db_write.go): the encoding's time is added to
+encode. A dirty character whose encoded bytes still hash to the last
+committed digest is not rewritten: doors mark characters dirty with
+no change signal (mutateCharacterLocked), so the commit is the first
+place that can see a touch changed nothing, and the write it skips
+was a full record string copy into the statement plus the statement
+itself (live hour-12: writeCharacterTx 279 MB flat). The digest is
+staged, never retained here: the caller keeps it only once the
+transaction commits, so a rolled-back attempt cannot make a later
+commit skip a row the disk does not hold.
+================
+*/
+func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) error {
+	start := w.now()
+	record, err := encodeCharacterBorrowed(w.scratch, division, c)
+	*w.encode += w.now().Sub(start)
 	if err != nil {
 		return err
 	}
-	return writeCharacterTx(tx, division, c, record)
+	key := committedCharacterKey{division: division, id: c.ID}
+	digest := sha256.Sum256(record)
+	if last, known := w.committed[key]; known && last == digest {
+		w.rows.skipped++
+		return nil
+	}
+	if err := writeCharacterTx(w.tx, division, c, record); err != nil {
+		return err
+	}
+	w.staged[key] = digest
+	w.rows.written++
+	return nil
 }

@@ -50,7 +50,7 @@ func referenceGroundScope(drops []placedDrop, viewer worldgeom.InterestBlock, pu
 			delete(shown, drop.item.Gid)
 			continue
 		}
-		spawn = append(spawn, drop.item)
+		spawn = append(spawn, *drop.item)
 	}
 	despawn := make([]uint32, 0, len(shown))
 	for gid := range shown {

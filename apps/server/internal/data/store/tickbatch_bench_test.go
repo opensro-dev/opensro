@@ -105,6 +105,31 @@ func BenchmarkTickDoorBurst(b *testing.B) {
 
 /*
 ================
+BenchmarkTickUnchangedBurst
+
+The deferred burst with touches that change nothing: the doors mark
+every touched character dirty, so before the digest skip each flush
+rewrote the whole set; the commit now writes none of them. The
+changing burst above is the control.
+================
+*/
+func BenchmarkTickUnchangedBurst(b *testing.B) {
+	s, chars := benchBurstFixture(b)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		s.BeginTickBatch()
+		for j := 0; j < benchBurstCalls; j++ {
+			c := chars[j%len(chars)]
+			s.MutateCharacterDeferred(c, "bench", func() {})
+		}
+		if stats := s.FlushTickBatch(); stats.Err != nil {
+			b.Fatal(stats.Err)
+		}
+	}
+}
+
+/*
+================
 BenchmarkEncodeCharacter
 
 One character row's JSON: the unit the commit repeats per dirty row.

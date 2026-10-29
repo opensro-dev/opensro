@@ -395,7 +395,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	// below weighs, read in the same door pass that judged admission.
 	companionSeen := false
 	ownerDead := false
-	snapshot := rt.characterSnapshotAdmitted(key.division, state.character, func(live *enterworld.Character) bool {
+	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(live *enterworld.Character) bool {
 		pet := live.CompanionByGID(key.gid)
 		if pet == nil {
 			return false
