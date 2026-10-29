@@ -245,6 +245,9 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if code := temptationTargetRefusal(skill, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
+	if code := rt.jobMonsterTargetRefusal(snapshot, target); code != 0 {
+		return offensiveRefusal(code), skillCastRefused
+	}
 	if d := skill.TimedEffect.Periodic; d.Pinned {
 		code := rt.periodicEffects.Refusal(linkedpulse.Effect{Division: divisionID,
 			SourceGID: enterworld.ObjectIDForCharacter(snapshot), TargetGID: target.Gid,

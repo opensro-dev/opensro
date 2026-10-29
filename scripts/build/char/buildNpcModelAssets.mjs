@@ -277,9 +277,12 @@ export function buildRetailAnimationCatalog( bsr, clips ) {
 /*
 ================
 resolveNpcModel
+
+A roster codename's model (its own or its base chain's .bsr/.cpd), or
+null; exported so the contracts can prove a planned species resolves.
 ================
 */
-function resolveNpcModel( codename, rows ) {
+export function resolveNpcModel( codename, rows ) {
 	const cols = rows.get( codename );
 	if ( !cols ) return null;
 	let bsrCols = cols;

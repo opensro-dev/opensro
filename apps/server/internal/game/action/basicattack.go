@@ -388,6 +388,10 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		if code := rt.playerAttackTargetRefusal(divisionID, snapshot, target.snapshot, nowMs); code != 0 {
 			return offensiveRefusal(code)
 		}
+	} else if target.monster != nil {
+		if code := rt.jobMonsterTargetRefusal(snapshot, *target.monster); code != 0 {
+			return offensiveRefusal(code)
+		}
 	}
 	// Command acceptance runs phase 0x37 with the ammo bit 0x20
 	// (the reference server's cost check): an empty bow is refused at the double-click, before the
