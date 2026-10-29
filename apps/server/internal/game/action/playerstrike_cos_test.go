@@ -236,9 +236,10 @@ TestPlayerKillOfATransportScattersItsCargo
 
 A player's fatal hit on a transport settles through the companion owner's
 death, as a monster's does: the reference server drops the goods around
-it, reserved to the winner (the fatal dealer here; a monster winner
-reserves them to no one, TestMonsterKillOfATransportDropsItsCargo), and
-its kind-1 release deletes the record. The owner is untouched.
+it unowned - PublishDropsWithGoldBonus resets a drop's ground owner to
+the winner only for items CGObj_IsTradeGoods does not name, and every
+trade good is one - and its kind-1 release deletes the record. The
+owner is untouched.
 ================
 */
 func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
@@ -257,8 +258,8 @@ func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
 		t.Fatal("the killed transport kept its record")
 	}
 	ground := rt.Ground.All(testDivision)
-	if len(ground) != 1 || ground[0].Codename != potion.Codename || ground[0].StackCount != 7 || ground[0].DroppedBy != attacker.Name {
-		t.Fatalf("cargo %+v, want the 7 potions reserved to the killer %q", ground, attacker.Name)
+	if len(ground) != 1 || ground[0].Codename != potion.Codename || ground[0].StackCount != 7 || ground[0].DroppedBy != "" {
+		t.Fatalf("cargo %+v, want the 7 potions unowned", ground)
 	}
 	if *owner.CurrentHP != 100 {
 		t.Fatalf("owner HP %d, want 100", *owner.CurrentHP)

@@ -137,8 +137,8 @@ type cosAbnormalOwner struct {
 	aliveBefore bool
 	died        bool
 	// winnerName is the player whose hit killed the pet ("" for a monster
-	// or companion killer), stamped by applyCOSHitInDoor for the death
-	// settlement's cargo reservation (cosdeath.go).
+	// or companion killer), stamped by applyCOSHitInDoor so the death
+	// settlement can name the dealer on its cargo log line (cosdeath.go).
 	winnerName                         string
 	ref                                *enterworld.CharacterRef
 	hpChanged, mpChanged, speedChanged bool

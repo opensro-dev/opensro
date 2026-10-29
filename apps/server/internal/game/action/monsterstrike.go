@@ -312,8 +312,9 @@ type cosHit struct {
 	displaceAt    int
 	context       abnormal.HitContext
 	// winnerName names the player who dealt this hit ("" when the dealer
-	// is a monster or a companion): a fatal hit's transport cargo is
-	// reserved to the winner (cosdeath.go).
+	// is a monster or a companion): a fatal hit's dealer is named on the
+	// death settlement for the cargo scatter's log line only - trade
+	// goods are never reserved to it (cosdeath.go).
 	winnerName string
 	// Filled by applyCOSHitInDoor.
 	strike    monsterStrike
