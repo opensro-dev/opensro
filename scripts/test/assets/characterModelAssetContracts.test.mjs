@@ -24,9 +24,9 @@ import {
 import {
 	bakeCharacterResource,
 	expandCharacterInfoCodenames,
-	preserveFreshNpcVatReferences,
 	resolveNpcModel
 } from "../../build/char/buildNpcModelAssets.mjs";
+import { preserveFreshNpcVatReferences } from "../../build/char/buildNpcVatAssets.mjs";
 import {
 	enabledCosReferences,
 	loadFortressStructureRoster,
@@ -289,8 +289,9 @@ test("generated-output cleanup stays inside its namespace and preserves retained
 });
 
 test("model-only rebuild preserves only byte-verified VAT enrichments", ( t ) => {
-	const temporaryAssets = fs.mkdtempSync( path.join( os.tmpdir(), "sro-npc-vat-preserve-" ) );
-	t.after( () => fs.rmSync( temporaryAssets, { recursive: true, force: true } ) );
+	const temporaryRoot = fs.mkdtempSync( path.join( os.tmpdir(), "sro-npc-vat-preserve-" ) );
+	t.after( () => fs.rmSync( temporaryRoot, { recursive: true, force: true } ) );
+	const temporaryAssets = path.join( temporaryRoot, "assets" );
 
 	const glb = "/assets/npc/mob/china/test.glb";
 	const vatManifest = "/assets/npc/vat/mob/china/test.vat.json";
@@ -358,7 +359,7 @@ test("model-only rebuild preserves only byte-verified VAT enrichments", ( t ) =>
 	];
 	assert.deepEqual(
 		preserveFreshNpcVatReferences( freshModels, previousManifest, {
-			publicAssetsRoot: temporaryAssets
+			publicRoot: temporaryRoot
 		} ),
 		{ contract, preserved: 2, stale: 0 }
 	);
@@ -374,7 +375,7 @@ test("model-only rebuild preserves only byte-verified VAT enrichments", ( t ) =>
 	];
 	assert.deepEqual(
 		preserveFreshNpcVatReferences( staleModels, previousManifest, {
-			publicAssetsRoot: temporaryAssets
+			publicRoot: temporaryRoot
 		} ),
 		{ contract: null, preserved: 0, stale: 2 }
 	);
