@@ -118,7 +118,7 @@ func TestRetentionPrunesOnlyExpiredDailyFiles(t *testing.T) {
 		}
 	}
 	l := &Log{dir: dir, retainDays: 30, now: func() time.Time { return today }}
-	l.prune()
+	l.prune("")
 
 	if _, err := os.Stat(filepath.Join(dir, expired)); !os.IsNotExist(err) {
 		t.Fatalf("%s survived the retention sweep", expired)
@@ -127,6 +127,33 @@ func TestRetentionPrunesOnlyExpiredDailyFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
 			t.Fatalf("%s was removed or lost: %v", kept, err)
 		}
+	}
+}
+
+/*
+================
+TestRetentionKeepsTheOpenDailyFile
+
+An expired day that is the file being written stays: the writer's own
+file is never pruned out from under it, whatever the clock says.
+================
+*/
+func TestRetentionKeepsTheOpenDailyFile(t *testing.T) {
+	dir := t.TempDir()
+	today := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	old := today.AddDate(0, 0, -40)
+	name := fileName(old)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l := &Log{dir: dir, retainDays: 30, now: func() time.Time { return today }}
+	l.prune(old.UTC().Format(dateLayout))
+	if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+		t.Fatalf("the open daily file %s was pruned: %v", name, err)
+	}
+	l.prune("")
+	if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+		t.Fatalf("%s survived once it was no longer open", name)
 	}
 }
 

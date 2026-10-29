@@ -257,7 +257,7 @@ func (l *Log) run() {
 			log.WithError(err).WithField("dropped", l.dropped.Load()).Warn("chatlog: " + what + "; lines are being dropped")
 		}
 	}
-	l.prune()
+	l.prune(day)
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 	write := func(entry Entry) {
@@ -270,7 +270,7 @@ func (l *Log) run() {
 				return
 			}
 			file, out, day = f, bufio.NewWriterSize(f, writeBuffer), want
-			l.prune()
+			l.prune(day)
 		}
 		data, err := json.Marshal(line{
 			TS:        entry.At.UTC().Format(time.RFC3339),
@@ -320,10 +320,12 @@ prune
 Remove daily files whose UTC date is outside the retention window: at
 most retainDays daily files survive, today's included. Foreign files -
 including the shadow-mute list beside the log - are never touched, and
-a file whose name does not parse as one of ours is left alone.
+a file whose name does not parse as one of ours is left alone. The
+file being written (open) is never removed, whatever its date: on
+Linux an unlinked open file would swallow every later line of its day.
 ================
 */
-func (l *Log) prune() {
+func (l *Log) prune(open string) {
 	names, err := os.ReadDir(l.dir)
 	if err != nil {
 		return
@@ -338,7 +340,7 @@ func (l *Log) prune() {
 		if _, err := time.Parse(dateLayout, day); err != nil {
 			continue
 		}
-		if day < cutoff {
+		if day < cutoff && day != open {
 			_ = os.Remove(filepath.Join(l.dir, file))
 		}
 	}
