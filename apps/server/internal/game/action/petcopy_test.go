@@ -310,7 +310,6 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 	}
 }
 
-
 /*
 ================
 TestPetSpiritReadsNothingOutsideTheCompanionCopy
