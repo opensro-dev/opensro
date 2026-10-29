@@ -2714,7 +2714,9 @@ test("a move unanswered on a live link times out as the movement lane's loss", a
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
-	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound 0 ms ago/ );
+	// The inbound age reads the real event clock (#1474), so a loaded machine
+	// sees a few milliseconds between the last frame and the step.
+	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound \d{1,2} ms ago/ );
 });
 
 /*
