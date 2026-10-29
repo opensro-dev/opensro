@@ -97,11 +97,18 @@ modes 6..7) and a pickup pet (+0x43C) whoever attacks it; a protected COS
 the reference server's 0x3020, and a ridden COS stays a target (the mounted trader's
 transport). The owner need not be alive: the attack validation judges the owner's
 relations, not its life.
+
+The owner's copy is the pet-owner view (SnapshotCompanion, #2030): an
+area query resolves every pet of every player standing in it. Its
+readers are audited: cosTargetRefusal and the pet lanes'
+worldPlayerEnemy read the owner's ID, name, world, body status, level,
+PK, aggressions, guild, the job-suit slot and the ridden transport's
+cargo, and the strike itself takes the live owner (target.player).
 ================
 */
 func (rt *Runtime) resolveCOSTarget(division string, attacker *enterworld.Character, gid uint32, now int64) (combatTarget, bool) {
 	owner := rt.characterByCosGID(division, gid)
-	snapshot := rt.characterSnapshotAdmitted(division, owner, func(live *enterworld.Character) bool {
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(live *enterworld.Character) bool {
 		if live.ID == attacker.ID || live.DeletePending ||
 			domain.CharacterWorldInstance(live) != domain.CharacterWorldInstance(attacker) {
 			return false

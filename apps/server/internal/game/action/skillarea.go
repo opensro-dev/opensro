@@ -370,7 +370,7 @@ The striker's skill row owns the hostility of its monster victims; player
 victims recorded their aggression in the door.
 ==================
 */
-func (rt *Runtime) publishArea(division string, caster *enterworld.Character, skill enterworld.SkillRow, impactCount int, plan areaStrikePlan, commit areaCommit, now int64) areaPublication {
+func (rt *Runtime) publishArea(division string, caster *enterworld.Character, skill enterworld.SkillRow, impactCount int, plan areaStrikePlan, commit areaCommit, now int64, doors characterDoors) areaPublication {
 	var out areaPublication
 	source := enterworld.ObjectIDForCharacter(caster)
 	var deaths []wire.Frame
@@ -395,9 +395,9 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			public, private := rt.publishPlayerHit(division, hit, now)
 			out.after = append(out.after, public...)
 			out.recipients = append(out.recipients, private)
-			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
+			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now, doors)
 			out.returned = mergeOpResults(out.returned, returned)
-			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now))
+			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now, doors))
 			out.returned = mergeOpResults(out.returned, rt.screamMaskPlayer(division, victim.target.player, caster, now))
 			continue
 		}
@@ -561,7 +561,7 @@ Each victim takes every authored impact; once one is fatal its remaining
 records are bare type 8.
 ==================
 */
-func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enterworld.Character, skill enterworld.SkillRow, area enterworld.SkillOffensiveArea, chained, charged bool, primary combatTarget, attacker combat.Stats, loadout combat.Loadout, consumeAmmo bool, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enterworld.Character, skill enterworld.SkillRow, area enterworld.SkillOffensiveArea, chained, charged bool, primary combatTarget, attacker combat.Stats, loadout combat.Loadout, consumeAmmo bool, nowMs int64, rootID uint32, release *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if skill.Attack.ImpactCount == 0 {
 		return OpResult{}, skillCastRefused
 	}
@@ -590,7 +590,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	roster := rt.monsterRewardRoster(division, character, nowMs)
 	var ammo ammunitionResult
 	var stolen wire.Frame
-	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
+	if !doors.updateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
 		if charged {
 			cost, refusal = rt.stagePhaseCost(division, character, skill, nowMs, release, rootID)
@@ -632,7 +632,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		return OpResult{}, skillCastRefused
 	}
-	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, nowMs)
+	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, nowMs, doors)
 	if len(published.targets) == 0 || published.targets[0].GID != primary.gid {
 		// The primary's record always leads (SkillCastAreaFrame): a primary
 		// that left the door unstruck still steers with bare records.
@@ -687,7 +687,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			tally.note(formula.Blocked, true)
 		}
 	}
-	wear := rt.applyEquipmentWear(division, character, tally)
+	wear := rt.applyEquipmentWear(division, character, tally, doors)
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)

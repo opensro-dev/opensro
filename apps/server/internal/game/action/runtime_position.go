@@ -196,12 +196,13 @@ func (rt *Runtime) characterSnapshotCombatAdmitted(
 ==================
 characterSnapshotCompanionAdmitted
 
-characterSnapshotAdmitted for the per-tick pet pass (#2030): the copy
-keeps the equipment rows and every companion-carrying row, and no
-avatar inventory (domain SnapshotCompanion). A root takes it only
-when no reader of its copy reads a non-summon bag row or an avatar
-row; companion resolution and equipment reads see exactly what the
-full copy shows. The companionCopy seam replaces the copy in tests
+characterSnapshotAdmitted for the per-tick pet and brood passes
+(#2030): the pet-owner view (domain SnapshotCompanion) - identity,
+world, companions, life and status, the PvP and relation facts, and
+the inventory's companion rows and relation slot. A root takes it only
+when every reader of its copy reads within that list; companion
+resolution and the relation rules see exactly what the full copy
+shows. The companionCopy seam replaces the copy in tests
 exactly as combatCopy does for the combat roots; admission still
 judges the live record first, in its own door pass, so a refused
 record pays for no copy under the seam either.

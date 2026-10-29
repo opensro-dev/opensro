@@ -750,7 +750,7 @@ func TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate(t *testing.T)
 		OwnerJID: 0x7777777, DroppedAt: rt.Now(),
 	})
 	res := rt.grantPeerCosPickup(testDivision, picker, peer, drop, wire.PickupAnim{Gid: peerPetGID}, petPickupAt{
-		now: rt.Now(), command: true,
+		now: rt.Now(), command: true, doors: rt.handlerDoors(),
 	})
 	if len(res.Broadcast) != 0 || len(peer.ActiveCOS.Container.Rows) != 0 || len(rt.Ground.All(testDivision)) != 1 {
 		t.Fatalf("grantPeerCosPickup bypassed OwnerJID recheck: res=%+v rows=%+v", res, peer.ActiveCOS.Container.Rows)

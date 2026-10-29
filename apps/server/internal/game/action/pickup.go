@@ -32,7 +32,7 @@ pending matures at the travel time, and the client gets the latch arm plus
 the movement ack toward the item.
 ==================
 */
-func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, character *enterworld.Character, groundItem grounditem.Item, approach grounditem.Approach, now time.Time) OpResult {
+func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, character *enterworld.Character, groundItem grounditem.Item, approach grounditem.Approach, now time.Time, doors characterDoors) OpResult {
 	// The reference server's use-item auto command, state 1,
 	// walks to an out-of-range drop via
 	// its pursuit start, which refuses
@@ -57,7 +57,7 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 	// walk mode) along the committed path. A fixed run-speed estimate made a
 	// faster character stand on the drop until the estimate ran out.
 	arrivesAtMs := now.Add(approach.Travel).UnixMilli()
-	if !rt.deps.Update(character, "pickup-approach", func() bool {
+	if !doors.update(character, "pickup-approach", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -133,16 +133,18 @@ func (rt *Runtime) grantPickup(
 	divisionID, worldKey string,
 	character, characterSnapshot *enterworld.Character,
 	groundItem grounditem.Item,
+	doors characterDoors,
 ) OpResult {
 	// Natively trade goods leave the party's item share for the picker's
-	// transport (tradepickup.go).
+	// transport (tradepickup.go). Trade goods keep their own immediate
+	// door on both lanes (grantTradeGoodsPickup predates the batch).
 	if isPickupTradeGoods(groundItem.TypeFlags) {
 		return rt.grantTradeGoodsPickup(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
 			recipient: character, snapshot: characterSnapshot, item: groundItem})
 	}
 	recipient := rt.partyPickupRecipient(divisionID, character, groundItem, rt.Now().UnixMilli())
 	return rt.grantPickupTo(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
-		recipient: recipient, snapshot: characterSnapshot, item: groundItem})
+		recipient: recipient, snapshot: characterSnapshot, item: groundItem}, doors)
 }
 
 /*
@@ -170,7 +172,7 @@ grantPickupTo
 grantPickup's grant for a recipient the rotation already chose.
 ==================
 */
-func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
+func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result OpResult) {
 	divisionID, worldKey, groundItem, characterSnapshot := g.division, g.worldKey, g.item, g.snapshot
 	picker, character := g.picker, g.recipient
 	defer func() {
@@ -209,7 +211,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 		}
 		removed := false
 		balances := make([]uint64, len(shares))
-		rt.deps.UpdateMany(credited, "pickup-gold", func() bool {
+		doors.updateMany(credited, "pickup-gold", func() bool {
 			for _, s := range shares {
 				// The durable character stores signed-64 gold. Refuse before removing
 				// the heap rather than publishing a balance that persistence clamps.
@@ -256,7 +258,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 	var grantedItem inventory.Item
 	var questFrames []wire.Frame
 	result = pickupRefusal(wire.ErrCodeInvalidRequest)
-	if !rt.deps.Update(character, "pickup-item", func() bool {
+	if !doors.update(character, "pickup-item", func() bool {
 		if character.DeletePending {
 			return false
 		}

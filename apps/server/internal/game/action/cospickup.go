@@ -76,7 +76,7 @@ func finishCosPickupCommand(result OpResult, command wire.CosCommand) OpResult {
 			switch frame.Payload[1] {
 			case wire.ErrCodeStorageFull:
 				code = cosPickupBagFull
-			case cosPickupOwnerBagFull, cosPickupRetryBackoff:
+			case cosPickupBagFull, cosPickupOwnerBagFull, cosPickupRetryBackoff:
 				code = frame.Payload[1]
 			}
 		}
@@ -114,7 +114,7 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 		return refused
 	}
 	request := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: command.CosGid, GroundGID: command.TargetGid}
-	result := rt.applyCosGroundAt(division, c, request, cosGroundAttempt{now: rt.Now(), allowApproach: true, command: true})
+	result := rt.applyCosGroundAt(division, c, request, cosGroundAttempt{now: rt.Now(), allowApproach: true, command: true, doors: rt.handlerDoors()})
 	return finishCosPickupCommand(result, command)
 }
 

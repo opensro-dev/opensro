@@ -47,7 +47,7 @@ func (rt *Runtime) stopFollowMovement(division string, character, snapshot *ente
 	}
 	nowMs := rt.Now().UnixMilli()
 	from := rt.liveSpawn(key, snapshot, nowMs)
-	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, rt.handlerDoors())
 	return stopped
 }
 
@@ -86,7 +86,8 @@ func (rt *Runtime) beginFollow(division string, character *enterworld.Character,
 	intent.FollowSession = admission.(populationAdmission).session
 	rt.Pending.Clear(grounditem.PendingKey(division, snapshot.Name))
 	rt.setCombatIntent(intent)
-	return rt.advanceFollowIntent(character, intent, nowMs)
+	// beginFollow answers the 0x7045 handler: its commits are immediate.
+	return rt.advanceFollowIntent(character, intent, nowMs, rt.handlerDoors())
 }
 
 /*
@@ -169,7 +170,7 @@ No cast lookup, cooldown or damage path can run for this command. Retain
 the intent while waiting in range so a moving target can lead again.
 ================
 */
-func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	snapshot := rt.characterSnapshot(intent.DivisionID, character)
 	target, spacing, ok := rt.followActors(snapshot, intent, nowMs)
 	if !ok || rt.skillCastPostureBlocked(intent.DivisionID, snapshot, nowMs) {
@@ -177,7 +178,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 		if snapshot != nil && !teleportBlocks(snapshot.NativeTeleportMode) && enterworld.CharacterAlive(snapshot) {
 			key := simulation.WorldKey(intent.DivisionID, snapshot.Name)
 			from := rt.liveSpawn(key, snapshot, nowMs)
-			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, doors)
 			return stopped
 		}
 		return OpResult{}
@@ -199,7 +200,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 	}
 	return rt.commitIntentMovement(character, snapshot, intentMovement{
 		intent: intent, from: from, target: to, goal: goal, nowMs: nowMs,
-	})
+	}, doors)
 }
 
 /*

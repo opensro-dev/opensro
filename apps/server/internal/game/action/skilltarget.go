@@ -196,7 +196,7 @@ func (rt *Runtime) beginSupportApproach(division string, character, snapshot *en
 		ActionReach:   spacing.ActionReach,
 	}
 	rt.setCombatIntent(intent)
-	return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs)
+	return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs, rt.handlerDoors())
 }
 
 /*
@@ -209,7 +209,7 @@ stop, face the target and run the cast. The cast owner re-arms the intent
 if the target has moved away again.
 ==================
 */
-func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	division := intent.DivisionID
 	snapshot := rt.characterSnapshot(division, character)
 	recipient := rt.characterSnapshot(division, rt.findCharacterByGid(division, intent.TargetGid))
@@ -237,11 +237,11 @@ func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, int
 		if !rt.pursuitSteerDue(intent, worldKey, snapshot, to, nowMs) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs)
+		return rt.approachIntentTarget(character, snapshot, intent, spacing, from, to, nowMs, doors)
 	}
 
 	rt.ClearCombatIntent(division, intent.CharacterName)
-	transition, transitioned := rt.enterBasicAttackRange(character, snapshot, worldKey, to, nowMs)
+	transition, transitioned := rt.enterBasicAttackRange(character, snapshot, worldKey, to, nowMs, doors)
 	if !transitioned {
 		return OpResult{}
 	}

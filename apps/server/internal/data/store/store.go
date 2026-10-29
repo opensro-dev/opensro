@@ -234,8 +234,14 @@ type Store struct {
 	// characterRowTx (db_write.go), so no writer can leave an entry
 	// describing bytes the disk no longer holds.
 	committedDigests map[committedCharacterKey][32]byte
-	changes          changeSet
-	ground           groundState
+	// committedMetaDigests is the character digests' discipline for
+	// the meta planes the commit rewrites whole (trade rewards, job
+	// rankings, the version stamps): the last committed digest per
+	// meta key, staged inside a commit and retained only once its
+	// transaction commits (persistence.go).
+	committedMetaDigests map[string][32]byte
+	changes              changeSet
+	ground               groundState
 	// batch is the simulation tick's deferred commit (tickbatch.go).
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
@@ -292,20 +298,21 @@ func Open(dir string, opts Options) (*Store, error) {
 	}
 
 	s := &Store{
-		dir:              dir,
-		dbPath:           filepath.Join(dir, DBFileName),
-		dbBakPath:        filepath.Join(dir, DBBakFileName),
-		characters:       map[string][]*domain.Character{},
-		deleted:          map[string][]json.RawMessage{},
-		mailboxes:        map[string]map[int64][]domain.LetterRecord{},
-		guilds:           map[string]map[int64]domain.GuildRecord{},
-		guildMembers:     map[string]map[int64][]domain.GuildMemberRecord{},
-		camps:            map[string]map[int64]domain.TrainingCampRecord{},
-		campMembers:      map[string]map[int64][]domain.TrainingCampMemberRecord{},
-		meta:             Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
-		charDivision:     map[*domain.Character]string{},
-		committedDigests: map[committedCharacterKey][32]byte{},
-		changes:          newChangeSet(),
+		dir:                  dir,
+		dbPath:               filepath.Join(dir, DBFileName),
+		dbBakPath:            filepath.Join(dir, DBBakFileName),
+		characters:           map[string][]*domain.Character{},
+		deleted:              map[string][]json.RawMessage{},
+		mailboxes:            map[string]map[int64][]domain.LetterRecord{},
+		guilds:               map[string]map[int64]domain.GuildRecord{},
+		guildMembers:         map[string]map[int64][]domain.GuildMemberRecord{},
+		camps:                map[string]map[int64]domain.TrainingCampRecord{},
+		campMembers:          map[string]map[int64][]domain.TrainingCampMemberRecord{},
+		meta:                 Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
+		charDivision:         map[*domain.Character]string{},
+		committedDigests:     map[committedCharacterKey][32]byte{},
+		committedMetaDigests: map[string][32]byte{},
+		changes:              newChangeSet(),
 		ground: groundState{
 			loadedRecords: map[string][]domain.GroundItemRecord{},
 		},
@@ -509,6 +516,7 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}
+	s.committedMetaDigests = map[string][32]byte{}
 	s.ledger.seen = map[*domain.Character]int64{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {

@@ -314,6 +314,57 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 
 /*
 ================
+TestTailwindRecipientsReadNothingOutsideTheCompanionCopy
+
+The Tailwind recipient pass copies every admitted party member to
+gate it; production members carry stuffed bags. A fattened member
+must charge exactly as on the whole-record copy, and the seam must
+see the member's copy happen.
+================
+*/
+func TestTailwindRecipientsReadNothingOutsideTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 3)
+	member := nearbyCharacter(rt, c, 21, "tailwind-party", 50)
+	memberGID := enterworld.ObjectIDForCharacter(member)
+	rt.petSessions[petOwnerKey{division: testDivision, name: member.Name}] = &petSession{character: member, ready: true}
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), memberGID}}}
+	}
+	stuffOwnerInventories(member)
+
+	copied := []string{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied = append(copied, character.Name)
+		return character.SnapshotCompanion()
+	}
+	rt.advanceTailwind(key, clock.NowMs())
+	chargeTailwind(rt, clock, key, 10)
+	if got := rt.tailwindView(testDivision, memberGID, clock.NowMs()).stacks; got != 10 {
+		t.Fatalf("party member charged %d stacks on the companion copy, want 10", got)
+	}
+	found := false
+	for _, name := range copied {
+		if name == member.Name {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("recipient pass never took the companion copy of %s; copied %v", member.Name, copied)
+	}
+
+	rt.tailwinds.sources = nil
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+	rt.advanceTailwind(key, clock.NowMs())
+	chargeTailwind(rt, clock, key, 10)
+	if got := rt.tailwindView(testDivision, memberGID, clock.NowMs()).stacks; got != 10 {
+		t.Fatalf("party member charged %d stacks on the full copy, want 10", got)
+	}
+}
+
+/*
+================
 TestElementalWalkReadsNothingOutsideTheCompanionCopy
 
 Production keeps the wolf's record in a bag row behind a stuffed bag.

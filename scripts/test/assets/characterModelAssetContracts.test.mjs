@@ -24,7 +24,8 @@ import {
 import {
 	bakeCharacterResource,
 	expandCharacterInfoCodenames,
-	preserveFreshNpcVatReferences
+	preserveFreshNpcVatReferences,
+	resolveNpcModel
 } from "../../build/char/buildNpcModelAssets.mjs";
 import {
 	enabledCosReferences,
@@ -37,7 +38,7 @@ import { loadBoothModelRoster } from "../../build/char/boothModelRoster.mjs";
 import { buildEffectRecordTable } from "../../build/char/parseSkillEffect.mjs";
 import { parseCharacterBsr, parseSkinnedBms } from "../../build/char/formats.mjs";
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
-import { loadQinShiTombSkillRows } from "../../build/shared/qinshiTomb.mjs";
+import { loadQinShiTombCharacterRows, loadQinShiTombSkillRows } from "../../build/shared/qinshiTomb.mjs";
 import { sha256Hex } from "../../build/shared/hash.mjs";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../lib/publishedAsset.mjs";
 import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
@@ -480,6 +481,42 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	assert.equal( npcRoster.length, 176, "the authored CH/EU town roster lost model coverage" );
 	for ( const codename of [ "NPC_CH_SMITH", "NPC_EU_SMITH", "NPC_EU_ADVICE3", "STRUCTURE_GATE_PULLEY_JA_01" ] ) {
 		assert.ok( npcRoster.some( ( ref ) => ref.codename === codename ), `${codename} left the server roster` );
+	}
+});
+
+test("a default build plans every Qin-Shi tomb species (#2024)", () => {
+	// The shipped failure, one seam deeper: the bake's character rows
+	// follow the shard's deployed posture (#2043), but the roster export
+	// is a Go child that reads only its env — with SRO_QINSHI_TOMB unset
+	// the modelled roster planned none of the tomb monsters, so a
+	// default data build still published no models for them. Planning
+	// must not depend on the build env: with the flag deleted, every one
+	// of the 79 overlay species is on a bake roster and resolves to a
+	// model.
+	const previousTomb = process.env.SRO_QINSHI_TOMB;
+	delete process.env.SRO_QINSHI_TOMB;
+	try {
+		const overlayNames = loadQinShiTombCharacterRows().rows.map( ( cols ) => cols[2] );
+		assert.equal( overlayNames.length, 79, "the committed tomb characterdata overlay" );
+		const rows = loadCharacterDataRows( textdataDir, { codenamePattern: /./, qinshiTombOverlay: true } );
+		for ( const codename of overlayNames ) {
+			assert.ok( rows.has( codename ), `${codename} missing from the bake's character rows` );
+		}
+		const modelled = loadModelledMobRoster().filter( ( ref ) => overlayNames.includes( ref.codename ) );
+		const cos = enabledCosReferences( rows ).filter( ( ref ) => overlayNames.includes( ref.codename ) );
+		// 78 species ride the modelled monster roster; the 79th,
+		// MOB_QT_TQ_THIEF_01_COS, is a quest companion on the COS roster.
+		assert.equal( modelled.length, 78, "modelled tomb species" );
+		assert.deepEqual( cos.map( ( ref ) => ref.codename ), [ "MOB_QT_TQ_THIEF_01_COS" ] );
+		for ( const ref of modelled ) {
+			const model = resolveNpcModel( ref.codename, rows );
+			assert.ok( model, `${ref.codename} resolves no model` );
+			assert.equal( model.refObjId, ref.refObjId, `${ref.codename} RefObj identity drift` );
+			assert.match( model.bsrPath, /\.(?:bsr|cpd)$/, `${ref.codename} model path` );
+		}
+	} finally {
+		if ( previousTomb === undefined ) delete process.env.SRO_QINSHI_TOMB;
+		else process.env.SRO_QINSHI_TOMB = previousTomb;
 	}
 });
 
