@@ -170,7 +170,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
 	// The shares fence and Pain Quota links took off the hits land on their
 	// takers as this monster's hits (linkeddamage.go).
-	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs))
+	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs, rt.tickDoors()))
 	// A Scream Mask on the victim rolls its statuses on this monster (screammask.go).
 	returned = mergeOpResults(returned, rt.screamMaskMonster(divisionID, character, instance, in.from, nowMs))
 	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)
@@ -311,6 +311,11 @@ type cosHit struct {
 	displacement  *playerDisplacement
 	displaceAt    int
 	context       abnormal.HitContext
+	// winnerName names the player who dealt this hit ("" when the dealer
+	// is a monster or a companion): a fatal hit's dealer is named on the
+	// death settlement for the cargo scatter's log line only - trade
+	// goods are never reserved to it (cosdeath.go).
+	winnerName string
 	// Filled by applyCOSHitInDoor.
 	strike    monsterStrike
 	remaining uint32
@@ -386,6 +391,7 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 	if strike.fatal {
 		block.changed = block.block.ClearAll(block)
 		block.fatal = true
+		block.winnerName = hit.winnerName
 	} else {
 		if block.block.Mask != 0 {
 			block.changed = block.block.BreakOnHit(block, hit.context) || block.changed

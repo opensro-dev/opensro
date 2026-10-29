@@ -243,7 +243,7 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 			return OpResult{}
 		}
 		hit, result, landed := rt.creditPlayerHit(playerHitInput{division: h.division, caster: c, snapshot: snapshot,
-			attacker: attacker, skill: row, target: victim, impacts: 1, fixed: &formula, now: now})
+			attacker: attacker, skill: row, target: victim, impacts: 1, fixed: &formula, now: now}, rt.tickDoors())
 		if !landed {
 			return OpResult{}
 		}

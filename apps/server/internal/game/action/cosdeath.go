@@ -3,10 +3,14 @@
 
 cosdeath.go - what a companion's death leaves behind, by kind
 
-Every character death runs the reference server's kill credit, whose
-vtable+0x638 drops a COS's transport cargo: a
-transport's goods go offline and publish unowned, the way a monster's
-drops do. The COS death then releases a vehicle
+Every character death runs the kill credit, which drops a COS's
+transport cargo: a transport's goods go offline and publish unowned, the
+way a monster's drops do. Publishing a drop normally resets its ground
+owner to the winner, but trade goods are exempt from that reset - and
+every transport row is a trade good - so cargo stays unowned whoever
+killed the transport. The fatal dealer is still recorded on the
+settlement, for the scatter's log line only.
+The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
 keep theirs on the summoner item for revival (cosabnormal.go). A
 captured quest monster is gone with its death, and
@@ -18,6 +22,8 @@ package action
 
 import (
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -68,11 +74,13 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 ================
 dropTransportCargo
 
-Natively the cargo scatters around the dead transport, owned by no one.
+Natively the cargo scatters around the dead transport, owned by no
+one: the winner reset that publishing applies to drops never reaches
+a trade good (see the file banner).
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
-	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now)...)
+	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now, "death", o.winnerName)...)
 }
 
 /*
@@ -80,21 +88,37 @@ func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
 scatterTransportCargo
 
 The native cargo drop, shared with the port-only trader rule (tradercargodrop.go):
-every row of pet's container lands unowned around the transport, and the
-container empties. A row the ground owner refuses stays lost with the
-vehicle. The caller holds c's door; returns the drops' public frames.
+every row of pet's container lands unowned around the transport, and
+the container empties. winnerName names the fatal dealer for the log
+line only ("" when no hit dealt the death); a bag is never reserved to
+it, as native never reserves trade goods. A row the ground owner
+refuses stays lost with the vehicle - the scatter log line below is
+the only trace it leaves. The caller holds c's door; returns the
+drops' public frames.
 ================
 */
-func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64) []wire.Frame {
+func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64, cause, winnerName string) []wire.Frame {
 	at := rt.companionLiveSpawn(division, c, pet, nowMs)
 	now := time.UnixMilli(nowMs)
 	var dropped []grounditem.Item
-	for _, item := range invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity)) {
+	rows := invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity))
+	for _, item := range rows {
 		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, "", now), at, cosCargoRarity)
 		if added := rt.addCharacterGround(division, c, planned); added.Gid != 0 {
 			dropped = append(dropped, added)
 		}
 	}
+	killerKind := "none"
+	if winnerName != "" {
+		killerKind = "player"
+	}
+	// rows counts what the container held, bags what the ground owner
+	// accepted: rows > 0 with bags == 0 means registration refused every
+	// row and the goods stayed lost with the vehicle.
+	log.WithFields(log.Fields{
+		"cause": cause, "killer": killerKind, "winner": winnerName,
+		"owner": c.Name, "rows": len(rows), "bags": len(dropped),
+	}).Info("trade: transport cargo scattered")
 	pet.Container.Rows = nil
 	if len(dropped) == 0 {
 		return nil

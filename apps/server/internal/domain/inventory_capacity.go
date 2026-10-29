@@ -36,6 +36,10 @@ const (
 	// that package imports domain, so the value is stated here and the
 	// two are tied by test.
 	EquipmentSlotEnd = 13
+	// JobSuitSlot is the job suit's equipment socket, which the
+	// free-battle cape shares: the PvP relation rules read it (action
+	// playerRelationEquipment), so the pet-owner view keeps it.
+	JobSuitSlot = 8
 )
 
 /*

@@ -12,6 +12,7 @@ import (
 	"container/heap"
 	"sort"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -101,6 +102,48 @@ func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) 
 	}
 	if next := s.behaviorBatches(1); len(next[0].actors) != 2 {
 		t.Fatal("survivors were not rescheduled")
+	}
+}
+
+/*
+================
+TestBehaviorActorMoverMatchesDispatchReads
+
+TestBehaviorActorMoverMatchesDispatchReads pins behaviorActorMover to
+the two reads it fuses (#2029): the instance behaviorActor returns and
+the mover MonsterState.Mover returns - the stored row, or the
+synthesized spawn mover when no row exists yet - and not-ok for a
+retired actor or an unknown population.
+================
+*/
+func TestBehaviorActorMoverMatchesDispatchReads(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	s.clock = func() time.Time { return time.UnixMilli(5000) }
+	batch := s.behaviorBatches(0)[0]
+
+	snap := s.behaviorActorMover(batch.key, 1)
+	actor, actorOK := s.behaviorActor(batch.key, 1)
+	mover, moverOK := s.Mover("benchmark", 1)
+	if !snap.ok || !actorOK || !moverOK {
+		t.Fatal("dispatch reads disagree on a live actor")
+	}
+	if snap.instance != actor || snap.mover != mover {
+		t.Fatal("fused snapshot differs from the separate reads")
+	}
+
+	d.movers.remove(3)
+	snap = s.behaviorActorMover(batch.key, 3)
+	mover, moverOK = s.Mover("benchmark", 3)
+	if !snap.ok || !moverOK || snap.mover != mover {
+		t.Fatal("synthesized spawn mover differs from Mover's")
+	}
+
+	d.instances.remove(2)
+	if snap := s.behaviorActorMover(batch.key, 2); snap.ok {
+		t.Fatal("retired actor resolved")
+	}
+	if snap := s.behaviorActorMover(populationKey{division: "nowhere"}, 1); snap.ok {
+		t.Fatal("unknown population resolved")
 	}
 }
 

@@ -139,6 +139,10 @@ type commitTiming struct {
 	// bytes still matched the last committed digest (persistence.go).
 	charactersWritten atomic.Int64
 	charactersSkipped atomic.Int64
+	// The same written/skipped pair for the meta planes the commit
+	// rewrites whole (trade rewards, job rankings, version stamps).
+	metaWritten atomic.Int64
+	metaSkipped atomic.Int64
 }
 
 /*
@@ -159,6 +163,8 @@ allocates, to keep what it was.
 func (t *commitTiming) record(label string, d commitPhaseDurations, rows commitRowCounts) {
 	t.charactersWritten.Add(rows.written)
 	t.charactersSkipped.Add(rows.skipped)
+	t.metaWritten.Add(rows.metaWritten)
+	t.metaSkipped.Add(rows.metaSkipped)
 	for i := range d {
 		if t.phases[i].Add(d[i]) && i == commitPhaseTotal {
 			longest := &LongestCommit{Label: label}
@@ -204,6 +210,10 @@ type LockTiming struct {
 	// of the dirty set a commit actually had to write.
 	CharacterRowsWritten int64 `json:"character_rows_written"`
 	CharacterRowsSkipped int64 `json:"character_rows_skipped"`
+	// MetaRowsWritten / MetaRowsSkipped: the same ratio for the meta
+	// planes (persistence.go).
+	MetaRowsWritten int64 `json:"meta_rows_written"`
+	MetaRowsSkipped int64 `json:"meta_rows_skipped"`
 }
 
 /*
@@ -224,6 +234,8 @@ func (s *Store) LockTiming() LockTiming {
 		LongestCommit:        s.commits.longest.Load(),
 		CharacterRowsWritten: s.commits.charactersWritten.Load(),
 		CharacterRowsSkipped: s.commits.charactersSkipped.Load(),
+		MetaRowsWritten:      s.commits.metaWritten.Load(),
+		MetaRowsSkipped:      s.commits.metaSkipped.Load(),
 	}
 	for i, name := range commitPhaseNames {
 		out.CommitMs[name] = s.commits.phases[i].Snapshot()

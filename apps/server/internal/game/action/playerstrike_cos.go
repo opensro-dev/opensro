@@ -133,7 +133,7 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 		}
 	}
 	if skill.ActionCastingTimeMs != 0 && st.release == nil {
-		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now)
+		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now, st.doors)
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffCOS(debuffCast{division: division, character: character, snapshot: snapshot,
@@ -147,7 +147,7 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
 	}
 	if skill.OffensiveArea.Radius != 0 {
-		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release)
+		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)
 	}
 	return rt.strikeCOSTarget(st, target, casterAt)
 }
@@ -178,7 +178,8 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 		return cosHit{}, false
 	}
 	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: target.at, block: block, displaceAt: -1,
-		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+		winnerName: snapshot.Name,
+		context:    abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
 	remainingHP := pet.CurrentHP
 	actor := criticalActor{division: division, character: snapshot.Name}
 	for range skill.Attack.ImpactCount {
@@ -268,7 +269,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	var killAfter jobKillPayout
 	var killWar domain.GuildWarCombat
 	var refusal uint16
-	if !rt.deps.UpdateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
+	if !st.doors.updateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
 		var cost skillCharge
 		if st.advanced {
 			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {
@@ -363,7 +364,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	for _, formula := range hit.formulas {
 		tally.note(formula.Blocked, true)
 	}
-	wear := rt.applyEquipmentWear(division, character, tally)
+	wear := rt.applyEquipmentWear(division, character, tally, st.doors)
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)

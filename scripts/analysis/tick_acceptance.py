@@ -76,6 +76,19 @@ def percentile_from_buckets(bounds, buckets, q, open_value):
 
 
 # ================
+# histogram_counts
+#
+# One snapshot's bucket counts. The served metrics name the field
+# "counts" (bounds_ms plus one open last bucket, with the server's own
+# percentiles beside it); "buckets" is accepted for snapshots taken
+# before the rename. Reading only "buckets" made every real window
+# delta empty, so the report refused live input as sample-less.
+# ================
+def histogram_counts(hist):
+    return hist.get("counts") or hist.get("buckets") or []
+
+
+# ================
 # window_histogram
 #
 # Percentiles of the tick histogram over the window between the two
@@ -86,8 +99,8 @@ def window_histogram(before, after, spike_max_ms):
     hb = before.get("tick_ms_histogram") or {}
     ha = after.get("tick_ms_histogram") or {}
     bounds = ha.get("bounds_ms") or hb.get("bounds_ms") or []
-    bb = hb.get("buckets") or [0] * len(ha.get("buckets") or [])
-    ba = ha.get("buckets") or []
+    ba = histogram_counts(ha)
+    bb = histogram_counts(hb) or [0] * len(ba)
     deltas = [max(0, a - b) for a, b in zip(ba, bb)]
     return {
         "p50_ms": percentile_from_buckets(bounds, deltas, 0.50, spike_max_ms),
@@ -270,13 +283,13 @@ def self_test():
     bounds = [10.0, 25.0, 50.0, 100.0]
     before = {
         "tick_count": 1000, "tick_overruns": 10, "live_sessions": 3,
-        "tick_ms_histogram": {"bounds_ms": bounds, "buckets": [900, 80, 15, 4, 1]},
+        "tick_ms_histogram": {"bounds_ms": bounds, "counts": [900, 80, 15, 4, 1]},
         "slow_hooks": {"advanceReturnScrolls": {"count": 5, "max_ms": 300.0}},
         "slow_divisions": {},
     }
     after = {
         "tick_count": 3000, "tick_overruns": 12, "live_sessions": 5,
-        "tick_ms_histogram": {"bounds_ms": bounds, "buckets": [2700, 220, 55, 20, 5]},
+        "tick_ms_histogram": {"bounds_ms": bounds, "counts": [2700, 220, 55, 20, 5]},
         "slow_hooks": {"advanceReturnScrolls": {"count": 5, "max_ms": 300.0},
                        "advancePets": {"count": 2, "max_ms": 150.0}},
         "slow_divisions": {"7": {"count": 1, "max_ms": 120.0}},
@@ -294,6 +307,22 @@ def self_test():
     # (50, 100] must not read as a 30 ms spike max.
     capped = percentile_from_buckets(bounds, [900, 50, 30, 20, 0], 0.99, 30.0)
     assert capped == 100.0, capped
+    # The served shape, from a live snapshot (2026-10-28, the #2033
+    # profile window): "counts" with the open bucket last and the
+    # server's own percentiles printed beside them. The window math
+    # must reproduce those percentiles from the counts alone; on the
+    # pre-fix reader ("buckets" only) this window had no samples and
+    # the report refused it.
+    served_bounds = [2, 5, 10, 12, 14, 16, 18, 20, 25, 30, 40, 50, 60, 70, 80, 90,
+                     100, 110, 120, 140, 160, 180, 200, 250, 300, 400, 500, 750, 1000, 2000]
+    served_counts = [0, 0, 0, 3, 58, 551, 2389, 6031, 41582, 57781, 95971, 66978,
+                     39266, 21472, 10737, 5073, 2338, 1159, 791, 981, 566, 239,
+                     85, 46, 13, 15, 13, 28, 0, 0, 0]
+    served = window_histogram(
+        {"tick_ms_histogram": {"bounds_ms": served_bounds, "counts": [0] * len(served_counts)}},
+        {"tick_ms_histogram": {"bounds_ms": served_bounds, "counts": served_counts}}, 0.0)
+    assert served["samples"] == 354166, served
+    assert (served["p50_ms"], served["p90_ms"], served["p99_ms"], served["p999_ms"]) == (40, 70, 110, 180), served
     hooks, hits, worst = slow_totals(before["slow_hooks"], after["slow_hooks"])
     assert hits == 2 and worst == 300.0, (hits, worst)
     assert hooks["advanceReturnScrolls"]["hits"] == 0

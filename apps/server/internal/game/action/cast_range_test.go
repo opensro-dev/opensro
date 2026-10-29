@@ -57,7 +57,7 @@ func TestLogosBaroiReleaseRetainsMovingTarget(t *testing.T) {
 func TestPlayerArrowReleaseRetainsMovingTarget(t *testing.T) {
 	rt, c, gid, skill, now := arrowFixture(t)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: gid}
-	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 	if decision != skillCastAccepted || len(start.Frames) != 1 {
 		t.Fatal("not preparing")
 	}

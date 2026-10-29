@@ -348,7 +348,7 @@ func (rt *Runtime) applyPeriodicPlayerPulse(effect linkedpulse.Effect, c, snapsh
 		return OpResult{}
 	}
 	hit, result, landed := rt.creditPlayerHit(playerHitInput{division: effect.Division, caster: c, snapshot: snapshot,
-		attacker: attacker, skill: skill, target: target, impacts: 1, now: now})
+		attacker: attacker, skill: skill, target: target, impacts: 1, now: now}, rt.tickDoors())
 	if !landed {
 		return OpResult{}
 	}
@@ -382,7 +382,7 @@ func (rt *Runtime) applyPeriodicCOSPulse(effect linkedpulse.Effect, c, snapshot 
 		return OpResult{}
 	}
 	owner := target.player
-	st := offensiveStage{division: effect.Division, character: c, snapshot: snapshot, skill: skill, attacker: attacker, now: now}
+	st := offensiveStage{division: effect.Division, character: c, snapshot: snapshot, skill: skill, attacker: attacker, now: now, doors: rt.tickDoors()}
 	casterAt := rt.liveSpawn(simulation.WorldKey(effect.Division, snapshot.Name), snapshot, now)
 	hit, planned := rt.planPlayerCOSHitAt(st, target, casterAt, 0, 0)
 	if !planned {

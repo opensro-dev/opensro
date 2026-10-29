@@ -61,7 +61,7 @@ func makeGroundPublication(t *testing.T, kind string) groundPublicationFixture {
 		f.item = heap.Gid
 		f.result = rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: heap.Gid}.Encode())
 	} else {
-		f.result = rt.commitIntentMovement(c, c.Snapshot(), intentMovement{intent: basicAttackIntent{DivisionID: testDivision, CharacterName: c.Name, TargetGid: 101, FollowTarget: kind == "follow"}, from: from, target: goal, goal: goal, nowMs: clock.NowMs()})
+		f.result = rt.commitIntentMovement(c, c.Snapshot(), intentMovement{intent: basicAttackIntent{DivisionID: testDivision, CharacterName: c.Name, TargetGid: 101, FollowTarget: kind == "follow"}, from: from, target: goal, goal: goal, nowMs: clock.NowMs()}, rt.handlerDoors())
 	}
 	if len(f.result.Frames) == 0 {
 		t.Fatal("approach did not publish")

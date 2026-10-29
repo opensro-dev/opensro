@@ -386,15 +386,24 @@ func TestPetAreaVictimsReadNothingOutsideTheCompanionCopy(t *testing.T) {
 	}
 	setCape(owner, 1)
 	setCape(victim, 2)
+	copied = nil
 	if found, foundPet := selectVictim(); !found || !foundPet {
 		t.Fatalf("different-cape victim not selected on the companion copy: player=%t companion=%t", found, foundPet)
 	}
-	seen := false
+	// The victim must be companion-copied twice by one selection: once
+	// by the area site itself, and once by the companion resolution
+	// that resolves his pet candidate through the same seam. A bare
+	// "the victim was copied" check agrees even with the area site
+	// back on the whole-record copy, because the resolution still
+	// copies him; the count is what pins the site (#2058).
+	victimCopies := 0
 	for _, name := range copied {
-		seen = seen || name == victim.Name
+		if name == victim.Name {
+			victimCopies++
+		}
 	}
-	if !seen {
-		t.Fatalf("area selector never took the companion copy of %s; copied %v", victim.Name, copied)
+	if victimCopies != 2 {
+		t.Fatalf("area selection companion-copied %s %d times, want 2 (the area site and the companion resolution; the area site back on the whole-record copy leaves 1); copied %v", victim.Name, victimCopies, copied)
 	}
 	setCape(victim, 1)
 	if found, foundPet := selectVictim(); found || foundPet {

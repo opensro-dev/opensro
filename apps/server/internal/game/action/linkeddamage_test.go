@@ -58,7 +58,7 @@ func TestFenceMovesThePhysicalShareToTheWarrior(t *testing.T) {
 		t.Fatalf("kept %+v moves %+v", kept, out.linkMoves)
 	}
 	before := *warrior.CurrentHP
-	shared := rt.strikeLinkedShares(testDivision, 9001, deathKiller{}, enterworld.SkillRow{ID: 1}, out.linkMoves, now)
+	shared := rt.strikeLinkedShares(testDivision, 9001, deathKiller{}, enterworld.SkillRow{ID: 1}, out.linkMoves, now, rt.tickDoors())
 	if got := before - *warrior.CurrentHP; got != 23 {
 		t.Fatalf("warrior lost %d, want 23", got)
 	}
