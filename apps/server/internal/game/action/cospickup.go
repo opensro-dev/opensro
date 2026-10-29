@@ -76,7 +76,7 @@ func finishCosPickupCommand(result OpResult, command wire.CosCommand) OpResult {
 			switch frame.Payload[1] {
 			case wire.ErrCodeStorageFull:
 				code = cosPickupBagFull
-			case cosPickupOwnerBagFull, cosPickupRetryBackoff:
+			case cosPickupBagFull, cosPickupOwnerBagFull, cosPickupRetryBackoff:
 				code = frame.Payload[1]
 			}
 		}
