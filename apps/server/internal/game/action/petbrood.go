@@ -187,9 +187,10 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	// brood-space gid) is refused before any state moves (#1943). A crow
 	// with no brood out needs no copy at all: only the recharge below
 	// runs for it, and that reads the live record inside its own door.
-	// The copy is the companion copy: the source resolves through
-	// companion rows and the Brood list is cloned identically in both
-	// modes (#2030; TestCrowBroodReadsNothingOutsideTheCompanionCopy).
+	// The copy is the companion copy (#2030): every reader below - the
+	// source and its brood, life, town, and the death storm's pet-combat
+	// step - reads companions, equipment and world facts, never a plain
+	// bag row or the avatar inventory.
 	crow := false
 	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		source := crowBroodSource(c, key.gid)
