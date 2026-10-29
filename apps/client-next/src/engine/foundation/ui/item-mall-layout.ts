@@ -236,6 +236,27 @@ export function mallPageLayout( rect: readonly [number, number, number, number],
 
 /*
 ================
+mallPageNumberPresentation
+
+How one page number of the manager draws. The page manager is born with
+three colours (its constructor defaults): white for a plain page, and
+0xFFFF9951 for both the styled face and the current page. Drawing a page
+(CIFPageManager_SetCurrentPage) gives the current page the third colour
+and the styled font face, and every other page the white and the plain
+face; the mall never recolours them.
+================
+*/
+export function mallPageNumberPresentation( page: number, current: number ): {
+	color: AuthoredControl["color"] | undefined;
+	fontStyle: number;
+} {
+	return page === current ?
+		{ color: [ 1, 0x99 / 255, 0x51 / 255, 1 ], fontStyle: 2 } :
+		{ color: undefined, fontStyle: 0 };
+}
+
+/*
+================
 mallCurrencyRows
 
 6BF320 starts y at 80, advances 22 before each mall row and grows the

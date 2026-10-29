@@ -31,6 +31,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { codeClosure } from "./codeStamp.mjs";
+import { qinshiTombEnabled } from "./qinshiTomb.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
 import { extractedRoot, gameRoot, generatedRoot, publicRoot, rebuildRoot } from "../world/paths.mjs";
 
@@ -40,10 +41,11 @@ const serverSourceRoot = path.resolve(
 );
 const statePath = path.join( rebuildRoot, ".state", "resource-build-fingerprint.json" );
 
+// v10: the effective tomb posture joined the knobs (#2024 follow-up).
 // v9: the pet design joined; it moved from scripts/build into the server (#1631).
 // v8: the Qin-Shi tomb overlay knob and the enterworld roots joined.
 // v7: the code closure and the pack-layout baseline joined the roots.
-const FINGERPRINT_VERSION = 9;
+const FINGERPRINT_VERSION = 10;
 const DIRECTORY_CONCURRENCY = 32;
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
@@ -60,6 +62,26 @@ export const ENV_KNOBS = [
 	// local tree must not skip that and keep its own layout.
 	"SRO_ASSET_PACK_BASELINE"
 ];
+
+/*
+================
+buildKnobLines
+
+The knob lines both the whole-build fingerprint and every lane memo
+hash: each raw ENV_KNOBS value, then the postures the bake derives
+from more than its env. The tomb bake follows the shard's deployed
+posture when SRO_QINSHI_TOMB is unset (shared/qinshiTomb.mjs), read
+from the release profile and the shard registry, neither of which is a
+fingerprint root; hashing only the raw env would let a profile or
+registry flip skip the bake and ship the other posture's assets, the
+#2024 split in reverse.
+================
+*/
+export function buildKnobLines() {
+	const lines = ENV_KNOBS.map( ( name ) => `env ${name}=${process.env[name] ?? ""}` );
+	lines.push( `posture SRO_QINSHI_TOMB=${qinshiTombEnabled()}` );
+	return lines;
+}
 
 // The entries whose source closure the fingerprint covers beyond scripts/build.
 const CODE_ENTRIES = [
@@ -188,8 +210,8 @@ export async function computeResourceBuildFingerprint() {
 
 	const hash = createHash( "sha256" );
 	hash.update( `v${FINGERPRINT_VERSION}\n` );
-	for ( const knob of ENV_KNOBS ) {
-		hash.update( `env ${knob}=${process.env[knob] ?? ""}\n` );
+	for ( const line of buildKnobLines() ) {
+		hash.update( `${line}\n` );
 	}
 	for ( const line of lines ) {
 		hash.update( line );

@@ -248,102 +248,6 @@ func MonsterDespawnBracketFrames(gids []uint32) []Frame {
 	}
 }
 
-/*
-==================
-playerMovementIntent
-
-playerMovementIntent is one immutable target-command snapshot. It is kept
-separate from playerPose.Pose because the command destination is an
-invalidation input, while the live pose owns combat and approach geometry.
-==================
-*/
-type playerMovementIntent struct {
-	destination Spawn
-	inFlight    bool
-	present     bool
-}
-
-/*
-================
-capturePlayerMovementIntent
-================
-*/
-func capturePlayerMovementIntent(world WorldState, nowMs int64) playerMovementIntent {
-	return playerMovementIntent{
-		destination: world.Spawn,
-		inFlight:    world.MovingAt(nowMs),
-		present:     true,
-	}
-}
-
-// playerPose is one live player position inside a division at tick time.
-/*
-================
-playerPose
-================
-*/
-type playerPose struct {
-	NativeBodyStatus uint8
-	Gid              uint32
-	Pose             Spawn
-	MovementIntent   playerMovementIntent
-	BodyRadius       BodyRadius
-	// Guard is the player's first-attack protection (the Bard's Noise),
-	// read from the action owner when the leg samples its players.
-	Guard monster.FirstAttackGuard
-	// OwnerGid names the player a companion entry belongs to; zero for a
-	// player. Companions are targets, never acquisition candidates.
-	OwnerGid uint32
-	// Band is a companion's COS band (TypeID 4).
-	Band uint8
-	// JobState is a player's job state: the dressed job, 4 outside
-	// job mode.
-	JobState uint8
-	// Mounted: whether the player is mounted on a COS when
-	// acquisition chooses a companion.
-	Mounted bool
-}
-
-/*
-================
-CompanionTarget
-
-One summoned, living companion a monster may strike: the action owner's
-projection of its world pose, body and status.
-================
-*/
-type CompanionTarget struct {
-	Gid              uint32
-	Pose             Spawn
-	BodyRadius       BodyRadius
-	NativeBodyStatus uint8
-	Band             uint8
-}
-
-/*
-==================
-chaseGuidance
-
-chaseGuidance returns the movement state the pursuit owner last observed.
-Direct test fixtures and stationary actors may omit MovementIntent; their
-live pose then acts as a settled command destination.
-==================
-*/
-func (player playerPose) chaseGuidance() monster.ChaseGuidance {
-	intent := player.MovementIntent
-	destination := player.Pose
-	if intent.present {
-		destination = intent.destination
-	}
-	return monster.NewChaseGuidance(monster.Pose{
-		RegionID: destination.RegionID,
-		X:        destination.X,
-		Y:        destination.Y,
-		Z:        destination.Z,
-		Heading:  destination.Angle,
-	}, intent.present && intent.inFlight)
-}
-
 // RunMonsterLeg advances actors independently of observer interest.
 /*
 ================
@@ -416,7 +320,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// its closure before returning, so the slots are reused safely.
 	var dispatch struct {
 		division string
-		instance monster.Instance
+		key      populationKey
+		gid      uint32
 		players  []playerPose
 	}
 	act := func(attack MonsterAttackOperation) {
@@ -424,7 +329,17 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// set. Mutable actor state remains in MonsterState.
 		owned := *ops
 		owned.BasicAttack = attack
-		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
+		// Resolve the actor here, inside the action lane's division
+		// lock: a mover set by a slower lane (an abnormal retime, a GM
+		// or impact set) while the leg waited for the lock is then the
+		// value the step starts from, instead of a dispatch-time
+		// snapshot the step's whole-value commits would overwrite
+		// (#2047 review).
+		actor := ops.Monsters.behaviorActorMover(dispatch.key, dispatch.gid)
+		if !actor.ok {
+			return
+		}
+		owned.advanceAndPublish(dispatch.division, actor, dispatch.players, nowMs, sessions, push)
 	}
 	stepped := 0
 	phaseStarted = time.Now()
@@ -446,10 +361,14 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		}
 		for _, gid := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
-			// Read a value snapshot at dispatch so despawn/retaliation between
-			// scheduling and dispatch cannot revive an obsolete actor snapshot.
-			instance, exists := ops.Monsters.behaviorActor(batch.key, gid)
-			if !exists {
+			// All dispatch decides is that the actor is still there: a
+			// despawn between scheduling and dispatch drops it here, and
+			// its instance and mover are read only inside the action
+			// lane, under its division lock (act), so nothing read here
+			// can go stale while the leg waits for that lock (#2047
+			// review). The direct path below resolves at the same
+			// adjacency it always had.
+			if !ops.Monsters.behaviorActorLive(batch.key, gid) {
 				continue
 			}
 			if ops.noteResumed(batch.key, gid) {
@@ -459,11 +378,15 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.instance, dispatch.players = divisionID, instance, players
+				dispatch.division, dispatch.key, dispatch.gid, dispatch.players = divisionID, batch.key, gid, players
 				ops.RunAction(divisionID, act)
 				continue
 			}
-			ops.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)
+			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
+			if !actor.ok {
+				continue
+			}
+			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
 	}
 	stats.batch = time.Since(phaseStarted)

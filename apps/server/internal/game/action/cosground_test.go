@@ -125,6 +125,101 @@ func cosGroundRoundTrip(t *testing.T, paced bool) {
 
 /*
 ================
+TestCOSGroundManualPickupFullPetBagAnswersNativeDisable
+
+The manual 0x706D pet pickup (move type 0x11) against a full pet
+container: the reference server's COS-container-full answer is the
+0xB4 class the client drop manager (77DD10) retires the target on.
+Answering the player-bag byte (0x07) instead leaves the client's
+pet retrying the same drop until the 30-second ownership window
+lapses and the drop goes free-for-all - the SUN-shield loss of
+BR-261028-2106-FF3D, where the owner's own pet was refused twenty
+times and another character banked the drop after the window.
+The drop and the container stay untouched either way.
+================
+*/
+func TestCOSGroundManualPickupFullPetBagAnswersNativeDisable(t *testing.T) {
+	c := testCharacter()
+	refs := testCosSource(testItems())
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	row := c.MissionInventory[0]
+	row.Slot = 0
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 1, Rows: []domain.InventoryRow{row}}}
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: row.RefObjID, Codename: row.Codename, TypeFlags: row.TypeFlags,
+		StackCount: 1, OwnerJID: enterworld.ObjectIDForCharacter(c),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y)})
+	p, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) != 1 || r.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		len(r.Frames[0].Payload) != 2 || r.Frames[0].Payload[0] != 2 || r.Frames[0].Payload[1] != cosPickupBagFull {
+		t.Fatalf("full pet container answered %v, want B06D [02 B4] (native COS-full disable class)", r.Frames)
+	}
+	if len(rt.Ground.All(testDivision)) != 1 || len(c.ActiveCOS.Container.Rows) != 1 {
+		t.Fatalf("refused pickup consumed state: ground=%v rows=%v", rt.Ground.All(testDivision), c.ActiveCOS.Container.Rows)
+	}
+}
+
+/*
+================
+TestCOSGroundManualPickupSealEquipmentDrop
+
+A Seal of Sun equipment drop (ITEM_CH_SHIELD_09_C_RARE) picked up by
+the drop owner's own grab pet, in range with container room, must
+land in the pet container - the pickup Verkohlt's pet was refused
+twenty times in BR-261028-2106-FF3D. No seal or equipment gate may
+refuse it.
+================
+*/
+func TestCOSGroundManualPickupSealEquipmentDrop(t *testing.T) {
+	c := testCharacter()
+	items := testItems()
+	items["ITEM_CH_SHIELD_09_C_RARE"] = &enterworld.ItemRef{
+		RefObjID: 25252, Codename: "ITEM_CH_SHIELD_09_C_RARE", TypeIDs: [4]int64{3, 1, 6, 2},
+		Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
+		Combat: &enterworld.ItemCombatRef{},
+	}
+	refs := testCosSource(items)
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 28}}
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 25252, Codename: "ITEM_CH_SHIELD_09_C_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), StackCount: 1, OwnerJID: enterworld.ObjectIDForCharacter(c),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y)})
+	p, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rt.HandleItemMove(testDivision, c, p)
+	if len(r.Frames) == 0 || r.Frames[0].Opcode != wire.OpItemMoveResponse || len(r.Frames[0].Payload) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("owner pet seal pickup answered %v, want a success receipt", r.Frames)
+	}
+	if len(rt.Ground.All(testDivision)) != 0 || len(c.ActiveCOS.Container.Rows) != 1 ||
+		c.ActiveCOS.Container.Rows[0].Codename != "ITEM_CH_SHIELD_09_C_RARE" {
+		t.Fatalf("seal drop did not land in the pet container: ground=%v rows=%v",
+			rt.Ground.All(testDivision), c.ActiveCOS.Container.Rows)
+	}
+}
+
+/*
+================
 TestCOSGroundQuestItemGrantsToOwnerPlayerBagAndUpdatesQuestProgress
 
 The native pickup recipient choice: when a grab pet

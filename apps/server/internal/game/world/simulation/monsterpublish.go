@@ -15,8 +15,6 @@ package simulation
 
 import (
 	"time"
-
-	"opensro.online/server/internal/game/world/monster"
 )
 
 /*
@@ -24,14 +22,15 @@ import (
 advanceAndPublish
 ================
 */
-func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monster.Instance, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
+func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor behaviorActorSnapshot, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
 	// Part C times the advance itself, so the direct dispatch below and
 	// the RunAction closure path accumulate into the same figure.
 	if ops.leg != nil {
 		started := time.Now()
 		defer func() { ops.leg.noteAdvance(time.Since(started)) }()
 	}
-	frames, targeted := ops.advanceInstance(divisionID, instance, players, nowMs)
+	instance := actor.instance
+	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, actor.mover, true, players, nowMs)
 	for _, session := range ops.divisionSessions(divisionID, sessions) {
 		if len(frames) > 0 && ops.shownMonsters[session.SessionID][instance.Gid] {
 			push.PushToSession(session.SessionID, frames)

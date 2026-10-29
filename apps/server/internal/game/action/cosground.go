@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -95,9 +97,14 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	var picked grounditem.Item
+	// The refusal gates below answer one generic byte; which gate fired
+	// is logged once per refusal (the B-11 rule the player bag already
+	// follows), so a repeat report names the cause instead of the byte.
+	refusalCause := ""
 	attempt.doors.update(c, "cos-ground-item", func() bool {
 		bag, inv, valid := rt.ownedCOSContainer(c, q.CosGID)
 		if !valid || c.CompanionByGID(q.CosGID).Mounted || enterworld.CurrentHP(c) == 0 {
+			refusalCause = "container-unavailable"
 			return false
 		}
 		if q.MovementType == wire.MoveTypeCosDrop {
@@ -116,12 +123,14 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		}
 		item, found := rt.characterGround(division, c, q.GroundGID)
 		if !found || item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
+			refusalCause = "not-found-or-reserved"
 			return false
 		}
 		item.Summon.RefreshRentalTimes(now.Unix())
 		from := grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
 		if !grounditem.SameWorld(from, item.Position) || math.IsNaN(distance) {
+			refusalCause = "off-plane"
 			return false
 		}
 		if distance > grounditem.ExecuteRange {
@@ -157,7 +166,25 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			}
 			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon)}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
-				result = failureResult(fault.Code)
+				code := fault.Code
+				if code == wire.ErrCodeStorageFull {
+					// The full bag here is the COS container: the
+					// reference server's 0xB4 class (cospickup.go) is
+					// what retires the client's auto-pickup target.
+					// The player-bag byte (0x07) leaves it retrying
+					// the drop until the ownership window lapses.
+					code = cosPickupBagFull
+				}
+				log.WithField("character", c.Name).
+					WithField("cos", q.CosGID).
+					WithField("ground", q.GroundGID).
+					WithField("move", q.MovementType).
+					WithField("code", code).
+					WithField("cause", "grant-fault").
+					WithField("occupied", inv.Len()).
+					WithField("capacity", bag.Capacity).
+					Warn("cos ground refused")
+				result = failureResult(code)
 				return false
 			}
 			candidate := *c.CompanionByGID(q.CosGID)
@@ -165,13 +192,16 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			refs := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 			ref, ok := refs.CharacterRefByCodename(candidate.Codename)
 			if !ok {
+				refusalCause = "grant-build"
 				return false
 			}
 			if _, err := enterworld.BuildCOSRecord(&candidate, ref, rt.deps.ItemReferences()); err != nil {
+				refusalCause = "grant-build"
 				return false
 			}
 			granted, ok := inv.At(grant.DestSlot)
 			if !ok {
+				refusalCause = "grant-build"
 				return false
 			}
 			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
@@ -194,6 +224,15 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		result = OpResult{Frames: append(frames, public...), Broadcast: public}
 		return true
 	})
+	if refusalCause != "" {
+		log.WithField("character", c.Name).
+			WithField("cos", q.CosGID).
+			WithField("ground", q.GroundGID).
+			WithField("move", q.MovementType).
+			WithField("code", wire.ErrCodeInvalidRequest).
+			WithField("cause", refusalCause).
+			Warn("cos ground refused")
+	}
 	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && picked.RefObjID != 0 && !picked.IsGold() {
 		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
 	}

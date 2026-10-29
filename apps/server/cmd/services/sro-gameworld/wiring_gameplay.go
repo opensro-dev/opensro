@@ -34,6 +34,7 @@ import (
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
@@ -954,6 +955,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	shadowMutes := shadowmute.Open(store.DirForShardFromEnv(game.divisionID))
 	game.chat.ShadowMuted = shadowMutes.Muted
 	game.items.ChatShadowMuted = shadowMutes.Muted
+	// Port-only, not native: the staff's moderation chat log (chatlog),
+	// daily files beside the mute list in the shard's authority
+	// directory - never the public site or API. Retention is
+	// SRO_CHAT_LOG_RETAIN_DAYS (default 30).
+	moderationLog := chatlog.Open(store.DirForShardFromEnv(game.divisionID), chatlog.RetainDaysFromEnv())
+	game.chat.ModerationLog = moderationLog
+	game.items.ModerationLog = moderationLog
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)
