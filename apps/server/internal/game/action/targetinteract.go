@@ -292,13 +292,13 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 	})
 	approach := grounditem.PlanApproach(from, groundItem.Position, worldSnapshot.MovementMode)
 	if !approach.InRange {
-		return prependOpResult(stopped, rt.armApproach(divisionID, worldKey, pendingKey, character, groundItem, approach, now))
+		return prependOpResult(stopped, rt.armApproach(divisionID, worldKey, pendingKey, character, groundItem, approach, now, rt.handlerDoors()))
 	}
 
 	// In range: a stale pending for another gid is superseded.
 	rt.Pending.Clear(pendingKey)
 
-	return prependOpResult(stopped, rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem))
+	return prependOpResult(stopped, rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem, rt.handlerDoors()))
 }
 
 // skillRoute names the owner a pressed skill goes to, in dispatch order.
@@ -452,7 +452,7 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 	case skillRouteWall:
 		return rt.acceptWall(divisionID, character, snapshot, cast, skill)
 	case skillRouteStatusCast:
-		result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, now, nil)
+		result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, now, nil, rt.handlerDoors())
 		return result
 	case skillRouteAreaBurst:
 		return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, now)

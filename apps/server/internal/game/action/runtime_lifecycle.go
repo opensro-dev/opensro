@@ -376,9 +376,10 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 			groundItem,
 			approach,
 			now,
+			rt.tickDoors(),
 		), character
 	}
-	return rt.grantPickup(pending.DivisionID, worldKey, character, snapshot, groundItem), character
+	return rt.grantPickup(pending.DivisionID, worldKey, character, snapshot, groundItem, rt.tickDoors()), character
 }
 
 /*

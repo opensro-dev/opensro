@@ -107,7 +107,7 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	reach := rt.playerActionReach(division, snapshot, skill, loadout)
 	intent := basicAttackIntent{DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID, ActionReach: reach, SingleCast: true}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(c, intent, now)
+	return rt.advanceBasicAttackIntent(c, intent, now, rt.handlerDoors())
 }
 
 /*

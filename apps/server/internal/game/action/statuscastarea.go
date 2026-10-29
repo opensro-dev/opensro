@@ -28,7 +28,7 @@ Admission and preparation are shared with the planted trap. The release
 debits the prepared cost even when no monster stands in range.
 ================
 */
-func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if !skill.StatusCast || skill.TargetRequired || rt.Monsters == nil {
 		return OpResult{DiagnosticRefusal: "status-area-admission-refused"}, skillCastRefused
 	}
@@ -75,7 +75,7 @@ func (rt *Runtime) acceptUntargetedStatusCast(division string, c, snapshot *ente
 		return OpResult{DiagnosticRefusal: "status-area-release-commit-refused"}, skillCastRefused
 	}
 	gid := enterworld.ObjectIDForCharacter(c)
-	published := rt.publishArea(division, snapshot, skill, 1, plan, commit, now)
+	published := rt.publishArea(division, snapshot, skill, 1, plan, commit, now, doors)
 	success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: pending.token}
 	released := wire.SkillCastReleaseFrame(pending.token, 0)
 	if len(published.targets) > 0 {
