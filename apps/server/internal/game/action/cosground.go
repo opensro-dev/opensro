@@ -37,6 +37,9 @@ type cosGroundAttempt struct {
 	now           time.Time
 	allowApproach bool
 	command       bool
+	// doors picks the caller's lane: the item-move and COS-command
+	// handlers answer at once, the pet tick joins the batch.
+	doors characterDoors
 }
 
 /*
@@ -56,7 +59,7 @@ func (rt *Runtime) applyCosGround(division string, c *enterworld.Character, q wi
 		result := finishPendingCosPickup(session, failureResult(wire.ErrCodeInvalidRequest))
 		retired = result.Frames
 	}
-	result := rt.applyCosGroundAt(division, c, q, cosGroundAttempt{now: rt.Now(), allowApproach: true})
+	result := rt.applyCosGroundAt(division, c, q, cosGroundAttempt{now: rt.Now(), allowApproach: true, doors: rt.handlerDoors()})
 	result.Frames = append(retired, result.Frames...)
 	return result
 }
@@ -87,12 +90,12 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
 	}
-	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now, command: attempt.command}); handled {
+	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now, command: attempt.command, doors: attempt.doors}); handled {
 		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	var picked grounditem.Item
-	rt.deps.Update(c, "cos-ground-item", func() bool {
+	attempt.doors.update(c, "cos-ground-item", func() bool {
 		bag, inv, valid := rt.ownedCOSContainer(c, q.CosGID)
 		if !valid || c.CompanionByGID(q.CosGID).Mounted || enterworld.CurrentHP(c) == 0 {
 			return false
@@ -210,6 +213,7 @@ type petPickupAt struct {
 	sharedOwner uint32
 	now         time.Time
 	command     bool
+	doors       characterDoors
 }
 
 /*
@@ -283,7 +287,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		}
 	}
 	result := rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
-		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor})
+		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor}, p.doors)
 	result.Frames = withoutActionState(result.Frames)
 	if isPickupFault(result, wire.ErrCodeStorageFull) {
 		if !p.command {
@@ -376,7 +380,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 	var picked grounditem.Item
 	var peerPetGID uint32
 	var peerBagFull bool
-	rt.deps.Update(recipient, "cos-ground-item", func() bool {
+	p.doors.update(recipient, "cos-ground-item", func() bool {
 		peerPetGID = rt.findPickupPetGID(recipient)
 		if peerPetGID == 0 {
 			return false

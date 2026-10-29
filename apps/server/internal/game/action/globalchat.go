@@ -101,6 +101,10 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}, line}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
 	division, name := use.division, c.Name
+	if rt.ChatShadowMuted != nil && rt.ChatShadowMuted(c.AccountID) {
+		// The item is spent and the author sees the line; nobody else does.
+		return true
+	}
 	*after = func() {
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
