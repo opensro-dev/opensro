@@ -25,6 +25,9 @@ const reference = JSON.parse( readFileSync( "tests/fixtures/native/arrow-referen
 const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json", "utf8" ) );
 const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) );
 const catalog = createEffectDecoder().decode( new TextEncoder().encode( JSON.stringify( raw ) ) );
+// Published SCT_ARROW stages: 666 retail ones plus the 10 the Qin-Shi tomb
+// monsters bring (MSKILL_TQ_TOMBARCHER_* and MSKILL_TQ_TOMBBUGGHOST_*, #2024).
+const PUBLISHED_ARROW_STAGES = 676;
 const stage = {
 	resource: "arrow.bsr",
 	phase: "SHOT",
@@ -139,7 +142,7 @@ test(
 				if ( s.resource === "weapon" ) weapons++;
 			}
 		}
-		assert.equal( arrows, 666 );
+		assert.equal( arrows, PUBLISHED_ARROW_STAGES );
 		assert.equal( weapons, 26 );
 		const decoded = createEffectDecoder().decode(
 			new TextEncoder().encode(
@@ -163,7 +166,7 @@ test(
 	}
 );
 test(
-	"all 666 published arrow stages admit, including held arrows, splash and equipped weapon copies",
+	"every published arrow stage admits, including held arrows, splash and equipped weapon copies",
 	NATIVE_ONLY,
 	() => {
 		let count = 0;
@@ -181,7 +184,7 @@ test(
 				}
 			}
 		}
-		assert.equal( count, 666 );
+		assert.equal( count, PUBLISHED_ARROW_STAGES );
 	}
 );
 test("auxiliary creation order, detail gate and held-arrow fade match original helper execution", () => {
