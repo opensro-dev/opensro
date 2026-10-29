@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -206,6 +207,28 @@ const (
 	// refuse without writing a code.
 	playerAttackFlagRefused uint16 = 0x3006
 )
+
+/*
+================
+jobMonsterTargetRefusal
+
+The attack-target validation's monster branch: a job bandit
+refuses its own side. A thief bandit may be struck only by a trader or
+a hunter, a hunter bandit only by a thief, and a player outside job
+mode (no suit answers state 4) by neither. The refusal is the generic
+0x3006 the validation answers with.
+================
+*/
+func (rt *Runtime) jobMonsterTargetRefusal(attacker *enterworld.Character, target monster.Instance) uint16 {
+	job, _ := rt.playerRelationEquipment(attacker)
+	if job == 0 {
+		job = enterworld.NoJobClass
+	}
+	if target.JobAttackerRefused(job) {
+		return 0x3006
+	}
+	return 0
+}
 
 /*
 ================

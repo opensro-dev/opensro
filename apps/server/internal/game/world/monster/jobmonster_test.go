@@ -42,3 +42,34 @@ func TestJobMonsterRefusesItsOwnSide(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestJobMonsterAttackerRefused
+
+The validation from the attacker's side: a thief monster may be struck
+only by a trader or a hunter, a hunter monster only by a thief, and an
+ordinary monster by anyone. State 4 (no suit) is refused by both.
+================
+*/
+func TestJobMonsterAttackerRefused(t *testing.T) {
+	monsterOf := func(typeID4 uint8) Instance {
+		var i Instance
+		i.Ref.TidWord, i.Ref.TypeID4 = 0x00c6, typeID4
+		return i
+	}
+	thief, hunter, ordinary := monsterOf(2), monsterOf(3), monsterOf(1)
+	for job := uint8(1); job <= 4; job++ {
+		wantThief := job == jobStateThief || job == jobStateSpecial
+		wantHunter := job != jobStateThief
+		if got := thief.JobAttackerRefused(job); got != wantThief {
+			t.Errorf("thief monster, attacker job %d: refused %v, want %v", job, got, wantThief)
+		}
+		if got := hunter.JobAttackerRefused(job); got != wantHunter {
+			t.Errorf("hunter monster, attacker job %d: refused %v, want %v", job, got, wantHunter)
+		}
+		if ordinary.JobAttackerRefused(job) {
+			t.Errorf("ordinary monster refused attacker job %d", job)
+		}
+	}
+}

@@ -235,10 +235,11 @@ func TestThiefCannotStrikeALevelOneCaravanTransport(t *testing.T) {
 TestPlayerKillOfATransportScattersItsCargo
 
 A player's fatal hit on a transport settles through the companion owner's
-death, as a monster's does: the goods drop around it unowned - the
-publish resets a drop's ground owner to the winner except for trade
-goods, and every cargo row is one - and its kind-1 release deletes the
-record. The owner is untouched.
+death, as a monster's does: the goods drop around it unowned, and its
+kind-1 release deletes the record. The owner is untouched. A live
+transport carries only trade goods, which the publish's owner reset
+skips; the scatter publishes every row unowned, so a stack of potions
+stands in for them here.
 ================
 */
 func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
