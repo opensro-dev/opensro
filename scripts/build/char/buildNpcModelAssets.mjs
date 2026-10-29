@@ -277,9 +277,14 @@ export function buildRetailAnimationCatalog( bsr, clips ) {
 /*
 ================
 resolveNpcModel
+
+Resolve one roster codename to the model this bake publishes for it
+(the row's own .bsr/.cpd, or its base chain's), or null when the row is
+absent. Exported for the asset contracts: a planned species is exactly
+a roster reference this resolves.
 ================
 */
-function resolveNpcModel( codename, rows ) {
+export function resolveNpcModel( codename, rows ) {
 	const cols = rows.get( codename );
 	if ( !cols ) return null;
 	let bsrCols = cols;
