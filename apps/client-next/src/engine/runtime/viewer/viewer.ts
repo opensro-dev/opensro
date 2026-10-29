@@ -120,6 +120,7 @@ export interface ViewerCharacters {
 	glowing( gid: number ): boolean;
 	linkedRide( entity: EntityState ): number | null | undefined;
 	error(): string | null | undefined;
+	failure?(): { path: string | null; message: string; } | null;
 }
 
 /*
@@ -296,7 +297,9 @@ owners. A look whose body or items the catalogue lacks fails
 */
 export function createViewer( host: ViewerHost ) {
 	// settle is the one way out of the still promise: a PNG or a reason.
-	let settle: ( outcome: { png: string; } | { reason: ViewerReason; stage: ViewerStage; } ) => void = () => {};
+	let settle: (
+		outcome: { png: string; } | { reason: ViewerReason; stage: ViewerStage; detail?: string; }
+	) => void = () => {};
 	/*
 	================
 	armStill
@@ -309,7 +312,10 @@ export function createViewer( host: ViewerHost ) {
 			settle = outcome =>
 				"png" in outcome ?
 					resolve( outcome.png ) :
-					reject( Error( outcome.reason, { cause: { stage: outcome.stage } } ) );
+					reject( Error(
+						outcome.detail ? `${outcome.reason}: ${outcome.detail}` : outcome.reason,
+						{ cause: { stage: outcome.stage } }
+					) );
 		} );
 		// An unawaited rejection is still reported through the message.
 		still.catch( () => {} );
@@ -350,8 +356,13 @@ export function createViewer( host: ViewerHost ) {
 		if ( finished ) return;
 		finished = true;
 		const at = stage();
+		// An asset failure names its source: the batch reading this
+		// rejection cannot tell one monster's model from another's by
+		// "asset-load" alone.
+		const failure = reason === "asset-load" ? host.characters.failure?.() ?? null : null;
+		const detail = failure ? (failure.path ? `${failure.path}: ${failure.message}` : failure.message) : undefined;
 		post( { type: "viewer-error", reason, stage: at } );
-		settle( { reason, stage: at } );
+		settle( { reason, stage: at, detail } );
 	};
 	/*
 	================
