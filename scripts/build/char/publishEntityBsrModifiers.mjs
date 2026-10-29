@@ -14,12 +14,33 @@ import { entityMaterialMetadata } from "./entityMaterialMetadata.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { parseCharacterBsr } from "./formats.mjs";
+import { compoundBodyBsr } from "./itemAttachments.mjs";
 import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
 import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { PORT_PET_DROP_MODEL } from "../shared/portItemRows.mjs";
+
+// A compound resource (.cpd, the Qin-Shi tomb flamemaster, #2024).
+const COMPOUND_RESOURCE = /\.cpd$/i;
+
+/*
+================
+entitySource
+
+The BSR whose modifiers a manifest resource carries: the resource itself,
+or a compound's body branch, which is what the npc builder bakes into a
+compound row (assembleCompoundCharacter).
+================
+*/
+export async function entitySource( resourcePath ) {
+	if ( !COMPOUND_RESOURCE.test( resourcePath ) ) {
+		return { path: resourcePath, buffer: fs.readFileSync( dataAssetPath( resourcePath ) ) };
+	}
+	const body = await compoundBodyBsr( resourcePath );
+	return { path: body.bsrPath, buffer: body.buffer };
+}
 
 // Metadata-only rebuild: retain byte-identical meshes and the VAT owner's
 // enrichment. Full model builders publish the same original BSR payload.
@@ -48,9 +69,10 @@ export async function publishEntityBsrModifiers() {
 				domain === "npc" && bsr === CROW_EGG_BSR
 			) continue;
 			if ( !cache.has( bsr ) ) {
-				cache.set( bsr, parseCharacterBsr( fs.readFileSync( dataAssetPath( bsr ) ), bsr ) );
+				const source = await entitySource( bsr );
+				cache.set( bsr, { ...source, modifiers: parseCharacterBsr( source.buffer, source.path ) } );
 			}
-			const modifiers = cache.get( bsr );
+			const { buffer: sourceBuffer, path: sourcePath, modifiers } = cache.get( bsr );
 			row.modifierSets = modifiers.modifierSets;
 			row.particleModifiers = modifiers.particleModifiers;
 			row.materialModifiers = modifiers.materialModifiers;
@@ -66,12 +88,7 @@ export async function publishEntityBsrModifiers() {
 				) {
 					if ( !updated.has( url ) ) {
 						const original = readPublishedAssetBytesSync( url, publicRoot ),
-							bytes = await entityMaterialMetadata(
-								original,
-								fs.readFileSync( dataAssetPath( bsr ) ),
-								bsr,
-								slot
-							);
+							bytes = await entityMaterialMetadata( original, sourceBuffer, sourcePath, slot );
 						writeIntoPublicTreeSync( path.join( publicRoot, url ), bytes );
 						updated.set( url, bytes.length );
 						paths.push( url );

@@ -1,22 +1,26 @@
 /*
 ===========================================================================
 
-entityCompoundParticles.test.mjs - effect references read a .cpd entity
+entityCompoundParticles.test.mjs - entity readers take a .cpd entity
 
 The npc manifest carries a compound model once the tomb flamemaster is on
 the roster (#2024): res/char/china/shinmu.cpd. The effect builder used to
 read every npc model as a BSR and stopped the asset build on it. These
 tests read the retail compound through its branches, with and without
-the tomb posture that supplies the degree-9 stand-ins.
+the tomb posture that supplies the degree-9 stand-ins. The modifier
+refresh (publishEntityBsrModifiers) reads a compound's body branch, the
+BSR the npc builder bakes into a compound row.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { entitySource } from "../../build/char/publishEntityBsrModifiers.mjs";
 import { collectEntityParticleReferences, readEntityModel } from "../../build/effects/buildEffectPrograms.mjs";
 
 const SHINMU = "res/char/china/shinmu.cpd";
 const HAIR_PARTICLES = 1;
+const SHINMU_BODY = "res/char/china/chinaman_warrior.bsr";
 
 /*
 ================
@@ -82,4 +86,15 @@ test("the npc manifest's compound row yields references instead of stopping the 
 		assert.equal( reference.domain, "npc" );
 		assert.equal( reference.modelPath, SHINMU );
 	}
+});
+
+/*
+================
+modifier refresh reads a compound's body branch
+================
+*/
+test("the modifier refresh reads a compound entity through its body branch", async () => {
+	const source = await entitySource( SHINMU );
+	assert.equal( source.path, SHINMU_BODY );
+	assert.equal( source.buffer.subarray( 0, 12 ).toString( "latin1" ), "JMXVRES 0109" );
 });

@@ -365,6 +365,23 @@ async function resolveCompoundBranchBsr( branchPath ) {
 
 /*
 ================
+compoundBodyBsr
+
+A compound's body: branch 0, the kind-0 character BSR. A compound row's
+manifest modifiers are this branch's (assembleCompoundCharacter returns its
+BSR), so every reader that refreshes them reads the same branch.
+================
+*/
+export async function compoundBodyBsr( cpdPath ) {
+	const cpd = parseCompound( await loadDataAsset( cpdPath ), cpdPath );
+	if ( cpd.branches.length === 0 ) {
+		throw new Error( `${cpdPath}: compound has no branches` );
+	}
+	return resolveCompoundBranchBsr( cpd.branches[0] );
+}
+
+/*
+================
 assembleCompoundCharacter
 
 0x00a577b0 (CResourceMgr_LoadCompoundObjectFromArchive) -> 0x00a9b280
