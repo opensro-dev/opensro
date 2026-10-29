@@ -41,7 +41,10 @@ func broodCopyTrace(t *testing.T, full bool) string {
 			return rt.characterSnapshot(divisionID, character)
 		}
 	}
-	skill := learnPetBook(t, c, 49)
+	// Book 51 is the brood row's third option: only BroodBook 3 storms
+	// when the clone dies (petbrood.go), so a lower book would leave the
+	// death storm's readers unexercised.
+	skill := learnPetBook(t, c, 51)
 	rt.castCrowBrood(testDivision, c, key.gid, skill, clock.NowMs())
 	if len(c.Brood) != 1 {
 		t.Fatal("the crow laid no egg; the trace would agree vacuously")
@@ -62,6 +65,20 @@ func broodCopyTrace(t *testing.T, full bool) string {
 	step(time.Second)
 	if len(c.Brood) != 0 {
 		t.Fatal("the dead clone was not removed")
+	}
+	// The storm's frames ride the monster leg: they join the trace, and
+	// exactly one wind visual proves the storm ran on this copy.
+	storms := 0
+	for _, batch := range rt.drainMonsterLegRecipients() {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == broodWindOpcode {
+				storms++
+			}
+		}
+		trace += fmt.Sprintf("leg %d %+v\n", batch.SourceGID, batch.Frames)
+	}
+	if storms != 1 {
+		t.Fatalf("the clone's death stormed %d times, want 1; the trace would not cover the storm's readers", storms)
 	}
 	return trace
 }
