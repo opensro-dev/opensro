@@ -17,11 +17,15 @@ package action
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/game/abnormal"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -83,6 +87,201 @@ func TestPetPassReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 
 /*
 ================
+petShieldTrace
+
+A tier-2 party shield cast on a fattened owner, partly absorbed, then
+advanced past expiry: the shield tick revalidates the owner and the
+recipient through its copy and retires both shields. (The tier-3
+burst settlement runs through the same copies and is covered by
+TestPetShieldTiersAndExpiry and TestPetShieldBurstKillCreditsNoQuest;
+its combat rolls make two fixture runs disagree with each other, so
+it cannot anchor a trace.) Run narrow and forced-full: every batch
+must agree, in any order - the tick walks its rows map.
+================
+*/
+func petShieldTrace(t *testing.T, full bool) string {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	near := nearbyCharacter(rt, c, 21, "shield-near", 50)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	petPeriodicFatten(c)
+	if full {
+		rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			return rt.characterSnapshot(divisionID, character)
+		}
+	}
+	skill := learnPetBook(t, c, 20)
+	result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs())
+	if len(result.Broadcast) < 2 {
+		t.Fatalf("no shields: %+v", result)
+	}
+	self := petShieldKey{testDivision, enterworld.ObjectIDForCharacter(c)}
+	rt.absorbPetShield(testDivision, self.gid, rt.petShields.rows[self].amount-20, clock.NowMs())
+	var lines []string
+	for _, now := range []int64{clock.NowMs() + 4999, clock.NowMs() + 5000} {
+		for _, batch := range rt.advancePetShields(now) {
+			lines = append(lines, fmt.Sprintf("%+v", batch))
+		}
+	}
+	if len(rt.petShields.rows) != 0 {
+		t.Fatal("shield retained; the trace would agree vacuously")
+	}
+	if len(lines) == 0 {
+		t.Fatal("shield tick produced no batches; the trace would agree vacuously")
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+/*
+================
+TestPetShieldTickReadsNothingOutsideTheCompanionCopy
+================
+*/
+func TestPetShieldTickReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	narrow, full := petShieldTrace(t, false), petShieldTrace(t, true)
+	a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
+	if len(a) != len(b) {
+		t.Fatalf("trace lengths diverged: narrow %d lines, full %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[i])
+		}
+	}
+}
+
+/*
+================
+petCounterTrace
+
+Ten grouped hits charge the bear counter and the tenth stuns, on a
+scripted roll (draw 4999, fully deterministic). The owner record is
+fattened after the fixture's setup: the bear lives in a bag row, so
+the counter resolves it through the companion walk either way.
+================
+*/
+func petCounterTrace(t *testing.T, full bool) string {
+	rt, clock, c, original := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	ref := original.Ref
+	ref.Level = 90
+	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{ref.RefObjID: ref}, nil))
+	rt.Monsters.SetAbnormalContext(monsterAbnormalContext{rt})
+	rt.Monsters.SetTimeSource(clock.Now)
+	rt.Monsters.StartDivision(testDivision)
+	first := roarField(t, rt, c, clock)
+	learnPetBook(t, c, 30)
+	at := rt.LiveSpawnFor(testDivision, c)
+	lease, _ := rt.casterPopulation(testDivision, c)
+	gids := []uint32{first.Gid}
+	for _, distance := range []float64{40, 50, 60, 70, 81} {
+		point := at
+		point.X += distance
+		rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{Division: testDivision, Population: lease, RefObjID: ref.RefObjID, Count: 1, Position: point, NowMs: clock.NowMs()})
+		rows := rt.Monsters.CombatCandidatesInPopulation(testDivision, lease, point, 1, clock.NowMs(), true)
+		if len(rows) != 1 {
+			t.Fatal("missing group fixture")
+		}
+		gids = append(gids, rows[0].Gid)
+	}
+	state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
+	bearAt := at
+	bearAt.X += 300
+	state.follower = simulation.NewPetFollower(c.ActiveCOS.GID, bearAt)
+	c.MissionInventory = []enterworld.InventoryRow{{Slot: 13, Summon: c.ActiveCOS}}
+	c.ActiveCOS = nil
+	petPeriodicFatten(c)
+	rt.CombatRoll = func() (uint32, error) { return 4999, nil }
+	if full {
+		rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			return rt.characterSnapshot(divisionID, character)
+		}
+	}
+	hit := petCounterHit{division: testDivision, owner: c, victim: enterworld.ObjectIDForCharacter(c), formulas: []combat.Result{{Damage: 1}}, now: clock.NowMs()}
+	trace := ""
+	for i := 0; i < 9; i++ {
+		hit.attacker = gids[i%4]
+		trace += fmt.Sprintf("%+v\n", rt.petCounterStun(hit))
+	}
+	hit.attacker = gids[4]
+	trace += fmt.Sprintf("%+v\n", rt.petCounterStun(hit))
+	stunned := 0
+	for _, gid := range gids {
+		mob, _ := rt.Monsters.Get(testDivision, gid)
+		if mob.Abnormal != nil && mob.Abnormal.Slots[abnormal.Stun].Active {
+			stunned++
+		}
+	}
+	if stunned == 0 {
+		t.Fatal("counter never stunned; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("stunned=%d hits=%v", stunned, state.trained.counterHits)
+}
+
+/*
+================
+TestPetCounterReadsNothingOutsideTheCompanionCopy
+================
+*/
+func TestPetCounterReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+	narrow, full := petCounterTrace(t, false), petCounterTrace(t, true)
+	if narrow != full {
+		t.Fatalf("counter traces diverged\nnarrow: %.900s\nfull:   %.900s", narrow, full)
+	}
+}
+
+/*
+================
+TestPetShieldTickTakesTheCompanionCopy
+
+Routing guard for the shield tick's two copies: the seam must fire
+for the owner (and the recipient) on an advance, so a site reverted
+to the whole-record copy fails here even though its frames agree.
+================
+*/
+func TestPetShieldTickTakesTheCompanionCopy(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	roarField(t, rt, c, clock)
+	c.MissionInventory = nil
+	rt.AttackPetExpansion = true
+	near := nearbyCharacter(rt, c, 21, "shield-near", 50)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
+	}
+	skill := learnPetBook(t, c, 20)
+	if result := rt.castPetShield(testDivision, c, c, c.ActiveCOS, skill, clock.NowMs()); len(result.Broadcast) < 2 {
+		t.Fatalf("no shields: %+v", result)
+	}
+	copied := map[string]int{}
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		copied[character.Name]++
+		return rt.characterSnapshot(divisionID, character)
+	}
+	rt.advancePetShields(clock.NowMs() + 5000)
+	// The owner site sits inside the per-row loop (once per shield row), and
+	// each row then copies its own recipient at the recipient site, so the
+	// owner's own row also copies him there. Both sites therefore leave a
+	// distinct shape: recipient copies of the other member exist at all, and
+	// owner copies outnumber them. A whole-record copy back at either site
+	// breaks one of the two.
+	if copied[near.Name] == 0 {
+		t.Fatalf("the shield tick never companion-copied recipient %s (whole-record copy back at the recipient site?); copied %v", near.Name, copied)
+	}
+	if copied[c.Name] <= copied[near.Name] {
+		t.Fatalf("owner companion copies = %d, recipient copies = %d; the owner site must copy the owner once per shield row (whole-record copy back there?); copied %v", copied[c.Name], copied[near.Name], copied)
+	}
+}
+
+/*
+================
 TestCompanionCopyCostsLessThanHalfTheFullCopy
 
 The allocation guard on the bench-shaped owner: a full bag, a
@@ -114,22 +313,40 @@ func TestCompanionCopyCostsLessThanHalfTheFullCopy(t *testing.T) {
 
 /*
 ================
-TestBondRevivalReadsNothingOutsideTheCompanionCopy
+TestBondRevivalTakesTheCombatCopy
 
 The bond revival weighs a dead party member through a detached copy:
-the recipient gate and the combat stats that set the revival HP.
-Production members carry stuffed bags; the stats walk reads
-equipment rows only, so the revived HP must agree on the companion
-copy and on the whole-record copy, and the seam must see the copy.
+the recipient gate and the combat stats that set the revival HP. The
+stats walk reads the avatar inventory's option rows (combat
+avatarOptionWrites), so the target copy must be the combat copy -
+equipment and avatar rows, no plain bag rows. The victim here wears
+an avatar dress blessed with the fixed 150 HP option: on the
+pet-owner view (AvatarInventory nil) the revival would weigh 150 HP
+less, which the companion-copy assertion below pins outright; the
+revival itself must land identically on the combat copy and on the
+whole-record copy, and the combat seam must see the copy happen.
 ================
 */
-func TestBondRevivalReadsNothingOutsideTheCompanionCopy(t *testing.T) {
+func TestBondRevivalTakesTheCombatCopy(t *testing.T) {
 	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
 	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
 	roarField(t, rt, c, clock)
 	c.MissionInventory = nil
 	rt.AttackPetExpansion = true
 	learnPetBook(t, c, 27)
+
+	// The victim's dress and its HP option must resolve through the
+	// same catalogues the revival stats read.
+	dress := &enterworld.ItemRef{RefObjID: 7, Codename: "TEST_AVATAR_DRESS", TypeIDs: [4]int64{3, 1, 13, 2}}
+	rt.deps.ItemReferences().(cosTestItemSource).staticItemSource[dress.Codename] = dress
+	hpaTag := uint32(0)
+	for _, b := range []byte("hpa") {
+		hpaTag = hpaTag<<8 | uint32(b)
+	}
+	rt.deps.(*enterworld.Deps).MagicOptions = gaugeOptions{
+		202: {ParamID: 202, OptionName: "MATTR_AVATAR_HP", Tag: hpaTag},
+	}
+
 	near := nearbyCharacter(rt, c, 21, "bond-near", 50)
 	near.ActiveCOS = nil
 	rt.BindPetSession(testDivision, near, 2)
@@ -137,21 +354,47 @@ func TestBondRevivalReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)}}}
 	}
 	stuffOwnerInventories(near)
-	narrowSnap, fullSnap := near.SnapshotCompanion(), near.Snapshot()
-	narrowStats, _, narrowErr := rt.playerCombatStats(testDivision, narrowSnap)
+	near.AvatarInventory = &enterworld.AvatarInventory{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: dress.RefObjID, Codename: dress.Codename,
+		MagicOptions: []uint64{uint64(150)<<32 | 202},
+	}}}
+
+	// The fixture must bite: the dress's option moves the revival
+	// vitals by exactly its 150 HP through the stats door, and the
+	// pet-owner view drops the avatar inventory that carries it.
+	fullSnap := near.Snapshot()
 	fullStats, _, fullErr := rt.playerCombatStats(testDivision, fullSnap)
-	if narrowErr != nil || fullErr != nil {
-		t.Fatalf("revival stats errors: companion %v, full %v", narrowErr, fullErr)
+	if fullErr != nil {
+		t.Fatalf("revival stats error on the whole record: %v", fullErr)
 	}
-	// Compare what the revival actually weighs: the vitals the stats
-	// produce for this victim (Stats itself carries a graph pointer
-	// that legitimately differs between any two calls).
-	nHP, nMP, nCHP, nCMP := keeperVitalsFrom(narrowSnap, narrowStats, nil)
+	fullHP, _, _, _ := keeperVitalsFrom(fullSnap, fullStats, nil)
+	bareSnap := near.Snapshot()
+	bareSnap.AvatarInventory = nil
+	bareStats, _, bareErr := rt.playerCombatStats(testDivision, bareSnap)
+	if bareErr != nil {
+		t.Fatalf("revival stats error without the dress: %v", bareErr)
+	}
+	bareHP, _, _, _ := keeperVitalsFrom(bareSnap, bareStats, nil)
+	if fullHP-bareHP != 150 {
+		t.Fatalf("avatar HP option moved the revival vitals by %d, want 150 (the fixture would agree vacuously)", fullHP-bareHP)
+	}
+	if near.SnapshotCompanion().AvatarInventory != nil {
+		t.Fatal("the pet-owner view kept the avatar inventory; the defect this guards is gone")
+	}
+
+	// The copy the revival takes weighs the same as the whole record.
+	combatSnap := near.SnapshotCombat()
+	combatStats, _, combatErr := rt.playerCombatStats(testDivision, combatSnap)
+	if combatErr != nil {
+		t.Fatalf("revival stats error on the combat copy: %v", combatErr)
+	}
+	cHP, cMP, cCHP, cCMP := keeperVitalsFrom(combatSnap, combatStats, nil)
 	fHP, fMP, fCHP, fCMP := keeperVitalsFrom(fullSnap, fullStats, nil)
-	if nHP != fHP || nMP != fMP || nCHP != fCHP || nCMP != fCMP {
-		t.Fatalf("revival vitals diverged on the fattened victim: narrow (%d,%d,%d,%d), full (%d,%d,%d,%d)",
-			nHP, nMP, nCHP, nCMP, fHP, fMP, fCHP, fCMP)
+	if cHP != fHP || cMP != fMP || cCHP != fCHP || cCMP != fCMP {
+		t.Fatalf("revival vitals diverged on the combat copy: combat (%d,%d,%d,%d), full (%d,%d,%d,%d)",
+			cHP, cMP, cCHP, cCMP, fHP, fMP, fCHP, fCMP)
 	}
+
 	key := petOwnerKey{testDivision, c.Name, c.ActiveCOS.GID}
 	state := rt.petSessionFor(key.division, key.name, key.gid)
 
@@ -167,27 +410,27 @@ func TestBondRevivalReadsNothingOutsideTheCompanionCopy(t *testing.T) {
 	}
 
 	copied := []string{}
-	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+	rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
 		copied = append(copied, character.Name)
-		return character.SnapshotCompanion()
+		return character.SnapshotCombat()
 	}
-	narrowHP, narrowFrames := revive()
+	combatHP, combatFrames := revive()
 	seen := false
 	for _, name := range copied {
 		seen = seen || name == near.Name
 	}
 	if !seen {
-		t.Fatalf("revival never took the companion copy of %s; copied %v", near.Name, copied)
+		t.Fatalf("revival never took the combat copy of %s; copied %v", near.Name, copied)
 	}
 
-	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+	rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
 		return rt.characterSnapshot(divisionID, character)
 	}
-	fullHP, fullFrames := revive()
-	if narrowHP != fullHP {
-		t.Fatalf("revival HP diverged: companion copy %d, full copy %d (revival stats read outside equipment?)", narrowHP, fullHP)
+	wholeHP, wholeFrames := revive()
+	if combatHP != wholeHP {
+		t.Fatalf("revival HP diverged: combat copy %d, whole-record copy %d (revival stats read outside the combat copy?)", combatHP, wholeHP)
 	}
-	if narrowFrames != fullFrames {
-		t.Fatalf("revival frames diverged\nnarrow: %.600s\nfull:   %.600s", narrowFrames, fullFrames)
+	if combatFrames != wholeFrames {
+		t.Fatalf("revival frames diverged\ncombat: %.600s\nwhole:   %.600s", combatFrames, wholeFrames)
 	}
 }

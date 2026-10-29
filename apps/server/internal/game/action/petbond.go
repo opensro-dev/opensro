@@ -242,12 +242,13 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 		// Revival weighs a dead, monster-killed, in-band target; all
 		// three are record fields, so a living or out-of-band member
 		// never pays for its detached copy (#1943). The copy is the
-		// companion copy: the recipient gate reads equipment and
-		// scalars, and the revival stats walk equipment rows only
-		// (PlayerStatsWithModifiers skips every non-equipment row),
-		// so nothing the revival weighs sits in a plain bag or avatar
-		// row (#2030; TestBondRevivalReadsNothingOutsideTheCompanionCopy).
-		snapshot := rt.characterSnapshotCompanionAdmitted(key.division, target, func(live *enterworld.Character) bool {
+		// combat copy: the recipient gate reads equipment and scalars,
+		// and the revival stats walk equipment rows plus the avatar
+		// inventory's option rows (combat avatarOptionWrites), so a
+		// plain bag row is all it may drop - the pet-owner view would
+		// revive a member without their avatar HP/MP options (#2030;
+		// TestBondRevivalTakesTheCombatCopy).
+		snapshot := rt.characterSnapshotCombatAdmitted(key.division, target, func(live *enterworld.Character) bool {
 			return !enterworld.CharacterAlive(live) && live.DeathKind == uint8(pk.DeathMonster) &&
 				rewardLevel(live) <= int64(pet.Level)+10
 		})
