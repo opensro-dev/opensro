@@ -3,14 +3,13 @@
 
 cosdeath.go - what a companion's death leaves behind, by kind
 
-Every character death runs the reference server's kill credit, whose
-vtable+0x638 drops a COS's transport cargo: a
-transport's goods go offline and publish unowned, the way a monster's
-drops do. PublishDropsWithGoldBonus would reset a drop's ground owner
-to the winner, but it skips any item CGObj_IsTradeGoods names - which
-is every trade good there is (0x482de0; the reset's jne at 0x4c41de) -
-so cargo stays unowned whoever killed the transport. The fatal dealer
-is still recorded on the settlement, for the scatter's log line only.
+Every character death runs the kill credit, which drops a COS's
+transport cargo: a transport's goods go offline and publish unowned, the
+way a monster's drops do. Publishing a drop normally resets its ground
+owner to the winner, but trade goods are exempt from that reset - and
+every transport row is a trade good - so cargo stays unowned whoever
+killed the transport. The fatal dealer is still recorded on the
+settlement, for the scatter's log line only.
 The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
 keep theirs on the summoner item for revival (cosabnormal.go). A
@@ -76,8 +75,8 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 dropTransportCargo
 
 Natively the cargo scatters around the dead transport, owned by no
-one: the winner reset in PublishDropsWithGoldBonus never reaches a
-trade good (see the file banner).
+one: the winner reset that publishing applies to drops never reaches
+a trade good (see the file banner).
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
@@ -102,7 +101,8 @@ func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Characte
 	at := rt.companionLiveSpawn(division, c, pet, nowMs)
 	now := time.UnixMilli(nowMs)
 	var dropped []grounditem.Item
-	for _, item := range invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity)) {
+	rows := invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity))
+	for _, item := range rows {
 		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, "", now), at, cosCargoRarity)
 		if added := rt.addCharacterGround(division, c, planned); added.Gid != 0 {
 			dropped = append(dropped, added)
@@ -112,9 +112,12 @@ func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Characte
 	if winnerName != "" {
 		killerKind = "player"
 	}
+	// rows counts what the container held, bags what the ground owner
+	// accepted: rows > 0 with bags == 0 means registration refused every
+	// row and the goods stayed lost with the vehicle.
 	log.WithFields(log.Fields{
 		"cause": cause, "killer": killerKind, "winner": winnerName,
-		"owner": c.Name, "bags": len(dropped),
+		"owner": c.Name, "rows": len(rows), "bags": len(dropped),
 	}).Info("trade: transport cargo scattered")
 	pet.Container.Rows = nil
 	if len(dropped) == 0 {

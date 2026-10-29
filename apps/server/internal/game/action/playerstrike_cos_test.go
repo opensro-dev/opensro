@@ -235,11 +235,10 @@ func TestThiefCannotStrikeALevelOneCaravanTransport(t *testing.T) {
 TestPlayerKillOfATransportScattersItsCargo
 
 A player's fatal hit on a transport settles through the companion owner's
-death, as a monster's does: the reference server drops the goods around
-it unowned - PublishDropsWithGoldBonus resets a drop's ground owner to
-the winner only for items CGObj_IsTradeGoods does not name, and every
-trade good is one - and its kind-1 release deletes the record. The
-owner is untouched.
+death, as a monster's does: the goods drop around it unowned - the
+publish resets a drop's ground owner to the winner except for trade
+goods, and every cargo row is one - and its kind-1 release deletes the
+record. The owner is untouched.
 ================
 */
 func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
