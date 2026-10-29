@@ -51,7 +51,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 	// are record fields, so a dead or bear-less owner never pays for
 	// its detached copy (#1943). The admitted copy feeds the gear,
 	// town and session gates below, as the detached record did.
-	owner := rt.characterSnapshotAdmitted(hit.division, hit.owner, func(live *enterworld.Character) bool {
+	owner := rt.characterSnapshotCompanionAdmitted(hit.division, hit.owner, func(live *enterworld.Character) bool {
 		if !enterworld.CharacterAlive(live) {
 			return false
 		}

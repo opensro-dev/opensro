@@ -37,10 +37,11 @@ import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import { mapWithConcurrency } from "./asyncUtils.mjs";
 import { codeHash } from "./codeStamp.mjs";
 import { claimPublicPaths, recordClaims } from "./publicationLedger.mjs";
-import { ENV_KNOBS, hashRoots } from "./resourceBuildFingerprint.mjs";
+import { buildKnobLines, hashRoots } from "./resourceBuildFingerprint.mjs";
 import { rebuildRoot } from "../world/paths.mjs";
 
-const MEMO_VERSION = 3;
+// v4: the knobs are buildKnobLines, the effective tomb posture included.
+const MEMO_VERSION = 4;
 const MEMO_ROOT = path.join( rebuildRoot, ".state", "lane-memo" );
 const STAT_CONCURRENCY = 64;
 const KEY_PARTS = [ "startup", "environment", "entry", "roots" ];
@@ -50,13 +51,14 @@ const KEY_PARTS = [ "startup", "environment", "entry", "roots" ];
 environmentHash
 
 The variables that change what the build writes: the whole-build
-fingerprint's own list (ENV_KNOBS). Every other SRO_* variable is either
-speed only or per run (the rebuild lock's token).
+fingerprint's own knob lines (buildKnobLines: the raw knobs and the
+postures derived from them). Every other SRO_* variable is either speed
+only or per run (the rebuild lock's token).
 ================
 */
 function environmentHash() {
 	const hash = createHash( "sha256" );
-	for ( const name of ENV_KNOBS ) hash.update( `${name}=${process.env[name] ?? ""}\n` );
+	for ( const line of buildKnobLines() ) hash.update( `${line}\n` );
 	return hash.digest( "hex" );
 }
 
