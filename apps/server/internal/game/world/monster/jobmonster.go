@@ -89,3 +89,25 @@ func (i Instance) JobTargetRefused(job uint8) bool {
 	}
 	return false
 }
+
+/*
+================
+Instance.JobAttackerRefused
+
+The same validation from the attacker's side, its monster
+branch: the attacker's job state picks the refusal - a thief monster
+refuses a thief (2) or an unsuited (4) attacker, a hunter monster
+everyone but a thief. A job wearer therefore strikes only the opposing
+side's bandits, and a player outside job mode strikes neither. job is
+the native state, as JobTargetRefused.
+================
+*/
+func (i Instance) JobAttackerRefused(job uint8) bool {
+	switch {
+	case i.HunterMonster():
+		return job != jobStateThief
+	case i.ThiefMonster():
+		return job == jobStateThief || job == jobStateSpecial
+	}
+	return false
+}
