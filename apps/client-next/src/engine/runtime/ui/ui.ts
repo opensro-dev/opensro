@@ -152,6 +152,7 @@ import {
 	mallTabControl,
 	mallCategoryIcon,
 	mallPageLayout,
+	mallPageNumberPresentation,
 	mallCurrencyRows,
 	mallQuestionLayout,
 	MALL_ROWS_PER_PAGE
@@ -10324,7 +10325,8 @@ export function createUi(
 				ox: number,
 				oy: number,
 				value: string,
-				clipToControl: boolean | "clip" = false
+				clipToControl: boolean | "clip" = false,
+				fontStyle = 0
 			) {
 				const box = authoredClientRect( node, ox, oy );
 				// SML2 markup (843100) renders through the text board's layout, never
@@ -10374,6 +10376,7 @@ export function createUi(
 									node.color,
 									{
 										fontIndex: node.fontIndex,
+										fontStyle,
 										hAlign: node.hAlign,
 										vAlign: 1
 									}
@@ -10386,6 +10389,7 @@ export function createUi(
 				quads.push(
 					...text.quads( value, box, clipToControl ? box : full, node.color, {
 						fontIndex: node.fontIndex,
+						fontStyle,
 						hAlign: node.hAlign,
 						vAlign: node.vAlign,
 						...(clipToControl ?
@@ -25561,7 +25565,17 @@ export function createUi(
 										manager.height
 									] as UiRect
 								};
-								authoredText( control, sx, sy, String( page + 1 ) );
+								// The current page draws in the manager's highlight
+								// colour and styled face (mallPageNumberPresentation).
+								const presentation = mallPageNumberPresentation( page, state.page );
+								authoredText(
+									presentation.color ? { ...control, color: presentation.color } : control,
+									sx,
+									sy,
+									String( page + 1 ),
+									false,
+									presentation.fontStyle
+								);
 								controls.push( {
 									id: "item-mall-page:" + page,
 									label: String( page + 1 ),

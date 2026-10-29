@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/transport"
 )
 
@@ -75,6 +76,10 @@ type Runtime struct {
 	// ShadowMuted reports a staff shadow-muted account (shadowmute,
 	// port-only, not native); nil mutes no one.
 	ShadowMuted func(accountID string) bool
+	// ModerationLog keeps every accepted line for the staff (chatlog,
+	// port-only, not native), muted lines included and marked; nil
+	// keeps no log.
+	ModerationLog *chatlog.Log
 }
 
 /*
