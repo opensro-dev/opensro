@@ -535,7 +535,7 @@ export function createViewer( host: ViewerHost ) {
 			elapsed += last < 0 ? 0 : Math.min( Math.max( now - last, 0 ), MAX_FRAME_STEP_MS );
 			last = now;
 			if ( !finished && elapsed > VIEWER_TIMEOUT_MS ) {
-				fail( "timeout" );
+				fail( host.characters.error() ? "asset-load" : "timeout" );
 				return stopped();
 			}
 			// A still keeps the loop until it is settled; the interactive view
@@ -560,7 +560,11 @@ export function createViewer( host: ViewerHost ) {
 				entities = [ entity ];
 				dressed = true;
 			}
-			if ( host.characters.error() ) {
+			// A still gets the whole timeout window even with a latched
+			// failure: the first failure is sticky across a batch and may
+			// belong to an earlier monster, while per-path loads keep
+			// retrying behind it. Interactive views fail immediately.
+			if ( host.characters.error() && !request?.still ) {
 				fail( "asset-load" );
 				return stopped();
 			}
