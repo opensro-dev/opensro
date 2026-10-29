@@ -45,6 +45,7 @@ import { publishCrowEgg } from "./crowEgg.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadBoothModelRoster } from "./boothModelRoster.mjs";
 import { bakeNpcSecondaryResources } from "./npcSecondaryResources.mjs";
+import { preserveFreshNpcVatReferences } from "./buildNpcVatAssets.mjs";
 import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
 import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 
@@ -80,7 +81,6 @@ import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
-import { sha256Hex } from "../shared/hash.mjs";
 import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
 import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
@@ -91,147 +91,11 @@ import {
 	removeSupersededResourceOutputs,
 	resourceGlbOutput
 } from "./resourceGlbOutput.mjs";
-import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
-import {
-	NPC_MANIFEST_FORMAT,
-	NPC_MANIFEST_VERSION,
-	npcManifestModels,
-	splitNpcManifestModels
-} from "../shared/npcManifest.mjs";
+import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { NPC_MANIFEST_FORMAT, NPC_MANIFEST_VERSION, splitNpcManifestModels } from "../shared/npcManifest.mjs";
 
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
-
-/*
-================
-publicAssetPathToDisk
-
-Resolve one generated /assets/ URL without accepting a path outside the
-generated public-assets owner. This builder only uses it to validate VAT
-artifacts already referenced by its previous manifest.
-================
-*/
-function publicAssetPathToDisk( publicPath, publicAssetsRoot = publicAssets ) {
-	const normalized = String( publicPath ?? "" ).replaceAll( "\\", "/" );
-	if ( !normalized.startsWith( "/assets/" ) || normalized.includes( ".." ) ) {
-		return null;
-	}
-	return path.join( publicAssetsRoot, normalized.slice( "/assets/".length ) );
-}
-
-/*
-================
-preserveFreshNpcVatReferences
-
-buildNpcVatAssets owns VAT generation, while this builder owns the primary
-NPC manifest. A model-only incremental rebuild used to replace that manifest
-with a VAT-free base document even when every GLB was byte-identical to the
-already baked payload. Runtime then silently changed from the pooled VAT path
-to per-entity skeletons until the full resource graph happened to run again.
-
-Preserve a prior enrichment only after proving the complete chain still
-matches: public paths, compiler contract, GLB SHA-256, VAT byte metadata and
-clip index. A changed GLB or policy deliberately drops its stale reference;
-the VAT builder is the only owner allowed to regenerate it.
-================
-*/
-export function preserveFreshNpcVatReferences( models, previousManifest, options = {} ) {
-	const publicAssetsRoot = options.publicAssetsRoot ?? publicAssets;
-	const previousVatContract = previousManifest?.vat;
-	// A v8 manifest holds joined entries already; the join leaves them as is.
-	const previousJoined = npcManifestModels( previousManifest );
-	const previousModels = Object.values( previousJoined );
-	if ( !previousVatContract || previousModels.length === 0 ) {
-		return { contract: null, preserved: 0, stale: 0 };
-	}
-
-	const previousByGlb = new Map();
-	const ambiguousGlbs = new Set();
-	for ( const previous of previousModels ) {
-		if ( !previous?.glb || !previous?.vat ) continue;
-		const prior = previousByGlb.get( previous.glb );
-		if ( prior && JSON.stringify( prior.vat ) !== JSON.stringify( previous.vat ) ) {
-			ambiguousGlbs.add( previous.glb );
-			continue;
-		}
-		previousByGlb.set( previous.glb, previous );
-	}
-
-	const jsonByPath = new Map();
-	const statByPath = new Map();
-	const sha256ByPath = new Map();
-	const readJson = ( filePath ) => {
-		if ( !jsonByPath.has( filePath ) ) jsonByPath.set( filePath, readJsonOrNullSync( filePath ) );
-		return jsonByPath.get( filePath );
-	};
-	const readStat = ( filePath ) => {
-		if ( !statByPath.has( filePath ) ) {
-			statByPath.set( filePath, fs.existsSync( filePath ) ? fs.statSync( filePath ) : null );
-		}
-		return statByPath.get( filePath );
-	};
-	const readSha256 = ( filePath ) => {
-		if ( !sha256ByPath.has( filePath ) ) {
-			sha256ByPath.set( filePath, sha256Hex( fs.readFileSync( filePath ) ) );
-		}
-		return sha256ByPath.get( filePath );
-	};
-
-	let preserved = 0;
-	let stale = 0;
-	for ( const model of models ) {
-		if ( !model?.glb ) continue;
-		if ( ambiguousGlbs.has( model.glb ) ) {
-			stale += 1;
-			continue;
-		}
-		const previous = previousJoined[model.codename]?.glb === model.glb ?
-			previousJoined[model.codename] :
-			previousByGlb.get( model.glb );
-		const reference = previous?.vat;
-		if ( !reference ) continue;
-
-		const glbPath = publicAssetPathToDisk( model.glb, publicAssetsRoot );
-		const vatManifestPath = publicAssetPathToDisk( reference.manifest, publicAssetsRoot );
-		const vatBinPath = publicAssetPathToDisk( reference.bin, publicAssetsRoot );
-		const glbStat = glbPath ? readStat( glbPath ) : null;
-		const vatBinStat = vatBinPath ? readStat( vatBinPath ) : null;
-		const vat = vatManifestPath ? readJson( vatManifestPath ) : null;
-		const valid = Boolean(
-			glbPath && vatBinPath && vat &&
-				glbStat?.isFile() && vatBinStat?.isFile() &&
-				vat.format === previousVatContract.format &&
-				vat.version === previousVatContract.version &&
-				vat.compilerVersion === previousVatContract.compilerVersion &&
-				vat.settings?.materialMode === previousVatContract.materialMode &&
-				JSON.stringify( vat.settings?.clipRoles ?? [] ) ===
-					JSON.stringify( previousVatContract.clipRoles ?? [] ) &&
-				vat.source?.glb === model.glb &&
-				vat.source?.byteLength === glbStat.size &&
-				vat.source?.sha256 === readSha256( glbPath ) &&
-				vat.bin?.path === reference.bin &&
-				vat.bin?.byteLength === vatBinStat.size &&
-				vat.bin?.sha256 === readSha256( vatBinPath ) &&
-				reference.bytes === vat.bin.byteLength &&
-				reference.frames === vat.texture?.frameCount &&
-				reference.compilerVersion === vat.compilerVersion &&
-				reference.materialMode === vat.settings.materialMode &&
-				JSON.stringify( reference.clips ?? [] ) === JSON.stringify( Object.keys( vat.clips ?? {} ) )
-		);
-		if ( !valid ) {
-			stale += 1;
-			continue;
-		}
-		model.vat = { ...reference };
-		preserved += 1;
-	}
-
-	return {
-		contract: preserved > 0 ? { ...previousVatContract } : null,
-		preserved,
-		stale
-	};
-}
 
 import {
 	characterInfoResolver,
@@ -277,9 +141,12 @@ export function buildRetailAnimationCatalog( bsr, clips ) {
 /*
 ================
 resolveNpcModel
+
+A roster codename's model (its own or its base chain's .bsr/.cpd), or
+null; exported so the contracts can prove a planned species resolves.
 ================
 */
-function resolveNpcModel( codename, rows ) {
+export function resolveNpcModel( codename, rows ) {
 	const cols = rows.get( codename );
 	if ( !cols ) return null;
 	let bsrCols = cols;
@@ -912,7 +779,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	models.push( publishCrowEgg( publicAssets ) );
 	builtResources++;
 	coveredModels++;
-	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
+	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicRoot } );
 	const { models: referenceRows, resources, boothModels } = splitNpcManifestModels( models );
 	const manifest = {
 		format: NPC_MANIFEST_FORMAT,

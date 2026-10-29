@@ -64,10 +64,11 @@ func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.C
 	}
 	// Runs for every bear source per bond plan: copy the owner only when
 	// the record still holds a live summoned bear under this gid. The
-	// copy stays the full one: the bear below resolves through the
-	// owner's inventory rows, and companion resolution walks bag rows -
-	// the narrow equipment copy drops the pet it just admitted (#1943).
-	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+	// copy is the companion copy: the bear below resolves through the
+	// owner's companion rows, which that copy keeps, where the #1943
+	// equipment copy dropped the pet it just admitted (#2030;
+	// TestBondSourceReadsNothingOutsideTheCompanionCopy).
+	owner := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
 		pet := c.CompanionByGID(key.gid)
 		return !c.DeletePending && pet != nil && pet.CurrentHP != 0 && companion.PetKind(pet.Codename) == "Bear"
 	})
@@ -241,9 +242,14 @@ func (rt *Runtime) advancePetBond(key petOwnerKey, state *petSession, now int64)
 		target := rt.findCharacterByGid(key.division, gid)
 		// Revival weighs a dead, monster-killed, in-band target; all
 		// three are record fields, so a living or out-of-band member
-		// never pays for its detached copy (#1943). The admitted copy
-		// feeds the recipient gate and the revival stats, as before.
-		snapshot := rt.characterSnapshotAdmitted(key.division, target, func(live *enterworld.Character) bool {
+		// never pays for its detached copy (#1943). The copy is the
+		// combat copy: the recipient gate reads equipment and scalars,
+		// and the revival stats walk equipment rows plus the avatar
+		// inventory's option rows (combat avatarOptionWrites), so a
+		// plain bag row is all it may drop - the pet-owner view would
+		// revive a member without their avatar HP/MP options (#2030;
+		// TestBondRevivalTakesTheCombatCopy).
+		snapshot := rt.characterSnapshotCombatAdmitted(key.division, target, func(live *enterworld.Character) bool {
 			return !enterworld.CharacterAlive(live) && live.DeathKind == uint8(pk.DeathMonster) &&
 				rewardLevel(live) <= int64(pet.Level)+10
 		})
