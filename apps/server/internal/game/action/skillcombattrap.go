@@ -275,7 +275,7 @@ func (rt *Runtime) strikeFromObject(s objectStrike, now int64) []simulation.Divi
 	}) {
 		return nil
 	}
-	published := rt.publishArea(division, s.snapshot, s.skill, 1, plan, commit, now)
+	published := rt.publishArea(division, s.snapshot, s.skill, 1, plan, commit, now, rt.tickDoors())
 	if len(published.targets) == 0 {
 		return nil
 	}

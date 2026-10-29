@@ -180,7 +180,7 @@ func TestCrossbowPreparationCancellation(t *testing.T) {
 			if mode == "arrows" {
 				rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[1].Codename].TypeIDs[3] = 1
 			}
-			_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: root.ID, HasTarget: true, TargetGid: target}, clock.NowMs())
+			_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: root.ID, HasTarget: true, TargetGid: target}, clock.NowMs(), rt.handlerDoors())
 			if mode == "arrows" {
 				if decision != skillCastRefused {
 					t.Fatal("crossbow accepted arrows")
@@ -221,7 +221,7 @@ func TestCrossbowInstantFlightRetention(t *testing.T) {
 			*c.World.Spawn.X -= 100
 			before, _ := rt.Monsters.Get(testDivision, target)
 			flight := projectileFlightMs(simulation.SeedWorldState(c).Spawn, simulation.Spawn{RegionID: before.Spawn.RegionID, X: before.Spawn.X, Y: before.Spawn.Y, Z: before.Spawn.Z}, skill.ProjectileSpeed)
-			result, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, clock.NowMs())
+			result, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, clock.NowMs(), rt.handlerDoors())
 			if decision != skillCastAccepted {
 				t.Fatalf("shot refused: %+v", result)
 			}

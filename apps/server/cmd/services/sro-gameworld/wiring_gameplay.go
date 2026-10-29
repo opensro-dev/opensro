@@ -40,6 +40,7 @@ import (
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -948,6 +949,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.chatFeed = chatfeed.New()
 	game.chat.Feed = game.chatFeed
 	game.items.PublicChat = game.chatFeed
+	// Port-only, not native: the staff's chat shadow-mute list, kept beside
+	// the shard's other operator stores (shadowmute).
+	shadowMutes := shadowmute.Open(store.DirForShardFromEnv(game.divisionID))
+	game.chat.ShadowMuted = shadowMutes.Muted
+	game.items.ChatShadowMuted = shadowMutes.Muted
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)

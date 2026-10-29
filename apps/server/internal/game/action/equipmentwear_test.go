@@ -73,7 +73,7 @@ func TestAttackWearsTheWeaponAtTwoPercentPerAttempt(t *testing.T) {
 	var tally wearTally
 	tally.note(false, true)
 	tally.note(true, true) // a blocked attempt does not count
-	wear := rt.applyEquipmentWear(testDivision, c, tally)
+	wear := rt.applyEquipmentWear(testDivision, c, tally, rt.handlerDoors())
 	if durabilityAt(c, wearWeaponSlot) != 95 || len(wear.actor) != 1 || wear.actor[0].Opcode != wire.OpItemDurability {
 		t.Fatalf("weapon durability %d, frames %+v; want 95 and one 0x31E8", durabilityAt(c, wearWeaponSlot), wear.actor)
 	}
@@ -81,7 +81,7 @@ func TestAttackWearsTheWeaponAtTwoPercentPerAttempt(t *testing.T) {
 		t.Fatalf("durability frame %x", p)
 	}
 	rt, c = wearFixture(t, 2)
-	if rt.applyEquipmentWear(testDivision, c, tally); durabilityAt(c, wearWeaponSlot) != 96 {
+	if rt.applyEquipmentWear(testDivision, c, tally, rt.handlerDoors()); durabilityAt(c, wearWeaponSlot) != 96 {
 		t.Fatal("a roll of 3 wore the weapon at a 2% chance")
 	}
 }
@@ -100,11 +100,11 @@ func TestHitsWearTheFirstArmourSlotWhoseRollSucceeds(t *testing.T) {
 	rt, c := wearFixture(t, 99, 0, 99, 0, 99, 0)
 	var tally wearTally
 	tally.note(false, false)
-	wear := rt.applyEquipmentWear(testDivision, c, tally)
+	wear := rt.applyEquipmentWear(testDivision, c, tally, rt.handlerDoors())
 	if durabilityAt(c, 1) != 1 || durabilityAt(c, wearWeaponSlot) != 96 || len(wear.actor) != 1 {
 		t.Fatalf("helmet %d weapon %d frames %d; want 1, 96 and one frame", durabilityAt(c, 1), durabilityAt(c, wearWeaponSlot), len(wear.actor))
 	}
-	wear = rt.applyEquipmentWear(testDivision, c, tally)
+	wear = rt.applyEquipmentWear(testDivision, c, tally, rt.handlerDoors())
 	stats := false
 	for _, frame := range wear.actor {
 		stats = stats || frame.Opcode == wire.OpBaseStats
@@ -112,7 +112,7 @@ func TestHitsWearTheFirstArmourSlotWhoseRollSucceeds(t *testing.T) {
 	if durabilityAt(c, 1) != 0 || !stats {
 		t.Fatalf("breaking the helmet left %d and published stats %v", durabilityAt(c, 1), stats)
 	}
-	if wear = rt.applyEquipmentWear(testDivision, c, tally); durabilityAt(c, 1) != 0 || len(wear.actor) != 0 {
+	if wear = rt.applyEquipmentWear(testDivision, c, tally, rt.handlerDoors()); durabilityAt(c, 1) != 0 || len(wear.actor) != 0 {
 		t.Fatal("a broken item lost another point")
 	}
 }

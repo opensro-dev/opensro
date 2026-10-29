@@ -176,6 +176,14 @@ func (s *MonsterState) populationForLease(division string, lease instance.Lease)
 
 // populationForObject follows a native GID lookup back to its population.
 // Unknown GIDs return an empty lookup state; queries never allocate a world.
+// Callers resolve one population's actors back to back, so the population
+// the last scan answered with is remembered (popHint) and asked first. The
+// hint is believed only while the registry still maps its key to that very
+// population and the population's rows still hold the gid - a retired
+// population's storage can outlive its registration and still answer
+// contains, which the scan could never return again - and any miss falls
+// through to the scan, so the hint can only ever repeat the scan's own
+// answer (#2029). Callers hold s.mu, as the maps above already require.
 /*
 ================
 populationForObject
@@ -187,9 +195,17 @@ func (s *MonsterState) populationForObject(division string, gid uint32) *divisio
 			return state
 		}
 	}
+	if s.popHintState != nil {
+		if s.popHintKey.division == division && s.worldPopulations[s.popHintKey] == s.popHintState &&
+			s.popHintState.instances.contains(gid) {
+			return s.popHintState
+		}
+		s.popHintState = nil
+	}
 	for key, state := range s.worldPopulations {
 		if key.division == division {
 			if state.instances.contains(gid) {
+				s.popHintKey, s.popHintState = key, state
 				return state
 			}
 		}

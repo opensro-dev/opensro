@@ -38,7 +38,7 @@ reference rather than trusting the inventory row's serialized type flags.
 ================
 */
 func (rt *Runtime) playerRelationEquipment(c *enterworld.Character) (job, cape uint8) {
-	ref, _, ok := (combat.ReqiEquipment{C: c, Items: rt.deps.ItemReferences()}).Item(8)
+	ref, _, ok := (combat.ReqiEquipment{C: c, Items: rt.deps.ItemReferences()}).Item(domain.JobSuitSlot)
 	if !ok || ref.TypeIDs[0] != 3 || ref.TypeIDs[1] != 1 || ref.TypeIDs[2] != 7 {
 		return 0, 0
 	}

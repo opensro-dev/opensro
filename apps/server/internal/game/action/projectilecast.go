@@ -270,7 +270,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 			}
 		} else if p.statusArea {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptUntargetedStatusCast(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptUntargetedStatusCast(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.threatDecrease {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
@@ -285,7 +285,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p)
 			}
 		} else {
-			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p)
+			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p, rt.tickDoors())
 		}
 	}
 	if decision != skillCastAccepted {
