@@ -296,9 +296,12 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
-	petShields  petShieldStore
-	wolfHowls   wolfHowlStore
-	tailwinds   tailwindStore
+	// cosOwners is the pet gid to owner index (cosownerindex.go):
+	// whose pet a gid is, without walking the division's characters.
+	cosOwners  cosOwnerIndex
+	petShields petShieldStore
+	wolfHowls  wolfHowlStore
+	tailwinds  tailwindStore
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
