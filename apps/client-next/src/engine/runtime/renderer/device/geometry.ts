@@ -93,6 +93,9 @@ export function createGeometryResources(
 	// The HDR stage's scene intermediate flips the colour format every
 	// geometry pipeline renders into; sceneBindings swaps every draw over.
 	let floatScene = false, shadowEnabled = false;
+	// Port-only water refraction: the copied frame views (device
+	// /water-refraction.ts), or null while the row is off.
+	let refractionColour: GPUTextureView | null = null, refractionDepth: GPUTextureView | null = null;
 	const waterReflection = createWaterReflection( created, format, retire );
 	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
 	const waterSampler = worldSampler;
@@ -259,6 +262,10 @@ export function createGeometryResources(
 				{ binding: 12, resource: waterSampler },
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
+				{ binding: 15, resource: refractionColour ?? white.createView() },
+				// A float texture (the stage's r32float copy), so the dummy is the
+				// white view, not the depth dummy.
+				{ binding: 16, resource: refractionDepth ?? white.createView() },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -346,7 +353,38 @@ export function createGeometryResources(
 			},
 			retire
 		);
+	/*
+	================
+	setRefractionViews
+
+	Port-only water refraction: the copied frame views (device
+	/water-refraction.ts), or null while the row is off. Bindings hold
+	their views, so every draw rebinds against its current pipeline.
+	================
+	*/
+	function setRefractionViews( colour: GPUTextureView | null, depth: GPUTextureView | null ) {
+		if ( refractionColour === colour && refractionDepth === depth ) return;
+		refractionColour = colour;
+		refractionDepth = depth;
+		for ( const [draw, meta] of metadata ) {
+			DeviceDraw.rebind(
+				meta.selection,
+				geometryBinding(
+					meta.uniform,
+					meta.instances,
+					meta.material,
+					draw.pipeline,
+					meta.clampedSampling,
+					meta.image,
+					meta.skin,
+					meta.bones,
+					meta.environmentImage
+				)
+			);
+		}
+	}
 	const commands: GeometryCommands = Object.freeze( {
+		refractionViews: setRefractionViews,
 		/*
 		================
 		hdrPreview
@@ -1114,6 +1152,7 @@ export function createGeometryResources(
 				const draw = new DeviceDraw(
 					{
 						deferredParticle: mat?.deferredParticle,
+						water: !!mat?.water,
 						blended: data.material?.sky ? false : data.material?.blend ?? false,
 						pipeline: selected,
 						vertices,
@@ -1359,6 +1398,17 @@ export function createGeometryResources(
 		every draw rebinds against its current pipeline.
 		================
 		*/
+		/*
+		================
+		refractionViews
+
+		Port-only, not native: the water refraction stage's copied frame
+		views, or null when the row is off (white and depth dummies then
+		 bind; the shader's stage gate never samples them). Bindings hold
+		their views, so every draw rebinds against its current pipeline.
+		================
+		*/
+		refractionViews: setRefractionViews,
 		refreshShadowBindings( enabled: boolean ) {
 			if ( shadowEnabled === enabled ) return;
 			// Bind the selected target before prepare() activates the first frame.

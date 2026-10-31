@@ -23,6 +23,7 @@ per-frame reads of its counts are monomorphic.
 */
 export class DeviceDraw implements GeometryDraw {
 	readonly deferredParticle: boolean | undefined;
+	readonly water: boolean | undefined;
 	readonly blended: boolean;
 	readonly vertices: GPUBuffer;
 	readonly indices: GPUBuffer;
@@ -38,13 +39,22 @@ export class DeviceDraw implements GeometryDraw {
 	constructor(
 		fixed: Pick<
 			GeometryDraw,
-			"deferredParticle" | "blended" | "pipeline" | "vertices" | "indices" | "firstIndex" | "baseVertex" | "count"
+			| "deferredParticle"
+			| "water"
+			| "blended"
+			| "pipeline"
+			| "vertices"
+			| "indices"
+			| "firstIndex"
+			| "baseVertex"
+			| "count"
 		>,
 		binding: GPUBindGroup,
 		instanceCapacity: number,
 		instanceCount: number
 	) {
 		this.deferredParticle = fixed.deferredParticle;
+		this.water = fixed.water;
 		this.blended = fixed.blended ?? false;
 		this.#pipeline = fixed.pipeline;
 		this.vertices = fixed.vertices;

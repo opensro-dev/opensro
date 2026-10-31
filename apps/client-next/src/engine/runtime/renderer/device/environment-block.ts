@@ -19,4 +19,7 @@ export const ENVIRONMENT_STAGES_OFFSET = 352;
 export const ENVIRONMENT_STAGES2_OFFSET = 368;
 // The sun shadow cascade matrix (sun-shadow-math.ts).
 export const ENVIRONMENT_SHADOW_MATRIX_OFFSET = 384;
-export const ENVIRONMENT_UNIFORM_BYTES = 448;
+// The camera's near and far (x, y), for depth linearisation in the
+// shaders (the water's shore band).
+export const ENVIRONMENT_CAMERA_OFFSET = 448;
+export const ENVIRONMENT_UNIFORM_BYTES = 464;

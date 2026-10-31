@@ -61,6 +61,11 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Port-only, not native: the water refracts the frame behind it and
+	// whitens at the shore (device/water-refraction.ts), drawing apart
+	// from the main pass. Off by default; off is the native blended
+	// reflection, byte for byte.
+	readonly waterRefraction: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
@@ -403,6 +408,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
+		waterRefraction: enabled( "waterRefraction" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
@@ -505,6 +511,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly waterRefraction: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
@@ -529,6 +536,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
+		waterRefraction: options.waterRefraction,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,

@@ -249,7 +249,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 	// device never compiles them. The float target format is the one owner.
 	const SCENE_FLOAT_FORMAT: GPUTextureFormat = "rgba16float";
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f,camera:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -322,6 +322,12 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
+// Port-only water refraction (device/water-refraction.ts): the frame's own
+// colour and depth before the water drew, copied for the water's fragment.
+@group(0) @binding(15) var sceneBehind:texture_2d<f32>;
+// The stage's depth copy is r32float (a depth attachment cannot be
+// resolved), so this reads a plain float texture, not a depth view.
+@group(0) @binding(16) var sceneBehindDepth:texture_2d<f32>;
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -552,7 +558,36 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
+ if(animated&&waterPass.plane.w<0.5){
+  // Native: the planar reflection alone. Port-only refraction (stages2.w,
+  // device/water-refraction.ts): the water drew after a copy of the frame,
+  // so its fragment can bend what sits under the surface by its own bump
+  // offset and whiten where the depth behind it reaches its own depth -
+  // the shore. The reflection stays the specular base it always was.
+  if(env.stages2.w<0.5){
+   // Native: the planar reflection over the frame's own lit water where a
+   // mirror exists (plane.z), the water's lit texture untouched where one
+   // does not - exactly the retail condition, byte for byte.
+   if(waterPass.plane.z>0.5){lit=waterColor;}
+  }else{
+   let frame=vec2f(textureDimensions(sceneBehind));
+   let screenUv=vec2f(input.position.xy)/frame;
+   let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+   let bumpOffset=select(vec2f(0),vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv)),material.reflection.w>0.5);
+   let behind=textureSampleLevel(sceneBehind,textureSampler,clamp(screenUv+bumpOffset*0.03,vec2f(0),vec2f(1)),0).rgb;
+   // The shore band in view-space metres: both depths linearised over the
+   // camera's near/far (env.camera, written per frame), not raw [0,1]
+   // buffer values whose spacing stretches with distance.
+   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
+   let near=max(env.camera.x,0.1);
+   let far=max(env.camera.y,near+1.0);
+   let linBehind=near*far/(far-depthBehind*(far-near));
+   let linFrag=near*far/(far-input.position.z*(far-near));
+   let shore=clamp(1.0-abs(linBehind-linFrag)/2.0,0.0,1.0);
+   let reflected=select(input.color.rgb*material.color.rgb,waterColor,waterPass.plane.z>0.5);
+   lit=mix(behind*0.85,reflected,0.45)+vec3f(shore*0.4);
+  }
+ }
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,
