@@ -628,6 +628,12 @@ Retail 0x72902a restores destination mode after the loading UI retires.
 			awaitingTravelBootstrap = false;
 			pendingTravel = null;
 			loadingMode = 2;
+			// The table's own description pins the moment: 포탈 나올 때 - the
+			// sound of coming out of the portal, the arrival (0x68e530 calls
+			// the row at 0x68eb0f). The cue rides the same ui-sound channel
+			// the packet handlers use; the bootstrap's own packets refresh
+			// nameClock right before this fires, so the cue reads fresh.
+			entities.publish( { kind: "ui-sound", handle: "SND_WARP", at: nameClock } );
 			gameplay.enterMusic();
 			gameplay.worldReady();
 		},
