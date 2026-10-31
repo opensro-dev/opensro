@@ -195,12 +195,13 @@ func BenchmarkMoverStorageSetSameRegion(b *testing.B) {
 						s.mu.Unlock()
 						b.Fatal(err)
 					}
-					old := state.movers.rows[1]
+					slot, _ := state.movers.slotOf(1)
+					old := state.movers.slots[slot].rec
 					oldBounds := moverInterestBoundsFor(old.value())
 					state.movers.spatial.remove(1, oldBounds)
 					row, _ := after.PendingSnapshot()
 					old.pending.set(row)
-					state.movers.rows[1] = old
+					state.movers.slots[slot].rec = old
 					state.movers.spatial.add(1, moverInterestBoundsFor(after))
 					state.syncApproachActor(1, after)
 					s.scheduleBehavior(state, 1, int64(1000+i))
