@@ -182,3 +182,63 @@ func TestAbnormalPassCompanionKillKeepsItsQuestSuppression(t *testing.T) {
 		t.Fatalf("only the player's own kill credits the quest: quest calls = %d, want 1", questCalls)
 	}
 }
+
+/*
+================
+TestAbnormalPassQuestCreditLandsOnPlayersKill
+
+Same geometry as the suppression pin (the companion's monster settles
+first, the player's own second, one shared roster), but watching the
+kill site instead of the credit count. Exactly one quest credit is
+expected and it must name the player's monster. A credit count cannot
+see a companion verdict written onto the shared roster instead of the
+settling copy: the companion's kill takes the credit and the player's
+is suppressed - same total, wrong kill.
+================
+*/
+func TestAbnormalPassQuestCreditLandsOnPlayersKill(t *testing.T) {
+	rt, clock, actor, target := newCombatTestRuntime(t, 1)
+	at := rt.LiveSpawnFor(testDivision, actor)
+	at.X += 30
+	extra := wolfSpawnAt(t, rt, actor, at, clock.NowMs())
+	const cosGID = uint32(0x00C05)
+	actor.ActiveCOS = &domain.CharacterCOS{GID: cosGID, Summoned: true}
+	companionRecord := playerBurnRecord(actor)
+	companionRecord.SourceGID, companionRecord.SourceName = cosGID, ""
+	playerRecord := playerBurnRecord(actor)
+	// Candidates run by ascending gid; the companion's monster goes first.
+	first, second := target, extra
+	if extra.Gid < target.Gid {
+		first, second = extra, target
+	}
+	seedMonsterAbnormal(t, rt, first.Gid, companionRecord, enterworld.ObjectIDForCharacter(actor))
+	seedMonsterAbnormal(t, rt, second.Gid, playerRecord, playerRecord.SourceGID)
+	installSmallGoldRef(rt)
+	rt.DropRoll = constantDropRoll(0)
+	fellAt := make(map[uint32]simulation.Spawn)
+	for _, gid := range []uint32{first.Gid, second.Gid} {
+		mover, found := rt.Monsters.Mover(testDivision, gid)
+		if !found {
+			t.Fatalf("monster %d has no mover to die at", gid)
+		}
+		pose := mover.LivePoseAt(clock.NowMs(), nil)
+		fellAt[gid] = simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	}
+	var questCalls int
+	rt.UpdateQuestKill = func(c *enterworld.Character, _ string, _ uint8) ([]wire.Frame, bool) {
+		questCalls++
+		return nil, true
+	}
+	var sites []simulation.Spawn
+	rt.NoteQuestKillSite = func(_ *enterworld.Character, _ string, fell simulation.Spawn) {
+		sites = append(sites, fell)
+	}
+	rt.advanceMonsterAbnormals(clock.NowMs())
+	if questCalls != 1 || len(sites) != 1 {
+		t.Fatalf("quest credits = %d (sites %d), want exactly 1", questCalls, len(sites))
+	}
+	site, want := sites[0], fellAt[second.Gid]
+	if site.RegionID != want.RegionID || site.X != want.X || site.Z != want.Z {
+		t.Fatalf("quest credit landed on the companion's monster at %+v, want the player's own kill at %+v", site, want)
+	}
+}
