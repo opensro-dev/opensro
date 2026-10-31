@@ -103,7 +103,10 @@ func isVersionMismatch(err error) bool {
 // pendingRenameQueuedMs, lastRenameMs; port-only, #1689,
 // SRO_NAME_CHANGE_SCROLL) and layout 11's name_reservations table. The
 // offline upgrade adds the empty table and rewrites no record.
-const CurrentVersion = 33
+// Version 34 adds the optional Halloween daily box count (halloweenBoxDay,
+// halloweenBoxCount; port-only, SRO_HALLOWEEN_EVENT). The offline upgrade
+// rewrites no record.
+const CurrentVersion = 34
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

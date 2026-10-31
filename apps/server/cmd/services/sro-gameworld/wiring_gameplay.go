@@ -202,6 +202,12 @@ func newGameplayPlane(
 	if items.SunEventOnly.Enabled() {
 		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
 	}
+	// SRO_HALLOWEEN_EVENT (port-only, not native in this client build):
+	// the Halloween Day event's switch and UTC window (wiring_halloween.go).
+	items.Halloween = halloweenEventFromEnv()
+	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
+	// helmets stay sealed at the transfer doors after the event.
+	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -843,6 +849,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}

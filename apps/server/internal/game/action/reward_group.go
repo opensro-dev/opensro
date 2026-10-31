@@ -474,6 +474,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
 		}
+		// The Halloween daily cap (halloween.go) counts the same
+		// committed loot the same way: every minted box, GM-spawned
+		// kills excluded, lands on the winner before the next kill.
+		if !impact.Instance.GMSpawned {
+			rt.countHalloweenBoxes(a.character, drops, now)
+		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)
 		} else if len(frames) > 0 {
