@@ -124,7 +124,10 @@ const OFF = Object.freeze( {
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.
-	sunDropMarker: false
+	sunDropMarker: false,
+	// Off by default: port-only portal-out cue on arrival; the native
+	// gate has no traced caller, so silence is the native default.
+	warpArrivalSound: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -543,6 +546,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -560,6 +564,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );

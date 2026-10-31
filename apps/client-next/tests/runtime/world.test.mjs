@@ -734,10 +734,23 @@ test("a resumed session keeps the party, so the next member delta applies after 
 	drain();
 	world.step( 5 );
 	// Loading completes: travelReady retires the login's reset latch.
+	// The Experimental warp-arrival row is on for this arrival (below, the
+	// resumed arrival runs with it off, the native silence).
+	world.experimental( { warpArrivalSound: true } );
 	world.ready();
 	first.receive( 0xb0d5, party.seed );
 	first.receive( 0x35d6, party.roster );
 	world.step( 6 );
+	// travelReady publishes the arrival's own cue: the table's portal-out
+	// row (SND_WARP, gatein.wav) rides the first batch after the ready.
+	const arrival = world.take();
+	if ( !arrival ) throw Error( "No batch after the ready" );
+	assert.ok(
+		arrival.events.some( e => e.kind === "ui-sound" && e.handle === "SND_WARP" ),
+		"The world's ready plays the portal-out cue"
+	);
+	world.ack( arrival.sequence );
+	presentation.apply( arrival );
 	drain();
 	assert.equal( defined( presentation.gameplay() ).social.members.length, 2 );
 	world.disconnect();
@@ -756,9 +769,21 @@ test("a resumed session keeps the party, so the next member delta applies after 
 	world.step( 10 );
 	drain();
 	world.step( 11 );
+	// The resumed arrival runs with the warp-arrival row off (its default):
+	// no portal-out cue rides the batch - the native arrival is silent.
+	world.experimental( { warpArrivalSound: false } );
 	world.ready();
 	second.receive( 0x3e58, party.delta( 21 ) );
 	world.step( 12 );
+	const resumedArrival = world.take();
+	if ( resumedArrival ) {
+		assert.ok(
+			!resumedArrival.events.some( e => e.kind === "ui-sound" && e.handle === "SND_WARP" ),
+			"With the row off, the arrival plays no portal-out cue"
+		);
+		world.ack( resumedArrival.sequence );
+		presentation.apply( resumedArrival );
+	}
 	drain();
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().error, undefined );
