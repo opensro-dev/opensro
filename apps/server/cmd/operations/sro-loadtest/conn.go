@@ -63,8 +63,11 @@ func dialGame(ctx context.Context, base, ticket string, timeout time.Duration) (
 	}
 	address = scheme + strings.TrimPrefix(strings.TrimPrefix(address, "http://"), "https://")
 	dialer := websocket.Dialer{Proxy: http.ProxyFromEnvironment, HandshakeTimeout: timeout}
-	ws, _, err := dialer.DialContext(ctx, address, nil)
+	ws, resp, err := dialer.DialContext(ctx, address, nil)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 		return nil, transport.Welcome{}, fmt.Errorf("dial: %w", err)
 	}
 	ws.SetReadLimit(int64(transport.MaxFrameBytes) + 4)
