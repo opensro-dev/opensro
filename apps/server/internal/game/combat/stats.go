@@ -151,6 +151,8 @@ PlayerStatsWithModifiers applies installation-time effect writes through the
 same dependency graph as equipment and passives. The effect owner supplies
 an immutable snapshot with independent source identities; this function does
 not infer lifetimes, rebuild caps from current stats, or allocate identities.
+While every input stands still the answer is shared from the content-keyed
+memo (statscache.go) instead of rebuilt.
 
 block carries the abnormal-state writes (source 5, or 0 for frostbite's 8C
 base replacement), applied after every other owner as the callbacks write
@@ -158,6 +160,29 @@ into the live keeper.
 ==================
 */
 func PlayerStatsWithModifiers(
+	character *domain.Character,
+	catalogs Catalogs,
+	modifiers []paramkeeper.Write,
+	block *abnormal.Block,
+) (Stats, Loadout, error) {
+	if stats, loadout, err, ok := playerStatsMemo.lookup(character, catalogs, modifiers, block); ok {
+		return stats, loadout, err
+	}
+	stats, loadout, err := playerStatsWithModifiers(character, catalogs, modifiers, block)
+	playerStatsMemo.insert(character, catalogs, modifiers, block, stats, loadout, err)
+	return stats, loadout, err
+}
+
+/*
+================
+playerStatsWithModifiers
+
+The rebuild itself: every equipment, passive and magic-option write
+through one fresh keeper graph. PlayerStatsWithModifiers memoises it
+(statscache.go) while every input stands still.
+================
+*/
+func playerStatsWithModifiers(
 	character *domain.Character,
 	catalogs Catalogs,
 	modifiers []paramkeeper.Write,
