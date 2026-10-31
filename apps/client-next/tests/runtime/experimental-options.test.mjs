@@ -52,6 +52,7 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
+	sunRays: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,
@@ -233,6 +234,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		sunRays: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -251,7 +253,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"sunRays"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -281,7 +284,8 @@ test("new environment preferences persist only on Confirm and Default remains a 
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"sunRays"
 		])
 	) {
 		const hud = createExperimentalHud();
@@ -320,7 +324,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	// changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
+		[ "sunShadow", "perPixelLighting", "sunRays", "enchantSparks", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

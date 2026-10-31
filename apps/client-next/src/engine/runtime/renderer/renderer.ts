@@ -44,6 +44,9 @@ import { regionRelativeXZ, worldAudioPosition } from "@/engine/foundation/world/
 const ENVIRONMENT_DIFFUSE = 8;
 const ENVIRONMENT_AMBIENT = 12;
 const ENVIRONMENT_SUN_DIRECTION = 84;
+// A far point along the shading direction; any large reach projects the
+// same direction onto the frame.
+const SUN_DISTANCE = 1000;
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -903,6 +906,32 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
+				// Port-only, not native. Experimental > Lighting > Sun rays: the
+				// sun's screen state projects from the same view-projection the
+				// frame drew with - the shading direction (environment 84..86)
+				// carried to a far point. Behind the eye the strength is zero and
+				// no ray marches.
+				const raysDraw = device.sunRays( viewport.width, viewport.height, experimental.sunRays && !preview ),
+					raysSun = new Float32Array( 4 );
+				if ( raysDraw ) {
+					const dx = scene.environment[ENVIRONMENT_SUN_DIRECTION]!,
+						dy = scene.environment[ENVIRONMENT_SUN_DIRECTION + 1]!,
+						dz = scene.environment[ENVIRONMENT_SUN_DIRECTION + 2]!,
+						m = scene.matrix,
+						x = scene.camera.eye[0] + dx * SUN_DISTANCE,
+						y = scene.camera.eye[1] + dy * SUN_DISTANCE,
+						z = scene.camera.eye[2] + dz * SUN_DISTANCE,
+						cw = m[3]! * x + m[7]! * y + m[11]! * z + m[15]!;
+					if ( cw > 0.1 ) {
+						const cx = m[0]! * x + m[4]! * y + m[8]! * z + m[12]!,
+							cy = m[1]! * x + m[5]! * y + m[9]! * z + m[13]!;
+						raysSun[0] = (cx / cw) * .5 + .5;
+						raysSun[1] = .5 - (cy / cw) * .5;
+						raysSun[2] = cw;
+						raysSun[3] = 1;
+					}
+					raysDraw.sun( raysSun[0]!, raysSun[1]!, raysSun[2]!, raysSun[3]! );
+				}
 				const pending = frame!.draw(
 					scaled ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
@@ -963,6 +992,7 @@ export function createRenderer(
 							} :
 							undefined,
 						sunShadow,
+						godRays: raysDraw,
 						casters: shadowOn ?
 							[ ...opaqueDraws, ...(preview ? [] : liveCharacters.filter( draw => !draw.blended )) ] :
 							[]

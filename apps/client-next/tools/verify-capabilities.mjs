@@ -70,6 +70,7 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+const godRays = runtime + "renderer/device/god-rays.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/VIEWER.md).
@@ -98,7 +99,8 @@ const deviceInternals = [
 	particles,
 	shadows,
 	sunShadow,
-	hdr
+	hdr,
+	godRays
 ];
 export const rules = {
 	createQuerySet: [ timing ],
@@ -379,6 +381,22 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( sunShadow );
+// The experimental screen-space sun rays: three half-res passes over a
+// depth copy, encoded on the frame encoder like the sun cascade.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createSampler",
+		"createTexture",
+		"createBuffer",
+		"createBindGroup",
+		"createBindGroupLayout",
+		"createPipelineLayout",
+		"writeBuffer",
+		"beginRenderPass"
+	]
+) rules[name].push( godRays );
 for ( const name of [ "createBuffer", "createTexture", "writeBuffer", "beginRenderPass" ] ) {
 	rules[name].push( waterReflection );
 }

@@ -165,6 +165,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Smooth lighting on characters and objects."
 			},
 			{
+				key: "sunRays",
+				id: "experimental-sun-rays",
+				label: "Sun rays",
+				description: "Light shafts where the sky shows through the world."
+			},
+			{
 				key: "enchantSparks",
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",

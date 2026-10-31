@@ -133,7 +133,8 @@ export async function captureRenderScale( { nativeOnly = false, recover = false 
 				hdrToneMap: true,
 				floatBloom: true,
 				sunShadow: true,
-				perPixelLighting: true
+				perPixelLighting: true,
+				sunRays: true
 			}, true );
 		}
 		await capture( "resize", { renderScale: 50 }, false, 173, 111 );

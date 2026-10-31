@@ -116,11 +116,26 @@ export interface SunShadowOwner {
 }
 /*
 ================
+GodRaysDraw
+
+The experimental screen-space sun rays (device/god-rays.ts). The renderer
+prepares the stage and the sun's screen state; the frame owner encodes the
+half-res passes over the stored scene depth, compositing into the scene
+target before the resolve chains, flares and UI.
+================
+*/
+export interface GodRaysDraw {
+	/** The sun's screen position (uv), its clip w and the strength; before encode. */
+	sun( u: number, v: number, w: number, strength: number ): void;
+	encode( encoder: GPUCommandEncoder, frameDepth: GPUTextureView, target: GPUTextureView ): void;
+}
+/*
+================
 ExperimentalFrame
 
 The frame's experimental stages: the HDR float intermediate (its tone map
-pass or the bloom chain's tonemapping copy-back) and the sun cascade's
-caster list.
+pass or the bloom chain's tonemapping copy-back), the sun cascade's caster
+list and the screen-space sun rays.
 ================
 */
 export interface ExperimentalFrame {
@@ -133,6 +148,7 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly godRays?: GodRaysDraw;
 }
 /*
 ================
@@ -163,6 +179,7 @@ export interface DeviceOwner extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
+	sunRays( width: number, height: number, enabled: boolean ): GodRaysDraw | undefined;
 	sunShadow(): SunShadowOwner;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;

@@ -102,6 +102,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
+			const godRays = experimental?.godRays;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
@@ -269,7 +270,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+							depthStoreOp: flares || godRays || deferred ||
+									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
@@ -284,14 +286,17 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && worldUiBundle ) {
+			if ( !bloom && !deferred && !hdrScene && !sceneScale && !godRays && worldUiBundle ) {
 				pass.executeBundles( [ worldUiBundle ] );
 			}
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+			if (
+				!bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && !godRays && backgroundBundle
+			) {
 				pass.executeBundles( [ backgroundBundle ] );
 			}
 			if (
-				!bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle
+				!bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && !godRays &&
+				!preview.length && uiBundle
 			) {
 				pass.executeBundles( [ uiBundle ] );
 			}
@@ -362,9 +367,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
-										"store" as const :
-										"discard" as const
+									depthStoreOp:
+										flares || godRays || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+											"store" as const :
+											"discard" as const
 								}
 							} :
 							{})
@@ -383,11 +389,16 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							draw.baseVertex ?? 0
 						);
 					}
-					if ( !bloom && !hdrScene && !sceneScale && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+					if ( !bloom && !hdrScene && !sceneScale && !godRays && worldUiBundle ) {
+						tail.executeBundles( [ worldUiBundle ] );
+					}
+					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && !godRays && backgroundBundle ) {
 						tail.executeBundles( [ backgroundBundle ] );
 					}
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle ) {
+					if (
+						!bloom && !hdrScene && !sceneScale && !flares && !thunder && !godRays && !preview.length &&
+						uiBundle
+					) {
 						tail.executeBundles( [ uiBundle ] );
 					}
 					tail.end();
@@ -404,6 +415,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					overlay.draw( 6 );
 					overlay.end();
 				}
+				// Port-only, not native: the rays march the stored scene depth and
+				// composite into the scene before the resolve chains, flares and UI.
+				if ( godRays && depth ) godRays.encode( encoder, depth, sceneView );
 				bloom?.encode( encoder, view );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,
@@ -448,7 +462,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					labels.executeBundles( [ worldUiBundle ] );
 					labels.end();
 				}
-				if ( flares || thunder || bloom || hdrScene || sceneScale ) {
+				if ( flares || thunder || bloom || hdrScene || sceneScale || godRays ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
 						label: "hud-after-flares",
@@ -457,7 +471,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: uiDepth,
 									depthClearValue: 1,
-									depthLoadOp: bloom && !hdrScene && !sceneScale && worldUiBundle ?
+									depthLoadOp: (bloom || godRays) && !hdrScene && !sceneScale && worldUiBundle ?
 										"load" as const :
 										"clear" as const,
 									depthStoreOp: "discard" as const
@@ -466,7 +480,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							{}),
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
-					if ( bloom && !hdrScene && !sceneScale && worldUiBundle ) hud.executeBundles( [ worldUiBundle ] );
+					if ( (bloom || godRays) && !hdrScene && !sceneScale && worldUiBundle ) {
+						hud.executeBundles( [ worldUiBundle ] );
+					}
 					if ( backgroundBundle ) hud.executeBundles( [ backgroundBundle ] );
 					if ( !preview.length && uiBundle ) hud.executeBundles( [ uiBundle ] );
 					hud.end();

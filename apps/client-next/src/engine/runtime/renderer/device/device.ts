@@ -13,6 +13,7 @@ import {
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
 import { createFinish } from "./finish";
+import { createGodRays } from "./god-rays";
 import { createHdr } from "./hdr";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
@@ -98,6 +99,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
+	let raysStage: ReturnType<typeof createGodRays> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
 	const depthTextures = new Set<GPUTexture>();
@@ -453,6 +455,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
+			raysStage = createGodRays( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
+
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
 			/*
 			================
@@ -542,6 +546,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		hdr( width, height, enabled ) {
 			if ( phase !== "running" || !hdr ) throw Error( "HDR device is not ready" );
 			return hdr.prepare( width, height, enabled && hdrOn );
+		},
+		/*
+		================
+		sunRays
+
+		Prepare the screen-space sun rays stage (device/god-rays.ts);
+		the renderer computes the sun's screen position and encodes the
+		stage after the scene pass.
+		================
+		*/
+		sunRays( width, height, enabled ) {
+			if ( phase !== "running" || !raysStage ) throw Error( "God rays device is not ready" );
+			return raysStage.prepare( width, height, enabled );
 		},
 		/*
 		================
@@ -857,6 +874,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			hdr = null;
 			finish?.dispose();
 			finish = null;
+			raysStage?.dispose();
+			raysStage = null;
 			particleQuery?.dispose();
 			particleQuery = null;
 			geometry?.dispose();

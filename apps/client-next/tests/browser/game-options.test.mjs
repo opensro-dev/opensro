@@ -288,6 +288,7 @@ test(
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					sunRays: false,
 					renderScale: 100
 				}
 			);
@@ -329,6 +330,7 @@ test(
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					sunRays: false,
 					renderScale: 100
 				}
 			);
@@ -341,7 +343,8 @@ test(
 				{ key: "dynamicSun", id: "experimental-dynamic-sun", tab: 1 },
 				{ key: "hdrToneMap", id: "experimental-hdr-tone-map", tab: 0 },
 				{ key: "sunShadow", id: "experimental-sun-shadow", tab: 2 },
-				{ key: "perPixelLighting", id: "experimental-per-pixel-lighting", tab: 2 }
+				{ key: "perPixelLighting", id: "experimental-per-pixel-lighting", tab: 2 },
+				{ key: "sunRays", id: "experimental-sun-rays", tab: 2 }
 			];
 			for ( const control of environmentControls ) {
 				await click( "experimental-tab:" + control.tab );

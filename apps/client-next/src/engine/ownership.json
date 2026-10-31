@@ -239,6 +239,7 @@
     "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/god-rays.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts"
   },
   "workers": {

@@ -69,7 +69,8 @@ test( "the float bloom chain composites, resizes and hands quality back", { time
 							floatBloom,
 							hdrToneMap: false,
 							sunShadow: false,
-							perPixelLighting: false
+							perPixelLighting: false,
+							sunRays: false
 						} );
 						canvas.width = canvas.height = size;
 						const bloom = device.bloom( size, size, true ),

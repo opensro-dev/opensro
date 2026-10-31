@@ -506,7 +506,8 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 			floatBloom: false,
 			hdrToneMap: false,
 			sunShadow: false,
-			perPixelLighting: false
+			perPixelLighting: false,
+			sunRays: false
 		} );
 		// The presentation pass is encoded inside the frame's own command
 		// buffer after the unchanged HUD composition, so the frame is one submit; the
