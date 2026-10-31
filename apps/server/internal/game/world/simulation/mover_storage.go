@@ -253,6 +253,55 @@ func (s *moverStorage) lookup(gid uint32) (monster.MoverState, bool) {
 
 /*
 ================
+setActivity
+
+Stamps only the activity cadence of an existing row, in place. The
+interest bounds never read the cadence (moverInterestBoundsFor) and
+a pending row's shared handle excludes it, so the stored value
+afterwards equals a full set of a row that differs only there.
+commitActivity's cadence-only commits (#2136) still arm from the new
+stamp; the row is not rebuilt for a clock tick. No-op when the row
+is gone: the caller's guard has just seen it.
+================
+*/
+func (s *moverStorage) setActivity(gid uint32, activity monster.ActivityCadence) {
+	if s == nil {
+		return
+	}
+	slot, ok := s.slotOf(gid)
+	if !ok {
+		return
+	}
+	rec := &s.slots[slot].rec
+	if rec.live != nil {
+		rec.live.Activity = activity
+		return
+	}
+	if rec.pending != nil {
+		rec.pending.activity = activity
+	}
+}
+
+/*
+================
+lookupAt
+
+lookup through a slot carried from the schedule read, verified
+against the gid before use. remove swaps the last row into the
+hole, so a carried slot can name another actor by dispatch time;
+the caller falls back to lookup on a miss (#2135). No fallback
+here: the miss is the signal.
+================
+*/
+func (s *moverStorage) lookupAt(slot uint32, gid uint32) (monster.MoverState, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return monster.MoverState{}, false
+	}
+	return s.slots[slot].rec.value(), true
+}
+
+/*
+================
 has
 
 Whether gid has a row, without building its MoverState.
@@ -432,26 +481,41 @@ ArriveMs == 0); the behaviour queue reads one per due actor per tick.
 ================
 */
 func (s *moverStorage) schedule(gid uint32) (moverSchedule, bool) {
+	m, _, ok := s.scheduleSlot(gid)
+	return m, ok
+}
+
+/*
+================
+scheduleSlot
+
+schedule plus the dense slot the row sits in. The behaviour batch
+build carries the slot to the dispatch read (lookupAt), which
+verifies it before use: remove swaps the last row into the hole, so
+a slot carried across a despawn can name another actor (#2135).
+================
+*/
+func (s *moverStorage) scheduleSlot(gid uint32) (moverSchedule, uint32, bool) {
 	if s == nil {
-		return moverSchedule{}, false
+		return moverSchedule{}, 0, false
 	}
 	slot, ok := s.slotOf(gid)
 	if !ok {
-		return moverSchedule{}, false
+		return moverSchedule{}, 0, false
 	}
 	r := s.slots[slot].rec
 	if r.live != nil {
 		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
-			regionID: r.live.Pose.RegionID}, true
+			regionID: r.live.Pose.RegionID}, slot, true
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending
 		if r.pending.shared.Value().row.Spawning {
 			mode = monster.MoverSpawning
 		}
-		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}, true
+		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}, slot, true
 	}
-	return moverSchedule{}, true
+	return moverSchedule{}, slot, true
 }
 
 /*

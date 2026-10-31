@@ -37,6 +37,11 @@ const (
 	behaviorBucketMs    = 8
 	behaviorBucketCount = 512
 	behaviorHorizonMs   = behaviorBucketMs * behaviorBucketCount
+
+	// behaviorNoMoverSlot marks a carried actor ref with no mover
+	// slot: the actor had no mover row at batch build, or no slot
+	// was carried at all. The dispatch read resolves it by gid.
+	behaviorNoMoverSlot = ^uint32(0)
 )
 
 /*
@@ -201,7 +206,7 @@ dies, so a second copy cannot fire again); live copies not yet due
 stay; stale copies drop. Array traffic only.
 ================
 */
-func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]uint32) []behaviorCopy {
+func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behaviorActorRef) []behaviorCopy {
 	keep := list[:0]
 	for _, e := range list {
 		if !q.liveCopy(e) {
@@ -212,7 +217,7 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]uint32)
 			continue
 		}
 		q.slots[e.slot].live = false
-		*out = append(*out, q.slots[e.slot].gid)
+		*out = append(*out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot})
 	}
 	return keep
 }
@@ -221,7 +226,8 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]uint32)
 ================
 behaviorQueue.takeDue
 
-Every gid due by now, in no order (callers sort). Their live dues are
+Every actor due by now, as a ref carrying no mover slot yet (the
+batch build fills it), in no order (callers sort). Their live dues are
 consumed: the caller re-arms the ones it keeps (scheduleBehavior) and
 the rest stay unscheduled, exactly the heap's pop contract.
 
@@ -233,7 +239,7 @@ future buckets and cannot fire in this drain: scheduleBehavior never
 re-arms into the past.
 ================
 */
-func (q *behaviorQueue) takeDue(now int64, out []uint32) []uint32 {
+func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorActorRef {
 	if len(q.far) > 0 && q.farMin-now <= behaviorHorizonMs {
 		rest := q.far[:0]
 		var migrate []behaviorCopy
@@ -252,7 +258,7 @@ func (q *behaviorQueue) takeDue(now int64, out []uint32) []uint32 {
 			}
 			if e.at <= now {
 				q.slots[e.slot].live = false
-				out = append(out, q.slots[e.slot].gid)
+				out = append(out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot})
 				continue
 			}
 			migrate = append(migrate, e)
@@ -364,14 +370,31 @@ MonsterState.scheduleBehavior
 ================
 */
 func (s *MonsterState) scheduleBehavior(state *divisionMonsterState, gid uint32, now int64) {
+	s.scheduleBehaviorSlot(state, gid, now)
+}
+
+/*
+================
+MonsterState.scheduleBehaviorSlot
+
+scheduleBehavior, also returning the mover slot the read resolved.
+The batch build carries the slot to the dispatch read
+(behaviorActorMover), which verifies it against the gid before use
+and falls back to the gid resolve when a despawn recycled it
+(#2135). behaviorNoMoverSlot means the actor had no mover row: it
+still joins the batch, and its mover is synthesized at the read,
+exactly as before the carry.
+================
+*/
+func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uint32, now int64) uint32 {
 	state.forgetDormant(gid)
-	m, ok := state.movers.schedule(gid)
+	m, slot, ok := state.movers.scheduleSlot(gid)
 	if !ok {
 		state.behavior.remove(gid)
-		return
+		return behaviorNoMoverSlot
 	}
 	if s.tryDormant(state, gid, m, now) {
-		return
+		return slot
 	}
 	at := now + 1
 	commandPending := state.instances.hot[gid].help.HasPending()
@@ -385,6 +408,24 @@ func (s *MonsterState) scheduleBehavior(state *divisionMonsterState, gid uint32,
 		}
 	}
 	state.behavior.set(gid, at)
+	return slot
+}
+
+/*
+================
+behaviorActorRef
+
+One due actor as the batch carries it: its gid, and the mover slot
+the build's schedule read resolved. The slot is a hint for the
+dispatch read (moverStorage.lookupAt), verified against the gid
+before use - remove swaps the last row into the hole, so a carried
+slot can name another actor by dispatch time. behaviorNoMoverSlot
+means no slot was carried.
+================
+*/
+type behaviorActorRef struct {
+	gid  uint32
+	slot uint32
 }
 
 /*
@@ -394,7 +435,7 @@ behaviorBatch
 */
 type behaviorBatch struct {
 	key    populationKey
-	actors []uint32
+	actors []behaviorActorRef
 }
 
 /*
@@ -465,24 +506,30 @@ step starts from, or the step's whole-value commits overwrite it
 (#2047 review).
 ================
 */
-func (s *MonsterState) behaviorActorMover(key populationKey, gid uint32) behaviorActorSnapshot {
+func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRef) behaviorActorSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForLease(key.division, key.lease)
 	if state == nil {
 		return behaviorActorSnapshot{}
 	}
-	actor, ok := state.instances.lookup(gid)
+	actor, ok := state.instances.lookup(ref.gid)
 	if !ok {
 		return behaviorActorSnapshot{}
 	}
-	if mover, ok := state.movers.lookup(gid); ok {
+	// The batch carried the mover's slot (#2135): read through it
+	// when it still names this actor, else resolve by gid as before.
+	mover, ok := state.movers.lookupAt(ref.slot, ref.gid)
+	if !ok {
+		mover, ok = state.movers.lookup(ref.gid)
+	}
+	if ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
 		return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
 	}
-	mover := monster.NewSpawnMover(actor, s.nowMillis())
+	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
@@ -515,7 +562,8 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		batch := behaviorBatch{key: key}
 		batch.actors = state.behavior.takeDue(now, batch.actors)
 		actors := batch.actors[:0]
-		for _, gid := range batch.actors {
+		for _, ref := range batch.actors {
+			gid := ref.gid
 			i, exists := state.instances.hot[gid]
 			if !exists {
 				state.behavior.remove(gid)
@@ -528,11 +576,11 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
-			actors = append(actors, gid)
-			s.scheduleBehavior(state, gid, now)
+			ref.slot = s.scheduleBehaviorSlot(state, gid, now)
+			actors = append(actors, ref)
 		}
 		batch.actors = actors
-		sort.Slice(batch.actors, func(i, j int) bool { return batch.actors[i] < batch.actors[j] })
+		sort.Slice(batch.actors, func(i, j int) bool { return batch.actors[i].gid < batch.actors[j].gid })
 		out = append(out, batch)
 	}
 	return out

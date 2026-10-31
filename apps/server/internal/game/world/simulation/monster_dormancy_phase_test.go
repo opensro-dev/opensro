@@ -67,9 +67,9 @@ func wakeDormancyPhaseWorld(t *testing.T, s *MonsterState, d *divisionMonsterSta
 	first := make(map[uint32]int64)
 	for tick := int64(200000); tick <= 202100; tick += 100 {
 		for _, batch := range s.behaviorBatchesForDivision(tick, "sleep") {
-			for _, gid := range batch.actors {
-				if _, seen := first[gid]; !seen {
-					first[gid] = tick
+			for _, ref := range batch.actors {
+				if _, seen := first[ref.gid]; !seen {
+					first[ref.gid] = tick
 				}
 			}
 		}
