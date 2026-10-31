@@ -89,6 +89,42 @@ func TestActivityRetaliationInvalidatesSuspensionAndWakesScheduledActor(t *testi
 	}
 }
 
+/*
+================
+TestCommitActivityCadenceOnlyStampsCadence
+
+An idle re-check commit that moves only the activity clock stores
+exactly the committed value (stamped in place, not rebuilt: the
+interest bounds and the pending row's shared handle never carried
+the cadence), and a commit that moves anything else still lands in
+full (#2136). Read back through Mover, the read the gate trusts.
+================
+*/
+func TestCommitActivityCadenceOnlyStampsCadence(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	before, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	after := before
+	if !after.Activity.Due(uint32(now + 1001)) {
+		t.Fatal("fixture cadence did not fire")
+	}
+	if !ops.Monsters.commitActivity(monsterTestDivision, actor.Gid, before, after, now+1001) {
+		t.Fatal("cadence-only commit rejected")
+	}
+	got, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if got != after {
+		t.Fatalf("stored mover differs from cadence-only commit:\n got %+v\nwant %+v", got, after)
+	}
+	moved := after
+	moved.Pose.X += 25
+	if !ops.Monsters.commitActivity(monsterTestDivision, actor.Gid, after, moved, now+1001) {
+		t.Fatal("pose-carrying commit rejected")
+	}
+	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if got != moved {
+		t.Fatal("pose change did not land in full")
+	}
+}
+
 func TestActivityProductionTickerRetainsUnobservedDivision(t *testing.T) {
 	ops, actor, now := activityFixture(t)
 	source := &fakeSource{}

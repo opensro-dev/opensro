@@ -253,6 +253,37 @@ func (s *moverStorage) lookup(gid uint32) (monster.MoverState, bool) {
 
 /*
 ================
+setActivity
+
+Stamps only the activity cadence of an existing row, in place. The
+interest bounds never read the cadence (moverInterestBoundsFor) and
+a pending row's shared handle excludes it, so the stored value
+afterwards equals a full set of a row that differs only there.
+commitActivity's cadence-only commits (#2136) still arm from the new
+stamp; the row is not rebuilt for a clock tick. No-op when the row
+is gone: the caller's guard has just seen it.
+================
+*/
+func (s *moverStorage) setActivity(gid uint32, activity monster.ActivityCadence) {
+	if s == nil {
+		return
+	}
+	slot, ok := s.slotOf(gid)
+	if !ok {
+		return
+	}
+	rec := &s.slots[slot].rec
+	if rec.live != nil {
+		rec.live.Activity = activity
+		return
+	}
+	if rec.pending != nil {
+		rec.pending.activity = activity
+	}
+}
+
+/*
+================
 lookupAt
 
 lookup through a slot carried from the schedule read, verified
