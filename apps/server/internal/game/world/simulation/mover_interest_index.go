@@ -253,9 +253,11 @@ func outdoorReachSectorWindow(center Spawn, reach float64) (lowX, highX, lowZ, h
 livePosesWithinOutdoorReach
 
 Visits movers whose live pose at nowMs can lie within reach of an outdoor
-center, falling back to the full table when center is in a dungeon or the
-sector window exceeds maxOutdoorReachSectorBuckets. Only movers flagged as
-spanning multiple regions in a multi-sector window consult deduplication.
+center, falling back to the full table when the sector window exceeds
+maxOutdoorReachSectorBuckets. A dungeon center visits only the dungeon
+buckets (#2139). Only movers flagged as spanning multiple regions in a
+multi-sector window consult deduplication; in the dungeon walk every
+spanning mover does, because it sits in one bucket per endpoint.
 ================
 */
 func (s *moverStorage) livePosesWithinOutdoorReach(center Spawn, reach float64, nowMs int64, ground monster.GroundResolver) iter.Seq2[uint32, monster.Pose] {
@@ -265,6 +267,42 @@ func (s *moverStorage) livePosesWithinOutdoorReach(center Spawn, reach float64, 
 		}
 		lowX, highX, lowZ, highZ, ok := outdoorReachSectorWindow(center, reach)
 		if !ok {
+			if worldgeom.IsDungeonRegion(center.RegionID) {
+				// Every dungeon region is one plane in a single local
+				// frame (worldgeom.SamePlane), so a candidate may stand
+				// in any of them; but storage indexes movers by their
+				// settled pose region and both segment endpoints, so
+				// the dungeon buckets hold them all. The query touches
+				// the dungeon regions, not the whole table (#2139).
+				// Consumers still apply their plane and distance
+				// filters to every pose yielded, so the candidate set
+				// is the one the full scan produced.
+				var seen map[uint32]struct{}
+				for region, bucket := range s.spatial {
+					if region.dungeon == 0 {
+						continue
+					}
+					for gid, spans := range bucket {
+						if spans {
+							if _, duplicate := seen[gid]; duplicate {
+								continue
+							}
+							if seen == nil {
+								seen = make(map[uint32]struct{})
+							}
+							seen[gid] = struct{}{}
+						}
+						slot, exists := s.slotOf(gid)
+						if !exists {
+							continue
+						}
+						if !yield(gid, s.slots[slot].rec.livePoseAt(nowMs, ground)) {
+							return
+						}
+					}
+				}
+				return
+			}
 			for _, slot := range s.slots {
 				if !yield(slot.gid, slot.rec.livePoseAt(nowMs, ground)) {
 					return
