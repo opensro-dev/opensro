@@ -16,6 +16,7 @@ package action
 import (
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -122,8 +123,12 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			return true
 		}
 		item, found := rt.characterGround(division, c, q.GroundGID)
-		if !found || item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
-			refusalCause = "not-found-or-reserved"
+		if !found {
+			refusalCause = "not-found"
+			return false
+		}
+		if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
+			refusalCause = "reserved"
 			return false
 		}
 		item.Summon.RefreshRentalTimes(now.Unix())
@@ -175,15 +180,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 					// the drop until the ownership window lapses.
 					code = cosPickupBagFull
 				}
-				log.WithField("character", c.Name).
-					WithField("cos", q.CosGID).
-					WithField("ground", q.GroundGID).
-					WithField("move", q.MovementType).
-					WithField("code", code).
-					WithField("cause", "grant-fault").
-					WithField("occupied", inv.Len()).
-					WithField("capacity", bag.Capacity).
-					Warn("cos ground refused")
+				rt.logCosRefusal(c, q, code, "grant-fault")
 				result = failureResult(code)
 				return false
 			}
@@ -225,13 +222,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		return true
 	})
 	if refusalCause != "" {
-		log.WithField("character", c.Name).
-			WithField("cos", q.CosGID).
-			WithField("ground", q.GroundGID).
-			WithField("move", q.MovementType).
-			WithField("code", wire.ErrCodeInvalidRequest).
-			WithField("cause", refusalCause).
-			Warn("cos ground refused")
+		rt.logCosRefusal(c, q, wire.ErrCodeInvalidRequest, refusalCause)
 	}
 	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && picked.RefObjID != 0 && !picked.IsGold() {
 		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
@@ -505,4 +496,71 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		})
 	}
 	return result
+}
+
+// cosRefusalLogInterval paces the refusal warning per character and cause.
+const cosRefusalLogInterval = time.Minute
+
+/*
+================
+cosRefusalKey
+
+One rollup row. It names the character and the cause, never the ground
+item: item gids never stop arriving, so a per-item key would grow without
+bound, and these two are bounded by the roster.
+================
+*/
+type cosRefusalKey struct {
+	character string
+	cause     string
+}
+
+/*
+================
+cosRefusalWindow
+================
+*/
+type cosRefusalWindow struct {
+	mu       sync.Mutex
+	lastLog  time.Time
+	sinceLog uint64
+}
+
+/*
+================
+logCosRefusal
+
+One refusal retires the target client-side (77DD10), so repeats are a stuck
+loop, not news: count them and log at most once a minute with the rolled-up
+count, the frameLimiter clamp-log shape (transport/ratelimit.go). The
+reported ground is the refusal that opened the window. Returns whether a
+line was written.
+================
+*/
+func (rt *Runtime) logCosRefusal(c *enterworld.Character, q wire.ItemMoveRequest, code byte, cause string) bool {
+	key := cosRefusalKey{character: strings.ToLower(c.Name), cause: cause}
+	entry, _ := rt.cosRefusalLog.LoadOrStore(key, &cosRefusalWindow{})
+	window := entry.(*cosRefusalWindow)
+	now := rt.Now()
+	window.mu.Lock()
+	window.sinceLog++
+	count := window.sinceLog
+	due := window.lastLog.IsZero() || now.Sub(window.lastLog) >= cosRefusalLogInterval
+	if due {
+		window.lastLog = now
+		window.sinceLog = 0
+	}
+	window.mu.Unlock()
+	if !due {
+		return false
+	}
+	log.WithField("character", c.Name).
+		WithField("cos", q.CosGID).
+		WithField("ground", q.GroundGID).
+		WithField("move", q.MovementType).
+		WithField("code", code).
+		WithField("cause", cause).
+		WithField("refusals", count).
+		Warn("cos ground refused")
+	return true
 }
