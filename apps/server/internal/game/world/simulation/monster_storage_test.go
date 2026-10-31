@@ -42,6 +42,40 @@ func TestResidentMonsterRoundTripAndIsolation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestLeaderFactsMatchLookup
+
+The FOLLOW transaction's field-level leader facts must answer exactly
+what the full lookup answers, in either residency tier: a divergence
+would move a commit's fresh compare with no behaviour test watching.
+The leader's radius is grade-scaled on purpose.
+================
+*/
+func TestLeaderFactsMatchLookup(t *testing.T) {
+	s := newMonsterStorage(nil)
+	leader := monster.Instance{Gid: 7, CurrentHP: 42}
+	leader.Ref.BodyRadius = 10
+	leader.Ref.MonsterType = 4 // giant (4): BodyRadius scales by GradeScale
+	s.set(leader.Gid, leader)
+	check := func(gid uint32) {
+		hp, radius, exists := s.leaderFacts(gid)
+		want, wantExists := s.lookup(gid)
+		if exists != wantExists || hp != want.CurrentHP || radius != want.BodyRadius() {
+			t.Fatalf("gid %d: facts (%d, %v, %v), lookup (%d, %v, %v)",
+				gid, hp, radius, exists, want.CurrentHP, want.BodyRadius(), wantExists)
+		}
+	}
+	check(leader.Gid)
+	check(404)
+	s.archive = &monsterArchive{}
+	s.freeze(leader.Gid)
+	if _, cold := s.cold[leader.Gid]; !cold {
+		t.Fatal("leader did not freeze")
+	}
+	check(leader.Gid)
+}
+
 func fillResidentTestValue(v reflect.Value, r *rand.Rand) {
 	if !v.CanSet() {
 		return
