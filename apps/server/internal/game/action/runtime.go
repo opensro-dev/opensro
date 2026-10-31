@@ -792,6 +792,9 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// tickGateCuts counts the TickHooks cut running by a held publication
+	// gate (acquireTickGate). Tick goroutine only.
+	tickGateCuts int
 	// actionSessions owns the pending back command and private B2CD count.
 	// Existing continuation and cast owners execute and commit gameplay.
 	groundApproachStops sync.Map // motion revision terminal events; action tick owns retirement

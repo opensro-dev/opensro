@@ -77,11 +77,24 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// behind an entry bootstrap or a request op used to read as slow
 		// itself, naming the waiter instead of the holder (#1820 E). The
 		// holder's side of the same stall is the publication_holds report.
+		//
+		// The wait is bounded (acquireTickGate). A step that loses it cuts
+		// the rest of this hook, so the steps after it run next tick in
+		// their usual order instead of out of order now. Each is due-based
+		// and already survives a tick the ticker dropped under an overrun.
+		cut := false
 		step := func(name string, run func()) {
+			if cut {
+				return
+			}
 			var unlock func()
 			timed("tickPublicationGate", func() {
-				unlock = rt.lockTickPublication()
+				unlock = rt.acquireTickGate()
 			})
+			if unlock == nil {
+				cut = true
+				return
+			}
 			defer unlock()
 			timed(name, func() {
 				run()
@@ -172,11 +185,13 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advancePKRecords", rt.advancePKRecords)
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
 		// Pending pickups take the gate themselves (publishPendingPickup).
-		timed("advancePendingPickups", func() {
-			out = append(out, rt.advancePendingPickups(nowMs)...)
-			out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
-			sealed = len(out)
-		})
+		if !cut {
+			timed("advancePendingPickups", func() {
+				out = append(out, rt.advancePendingPickups(nowMs)...)
+				out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+				sealed = len(out)
+			})
+		}
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
 		frames("ReleaseExpiredOwnership", rt.ReleaseExpiredOwnership)
@@ -188,6 +203,35 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out
 	}
+}
+
+/*
+================
+acquireTickGate
+
+The publication gate for one TickHook step, or nil when the bound ran out
+and the hook should cut. A cut hook's last wait counts once per tick, and
+past maxTickGateCuts cut ticks the wait is unbounded again. Only the tick
+goroutine touches tickGateCuts.
+================
+*/
+func (rt *Runtime) acquireTickGate() func() {
+	if rt.tickGateCuts >= maxTickGateCuts {
+		rt.tickGateCuts = 0
+		return rt.lockTickPublication()
+	}
+	unlock, ok := rt.tryLockTickPublication(tickGateBound)
+	if !ok {
+		rt.tickGateCuts++
+		// The wait is under the slow threshold, so name each cut here or
+		// the live re-measure could not see this path run.
+		if rt.Steps.Slow != nil {
+			rt.Steps.Slow("tickGateCut", tickGateBound)
+		}
+		return nil
+	}
+	rt.tickGateCuts = 0
+	return unlock
 }
 
 /*
