@@ -112,11 +112,18 @@ func (s *MonsterState) ReinstallStructures(divisionID string, world instance.ID,
 	if state == nil {
 		return 0
 	}
-	var nests []int
-	for gid, row := range state.instances.values() {
-		if !row.Ref.Structure {
-			continue
+	// Collect first: removeInstanceLocked removes from the storage
+	// values walks, and a hot removal swaps the last row into the
+	// hole (see monsterHotSlot), so the walk must not remove.
+	var structures []monster.Instance
+	for _, row := range state.instances.values() {
+		if row.Ref.Structure {
+			structures = append(structures, row)
 		}
+	}
+	var nests []int
+	for _, row := range structures {
+		gid := row.Gid
 		index, attached := state.gidNests[gid]
 		s.removeInstanceLocked(state, gid, row)
 		if attached {
