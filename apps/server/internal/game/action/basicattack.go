@@ -15,6 +15,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -161,6 +162,13 @@ type basicAttackIntent struct {
 // chainLatencyBudgetMs is the per-command allowance native chain steps take
 // out of their waits so client latency does not stretch the authored combo.
 const chainLatencyBudgetMs = 500
+
+// basicAttackSpreadBudget is the per-tick ceiling on advancing attack
+// intents: a burst of due intents drains over later ticks instead of
+// inside one (#2143). At least one intent always advances, so a single
+// expensive intent cannot stall the step either. A var so tests can
+// shrink it to zero and watch the spread happen.
+var basicAttackSpreadBudget = 4 * time.Millisecond
 
 /*
 ==================
@@ -819,14 +827,40 @@ then routes their results after releasing authority locks.
 */
 func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
-	for _, intent := range rt.combatIntentSnapshot() {
+	intents := rt.combatIntentSnapshot()
+	if len(intents) == 0 {
+		return nil
+	}
+	// The scan resumes past the intent the last call served last, so a
+	// burst draining over several ticks under the spread budget cannot
+	// starve the tail of the sorted snapshot (#2143). A cursor whose
+	// intent retired finds no match and the scan starts at the head.
+	start := 0
+	for i, intent := range intents {
+		if simulation.WorldKey(intent.DivisionID, intent.CharacterName) == rt.basicAttackCursor {
+			start = i + 1
+			break
+		}
+	}
+	if start == len(intents) {
+		start = 0
+	}
+	started := time.Now()
+	served := 0
+	for n := 0; n < len(intents); n++ {
+		intent := intents[(start+n)%len(intents)]
 		// A chain stage waits only on the casting instance; its root bracket
 		// is deliberately still open (see chainStageBlocked).
 		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]
 		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
 			continue
 		}
+		if served > 0 && time.Since(started) >= basicAttackSpreadBudget {
+			return out
+		}
 		character, result, ok := rt.advanceBasicAttackIntentInDivision(intent, nowMs)
+		served++
+		rt.basicAttackCursor = simulation.WorldKey(intent.DivisionID, intent.CharacterName)
 		if !ok {
 			continue
 		}
@@ -874,6 +908,9 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 			out = append(out, private)
 		}
 	}
+	// The whole snapshot was served: no burst is draining, so the next
+	// tick starts at the head and keeps the sorted order.
+	rt.basicAttackCursor = ""
 	return out
 }
 
@@ -883,7 +920,14 @@ advanceBasicAttackIntentInDivision
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, nowMs int64) (*enterworld.Character, OpResult, bool) {
-	unlock := rt.lockDivision(intent.DivisionID)
+	// The wait for the division lane is named as its own slow step
+	// (basicAttackDivisionWait): a slow advanceBasicAttackIntents reading
+	// beside it is the lane holder's cost, not the intent's work (#2143).
+	// The wait still sits inside the enclosing step's time.
+	var unlock func()
+	rt.Steps.Time("basicAttackDivisionWait", func() {
+		unlock = rt.lockDivision(intent.DivisionID)
+	})
 	defer unlock()
 	// A request can cancel/replace an intent after the tick snapshots it but
 	// before this division lock is acquired. Never resurrect that stale cast.
