@@ -246,6 +246,8 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 		}
 	}
 	clone.MostWanted = clonePointer(source.MostWanted)
+	clone.VisualFlags = clonePointer(source.VisualFlags)
+	clone.Mission = cloneMissionRuntime(source.Mission)
 	clone.QuickSlots = cloneSlice(source.QuickSlots)
 	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
 	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
@@ -501,5 +503,19 @@ func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
 	clone.Y = clonePointer(source.Y)
 	clone.Z = clonePointer(source.Z)
 	clone.Angle = clonePointer(source.Angle)
+	return &clone
+}
+
+/*
+================
+cloneMissionRuntime
+================
+*/
+func cloneMissionRuntime(source *MissionRuntime) *MissionRuntime {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.EventGuideStateMask = clonePointer(source.EventGuideStateMask)
 	return &clone
 }
