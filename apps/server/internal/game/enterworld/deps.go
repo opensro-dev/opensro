@@ -88,6 +88,12 @@ type Deps struct {
 	// (SRO_LEVEL_CAP, progression's vocabulary) so the client's level
 	// windows follow it; zero is the native cap and publishes nothing.
 	LevelCap int64
+	// SlowEnterThreshold is the enter-handler duration that earns the
+	// "bootstrap: slow enter world" phase log (register.go): an entry
+	// past it names the gate wait against the total. Zero means the
+	// production default; tests set it so a held gate trips the line
+	// without waiting out that bound.
+	SlowEnterThreshold time.Duration
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool

@@ -37,6 +37,11 @@ var (
 	// errHandlerPanic closes a session whose game handler panicked; a
 	// sentinel so the close-reason metrics can classify it.
 	errHandlerPanic = errors.New("transport: handler panic")
+	// errSceneBootstrapStuck closes a session whose scene admission
+	// never enqueued its bootstrap (or refusal) within the entry bound:
+	// the entry lane is wedged, and retrying on a fresh session is the
+	// only way forward for the player.
+	errSceneBootstrapStuck = errors.New("transport: scene bootstrap not enqueued within the entry bound")
 )
 
 // Session is one logical client, surviving transport reconnects. Game
@@ -62,15 +67,23 @@ type Session struct {
 	// replace the reader while an old handler still owns a committed result.
 	dispatchMu sync.Mutex
 
-	mu              sync.Mutex
-	cond            *sync.Cond
-	conn            Conn // nil while detached
-	gen             int  // bumped on every attach; loops check it before acting
-	attached        bool
-	closed          bool
-	sceneRevision   uint64
-	sceneLoading    bool
-	observedObjects map[uint32]struct{}
+	mu            sync.Mutex
+	cond          *sync.Cond
+	conn          Conn // nil while detached
+	gen           int  // bumped on every attach; loops check it before acting
+	attached      bool
+	closed        bool
+	sceneRevision uint64
+	sceneLoading  bool
+	// sceneLoadingSince stamps the current admission's start; the
+	// keepalive watchdog measures the unenqueued window against it.
+	sceneLoadingSince time.Time
+	// sceneBootstrapEnqueued records that the current scene's bootstrap
+	// (or its refusal answer) reached the outbound queue. Reset by every
+	// BeginSceneAdmission; set by the reset-batch enqueue and by the
+	// enter lane's explicit mark after a published refusal.
+	sceneBootstrapEnqueued bool
+	observedObjects        map[uint32]struct{}
 	// publishedSorted is observedObjects in ascending order, rebuilt into a
 	// fresh array on the first PublishedObjects read after any change marks
 	// it stale. Readers share it, so it is never written once built.

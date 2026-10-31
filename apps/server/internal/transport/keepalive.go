@@ -6,14 +6,20 @@ keepalive.go - a session's liveness: keepalive pings and idle detach
 The keepalive loop pings an attached client that has gone quiet, detaches
 one silent past the idle timeout (into the resume grace window), and pings
 on a short cadence while a scene is loading, because a healthy world entry
-sends nothing while the server builds it (#1417). Moved verbatim out of
-session.go, which owns attachment, queues and IO.
+sends nothing while the server builds it (#1417). It also closes a scene
+admission whose bootstrap never reached the queue within the entry bound
+(the wedged-entry watchdog). Moved verbatim out of session.go, which owns
+attachment, queues and IO.
 
 ===========================================================================
 */
 package transport
 
-import "time"
+import (
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 // sceneLoadingPingInterval is how often the keepalive proves the wire is
 // alive while a scene admission is in flight. World entry can sit silent
@@ -75,7 +81,26 @@ func (s *Session) keepaliveLoop() {
 			idle := now.Sub(s.lastRecv)
 			gen := s.gen
 			loading := s.sceneLoading
+			// A scene whose bootstrap (or refusal) never reached the
+			// queue has no answer on the wire at all: the entry lane is
+			// wedged behind a door it may never get. Close past the
+			// entry bound so the player's next attempt starts clean
+			// instead of queueing behind this session's corpse.
+			bootstrapStuck := loading && !s.sceneBootstrapEnqueued &&
+				!s.sceneLoadingSince.IsZero() && now.Sub(s.sceneLoadingSince) > s.hub.cfg.EntryBootstrapBound
+			loadingAge := now.Sub(s.sceneLoadingSince)
+			revision := s.sceneRevision
 			s.mu.Unlock()
+			if bootstrapStuck {
+				log.WithFields(log.Fields{
+					"session":  s.ID,
+					"revision": revision,
+					"age_ms":   loadingAge.Milliseconds(),
+					"bound_ms": s.hub.cfg.EntryBootstrapBound.Milliseconds(),
+				}).Warn("transport: scene bootstrap not enqueued within the entry bound; closing session")
+				s.hub.closeSession(s, errSceneBootstrapStuck)
+				continue
+			}
 			if gen != lastGen {
 				// A fresh attachment already proved the wire with its
 				// WELCOME; the ping cadence restarts with it.
