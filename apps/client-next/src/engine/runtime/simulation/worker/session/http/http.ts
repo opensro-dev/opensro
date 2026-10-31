@@ -78,7 +78,9 @@ export function createSessionHttp() {
 			redirect: "error",
 			cache: "no-store",
 			...(encoded !== undefined ? { body: encoded } : {}),
-			...(keepalive && encoded !== undefined && encoded.length <= KEEPALIVE_BODY_CHARS ? { keepalive: true } : {}),
+			...(keepalive && encoded !== undefined && encoded.length <= KEEPALIVE_BODY_CHARS ?
+				{ keepalive: true } :
+				{}),
 			signal
 		} );
 		if ( response.status === RELEASE_OUTDATED_STATUS ) outdated = true;
