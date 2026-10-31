@@ -250,3 +250,37 @@ func BenchmarkMoverStorageSetSameRegion(b *testing.B) {
 		})
 	}
 }
+
+/*
+================
+TestBehaviorActorMoverFallsBackOnARecycledSlot
+
+A batch built before a removal carries slots the removal may have
+recycled: gid 3 moves into gid 1's hole, so its own carried slot runs
+off the end and gid 1's now names gid 3. The survivor must still
+resolve through the gid fallback, with its own row, and the removed
+actor must not resolve as the slot's new occupant.
+================
+*/
+func TestBehaviorActorMoverFallsBackOnARecycledSlot(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	s.clock = func() time.Time { return time.UnixMilli(5000) }
+	batch := s.behaviorBatches(0)[0]
+	refs := make(map[uint32]behaviorActorRef, len(batch.actors))
+	for _, ref := range batch.actors {
+		refs[ref.gid] = ref
+	}
+	d.instances.remove(1)
+
+	survivor := refs[3]
+	if _, carried := d.instances.lookupAt(survivor.monsterSlot, survivor.gid); carried {
+		t.Fatal("the survivor's carried slot still resolves, so the fallback is not under test")
+	}
+	snap := s.behaviorActorMover(batch.key, survivor)
+	if !snap.ok || snap.instance.Gid != 3 {
+		t.Fatalf("the survivor did not fall back to its gid: %+v", snap.instance.Gid)
+	}
+	if snap := s.behaviorActorMover(batch.key, refs[1]); snap.ok {
+		t.Fatalf("the removed actor resolved as gid %d", snap.instance.Gid)
+	}
+}
