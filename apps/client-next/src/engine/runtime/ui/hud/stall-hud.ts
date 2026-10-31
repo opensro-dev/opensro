@@ -244,6 +244,7 @@ createStallHud
 */
 export function createStallHud() {
 	let prompt: StallPrompt | null = null;
+	let windowOpen = false;
 	let network = EMPTY_NETWORK;
 	let searchedAt = -Infinity;
 	let chat = "";
@@ -378,6 +379,21 @@ export function createStallHud() {
 		*/
 		resetNetwork() {
 			network = EMPTY_NETWORK;
+		},
+		/*
+		================
+		windowOpened
+
+		CIFStall::ShowWindow (5A0DC0) opens the inventory beside the stall
+		window on every show, owner and visitor alike; true on the frame the
+		window first appears so a later tab switch is not undone.
+		================
+		*/
+		windowOpened( phase: StallState["phase"] | undefined ): boolean {
+			const now = phase === "owner" || phase === "visitor",
+				rising = now && !windowOpen;
+			windowOpen = now;
+			return rising;
 		},
 		/*
 		================
