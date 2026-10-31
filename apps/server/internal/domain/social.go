@@ -108,6 +108,21 @@ func (character *Character) SnapshotCombat() *Character {
 
 /*
 ================
+SnapshotCast
+
+Snapshot's normalized view for the skill press (#1943): the combat
+rows plus every companion-carrying bag row, because the press flow
+resolves the caster's companions through its copy while no press
+reader reads a plain bag row. Each caller must be cleared for the
+copy root by root, as for SnapshotCombat.
+================
+*/
+func (character *Character) SnapshotCast() *Character {
+	return character.snapshotWith(cloneCharacterCast)
+}
+
+/*
+================
 SnapshotCompanion
 
 Snapshot's normalized pet-owner view for the per-tick pet and brood

@@ -67,6 +67,24 @@ func cloneCharacterCombat(source *Character) *Character {
 
 /*
 ================
+cloneCharacterCast
+
+cloneCharacter for the skill-press readers (#1943): the mission
+inventory keeps its equipment rows, the whole avatar inventory, and
+every bag row carrying a companion, each detached exactly as
+cloneInventoryRows detaches it. Companion resolution walks the
+bag-row Summon records, and the press flow resolves the caster's
+companions through its copy (the crow lane), so the kept bag rows
+keep that resolution identical to the full copy's; the plain bag
+rows it drops are read by no press reader.
+================
+*/
+func cloneCharacterCast(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsCast)
+}
+
+/*
+================
 cloneCharacterCompanion
 
 The pet-owner view (#2030): the per-tick pet and brood passes copy
@@ -136,6 +154,8 @@ const (
 	rowsEquipment
 	// rowsCombat keeps the equipment rows and the whole avatar inventory.
 	rowsCombat
+	// rowsCast keeps the combat rows and every companion-carrying bag row.
+	rowsCast
 )
 
 /*
@@ -185,9 +205,12 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	if rows == rowsAll {
+	switch rows {
+	case rowsAll:
 		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
-	} else {
+	case rowsCast:
+		clone.MissionInventory = cloneCastRows(source.MissionInventory)
+	default:
 		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
 	clone.Buyback = cloneSlice(source.Buyback)
@@ -341,6 +364,39 @@ func cloneEquipmentRows(source []InventoryRow) []InventoryRow {
 		row.Summon = CloneCOS(row.Summon)
 		row.MagicOptions = cloneSlice(row.MagicOptions)
 		clone = append(clone, row)
+	}
+	return clone
+}
+
+/*
+================
+cloneCastRows
+
+The press half of cloneInventoryRows: the equipment rows plus every
+bag row carrying a companion, deep-copied in source order exactly as
+cloneInventoryRows copies them; plain bag rows are dropped, and a nil
+inventory stays nil so absence keeps its meaning. Keeping the kept
+rows in source order keeps Companions over this copy visiting exactly
+the full copy's companions.
+================
+*/
+func cloneCastRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	kept := 0
+	for _, row := range source {
+		if row.Slot >= 0 && row.Slot < EquipmentSlotEnd || row.Summon != nil {
+			kept++
+		}
+	}
+	clone := make([]InventoryRow, 0, kept)
+	for _, row := range source {
+		if row.Slot >= 0 && row.Slot < EquipmentSlotEnd || row.Summon != nil {
+			row.Summon = CloneCOS(row.Summon)
+			row.MagicOptions = cloneSlice(row.MagicOptions)
+			clone = append(clone, row)
+		}
 	}
 	return clone
 }
