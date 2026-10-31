@@ -170,3 +170,145 @@ func TestSnapshotSeesEachNarrowWriter(t *testing.T) {
 		}
 	})
 }
+
+/*
+================
+TestSnapshotSeesTheOtherWriters
+
+The remaining writers, each alone between two reads like the narrow pair
+above. Every subtest first proves the writer actually landed (a row or
+clock fact changed), so a passing view comparison is never vacuous: with
+the writer's mark removed, the stale view and the rows part ways at once.
+================
+*/
+func TestSnapshotSeesTheOtherWriters(t *testing.T) {
+	viewMatches := func(t *testing.T, r *Registry, division, name string) {
+		t.Helper()
+		rows := append([]Effect(nil), r.byOwner[ownerKey(division, name)]...)
+		if got := r.Snapshot(division, name); !reflect.DeepEqual(got, rows) {
+			t.Fatalf("snapshot for %s/%s = %+v, rows %+v", division, name, got, rows)
+		}
+	}
+	plain := Effect{
+		DivisionID: "d", CharacterName: "anna", SkillID: 10, SkillGroup: 10,
+		InstanceToken: 3, State: StateActive, ClientCancelable: true,
+	}
+
+	t.Run("voluntary stop", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		r.Snapshot("d", "anna")
+		if _, ok := r.RequestVoluntaryStop("d", "anna", 10, 0); !ok {
+			t.Fatal("the stop did not land, so the view proved nothing")
+		}
+		if !r.byOwner[ownerKey("d", "anna")][0].StopRequested {
+			t.Fatal("the stop did not land, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("drain", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		if _, ok := r.RequestVoluntaryStop("d", "anna", 10, 0); !ok {
+			t.Fatal("the stop did not land, so the view proved nothing")
+		}
+		r.Snapshot("d", "anna")
+		if batches := r.DrainStopRequested(); len(batches) != 1 {
+			t.Fatalf("the drain returned %d batches, so the view proved nothing", len(batches))
+		}
+		if len(r.byOwner[ownerKey("d", "anna")]) != 0 {
+			t.Fatal("the drain removed nothing, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("death retirement", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		r.Snapshot("d", "anna")
+		if ended := r.RetireBodyStatusesOnDeath("d", "anna"); len(ended) != 1 {
+			t.Fatalf("death retired %d rows, so the view proved nothing", len(ended))
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("forget", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		r.Snapshot("d", "anna")
+		r.Forget("d", "anna")
+		if len(r.byOwner[ownerKey("d", "anna")]) != 0 {
+			t.Fatal("forget removed nothing, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("event retirement", func(t *testing.T) {
+		r := NewRegistry()
+		masked := plain
+		masked.EventCancelMask = 0x4
+		r.Apply(masked)
+		r.Snapshot("d", "anna")
+		if ended := r.RetireEvent("d", "anna", 0x4); len(ended) != 1 {
+			t.Fatalf("the event retired %d rows, so the view proved nothing", len(ended))
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("instance retirement", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		r.Snapshot("d", "anna")
+		if ended := r.RetireInstances("d", "anna", []uint32{3}); len(ended) != 1 {
+			t.Fatalf("the retirement ended %d rows, so the view proved nothing", len(ended))
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("any job checkpoint due", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(Effect{
+			DivisionID: "d", CharacterName: "anna", SkillID: 1, SkillGroup: 1,
+			InstanceToken: 7, State: StateActive, Persistent: true,
+			StartedAtMs: 1000, ExpiresAtMs: 601000,
+		})
+		before := r.byOwner[ownerKey("d", "anna")][0].jobUpdatedAtMs
+		r.Snapshot("d", "anna")
+		r.AnyJobCheckpointDue(2000)
+		if r.byOwner[ownerKey("d", "anna")][0].jobUpdatedAtMs == before {
+			t.Fatal("the clock moved nothing, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("link install", func(t *testing.T) {
+		r := NewRegistry()
+		r.Snapshot("d", "anna")
+		r.Snapshot("d", "bert")
+		link := Link{
+			DivisionID: "d", SourceName: "anna", TargetName: "bert",
+			SourceGID: 11, TargetGID: 22, SourceToken: 101, TargetToken: 202,
+			SkillID: 5, SkillGroup: 5, StartedAtMs: 0, ExpiresAtMs: 100000,
+		}
+		if code := r.ApplyLink(link); code != 0 {
+			t.Fatalf("the link refused with %#x, so the view proved nothing", code)
+		}
+		if len(r.byOwner[ownerKey("d", "anna")]) != 1 || len(r.byOwner[ownerKey("d", "bert")]) != 1 {
+			t.Fatal("the link installed nothing, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+		viewMatches(t, r, "d", "bert")
+	})
+	t.Run("replacement install", func(t *testing.T) {
+		r := NewRegistry()
+		r.Snapshot("d", "anna")
+		applied := r.ApplyReplacement(ReplacementApplication{
+			Effect: Effect{
+				DivisionID: "d", CharacterName: "anna", SkillID: 7, SkillGroup: 3,
+				InstanceToken: 9, State: StateActive,
+			},
+			Descriptors: map[uint32]ReplacementDescriptor{7: {Group: 3}},
+		})
+		if !applied {
+			t.Fatal("the replacement did not land, so the view proved nothing")
+		}
+		if len(r.byOwner[ownerKey("d", "anna")]) != 1 {
+			t.Fatal("the replacement installed nothing, so the view proved nothing")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+}
