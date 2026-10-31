@@ -180,3 +180,58 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 	s.streamPos = lastApplied
 	return true
 }
+
+/*
+================
+resumeRefusal
+
+Why a resume from a reported position cannot be served, with the ring's
+own numbers beside it (#2146): the reported position against the oldest
+position the ring still holds and the newest it has written. Logged on
+every refusal, so a live refusal wave names its own cause - a client
+ahead of the stream, a client behind frames the ring already dropped,
+or a re-send that would overflow the outbound queue.
+================
+*/
+type resumeRefusal struct {
+	Reason       string
+	Reported     uint32
+	Floor        uint32
+	Oldest       uint32
+	Head         uint32
+	RingFrames   int
+	QueuedFrames int
+	QueuedBytes  int
+}
+
+/*
+================
+ResumeRefusal
+
+The refusal snapshot for a position resumeFromLocked just turned away.
+Caller must NOT hold s.mu.
+================
+*/
+func (s *Session) ResumeRefusal(lastApplied uint32) resumeRefusal {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d := resumeRefusal{
+		Reported:     lastApplied,
+		Floor:        s.ringFloor,
+		Head:         s.streamPos,
+		RingFrames:   len(s.ring),
+		QueuedFrames: len(s.queue),
+		QueuedBytes:  s.queueBytes + s.lossyBytes,
+		Reason:       "resend-overflow",
+	}
+	if len(s.ring) > 0 {
+		d.Oldest = s.ring[0].pos
+	}
+	switch {
+	case lastApplied > s.streamPos:
+		d.Reason = "beyond-head"
+	case lastApplied < s.ringFloor:
+		d.Reason = "behind-floor"
+	}
+	return d
+}
