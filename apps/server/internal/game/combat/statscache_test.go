@@ -186,6 +186,18 @@ func TestPlayerStatsMemoFollowsEveryContentWriter(t *testing.T) {
 	}}
 	assertStatsFresh(t, "avatar option", c, withDress, writes, block)
 
+	// The socket names the keeper source, so a move onto an effect write's
+	// source turns the same content into the rebuild's alias refusal.
+	aliased := []paramkeeper.Write{{Parameter: 5, Channel: paramkeeper.Flat, Source: avatarSourceBase + 2, Value: 25}}
+	if _, _, err := PlayerStatsWithModifiers(c, withDress, aliased, block); err != nil {
+		t.Fatalf("avatar in socket 1: %v", err)
+	}
+	c.AvatarInventory.Rows[0].Slot = 2
+	if _, _, err := PlayerStatsWithModifiers(c, withDress, aliased, block); err == nil {
+		t.Fatal("avatar moved onto the effect source: served the stale answer, want the alias refusal")
+	}
+	c.AvatarInventory.Rows[0].Slot = 1
+
 	c.NativeBodyStatus = 1
 	assertStatsFresh(t, "berserk body", c, withDress, writes, block)
 }

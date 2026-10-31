@@ -130,10 +130,12 @@ type statsEquipRow struct {
 statsAvatarRow
 
 The fields of one avatar row the projection reads (avataroptions.go):
-what it is and its magic options.
+what it is, its magic options, and its socket, which names the keeper
+source of the row's writes.
 ================
 */
 type statsAvatarRow struct {
+	slot         int64
 	refObjID     uint32
 	codename     string
 	magicOptions []uint64
@@ -337,6 +339,7 @@ func statsAvatarKey(avatar *domain.AvatarInventory) []statsAvatarRow {
 	key := make([]statsAvatarRow, 0, len(avatar.Rows))
 	for _, row := range avatar.Rows {
 		key = append(key, statsAvatarRow{
+			slot:         row.Slot,
 			refObjID:     row.RefObjID,
 			codename:     row.Codename,
 			magicOptions: slices.Clone(row.MagicOptions),
@@ -361,7 +364,7 @@ func statsAvatarEqual(key []statsAvatarRow, avatar *domain.AvatarInventory) bool
 	}
 	for i, row := range avatar.Rows {
 		k := key[i]
-		if k.refObjID != row.RefObjID || k.codename != row.Codename ||
+		if k.slot != row.Slot || k.refObjID != row.RefObjID || k.codename != row.Codename ||
 			!slices.Equal(k.magicOptions, row.MagicOptions) {
 			return false
 		}
