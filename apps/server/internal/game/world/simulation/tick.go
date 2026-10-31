@@ -372,8 +372,24 @@ type Ticker struct {
 	// states is coordinator-owned. Each value is used only by the worker that
 	// owns its division, so hot-path state needs no cross-shard mutex.
 	states map[string]*divisionTickState
-	done   chan struct{}
-	once   sync.Once
+	// The preparation scratch below is coordinator-owned and kept between
+	// ticks: the drained-resume set, the live-division set, the division
+	// work list and the session order. The order is rebuilt only when
+	// session membership changes (attach/detach); a tick whose snapshot
+	// carries the same sessions is placed into the kept order instead of
+	// re-sorted. Nothing here outlives the tick that filled it: the work
+	// list and the resumed set are consumed synchronously before the next
+	// prepareTick runs.
+	resumedScratch map[string]bool
+	liveScratch    map[string]bool
+	workScratch    []divisionTickWork
+	orderKeys      []sessionOrderKey
+	orderIndex     map[sessionOrderKey]int
+	orderScratch   []int
+	orderUsed      []bool
+	orderValues    []SessionSnapshot
+	done           chan struct{}
+	once           sync.Once
 }
 
 /*
@@ -620,6 +636,107 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 
 /*
 ================
+sessionOrderKey
+
+The sort identity of one session snapshot: the (division, session,
+character) triple prepareTick orders by. Session IDs are unique per
+live session, so keys never collide within a tick.
+================
+*/
+type sessionOrderKey struct {
+	divisionID  string
+	sessionID   string
+	characterID int64
+}
+
+/*
+================
+sessionOrderKeyOf
+================
+*/
+func sessionOrderKeyOf(s SessionSnapshot) sessionOrderKey {
+	return sessionOrderKey{divisionID: s.DivisionID, sessionID: s.SessionID, characterID: s.CharacterID}
+}
+
+/*
+================
+orderSessions
+
+Orders one tick's snapshots by (division, session, character). The
+population changes only on attach and detach, so the kept order is
+rebuilt only then: a tick carrying the same sessions is placed into
+the kept order, and the sort runs on membership change alone.
+================
+*/
+func (t *Ticker) orderSessions(sessions []SessionSnapshot) {
+	if len(sessions) == len(t.orderKeys) && t.placeInKeptOrder(sessions) {
+		return
+	}
+	sort.SliceStable(sessions, func(i, j int) bool {
+		if sessions[i].DivisionID != sessions[j].DivisionID {
+			return sessions[i].DivisionID < sessions[j].DivisionID
+		}
+		if sessions[i].SessionID != sessions[j].SessionID {
+			return sessions[i].SessionID < sessions[j].SessionID
+		}
+		return sessions[i].CharacterID < sessions[j].CharacterID
+	})
+	t.orderKeys = t.orderKeys[:0]
+	if t.orderIndex == nil {
+		t.orderIndex = make(map[sessionOrderKey]int)
+	} else {
+		clear(t.orderIndex)
+	}
+	for i, s := range sessions {
+		key := sessionOrderKeyOf(s)
+		t.orderKeys = append(t.orderKeys, key)
+		t.orderIndex[key] = i
+	}
+}
+
+/*
+================
+placeInKeptOrder
+
+Places the snapshots into the kept order when they are exactly the
+kept sessions; reports false on any membership change. The scratch
+is reused; the used marks are cleared on every exit.
+================
+*/
+func (t *Ticker) placeInKeptOrder(sessions []SessionSnapshot) bool {
+	if cap(t.orderScratch) < len(sessions) {
+		t.orderScratch = make([]int, len(sessions))
+		t.orderUsed = make([]bool, len(sessions))
+		t.orderValues = make([]SessionSnapshot, len(sessions))
+	} else {
+		t.orderScratch = t.orderScratch[:len(sessions)]
+		t.orderUsed = t.orderUsed[:len(sessions)]
+		t.orderValues = t.orderValues[:len(sessions)]
+	}
+	placed := true
+	for i, s := range sessions {
+		pos, ok := t.orderIndex[sessionOrderKeyOf(s)]
+		if !ok || t.orderUsed[pos] {
+			placed = false
+			break
+		}
+		t.orderUsed[pos] = true
+		t.orderScratch[i] = pos
+	}
+	if placed {
+		for i, s := range sessions {
+			t.orderValues[t.orderScratch[i]] = s
+		}
+		copy(sessions, t.orderValues)
+	}
+	for _, pos := range t.orderScratch {
+		t.orderUsed[pos] = false
+	}
+	return placed
+}
+
+/*
+================
 prepareTick
 ================
 */
@@ -634,27 +751,31 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 	// identity with no snapshot here (the character re-entered under a new
 	// scene revision, or has not entered yet) is dropped: that entry
 	// bootstraps its own state.
-	resumedIDs := map[string]bool{}
+	resumedIDs := t.resumedScratch
+	if resumedIDs == nil {
+		resumedIDs = make(map[string]bool)
+		t.resumedScratch = resumedIDs
+	} else {
+		clear(resumedIDs)
+	}
 	if source, ok := t.Source.(ResumeSource); ok {
 		for _, id := range source.DrainResumedSessions() {
 			resumedIDs[id] = true
 		}
 	}
-	sort.SliceStable(sessions, func(i, j int) bool {
-		if sessions[i].DivisionID != sessions[j].DivisionID {
-			return sessions[i].DivisionID < sessions[j].DivisionID
-		}
-		if sessions[i].SessionID != sessions[j].SessionID {
-			return sessions[i].SessionID < sessions[j].SessionID
-		}
-		return sessions[i].CharacterID < sessions[j].CharacterID
-	})
+	t.orderSessions(sessions)
 
 	if t.states == nil {
 		t.states = make(map[string]*divisionTickState)
 	}
-	liveDivisions := make(map[string]bool)
-	work := make([]divisionTickWork, 0)
+	liveDivisions := t.liveScratch
+	if liveDivisions == nil {
+		liveDivisions = make(map[string]bool)
+		t.liveScratch = liveDivisions
+	} else {
+		clear(liveDivisions)
+	}
+	work := t.workScratch[:0]
 	for i := 0; i < len(sessions); {
 		j := i + 1
 		for j < len(sessions) && sessions[j].DivisionID == sessions[i].DivisionID {
@@ -706,6 +827,7 @@ func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
 			delete(t.states, divisionID)
 		}
 	}
+	t.workScratch = work
 	return tick, work
 }
 
