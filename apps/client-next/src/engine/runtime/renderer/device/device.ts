@@ -667,6 +667,15 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		uiTexture: ( id, image ) => ui?.texture( id, image ),
 		/*
 		================
+		uiAtlas
+
+		Port-only, not native: install or clear the icon atlas mapping; the
+		UI packer remaps the icons it maps into their sheet.
+		================
+		*/
+		uiAtlas: ( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ) => ui?.atlas( mapping ),
+		/*
+		================
 		ui
 
 		Prepare UI draws only when the device's UI owner exists.

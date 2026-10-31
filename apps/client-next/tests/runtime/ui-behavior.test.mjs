@@ -313,6 +313,85 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 
 /*
 ================
+iconAtlasDemand
+
+The icon family's atlas manifest (foundation/ui/icon-atlas.ts): its bytes
+turn icon demand into sheet demand - one request, one residency entry,
+one publish for the whole family - and the renderer hears the mapping. A
+sheet that fails turns the atlas off and the icons fall back to their own
+paths, exactly as without a manifest.
+================
+*/
+test("an installed atlas serves the icon family from its sheet", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png", b = "/assets/images/Media_extracted/icon/b.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	let installed = 0;
+	const wrapped = { ...f.assets };
+	f.resources.dispose();
+	const resources = createUiAssets(
+		wrapped,
+		( ...args ) => f.published.push( args ),
+		"https://fixture.invalid/",
+		undefined,
+		mapping => {
+			installed++;
+			f.installed = mapping;
+		}
+	);
+	f.resources = resources;
+	resources.step( [ a, b ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	assert.deepEqual( f.requests.slice( 1 ), [ "https://fixture.invalid" + a, "https://fixture.invalid" + b ] );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ], [b]: [ 0, 40, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	resources.step( [ a, b ], 1 );
+	assert.equal( installed, 1, "the mapping reaches the renderer once" );
+	assert.deepEqual( f.cancelled.sort(), [ 2, 3 ], "the per-icon requests cancel" );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet, "one sheet request for both icons" );
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 4, { kind: "image", image } );
+	resources.step( [ a, b ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ], "the sheet publishes once under its own path" );
+	assert.equal( resources.size( a ), undefined, "an icon holds no residency of its own" );
+	assert.equal( resources.size( sheet )[0], 2048 );
+	for ( let now = 3; now < 60_000; now += 1000 ) resources.step( [ a, b ], now );
+	assert.equal( f.requests.length, 4, "the family never re-requests" );
+	f.resources.dispose();
+});
+
+test("a failed sheet turns the atlas off and the icons take their own paths", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ a ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ a ], 1 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet );
+	f.results.set( 3, { kind: "error", error: "HTTP 503", absent: false } );
+	f.resources.step( [ a ], 2 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + a, "the icon falls back to its own path" );
+	assert.equal( f.resources.error(), null, "a failed sheet is not an interface failure" );
+	const image = { width: 32, height: 32 };
+	f.results.set( 4, { kind: "image", image } );
+	f.resources.step( [ a ], 3 );
+	assert.deepEqual( f.published, [ [ a, image ] ] );
+	f.resources.dispose();
+});
+
+/*
+================
 absentIconFallback
 
 CIFSlotWithHelp (55B450) loads icon\icon_default.ddj when the requested icon
@@ -321,29 +400,96 @@ without the blocking retry. Any other absent image settles blank, and a
 transient fault on an icon still retries.
 ================
 */
+test("an absent icon's fallback fetches the default itself, not its atlas sheet", () => {
+	// The review's trace: with the atlas installed and icon_default mapped
+	// (it is a published icon), the fallback's request used target() - which
+	// names the whole sheet for a mapped icon - so the sheet was published
+	// under the absent icon's path and drew 2048 px squashed into its quad.
+	// The fallback must fetch the default's own file.
+	const f = assetFixture();
+	const icon = "/assets/images/Media_extracted/icon/item/etc/absent_recipe.png";
+	const fallback = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	f.resources.step( [ icon ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [fallback]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	// The icon has no manifest entry, so its own path is still the request;
+	// it arrives absent and joins the fallback set.
+	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.resources.step( [ icon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + fallback,
+		"the fallback fetches the default's own file, never the sheet"
+	);
+	assert.equal( f.requests.some( r => r === "https://fixture.invalid" + sheet ), false );
+	const image = { width: 32, height: 32 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ icon ], 2 );
+	assert.deepEqual( f.published, [ [ icon, image ] ], "the default publishes under the icon's own path" );
+	assert.deepEqual( f.resources.size( icon ), [ 32, 32 ], "the default's own size, never the sheet's" );
+	f.resources.dispose();
+});
+
+test("a direct demand for the default icon still takes its atlas sheet", () => {
+	const f = assetFixture();
+	const defaultIcon = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [defaultIcon]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ defaultIcon ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ defaultIcon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + sheet,
+		"the default icon itself is served from the sheet when demanded directly"
+	);
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ defaultIcon ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ] );
+	f.resources.dispose();
+});
+
 test("an absent slot icon draws icon_default and an absent image settles blank", () => {
 	const f = assetFixture();
 	const icon = "/assets/images/Media_extracted/icon/item/etc/archemy_reinforce_recipe_a.png";
 	const art = "/assets/images/Media_extracted/interface/missing.png";
 	const paths = [ icon, art ];
 	f.resources.step( paths, 0 );
+	// The first icon demand asks for the atlas manifest first (the icon
+	// family's port-only sheet); an absent manifest fails it silently and
+	// every icon keeps its own path.
 	f.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.results.set( 3, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.resources.step( paths, 1 );
 	assert.equal( f.resources.error(), null, "absence never blocks the interface" );
 	assert.deepEqual( f.resources.stats().failed, [] );
 	assert.equal( f.requests.at( -1 ), "https://fixture.invalid/assets/images/Media_extracted/icon/icon_default.png" );
-	assert.equal( f.requests.length, 3, "the blank image is never requested again" );
+	assert.equal( f.requests.length, 4, "the blank image is never requested again" );
 	const image = { width: 32, height: 32 };
-	f.results.set( 3, { kind: "image", image } );
+	f.results.set( 4, { kind: "image", image } );
 	f.resources.step( paths, 2 );
 	assert.deepEqual( f.published, [ [ icon, image ] ], "the default is published under the icon's own path" );
 	for ( let now = 3; now < 60_000; now += 1000 ) f.resources.step( paths, now );
-	assert.equal( f.requests.length, 3 );
+	assert.equal( f.requests.length, 4 );
 	f.resources.dispose();
 	const g = assetFixture();
 	g.resources.step( [ icon ], 0 );
-	g.results.set( 1, { kind: "error", error: "HTTP 503" } );
+	g.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	g.results.set( 2, { kind: "error", error: "HTTP 503" } );
 	g.resources.step( [ icon ], 1 );
 	assert.match( g.resources.error(), /503/, "a transient fault keeps the retry" );
 	g.resources.step( [ icon ], 1001 );
