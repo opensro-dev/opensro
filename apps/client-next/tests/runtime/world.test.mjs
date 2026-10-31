@@ -3194,3 +3194,58 @@ test("a movement receipt queued behind scene references is not lost while they a
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
 });
+
+/*
+================
+a movement receipt behind scene references still trips the backstop
+
+References hold the silence leg open, but the receipt's ninety-second hard
+backstop is measured from the send (#1978): past it the answer can only be
+missing, however live the reference stream looks.
+================
+*/
+test("a movement receipt behind scene references still trips the ninety-second backstop", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 100 } }, 4 );
+	world.step( 5 );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 5000; at <= 89000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	sockets[0].receive( 14, references );
+	world.step( 93000 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+});
+
+/*
+================
+an answer behind endless scene references still has a limit
+
+Each frame restarts the answer's flat wait, so without a limit a stream that
+never stops would hold a lost answer open forever. Movement has its ninety
+second backstop; the answers take the same bound from the first frame.
+================
+*/
+test("an answer behind endless scene references still reaches its limit", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	let at = 9000;
+	while ( at < 90000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `inside the limit at ${at}` );
+		at += 4000;
+	}
+	while ( at < 120000 && world.status().phase === "world" ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		at += 4000;
+	}
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+});
