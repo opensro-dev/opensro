@@ -265,8 +265,8 @@ func (s *moverStorage) livePosesWithinOutdoorReach(center Spawn, reach float64, 
 		}
 		lowX, highX, lowZ, highZ, ok := outdoorReachSectorWindow(center, reach)
 		if !ok {
-			for gid, record := range s.rows {
-				if !yield(gid, record.livePoseAt(nowMs, ground)) {
+			for _, slot := range s.slots {
+				if !yield(slot.gid, slot.rec.livePoseAt(nowMs, ground)) {
 					return
 				}
 			}
@@ -307,11 +307,11 @@ func (s *moverStorage) livePosesWithinOutdoorReach(center Spawn, reach float64, 
 							seenMap[gid] = struct{}{}
 						}
 					}
-					entry, exists := s.rows[gid]
+					slot, exists := s.slotOf(gid)
 					if !exists {
 						continue
 					}
-					if !yield(gid, entry.livePoseAt(nowMs, ground)) {
+					if !yield(gid, s.slots[slot].rec.livePoseAt(nowMs, ground)) {
 						return
 					}
 				}

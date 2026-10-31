@@ -13,6 +13,7 @@ import (
 	"math"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
+	"sort"
 	"unique"
 )
 
@@ -83,11 +84,29 @@ func (p *residentPendingMover) value() monster.MoverState {
 
 /*
 ================
+moverSlot
+
+One mover row in dense slot order. The slot is the row's index in
+moverStorage.slots; byGID is the only map left, and it maps a gid to
+its slot. Slot order is insertion order except that remove swaps the
+last row into the hole, so a walk sees an order that is stable only
+within one mutation-free span: consumers that need an order sort or
+count (monstersquad does both), they never inherit one.
+================
+*/
+type moverSlot struct {
+	gid uint32
+	rec moverRecord
+}
+
+/*
+================
 moverStorage
 ================
 */
 type moverStorage struct {
-	rows    map[uint32]moverRecord
+	slots   []moverSlot
+	byGID   map[uint32]uint32
 	spatial moverInterestIndex
 
 	// The interest scan's shared poses (livePoseAtShared): a groundless
@@ -103,13 +122,33 @@ type moverStorage struct {
 
 /*
 ================
+slotOf
+
+The dense slot of gid, when the storage holds one.
+================
+*/
+func (s *moverStorage) slotOf(gid uint32) (uint32, bool) {
+	slot, ok := s.byGID[gid]
+	return slot, ok
+}
+
+/*
+================
 newMoverStorage
+
+Seeds in ascending gid order, so a fresh storage's slot order is the
+same on every build; runtime additions append in arrival order.
 ================
 */
 func newMoverStorage(rows map[uint32]monster.MoverState) *moverStorage {
-	s := &moverStorage{rows: make(map[uint32]moverRecord, len(rows))}
-	for gid, row := range rows {
-		s.set(gid, row)
+	gids := make([]uint32, 0, len(rows))
+	for gid := range rows {
+		gids = append(gids, gid)
+	}
+	sort.Slice(gids, func(i, j int) bool { return gids[i] < gids[j] })
+	s := &moverStorage{byGID: make(map[uint32]uint32, len(rows))}
+	for _, gid := range gids {
+		s.set(gid, rows[gid])
 	}
 	return s
 }
@@ -120,11 +159,17 @@ set
 ================
 */
 func (s *moverStorage) set(gid uint32, row monster.MoverState) {
-	if s.rows == nil {
-		s.rows = make(map[uint32]moverRecord)
+	if s.byGID == nil {
+		s.byGID = make(map[uint32]uint32)
 	}
 	s.poseGeneration++
-	old, exists := s.rows[gid]
+	slot, exists := s.slotOf(gid)
+	if !exists {
+		slot = uint32(len(s.slots))
+		s.slots = append(s.slots, moverSlot{gid: gid})
+		s.byGID[gid] = slot
+	}
+	old := s.slots[slot].rec
 	after := moverInterestBoundsFor(row)
 	if !exists {
 		s.spatial.add(gid, after)
@@ -139,7 +184,7 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		}
 		resident := &residentPendingMover{}
 		resident.set(p)
-		s.rows[gid] = moverRecord{pending: resident}
+		s.slots[slot].rec = moverRecord{pending: resident}
 		return
 	}
 	if old.live != nil {
@@ -148,7 +193,7 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	}
 	live := new(monster.MoverState)
 	*live = row
-	s.rows[gid] = moverRecord{live: live}
+	s.slots[slot].rec = moverRecord{live: live}
 }
 
 /*
@@ -199,8 +244,11 @@ func (s *moverStorage) lookup(gid uint32) (monster.MoverState, bool) {
 	if s == nil {
 		return monster.MoverState{}, false
 	}
-	r, ok := s.rows[gid]
-	return r.value(), ok
+	slot, ok := s.slotOf(gid)
+	if !ok {
+		return monster.MoverState{}, false
+	}
+	return s.slots[slot].rec.value(), true
 }
 
 /*
@@ -214,7 +262,7 @@ func (s *moverStorage) has(gid uint32) bool {
 	if s == nil {
 		return false
 	}
-	_, ok := s.rows[gid]
+	_, ok := s.slotOf(gid)
 	return ok
 }
 
@@ -233,11 +281,11 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 	if s == nil {
 		return monster.Pose{}, false
 	}
-	r, ok := s.rows[gid]
+	slot, ok := s.slotOf(gid)
 	if !ok {
 		return monster.Pose{}, false
 	}
-	return r.livePoseAt(nowMs, ground), true
+	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
 }
 
 /*
@@ -280,8 +328,8 @@ func (s *moverStorage) livePoseAtShared(gid uint32, nowMs int64) (monster.Pose, 
 ================
 livePoses
 
-Every row's livePoseAt, in the rows' (map) order: a population scan that
-reads only where each mover stands, without expanding a single row.
+Every row's livePoseAt, in slot order: a population scan that reads
+only where each mover stands, without expanding a single row.
 ================
 */
 func (s *moverStorage) livePoses(nowMs int64, ground monster.GroundResolver) iter.Seq2[uint32, monster.Pose] {
@@ -351,8 +399,8 @@ func (s *moverStorage) records() iter.Seq2[uint32, moverRecord] {
 		if s == nil {
 			return
 		}
-		for gid, record := range s.rows {
-			if !yield(gid, record) {
+		for _, slot := range s.slots {
+			if !yield(slot.gid, slot.rec) {
 				return
 			}
 		}
@@ -387,10 +435,11 @@ func (s *moverStorage) schedule(gid uint32) (moverSchedule, bool) {
 	if s == nil {
 		return moverSchedule{}, false
 	}
-	r, ok := s.rows[gid]
+	slot, ok := s.slotOf(gid)
 	if !ok {
 		return moverSchedule{}, false
 	}
+	r := s.slots[slot].rec
 	if r.live != nil {
 		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
 			regionID: r.live.Pose.RegionID}, true
@@ -419,10 +468,11 @@ func (s *moverStorage) catchUpActivity(gid uint32, now uint32) {
 	if s == nil {
 		return
 	}
-	r, ok := s.rows[gid]
+	slot, ok := s.slotOf(gid)
 	if !ok {
 		return
 	}
+	r := s.slots[slot].rec
 	if r.live != nil {
 		r.live.Activity = r.live.Activity.CatchUp(now)
 	}
@@ -437,7 +487,11 @@ compact
 ================
 */
 func (s *moverStorage) compact(gid uint32) bool {
-	return s != nil && s.rows[gid].pending != nil
+	if s == nil {
+		return false
+	}
+	slot, ok := s.slotOf(gid)
+	return ok && s.slots[slot].rec.pending != nil
 }
 
 /*
@@ -449,21 +503,34 @@ func (s *moverStorage) len() int {
 	if s == nil {
 		return 0
 	}
-	return len(s.rows)
+	return len(s.slots)
 }
 
 /*
 ================
 remove
+
+Swap-removes the slot: the last row takes the hole and its byGID
+entry follows it, so removal stays O(1) and slot order is the only
+casualty (see moverSlot).
 ================
 */
 func (s *moverStorage) remove(gid uint32) {
 	if s == nil {
 		return
 	}
-	if row, exists := s.rows[gid]; exists {
-		s.spatial.remove(gid, row.interestBounds())
-		delete(s.rows, gid)
-		s.poseGeneration++
+	slot, exists := s.slotOf(gid)
+	if !exists {
+		return
 	}
+	s.poseGeneration++
+	s.spatial.remove(gid, s.slots[slot].rec.interestBounds())
+	last := uint32(len(s.slots) - 1)
+	if slot != last {
+		s.slots[slot] = s.slots[last]
+		s.byGID[s.slots[slot].gid] = slot
+	}
+	s.slots[last] = moverSlot{}
+	s.slots = s.slots[:last]
+	delete(s.byGID, gid)
 }
