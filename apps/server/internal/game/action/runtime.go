@@ -478,6 +478,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
+	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
+	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
+	RaisedGoldCaps bool
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool

@@ -804,6 +804,8 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_MOONLIT_THIEF_SUIT rule, published at world
 	// entry: level-20 thief suits draw the Moonlit Ash model (equipment-appearance.ts).
 	readonly moonlitThiefSuit?: boolean;
+	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
+	readonly raisedGoldCaps?: boolean;
 	// The Experimental "Homing projectiles" row (port-only, default off):
 	// target-bone projectiles re-read the victim's socket in flight instead of
 	// flying to the launch-captured endpoint (effects.ts).

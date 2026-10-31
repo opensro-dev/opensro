@@ -240,6 +240,10 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_TRADER_PERCENT_CAP", NomadVar: "trade_job_trader_percent_cap", Default: "20"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
+	// Port-only, not native: a 10,000,000,000 stall price and a
+	// 1,000,000,000 warehouse gold deposit replace the native
+	// 1,000,000,000 and 100,000,000 caps. "off" is native.
+	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},

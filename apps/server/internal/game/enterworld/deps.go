@@ -103,6 +103,10 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	// RaisedGoldCaps publishes the port-only SRO_RAISED_GOLD_CAPS rule
+	// (action/goldcaps.go): the client's stall price editor and warehouse
+	// deposit dialog raise their native caps; false is native.
+	RaisedGoldCaps bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

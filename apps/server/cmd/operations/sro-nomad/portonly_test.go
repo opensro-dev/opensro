@@ -145,6 +145,24 @@ func TestAlchemyMaterialDropsOffJobVariable(t *testing.T) {
 
 /*
 ================
+TestRaisedGoldCapsJobVariable
+
+raised_gold_caps defaults to off, the native stall and deposit caps;
+"on" and "off" pass through as written.
+================
+*/
+func TestRaisedGoldCapsJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "off", "off": "off", "on": "on"} {
+		t.Setenv("SRO_RAISED_GOLD_CAPS", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["raised_gold_caps"] != want {
+			t.Fatalf("env %q: raised_gold_caps %v, want %s", env, variables["raised_gold_caps"], want)
+		}
+	}
+}
+
+/*
+================
 TestJobGoodsTeleportJobVariable
 
 job_goods_teleport defaults to off, native (owner, 2026-10-18 reversed

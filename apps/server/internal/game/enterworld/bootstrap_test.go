@@ -649,6 +649,34 @@ func TestBootstrapJSONPublishesStorageAutoStack(t *testing.T) {
 
 /*
 ================
+TestBootstrapJSONPublishesRaisedGoldCaps
+
+The port-only wider gold caps reach the client only when they are on; off
+leaves the blob as the native one.
+================
+*/
+func TestBootstrapJSONPublishesRaisedGoldCaps(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			RaisedGoldCaps: on,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if got := strings.Contains(string(blob), `"raisedGoldCaps":true`); got != on {
+			t.Fatalf("RaisedGoldCaps=%v: blob carries the rule %v", on, got)
+		}
+		if !on && strings.Contains(string(blob), "raisedGoldCaps") {
+			t.Fatal("the native blob names the port-only rule")
+		}
+	}
+}
+
+/*
+================
 TestBootstrapJSONPublishesLevelCap
 
 The configured cap reaches the client only when it differs from the

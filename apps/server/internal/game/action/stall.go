@@ -35,6 +35,7 @@ package action
 import (
 	"bytes"
 	"errors"
+	"math"
 	"unicode/utf8"
 
 	"opensro.online/server/internal/domain"
@@ -259,7 +260,8 @@ func (rt *Runtime) HandleStallVisit(division string, c *enterworld.Character, pa
 	}
 	came := wire.Frame{Opcode: wire.OpStallEvent, Payload: wire.EncodeStallVisitor(wire.StallEventCame, enterworld.ObjectIDForCharacter(c))}
 	rt.pushStall(division, s, c.Name, came)
-	body := wire.EncodeStallVisit(gid, s.Greeting, s.Open, s.Mode, rt.stallOffers(division, owner, s), visitors)
+	body := wire.EncodeStallVisit(gid, s.Greeting, s.Open, s.Mode, rt.stallOffers(division, owner, s), visitors,
+		rt.RaisedGoldCaps)
 	frames := append(rt.stallItemReferences(division, owner, s), wire.Frame{Opcode: wire.OpStallVisitResult, Payload: body})
 	return OpResult{Frames: frames}
 }
@@ -434,6 +436,27 @@ func (rt *Runtime) HandleStallEdit(division string, c *enterworld.Character, pay
 
 /*
 ================
+stallEditPrice
+
+An 0x71A8 offer price: the native u32, or the port-only u64 while
+SRO_RAISED_GOLD_CAPS is on. tail is the edition's fixed bytes after the
+price (the add's category and trailing byte, the modify's trailing byte);
+the length tells the two widths apart, so a native client's request still
+works on a raised shard. The caller tests the value against
+stallPriceLimit.
+================
+*/
+func (rt *Runtime) stallEditPrice(r *wire.Reader, tail int) (uint64, bool) {
+	if rt.RaisedGoldCaps && r.Remaining() == tail+8 {
+		price, _ := r.U64()
+		return price, true
+	}
+	price, _ := r.U32()
+	return uint64(price), false
+}
+
+/*
+================
 applyStallEdit
 
 One edit kind; returns the 0xB1A8 body after the kind byte.
@@ -444,13 +467,16 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 	case wire.StallEditModify:
 		slot, _ := r.U8()
 		count, _ := r.U16()
-		price, _ := r.U32()
+		price, _ := rt.stallEditPrice(r, 1)
 		_, _ = r.U8()
 		if r.Done() != nil {
 			return nil, wire.StallErrInvalidOp
 		}
 		if int(slot) >= stall.Slots {
 			return nil, wire.StallErrBadSlot
+		}
+		if price > rt.stallPriceLimit() {
+			return nil, wire.StallErrBadPrice
 		}
 		code := uint8(0)
 		serial := rt.Stalls.NextSerial()
@@ -472,16 +498,28 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 		if code != 0 {
 			return nil, code
 		}
-		return wire.NewWriter(8).U8(slot).U16(count).U32(price).U8(0).Payload(), 0
+		// The answer's price width is the shard's, never the request's: every
+		// client at this stall decodes it by the flag, and a native client's
+		// narrow modify must still answer the raised width here.
+		w := wire.NewWriter(16).U8(slot).U16(count)
+		if rt.RaisedGoldCaps {
+			w.U64(price)
+		} else {
+			w.U32(uint32(price))
+		}
+		return w.U8(0).Payload(), 0
 	case wire.StallEditAdd:
 		slot, _ := r.U8()
 		bagSlot, _ := r.U8()
 		count, _ := r.U16()
-		price, _ := r.U32()
+		price, _ := rt.stallEditPrice(r, 5)
 		_, _ = r.U32()
 		_, _ = r.U8()
 		if r.Done() != nil {
 			return nil, wire.StallErrInvalidOp
+		}
+		if price > rt.stallPriceLimit() {
+			return nil, wire.StallErrBadPrice
 		}
 		item, code := rt.stallOfferable(division, c, bagSlot)
 		if code == 0 {
@@ -642,7 +680,7 @@ The 0xB1A8 kind 2 and 3 body: a zero code and the offers.
 func (rt *Runtime) stallOfferBody(division string, c *enterworld.Character) []byte {
 	s, _ := rt.Stalls.Get(division, c.Name)
 	w := wire.NewWriter(64).U8(0)
-	return wire.WriteStallOffers(w, rt.stallOffers(division, c, s)).Payload()
+	return wire.WriteStallOffers(w, rt.stallOffers(division, c, s), rt.RaisedGoldCaps).Payload()
 }
 
 /*
@@ -763,8 +801,14 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 	}
 	code := uint8(0)
 	sold := rt.deps.UpdateMany([]*enterworld.Character{owner, buyer}, "stall-sale", func() bool {
-		if goldOf(buyer) < uint64(offer.Price) {
+		if goldOf(buyer) < offer.Price {
 			code = wire.StallErrNotEnoughGold
+			return false
+		}
+		// The owner's credit must not wrap: a balance near the uint64 end
+		// refuses the sale rather than gaining a price it cannot hold.
+		if goldOf(owner) > math.MaxUint64-(offer.Price-commission) {
+			code = wire.StallErrInvalidOp
 			return false
 		}
 		ownerBag := bagOf(owner)
@@ -789,8 +833,8 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 		}
 		owner.MissionInventory = rowsFromInvItems(ownerBag.Items())
 		buyer.MissionInventory = rowsFromInvItems(buyerBag.Items())
-		setGold(buyer, goldOf(buyer)-uint64(offer.Price))
-		setGold(owner, goldOf(owner)+uint64(offer.Price)-commission)
+		setGold(buyer, goldOf(buyer)-offer.Price)
+		setGold(owner, goldOf(owner)+offer.Price-commission)
 		return true
 	})
 	if !sold {
@@ -811,7 +855,8 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 		st.Slots[slot] = nil
 		return nil
 	})
-	event := wire.Frame{Opcode: wire.OpStallEvent, Payload: wire.EncodeStallSold(kind, slot, buyer.Name, rt.stallOffers(division, owner, after))}
+	event := wire.Frame{Opcode: wire.OpStallEvent, Payload: wire.EncodeStallSold(kind, slot, buyer.Name,
+		rt.stallOffers(division, owner, after), rt.RaisedGoldCaps)}
 	rt.pushStall(division, after, "", event)
 	rt.PushCharacterFrames(division, owner.Name, []wire.Frame{goldFrame(rt.characterSnapshot(division, owner))})
 	rt.PushCharacterFrames(division, buyer.Name, []wire.Frame{goldFrame(rt.characterSnapshot(division, buyer))})
@@ -826,16 +871,16 @@ The stall network's 1% (UIIT_MSG_WARENETWORK_REGIST_03), clamped to
 [1, 100000] as 755960 prints it.
 ================
 */
-func stallCommission(price uint32) uint64 {
-	fee := uint64(price) / 100
+func stallCommission(price uint64) uint64 {
+	fee := price / 100
 	if fee < 1 {
 		fee = 1
 	}
 	if fee > 100000 {
 		fee = 100000
 	}
-	if fee > uint64(price) {
-		fee = uint64(price)
+	if fee > price {
+		fee = price
 	}
 	return fee
 }
