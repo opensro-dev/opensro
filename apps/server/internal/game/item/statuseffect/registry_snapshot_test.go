@@ -136,4 +136,37 @@ func TestSnapshotSeesEachNarrowWriter(t *testing.T) {
 		}
 		stale(t, r)
 	})
+	t.Run("link marks both owners", func(t *testing.T) {
+		r := NewRegistry()
+		link := testLink()
+		r.Snapshot(link.DivisionID, link.SourceName)
+		r.Snapshot(link.DivisionID, link.TargetName)
+		if code := r.ApplyLink(link); code != 0 {
+			t.Fatalf("link refused: %#x", code)
+		}
+		for _, name := range []string{link.SourceName, link.TargetName} {
+			got := r.Snapshot(link.DivisionID, name)
+			if len(got) != 1 {
+				t.Fatalf("%s's view holds %d rows after the link, want 1", name, len(got))
+			}
+		}
+	})
+	t.Run("replacement install", func(t *testing.T) {
+		r := NewRegistry()
+		held := movementFixture(1, MovementHaste, 20)
+		incoming := movementFixture(2, MovementHaste, 40)
+		incoming.SkillGroup = 2
+		r.Apply(held)
+		r.Snapshot(held.DivisionID, held.CharacterName)
+		// A different group retires nothing, so no stop's mark can
+		// refresh the view: only the install's own mark can.
+		if !r.ApplyReplacement(ReplacementApplication{Effect: incoming, Descriptors: map[uint32]ReplacementDescriptor{
+			1: {Category: 3, Group: 1, Rank: 2}, 2: {Category: 3, Group: 2, Rank: 3},
+		}}) {
+			t.Fatal("replacement refused")
+		}
+		if got := r.Snapshot(held.DivisionID, held.CharacterName); len(got) != 2 {
+			t.Fatalf("the view holds %d rows after the install, want 2", len(got))
+		}
+	})
 }
