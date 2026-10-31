@@ -4,9 +4,11 @@
 monsterleg_stats.go - slow-leg attribution for the monster leg (#1820 C)
 
 Metrics only: no behaviour reads these numbers. RunMonsterLeg fills one
-record per leg (phase walls, woken/resumed counts, route plans, memo
-hits, wander clips, the movement layer's cold-cache delta and the GC
-pause/assist delta) and, when the leg reaches SlowHookThreshold, emits
+record per leg (phase walls - the batch phase split into its queue-build
+wall, the action lane's wall outside the step, and the step wall itself -
+woken/resumed counts, route plans, memo hits, wander clips, the movement
+layer's cold-cache delta and the GC pause/assist delta) and, when the leg
+reaches SlowHookThreshold, emits
 one structured line through the package log. The next optimization step
 (the dense lookup index, a shared navigation field, memoizing the
 return path) is chosen from which phase dominates those lines.
@@ -90,19 +92,26 @@ type legStats struct {
 	total                time.Duration
 	dormancy, visibility time.Duration
 	batch, advance       time.Duration
-	actors               int
-	woken, resumed       int
-	plans                [navCallerCount][navOutcomeCount]int
-	planProbes           [navCallerCount]int
-	planTime             [navCallerCount]time.Duration
-	memo                 [navCallerCount]int
-	clips                [navCallerCount]int
-	maxPlanTime          time.Duration
-	maxPlanProbes        int
-	gcPause, gcAssist    time.Duration
-	navMisses            uint64
-	gcStart              gcSample
-	navStart             uint64
+	// queue is the batch phase's queue-build wall (behaviorBatchesForDivision:
+	// due pops, reschedules, batch sort); lane is the RunAction wall outside
+	// the step (per-actor division-lock entry plus the in-lock actor
+	// resolution). batch - advance - queue - lane is the unmeasured residue
+	// (player-pose building, liveness probes) the next timer round splits
+	// if a slow leg ever hides there.
+	queue, lane       time.Duration
+	actors            int
+	woken, resumed    int
+	plans             [navCallerCount][navOutcomeCount]int
+	planProbes        [navCallerCount]int
+	planTime          [navCallerCount]time.Duration
+	memo              [navCallerCount]int
+	clips             [navCallerCount]int
+	maxPlanTime       time.Duration
+	maxPlanProbes     int
+	gcPause, gcAssist time.Duration
+	navMisses         uint64
+	gcStart           gcSample
+	navStart          uint64
 }
 
 /*
@@ -209,12 +218,14 @@ func (s *legStats) logSlow(divisionID string) {
 		}
 	}
 	log.Warnf("simulation: slow monster leg division=%s total=%v dormancy=%v visibility=%v batch=%v advance=%v "+
-		"actors=%d woken=%d resumed=%d plans{%s} outcomes{%s} maxplan=%v/%dprobes clips{%s} navmiss=+%d gcpause=%v gcassist=%v",
+		"actors=%d woken=%d resumed=%d plans{%s} outcomes{%s} maxplan=%v/%dprobes clips{%s} navmiss=+%d gcpause=%v gcassist=%v "+
+		"queue=%v lane=%v",
 		divisionID, s.total.Round(time.Microsecond), s.dormancy.Round(time.Microsecond), s.visibility.Round(time.Microsecond),
 		s.batch.Round(time.Microsecond), s.advance.Round(time.Microsecond), s.actors, s.woken, s.resumed,
 		strings.TrimSpace(plans.String()), strings.TrimSpace(outcomes.String()),
 		s.maxPlanTime.Round(time.Microsecond), s.maxPlanProbes, strings.TrimSpace(clips.String()),
-		s.navMisses, s.gcPause.Round(time.Microsecond), s.gcAssist.Round(time.Microsecond))
+		s.navMisses, s.gcPause.Round(time.Microsecond), s.gcAssist.Round(time.Microsecond),
+		s.queue.Round(time.Microsecond), s.lane.Round(time.Microsecond))
 }
 
 /*
