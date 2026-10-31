@@ -46,8 +46,16 @@ type divisionMonsterState struct {
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
 	instances        monsterStorage
-	uniqueNotices    []Frame
-	uniqueDeaths     map[uint32]bool
+	// interestMemo holds populationInterestGIDs results per viewer
+	// interest block. An entry is valid only while both store
+	// generations and the instant it was computed at still match;
+	// any write to either store retires the whole memo.
+	interestMemoMovers    uint64
+	interestMemoInstances uint64
+	interestMemoMs        int64
+	interestMemo          map[worldgeom.InterestBlock][]uint32
+	uniqueNotices         []Frame
+	uniqueDeaths          map[uint32]bool
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline

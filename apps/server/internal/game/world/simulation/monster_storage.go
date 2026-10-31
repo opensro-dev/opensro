@@ -70,6 +70,10 @@ Cold records omit transient effects; active effect owners keep actors resident.
 ================
 */
 type monsterStorage struct {
+	// generation advances on every write (set/remove): the interest
+	// scan's per-block memo (monster_worlds.go) keys on it, so any
+	// membership or content change retires every memoized viewer set.
+	generation    uint64
 	linkedEffects map[uint32]*monster.EffectSnapshot
 	selfEffects   map[uint32]monster.SelfEffects
 	targetEffects map[uint32]monster.TargetEffects
@@ -103,6 +107,7 @@ Publish scalar state and immutable effect snapshots together under the owner loc
 ================
 */
 func (s *monsterStorage) set(gid uint32, row monster.Instance) {
+	s.generation++
 	var sparse uint8
 	if row.LinkedEffects != nil {
 		sparse |= sparseLinked
@@ -419,6 +424,7 @@ Retire all projections owned by an actor, including sparse effect mirrors.
 ================
 */
 func (s *monsterStorage) remove(gid uint32) {
+	s.generation++
 	delete(s.linkedEffects, gid)
 	delete(s.selfEffects, gid)
 	delete(s.targetEffects, gid)

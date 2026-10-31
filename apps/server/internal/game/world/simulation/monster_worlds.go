@@ -10,6 +10,7 @@ World leases isolate actors; interest queries use current movement geometry.
 package simulation
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -426,7 +427,62 @@ those, and only they go through a seen set, made on the first one. A mover
 in one region is visited once without it. Static entries are unchanged.
 ================
 */
+/*
+================
+interestMemoLookup
+
+The memoized visible set for one viewer interest block, cloned: the
+caller owns the result, as with a fresh scan. A set is a function of the
+viewer's block alone (InterestVisible compares blocks, never exact
+positions), of both stores' generations, and of the instant - a hit is
+exactly what a fresh scan would return.
+================
+*/
+func (state *divisionMonsterState) interestMemoLookup(block worldgeom.InterestBlock, nowMs int64) ([]uint32, bool) {
+	if state.movers == nil || state.interestMemo == nil {
+		return nil, false
+	}
+	if state.interestMemoMovers != state.movers.poseGeneration ||
+		state.interestMemoInstances != state.instances.generation ||
+		state.interestMemoMs != nowMs {
+		return nil, false
+	}
+	gids, ok := state.interestMemo[block]
+	if !ok {
+		return nil, false
+	}
+	return slices.Clone(gids), true
+}
+
+/*
+================
+interestMemoStore
+
+Record a fresh scan for its block, retiring every entry first if the
+stores or the instant moved on since the memo was last valid.
+================
+*/
+func (state *divisionMonsterState) interestMemoStore(block worldgeom.InterestBlock, nowMs int64, gids []uint32) {
+	if state.movers == nil {
+		return
+	}
+	if state.interestMemo == nil ||
+		state.interestMemoMovers != state.movers.poseGeneration ||
+		state.interestMemoInstances != state.instances.generation ||
+		state.interestMemoMs != nowMs {
+		state.interestMemo = make(map[worldgeom.InterestBlock][]uint32)
+		state.interestMemoMovers = state.movers.poseGeneration
+		state.interestMemoInstances = state.instances.generation
+		state.interestMemoMs = nowMs
+	}
+	state.interestMemo[block] = gids
+}
+
 func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
+	block := worldgeom.InterestBlockAt(viewer)
+	if gids, ok := state.interestMemoLookup(block, nowMs); ok {
+		return gids
+	}
 	var out []uint32
 	if state.movers != nil {
 		var seen map[uint32]struct{}
@@ -447,7 +503,7 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 				if !state.instances.contains(gid) {
 					continue
 				}
-				pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
+				pose, _ := state.movers.livePoseAtShared(gid, nowMs)
 				if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
 					out = append(out, gid)
 				}
@@ -468,7 +524,8 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
+	state.interestMemoStore(block, nowMs, out)
+	return slices.Clone(out)
 }
 
 // Visibility is a delta stream. Copy full actors only for new/unseeded viewers,
