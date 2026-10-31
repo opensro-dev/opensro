@@ -114,6 +114,12 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if !petAttackBodyAllowed(pet, target.combatTarget) {
 		return refuse("body status forbids the attack")
 	}
+	// A companion's attack is validated through its owner (#2080): the
+	// owner's job state refuses an own-side job bandit at the order, as
+	// it refuses the owner.
+	if target.monster != nil && rt.jobMonsterTargetRefusal(snapshot, *target.monster) != 0 {
+		return refuse("monster target not attackable")
+	}
 	if target.player != nil && (rt.companionTeamRefusal(snapshot, target.snapshot) != 0 ||
 		rt.playerAttackTargetRefusal(division, snapshot, target.snapshot, nowMs) != 0) {
 		return refuse("player target not attackable")
@@ -207,8 +213,9 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	target, ok := rt.resolvePetCombatTarget(step, intent.target)
 	// The native owner check runs on every companion strike: the owner's free-battle team is
 	// refused first, so a cape put on mid-fight ends an attack on a team-mate.
-	if !ok || target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
-		step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
+	if !ok || target.monster != nil && rt.jobMonsterTargetRefusal(step.snapshot, *target.monster) != 0 ||
+		target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
+			step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
 		// A target that died or left ends the fight normally: counted, not logged.
 		if ended := rt.petTargetEnded(step.key.division, step.snapshot, intent.target); !ok && ended != "" {
 			rt.countPetTargetEnded(false, ended)
@@ -399,6 +406,12 @@ GID, so every viewer animates the pet.
 ================
 */
 func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill enterworld.SkillRow, targetAt simulation.Spawn) (petStrikeResult, bool) {
+	// Every companion strike re-takes the owner's attack validation
+	// (#2080): a bandit of the owner's own side is never struck, even
+	// by a lane that reached the strike without the order's check.
+	if rt.jobMonsterTargetRefusal(step.snapshot, target) != 0 {
+		return petStrikeResult{}, false
+	}
 	division, owner := step.key.division, step.state.character
 	block := rt.cosAbnormal(division, step.snapshot.Name, step.pet.GID)
 	attacker, err := cosCombatStats(step.ref, step.pet, block, rt.cosDebuffWords(division, step.snapshot.Name, step.pet.GID, step.nowMs))

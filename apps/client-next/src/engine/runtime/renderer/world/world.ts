@@ -603,10 +603,12 @@ export function createWorldRenderer(
 			// The ranges the eye cell selects, the previous cell's (a camera that
 			// steps back reuses them), and the ranges the group's draw holds.
 			candidates?: readonly TerrainRange[];
-			previousCandidates?: { cellX: number; cellZ: number; ranges: readonly TerrainRange[]; };
+			previousCandidates?: { cellX: number; cellZ: number; viewStamp: number; ranges: readonly TerrainRange[]; };
 			chosen?: readonly TerrainRange[];
 			cellX?: number;
 			cellZ?: number;
+			// The view stamp the choice was made for (world.ts's frustum cull).
+			viewStamp?: number;
 		}
 	>();
 	/*
@@ -955,6 +957,9 @@ export function createWorldRenderer(
 	const retired: WorldScene[] = [];
 	let lastReflection = false;
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
+	// The terrain stamp: bumped whenever the view changed, so a terrain
+	// group's frustum-culled choice (native A2D1B0) keys on cell AND view.
+	let terrainViewStamp = 0;
 	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
 	/*
@@ -1945,6 +1950,7 @@ export function createWorldRenderer(
 			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
 				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
 				localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
+			if ( viewChanged ) terrainViewStamp++;
 			lastReflection = reflectWater;
 			lastEye = localCamera.eye;
 			const weatherImages = new Map<string, ImageDraw>();
@@ -2048,7 +2054,8 @@ export function createWorldRenderer(
 				// unchanged cell is decided from the table, without the group's objects.
 				if (
 					kind === WALK_TERRAIN && walk.cell[walked * 2] === eyeCellX &&
-					walk.cell[walked * 2 + 1] === eyeCellZ
+					walk.cell[walked * 2 + 1] === eyeCellZ &&
+					walk.terrainView[walked] === terrainViewStamp
 				) {
 					const indices = walk.count[walked]!;
 					if ( indices > 0 ) {
@@ -2063,15 +2070,22 @@ export function createWorldRenderer(
 				if ( kind === WALK_TERRAIN && group.ranges ) {
 					let cache = selections.get( group );
 					if ( !cache ) {
-						cache = { indices: new Uint32Array( group.geometry.indices.length ), seams: new Map() };
+						cache = {
+							indices: new Uint32Array( group.geometry.indices.length ),
+							seams: new Map(),
+							viewStamp: -1
+						};
 						selections.set( group, cache );
 					}
-					// The terrain a group submits depends on the eye cell alone: every range
-					// at the LOD its distance from the eye cell selects. Native culls cells
-					// against the frustum each frame (A2D1B0); the GPU clips the off-screen
-					// ones here instead, at the cost of a few thousand clipped triangles, so
-					// turning the camera changes nothing to choose or upload.
-					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ;
+					// The terrain a group submits depends on the eye cell and the view:
+					// every range at the LOD its distance from the eye cell selects, then
+					// the frustum culls the ranges whose sphere falls outside it - the
+					// main frustum or the water mirror's - as the native client does
+					// each frame (A2D1B0). A view change re-chooses and re-uploads; the
+					// native client re-chose every frame, so this stays the cheaper
+					// side of parity.
+					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
+						cache.viewStamp !== terrainViewStamp;
 					if ( cache.chosen && !cellChanged ) {
 						if ( cache.indexCount ) {
 							visible.push( group );
@@ -2087,19 +2101,47 @@ export function createWorldRenderer(
 						// Retain only two cell-dependent plans; geometry retirement owns both.
 						const previous = cache.previousCandidates;
 						cache.previousCandidates = cache.candidates ?
-							{ cellX: cache.cellX!, cellZ: cache.cellZ!, ranges: cache.candidates } :
+							{
+								cellX: cache.cellX!,
+								cellZ: cache.cellZ!,
+								viewStamp: cache.viewStamp!,
+								ranges: cache.candidates
+							} :
 							undefined;
-						if ( previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ ) {
+						if (
+							previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ &&
+							previous.viewStamp === terrainViewStamp
+						) {
 							cache.candidates = previous.ranges;
 						} else {
 							cache.candidates = group.ranges.filter( range => {
 								const dx = range.cell[0] - eyeCellX, dz = range.cell[1] - eyeCellZ;
-								return range.lod === selectTerrainLod( dx * dx + dz * dz );
+								if ( range.lod !== selectTerrainLod( dx * dx + dz * dz ) ) return false;
+								// The "full" detail never re-chooses on a view change
+								// (the recompute condition above), so its kept set must
+								// stay view-independent: every range at LOD 0 stays.
+								if ( current?.terrainDetail === "full" ) return true;
+								return visibleFrustumSphere(
+									frustum,
+									range.center[0],
+									range.center[1],
+									range.center[2],
+									range.radius
+								) ||
+									!!reflectionFrustum &&
+										visibleFrustumSphere(
+											reflectionFrustum,
+											range.center[0],
+											range.center[1],
+											range.center[2],
+											range.radius
+										);
 							} );
 						}
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
+					cache.viewStamp = terrainViewStamp;
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
 					const chosen = cache.candidates, indicesDirty = chosen !== cache.chosen;
@@ -2176,6 +2218,7 @@ export function createWorldRenderer(
 					walk.count[walked] = count;
 					walk.cell[walked * 2] = eyeCellX;
 					walk.cell[walked * 2 + 1] = eyeCellZ;
+					walk.terrainView[walked] = terrainViewStamp;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
 						if ( layers.member( group ) ) layers.select( group, cache.indices, count );
