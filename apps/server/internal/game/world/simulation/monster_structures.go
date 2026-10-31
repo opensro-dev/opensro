@@ -255,7 +255,7 @@ func (s *MonsterState) removeInstanceLocked(state *divisionMonsterState, gid uin
 	state.behavior.remove(gid)
 	delete(state.aiTimers, gid)
 	delete(state.gidNests, gid)
-	removeRegionGid(state.byRegion, row.Spawn.RegionID, gid)
+	state.removeRegionGid(row.Spawn.RegionID, gid)
 }
 
 /*

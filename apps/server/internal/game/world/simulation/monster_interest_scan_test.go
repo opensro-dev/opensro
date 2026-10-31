@@ -3,11 +3,10 @@
 
 monster_interest_scan_test.go - the interest scan keeps its answers
 
-populationInterestGIDs keeps a seen set only for movers the index marks
-as listed in more than one region, and contains checks the hot tier
-first. referenceInterestGIDs is the scan as it was; random populations and
-viewers must get the same slice from both, and the benchmarks time the
-average crowd and the worst case for duplicates.
+populationInterestGIDs answers from the mover block index.
+referenceInterestGIDs walks the candidate regions the way the scan did before
+that index; random populations and viewers, queried at instants in any
+order, must get the same slice from both, and the benchmarks time a leg.
 
 ===========================================================================
 */
@@ -16,6 +15,7 @@ package simulation
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"slices"
 	"sort"
 	"testing"
@@ -341,7 +341,7 @@ func TestPopulationInterestScanRetiresMembershipOnCommit(t *testing.T) {
 	if state.byRegion == nil {
 		state.byRegion = make(map[uint16][]uint32)
 	}
-	state.byRegion[interestScanRegion] = append(state.byRegion[interestScanRegion], 1)
+	state.listRegionGid(interestScanRegion, 1)
 	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{1}) {
 		t.Fatalf("scan after static spawn = %v, want [1] (stale memo?)", got)
 	}
@@ -425,5 +425,120 @@ func TestPopulationInterestScanFollowsResetMovers(t *testing.T) {
 	}
 	if flips < 500 {
 		t.Fatalf("only %d single/multi-region flips", flips)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanSurvivesTheDirtyBound
+
+Past maxMoverBlockDirty the notes are dropped and the next scan rebuilds;
+a population nobody viewed for a long burst must answer exactly anyway.
+================
+*/
+func TestPopulationInterestScanSurvivesTheDirtyBound(t *testing.T) {
+	r := rand.New(rand.NewSource(23))
+	state := interestScanPopulation(r, 600)
+	viewer := interestScanViewer(r)
+	populationInterestGIDs(state, viewer, 500)
+	for i := 0; i <= maxMoverBlockDirty; i++ {
+		state.movers.set(uint32(1+r.Intn(600)), interestScanRow(r))
+	}
+	if state.movers.blocks.built {
+		t.Fatal("the bound did not drop the notes")
+	}
+	if got, want := populationInterestGIDs(state, viewer, 500), referenceInterestGIDs(state, viewer, 500); !slices.Equal(got, want) {
+		t.Fatalf("after the bound:\n got  %v\n want %v", got, want)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanHoldsAcrossQuietTicks
+
+The point of the index: a tick in which nobody crossed a block edge
+serves the memo without a rescan, and any change that can alter the
+answer retires it. The memo map's identity tells which happened.
+================
+*/
+func TestPopulationInterestScanHoldsAcrossQuietTicks(t *testing.T) {
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	pose := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	state.instances.set(1, monster.Instance{Gid: 1, CurrentHP: 1})
+	state.movers.set(1, monster.MoverState{Pose: pose})
+	state.instances.set(2, monster.Instance{Gid: 2, CurrentHP: 1})
+	state.movers.set(2, monster.MoverState{Pose: pose})
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{1, 2}) {
+		t.Fatalf("first scan = %v", got)
+	}
+
+	// A new instant and a commit that stays in its block keep the memo.
+	first := reflect.ValueOf(state.interestMemo).Pointer()
+	state.movers.set(1, monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion, X: 961, Z: 960}})
+	state.instances.set(2, monster.Instance{Gid: 2, CurrentHP: 7})
+	populationInterestGIDs(state, viewer, 600)
+	if reflect.ValueOf(state.interestMemo).Pointer() != first {
+		t.Fatal("a quiet tick retired the memo")
+	}
+
+	// A removed actor's mover row stays; the answer must still lose it.
+	state.instances.remove(2)
+	if got := populationInterestGIDs(state, viewer, 600); !slices.Equal(got, []uint32{1}) {
+		t.Fatalf("after the actor left: %v", got)
+	}
+
+	// A mover leaving the viewer's blocks retires it too.
+	far := monster.Pose{RegionID: interestScanRegion + 2, X: 960, Z: 960}
+	state.movers.set(1, monster.MoverState{Pose: far})
+	if got := populationInterestGIDs(state, viewer, 600); len(got) != 0 {
+		t.Fatalf("after the mover left: %v", got)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanFollowsStaticChanges
+
+A static entry joins and leaves through the region list and through
+gaining a mover, and a moved spawn is read fresh: none may be masked by
+the memo or by the static lists.
+================
+*/
+func TestPopulationInterestScanFollowsStaticChanges(t *testing.T) {
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	spawn := monster.SpawnPoint{RegionID: interestScanRegion, X: 960, Z: 960}
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: spawn})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("unlisted static visible: %v", got)
+	}
+	state.listRegionGid(interestScanRegion, 5)
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{5}) {
+		t.Fatalf("listed static = %v", got)
+	}
+	away := spawn
+	away.X = 0
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: away})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("static read its old spawn: %v", got)
+	}
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: spawn})
+	state.removeRegionGid(interestScanRegion, 5)
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("unlisted static stayed: %v", got)
+	}
+	state.listRegionGid(interestScanRegion, 5)
+	populationInterestGIDs(state, viewer, 500)
+	// With a mover far away, the listing no longer places it.
+	state.movers.set(5, monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion + 2, X: 960, Z: 960}})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("a static with a mover stayed at its spawn: %v", got)
+	}
+	state.movers.remove(5)
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{5}) {
+		t.Fatalf("a mover-less actor did not return to its spawn: %v", got)
 	}
 }

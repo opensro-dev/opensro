@@ -51,7 +51,7 @@ func (s *MonsterState) DevelopmentCreateLeader(division string, refID uint32, po
 	state.instances.set(instance.Gid, instance)
 	state.movers.set(instance.Gid, mover)
 	state.behavior.set(instance.Gid, 0)
-	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], instance.Gid)
+	state.listRegionGid(spawn.RegionID, instance.Gid)
 	return instance, nil
 }
 
@@ -188,7 +188,7 @@ func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 			delete(state.aiTimers, gid)
 			delete(state.storedAITimers, gid)
 			delete(state.pendingSummons, gid)
-			removeRegionGid(state.byRegion, instance.Spawn.RegionID, gid)
+			state.removeRegionGid(instance.Spawn.RegionID, gid)
 		}
 	}
 }
@@ -211,6 +211,6 @@ func (s *MonsterState) DevelopmentRemoveLeader(division string, leader uint32) {
 		delete(state.aiTimers, leader)
 		delete(state.storedAITimers, leader)
 		delete(state.pendingSummons, leader)
-		removeRegionGid(state.byRegion, instance.Spawn.RegionID, leader)
+		state.removeRegionGid(instance.Spawn.RegionID, leader)
 	}
 }
