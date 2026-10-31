@@ -26,6 +26,39 @@ import (
 
 /*
 ================
+TestPartyShareRosterResolvesOnlyTheParty
+
+#2030: a share lookup asks presence only for the party it can pay.
+With three bystanders standing in the same division, the gold share
+still splits between picker and peer - and never asks about anyone
+else. The full reward roster asked about every character present.
+================
+*/
+func TestPartyShareRosterResolvesOnlyTheParty(t *testing.T) {
+	rt, _, picker, peer, _ := sharedPickupFixture(t)
+	source := fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)
+	for i := range 3 {
+		by := picker.Snapshot()
+		by.ID = int64(40 + i)
+		by.Name = "Bystander" + string(rune('0'+i))
+		source[testDivision] = append(source[testDivision], by)
+	}
+	asked := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		asked++
+		return true
+	}
+	shares := rt.partyGoldShares(testDivision, picker, 101, rt.Now().UnixMilli())
+	if len(shares) != 2 || shares[0].character != picker || shares[1].character != peer {
+		t.Fatalf("shares = %+v, want the picker and the peer", shares)
+	}
+	if asked > 2 {
+		t.Fatalf("the share lookup asked presence for %d characters, want at most the 2 party members", asked)
+	}
+}
+
+/*
+================
 sharedPickupFixture
 ================
 */

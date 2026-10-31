@@ -174,7 +174,7 @@ func TestBerserkKillOwnerPartyAndSourceIdentity(t *testing.T) {
 	peer.BerserkPoints = 4
 	pgid := enterworld.ObjectIDForCharacter(&peer)
 	party := &RewardParty{Options: 1, Members: []uint32{gid, pgid}}
-	roster := rewardRoster{actors: map[uint32]rewardActor{gid: {character: actor, world: 1, party: party}, pgid: {character: &peer, world: 1, party: party, pose: simulation.Spawn{X: 999999}}}}
+	roster := rewardRoster{actors: map[uint32]rewardActor{gid: {character: actor, world: 1, party: party}, pgid: {character: &peer, world: 1, party: party}}}
 	mob.Gid = 0x12345678
 	mob.Nest.HasRarityOverride = true
 	mob.Nest.RarityOverride = 0x14
