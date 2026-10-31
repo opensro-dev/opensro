@@ -487,12 +487,11 @@ test("ordinary riding horse uses its private record without a public owner tail"
 });
 
 test("a refused target stays retired through a republication until it despawns", () => {
-	const pickup = createCosPickup();
-	const spawn = { kind: "spawn", entity: { gid: 901, groundItem: {} } };
-	pickup.track( spawn );
-	pickup.result( { selector: 8, itemGid: 901, gid: 7, result: 2 }, 0 );
-	pickup.track( spawn );
-	assert.equal( pickup.isRetired( 901 ), true );
-	pickup.track( { kind: "despawn", gid: 901 } );
-	assert.equal( pickup.isRetired( 901 ), false );
+	const f = fixture();
+	const entity = f.drop( 901, 10 );
+	f.owner.result( { selector: 8, subtype: 2, itemGid: 901, gid: 7, result: 2 }, 0 );
+	f.owner.track( { kind: "spawn", entity } );
+	assert.equal( f.owner.isRetired( 901 ), true );
+	f.owner.track( { kind: "despawn", gid: 901 } );
+	assert.equal( f.owner.isRetired( 901 ), false );
 });
