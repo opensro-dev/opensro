@@ -9,8 +9,6 @@ monsteractivity_benchmark_test.go - simulation monster activity benchmark test o
 package simulation
 
 import (
-	"container/heap"
-	"sort"
 	"testing"
 	"time"
 
@@ -34,43 +32,25 @@ func queueBenchmarkState(count int) (*MonsterState, *divisionMonsterState) {
 	return s, d
 }
 
-// Keeps the pre-optimization batch algorithm as a benchmark-only control.
 /*
 ================
 BenchmarkBehaviorBatch
+
+One batch build over 5000 actors, all due every tick: the queue drain
+plus the per-actor reschedule, which is the tick's scheduling cost.
+The pre-wheel control arm drove the old heap by hand and is gone with
+it; the before/after for this arm is the same benchmark on the base
+tree.
 ================
 */
 func BenchmarkBehaviorBatch(b *testing.B) {
-	for _, legacy := range []bool{true, false} {
-		name := "identities"
-		if legacy {
-			name = "legacy-snapshots"
+	s, _ := queueBenchmarkState(5000)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for tick := 0; tick < b.N; tick++ {
+		if got := s.behaviorBatches(int64(tick)); len(got) != 1 || len(got[0].actors) != 5000 {
+			b.Fatal("lost actors")
 		}
-		b.Run(name, func(b *testing.B) {
-			s, d := queueBenchmarkState(5000)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for tick := 0; tick < b.N; tick++ {
-				if !legacy {
-					if got := s.behaviorBatches(int64(tick)); len(got) != 1 || len(got[0].actors) != 5000 {
-						b.Fatal("lost actors")
-					}
-					continue
-				}
-				var actors []monster.Instance
-				for d.behavior.Len() > 0 && d.behavior.entries[0].at <= int64(tick) {
-					e := heap.Pop(&d.behavior).(*behaviorEntry)
-					i := finishSummonAction(d.instances.get(e.gid), int64(tick))
-					d.instances.set(e.gid, i)
-					actors = append(actors, i)
-					s.scheduleBehavior(d, e.gid, int64(tick))
-				}
-				sort.Slice(actors, func(i, j int) bool { return actors[i].Gid < actors[j].Gid })
-				if len(actors) != 5000 {
-					b.Fatal("lost actors")
-				}
-			}
-		})
 	}
 }
 

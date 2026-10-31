@@ -414,21 +414,6 @@ func (s *MonsterState) PopulationInterestInstances(division string, lease instan
 
 /*
 ================
-populationInterestGIDs
-
-The spawn index owns nest/lifecycle queries. Visibility instead queries the
-mover's live region bounds: a pursuing actor can leave its spawn region ring.
-Filter exact live blocks before any archived actor read (the retail
-server's neighbour-block resolution).
-Caller holds MonsterState.mu.
-
-A mover whose segment spans regions is listed in each; the index marks
-those, and only they go through a seen set, made on the first one. A mover
-in one region is visited once without it. Static entries are unchanged.
-================
-*/
-/*
-================
 interestMemoLookup
 
 The memoized visible set for one viewer interest block, cloned: the
@@ -478,6 +463,21 @@ func (state *divisionMonsterState) interestMemoStore(block worldgeom.InterestBlo
 	state.interestMemo[block] = gids
 }
 
+/*
+================
+populationInterestGIDs
+
+The spawn index owns nest/lifecycle queries. Visibility instead queries the
+mover's live region bounds: a pursuing actor can leave its spawn region ring.
+Filter exact live blocks before any archived actor read (the retail
+server's neighbour-block resolution).
+Caller holds MonsterState.mu.
+
+A mover whose segment spans regions is listed in each; the index marks
+those, and only they go through a seen set, made on the first one. A mover
+in one region is visited once without it. Static entries are unchanged.
+================
+*/
 func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
 	block := worldgeom.InterestBlockAt(viewer)
 	if gids, ok := state.interestMemoLookup(block, nowMs); ok {
