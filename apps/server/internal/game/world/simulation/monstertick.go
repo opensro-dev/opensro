@@ -343,7 +343,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	}
 	stepped := 0
 	phaseStarted = time.Now()
-	for _, batch := range ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID) {
+	queueStarted := time.Now()
+	batches := ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID)
+	stats.queue = time.Since(queueStarted)
+	for _, batch := range batches {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
 		ops.activity.world = activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation}
@@ -379,7 +382,15 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			}
 			if ops.RunAction != nil {
 				dispatch.division, dispatch.key, dispatch.gid, dispatch.players = divisionID, batch.key, gid, players
+				advanceBefore := stats.advance
+				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
+				// The lane wall outside the step: the per-actor
+				// division-lock entry plus the in-lock actor
+				// resolution act runs before advanceAndPublish.
+				if outside := time.Since(laneStarted) - (stats.advance - advanceBefore); outside > 0 {
+					stats.lane += outside
+				}
 				continue
 			}
 			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
