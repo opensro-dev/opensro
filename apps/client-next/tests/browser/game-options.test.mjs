@@ -338,7 +338,7 @@ test(
 			await click( "open-window:Experimental" );
 			const environmentControls = [
 				{ key: "floatBloom", id: "experimental-float-bloom", tab: 0 },
-				{ key: "dynamicSun", id: "experimental-dynamic-sun", tab: 1 },
+				{ key: "dynamicSun", id: "experimental-dynamic-sun", tab: 2 },
 				{ key: "hdrToneMap", id: "experimental-hdr-tone-map", tab: 0 },
 				{ key: "sunShadow", id: "experimental-sun-shadow", tab: 2 },
 				{ key: "perPixelLighting", id: "experimental-per-pixel-lighting", tab: 2 }
