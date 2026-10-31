@@ -302,3 +302,28 @@ func TestCreditedHitBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
 		t.Fatal("the killing hit never built the reward roster")
 	}
 }
+
+/*
+================
+TestRewardRosterResolvesPosesWhenTheyAreRead
+
+#2030: the roster build resolves no positions; a pose read sees the
+actor where it stands at the read, not where it stood at the build.
+================
+*/
+func TestRewardRosterResolvesPosesWhenTheyAreRead(t *testing.T) {
+	rt, _, actor, _ := newCombatTestRuntime(t, 100)
+	roster := rt.monsterRewardRoster(testDivision, actor, 1000)
+	a, ok := roster.actors[enterworld.ObjectIDForCharacter(actor)]
+	if !ok {
+		t.Fatal("the actor is missing from its own roster")
+	}
+	before := rt.rewardActorPose(testDivision, a, 1000)
+	rt.Worlds.Update(simulation.WorldKey(testDivision, actor.Name),
+		func() simulation.WorldState { panic("the actor world must exist") },
+		func(w *simulation.WorldState) { w.Spawn.X = before.X + 5000 })
+	after := rt.rewardActorPose(testDivision, a, 1000)
+	if after.X != before.X+5000 {
+		t.Fatalf("the pose was frozen at roster build: before %+v, after %+v", before, after)
+	}
+}
