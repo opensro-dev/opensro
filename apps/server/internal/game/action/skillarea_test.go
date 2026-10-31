@@ -278,13 +278,41 @@ TestAreaStrikeBuildsTheRewardRosterOnlyForAKill
 #2030 strike gate, area site: an area whose monster victims all
 survive their plans doors the caster, the player victims and the COS
 owners and builds no reward roster; a victim whose plan can kill
-keeps the roster-wide door. The roster builder alone reads the
-division's parties on this lane, so party reads witness the build;
-the fixture division holds one character, whose own presence the
-cast path may still ask after.
+keeps the roster-wide door.
+
+The witness is the roster build's own product: the character list
+the area strike hands its door. Two bystanders stand in the division
+outside the cast; only a division-wide roster build can put them on
+that list - the narrow door holds the caster, the player victims
+and the COS owners alone. The older witnesses could pass for the
+wrong reason: the party callback is also read by the share lanes
+(partyShareRoster), and presence is swept by victim selection
+itself (areaPlayerCandidates), so neither one isolates the build.
 ================
 */
 func TestAreaStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	doorNames := func(rt *Runtime) *[]string {
+		names := &[]string{}
+		rt.deps.(*enterworld.Deps).UpdateCharacters = func(characters []*enterworld.Character, label string, update func() bool) bool {
+			if label == "player-area-attack" {
+				for _, character := range characters {
+					*names = append(*names, character.Name)
+				}
+			}
+			return update()
+		}
+		return names
+	}
+	addBystanders := func(rt *Runtime, c *enterworld.Character) (string, string) {
+		bystanderA := *c
+		bystanderA.ID, bystanderA.Name = 4, "area-bystander-a"
+		bystanderB := *c
+		bystanderB.ID, bystanderB.Name = 5, "area-bystander-b"
+		door := rt.deps.(*enterworld.Deps).Characters.(*storeDoor)
+		door.inner = enterworld.StaticCharacterSource{testDivision: {c, &bystanderA, &bystanderB}}
+		return bystanderA.Name, bystanderB.Name
+	}
+
 	rt, targets := areaFixture(t, 100000)
 	c := rt.findCharacter(testDivision, "asd2")
 	skill := shippedOffense(t, "SKILL_CH_LIGHTNING_CHUNDUNG_A_01")
@@ -292,26 +320,15 @@ func TestAreaStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
 	c.Skills = append(c.Skills, skill.ID)
 	c.Intellect = testInt64(200)
 	c.CurrentMP = testInt64(1000)
-	builds := 0
-	rt.RewardParties = func(division string) []RewardParty {
-		builds++
-		return nil
-	}
-	var queried []string
-	rt.RewardActorPresent = func(division, name string) bool {
-		queried = append(queried, name)
-		return true
-	}
+	nameA, nameB := addBystanders(rt, c)
+	doored := doorNames(rt)
 	request := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets[0].Gid}.Encode()
 	if result := rt.HandleTargetInteract(testDivision, c, request); len(result.Frames) == 0 {
 		t.Fatal("area refused")
 	}
-	if builds != 0 {
-		t.Fatalf("an area that cannot kill built the reward roster (%d builds)", builds)
-	}
-	for _, name := range queried {
-		if name != c.Name {
-			t.Fatalf("an area that cannot kill swept the division for presence (%v)", queried)
+	for _, name := range *doored {
+		if name == nameA || name == nameB {
+			t.Fatalf("an area that cannot kill built the reward roster (door held %v)", *doored)
 		}
 	}
 	if got := rt.surpriseFatalCount.Load(); got != 0 {
@@ -326,17 +343,18 @@ func TestAreaStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
 	c2.CurrentMP = testInt64(1000)
 	kills := 0
 	rt2.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) { kills++; return nil, true }
-	builds2 := 0
-	rt2.RewardParties = func(division string) []RewardParty {
-		builds2++
-		return nil
-	}
+	nameA2, nameB2 := addBystanders(rt2, c2)
+	doored2 := doorNames(rt2)
 	request2 := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets2[0].Gid}.Encode()
 	if result := rt2.HandleTargetInteract(testDivision, c2, request2); len(result.Frames) == 0 {
 		t.Fatal("killing area refused")
 	}
-	if builds2 == 0 {
-		t.Fatal("a killing area never built the reward roster")
+	held := map[string]bool{}
+	for _, name := range *doored2 {
+		held[name] = true
+	}
+	if !held[nameA2] || !held[nameB2] {
+		t.Fatalf("a killing area never built the reward roster (door held %v)", *doored2)
 	}
 	if kills != 3 {
 		t.Fatalf("kill credits %d, want 3", kills)
