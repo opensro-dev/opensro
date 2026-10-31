@@ -77,6 +77,10 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return frames, nil
 		}
 	}
+	tactics := ops.resolveTactics(instance)
+	if idleRestQuiescent(ops, instance, mover, tactics, nowMs) {
+		return nil, nil
+	}
 	if mover.Mode() != monster.MoverPending {
 		// The gate hands back the mover it gated (its cadence may have
 		// been consumed and committed); re-reading the row here would
@@ -106,7 +110,6 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	if nowMs < instance.SummonActionUntilMs {
 		return nil, nil
 	}
-	tactics := ops.resolveTactics(instance)
 	// Temptation: a tempted monster, and a monster fighting one, plan
 	// against monsters (monstertemptation.go).
 	divisionPlayers, tactics = ops.temptationView(divisionID, instance, mover, divisionPlayers, tactics, nowMs)
@@ -264,6 +267,62 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	}
 
 	return ops.advanceIdle(divisionID, instance, tactics, mover, divisionPlayers, nowMs)
+}
+
+/*
+================
+idleRestQuiescent
+
+True when an idle monster at rest can only return nil from the rest of
+advanceInstanceStep, so the step may skip its pose, activity-gate and
+AI-timer reads until the monster's next due time (#2136 item 3). Each
+guard names the branch it disarms and reads only what the caller
+already carries - the instance snapshot and the mover value - so a
+monster failing any guard runs the full step exactly as before.
+================
+*/
+func idleRestQuiescent(ops *MonsterMoverOps, instance monster.Instance, mover monster.MoverState, tactics monster.Tactics, nowMs int64) bool {
+	// Mode branches below: pending, battle re-entry, wander expiry,
+	// returning, following, recovering, chasing and spawning.
+	if mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
+		return false
+	}
+	// The activity gate's Due test, read without committing the cadence.
+	if ops.activity != nil && uint32(nowMs)-mover.Activity.LastCheck > uint32(mover.Activity.Interval) {
+		return false
+	}
+	// A pending help event or queued command is handled below.
+	if instance.Help.HasPending() {
+		return false
+	}
+	// A summoned monster at rest looks for its summoner's target.
+	if mover.ControlMode() == monster.ControlSummoned {
+		return false
+	}
+	// Temptation rewrites the plan; a held target is fought below.
+	if instance.Tempted() || mover.TargetGID() != 0 {
+		return false
+	}
+	// advanceIdle decides only once the idle deadline passes.
+	if nowMs > mover.BehaviorDeadlineMs {
+		return false
+	}
+	// An aggressive monster's sight scan reads the AI timer, and the
+	// check consumes selection state: the scan cadence (a few hundred
+	// milliseconds) cannot be deferred to the idle deadline (seconds).
+	if tactics.Aggressive {
+		return false
+	}
+	// A held navigation goal commits its next segment below, even with
+	// no segment open.
+	if _, active := mover.NavigationGoal(); active {
+		return false
+	}
+	// A live or matured segment still has to glide or settle.
+	if mover.From != (monster.Pose{}) || mover.To != (monster.Pose{}) || mover.ArriveMs > mover.DepartMs || mover.InFlight(nowMs) {
+		return false
+	}
+	return true
 }
 
 func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {

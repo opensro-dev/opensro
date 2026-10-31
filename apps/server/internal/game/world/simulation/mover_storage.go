@@ -109,15 +109,9 @@ type moverStorage struct {
 	byGID   map[uint32]uint32
 	spatial moverInterestIndex
 
-	// The interest scan's shared poses (livePoseAtShared): a groundless
-	// live pose at one instant is a pure function of the row, so one
-	// computation can serve every viewer of a leg. poseGeneration
-	// advances on every row write; the memo is valid only while its
-	// recorded generation and instant both still match.
-	poseGeneration     uint64
-	poseMemoGeneration uint64
-	poseMemoMs         int64
-	poseMemo           map[uint32]monster.Pose
+	// blocks keeps interest-block membership between scans
+	// (mover_block_index.go).
+	blocks moverBlockIndex
 }
 
 /*
@@ -162,9 +156,10 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	if s.byGID == nil {
 		s.byGID = make(map[uint32]uint32)
 	}
-	s.poseGeneration++
+	s.blocks.note(gid)
 	slot, exists := s.slotOf(gid)
 	if !exists {
+		s.blocks.rosterGeneration++
 		slot = uint32(len(s.slots))
 		s.slots = append(s.slots, moverSlot{gid: gid})
 		s.byGID[gid] = slot
@@ -335,42 +330,6 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 		return monster.Pose{}, false
 	}
 	return s.slots[slot].rec.livePoseAt(nowMs, ground), true
-}
-
-/*
-================
-livePoseAtShared
-
-livePoseAt(gid, nowMs, nil) memoized across the viewers of one leg: the
-interest scan asks where a mover stands once per viewer who might see
-it, and the groundless answer at one instant cannot change until a row
-is written. Any set or remove advances poseGeneration and retires the
-memo, as does a new instant. Callers hold the population lock, exactly
-as for livePoseAt; only the scan's groundless read is shared, never a
-ground-resolved one.
-================
-*/
-func (s *moverStorage) livePoseAtShared(gid uint32, nowMs int64) (monster.Pose, bool) {
-	if s == nil {
-		return monster.Pose{}, false
-	}
-	if s.poseMemo == nil {
-		s.poseMemo = make(map[uint32]monster.Pose)
-		s.poseMemoGeneration = s.poseGeneration
-		s.poseMemoMs = nowMs
-	} else if s.poseMemoGeneration != s.poseGeneration || s.poseMemoMs != nowMs {
-		clear(s.poseMemo)
-		s.poseMemoGeneration = s.poseGeneration
-		s.poseMemoMs = nowMs
-	}
-	if pose, ok := s.poseMemo[gid]; ok {
-		return pose, true
-	}
-	pose, ok := s.livePoseAt(gid, nowMs, nil)
-	if ok {
-		s.poseMemo[gid] = pose
-	}
-	return pose, ok
 }
 
 /*
@@ -587,7 +546,8 @@ func (s *moverStorage) remove(gid uint32) {
 	if !exists {
 		return
 	}
-	s.poseGeneration++
+	s.blocks.note(gid)
+	s.blocks.rosterGeneration++
 	s.spatial.remove(gid, s.slots[slot].rec.interestBounds())
 	last := uint32(len(s.slots) - 1)
 	if slot != last {

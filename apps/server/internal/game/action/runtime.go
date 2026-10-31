@@ -795,6 +795,11 @@ type Runtime struct {
 	// tickGateCuts counts the TickHooks cut running by a held publication
 	// gate (acquireTickGate). Tick goroutine only.
 	tickGateCuts int
+	// basicAttackCursor is the world key of the intent the last
+	// advanceBasicAttackIntents call served last; the next call resumes
+	// past it, so a burst spread over ticks cannot starve the tail of
+	// the intent snapshot (#2143).
+	basicAttackCursor string
 	// actionSessions owns the pending back command and private B2CD count.
 	// Existing continuation and cast owners execute and commit gameplay.
 	groundApproachStops sync.Map // motion revision terminal events; action tick owns retirement

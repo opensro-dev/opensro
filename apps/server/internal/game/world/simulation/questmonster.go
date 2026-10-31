@@ -111,7 +111,7 @@ func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 	state.instances.set(actor.Gid, actor)
 	state.movers.set(actor.Gid, mover)
 	state.behavior.set(actor.Gid, 0)
-	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+	state.listRegionGid(spawn.RegionID, actor.Gid)
 	armLifetimeLocked(state, actor, request.NowMs)
 	armQuestLifetimeLocked(state, actor.Gid, request.NowMs+request.LifetimeMs, request.LifetimeMs > 0)
 	return true
