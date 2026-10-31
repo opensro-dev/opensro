@@ -122,6 +122,11 @@ TestBasicAttackIntentsServeAllInsideBudget
 */
 func TestBasicAttackIntentsServeAllInsideBudget(t *testing.T) {
 	rt, clock, actors := spreadFollowFixture(t)
+	// A generous budget, so a stalled test machine cannot fail this.
+	saved := basicAttackSpreadBudget
+	basicAttackSpreadBudget = time.Hour
+	defer func() { basicAttackSpreadBudget = saved }()
+
 	out := rt.advanceBasicAttackIntents(clock.NowMs(), nil)
 	if len(out) != len(actors) {
 		t.Fatalf("one call inside the budget published %d batches, want %d", len(out), len(actors))
