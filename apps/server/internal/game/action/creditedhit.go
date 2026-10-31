@@ -99,9 +99,12 @@ func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bo
 	// build waits until a kill is possible (#2030); a hit planned short
 	// of lethal that still kills builds it at the fatal impact, outside
 	// any door, as the build has always run.
+	// The flag is copied out: a closure reading in.companion would move
+	// the whole input to the heap on every hit, surviving or not.
+	companionKill := in.companion
 	rosterForKill := func() rewardRoster {
 		built := rt.monsterRewardRoster(division, c, now)
-		built.companionKill = in.companion
+		built.companionKill = companionKill
 		return built
 	}
 	var roster rewardRoster

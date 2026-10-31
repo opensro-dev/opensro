@@ -12,8 +12,10 @@ package action
 
 import (
 	"math"
+	"slices"
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
@@ -49,6 +51,61 @@ func isPersonalQuestPickupItem(item grounditem.Item) bool {
 
 /*
 ================
+partyShareRoster
+
+The share lanes' slice of the reward roster: the picker and its party
+members, resolved with the roster's own eligibility (deletion and
+presence over the division list, read inside the same read door), but
+without materializing every other character in the division four
+times per pickup (#2030). Only actors are built; the participant
+list stays empty and no settlement ever receives this roster.
+================
+*/
+func (rt *Runtime) partyShareRoster(division string, self *enterworld.Character) rewardRoster {
+	r := rewardRoster{division: division, actors: map[uint32]rewardActor{}}
+	if self == nil {
+		return r
+	}
+	selfGID := enterworld.ObjectIDForCharacter(self)
+	var party *RewardParty
+	if rt.RewardParties != nil {
+		parties := rt.RewardParties(division)
+		// The last listing wins, as the full roster's member map has it.
+		for i := range parties {
+			if slices.Contains(parties[i].Members, selfGID) {
+				party = &parties[i]
+			}
+		}
+	}
+	wanted := map[uint32]bool{selfGID: true}
+	if party != nil {
+		for _, gid := range party.Members {
+			wanted[gid] = true
+		}
+	}
+	// The division list is taken before the read door, exactly as the
+	// full roster takes it: the store read lock must not nest.
+	characters := rt.deps.CharactersForDivision(division)
+	rt.deps.Read(division, func() {
+		for _, c := range characters {
+			if c == nil || c.DeletePending {
+				continue
+			}
+			gid := enterworld.ObjectIDForCharacter(c)
+			if !wanted[gid] {
+				continue
+			}
+			if rt.RewardActorPresent != nil && !rt.RewardActorPresent(division, c.Name) {
+				continue
+			}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: party}
+		}
+	})
+	return r
+}
+
+/*
+================
 partyPickupRecipient
 
 The reference server: item-share bit, rotating member alive (life byte 1),
@@ -63,7 +120,7 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 	if isPersonalQuestPickupItem(item) {
 		return picker
 	}
-	roster := rt.monsterRewardRoster(division, picker, nowMs)
+	roster := rt.partyShareRoster(division, picker)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(picker)]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
 		return picker
@@ -113,7 +170,7 @@ split applies (no party, option clear).
 ================
 */
 func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Character, amount uint32, nowMs int64) []goldShare {
-	roster := rt.monsterRewardRoster(division, recipient, nowMs)
+	roster := rt.partyShareRoster(division, recipient)
 	self := enterworld.ObjectIDForCharacter(recipient)
 	origin, found := roster.actors[self]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
@@ -176,8 +233,8 @@ inSharedLootParty
 Whether c is in a live party whose item-share option bit (0x02) is set.
 ================
 */
-func (rt *Runtime) inSharedLootParty(division string, c *enterworld.Character, nowMs int64) bool {
-	roster := rt.monsterRewardRoster(division, c, nowMs)
+func (rt *Runtime) inSharedLootParty(division string, c *enterworld.Character) bool {
+	roster := rt.partyShareRoster(division, c)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(c)]
 	return found && origin.party != nil && origin.party.Options&sharedLootOption != 0
 }
@@ -262,11 +319,11 @@ is-gold slot (vtable +0x7C) and skips the call when it
 is set.
 ================
 */
-func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item, nowMs int64) []RecipientFrames {
+func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item) []RecipientFrames {
 	if item.IsGold() {
 		return nil
 	}
-	roster := rt.monsterRewardRoster(division, picker, nowMs)
+	roster := rt.partyShareRoster(division, picker)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(picker)]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
 		return nil

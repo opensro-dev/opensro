@@ -225,7 +225,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		rt.logCosRefusal(c, q, wire.ErrCodeInvalidRequest, refusalCause)
 	}
 	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && picked.RefObjID != 0 && !picked.IsGold() {
-		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked)...)
 	}
 	return result
 }
@@ -338,7 +338,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		// Natively, when the owner's player bag is full on a personal
 		// quest drop, an item-share party emits 0x189C (3 s retry
 		// backoff); solo or non-item-share emits 0x18B5 (owner bag full).
-		if rt.inSharedLootParty(division, c, now.UnixMilli()) {
+		if rt.inSharedLootParty(division, c) {
 			return failureResult(cosPickupRetryBackoff), true
 		}
 		return failureResult(cosPickupOwnerBagFull), true
@@ -486,7 +486,7 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		return true
 	})
 	if len(result.Broadcast) > 0 {
-		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked, now.UnixMilli())...)
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked)...)
 		return result
 	}
 	if peerBagFull && peerPetGID != 0 {
