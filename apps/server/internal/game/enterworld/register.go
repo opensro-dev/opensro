@@ -236,6 +236,42 @@ func packetBytes(p Packet) []byte {
 // always names a real wait.
 const defaultSlowEnterThreshold = 5 * time.Second
 
+// defaultGateWaitBound is the publication-gate wait that abandons an
+// entry when deps.GateWaitBound is unset. A legitimate gate hold is
+// another entry's build and publish, sub-second even in the slowest
+// measured entries; ten seconds is the client's own admission
+// patience, so a wait past it is a wedge, not slowness, and the entry
+// is worth more as a log line than as a silently parked handler.
+const defaultGateWaitBound = 10 * time.Second
+
+/*
+================
+acquireEnterGate
+
+Take the division publication gate for one entry, giving up when the
+session closes or the bound passes. The gate is taken before scene
+admission, so a handler parked on it is invisible to both the
+bootstrap watchdog and the slow-entry log; abandoning the entry
+unanswered leaves the wait in the log instead, and the client
+retries. The deferred taker still releases the gate when it frees,
+so an abandoned wait never wedges the queue behind it.
+================
+*/
+func acquireEnterGate(lock func(string, string) func(), division string, done <-chan struct{}, bound time.Duration) (func(), bool) {
+	acquired := make(chan func(), 1)
+	go func() { acquired <- lock(division, "enterWorld") }()
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	select {
+	case unlock := <-acquired:
+		return unlock, true
+	case <-done:
+	case <-timer.C:
+	}
+	go func() { (<-acquired)() }()
+	return nil, false
+}
+
 // RegisterEnterWorld registers the OpEnterWorld (0x0006) handler: decode,
 // bootstrap, answer OpEnterWorldResult (0x0007), bind the session identity,
 // then push the bootstrap packets as native frames in order. All frames ride
@@ -256,6 +292,10 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 		if slowThreshold <= 0 {
 			slowThreshold = defaultSlowEnterThreshold
 		}
+		gateBound := deps.GateWaitBound
+		if gateBound <= 0 {
+			gateBound = defaultGateWaitBound
+		}
 		var requestName string
 		var gateWait time.Duration
 		// Acquire before invalidating the old scene. A committed pickup must
@@ -266,9 +306,26 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				division := resolveBootstrapDivision(deps, request.Division)
 				admission.ResolveDivisionID = func(string) string { return division }
 				if division != "" {
-					unlock := deps.LockPublication(division, "enterWorld")
-					defer unlock()
+					unlock, ok := acquireEnterGate(deps.LockPublication, division, s.Done(), gateBound)
 					gateWait = time.Since(enteredAt)
+					if !ok {
+						// The client leaving needs no name; a live
+						// session abandoned at the gate is the wedge
+						// this bound exists to expose.
+						select {
+						case <-s.Done():
+						default:
+							log.WithFields(log.Fields{
+								"session":   s.DiagnosticSessionID(),
+								"character": requestName,
+								"division":  division,
+								"waited_ms": gateWait.Milliseconds(),
+								"bound_ms":  gateBound.Milliseconds(),
+							}).Warn("bootstrap: enter world abandoned at the publication gate")
+						}
+						return
+					}
+					defer unlock()
 				}
 			}
 		}
