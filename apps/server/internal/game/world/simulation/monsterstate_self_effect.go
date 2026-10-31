@@ -12,7 +12,7 @@ func (s *MonsterState) SelectConditionalSkill(division string, gid uint32) (uint
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
 		return 0, false
 	}
@@ -45,7 +45,7 @@ func (s *MonsterState) InstallMonsterSelfEffect(division string, gid uint32, eff
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
 		return false
 	}
@@ -87,7 +87,7 @@ func (s *MonsterState) InstallMonsterTargetEffect(division string, gid uint32, e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
 		return 0, false
 	}
@@ -158,7 +158,7 @@ func (s *MonsterState) RetireMonsterSelfEffects(now int64) []MonsterSelfEffectRe
 			owners[gid] = true
 		}
 		for gid := range owners {
-			r, ok := state.instances.hot[gid]
+			r, ok := state.instances.hotRow(gid)
 			if !ok {
 				panic("monster effect lost resident owner")
 			}

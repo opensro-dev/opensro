@@ -26,7 +26,9 @@ func TestResidentMonsterRoundTripAndIsolation(t *testing.T) {
 		copy := original
 		copy.Gid++
 		s.set(copy.Gid, copy)
-		if s.hot[copy.Gid].ref != s.hot[original.Gid].ref || s.hot[copy.Gid].nest != s.hot[original.Gid].nest {
+		copyRow, copyHot := s.hotRow(copy.Gid)
+		originalRow, originalHot := s.hotRow(original.Gid)
+		if !copyHot || !originalHot || copyRow.ref != originalRow.ref || copyRow.nest != originalRow.nest {
 			t.Fatal("static definitions not shared")
 		}
 		copy.Ref.MaxHP++
@@ -99,5 +101,70 @@ func fillResidentTestValue(v reflect.Value, r *rand.Rand) {
 		v.SetUint(r.Uint64())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		v.SetInt(r.Int63())
+	}
+}
+
+/*
+================
+TestRemoveHotKeepsTheMovedRowReachable
+
+Swap-removal moves the last row into the hole, so the moved row's slot
+entry must follow it. Removing the last row itself moves nothing.
+================
+*/
+func TestRemoveHotKeepsTheMovedRowReachable(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 4; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid * 10})
+	}
+	storage.remove(2)
+	storage.remove(3)
+	if _, ok := storage.hotRow(2); ok {
+		t.Fatal("a removed row is still reachable")
+	}
+	for _, gid := range []uint32{1, 4} {
+		row, ok := storage.hotRow(gid)
+		if !ok || row.currentHP != gid*10 {
+			t.Fatalf("gid %d after removal: found %v, hp %d", gid, ok, row.currentHP)
+		}
+	}
+	if len(storage.hot) != 2 || len(storage.byGID) != 2 {
+		t.Fatalf("hot %d rows, %d slots, want 2 of each", len(storage.hot), len(storage.byGID))
+	}
+}
+
+/*
+================
+TestShrinkHotExcessRebuildsBothHalves
+
+The rebuild runs only after a large contraction, and the rows and slot
+map must still agree after it. Below the threshold it copies nothing.
+================
+*/
+func TestShrinkHotExcessRebuildsBothHalves(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 8192; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid})
+	}
+	peak := 0
+	storage.shrinkHotExcess(&peak, true)
+	if peak != 8192 || cap(storage.hot) < 8192 {
+		t.Fatalf("a full storage shrank: peak %d, capacity %d", peak, cap(storage.hot))
+	}
+	for gid := uint32(11); gid <= 8192; gid++ {
+		storage.remove(gid)
+	}
+	storage.shrinkHotExcess(&peak, false)
+	if cap(storage.hot) < 8192 {
+		t.Fatal("a shrink ran without being allowed")
+	}
+	storage.shrinkHotExcess(&peak, true)
+	if cap(storage.hot) != 10 || peak != 10 {
+		t.Fatalf("no shrink: capacity %d, peak %d", cap(storage.hot), peak)
+	}
+	for gid := uint32(1); gid <= 10; gid++ {
+		if row, ok := storage.hotRow(gid); !ok || row.currentHP != gid {
+			t.Fatalf("gid %d lost in the rebuild", gid)
+		}
 	}
 }

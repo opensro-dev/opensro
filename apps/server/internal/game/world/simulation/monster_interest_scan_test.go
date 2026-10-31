@@ -38,7 +38,7 @@ The scan before this change: candidates' seen set, both-tier contains.
 func referenceInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
 	var out []uint32
 	for gid := range state.movers.candidates(viewer) {
-		_, hot := state.instances.hot[gid]
+		_, hot := state.instances.hotSlotOf(gid)
 		_, cold := state.instances.cold[gid]
 		if !hot && !cold {
 			continue

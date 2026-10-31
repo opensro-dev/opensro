@@ -397,7 +397,8 @@ func (s *MonsterState) scheduleBehaviorSlot(state *divisionMonsterState, gid uin
 		return slot
 	}
 	at := now + 1
-	commandPending := state.instances.hot[gid].help.HasPending()
+	resident, _ := state.instances.hotRow(gid)
+	commandPending := resident.help.HasPending()
 	if m.mode == monster.MoverPending && m.activity.Interval != 0 && !commandPending {
 		elapsed := uint32(now) - m.activity.LastCheck
 		if elapsed <= uint32(m.activity.Interval) {
@@ -564,7 +565,7 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		actors := batch.actors[:0]
 		for _, ref := range batch.actors {
 			gid := ref.gid
-			i, exists := state.instances.hot[gid]
+			i, exists := state.instances.hotRow(gid)
 			if !exists {
 				state.behavior.remove(gid)
 				continue
