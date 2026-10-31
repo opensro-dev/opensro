@@ -382,11 +382,11 @@ func TestSkillStrikeSurpriseFatalIsCounted(t *testing.T) {
 	rt, _, actor, mob := newCombatTestRuntime(t, 100)
 	impact := simulation.MonsterDamageResult{Instance: mob, Fatal: true}
 	roster := rewardRoster{division: testDivision, characters: []*enterworld.Character{actor}}
-	rt.settleSkillStrikeFatal(testDivision, actor, roster, false, impact, monster.Pose{}, 1000)
+	rt.settleStrikeFatal(testDivision, actor, roster, false, impact, monster.Pose{}, 1000)
 	if got := rt.surpriseFatalCount.Load(); got != 1 {
 		t.Fatalf("surprise fatal count = %d, want 1", got)
 	}
-	rt.settleSkillStrikeFatal(testDivision, actor, roster, true, impact, monster.Pose{}, 1000)
+	rt.settleStrikeFatal(testDivision, actor, roster, true, impact, monster.Pose{}, 1000)
 	if got := rt.surpriseFatalCount.Load(); got != 1 {
 		t.Fatalf("a lethal-plan kill counted as a surprise: %d", got)
 	}

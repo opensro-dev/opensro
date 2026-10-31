@@ -395,7 +395,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// the roster-wide door exactly as before. The sequence refuses
 	// outright when the target's HP moved off the planned value and
 	// applied damage never exceeds planned damage, so a fatal impact
-	// implies a lethal plan; settleSkillStrikeFatal guards the rest.
+	// implies a lethal plan; settleStrikeFatal guards the rest.
 	var plannedDamage uint64
 	for _, plan := range damagePlans {
 		plannedDamage += uint64(plan.Damage)
@@ -461,7 +461,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
 			}
 			if committed[len(committed)-1].Fatal {
-				settlement = rt.settleSkillStrikeFatal(divisionID, character, roster, canKill, committed[len(committed)-1], monsterPose, nowMs)
+				settlement = rt.settleStrikeFatal(divisionID, character, roster, canKill, committed[len(committed)-1], monsterPose, nowMs)
 				killProgressionFrames, killDrops = settlement.actorFrames, settlement.drops
 			}
 			return true
@@ -626,16 +626,17 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 
 /*
 ================
-settleSkillStrikeFatal
+settleStrikeFatal
 
-The fatal impact of a skill strike, settled inside the strike door.
+The fatal impact of a strike, settled inside the strike door: a
+player's skill strike, or a companion's struck for its owner.
 canKill says the plan was lethal and the roster is the full reward
 roster; without it the settlement runs on the caster's narrow roster
 and the kill was impossible by the planned-damage invariant, which
 noteSurpriseFatal makes audible instead of silent (#2030).
 ================
 */
-func (rt *Runtime) settleSkillStrikeFatal(division string, character *enterworld.Character, roster rewardRoster, canKill bool, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+func (rt *Runtime) settleStrikeFatal(division string, character *enterworld.Character, roster rewardRoster, canKill bool, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
 	if !canKill {
 		rt.noteSurpriseFatal(division, impact.Instance.Gid)
 	}

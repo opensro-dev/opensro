@@ -469,7 +469,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	// reader, and it runs only on a fatal impact. The sequence
 	// refuses outright when the target's HP moved off the planned
 	// value and applied damage never exceeds planned damage, so a
-	// fatal impact implies a lethal plan; settleSkillStrikeFatal
+	// fatal impact implies a lethal plan; settleStrikeFatal
 	// guards the rest.
 	var plannedDamage uint64
 	for _, plan := range plans {
@@ -506,7 +506,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 			roster.companionKill = true
 			// The pet's strike is a skill strike struck by the
 			// companion for its owner; the fatal door is shared.
-			settlement = rt.settleSkillStrikeFatal(division, owner, roster, canKill, committed[len(committed)-1], monsterPose, step.nowMs)
+			settlement = rt.settleStrikeFatal(division, owner, roster, canKill, committed[len(committed)-1], monsterPose, step.nowMs)
 		}
 		return true
 	}) {
