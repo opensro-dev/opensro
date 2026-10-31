@@ -61,7 +61,9 @@ export function monsterPortraitReferences( manifest ) {
 		const slot = [ 1, 3, 4 ].includes( row.materialKind ) ? row.materialKind : 0;
 		return {
 			refObjId: row.refObjId,
-			codename: row.codename,
+			// Named only when the manifest names the row: an undefined
+			// key would change the reference's shape for every consumer.
+			...(row.codename ? { codename: row.codename } : {}),
 			glb: row.materialVariants?.[String( slot )] ?? row.glb
 		};
 	} );
