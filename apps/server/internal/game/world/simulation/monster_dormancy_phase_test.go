@@ -61,7 +61,7 @@ func wakeDormancyPhaseWorld(t *testing.T, s *MonsterState, d *divisionMonsterSta
 	if len(d.dormant) != 0 || d.behavior.Len() != actors {
 		t.Fatalf("wake left dormant=%d scheduled=%d, want 0/%d", len(d.dormant), d.behavior.Len(), actors)
 	}
-	if at := d.behavior.entries[0].at; at <= 200000 {
+	if at, _ := d.behavior.earliestDue(); at <= 200000 {
 		t.Fatalf("earliest woken actor due at %d, on or before the wake tick", at)
 	}
 	first := make(map[uint32]int64)
@@ -132,10 +132,8 @@ func TestDormancyWakeMatchesNeverSleptTwin(t *testing.T) {
 	session.World.Spawn.RegionID = 0x6061
 	s.prepareDormancy(200000, "sleep", []SessionSnapshot{session})
 	sleptAt := int64(-1)
-	for _, e := range d.behavior.entries {
-		if e.gid == actor.Gid {
-			sleptAt = e.at
-		}
+	if slot, ok := d.behavior.byGID[actor.Gid]; ok {
+		sleptAt = d.behavior.slots[slot].at
 	}
 
 	// Never-slept twin: the same cadence stepped through the sleep window
@@ -153,10 +151,8 @@ func TestDormancyWakeMatchesNeverSleptTwin(t *testing.T) {
 	d2.keepAwakeUntil[0x6060] = 200000 + regionSleepGraceMs
 	s2.scheduleBehavior(d2, actor.Gid, 200000)
 	twinAt := int64(-1)
-	for _, e := range d2.behavior.entries {
-		if e.gid == actor.Gid {
-			twinAt = e.at
-		}
+	if slot, ok := d2.behavior.byGID[actor.Gid]; ok {
+		twinAt = d2.behavior.slots[slot].at
 	}
 	if sleptAt != 201074 || twinAt != sleptAt {
 		t.Fatalf("slept due %d, never-slept twin due %d, want both 201074", sleptAt, twinAt)

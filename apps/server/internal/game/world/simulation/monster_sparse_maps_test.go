@@ -1,12 +1,11 @@
 package simulation
 
 import (
-	"container/heap"
 	"testing"
 	"time"
 )
 
-func TestSparseQueueCompactionPreservesIdentityAndOrder(t *testing.T) {
+func TestSparseQueueCompactionPreservesIdentity(t *testing.T) {
 	var state divisionMonsterState
 	for i := uint32(0); i < 10000; i++ {
 		state.behavior.set(i, int64(i%17))
@@ -15,21 +14,30 @@ func TestSparseQueueCompactionPreservesIdentityAndOrder(t *testing.T) {
 	for i := uint32(0); i < 9990; i++ {
 		state.behavior.remove(i)
 	}
-	before := state.behavior.byGID[9999]
+	before := state.behavior.slots[state.behavior.byGID[9999]].at
 	state.compactDormantIndexes(time.Now().Add(time.Second))
-	if state.behavior.byGID[9999] != before || cap(state.behavior.entries) > 32 || state.sparseMapPeaks[2] != 10 {
+	if _, capacity := state.behavior.capacity(); state.behavior.slots[state.behavior.byGID[9999]].at != before || capacity > 64 || state.sparseMapPeaks[2] != 10 {
 		t.Fatal("queue contraction did not preserve entry identity")
 	}
-	lastAt, lastGid := int64(-1), uint32(0)
-	for state.behavior.Len() > 0 {
-		e := heap.Pop(&state.behavior).(*behaviorEntry)
-		if e.at < lastAt || e.at == lastAt && e.gid < lastGid {
-			t.Fatal("priority order changed")
+	due := state.behavior.takeDue(16, nil)
+	if len(due) != 10 {
+		t.Fatalf("drained %d actors after contraction, want the surviving 10", len(due))
+	}
+	seen := make(map[uint32]bool)
+	for _, gid := range due {
+		if gid < 9990 || seen[gid] {
+			t.Fatalf("contraction changed the live set: drained %v", due)
 		}
-		lastAt, lastGid = e.at, e.gid
+		seen[gid] = true
+	}
+	for gid, slot := range state.behavior.byGID {
+		if state.behavior.slots[slot].gid != gid {
+			t.Fatal("index not synchronized")
+		}
+		state.behavior.remove(gid)
 	}
 	if len(state.behavior.byGID) != 0 {
-		t.Fatal("index not synchronized")
+		t.Fatal("removal left index entries")
 	}
 }
 
@@ -54,9 +62,9 @@ func TestSparseMapWaitsForAdmission(t *testing.T) {
 func BenchmarkSparseMapContraction(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		m := make(map[uint32]*behaviorEntry, 53000)
+		m := make(map[uint32]int64, 53000)
 		for gid := uint32(0); gid < 53000; gid++ {
-			m[gid] = &behaviorEntry{gid: gid}
+			m[gid] = int64(gid)
 		}
 		for gid := uint32(0); gid < 51000; gid++ {
 			delete(m, gid)

@@ -3,16 +3,21 @@
 
 monsteractivity_queue.go - the monster behaviour queue and its due batches
 
-Every materialized actor has one update entry, ordered by (at, gid).
-PENDING sleeps until its activity deadline (or earlier movement arrival);
-combat events reschedule the same entry. No viewer ring owns actor
-liveness.
+Every materialized actor has one update entry, due at a millisecond
+time. PENDING sleeps until its activity deadline (or earlier movement
+arrival); combat events reschedule the same entry. No viewer ring owns
+actor liveness.
 
-The queue sifts with its own typed copies of container/heap's up and down,
-step for step, so every operation leaves the same order the generic heap
-would; the generic one cost an interface call per compare and swap on the
-tick's busiest path. The heap.Interface methods stay for callers that use
-container/heap directly.
+The queue is a timer wheel: buckets of 8 ms over a 4096 ms ring, an
+immediate list for dues in the past and a far list for dues beyond the
+ring (the activity cadence tops out near 2 s, so the far list is a
+safety path, not the common one). set only appends and records the live
+due in byGID; the copies an earlier set left behind are stale the
+moment byGID moves and die when their bucket drains. Scheduling is
+O(1); the old binary heap's sift (less/swap per level, per actor, per
+tick) was the measured cost this replaces (#2135). The batch sorts its
+actors by gid, so the order monsters act in never depended on the
+container - only the due set did, and the wheel keeps it exact.
 
 ===========================================================================
 */
@@ -25,183 +30,330 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+const (
+	// behaviorBucketMs is the wheel's bucket width; behaviorBucketCount
+	// buckets ring a horizon a little past twice the longest activity
+	// cadence (NewActivityCadence draws 1000-1999 ms).
+	behaviorBucketMs    = 8
+	behaviorBucketCount = 512
+	behaviorHorizonMs   = behaviorBucketMs * behaviorBucketCount
+)
+
 /*
 ================
-behaviorEntry
+behaviorCopy
+
+One placement of a slot in a bucket list. A copy is live only while
+its slot is live and still holds the same at; rescheduling leaves the
+old copies stale.
 ================
 */
-type behaviorEntry struct {
-	gid   uint32
-	at    int64
-	index int
+type behaviorCopy struct {
+	slot uint32
+	at   int64
+}
+
+/*
+================
+behaviorSlot
+
+One scheduled actor's dense queue row. live is false once the actor
+fires or is removed, until set revives the row; copies naming a dead
+row are stale whatever at they carry.
+================
+*/
+type behaviorSlot struct {
+	gid  uint32
+	at   int64
+	live bool
 }
 
 /*
 ================
 behaviorQueue
+
+The wheel. byGID maps a gid to its slot and is read on the re-arm
+path and written only when an actor enters or leaves the queue; the
+drain itself walks bucket lists of behaviorCopy and the slot array,
+no map traffic. now is the last drain time and the ring's cursor base.
 ================
 */
 type behaviorQueue struct {
-	entries []*behaviorEntry
-	byGID   map[uint32]*behaviorEntry
+	slots   []behaviorSlot
+	free    []uint32
+	buckets [behaviorBucketCount][]behaviorCopy
+	far     []behaviorCopy
+	farMin  int64
+	due     []behaviorCopy
+	byGID   map[uint32]uint32
+	now     int64
+}
+
+/*
+================
+behaviorBucketIndex
+
+The ring bucket a due time falls in.
+================
+*/
+func behaviorBucketIndex(at int64) int {
+	return int(at/behaviorBucketMs) % behaviorBucketCount
 }
 
 /*
 ================
 behaviorQueue.Len
+
+The scheduled actor count: one live slot per gid.
 ================
 */
-func (q behaviorQueue) Len() int { return len(q.entries) }
+func (q *behaviorQueue) Len() int { return len(q.byGID) }
 
 /*
 ================
-behaviorQueue.Less
+behaviorQueue.place
+
+Appends the slot's copy to the list that holds its due: the immediate
+list at or before the last drain, its ring bucket inside the horizon,
+the far list beyond it.
 ================
 */
-func (q behaviorQueue) Less(i, j int) bool { return q.less(i, j) }
-
-/*
-================
-behaviorQueue.Swap
-================
-*/
-func (q behaviorQueue) Swap(i, j int) { q.swap(i, j) }
-
-/*
-================
-behaviorQueue.Push
-================
-*/
-func (q *behaviorQueue) Push(v any) {
-	e := v.(*behaviorEntry)
-	e.index = len(q.entries)
-	q.entries = append(q.entries, e)
-	q.byGID[e.gid] = e
-}
-
-/*
-================
-behaviorQueue.Pop
-================
-*/
-func (q *behaviorQueue) Pop() any {
-	n := len(q.entries) - 1
-	e := q.entries[n]
-	q.entries[n] = nil
-	q.entries = q.entries[:n]
-	delete(q.byGID, e.gid)
-	return e
-}
-
-/*
-================
-behaviorQueue.less
-================
-*/
-func (q *behaviorQueue) less(i, j int) bool {
-	a, b := q.entries[i], q.entries[j]
-	return a.at < b.at || a.at == b.at && a.gid < b.gid
-}
-
-/*
-================
-behaviorQueue.swap
-================
-*/
-func (q *behaviorQueue) swap(i, j int) {
-	q.entries[i], q.entries[j] = q.entries[j], q.entries[i]
-	q.entries[i].index = i
-	q.entries[j].index = j
-}
-
-/*
-================
-behaviorQueue.up
-
-container/heap's up.
-================
-*/
-func (q *behaviorQueue) up(j int) {
-	for {
-		i := (j - 1) / 2
-		if i == j || !q.less(j, i) {
-			break
+func (q *behaviorQueue) place(slot uint32, at int64) {
+	e := behaviorCopy{slot: slot, at: at}
+	switch {
+	case at <= q.now:
+		q.due = append(q.due, e)
+	case at < q.now+behaviorHorizonMs:
+		i := behaviorBucketIndex(at)
+		q.buckets[i] = append(q.buckets[i], e)
+	default:
+		if len(q.far) == 0 || at < q.farMin {
+			q.farMin = at
 		}
-		q.swap(i, j)
-		j = i
+		q.far = append(q.far, e)
 	}
-}
-
-/*
-================
-behaviorQueue.down
-
-container/heap's down: reports whether the entry moved.
-================
-*/
-func (q *behaviorQueue) down(i0, n int) bool {
-	i := i0
-	for {
-		j1 := 2*i + 1
-		if j1 >= n || j1 < 0 {
-			break
-		}
-		j := j1
-		if j2 := j1 + 1; j2 < n && q.less(j2, j1) {
-			j = j2
-		}
-		if !q.less(j, i) {
-			break
-		}
-		q.swap(i, j)
-		i = j
-	}
-	return i > i0
 }
 
 /*
 ================
 behaviorQueue.set
 
-Schedules gid at at: heap.Fix for an existing entry, heap.Push for a new
-one.
+Schedules gid at at: revive (or take) its slot, stamp the due, place
+a copy. One byGID read for a known actor; the map is written only for
+an actor entering the queue. Copies of earlier dues go stale in place.
 ================
 */
 func (q *behaviorQueue) set(gid uint32, at int64) {
 	if q.byGID == nil {
-		q.byGID = make(map[uint32]*behaviorEntry)
+		q.byGID = make(map[uint32]uint32)
 	}
-	if e := q.byGID[gid]; e != nil {
-		e.at = at
-		if !q.down(e.index, len(q.entries)) {
-			q.up(e.index)
+	slot, ok := q.byGID[gid]
+	if !ok {
+		if n := len(q.free); n > 0 {
+			slot = q.free[n-1]
+			q.free = q.free[:n-1]
+		} else {
+			slot = uint32(len(q.slots))
+			q.slots = append(q.slots, behaviorSlot{})
 		}
-		return
+		q.byGID[gid] = slot
 	}
-	q.Push(&behaviorEntry{gid: gid, at: at})
-	q.up(len(q.entries) - 1)
+	q.slots[slot] = behaviorSlot{gid: gid, at: at, live: true}
+	q.place(slot, at)
 }
 
 /*
 ================
 behaviorQueue.remove
 
-heap.Remove of gid's entry, if it has one.
+Unschedules gid: the slot dies and leaves the queue, staling every
+copy at once.
 ================
 */
 func (q *behaviorQueue) remove(gid uint32) {
-	e := q.byGID[gid]
-	if e == nil {
+	slot, ok := q.byGID[gid]
+	if !ok {
 		return
 	}
-	i, n := e.index, len(q.entries)-1
-	if n != i {
-		q.swap(i, n)
-		if !q.down(i, n) {
-			q.up(i)
+	delete(q.byGID, gid)
+	q.slots[slot].live = false
+	q.free = append(q.free, slot)
+}
+
+/*
+================
+behaviorQueue.liveCopy
+
+Whether a bucket copy still names its slot's live due.
+================
+*/
+func (q *behaviorQueue) liveCopy(e behaviorCopy) bool {
+	s := q.slots[e.slot]
+	return s.live && s.at == e.at
+}
+
+/*
+================
+behaviorQueue.filterDue
+
+One list under drain at now: live copies due by now fire (their slot
+dies, so a second copy cannot fire again); live copies not yet due
+stay; stale copies drop. Array traffic only.
+================
+*/
+func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]uint32) []behaviorCopy {
+	keep := list[:0]
+	for _, e := range list {
+		if !q.liveCopy(e) {
+			continue
+		}
+		if e.at > now {
+			keep = append(keep, e)
+			continue
+		}
+		q.slots[e.slot].live = false
+		*out = append(*out, q.slots[e.slot].gid)
+	}
+	return keep
+}
+
+/*
+================
+behaviorQueue.takeDue
+
+Every gid due by now, in no order (callers sort). Their live dues are
+consumed: the caller re-arms the ones it keeps (scheduleBehavior) and
+the rest stay unscheduled, exactly the heap's pop contract.
+
+Far dues first migrate into the ring (or fire) once the nearest one is
+inside the horizon; the ring then sweeps from the last drain's bucket
+to now's, or every bucket when the drain gap spans the horizon or time
+went backwards. Copies set during the caller's processing land in
+future buckets and cannot fire in this drain: scheduleBehavior never
+re-arms into the past.
+================
+*/
+func (q *behaviorQueue) takeDue(now int64, out []uint32) []uint32 {
+	if len(q.far) > 0 && q.farMin-now <= behaviorHorizonMs {
+		rest := q.far[:0]
+		var migrate []behaviorCopy
+		farMin := int64(0)
+		haveFar := false
+		for _, e := range q.far {
+			if !q.liveCopy(e) {
+				continue
+			}
+			if e.at > now+behaviorHorizonMs {
+				rest = append(rest, e)
+				if !haveFar || e.at < farMin {
+					farMin, haveFar = e.at, true
+				}
+				continue
+			}
+			if e.at <= now {
+				q.slots[e.slot].live = false
+				out = append(out, q.slots[e.slot].gid)
+				continue
+			}
+			migrate = append(migrate, e)
+		}
+		q.far = rest
+		q.farMin = farMin
+		// Placed only now: place appends to the lists this loop filters.
+		for _, e := range migrate {
+			q.place(e.slot, e.at)
 		}
 	}
-	q.Pop()
+	q.due = q.filterDue(q.due, now, &out)
+	if now < q.now || now-q.now >= behaviorHorizonMs {
+		for i := range q.buckets {
+			q.buckets[i] = q.filterDue(q.buckets[i], now, &out)
+		}
+	} else {
+		start, end := behaviorBucketIndex(q.now), behaviorBucketIndex(now)
+		for i := start; ; i = (i + 1) % behaviorBucketCount {
+			q.buckets[i] = q.filterDue(q.buckets[i], now, &out)
+			if i == end {
+				break
+			}
+		}
+	}
+	q.now = now
+	return out
+}
+
+/*
+================
+behaviorQueue.earliestDue
+
+The nearest live due, for the dormancy pins and statistics that read
+one: a byGID scan, never on the tick's path.
+================
+*/
+func (q *behaviorQueue) earliestDue() (int64, bool) {
+	var best int64
+	found := false
+	for _, s := range q.slots {
+		if s.live && (!found || s.at < best) {
+			best, found = s.at, true
+		}
+	}
+	return best, found
+}
+
+/*
+================
+behaviorQueue.capacity
+
+Live list entries plus the lists' backing capacity, the excess the
+sparse-map compaction shrinks after a mass despawn.
+================
+*/
+func (q *behaviorQueue) capacity() (live int, capacity int) {
+	live = len(q.due) + len(q.far)
+	capacity = cap(q.due) + cap(q.far) + cap(q.slots) + cap(q.free)
+	for i := range q.buckets {
+		live += len(q.buckets[i])
+		capacity += cap(q.buckets[i])
+	}
+	return live, capacity
+}
+
+/*
+================
+behaviorQueue.shrinkExcess
+
+Rebuilds the lists with live copies only after a large sustained
+contraction, the heap entries shrink's successor in
+compactDormantIndexes. Same thresholds: no churn at ordinary region
+boundaries. Removal only stales copies, so this is also where a mass
+despawn's stale copies leave the buckets.
+================
+*/
+func (q *behaviorQueue) shrinkExcess() {
+	live := len(q.byGID)
+	_, capacity := q.capacity()
+	if capacity < 8192 || live > 4096 || live*4 > capacity {
+		return
+	}
+	slots := make([]behaviorSlot, 0, live)
+	for _, s := range q.slots {
+		if s.live {
+			q.byGID[s.gid] = uint32(len(slots))
+			slots = append(slots, s)
+		}
+	}
+	q.slots = slots
+	q.free = nil
+	q.due = nil
+	q.far = nil
+	q.farMin = 0
+	for i := range q.buckets {
+		q.buckets[i] = nil
+	}
+	for slot, s := range q.slots {
+		q.place(uint32(slot), s.at)
+	}
 }
 
 //============================================================================
@@ -361,25 +513,25 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		}
 		state := s.populationForLease(key.division, key.lease)
 		batch := behaviorBatch{key: key}
-		for state.behavior.Len() > 0 && state.behavior.entries[0].at <= now {
-			// Reschedule the existing queue entry in place. Pop followed by
-			// set allocated a new object for every actor on every due tick.
-			e := state.behavior.entries[0]
-			i, exists := state.instances.hot[e.gid]
+		batch.actors = state.behavior.takeDue(now, batch.actors)
+		actors := batch.actors[:0]
+		for _, gid := range batch.actors {
+			i, exists := state.instances.hot[gid]
 			if !exists {
-				state.behavior.remove(e.gid)
+				state.behavior.remove(gid)
 				continue
 			}
 			if i.currentHP == 0 && i.ref.Value().MaxHP > 0 {
-				state.behavior.remove(e.gid)
+				state.behavior.remove(gid)
 				continue
 			}
 			if i.summonActionUntilMs != 0 && now >= i.summonActionUntilMs {
-				state.instances.set(e.gid, finishSummonAction(i.value(e.gid), now))
+				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
-			batch.actors = append(batch.actors, e.gid)
-			s.scheduleBehavior(state, e.gid, now)
+			actors = append(actors, gid)
+			s.scheduleBehavior(state, gid, now)
 		}
+		batch.actors = actors
 		sort.Slice(batch.actors, func(i, j int) bool { return batch.actors[i] < batch.actors[j] })
 		out = append(out, batch)
 	}
