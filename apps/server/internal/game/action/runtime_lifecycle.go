@@ -87,15 +87,15 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 			if cut {
 				return
 			}
-			var unlock func()
+			acquired := false
 			timed("tickPublicationGate", func() {
-				unlock = rt.acquireTickGate()
+				acquired = rt.acquireTickGate()
 			})
-			if unlock == nil {
+			if !acquired {
 				cut = true
 				return
 			}
-			defer unlock()
+			defer rt.releaseTickGate()
 			timed(name, func() {
 				run()
 				out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
@@ -209,29 +209,29 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 ================
 acquireTickGate
 
-The publication gate for one TickHook step, or nil when the bound ran out
-and the hook should cut. A cut hook's last wait counts once per tick, and
+Takes the publication gate for one TickHook step into rt.tickGate, or
+returns false when the bound ran out and the hook should cut. A cut hook's last wait counts once per tick, and
 past maxTickGateCuts cut ticks the wait is unbounded again. Only the tick
 goroutine touches tickGateCuts.
 ================
 */
-func (rt *Runtime) acquireTickGate() func() {
+func (rt *Runtime) acquireTickGate() bool {
 	if rt.tickGateCuts >= maxTickGateCuts {
 		rt.tickGateCuts = 0
-		return rt.lockTickPublication()
+		rt.waitTickPublication()
+		return true
 	}
-	unlock, ok := rt.tryLockTickPublication(tickGateBound)
-	if !ok {
+	if !rt.tryLockTickPublication(tickGateBound) {
 		rt.tickGateCuts++
 		// The wait is under the slow threshold, so name each cut here or
 		// the live re-measure could not see this path run.
 		if rt.Steps.Slow != nil {
 			rt.Steps.Slow("tickGateCut", tickGateBound)
 		}
-		return nil
+		return false
 	}
 	rt.tickGateCuts = 0
-	return unlock
+	return true
 }
 
 /*

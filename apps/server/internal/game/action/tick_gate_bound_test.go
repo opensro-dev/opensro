@@ -83,7 +83,7 @@ func TestTickGateGivesBackWhatItTook(t *testing.T) {
 	rt.LockPublication("aaa-first", "test")() // make the lane; sorts first
 	release := rt.LockPublication(testDivision, "test")
 	defer release()
-	if _, ok := rt.tryLockTickPublication(time.Millisecond); ok {
+	if rt.tryLockTickPublication(time.Millisecond) {
 		t.Fatal("took a held gate")
 	}
 	lane := rt.operations.lane("aaa-first", &rt.maintenance)
@@ -105,5 +105,29 @@ func TestTickGateFreeServesEveryStep(t *testing.T) {
 	rt.TickHook()(clock.NowMs())
 	if rt.tickGateCuts != 0 {
 		t.Fatalf("a free gate cut %d ticks", rt.tickGateCuts)
+	}
+}
+
+/*
+================
+TestTickGateHoldAllocatesNothing
+
+The gate is taken once per TickHook step, dozens of times a tick, so a
+single allocation here multiplies into the tick budget (#2143). The first
+pass grows the buffers; every later one must reuse them.
+================
+*/
+func TestTickGateHoldAllocatesNothing(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	rt.LockPublication(testDivision, "test")() // make the lane
+	hold := func() {
+		if !rt.acquireTickGate() {
+			t.Fatal("a free gate cut the step")
+		}
+		rt.releaseTickGate()
+	}
+	hold()
+	if allocs := testing.AllocsPerRun(100, hold); allocs != 0 {
+		t.Fatalf("one gate hold allocated %.0f times, want 0", allocs)
 	}
 }
