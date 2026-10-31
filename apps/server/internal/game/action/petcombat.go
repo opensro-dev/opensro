@@ -460,7 +460,26 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		}
 	}
 	monsterPose := monster.Pose{RegionID: targetAt.RegionID, X: targetAt.X, Y: targetAt.Y, Z: targetAt.Z}
-	roster := rt.monsterRewardRoster(division, owner, step.nowMs)
+	// The reward roster serves the settlement alone, and a strike
+	// whose planned damage cannot kill reaches none (#2030): door the
+	// owner alone and build no roster. The door audit: inside the
+	// door below, the only character the closure mutates is the owner
+	// (its trained rows, in the two petTrainedCommit calls); the
+	// monster is world state; the settlement is the roster's only
+	// reader, and it runs only on a fatal impact. The sequence
+	// refuses outright when the target's HP moved off the planned
+	// value and applied damage never exceeds planned damage, so a
+	// fatal impact implies a lethal plan; settleStrikeFatal
+	// guards the rest.
+	var plannedDamage uint64
+	for _, plan := range plans {
+		plannedDamage += uint64(plan.Damage)
+	}
+	canKill := plannedDamage >= uint64(target.CurrentHP)
+	roster := rewardRoster{division: division, characters: []*enterworld.Character{owner}}
+	if canKill {
+		roster = rt.monsterRewardRoster(division, owner, step.nowMs)
+	}
 	var committed []simulation.MonsterDamageResult
 	var settlement monsterSettlement
 	var trainedFrames []wire.Frame
@@ -485,7 +504,9 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		trainedFrames, _ = rt.petTrainedCommit(step, owner, livePet, step.trained, dealt, committed[len(committed)-1].Fatal, false)
 		if committed[len(committed)-1].Fatal {
 			roster.companionKill = true
-			settlement = rt.settleMonsterInsideDoor(division, owner, roster, committed[len(committed)-1], monsterPose, step.nowMs)
+			// The pet's strike is a skill strike struck by the
+			// companion for its owner; the fatal door is shared.
+			settlement = rt.settleStrikeFatal(division, owner, roster, canKill, committed[len(committed)-1], monsterPose, step.nowMs)
 		}
 		return true
 	}) {
