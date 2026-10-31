@@ -42,7 +42,20 @@ the weapon slot (harp is false to equip the fixture's sword unchanged).
 */
 func boomingFixture(t *testing.T, offsets []float64, harp bool) (*Runtime, *enterworld.Character, enterworld.SkillRow, []monster.Instance) {
 	t.Helper()
-	rt, clock, c, primary := newCombatTestRuntime(t, boomingMonsterHP)
+	return boomingFixtureHP(t, boomingMonsterHP, offsets, harp)
+}
+
+/*
+================
+boomingFixtureHP
+
+boomingFixture with the victims' HP chosen by the caller, so a test
+can field monsters the strike kills.
+================
+*/
+func boomingFixtureHP(t *testing.T, hp uint32, offsets []float64, harp bool) (*Runtime, *enterworld.Character, enterworld.SkillRow, []monster.Instance) {
+	t.Helper()
+	rt, clock, c, primary := newCombatTestRuntime(t, hp)
 	row, ok := shippedSkillSource(t).SkillByCodename(boomingChordCode)
 	if !ok || !row.AreaBurst {
 		t.Fatalf("%s not on the area-burst route: %q", boomingChordCode, row.OffenseRefusal)
@@ -175,5 +188,59 @@ func TestBoomingChordRequiresHarp(t *testing.T) {
 	after, _ := rt.Monsters.Get(testDivision, monsters[0].Gid)
 	if afterMP != beforeMP || after.CurrentHP != monsters[0].CurrentHP || rt.castTokenCounter != 0 {
 		t.Fatalf("cast without harp: MP %d -> %d, HP %d -> %d", beforeMP, afterMP, monsters[0].CurrentHP, after.CurrentHP)
+	}
+}
+
+/*
+================
+TestAreaBurstBuildsTheRewardRosterOnlyForAKill
+
+#2030 strike gate, burst site: a burst whose monster victims all
+survive their plans doors the caster, the player victims and the COS
+owners and builds no reward roster; a victim whose plan can kill
+keeps the roster-wide door. The roster builder alone reads the
+division's parties on this lane, so party reads witness the build,
+as in the area lane's pin.
+================
+*/
+func TestAreaBurstBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	rt, c, skill, monsters := boomingFixture(t, []float64{3, 30}, true)
+	builds := 0
+	rt.RewardParties = func(division string) []RewardParty {
+		builds++
+		return nil
+	}
+	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+	if open, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok || open.Payload[0] != 1 {
+		t.Fatalf("burst refused: %+v", out)
+	}
+	if after, _ := rt.Monsters.Get(testDivision, monsters[0].Gid); after.CurrentHP == monsters[0].CurrentHP {
+		t.Fatal("the burst did not land")
+	}
+	if builds != 0 {
+		t.Fatalf("a burst that cannot kill built the reward roster (%d builds)", builds)
+	}
+	if got := rt.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a plain burst counted %d surprise fatals", got)
+	}
+
+	rt2, c2, skill2, slain := boomingFixtureHP(t, 1, []float64{3}, true)
+	builds2 := 0
+	rt2.RewardParties = func(division string) []RewardParty {
+		builds2++
+		return nil
+	}
+	out2 := rt2.HandleTargetInteract(testDivision, c2, wire.SkillAction{ActionId: skill2.ID}.Encode())
+	if open, ok := findFrame(out2.Frames, wire.OpSkillCastResult); !ok || open.Payload[0] != 1 {
+		t.Fatalf("killing burst refused: %+v", out2)
+	}
+	if after, found := rt2.Monsters.Get(testDivision, slain[0].Gid); found && after.CurrentHP != 0 {
+		t.Fatal("the killing burst left its victim alive")
+	}
+	if builds2 == 0 {
+		t.Fatal("a killing burst never built the reward roster")
+	}
+	if got := rt2.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a killing burst counted %d surprise fatals", got)
 	}
 }
