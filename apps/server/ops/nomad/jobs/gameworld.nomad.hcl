@@ -679,6 +679,15 @@ variable "trade_job_hunter_percent_cap" {
   default = "60"
 }
 
+# raised_gold_caps raises the stall price cap to ten billion and the
+# warehouse gold deposit cap to one billion (port-only, not native).
+# Anything but "on" keeps the native caps (one billion and one hundred
+# million) and the native u32 stall-offer wire.
+variable "raised_gold_caps" {
+  type    = string
+  default = "off"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 # On, the destinations are the VSRO client's refoptionalteleport table when
@@ -1304,6 +1313,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_JOB_TRADER_PERCENT_CAP        = var.trade_job_trader_percent_cap
         SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER = var.trade_job_hunter_percent_per_trader
         SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
+        SRO_RAISED_GOLD_CAPS                    = var.raised_gold_caps
         SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
         SRO_GM_SETSPEED                         = var.gm_setspeed
         SRO_GM_TRAINING_DUMMY                   = var.gm_training_dummy
