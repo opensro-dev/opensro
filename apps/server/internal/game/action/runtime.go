@@ -120,8 +120,11 @@ type Runtime struct {
 	RewardActorPresent  func(division, name string) bool
 	// PetPolicies are the port-only pet rules (companion.PoliciesFromEnv);
 	// the zero value is native.
-	PetPolicies         companion.Policies
-	returnGeneration    atomic.Uint64
+	PetPolicies      companion.Policies
+	returnGeneration atomic.Uint64
+	// surpriseFatalCount counts strikes that killed under a plan that
+	// could not kill: the roster gate's invariant made audible (#2030).
+	surpriseFatalCount  atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
