@@ -203,6 +203,48 @@ func TestCommitDetectsInPlaceMutations(t *testing.T) {
 
 /*
 ================
+TestCommitDetectsInPlacePointerChildMutations
+
+The committed copy must detach a persisted pointer child rather than
+alias it: a door whose only change writes through such a pointer (the
+kill door raising a most-wanted streak in place; the world's movement
+mode is the same shape one level down) must still write the row. An
+aliased copy compares the record against itself and the section skip
+loses the save.
+================
+*/
+func TestCommitDetectsInPlacePointerChildMutations(t *testing.T) {
+	t.Run("most wanted streak", func(t *testing.T) {
+		s := openTest(t, t.TempDir(), newTestClock())
+		c, _ := stageCommittedCopy(t, s)
+		s.MutateCharacter(c, "sections-test", func() { c.MostWanted = &domain.MostWanted{Streak: 1} })
+		s.MutateCharacter(c, "sections-test", func() { c.MostWanted.Streak = 5 })
+		got := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name))
+		want, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != string(want) {
+			t.Fatalf("an in-place streak change was not persisted:\ngot:  %s\nwant: %s", got, want)
+		}
+	})
+	t.Run("world movement mode", func(t *testing.T) {
+		s := openTest(t, t.TempDir(), newTestClock())
+		c, _ := stageCommittedCopy(t, s)
+		s.MutateCharacter(c, "sections-test", func() { *c.World.MovementMode = 3 })
+		got := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name))
+		want, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != string(want) {
+			t.Fatalf("an in-place movement-mode change was not persisted:\ngot:  %s\nwant: %s", got, want)
+		}
+	})
+}
+
+/*
+================
 TestCommitDetectsMutationAfterDigestRefresh
 
 The refresh staging (sections moved, bytes did not - a nil slice turned

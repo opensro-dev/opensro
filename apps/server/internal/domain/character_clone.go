@@ -245,6 +245,7 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 			clone.SharedSkillCooldowns[group] = until
 		}
 	}
+	clone.MostWanted = clonePointer(source.MostWanted)
 	clone.QuickSlots = cloneSlice(source.QuickSlots)
 	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
 	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
@@ -411,6 +412,7 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 		value := *source.InstanceReturn
 		clone.InstanceReturn = &value
 	}
+	clone.MovementMode = clonePointer(source.MovementMode)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
 }
