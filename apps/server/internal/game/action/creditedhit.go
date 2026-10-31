@@ -93,14 +93,28 @@ func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bo
 	if !ok {
 		return hit, false
 	}
-	roster := rt.monsterRewardRoster(division, c, now)
-	roster.companionKill = in.companion
+	// The roster serves a kill and nothing else: the deferred door's
+	// participant list for a hit that can kill, and the settlement when
+	// one lands. A surviving hit reads none of it, so the whole-division
+	// build waits until a kill is possible (#2030); a hit planned short
+	// of lethal that still kills builds it at the fatal impact, outside
+	// any door, as the build has always run.
+	rosterForKill := func() rewardRoster {
+		built := rt.monsterRewardRoster(division, c, now)
+		built.companionKill = in.companion
+		return built
+	}
+	var roster rewardRoster
+	haveRoster := false
 	commit := func() bool {
 		hit.impacts = rt.Monsters.ApplyDamageSequence(division, target.Gid, target.CurrentHP, plans)
 		if len(hit.impacts) == 0 {
 			return false
 		}
 		if hit.impacts[0].Fatal {
+			if !haveRoster {
+				roster, haveRoster = rosterForKill(), true
+			}
 			pose := monster.Pose{}
 			if mover, exists := rt.Monsters.Mover(division, target.Gid); exists {
 				pose = mover.LivePoseAt(now, nil)
@@ -111,6 +125,7 @@ func (rt *Runtime) commitCredited(in creditedHitRequest) (creditedMonsterHit, bo
 	}
 	committed := false
 	if plans[0].Damage >= target.CurrentHP {
+		roster, haveRoster = rosterForKill(), true
 		committed = rt.deps.UpdateManyDeferred(roster.characters, reason, commit)
 	} else {
 		committed = commit()
