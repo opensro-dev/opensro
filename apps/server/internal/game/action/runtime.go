@@ -795,6 +795,13 @@ type Runtime struct {
 	// tickGateCuts counts the TickHooks cut running by a held publication
 	// gate (acquireTickGate). Tick goroutine only.
 	tickGateCuts int
+	// tickGate is the hold on every publication gate, taken once per
+	// TickHook step. The step's buffers live here because it runs dozens
+	// of times a tick (#2143). Tick goroutine only.
+	tickGate struct {
+		ids  []string
+		held []tickGateHold
+	}
 	// basicAttackCursor is the world key of the intent the last
 	// advanceBasicAttackIntents call served last; the next call resumes
 	// past it, so a burst spread over ticks cannot starve the tail of

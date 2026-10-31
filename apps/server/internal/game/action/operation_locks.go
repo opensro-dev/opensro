@@ -177,7 +177,7 @@ progress, so no character of it has tick work yet.
 ================
 */
 func (rt *Runtime) lockTickPublication() func() {
-	ids := rt.publicationDivisions()
+	ids := rt.publicationDivisions(nil)
 	releases := make([]func(), 0, len(ids))
 	for _, id := range ids {
 		releases = append(releases, rt.LockPublication(id, "tick"))
@@ -189,12 +189,13 @@ func (rt *Runtime) lockTickPublication() func() {
 ================
 publicationDivisions
 
-Every division with a lane, in the one order the tick takes their gates.
+Every division with a lane, in the one order the tick takes their gates,
+written over ids so the per-step tick gate allocates nothing.
 ================
 */
-func (rt *Runtime) publicationDivisions() []string {
+func (rt *Runtime) publicationDivisions(ids []string) []string {
+	ids = ids[:0]
 	rt.operations.mu.Lock()
-	ids := make([]string, 0, len(rt.operations.division))
 	for id := range rt.operations.division {
 		ids = append(ids, id)
 	}
@@ -218,28 +219,77 @@ func releaseTickPublication(releases []func()) func() {
 
 /*
 ================
-tryLockTickPublication
+tickGateHold
 
-lockTickPublication that gives up after bound (#2143). A request stuck on
-the disk holds one division's gate for seconds; the tick gives back
-whatever it took, so nothing waits behind a tick that is itself waiting.
-sync.Mutex has no timed lock, so the wait polls.
+One publication gate the tick holds, and when it was taken.
 ================
 */
-func (rt *Runtime) tryLockTickPublication(bound time.Duration) (func(), bool) {
+type tickGateHold struct {
+	lane     *divisionLane
+	acquired time.Time
+}
+
+/*
+================
+tryLockTickPublication
+
+lockTickPublication that gives up after bound (#2143), holding in rt.tickGate
+for releaseTickGate. A request stuck on the disk holds one division's gate
+for seconds; the tick gives back whatever it took, so nothing waits behind a
+tick that is itself waiting. sync.Mutex has no timed lock, so the wait polls.
+================
+*/
+func (rt *Runtime) tryLockTickPublication(bound time.Duration) bool {
 	deadline := time.Now().Add(bound)
-	ids := rt.publicationDivisions()
-	releases := make([]func(), 0, len(ids))
-	for _, id := range ids {
+	rt.tickGate.ids = rt.publicationDivisions(rt.tickGate.ids)
+	for _, id := range rt.tickGate.ids {
 		lane := rt.operations.lane(id, &rt.maintenance)
 		for !lane.publication.TryLock() {
 			if time.Now().After(deadline) {
-				releaseTickPublication(releases)()
-				return nil, false
+				rt.releaseTickGate()
+				return false
 			}
 			time.Sleep(tickGatePollInterval)
 		}
-		releases = append(releases, rt.publicationRelease(lane, "tick"))
+		rt.tickGate.held = append(rt.tickGate.held, tickGateHold{lane: lane, acquired: time.Now()})
 	}
-	return releaseTickPublication(releases), true
+	return true
+}
+
+/*
+================
+waitTickPublication
+
+The unbounded form, for a tick past its cut limit, holding in rt.tickGate.
+================
+*/
+func (rt *Runtime) waitTickPublication() {
+	rt.tickGate.ids = rt.publicationDivisions(rt.tickGate.ids)
+	for _, id := range rt.tickGate.ids {
+		lane := rt.operations.lane(id, &rt.maintenance)
+		lane.publication.Lock()
+		rt.tickGate.held = append(rt.tickGate.held, tickGateHold{lane: lane, acquired: time.Now()})
+	}
+}
+
+/*
+================
+releaseTickGate
+
+Gives back what rt.tickGate holds, last taken first, and keeps the buffer.
+A long hold is reported as publicationRelease reports one, without the
+closure it would build per division per step.
+================
+*/
+func (rt *Runtime) releaseTickGate() {
+	held := rt.tickGate.held
+	for i := len(held) - 1; i >= 0; i-- {
+		elapsed := time.Since(held[i].acquired)
+		held[i].lane.releasePublication()
+		if rt.PublicationHold != nil && elapsed >= simulation.SlowHookThreshold {
+			rt.PublicationHold("tick", elapsed)
+		}
+		held[i] = tickGateHold{}
+	}
+	rt.tickGate.held = held[:0]
 }
