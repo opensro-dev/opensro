@@ -79,6 +79,14 @@ func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 	var out []areaCandidate
 	if rt.Monsters != nil && q.selects&areaSelectObjects != 0 {
 		for _, m := range rt.Monsters.CombatCandidatesInPopulation(q.division, q.lease, q.center, q.reach, q.now, q.nearest) {
+			// The native selectors run every candidate through the caster's
+			// attack-target validation, whose monster branch refuses an
+			// own-side job bandit whatever the selection mode: an area never
+			// splashes one, primary or not (#2080). A companion's area reads
+			// its owner's job state the same way, through the query's caster.
+			if q.caster != nil && rt.jobMonsterTargetRefusal(q.caster, m) != 0 {
+				continue
+			}
 			mover, ok := rt.Monsters.Mover(q.division, m.Gid)
 			if !ok {
 				continue
