@@ -385,6 +385,29 @@ func (r *Registry) ExpireItems(divisionID string, now time.Time, lifetime time.D
 	return expired
 }
 
+/*
+================
+HasExpired
+
+The expiry peek behind ExpireItems: some entry sits at or past its
+fixture lifetime. Reads only the stored DroppedAt stamps and never
+detaches a record, so scanning the whole plane costs no copy (the
+sweep's cadence probe used to clone every drop, pet records and their
+cargo included, just to read two fields per row, #2030).
+================
+*/
+func (r *Registry) HasExpired(divisionID string, now time.Time, lifetime time.Duration) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, item := range r.byDivision[divisionID] {
+		if !item.DroppedAt.IsZero() && now.Sub(item.DroppedAt) >= lifetime {
+			return true
+		}
+	}
+	return false
+}
+
 // ReleaseExpiredOwners makes reserved drops public at the native 30-second
 // boundary without replacing their entity identity. The caller broadcasts
 // 0x31E2 for each returned row; subsequent calls return nothing.
