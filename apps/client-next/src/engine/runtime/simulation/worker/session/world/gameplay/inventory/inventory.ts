@@ -1544,6 +1544,18 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 		},
 		/*
 ================
+holdForReferences
+
+Every open answer waits behind the reference frames (gameplay
+referenceProgress), so none can have been lost before until.
+================
+		*/
+		holdForReferences( until: number ) {
+			if ( pending ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+			mall.holdUntil( until );
+		},
+		/*
+================
 use
 ================
 		*/

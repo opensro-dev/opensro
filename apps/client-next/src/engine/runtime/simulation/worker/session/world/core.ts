@@ -304,6 +304,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 	function receive( frame: WireFrame, now: number ) {
 		nameClock = now;
 		if ( frame.opcode === 14 ) {
+			gameplay.referenceProgress( now );
 			const refs = commerceReferences( frame.payload );
 			gameplay.references( refs );
 			entities.references( refs );
