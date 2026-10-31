@@ -42,6 +42,11 @@ const (
 	// slot: the actor had no mover row at batch build, or no slot
 	// was carried at all. The dispatch read resolves it by gid.
 	behaviorNoMoverSlot = ^uint32(0)
+
+	// behaviorNoMonsterSlot marks a carried actor ref with no
+	// monster slot: the batch build has not stamped one yet. The
+	// dispatch read resolves it by gid.
+	behaviorNoMonsterSlot = ^uint32(0)
 )
 
 /*
@@ -217,7 +222,7 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behavio
 			continue
 		}
 		q.slots[e.slot].live = false
-		*out = append(*out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot})
+		*out = append(*out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot})
 	}
 	return keep
 }
@@ -226,8 +231,8 @@ func (q *behaviorQueue) filterDue(list []behaviorCopy, now int64, out *[]behavio
 ================
 behaviorQueue.takeDue
 
-Every actor due by now, as a ref carrying no mover slot yet (the
-batch build fills it), in no order (callers sort). Their live dues are
+Every actor due by now, as a ref carrying no slots yet (the batch
+build fills them), in no order (callers sort). Their live dues are
 consumed: the caller re-arms the ones it keeps (scheduleBehavior) and
 the rest stay unscheduled, exactly the heap's pop contract.
 
@@ -258,7 +263,7 @@ func (q *behaviorQueue) takeDue(now int64, out []behaviorActorRef) []behaviorAct
 			}
 			if e.at <= now {
 				q.slots[e.slot].live = false
-				out = append(out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot})
+				out = append(out, behaviorActorRef{gid: q.slots[e.slot].gid, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot})
 				continue
 			}
 			migrate = append(migrate, e)
@@ -421,12 +426,17 @@ the build's schedule read resolved. The slot is a hint for the
 dispatch read (moverStorage.lookupAt), verified against the gid
 before use - remove swaps the last row into the hole, so a carried
 slot can name another actor by dispatch time. behaviorNoMoverSlot
-means no slot was carried.
+means no slot was carried. The monster slot is the same hint for
+the actor read (monsterStorage.lookupAt since the hot rows went
+dense, #2133): the build stamps it from the probe it already
+makes, and a recycled slot misses to the gid resolve.
+behaviorNoMonsterSlot means no monster slot was carried.
 ================
 */
 type behaviorActorRef struct {
-	gid  uint32
-	slot uint32
+	gid         uint32
+	slot        uint32
+	monsterSlot uint32
 }
 
 /*
@@ -514,7 +524,12 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if state == nil {
 		return behaviorActorSnapshot{}
 	}
-	actor, ok := state.instances.lookup(ref.gid)
+	// The batch carried the monster's slot (#2133): read through it
+	// when it still names this actor, else resolve by gid as before.
+	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
+	if !ok {
+		actor, ok = state.instances.lookup(ref.gid)
+	}
 	if !ok {
 		return behaviorActorSnapshot{}
 	}
@@ -565,7 +580,7 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		actors := batch.actors[:0]
 		for _, ref := range batch.actors {
 			gid := ref.gid
-			i, exists := state.instances.hotRow(gid)
+			i, monsterSlot, exists := state.instances.hotRowSlot(gid)
 			if !exists {
 				state.behavior.remove(gid)
 				continue
@@ -578,6 +593,7 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 				state.instances.set(gid, finishSummonAction(i.value(gid), now))
 			}
 			ref.slot = s.scheduleBehaviorSlot(state, gid, now)
+			ref.monsterSlot = monsterSlot
 			actors = append(actors, ref)
 		}
 		batch.actors = actors

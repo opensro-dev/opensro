@@ -168,3 +168,42 @@ func TestShrinkHotExcessRebuildsBothHalves(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestLookupAtRejectsARecycledSlot
+
+A carried slot names whatever row sits in it now: once removal swaps
+another actor into the hole, the carried read must miss so dispatch
+falls back to the gid resolve, never read the new occupant.
+================
+*/
+func TestLookupAtRejectsARecycledSlot(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 3; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid * 10})
+	}
+	slot, ok := storage.hotSlotOf(1)
+	if !ok {
+		t.Fatal("gid 1 has no slot")
+	}
+	if got, ok := storage.lookupAt(slot, 1); !ok || got.Gid != 1 || got.CurrentHP != 10 {
+		t.Fatalf("carried read before removal: %+v, %v", got, ok)
+	}
+	storage.remove(1)
+	if _, ok := storage.lookupAt(slot, 1); ok {
+		t.Fatal("a slot recycled onto gid 3 answered for the removed gid 1")
+	}
+	if got, ok := storage.lookupAt(slot, 3); !ok || got.Gid != 3 || got.CurrentHP != 30 {
+		t.Fatalf("the slot's new occupant does not read through it: %+v, %v", got, ok)
+	}
+	if _, ok := storage.lookupAt(uint32(len(storage.hot)), 3); ok {
+		t.Fatal("an out-of-range slot answered")
+	}
+	if _, ok := storage.lookupAt(behaviorNoMonsterSlot, 3); ok {
+		t.Fatal("the no-slot sentinel answered")
+	}
+	if got, ok := storage.lookup(3); !ok || got.Gid != 3 {
+		t.Fatalf("the gid fallback lost gid 3: %+v, %v", got, ok)
+	}
+}

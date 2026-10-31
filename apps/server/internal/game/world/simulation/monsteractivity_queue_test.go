@@ -172,7 +172,7 @@ func TestBehaviorQueueDueSetMatchesLegacyHeap(t *testing.T) {
 			}
 			seen := make(map[uint32]bool, len(gotDue))
 			for _, ref := range gotDue {
-				if !wantDue[ref.gid] || seen[ref.gid] || ref.slot != behaviorNoMoverSlot {
+				if !wantDue[ref.gid] || seen[ref.gid] || ref.slot != behaviorNoMoverSlot || ref.monsterSlot != behaviorNoMonsterSlot {
 					t.Fatalf("step %d: wheel fired ref %+v, heap set %v", step, ref, wantDue)
 				}
 				seen[ref.gid] = true
