@@ -31,11 +31,16 @@ func TestCheckTargetURL(t *testing.T) {
 			t.Fatalf("checkTargetURL(%q) = %v, want allowed", raw, err)
 		}
 	}
-	// The live service is refused with and without the remote opt-in.
+	// The live service is refused with and without the remote opt-in,
+	// under the spellings DNS treats as the same name (case, root dot).
 	for _, raw := range []string{
 		"http://opensro.online",
 		"https://play.opensro.online:8787",
 		"http://agent.opensro.online",
+		"http://OPENSRO.ONLINE:8787",
+		"http://Opensro.Online:8787",
+		"http://api.OPENSRO.online:8787",
+		"http://opensro.online.:8787",
 	} {
 		for _, allowRemote := range []bool{false, true} {
 			if err := checkTargetURL(raw, allowRemote); err == nil {

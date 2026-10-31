@@ -54,7 +54,7 @@ func checkTargetURL(raw string, allowRemote bool) error {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fmt.Errorf("target %q: scheme must be http or https", raw)
 	}
-	host := parsed.Hostname()
+	host := normalizeHost(parsed.Hostname())
 	if host == "" {
 		return fmt.Errorf("target %q: no host", raw)
 	}
@@ -68,6 +68,20 @@ func checkTargetURL(raw string, allowRemote bool) error {
 		return fmt.Errorf("target %q is not loopback; pass -allow-remote only for an isolated staging stack", raw)
 	}
 	return nil
+}
+
+/*
+================
+normalizeHost
+
+The spelling a host is compared under: DNS names are case-insensitive
+and may carry the root dot, so OPENSRO.ONLINE and opensro.online. name
+the same live service as opensro.online. Without this the prod
+refusal below is a spelling test, not a guard.
+================
+*/
+func normalizeHost(host string) string {
+	return strings.TrimSuffix(strings.ToLower(host), ".")
 }
 
 /*
