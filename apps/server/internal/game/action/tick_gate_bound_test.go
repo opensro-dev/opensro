@@ -168,3 +168,61 @@ func TestTickGateReportsALongHold(t *testing.T) {
 		t.Fatalf("a long hold reported %v, want one tick report", labels)
 	}
 }
+
+/*
+================
+TestTickGateCutLeavesQueuedWorkForNextTick
+
+The cut is sticky: once a step loses the gate, the steps after it do not
+run later in the same hook when the holder lets go - their work waits for
+the next tick, in order. The monster leg's queued recipient frames are
+the witness: they survive the cut hook untouched, though the gate frees
+while it runs, and drain on the next served one.
+================
+*/
+func TestTickGateCutLeavesQueuedWorkForNextTick(t *testing.T) {
+	rt, clock, _, _ := newCombatTestRuntime(t, 100)
+	saved := tickGateBound
+	tickGateBound = 5 * time.Millisecond
+	defer func() { tickGateBound = saved }()
+	rt.monsterLegRecipientsMu.Lock()
+	rt.monsterLegRecipients = append(rt.monsterLegRecipients, simulation.DivisionFrames{
+		DivisionID: testDivision,
+		Frames:     []simulation.Frame{{Opcode: 1}},
+	})
+	rt.monsterLegRecipientsMu.Unlock()
+	hook := rt.TickHook()
+	release := rt.LockPublication(testDivision, "test")
+	released := make(chan struct{})
+	go func() {
+		// The holder lets go while the cut hook is still polling: a
+		// non-sticky hook would pick its remaining steps up here.
+		time.Sleep(12 * time.Millisecond)
+		release()
+		close(released)
+	}()
+	hook(clock.NowMs())
+	rt.monsterLegRecipientsMu.Lock()
+	queued := len(rt.monsterLegRecipients)
+	rt.monsterLegRecipientsMu.Unlock()
+	if queued != 1 {
+		t.Fatalf("a cut hook drained the queued work: %d batches left", queued)
+	}
+	<-released
+	out := hook(clock.NowMs() + 1)
+	rt.monsterLegRecipientsMu.Lock()
+	queued = len(rt.monsterLegRecipients)
+	rt.monsterLegRecipientsMu.Unlock()
+	if queued != 0 {
+		t.Fatalf("the served hook left %d batches queued", queued)
+	}
+	drained := 0
+	for _, batch := range out {
+		if batch.DivisionID == testDivision {
+			drained++
+		}
+	}
+	if drained != 1 {
+		t.Fatalf("the served hook published %d drained batches, want 1", drained)
+	}
+}

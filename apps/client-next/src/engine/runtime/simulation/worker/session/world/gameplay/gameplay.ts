@@ -353,6 +353,10 @@ const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 // How long one reference frame vouches for answers queued behind it: the
 // flat answer deadline, so the wait restarts at each frame (#2148).
 const REFERENCE_ANSWER_HOLD_MS = 10000;
+// How far references can carry one answer in all, from the first frame that
+// held it: the movement receipt's backstop, so an endless stream cannot keep
+// a lost answer open forever.
+const REFERENCE_ANSWER_LIMIT_MS = 90000;
 
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
@@ -3471,7 +3475,7 @@ the references again (#2148).
 		*/
 		referenceProgress( now: number ) {
 			movement.noteInboundProgress( now );
-			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS );
+			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
 		},
 		/*
 ================

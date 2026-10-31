@@ -134,6 +134,8 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
+			// The latest deadline references may reach, fixed by the first hold.
+			referenceLimit?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -1547,12 +1549,18 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 holdForReferences
 
 Every open answer waits behind the reference frames (gameplay
-referenceProgress), so none can have been lost before until.
+referenceProgress), so none can have been lost before until. The first hold
+fixes limit, and later frames cannot move it: a stream that never ends must
+not keep an answer open forever.
 ================
 		*/
-		holdForReferences( until: number ) {
-			if ( pending ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
-			mall.holdUntil( until );
+		holdForReferences( until: number, limit: number ) {
+			if ( pending ) {
+				const referenceLimit = pending.referenceLimit ?? limit;
+				const deadline = Math.max( pending.deadline, Math.min( until, referenceLimit ) );
+				pending = { ...pending, deadline, referenceLimit };
+			}
+			mall.holdUntil( until, limit );
 		},
 		/*
 ================
