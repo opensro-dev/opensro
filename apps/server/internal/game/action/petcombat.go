@@ -215,7 +215,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	// refused first, so a cape put on mid-fight ends an attack on a team-mate.
 	if !ok || target.monster != nil && rt.jobMonsterTargetRefusal(step.snapshot, *target.monster) != 0 ||
 		target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
-		step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
+			step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
 		// A target that died or left ends the fight normally: counted, not logged.
 		if ended := rt.petTargetEnded(step.key.division, step.snapshot, intent.target); !ok && ended != "" {
 			rt.countPetTargetEnded(false, ended)

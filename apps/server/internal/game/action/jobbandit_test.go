@@ -35,7 +35,15 @@ func dressJobSuit(t *testing.T, rt *Runtime, c *enterworld.Character, job uint8)
 		domain.JobHunter: {RefObjID: 9203, Codename: "TEST_HUNTER_SUIT", TypeIDs: [4]int64{3, 1, 7, 3}},
 	}
 	suit := suits[job]
-	rt.deps.ItemReferences().(staticItemSource)[suit.Codename] = suit
+	// The pet fixtures wrap the item source to add character references.
+	switch items := rt.deps.ItemReferences().(type) {
+	case staticItemSource:
+		items[suit.Codename] = suit
+	case cosTestItemSource:
+		items.staticItemSource[suit.Codename] = suit
+	default:
+		t.Fatalf("unknown item source %T", items)
+	}
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(enterworld.JobSuitSlot),
 		RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
 }
