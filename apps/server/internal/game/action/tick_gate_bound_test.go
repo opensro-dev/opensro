@@ -193,22 +193,25 @@ func TestTickGateCutLeavesQueuedWorkForNextTick(t *testing.T) {
 	rt.monsterLegRecipientsMu.Unlock()
 	hook := rt.TickHook()
 	release := rt.LockPublication(testDivision, "test")
-	released := make(chan struct{})
-	go func() {
-		// The holder lets go while the cut hook is still polling: a
-		// non-sticky hook would pick its remaining steps up here.
-		time.Sleep(12 * time.Millisecond)
-		release()
-		close(released)
-	}()
+	released := false
+	// The holder lets go the moment the hook reports its cut, with the
+	// remaining steps still ahead: a non-sticky hook would run them here.
+	rt.Steps.Slow = func(name string, _ time.Duration) {
+		if name == "tickGateCut" && !released {
+			released = true
+			release()
+		}
+	}
 	hook(clock.NowMs())
+	if !released {
+		t.Fatal("the hook never cut, so the test proved nothing")
+	}
 	rt.monsterLegRecipientsMu.Lock()
 	queued := len(rt.monsterLegRecipients)
 	rt.monsterLegRecipientsMu.Unlock()
 	if queued != 1 {
 		t.Fatalf("a cut hook drained the queued work: %d batches left", queued)
 	}
-	<-released
 	out := hook(clock.NowMs() + 1)
 	rt.monsterLegRecipientsMu.Lock()
 	queued = len(rt.monsterLegRecipients)
