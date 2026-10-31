@@ -94,6 +94,13 @@ type Deps struct {
 	// production default; tests set it so a held gate trips the line
 	// without waiting out that bound.
 	SlowEnterThreshold time.Duration
+	// GateWaitBound caps how long the enter handler waits for the
+	// publication gate before abandoning the entry unanswered
+	// (register.go): the gate is taken before scene admission, so a
+	// parked wait is invisible to both the bootstrap watchdog and the
+	// slow-entry log. Zero means the production default; tests set it
+	// so a held gate trips the abandonment without waiting it out.
+	GateWaitBound time.Duration
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
