@@ -62,8 +62,8 @@ TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity
 func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) {
 	s, d := queueBenchmarkState(3)
 	batch := s.behaviorBatches(0)[0]
-	for i, gid := range batch.actors {
-		if gid != uint32(i+1) {
+	for i, ref := range batch.actors {
+		if ref.gid != uint32(i+1) {
 			t.Fatal("non-deterministic dispatch order")
 		}
 	}
@@ -101,7 +101,7 @@ func TestBehaviorActorMoverMatchesDispatchReads(t *testing.T) {
 	s.clock = func() time.Time { return time.UnixMilli(5000) }
 	batch := s.behaviorBatches(0)[0]
 
-	snap := s.behaviorActorMover(batch.key, 1)
+	snap := s.behaviorActorMover(batch.key, batch.actors[0])
 	actor, actorOK := s.behaviorActor(batch.key, 1)
 	mover, moverOK := s.Mover("benchmark", 1)
 	if !snap.ok || !actorOK || !moverOK {
@@ -112,18 +112,72 @@ func TestBehaviorActorMoverMatchesDispatchReads(t *testing.T) {
 	}
 
 	d.movers.remove(3)
-	snap = s.behaviorActorMover(batch.key, 3)
+	snap = s.behaviorActorMover(batch.key, batch.actors[2])
 	mover, moverOK = s.Mover("benchmark", 3)
 	if !snap.ok || !moverOK || snap.mover != mover {
 		t.Fatal("synthesized spawn mover differs from Mover's")
 	}
 
 	d.instances.remove(2)
-	if snap := s.behaviorActorMover(batch.key, 2); snap.ok {
+	if snap := s.behaviorActorMover(batch.key, batch.actors[1]); snap.ok {
 		t.Fatal("retired actor resolved")
 	}
-	if snap := s.behaviorActorMover(populationKey{division: "nowhere"}, 1); snap.ok {
+	if snap := s.behaviorActorMover(populationKey{division: "nowhere"}, batch.actors[0]); snap.ok {
 		t.Fatal("unknown population resolved")
+	}
+}
+
+/*
+================
+TestBehaviorActorMoverRecycledSlotFallsBack
+
+A slot carried in the batch names whatever row sits in it at read
+time: remove swaps the last row into the hole, so after a despawn
+the carried slot can hold another actor. The read must fall back to
+the gid resolve and return this actor's current row, never the
+stranger's (#2135 item 2).
+================
+*/
+func TestBehaviorActorMoverRecycledSlotFallsBack(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	s.clock = func() time.Time { return time.UnixMilli(5000) }
+	batch := s.behaviorBatches(0)[0]
+	ref := batch.actors[0]
+	if ref.gid != 1 || ref.slot == behaviorNoMoverSlot {
+		t.Fatal("batch carried no slot for a resident mover")
+	}
+	// Despawn 1's mover: 3's row swaps into the slot the ref carries.
+	d.movers.remove(1)
+	// Respawn 1 behind a marker row of its own.
+	d.movers.set(1, monster.MoverState{Pose: monster.Pose{RegionID: 0x62a8}})
+	snap := s.behaviorActorMover(batch.key, ref)
+	want, ok := s.Mover("benchmark", 1)
+	if !snap.ok || !ok || snap.mover != want || snap.mover.Pose.RegionID != 0x62a8 {
+		t.Fatalf("carried slot read the wrong row: %+v", snap.mover)
+	}
+}
+
+/*
+================
+BenchmarkBehaviorActorMover
+
+The leg's per-actor dispatch read over one built batch: the instance
+plus the mover, read through the slot the batch carried (#2135 item
+2). On the pre-carry tree the same loop resolved every mover by gid
+through the map.
+================
+*/
+func BenchmarkBehaviorActorMover(b *testing.B) {
+	s, _ := queueBenchmarkState(5000)
+	batch := s.behaviorBatches(0)[0]
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, ref := range batch.actors {
+			if snap := s.behaviorActorMover(batch.key, ref); !snap.ok {
+				b.Fatal("dispatch read lost an actor")
+			}
+		}
 	}
 }
 

@@ -24,11 +24,11 @@ func TestSparseQueueCompactionPreservesIdentity(t *testing.T) {
 		t.Fatalf("drained %d actors after contraction, want the surviving 10", len(due))
 	}
 	seen := make(map[uint32]bool)
-	for _, gid := range due {
-		if gid < 9990 || seen[gid] {
+	for _, ref := range due {
+		if ref.gid < 9990 || seen[ref.gid] {
 			t.Fatalf("contraction changed the live set: drained %v", due)
 		}
-		seen[gid] = true
+		seen[ref.gid] = true
 	}
 	for gid, slot := range state.behavior.byGID {
 		if state.behavior.slots[slot].gid != gid {

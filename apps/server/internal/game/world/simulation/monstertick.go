@@ -321,7 +321,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	var dispatch struct {
 		division string
 		key      populationKey
-		gid      uint32
+		ref      behaviorActorRef
 		players  []playerPose
 	}
 	act := func(attack MonsterAttackOperation) {
@@ -335,7 +335,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// value the step starts from, instead of a dispatch-time
 		// snapshot the step's whole-value commits would overwrite
 		// (#2047 review).
-		actor := ops.Monsters.behaviorActorMover(dispatch.key, dispatch.gid)
+		actor := ops.Monsters.behaviorActorMover(dispatch.key, dispatch.ref)
 		if !actor.ok {
 			return
 		}
@@ -362,7 +362,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			players = append(players, player)
 			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
-		for _, gid := range batch.actors {
+		for _, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
 			// All dispatch decides is that the actor is still there: a
 			// despawn between scheduling and dispatch drops it here, and
@@ -371,17 +371,17 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			// can go stale while the leg waits for that lock (#2047
 			// review). The direct path below resolves at the same
 			// adjacency it always had.
-			if !ops.Monsters.behaviorActorLive(batch.key, gid) {
+			if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
 				continue
 			}
-			if ops.noteResumed(batch.key, gid) {
+			if ops.noteResumed(batch.key, ref.gid) {
 				stats.resumed++
 			}
 			if stepped++; stepped%monsterLegStepActors == 0 {
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.key, dispatch.gid, dispatch.players = divisionID, batch.key, gid, players
+				dispatch.division, dispatch.key, dispatch.ref, dispatch.players = divisionID, batch.key, ref, players
 				advanceBefore := stats.advance
 				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
@@ -393,7 +393,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				}
 				continue
 			}
-			actor := ops.Monsters.behaviorActorMover(batch.key, gid)
+			actor := ops.Monsters.behaviorActorMover(batch.key, ref)
 			if !actor.ok {
 				continue
 			}

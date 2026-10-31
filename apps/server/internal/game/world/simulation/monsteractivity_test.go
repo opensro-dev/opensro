@@ -81,7 +81,7 @@ func TestActivityRetaliationInvalidatesSuspensionAndWakesScheduledActor(t *testi
 	found := false
 	for _, b := range batches {
 		for _, a := range b.actors {
-			found = found || a == actor.Gid
+			found = found || a.gid == actor.Gid
 		}
 	}
 	if !found {
