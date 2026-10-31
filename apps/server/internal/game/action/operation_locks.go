@@ -21,6 +21,18 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+// The tick's bounded wait for the publication gate (#2143). Past
+// tickGateBound the tick drops the rest of its action steps, and it may do
+// so maxTickGateCuts ticks running: after that it waits as it always did,
+// so a held gate delays these steps by about half a second, never forever.
+// A var so a test can shrink the bound.
+var tickGateBound = 5 * time.Millisecond
+
+const (
+	maxTickGateCuts      = 5
+	tickGatePollInterval = 200 * time.Microsecond
+)
+
 /*
 ================
 divisionLane
@@ -125,6 +137,18 @@ unwired runtimes take the bare release, exactly as before.
 func (rt *Runtime) LockPublication(divisionID, label string) func() {
 	lane := rt.operations.lane(divisionID, &rt.maintenance)
 	lane.publication.Lock()
+	return rt.publicationRelease(lane, label)
+}
+
+/*
+================
+publicationRelease
+
+The release of a publication gate just taken: the bare one, or with a
+sink wired the one that reports a long hold under label.
+================
+*/
+func (rt *Runtime) publicationRelease(lane *divisionLane, label string) func() {
 	sink := rt.PublicationHold
 	if sink == nil {
 		return lane.releasePublication
@@ -153,6 +177,22 @@ progress, so no character of it has tick work yet.
 ================
 */
 func (rt *Runtime) lockTickPublication() func() {
+	ids := rt.publicationDivisions()
+	releases := make([]func(), 0, len(ids))
+	for _, id := range ids {
+		releases = append(releases, rt.LockPublication(id, "tick"))
+	}
+	return releaseTickPublication(releases)
+}
+
+/*
+================
+publicationDivisions
+
+Every division with a lane, in the one order the tick takes their gates.
+================
+*/
+func (rt *Runtime) publicationDivisions() []string {
 	rt.operations.mu.Lock()
 	ids := make([]string, 0, len(rt.operations.division))
 	for id := range rt.operations.division {
@@ -160,13 +200,46 @@ func (rt *Runtime) lockTickPublication() func() {
 	}
 	rt.operations.mu.Unlock()
 	sort.Strings(ids)
-	releases := make([]func(), 0, len(ids))
-	for _, id := range ids {
-		releases = append(releases, rt.LockPublication(id, "tick"))
-	}
+	return ids
+}
+
+/*
+================
+releaseTickPublication
+================
+*/
+func releaseTickPublication(releases []func()) func() {
 	return func() {
 		for i := len(releases) - 1; i >= 0; i-- {
 			releases[i]()
 		}
 	}
+}
+
+/*
+================
+tryLockTickPublication
+
+lockTickPublication that gives up after bound (#2143). A request stuck on
+the disk holds one division's gate for seconds; the tick gives back
+whatever it took, so nothing waits behind a tick that is itself waiting.
+sync.Mutex has no timed lock, so the wait polls.
+================
+*/
+func (rt *Runtime) tryLockTickPublication(bound time.Duration) (func(), bool) {
+	deadline := time.Now().Add(bound)
+	ids := rt.publicationDivisions()
+	releases := make([]func(), 0, len(ids))
+	for _, id := range ids {
+		lane := rt.operations.lane(id, &rt.maintenance)
+		for !lane.publication.TryLock() {
+			if time.Now().After(deadline) {
+				releaseTickPublication(releases)()
+				return nil, false
+			}
+			time.Sleep(tickGatePollInterval)
+		}
+		releases = append(releases, rt.publicationRelease(lane, "tick"))
+	}
+	return releaseTickPublication(releases), true
 }

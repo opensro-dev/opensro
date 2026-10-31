@@ -350,6 +350,9 @@ interface WorldReferences {
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
+// How long one reference frame vouches for answers queued behind it: the
+// flat answer deadline, so the wait restarts at each frame (#2148).
+const REFERENCE_ANSWER_HOLD_MS = 10000;
 
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
@@ -3453,6 +3456,22 @@ state here before a command can claim a native wire conversation.
 					null,
 				entity.gid
 			);
+		},
+		/*
+================
+referenceProgress
+
+The scene's reference frames (opcode 14) fill the ordered stream after
+game-ready: over 2 MB, more than 10 s on a slow link. Every answer sent
+after them waits behind them. Core handles these frames apart from the
+gameplay receive path, so they must say here that the link is delivering,
+or a slow link reads as a lost answer and resumes, and the resume sends
+the references again (#2148).
+================
+		*/
+		referenceProgress( now: number ) {
+			movement.noteInboundProgress( now );
+			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS );
 		},
 		/*
 ================

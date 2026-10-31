@@ -121,6 +121,8 @@ func TestTickHookTimesThePublicationGateWait(t *testing.T) {
 		steps = append(steps, name)
 		mu.Unlock()
 	}
+	// At the cut limit: the tick waits for the holder (acquireTickGate).
+	rt.tickGateCuts = maxTickGateCuts
 	unlock := rt.LockPublication(testDivision, "test")
 	done := make(chan struct{})
 	go func() {
