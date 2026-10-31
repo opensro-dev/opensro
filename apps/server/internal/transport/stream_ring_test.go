@@ -299,3 +299,56 @@ func TestRingResumeThatWouldOverflowTheQueueIsRefused(t *testing.T) {
 		t.Fatal("a re-sent block that overflows the outbound queue was accepted")
 	}
 }
+
+/*
+================
+TestRingResumeRefusalNamesTheGap
+
+Every refusal the ring can produce names itself against the ring's own
+numbers (#2146): behind a floor the ring already dropped past, beyond
+everything written, or covered but too big to re-send. The live refusal
+log prints exactly this snapshot; a wrong classification here sends the
+whole diagnosis after the wrong side of the contract.
+================
+*/
+func TestRingResumeRefusalNamesTheGap(t *testing.T) {
+	_, sess, _ := attachedSession(t, false)
+
+	sess.mu.Lock()
+	for i := 0; i <= streamRingMaxFrames; i++ {
+		sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	}
+	if sess.resumeFromLocked(0) {
+		sess.mu.Unlock()
+		t.Fatal("resume from 0 after overflow was accepted")
+	}
+	head := sess.streamPos
+	sess.mu.Unlock()
+	d := sess.ResumeRefusal(0)
+	if d.Reason != "behind-floor" || d.Reported != 0 || d.Floor == 0 || d.Head != head || d.Oldest <= d.Floor {
+		t.Fatalf("overflow refusal = %+v, want behind-floor at 0 with floor < oldest <= head %d", d, head)
+	}
+
+	d = sess.ResumeRefusal(head + 1)
+	if d.Reason != "beyond-head" || d.Reported != head+1 {
+		t.Fatalf("unwritten position refusal = %+v, want beyond-head at %d", d, head+1)
+	}
+
+	_, full, _ := attachedSession(t, false)
+	full.mu.Lock()
+	for i := 0; i < full.hub.cfg.OutboundQueue/2+1; i++ {
+		full.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	}
+	for i := 0; i < full.hub.cfg.OutboundQueue/2; i++ {
+		full.queue = append(full.queue, Frame{Opcode: ringTestOp, Payload: []byte{2}})
+	}
+	if full.resumeFromLocked(0) {
+		full.mu.Unlock()
+		t.Fatal("a re-sent block that overflows the outbound queue was accepted")
+	}
+	full.mu.Unlock()
+	d = full.ResumeRefusal(0)
+	if d.Reason != "resend-overflow" || d.QueuedFrames == 0 || d.RingFrames == 0 {
+		t.Fatalf("queue refusal = %+v, want resend-overflow with ring and queue populated", d)
+	}
+}
