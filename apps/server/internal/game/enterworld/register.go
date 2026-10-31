@@ -477,6 +477,13 @@ func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 // OpcodeGameReady is the C->S game-ready trigger (agentGameReadyOpcode).
 const OpcodeGameReady uint16 = 0x3012
 
+// OpcodeResetClientAck is the client's empty answer to OpcodeResetClient
+// (0x3369): the native handler sub_74b880 sends 0x36DD first, then applies
+// the reset. Native capture shows no server response and no state riding
+// on it - a bare acknowledgement the native server ignores
+// (research/docs/reverse-engineering/gateway/GatewayProtocol.md).
+const OpcodeResetClientAck uint16 = 0x36DD
+
 // ConsentAnswerLength is the body of the native client's only 0x3012
 // send: the confirm-box answer {u32, u32, u8} (NetClient 701A50 from
 // CGInterface_OnMsgBoxResult, the friend request's prompt type 0x23). The
@@ -559,6 +566,23 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 	})
 }
 
+/*
+================
+RegisterResetClientAck
+
+Takes the 0x36DD reset acknowledgement and drops it, the native server's
+own posture. Registering the deliberate ignore matters: an unregistered
+ack lands in the unhandled-opcode counter once per scene reset (#2147),
+once per world entry and teleport, which is exactly the noise that hid
+opcodes nobody had explained yet.
+================
+*/
+func RegisterResetClientAck(hub *transport.Hub) {
+	hub.Handle(OpcodeResetClientAck, func(s *transport.Session, _ uint16, _ []byte) {
+		log.Debugf("bootstrap: reset-client ack from session %d ignored", s.ID)
+	})
+}
+
 // Register wires every bootstrap-lane handler onto the hub.
 /*
 ================
@@ -568,6 +592,7 @@ Register
 func Register(hub *transport.Hub, deps *Deps) {
 	RegisterEnterWorld(hub, deps)
 	RegisterGameReady(hub, deps)
+	RegisterResetClientAck(hub)
 	RegisterQuickSlotBindings(hub, deps)
 	RegisterEventGuideAck(hub, deps)
 	RegisterStallNetworkLeave(hub, deps)
