@@ -914,3 +914,24 @@ test("a server speaking another release protocol marks the session outdated and 
 	assert.equal( session.step().releaseOutdated, true );
 	session.dispose();
 });
+
+test("world lifecycle commands with no world session publish no error", () => {
+	const session = createSession();
+	for ( const kind of [ "world-ready", "restart", "exit", "reconnect", "disconnect" ] ) {
+		session.command( { kind } );
+		assert.equal( session.step()?.error, undefined, kind );
+	}
+	session.dispose();
+});
+
+test("a failed entry error is not replaced by lifecycle commands with no world session", () => {
+	const session = createSession();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	const failed = session.step();
+	assert.equal( failed?.error, "Error: Authentication required" );
+	for ( const kind of [ "world-ready", "restart", "exit", "reconnect" ] ) {
+		session.command( { kind } );
+		assert.equal( session.step()?.error ?? failed?.error, "Error: Authentication required", kind );
+	}
+	session.dispose();
+});
