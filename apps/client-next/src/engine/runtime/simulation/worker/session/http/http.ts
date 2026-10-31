@@ -21,6 +21,9 @@ import {
 } from "@/engine/foundation/release/protocol";
 
 const DEFAULT_RESPONSE_BYTES = 65536;
+// Browsers refuse a keepalive fetch whose body passes 64 KiB, and a character
+// can be four UTF-8 bytes, so the cap is counted in chars with the margin.
+const KEEPALIVE_BODY_CHARS = 16 * 1024;
 const LIST_RESPONSE_BYTES = 1 << 20;
 const REFERENCE_BYTES_LIMIT = 32 * 1024 * 1024;
 const REFERENCE_ROWS_LIMIT = 65536;
@@ -43,6 +46,7 @@ type RequestOptions = {
 	body?: unknown;
 	token?: string;
 	limit?: number;
+	keepalive?: boolean;
 };
 
 /*
@@ -62,17 +66,19 @@ export function createSessionHttp() {
 	================
 	*/
 	async function request( options: RequestOptions ): Promise<SessionResponse> {
-		const { base, route, signal, body, token, limit = DEFAULT_RESPONSE_BYTES } = options;
+		const { base, route, signal, body, token, limit = DEFAULT_RESPONSE_BYTES, keepalive = false } = options;
 		const headers: Record<string, string> = { [RELEASE_PROTOCOL_HEADER]: String( RELEASE_PROTOCOL ) };
 		if ( body !== undefined ) headers["Content-Type"] = "application/json";
 		if ( token ) headers.Authorization = `Bearer ${token}`;
+		const encoded = body !== undefined ? JSON.stringify( body ) : undefined;
 		const response = await fetch( `${base}${route}`, {
 			method: body === undefined ? "GET" : "POST",
 			headers,
 			credentials: BROWSER_AUTH_ROUTES.has( route ) ? "include" : "omit",
 			redirect: "error",
 			cache: "no-store",
-			...(body !== undefined ? { body: JSON.stringify( body ) } : {}),
+			...(encoded !== undefined ? { body: encoded } : {}),
+			...(keepalive && encoded !== undefined && encoded.length <= KEEPALIVE_BODY_CHARS ? { keepalive: true } : {}),
 			signal
 		} );
 		if ( response.status === RELEASE_OUTDATED_STATUS ) outdated = true;
@@ -135,7 +141,9 @@ export function createSessionHttp() {
 			return request( { base, route: "/title/servers", signal, limit: LIST_RESPONSE_BYTES } );
 		},
 		incident( base: string, token: string | undefined, body: unknown, signal: AbortSignal ) {
-			return request( { base, route: "/client/incident", signal, body, token } );
+			// A failing page may be closing: keepalive lets the post finish
+			// instead of reaching the Agent cut short (#2149).
+			return request( { base, route: "/client/incident", signal, body, token, keepalive: true } );
 		},
 		roster( base: string, token: string, signal: AbortSignal ) {
 			return request( { base, route: "/character/list", signal, token, limit: LIST_RESPONSE_BYTES } );
