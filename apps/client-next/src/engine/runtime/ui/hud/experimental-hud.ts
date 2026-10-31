@@ -145,6 +145,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-sun-drop-marker",
 				label: "Seal of Sun drop marker",
 				description: "Mark your own degree-9+ Sun drops on the ground."
+			},
+			{
+				key: "warpArrivalSound",
+				id: "experimental-warp-arrival-sound",
+				label: "Portal arrival sound",
+				description: "Play the portal-out cue when you arrive."
 			}
 		]
 	},
