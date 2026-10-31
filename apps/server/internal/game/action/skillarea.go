@@ -274,9 +274,9 @@ func areaDoorCharacters(caster *enterworld.Character, plan *areaStrikePlan) []*e
 ==================
 commitAreaInDoor
 
-Inside the roster's door (every character of the division): the monster
-sequences, each player victim, then the monsters' fatal settlements.
-False when nothing landed.
+Inside the strike's door (caster, victims and COS owners, or the whole
+roster when a plan can kill): the monster sequences, each player victim,
+then the monsters' fatal settlements. False when nothing landed.
 ==================
 */
 func (rt *Runtime) commitAreaInDoor(division string, caster *enterworld.Character, roster rewardRoster, plan *areaStrikePlan, now int64) (areaCommit, bool) {
@@ -366,7 +366,7 @@ func areaDrains(plan areaStrikePlan, commit areaCommit) [][]simulation.MonsterDa
 ==================
 settleAreaFatalities
 
-Inside the roster's door: every monster whose last committed impact was
+Inside the strike's door: every monster whose last committed impact was
 fatal settles through the shared reward door at the pose its plan kept.
 ==================
 */
