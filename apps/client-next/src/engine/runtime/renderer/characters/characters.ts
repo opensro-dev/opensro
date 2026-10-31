@@ -1098,22 +1098,42 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		return { frameActors, cycles };
 	}
 	/*
-	================
-	retireModels
+================
+batchesOfModel
 
-	Drop the models and assemblies no retained, published or portrait actor
-	uses. CPU bookkeeping only: their batches' draws wait in retiredDraws for
-	the next full prepare pass, so this may run between frames.
-	================
+Every batch key a model owns: the plain key, and each variant key batchKey
+suffixed "\0" + state (fade, deferral, tint, glow, cloth, modifiers). A
+variant batch holds palette streams of its own; one missed here would
+outlive its model's retirement with a GPU animation row still bound to the
+retired model's identity.
+================
+	*/
+	function batchesOfModel( id: string ): string[] {
+		const keys: string[] = [];
+		for ( const key of batches.keys() ) {
+			if ( key === id || key.startsWith( id + "\0" ) ) keys.push( key );
+		}
+		return keys;
+	}
+	/*
+================
+retireModels
+
+Drop the models and assemblies no retained, published or portrait actor
+uses. CPU bookkeeping only: their batches' draws wait in retiredDraws for
+the next full prepare pass, so this may run between frames.
+================
 	*/
 	function retireModels( inUse: readonly CharacterActor[], pending: readonly string[] = [] ) {
 		if ( !retained ) return;
 		const keep = residencyKeep( inUse, pending );
 		for ( const [id, resource] of models ) {
 			if ( keep.has( id ) ) continue;
-			const batch = batches.get( id );
-			if ( batch ) retiredDraws.push( ...batch.draws );
-			batches.delete( id );
+			for ( const key of batchesOfModel( id ) ) {
+				const batch = batches.get( key );
+				if ( batch ) retiredDraws.push( ...batch.draws );
+				batches.delete( key );
+			}
 			forgetModel( id, resource );
 		}
 	}
@@ -1199,10 +1219,12 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				if ( keep.has( id ) ) continue;
 				// Release before forgetting the model, so a failed release
 				// leaves it resident for the retry.
-				for ( const draw of batches.get( id )?.draws ?? [] ) {
-					geometry.release( draw );
+				for ( const key of batchesOfModel( id ) ) {
+					for ( const draw of batches.get( key )?.draws ?? [] ) {
+						geometry.release( draw );
+					}
+					batches.delete( key );
 				}
-				batches.delete( id );
 				forgetModel( id, resource );
 			}
 		}

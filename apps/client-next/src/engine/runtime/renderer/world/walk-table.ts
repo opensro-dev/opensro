@@ -56,6 +56,9 @@ export interface WalkTable {
 	readonly count: Int32Array;
 	// Terrain: the eye cell (x, z) the group last chose for.
 	readonly cell: Float64Array;
+	// Terrain: the view stamp the group last chose for (world.ts's
+	// frustum culling of the chosen ranges, native A2D1B0).
+	readonly terrainView: Float64Array;
 	// The group's index in draw order, and its triangles per placement.
 	readonly order: Int32Array;
 	readonly instanceTriangles: Float64Array;
@@ -111,6 +114,7 @@ export function compileWalkTable(
 		reach: new Float64Array( count * 4 ),
 		count: new Int32Array( count ).fill( -1 ),
 		cell: new Float64Array( count * 2 ).fill( NaN ),
+		terrainView: new Float64Array( count ).fill( -1 ),
 		order: new Int32Array( count ),
 		instanceTriangles: new Float64Array( count ),
 		seen: new Float64Array( count ).fill( -1 ),

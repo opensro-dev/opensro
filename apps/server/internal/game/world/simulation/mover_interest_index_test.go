@@ -109,6 +109,37 @@ func TestMoverInterestBoundsFalsePositivesAndDeduplication(t *testing.T) {
 
 /*
 ================
+TestDungeonReachYieldsSpanningMoverOnce
+
+A dungeon query walks every dungeon bucket, and a mover whose segment
+crosses dungeon regions sits in one bucket per endpoint: without the
+dedupe an area skill would hit it once per bucket (#2139). A mover
+standing outdoors is never in those buckets.
+================
+*/
+func TestDungeonReachYieldsSpanningMoverOnce(t *testing.T) {
+	spanning := monster.MoverState{
+		Pose:     monster.Pose{RegionID: 0x8003, X: 10, Z: 10},
+		From:     monster.Pose{RegionID: 0x8001, X: 10, Z: 10},
+		To:       monster.Pose{RegionID: 0x8002, X: 10, Z: 10},
+		ArriveMs: 10000,
+	}
+	settled := monster.PendingMover{Pose: monster.Pose{RegionID: 0x8001, X: 20, Z: 20}}.Expand()
+	outdoor := monster.PendingMover{Pose: monster.Pose{RegionID: 0x6060, X: 20, Z: 20}}.Expand()
+	storage := newMoverStorage(map[uint32]monster.MoverState{1: spanning, 2: settled, 3: outdoor})
+	center := Spawn{RegionID: 0x8001, X: 10, Z: 10}
+	var got []uint32
+	for gid := range storage.livePosesWithinOutdoorReach(center, 100, 5000, nil) {
+		got = append(got, gid)
+	}
+	slices.Sort(got)
+	if !reflect.DeepEqual(got, []uint32{1, 2}) {
+		t.Fatalf("dungeon walk yielded %v, want each dungeon mover once and no outdoor mover", got)
+	}
+}
+
+/*
+================
 TestMoverInterestUpdateRemoveAndPendingStorage
 ================
 */

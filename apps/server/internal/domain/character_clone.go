@@ -23,6 +23,20 @@ func cloneCharacter(source *Character) *Character {
 
 /*
 ================
+CloneCharacter
+
+cloneCharacter for callers outside the package (the store's committed
+copies, persistence.go): a detached, value-equal copy of the whole
+record. Every mutable child added to Character must acquire an
+independent copy in cloneCharacterFiltered, or this copy aliases it.
+================
+*/
+func CloneCharacter(source *Character) *Character {
+	return cloneCharacter(source)
+}
+
+/*
+================
 cloneCharacterEquipment
 
 cloneCharacter for readers that never leave the worn equipment: the
@@ -231,6 +245,9 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 			clone.SharedSkillCooldowns[group] = until
 		}
 	}
+	clone.MostWanted = clonePointer(source.MostWanted)
+	clone.VisualFlags = clonePointer(source.VisualFlags)
+	clone.Mission = cloneMissionRuntime(source.Mission)
 	clone.QuickSlots = cloneSlice(source.QuickSlots)
 	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
 	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
@@ -397,6 +414,7 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 		value := *source.InstanceReturn
 		clone.InstanceReturn = &value
 	}
+	clone.MovementMode = clonePointer(source.MovementMode)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
 }
@@ -485,5 +503,19 @@ func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
 	clone.Y = clonePointer(source.Y)
 	clone.Z = clonePointer(source.Z)
 	clone.Angle = clonePointer(source.Angle)
+	return &clone
+}
+
+/*
+================
+cloneMissionRuntime
+================
+*/
+func cloneMissionRuntime(source *MissionRuntime) *MissionRuntime {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.EventGuideStateMask = clonePointer(source.EventGuideStateMask)
 	return &clone
 }

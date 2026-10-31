@@ -182,6 +182,14 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 		}
 	}
 	rt.petMu.Unlock()
+	// The owner's pets leave the world with the owner: the gid index
+	// forgets them here (cosownerindex.go).
+	for _, state := range retired {
+		if state != nil && state.character != nil {
+			rt.cosOwners.forgetOwner(division, state.character)
+			break
+		}
+	}
 	for key, state := range retired {
 		if key.gid == 0 {
 			rt.deps.Update(state.character, "crow-brood-logout", func() bool {
@@ -741,6 +749,10 @@ own state without touching the owner's independent attack and pickup pets.
 */
 func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet *enterworld.CharacterCOS) *petSession {
 	key := petOwnerKey{division: division, name: strings.ToLower(owner.character.Name), gid: pet.GID}
+	// Every summoned pet's runtime life starts at this door (world
+	// entry, summon, mercenary call): the gid index notes its owner
+	// here and nowhere else (cosownerindex.go).
+	rt.cosOwners.note(division, pet.GID, owner.character)
 	rt.petMu.Lock()
 	old := rt.petSessions[key]
 	if old != nil && old.character == owner.character && old.transportCOS == pet {

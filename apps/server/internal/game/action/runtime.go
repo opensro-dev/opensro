@@ -59,6 +59,7 @@ barrier.
 type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
+	cosRefusalLog    sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
@@ -296,9 +297,12 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
-	petShields  petShieldStore
-	wolfHowls   wolfHowlStore
-	tailwinds   tailwindStore
+	// cosOwners is the pet gid to owner index (cosownerindex.go):
+	// whose pet a gid is, without walking the division's characters.
+	cosOwners  cosOwnerIndex
+	petShields petShieldStore
+	wolfHowls  wolfHowlStore
+	tailwinds  tailwindStore
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission

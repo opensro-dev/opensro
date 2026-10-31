@@ -312,6 +312,50 @@ func TestReturnCorpseIsNeverTeleported(t *testing.T) {
 
 /*
 ================
+TestReturnScrollWaveDrainsAcrossTicks
+
+A wave of casts coming due on the same tick no longer runs every
+arrival inline (#2143): one advance completes at most
+maxReturnScrollCompletionsPerTick jobs, oldest first, and the rest
+stay due for later ticks. The phantom jobs name characters the
+division does not hold, so each processed job shows up as a removed
+cast; the real cast behind them must still complete, one tick late.
+================
+*/
+func TestReturnScrollWaveDrainsAcrossTicks(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 5000)
+	want := simulation.Spawn{RegionID: 25416, X: 703, Y: 42, Z: 1575, Angle: 12345}
+	c.World.RebirthPoint = worldSpawnFromMission(want)
+	planted := clock.NowMs()
+	for _, name := range []string{"wave-a", "wave-b", "wave-c"} {
+		rt.returnCasts.Store(simulation.WorldKey(testDivision, name),
+			pendingReturn{division: testDivision, name: name, due: planted})
+	}
+	useReturn(rt, c)
+	key := simulation.WorldKey(testDivision, c.Name)
+
+	clock.Advance(5 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	remaining := 0
+	rt.returnCasts.Range(func(_, _ any) bool { remaining++; return true })
+	if remaining != 2 {
+		t.Fatalf("casts left after one advance = %d, want 2 (one phantom plus the real cast)", remaining)
+	}
+	if _, pending := rt.returnCasts.Load(key); !pending || c.NativeTeleportMode != 1 {
+		t.Fatal("the real cast completed inside the wave's first tick")
+	}
+
+	rt.advanceReturnScrolls(clock.NowMs())
+	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 {
+		t.Fatal("the queued cast did not complete on the next tick")
+	}
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != want {
+		t.Fatalf("queued completion arrived at %+v, want %+v", got, want)
+	}
+}
+
+/*
+================
 TestReturnInvalidReferencesNeverConsume
 ================
 */
