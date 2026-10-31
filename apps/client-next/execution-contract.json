@@ -2445,6 +2445,14 @@
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/msaa.ts",
+			"functions": [
+				"resolveDepth"
+			],
+			"reason": "The frame owner resolves the multisampled scene depth into the frame's single-sampled depth right after the scene pass, before the flare probe and the labels read it."
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/sun-shadow.ts",
 			"functions": [
 				"encode"

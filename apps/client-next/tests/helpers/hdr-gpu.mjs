@@ -13,7 +13,18 @@ reviewed trees. Device destruction exercises the real recovery lifecycle.
 captureLightingStages
 ================
 */
-export async function captureLightingStages( { startup = false, recover = false, nativeOnly = false } = {} ) {
+export async function captureLightingStages(
+	{
+		startup = false,
+		recover = false,
+		nativeOnly = false,
+		stages = null,
+		recoverStage = "hdrToneMap",
+		// A yaw for the box witness: rotated faces give a scene whose hard
+		// silhouettes cross pixel rows diagonally (the MSAA capture's proof).
+		boxYaw = 0
+	} = {}
+) {
 	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 	const { createPresentationRandom } = await import( "/src/engine/runtime/random/random.ts" );
 	const { defaultVideoOptions, changeVideo } = await import( "/src/engine/foundation/rendering/video-options.ts" );
@@ -47,6 +58,7 @@ export async function captureLightingStages( { startup = false, recover = false,
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		msaa: false,
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,
@@ -87,10 +99,13 @@ export async function captureLightingStages( { startup = false, recover = false,
 		[ [ 1, 2, 6, 5 ], [ 1, 0, 0 ] ],
 		[ [ [ 0 ], [ 4 ], [ 7 ], [ 3 ] ].flat(), [ -1, 0, 0 ] ]
 	];
+	const yaw = Math.cos( boxYaw ), yawSin = Math.sin( boxYaw );
+	const orbit = ( x, z ) => [ 18 + (x - 18) * yaw + (z - 0) * yawSin, 0 - (x - 18) * yawSin + (z - 0) * yaw ];
 	for ( const [quad, normal] of faces ) {
 		const base = cube.length / 3;
 		for ( const corner of quad ) {
-			cube.push( corners[corner][0] + 14, corners[corner][1], corners[corner][2] - 4 );
+			const [rx, rz] = orbit( corners[corner][0] + 14, corners[corner][2] - 4 );
+			cube.push( rx, corners[corner][1], rz );
 			cubeNormals.push( normal[0], normal[1], normal[2] );
 		}
 		cubeIndices.push( base, base + 1, base + 2, base, base + 2, base + 3 );
@@ -171,9 +186,9 @@ export async function captureLightingStages( { startup = false, recover = false,
 			]
 		} );
 		const rows = [];
-		const modes = nativeOnly ? [ "off" ] : startup ?
+		const modes = stages ?? (nativeOnly ? [ "off" ] : startup ?
 			[ "hdrToneMap", "off" ] :
-			[ "off", "hdrToneMap", "off", "sunShadow", "off", "perPixelLighting", "off", "combined", "off" ];
+			[ "off", "hdrToneMap", "off", "sunShadow", "off", "perPixelLighting", "off", "combined", "off" ]);
 		for ( const mode of modes ) {
 			renderer.videoOptions( changeVideo( defaultVideoOptions(), 11, mode === "combined" ? 1 : 0 ) );
 			renderer.experimentalVideo( {
@@ -190,7 +205,7 @@ export async function captureLightingStages( { startup = false, recover = false,
 			context.drawImage( image, 0, 0 );
 			image.close();
 			rows.push( { mode, rgba: [ ...context.getImageData( 0, 0, width, height ).data ] } );
-			if ( recover && mode === "hdrToneMap" ) {
+			if ( recover && mode === recoverStage ) {
 				const old = devices.at( -1 );
 				old.destroy();
 				await old.lost;

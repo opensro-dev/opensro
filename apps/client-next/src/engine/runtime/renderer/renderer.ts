@@ -948,6 +948,7 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
+						msaa: device.msaa( sceneWidth, sceneHeight, experimental.msaa ),
 						sceneScale: scaled ?
 							{
 								view: color,

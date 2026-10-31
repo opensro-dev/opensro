@@ -52,6 +52,8 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
+	// Off by default: the multisampled scene is a port-only deviation.
+	msaa: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,
@@ -233,6 +235,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		msaa: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -316,11 +319,12 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
 		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages; render scale joins Image without
-	// changing the indices used to reopen the existing tabs.
+	// Lighting keeps the direct-light stages; MSAA rides there as a render
+	// stage; render scale joins Image without changing the indices used to
+	// reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
+		[ "sunShadow", "perPixelLighting", "msaa", "enchantSparks", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
