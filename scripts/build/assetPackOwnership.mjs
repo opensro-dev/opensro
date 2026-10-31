@@ -75,6 +75,9 @@ export function imagePackGroup( publicPath ) {
 	// Port-only re-encodings for devices without BC (textures/buildTextureVariants
 	// .mjs): their own lazy group, so a BC device never fetches them.
 	if ( lower.startsWith( "/assets/texture-variants/astc/" ) ) return "texture-variants-astc";
+	// Port-only: the UI icon atlas sheet and manifest (uiIconAtlas.mjs),
+	// read on the first icon the interface demands.
+	if ( lower.startsWith( "/assets/ui-atlas/" ) ) return "ui-atlas";
 	if ( lower.startsWith( "/assets/world/outdoor/" ) ) return "outdoor-world";
 	if ( lower.startsWith( "/assets/world/" ) ) return "world-textures";
 	if ( lower.startsWith( "/assets/images/map_extracted/tile2d/" ) ) return "map-tiles";

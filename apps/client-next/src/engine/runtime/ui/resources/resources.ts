@@ -17,11 +17,13 @@ static with no texture does.
 ===========================================================================
 */
 
+import { iconAtlas, UI_ATLAS_MANIFEST_PATH, type IconAtlas } from "@/engine/foundation/ui/icon-atlas";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { UiTexture } from "@/engine/contracts/texture";
 import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
+
 const DEFAULT_ICON = ICON_ROOT + "icon_default.png";
 // Remembered absent paths beyond current demand are dropped past this count.
 const MAX_REMEMBERED_ABSENT = 480;
@@ -44,7 +46,11 @@ export function createUiAssets(
 	) => void = event => {
 		if ( event.kind === "failed" ) console.warn( "[ui-assets]", event );
 		else console.info( "[ui-assets]", event );
-	}
+	},
+	// Port-only, not native: told when the icon atlas manifest installs (or
+	// fails to). The renderer's quad packer remaps the icons it maps into
+	// their sheet; without a manifest nothing changes.
+	installAtlas: ( mapping: IconAtlas | null ) => void = () => {}
 ) {
 	const pending = new Map<string, number>();
 	const loaded = new Map<string, readonly [number, number]>();
@@ -59,6 +65,18 @@ export function createUiAssets(
 	const crest = ( path: string ) => /\/marks\/[GA][0-9]{1,10}_[0-9]{1,10}_[0-9]{1,10}\.crb$/.test( path );
 	let disposed = false;
 	let wanted = new Set<string>();
+	// The icon atlas: installed once its manifest arrives, failed forever
+	// when it cannot (the per-icon files are the fallback either way).
+	let atlas: IconAtlas | null = null, atlasRequest = -1, atlasFailed = false;
+	// A wanted path's load target: the sheet that holds it, or itself.
+	const target = ( path: string ) => {
+		const sheet = atlas?.entry( path )?.sheet;
+		return sheet ?? path;
+	};
+	// The demand translated to load targets (the atlas sheets their icons
+	// live in): every bookkeeping set below keys by these, so one sheet is
+	// one pending request, one residency entry and one publish.
+	let effective = new Set<string>();
 	let previousPaths: readonly string[] = [], settled = false;
 	// The array the caller last handed in, if it was already frozen when it
 	// was adopted: only then can it prove an unchanged demand without being
@@ -90,7 +108,7 @@ export function createUiAssets(
 				residentBytes + incomingBytes <= MAX_RESIDENT_BYTES &&
 				loaded.size + incomingCount <= MAX_RESIDENT_IMAGES
 			) break;
-			if ( wanted.has( path ) ) continue;
+			if ( effective.has( path ) ) continue;
 			publish( path, null );
 			loaded.delete( path );
 			evictions++;
@@ -156,17 +174,43 @@ export function createUiAssets(
 				wanted = new Set( paths );
 				settled = false;
 			}
+			let changed = false, atlasChanged = false;
+			if ( atlasRequest >= 0 ) {
+				const result = assets.take( atlasRequest );
+				if ( result ) {
+					atlasRequest = -1;
+					let mapping: IconAtlas | null = null;
+					if ( result.kind === "bytes" ) {
+						try {
+							mapping = iconAtlas( JSON.parse( new TextDecoder().decode( result.buffer ) ) );
+						} catch {
+							mapping = null;
+						}
+					}
+					if ( mapping ) {
+						atlas = mapping;
+						// The translated demand changes every mapped icon's
+						// target, and the packer's records with it.
+						effective = new Set( [ ...wanted ].map( target ) );
+						atlasChanged = true;
+						installAtlas( mapping );
+					} else atlasFailed = true;
+					changed = true;
+				}
+			}
+
 			for ( const [path, id] of pending ) {
-				if ( !wanted.has( path ) ) {
+				if ( !effective.has( path ) ) {
 					assets.cancel( id );
 					pending.delete( path );
 				}
 			}
-			let changed = false;
-			if ( demandChanged ) {
+			if ( demandChanged || atlasChanged ) {
 				// All wanted images are protected from eviction. Their relative age
-				// only needs refreshing when demand changes, not on every load poll.
-				for ( const path of wanted ) {
+				// only needs refreshing when demand changes (or the atlas
+				// retranslates it), not on every load poll.
+				effective = new Set( [ ...wanted ].map( target ) );
+				for ( const path of effective ) {
 					const size = loaded.get( path );
 					if ( size ) {
 						loaded.delete( path );
@@ -177,11 +221,13 @@ export function createUiAssets(
 			trim();
 			for ( const remembered of [ missing, fallback ] ) {
 				for ( const path of remembered ) {
-					if ( !wanted.has( path ) && remembered.size > MAX_REMEMBERED_ABSENT ) remembered.delete( path );
+					if ( !effective.has( target( path ) ) && remembered.size > MAX_REMEMBERED_ABSENT ) {
+						remembered.delete( path );
+					}
 				}
 			}
 			for ( const path of failures.keys() ) {
-				if ( !wanted.has( path ) ) {
+				if ( !effective.has( path ) ) {
 					clearFailure( path, "released" );
 					changed = true;
 				}
@@ -211,6 +257,16 @@ export function createUiAssets(
 				} else if ( crest( path ) ) {
 					missing.add( path );
 					changed = true;
+				} else if ( atlas?.sheets.includes( path ) ) {
+					// A sheet that cannot load turns the atlas off: the demand
+					// retranslates to the per-icon files, exactly the state
+					// before the manifest arrived.
+					atlas = null;
+					atlasFailed = true;
+					effective = new Set( [ ...wanted ].map( target ) );
+					installAtlas( null );
+					clearFailure( path, "released" );
+					changed = true;
 				} else if ( result.kind === "error" && result.absent ) {
 					// The next pass requests icon_default under this path; a default
 					// that is itself absent, or any other image, stays blank.
@@ -227,20 +283,41 @@ export function createUiAssets(
 					changed = true;
 				}
 			}
-			for ( const path of wanted ) {
+			if ( !atlas && !atlasFailed && atlasRequest < 0 && assets.available() > 0 ) {
+				for ( const path of wanted ) {
+					if ( !path.startsWith( ICON_ROOT ) ) continue;
+					try {
+						atlasRequest = assets.request(
+							new URL( UI_ATLAS_MANIFEST_PATH, base ).href,
+							4 * 1024 * 1024
+						);
+					} catch {
+						atlasFailed = true;
+					}
+					break;
+				}
+			}
+			for ( const path of effective ) {
 				if (
 					missing.has( path ) || loaded.has( path ) || pending.has( path ) ||
 					(failures.get( path )?.retryAt ?? -Infinity) > now
 				) continue;
 				if ( assets.available() === 0 ) break;
+				const request = fallback.has( path ) ? DEFAULT_ICON : path;
+				// A fallback fetches the default icon itself, never its atlas
+				// target: the default is a published icon, so target() names
+				// the whole sheet there, and the sheet published under an
+				// absent icon's path would draw 2048 px squashed into that
+				// icon's quad (the review's trace on this branch).
+				const url = fallback.has( path ) ? DEFAULT_ICON : target( path );
 				try {
 					pending.set(
 						path,
 						assets.request(
-							new URL( fallback.has( path ) ? DEFAULT_ICON : path, base ).href,
-							crest( path ) ? 256 : 4 * 1024 * 1024,
+							new URL( url, base ).href,
+							crest( request ) ? 256 : 4 * 1024 * 1024,
 							// A native texture arrives as its container bytes.
-							crest( path ) ? "crest" : isNativeTexture( path ) ? undefined : "png"
+							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png"
 						)
 					);
 				} catch ( error ) {
@@ -248,9 +325,9 @@ export function createUiAssets(
 					changed = true;
 				}
 			}
-			settled = pending.size === 0 && failures.size === 0;
+			settled = pending.size === 0 && failures.size === 0 && atlasRequest < 0;
 			if ( settled ) {
-				for ( const path of wanted ) {
+				for ( const path of effective ) {
 					if ( !loaded.has( path ) && !missing.has( path ) ) {
 						settled = false;
 						break;
