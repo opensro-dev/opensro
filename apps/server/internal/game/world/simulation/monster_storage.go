@@ -407,6 +407,28 @@ func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
 
 /*
 ================
+leaderFacts
+
+The FOLLOW transaction's leader facts — existence, current HP and body
+radius — read off the row locate probed, without expanding the detached
+Instance snapshot lookup builds for them. The radius is the instance's
+own BodyRadius over the row's shared ref and nest rows, so it tracks
+the method if its formula ever moves.
+================
+*/
+func (s *monsterStorage) leaderFacts(gid uint32) (uint32, float64, bool) {
+	slot := s.locate(gid)
+	switch slot.residency {
+	case slotHot:
+		return slot.hot.currentHP, monster.Instance{Ref: slot.hot.ref.Value(), Nest: slot.hot.nest.Value()}.BodyRadius(), true
+	case slotCold:
+		return slot.cold.hp, monster.Instance{Ref: slot.cold.ref.Value(), Nest: slot.cold.nest.Value()}.BodyRadius(), true
+	}
+	return 0, 0, false
+}
+
+/*
+================
 removeCold
 
 Forget a sleeping monster's cold row.
