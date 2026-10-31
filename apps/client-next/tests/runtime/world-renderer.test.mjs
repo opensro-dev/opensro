@@ -1015,12 +1015,13 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	assert.ok( edge.length );
 	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( lastIndexCount, 1536 );
-	// Cross the LOD boundary while looking away. Terrain is chosen by eye cell,
-	// not by view (the GPU clips what is behind), so the crossing stitches the
-	// edge at once and turning back changes nothing.
+	// Cross the LOD boundary while looking away. The eye cell chooses the
+	// LOD and the frustum culls the ranges turned away from (A2D1B0), so
+	// the crossing submits nothing and stitches nothing; turning back
+	// stitches the edge at once and changes nothing else.
 	world.camera( { eye: [ -960, 500, 10 ], target: [ -2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-	assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
-	assert.ok( edge.every( i => positions[i] === 10 ) );
+	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( prepare( -960 ), draw );
 	assert.ok( edge.every( i => positions[i] === 10 ) );
 	const writes = [ indexWrites, positionWrites ];
@@ -1037,7 +1038,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	}
 	for ( const [x, height] of [ [ -960, 10 ], [ -1280, 0 ], [ -960, 10 ] ] ) {
 		world.camera( { eye: [ x, 500, 10 ], target: [ x - 2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
+		assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
 		assert.equal( prepare( x ), draw );
 		assert.ok( edge.every( i => positions[i] === height ) );
 	}
