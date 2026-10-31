@@ -314,6 +314,9 @@ type Runtime struct {
 	premiumSpend premiumSpendLedger
 	// pkOwners are the players whose PK record runs a clock (pkrecord.go).
 	pkOwners petSkillWindowIndex
+	// murdererDrains holds each murderer's next drain instant
+	// (murdererdrain.go); only the tick's PK sweep reads or writes it.
+	murdererDrains map[petOwnerKey]int64
 	// pulseAreas are the owners of live pulse areas (skillpulsearea.go).
 	pulseAreas            pulseAreaClock
 	commerceReferenceSeed []wire.Frame

@@ -88,6 +88,22 @@ func (rt *Runtime) BindRecoverySession(division string, c *enterworld.Character,
 
 /*
 ================
+residentOnline
+
+Whether a character is an authenticated world resident right now. The
+recovery session is bound at world bind and forgotten with the session
+(naturalrecovery.go), so it is the runtime's online set for a player whose
+character record also survives offline.
+================
+*/
+func (rt *Runtime) residentOnline(division, name string) bool {
+	rt.recoveryMu.Lock()
+	defer rt.recoveryMu.Unlock()
+	return rt.recoverySessions[recoveryKey{division, strings.ToLower(name)}] != nil
+}
+
+/*
+================
 forgetRecoverySession
 
 The caller holds the division door before taking the collection lock.

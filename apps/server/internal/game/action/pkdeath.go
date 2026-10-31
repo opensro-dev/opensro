@@ -47,6 +47,10 @@ type deathKiller struct {
 	player       *enterworld.Character
 	siege        bool
 	strikerLevel int64
+	// murdererDrain marks the murderer status drain (murdererdrain.go). No
+	// object dealt the damage, but the death settles as the victim's own
+	// murderer death.
+	murdererDrain bool
 }
 
 /*
@@ -60,6 +64,14 @@ classified by playerKillKind.
 ================
 */
 func (rt *Runtime) deathKind(division string, victim *enterworld.Character, killer deathKiller) pk.DeathKind {
+	if killer.murdererDrain {
+		// The drain has no killer object. Inferred: classified as a player
+		// death so the existing relief takes 200 off the penalty and one off
+		// the daily count (pk.DeathRelief), and the murderer drop roll runs
+		// (dropOnDeathInDoor). DeathLoss then reads the killer-less murderer
+		// rates, the branch a monster's blow would take.
+		return pk.DeathPlayer
+	}
 	if killer.siege {
 		return pk.DeathSpecialWorld
 	}

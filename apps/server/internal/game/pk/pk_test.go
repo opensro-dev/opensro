@@ -237,3 +237,21 @@ func TestSelectDropSlot(t *testing.T) {
 		t.Fatalf("third bag item -> %d %v", slot, ok)
 	}
 }
+
+/*
+================
+TestDrainAmount
+
+5% of the maximum, truncated, with the one-HP floor that keeps a small
+maximum draining.
+================
+*/
+func TestDrainAmount(t *testing.T) {
+	for _, tc := range []struct{ maximum, want int64 }{
+		{1000, 50}, {120, 6}, {119, 5}, {20, 1}, {19, 1}, {1, 1}, {0, 0}, {-5, 0},
+	} {
+		if got := DrainAmount(tc.maximum); got != tc.want {
+			t.Fatalf("DrainAmount(%d) = %d, want %d", tc.maximum, got, tc.want)
+		}
+	}
+}
