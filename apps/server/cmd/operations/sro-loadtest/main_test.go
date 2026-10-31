@@ -13,7 +13,11 @@ actually carried.
 
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/transport"
+)
 
 /*
 ================
@@ -66,22 +70,32 @@ func TestEnterStats(t *testing.T) {
 
 /*
 ================
-TestCountedOpcode
+TestAppliedCountsOnStream
 
-Only opcodes above the session-internal range occupy a stream
-position; the bot's ack must mirror the server's ring rule or its
-resume position drifts from what the server kept.
+The bot's ack position advances exactly when the transport's own
+stream rule counts a frame - boundary either side of the reserved
+range, plus real session opcodes. The actual opcodes of the reserved
+range come from the transport package's own constants, so if the
+range ever moves this test moves with it instead of pinning a copy.
 ================
 */
-func TestCountedOpcode(t *testing.T) {
-	for _, op := range []uint16{0x0001, 0x0002, 0x0005} {
-		if countedOpcode(op) {
-			t.Fatalf("countedOpcode(0x%04X) = true, want false", op)
+func TestAppliedCountsOnStream(t *testing.T) {
+	conn := &gameConn{}
+	// The transport-internal range never occupies a stream position.
+	for _, op := range []uint16{
+		transport.OpHello, transport.OpWelcome, transport.OpPing, transport.OpPong, transport.OpBye,
+	} {
+		if transport.CountsOnStream(op) {
+			conn.applied.Add(1)
 		}
 	}
-	for _, op := range []uint16{0x0006, 0x3012, 0xB245} {
-		if !countedOpcode(op) {
-			t.Fatalf("countedOpcode(0x%04X) = false, want true", op)
+	// Session frames above it do: the enter-world pair and game-ready.
+	for _, op := range []uint16{transport.OpEnterWorld, transport.OpEnterWorldResult, opGameReady} {
+		if transport.CountsOnStream(op) {
+			conn.applied.Add(1)
 		}
+	}
+	if got := conn.appliedPosition(); got != 3 {
+		t.Fatalf("appliedPosition = %d, want 3 (enter-world pair and game-ready)", got)
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -30,20 +31,18 @@ import (
 
 // gameConn is one bot's WebSocket session. Frames arrive on the channel
 // readLoop fills; writes are serialized; applied counts the counted
-// opcodes read so far (the stream position the resume ring covers).
+// opcodes read so far (the stream position the resume ring covers). The
+// counters are atomic: readLoop writes them while the ack loop and the
+// owning bot read them on other goroutines. Whether an opcode counts is
+// the transport's own rule (transport.CountsOnStream), so the bot's ack
+// position can never drift from the server's ring if the rule moves.
 type gameConn struct {
 	ws      *websocket.Conn
 	writeMu sync.Mutex
 	frames  chan transport.Frame
 	done    chan struct{}
-	applied uint32
-	bytesIn uint64
-}
-
-// countedOpcode mirrors the server's ring rule: only opcodes above the
-// session-internal range occupy a stream position.
-func countedOpcode(opcode uint16) bool {
-	return opcode > 0x0005
+	applied atomic.Uint32
+	bytesIn atomic.Uint64
 }
 
 /*
@@ -71,6 +70,12 @@ func dialGame(ctx context.Context, base, ticket string, timeout time.Duration) (
 		return nil, transport.Welcome{}, fmt.Errorf("dial: %w", err)
 	}
 	ws.SetReadLimit(int64(transport.MaxFrameBytes) + 4)
+	// The dial context ends at the handshake, so the HELLO -> WELCOME
+	// wait needs its own bound: a connected but silent GameWorld must
+	// fail the bot at cfg.timeout, not hang the step past its report.
+	// The deadline also covers any pings met on the way and is cleared
+	// once WELCOME lands.
+	_ = ws.SetReadDeadline(time.Now().Add(timeout))
 	c := &gameConn{ws: ws, frames: make(chan transport.Frame, 256), done: make(chan struct{})}
 	if err := c.writeFrame(transport.Frame{
 		Opcode:  transport.OpHello,
@@ -101,6 +106,7 @@ func dialGame(ctx context.Context, base, ticket string, timeout time.Duration) (
 			_ = ws.Close()
 			return nil, transport.Welcome{}, fmt.Errorf("welcome: %w", err)
 		}
+		_ = ws.SetReadDeadline(time.Time{})
 		return c, welcome, nil
 	}
 }
@@ -118,7 +124,7 @@ func (c *gameConn) readFrame() (transport.Frame, error) {
 	if kind != websocket.BinaryMessage {
 		return transport.Frame{}, fmt.Errorf("websocket message type %d is not binary", kind)
 	}
-	c.bytesIn += uint64(len(body))
+	c.bytesIn.Add(uint64(len(body)))
 	return transport.DecodeFrame(body)
 }
 
@@ -149,8 +155,8 @@ func (c *gameConn) readLoop() {
 		if err != nil {
 			return
 		}
-		if countedOpcode(frame.Opcode) {
-			c.applied++
+		if transport.CountsOnStream(frame.Opcode) {
+			c.applied.Add(1)
 		}
 		select {
 		case c.frames <- frame:
@@ -169,7 +175,7 @@ appliedPosition
 ================
 */
 func (c *gameConn) appliedPosition() uint32 {
-	return c.applied
+	return c.applied.Load()
 }
 
 /*

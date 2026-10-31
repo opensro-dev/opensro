@@ -169,25 +169,58 @@ func (c *agentClient) mint(path string, body map[string]any) (string, error) {
 
 /*
 ================
+getJSON
+
+One JSON GET against the Agent; the reply decoded into out. The
+character list is answered only on GET, under the session the login
+established; anything but a 200 is a refusal (the session middleware
+answers 401 to an unsigned caller).
+================
+*/
+func (c *agentClient) getJSON(path string, out any) (int, error) {
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return resp.StatusCode, err
+	}
+	if out != nil && len(data) > 0 {
+		if err := json.Unmarshal(data, out); err != nil {
+			return resp.StatusCode, fmt.Errorf("agent %s: undecodable reply: %w", path, err)
+		}
+	}
+	return resp.StatusCode, nil
+}
+
+/*
+================
 characterNames
 
 The account's characters on this division, in the Agent's order. The bot
-enters with the first one unless the run names one.
+enters with the first one unless the run names one. The roster reply
+carries no ok flag: success is the 200 itself, and the shard is the
+login session's claim, so there is nothing to send.
 ================
 */
 func (c *agentClient) characterNames() ([]string, error) {
 	var reply struct {
-		OK         bool   `json:"ok"`
-		Code       string `json:"code"`
 		Characters []struct {
 			Name string `json:"name"`
 		} `json:"characters"`
 	}
-	if _, err := c.postJSON("/character/list", map[string]any{"divisionId": c.division}, &reply); err != nil {
+	status, err := c.getJSON("/character/list", &reply)
+	if err != nil {
 		return nil, err
 	}
-	if !reply.OK {
-		return nil, fmt.Errorf("agent character list refused: %s", reply.Code)
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("agent character list refused: status %d", status)
 	}
 	names := make([]string, 0, len(reply.Characters))
 	for _, ch := range reply.Characters {

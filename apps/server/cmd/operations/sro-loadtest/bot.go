@@ -154,12 +154,12 @@ func runBot(ctx context.Context, cfg runConfig, acct botAccount) botResult {
 		select {
 		case <-ctx.Done():
 			row.HeldSeconds = time.Since(holdStarted).Seconds()
-			row.BytesIn = conn.bytesIn
+			row.BytesIn = conn.bytesIn.Load()
 			return row
 		case frame, ok := <-conn.frames:
 			if !ok {
 				row.HeldSeconds = time.Since(holdStarted).Seconds()
-				row.BytesIn = conn.bytesIn
+				row.BytesIn = conn.bytesIn.Load()
 				return fail("hold", fmt.Errorf("connection closed after %.1fs in world", row.HeldSeconds))
 			}
 			row.FramesIn++
