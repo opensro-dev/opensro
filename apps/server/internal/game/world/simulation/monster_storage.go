@@ -70,18 +70,17 @@ Cold records omit transient effects; active effect owners keep actors resident.
 ================
 */
 type monsterStorage struct {
-	// generation advances on every write (set/remove): the interest
-	// scan's per-block memo (monster_worlds.go) keys on it, so any
-	// membership or content change retires every memoized viewer set.
-	generation    uint64
-	linkedEffects map[uint32]*monster.EffectSnapshot
-	selfEffects   map[uint32]monster.SelfEffects
-	targetEffects map[uint32]monster.TargetEffects
-	hot           map[uint32]residentMonster
-	abnormal      map[uint32]*abnormal.Block // immutable non-nil blocks
-	cold          map[uint32]archivedMonster
-	archive       *monsterArchive
-	maxBodyRadius float64
+	// viewGeneration advances only when what the interest scan reads
+	// here can change: an actor appears or leaves, or a spawn moves.
+	viewGeneration uint64
+	linkedEffects  map[uint32]*monster.EffectSnapshot
+	selfEffects    map[uint32]monster.SelfEffects
+	targetEffects  map[uint32]monster.TargetEffects
+	hot            map[uint32]residentMonster
+	abnormal       map[uint32]*abnormal.Block // immutable non-nil blocks
+	cold           map[uint32]archivedMonster
+	archive        *monsterArchive
+	maxBodyRadius  float64
 }
 
 /*
@@ -107,7 +106,11 @@ Publish scalar state and immutable effect snapshots together under the owner loc
 ================
 */
 func (s *monsterStorage) set(gid uint32, row monster.Instance) {
-	s.generation++
+	// A row that is not hot is new or waking; a wake rewrites the same
+	// spawn and costs one memo at worst.
+	if resident, hot := s.hot[gid]; !hot || resident.spawn != row.Spawn {
+		s.viewGeneration++
+	}
 	var sparse uint8
 	if row.LinkedEffects != nil {
 		sparse |= sparseLinked
@@ -446,7 +449,7 @@ Retire all projections owned by an actor, including sparse effect mirrors.
 ================
 */
 func (s *monsterStorage) remove(gid uint32) {
-	s.generation++
+	s.viewGeneration++
 	delete(s.linkedEffects, gid)
 	delete(s.selfEffects, gid)
 	delete(s.targetEffects, gid)
