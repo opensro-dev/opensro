@@ -738,6 +738,16 @@ test("a resumed session keeps the party, so the next member delta applies after 
 	first.receive( 0xb0d5, party.seed );
 	first.receive( 0x35d6, party.roster );
 	world.step( 6 );
+	// travelReady publishes the arrival's own cue: the table's portal-out
+	// row (SND_WARP, gatein.wav) rides the first batch after the ready.
+	const arrival = world.take();
+	if ( !arrival ) throw Error( "No batch after the ready" );
+	assert.ok(
+		arrival.events.some( e => e.kind === "ui-sound" && e.handle === "SND_WARP" ),
+		"The world's ready plays the portal-out cue"
+	);
+	world.ack( arrival.sequence );
+	presentation.apply( arrival );
 	drain();
 	assert.equal( defined( presentation.gameplay() ).social.members.length, 2 );
 	world.disconnect();
