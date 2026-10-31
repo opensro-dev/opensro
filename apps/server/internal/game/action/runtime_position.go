@@ -149,13 +149,14 @@ func (rt *Runtime) characterSnapshotCombat(
 ==================
 characterSnapshotCast
 
-characterSnapshot for the skill press (#1943): the combat rows plus
-every companion-carrying bag row and the whole avatar inventory. The
-press flow resolves the caster's companions through this copy (the
-crow lane walks the bag-row Summon records), so the copy keeps
-exactly those bag rows; a root takes it only when every reader of
-its copy is cleared for the dropped plain bag rows root by root, and
-the cast-copy differential test pins the press against the full copy.
+characterSnapshot for the skill press and the prepared-cast release
+(#1943): the combat rows plus every companion-carrying bag row and
+the whole avatar inventory. Both flows resolve the caster's
+companions through this copy (the crow lane walks the bag-row Summon
+records, at the strike both routes reach), so the copy keeps exactly
+those bag rows; a root takes it only when every reader of its copy
+is cleared for the dropped plain bag rows root by root, and the
+cast-copy differential tests pin both roots against the full copy.
 ==================
 */
 func (rt *Runtime) characterSnapshotCast(
