@@ -286,3 +286,60 @@ func TestAttackPetRefusesOwnersOwnSideBandit(t *testing.T) {
 		return !ok || live.CurrentHP < hunter.CurrentHP
 	})
 }
+
+/*
+================
+TestPetFightEndsWhenTheOwnersSuitChanges
+
+The BATTLE revalidation (#2080): the owner taking the suit off mid-fight
+makes the hunter bandit refused, so the fight ends and the pet stops
+striking.
+================
+*/
+func TestPetFightEndsWhenTheOwnersSuitChanges(t *testing.T) {
+	rt, clock, c, hunter := newPetBanditRuntime(t, 10000, 3)
+	dressJobSuit(t, rt, c, domain.JobThief)
+	if result := rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, hunter.Gid)); result.DiagnosticRefusal != "" {
+		t.Fatalf("order onto opposing bandit refused: %+v", result)
+	}
+	tickPetCombat(t, rt, clock, 100, func() bool {
+		live, ok := rt.Monsters.Get(testDivision, hunter.Gid)
+		return !ok || live.CurrentHP < hunter.CurrentHP
+	})
+	c.MissionInventory = nil
+	clock.now = clock.now.Add(100 * time.Millisecond)
+	rt.TickHook()(clock.NowMs())
+	if state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID); state.combat != nil {
+		t.Fatalf("the fight outlived the suit: %+v", state.combat)
+	}
+	before, _ := rt.Monsters.Get(testDivision, hunter.Gid)
+	for range 50 {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+	}
+	if after, _ := rt.Monsters.Get(testDivision, hunter.Gid); after.CurrentHP != before.CurrentHP {
+		t.Fatal("the pet kept striking a refused bandit")
+	}
+}
+
+/*
+================
+TestCompanionSinksRefuseOwnSideBandit
+
+The last doors (#2080): the strike and the bonus sink refuse an own-side
+bandit whatever lane reached them. The step is bare on purpose: a sink
+that passed the refusal would need the fields it lacks.
+================
+*/
+func TestCompanionSinksRefuseOwnSideBandit(t *testing.T) {
+	rt, _, c, bandit := newPetBanditRuntime(t, 10000, 2)
+	dressJobSuit(t, rt, c, domain.JobThief)
+	step := petCombatStep{key: petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}, snapshot: c}
+	if _, struck := rt.petStrike(step, bandit, enterworld.SkillRow{}, simulation.Spawn{}); struck {
+		t.Fatal("the strike reached an own-side bandit")
+	}
+	rt.wolfBonusHit(step, bandit, 100, "wolf-execute")
+	if after, _ := rt.Monsters.Get(testDivision, bandit.Gid); after.CurrentHP != bandit.CurrentHP {
+		t.Fatal("the bonus sink damaged an own-side bandit")
+	}
+}
