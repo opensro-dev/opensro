@@ -6,7 +6,9 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area and the skill-object owner
 pass take the narrow combat copy: equipment rows and the avatar
-inventory, no bag rows. Each scenario here runs twice on a bag loaded
+inventory, no bag rows. The skill press takes the cast copy: the
+combat rows plus the companion-carrying bag rows, because its flow
+resolves companions through the copy. Each scenario here runs twice on a bag loaded
 with everything a root could trip on - spare ammunition, an attack pet's
 summon row, a quest item - once on the narrow copy and once forced onto
 the full copy, and every frame and the end state must agree. A root that
@@ -54,6 +56,17 @@ forceFullCombatCopy
 */
 func forceFullCombatCopy(rt *Runtime) {
 	rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return rt.characterSnapshot(divisionID, character)
+	}
+}
+
+/*
+================
+forceFullCastCopy
+================
+*/
+func forceFullCastCopy(rt *Runtime) {
+	rt.castCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
 		return rt.characterSnapshot(divisionID, character)
 	}
 }
@@ -148,6 +161,50 @@ func periodicTrace(t *testing.T, full bool) string {
 		t.Fatal("periodic pulses never landed; the trace would agree vacuously")
 	}
 	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
+skillPressTrace
+
+A persistent attack pressed through the real 0x72CD door and two
+pulses, on a loaded bag. The press takes the cast copy; the bag
+carries an attack pet's summon row, so a press reader that needed a
+plain bag row would diverge, and one that resolved the caster's
+companions through its copy still finds the raven on both copies.
+================
+*/
+func skillPressTrace(t *testing.T, full bool) string {
+	rt, clock, c, target := periodicFixture(t, 10000)
+	loadCombatBag(c)
+	if full {
+		forceFullCastCopy(rt)
+	}
+	trace := fmt.Sprintf("%+v\n", rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: testPeriodicSkillID, HasTarget: true, TargetGid: target.Gid}.Encode()))
+	for _, at := range []int64{clock.NowMs() + 2000, clock.NowMs() + 4000} {
+		trace += fmt.Sprintf("%+v\n", rt.advancePeriodicEffects(at))
+	}
+	after, _ := rt.Monsters.Get(testDivision, target.Gid)
+	if after.CurrentHP >= 10000 {
+		t.Fatal("periodic pulses never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
+TestCastPressReadsNoPlainBagRows
+================
+*/
+func TestCastPressReadsNoPlainBagRows(t *testing.T) {
+	narrow, full := skillPressTrace(t, false), skillPressTrace(t, true)
+	a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
+	for i := range a {
+		if i >= len(b) || a[i] != b[i] {
+			t.Errorf("skill press: line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[min(i, len(b)-1)])
+			break
+		}
+	}
 }
 
 /*

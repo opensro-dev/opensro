@@ -239,6 +239,60 @@ func TestSnapshotEquipmentDropsBagRowCompanions(t *testing.T) {
 
 /*
 ================
+TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows
+
+The press copy: equipment rows and companion-carrying bag rows in
+source order, plain bag rows gone, the avatar inventory copied whole,
+and a bag-row companion still resolvable through the copy - the trap
+TestSnapshotEquipmentDropsBagRowCompanions pins from the other side.
+================
+*/
+func TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows(t *testing.T) {
+	crow := &CharacterCOS{GID: 7001, Codename: "COS_P_RAVEN_090", Summoned: true, CurrentHP: 100}
+	character := &Character{
+		Name: "castOwner",
+		MissionInventory: []InventoryRow{
+			{Slot: 6, Codename: "WEAPON", MagicOptions: []uint64{11}},
+			{Slot: 20, Codename: "POTION", StackCount: 50},
+			{Slot: 21, Codename: "PET_ITEM", Summon: crow},
+			{Slot: 22, Codename: "ITEM_QSP_TEST_01", StackCount: 1},
+		},
+		AvatarInventory: &AvatarInventory{Capacity: 4, Rows: []InventoryRow{{Slot: 0, Codename: "AVATAR"}}},
+	}
+
+	cast := character.SnapshotCast()
+	if len(cast.MissionInventory) != 2 ||
+		cast.MissionInventory[0].Slot != 6 || cast.MissionInventory[0].Codename != "WEAPON" ||
+		cast.MissionInventory[1].Slot != 21 || cast.MissionInventory[1].Codename != "PET_ITEM" {
+		t.Fatalf("cast inventory = %+v", cast.MissionInventory)
+	}
+	if cast.AvatarInventory == nil || len(cast.AvatarInventory.Rows) != 1 {
+		t.Fatalf("cast avatar inventory = %+v, want the one row", cast.AvatarInventory)
+	}
+	if got := cast.CompanionByGID(7001); got == nil {
+		t.Fatal("the cast copy lost the bag-row crow")
+	}
+	// Detachment matches Snapshot's: the kept companion row is a copy.
+	cast.MissionInventory[1].Summon.CurrentHP = 1
+	if crow.CurrentHP != 100 {
+		t.Fatal("cast copy aliases the record's companion")
+	}
+	if len(character.Snapshot().MissionInventory) != 4 {
+		t.Fatal("the full copy narrowed too")
+	}
+
+	bagOnly := &Character{MissionInventory: []InventoryRow{{Slot: 30, Codename: "BAG"}}}
+	if got := bagOnly.SnapshotCast(); len(got.MissionInventory) != 0 {
+		t.Fatalf("bag-only cast copy kept rows: %+v", got.MissionInventory)
+	}
+	empty := &Character{}
+	if got := empty.SnapshotCast(); got.MissionInventory != nil {
+		t.Fatal("nil inventory became non-nil")
+	}
+}
+
+/*
+================
 benchmarkCombatCharacter
 
 A character shaped like the tick guard's players (#1943): 13 equipment
@@ -491,5 +545,18 @@ func BenchmarkSnapshotCombat(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = c.SnapshotCombat()
+	}
+}
+
+/*
+================
+BenchmarkSnapshotCast
+================
+*/
+func BenchmarkSnapshotCast(b *testing.B) {
+	c := benchmarkCombatCharacter()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = c.SnapshotCast()
 	}
 }
