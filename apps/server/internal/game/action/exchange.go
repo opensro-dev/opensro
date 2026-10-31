@@ -271,6 +271,11 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if value, present := ref.NativeFields.Lookup("canTrade"); !present || value < 1 {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
+	// Port-only, not native (halloween.go): a sealed event helmet never
+	// reaches the table either, however tradeable its row is.
+	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+		return inventory.Item{}, wire.ExchangeErrCannotTrade
+	}
 	return item, 0
 }
 

@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
@@ -232,6 +233,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
+				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
+				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
+				Native: "The event helmets trade like any other item.",
+				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
+				Why:    "A helmet the event paid was never meant to reach a market."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",

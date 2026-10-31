@@ -283,6 +283,11 @@ storableItem
 ================
 */
 func (rt *Runtime) storableItem(item inventory.Item) bool {
+	// Port-only, not native (halloween.go): a sealed event helmet never
+	// enters either warehouse, however storable its row is.
+	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+		return false
+	}
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil {
 		return false

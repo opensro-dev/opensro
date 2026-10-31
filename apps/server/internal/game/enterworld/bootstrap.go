@@ -154,6 +154,24 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	if deps.EntryBetaSilk != nil {
 		deps.EntryBetaSilk(character)
 	}
+	// A configured event window that has ended takes its remaining
+	// boxes at this first entry after the end (halloween.go); the
+	// conditional door writes only when a box row actually leaves, so
+	// offline characters are covered at their next entry and nobody
+	// else's record changes.
+	if deps.RemoveExpiredEventBoxes != nil {
+		removed := false
+		deps.Update(liveCharacter, "expired-event-boxes", func() bool {
+			removed = deps.RemoveExpiredEventBoxes(liveCharacter)
+			return removed
+		})
+		if removed {
+			character = readCharacterSnapshot(deps, divisionID, liveCharacter)
+			if character == nil {
+				return Failure(nativeErrorCharacter, "characterNotFound")
+			}
+		}
+	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).
 	presented := character.PresentInventoryExpansion()

@@ -93,6 +93,11 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 					PromptSymbol: "SN_TALK_QSP_ALL_POTION_1_00", Immediate: true,
 				})
 			}
+			// The Halloween rows (port-only): the rolled exchange and
+			// the helmet rows, appended last and only while the event
+			// runs, so So-ok's quest rows (Capture the Flag among
+			// them) keep their order and places.
+			out = append(out, game.items.HalloweenTalkOptions(npcCodename, character)...)
 			return out
 		},
 		Accept: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
@@ -100,6 +105,13 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			return result.Frames, err
 		},
 		Finish: func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
+			if codename == action.HalloweenExchangeService {
+				return game.items.ExchangeHalloweenBox(character, npcCodename)
+			}
+			if len(codename) > len(action.HalloweenHelmetServicePrefix) &&
+				codename[:len(action.HalloweenHelmetServicePrefix)] == action.HalloweenHelmetServicePrefix {
+				return game.items.ExchangeHalloweenHelmet(character, npcCodename, codename)
+			}
 			if codename == quest.ResuscitationService {
 				result, err := quests.OpenResuscitation(character, npcCodename)
 				return result.Frames, err
