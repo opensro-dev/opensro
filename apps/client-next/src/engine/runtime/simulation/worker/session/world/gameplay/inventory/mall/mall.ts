@@ -171,6 +171,14 @@ export function createMall() {
 		},
 		/*
   ================
+  holdUntil
+  ================
+  */
+		holdUntil( until: number ) {
+			if ( request ) deadline = Math.max( deadline, until );
+		},
+		/*
+  ================
   step
   ================
   */

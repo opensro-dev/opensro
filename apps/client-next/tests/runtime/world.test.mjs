@@ -2903,6 +2903,7 @@ async function lostAnswerWorld( t ) {
 	t.after( () => world.dispose() );
 	const entry = {
 		...bootstrap,
+		simulationProtocolVersion: 1,
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
 		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
@@ -3148,4 +3149,48 @@ test("an input refused before the world is ready still advances the published in
 	world.step( 6 );
 	drain();
 	assert.equal( defined( presentation.gameplay() ).movementInputSeq, 3 );
+});
+
+/*
+================
+A scene's reference frames fill the ordered stream ahead of every answer
+
+Prod (#2148): 42 of 44 movement timeouts with a live link had taken up to
+2.4 MB of opcode 14 in their last 10 s and no game frame. The frames proved
+the link was delivering, yet nothing behind them could arrive, so an answer
+outlived its flat deadline and the session resumed into the same references.
+================
+*/
+test("an answer queued behind scene references is not lost while they arrive", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 9000; at <= 25000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	// When they stop, the answer has its flat wait and no more.
+	world.step( 34999 );
+	assert.equal( world.status().phase, "world" );
+	world.step( 35001 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+});
+
+test("a movement receipt queued behind scene references is not lost while they arrive", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 100 } }, 4 );
+	world.step( 5 );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 5000; at <= 25000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	world.step( 35100 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "movement_receipt_timeout" );
 });
