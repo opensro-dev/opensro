@@ -249,7 +249,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 	// device never compiles them. The float target format is the one owner.
 	const SCENE_FLOAT_FORMAT: GPUTextureFormat = "rgba16float";
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f,camera:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -322,6 +322,12 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
+// Port-only water refraction (device/water-refraction.ts): the frame's own
+// colour and depth before the water drew, copied for the water's fragment.
+@group(0) @binding(15) var sceneBehind:texture_2d<f32>;
+// The stage's depth copy is r32float (a depth attachment cannot be
+// resolved), so this reads a plain float texture, not a depth view.
+@group(0) @binding(16) var sceneBehindDepth:texture_2d<f32>;
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -352,12 +358,53 @@ fn sunShadowFactor(world:vec3f)->f32{
  let border=1.0-smoothstep(${SUN_SHADOW_FADE},0.5,max(abs(uv.x-0.5),abs(uv.y-0.5)));
  return mix(1.0,sum/9.0,border);
 }
+// Port-only, not native: the Water reflections row's screen-space trace.
+// The reflected ray marches in world space - the camera basis env already
+// carries (forward and the pre-scaled right/up, tangent and aspect
+// recovered from their lengths, near and far from env.camera) - and every
+// step reprojections onto the frame without any matrix. A step whose
+// copied depth stands in front of the ray point hit: the take is the
+// copied frame's colour, weighted by the march's length so distant and
+// grazing reflections fade out.
+fn ssrWaterReflection(screenUv:vec2f,depth01:f32,bumpOff:vec2f)->vec4f{
+ let t=length(env.up.xyz);
+ let asp=length(env.right.xyz)/t;
+ let fHat=normalize(env.forward.xyz);
+ let rHat=env.right.xyz/(t*asp);
+ let uHat=env.up.xyz/t;
+ let near=max(env.camera.x,0.1);
+ let far=max(env.camera.y,near+1.0);
+ let ndc=vec2f(screenUv.x*2.0-1.0,1.0-screenUv.y*2.0);
+ let ray=normalize(fHat+rHat*ndc.x+uHat*ndc.y);
+ let linFrag=near*far/(far-depth01*(far-near));
+ // The fragment's own position, relative to the eye; the surface's flat
+ // normal reflects the view ray upward off the water.
+ var p=ray*(linFrag/dot(ray,fHat));
+ let dir=reflect(ray,vec3f(0,1,0));
+ let frame=vec2f(textureDimensions(sceneBehindDepth));
+ for(var i=0;i<24;i=i+1){
+  p=p+dir;
+  let vz=dot(p,fHat);
+  if(vz<=near||vz>=far){break;}
+  let ndc2=vec2f(dot(p,rHat)*t*asp/vz,dot(p,uHat)*t/vz);
+  if(abs(ndc2.x)>1.0||abs(ndc2.y)>1.0){break;}
+  let uv2=vec2f(ndc2.x*.5+.5,.5-ndc2.y*.5)+bumpOff;
+  if(uv2.x<0.0||uv2.y<0.0||uv2.x>1.0||uv2.y>1.0){break;}
+  let at=clamp(vec2i(uv2*frame),vec2i(0),vec2i(frame)-vec2i(1));
+  let linScene=near*far/(far-textureLoad(sceneBehindDepth,at,0).r*(far-near));
+  if(linScene<vz-0.15){
+   let c=textureSampleLevel(sceneBehind,textureSampler,uv2,0).rgb;
+   return vec4f(c,1.0-f32(i)/24.0);
+  }
+ }
+ return vec4f(0,0,0,0);
+}
 struct SkinVertex {joints:vec4u,weights:vec4f}
 @group(0) @binding(6) var<storage,read> skinVertices:array<SkinVertex>;
 @group(0) @binding(7) var<storage,read> bones:array<mat4x4f>;
 @group(0) @binding(8) var sphereMap:texture_2d_array<f32>;
 @group(0) @binding(9) var waterMirror:texture_2d<f32>;
-struct WaterPass {matrix:mat4x4f,plane:vec4f,bump:vec4f,projection:vec4f}
+struct WaterPass {matrix:mat4x4f,plane:vec4f,bump:vec4f,projection:vec4f,ssr:vec4f}
 @group(0) @binding(10) var<uniform> waterPass:WaterPass;
 // 8BA130: stage 0 bump clamps; stage 1 reflection wraps. Both filter linearly.
 @group(0) @binding(11) var waterBumpSampler:sampler;
@@ -552,7 +599,52 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   let litTerrain=clamp(light.rgb+env.shadow.rgb,vec3f(0),vec3f(1))*sunShade;
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
- if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
+ if(animated&&waterPass.plane.w<0.5){
+  // Native: the planar reflection alone. Port-only refraction (stages2.w,
+  // device/water-refraction.ts): the water drew after a copy of the frame,
+  // so its fragment can bend what sits under the surface by its own bump
+  // offset and whiten where the depth behind it reaches its own depth -
+  // the shore. Port-only reflections (waterPass.ssr.x, the Water
+  // reflections row): the reflection term's SOURCE becomes a march of the
+  // copied depth; the planar mirror stays the fallback and the only term
+  // while the row is off.
+  var reflection=waterColor;
+  var reflectionOn=waterPass.plane.z>0.5;
+  if(waterPass.ssr.x>0.5){
+   let frame=vec2f(textureDimensions(sceneBehindDepth));
+   var bumpOff=vec2f(0);
+   if(material.reflection.w>0.5){
+    let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+    bumpOff=vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv));
+   }
+   let trace=ssrWaterReflection(vec2f(input.position.xy)/frame,input.position.z,bumpOff*0.05);
+   if(trace.a>0.0){reflection=trace.rgb*trace.a;reflectionOn=true;}
+  }
+  if(env.stages2.w<0.5){
+   // Native: the planar reflection over the frame's own lit water where a
+   // mirror exists (plane.z) - or the traced reflection under the row -
+   // the water's lit texture untouched otherwise, the retail condition
+   // while both rows are off.
+   if(reflectionOn){lit=reflection;}
+  }else{
+   let frame=vec2f(textureDimensions(sceneBehind));
+   let screenUv=vec2f(input.position.xy)/frame;
+   let dudv=(textureSampleLevel(sphereMap,waterBumpSampler,input.uv*vec2f(.25,-.25)+vec2f(0,1),0,0).rg*255.0-128.0)/127.0;
+   let bumpOffset=select(vec2f(0),vec2f(dot(waterPass.bump.xy,dudv),dot(waterPass.bump.zw,dudv)),material.reflection.w>0.5);
+   let behind=textureSampleLevel(sceneBehind,textureSampler,clamp(screenUv+bumpOffset*0.03,vec2f(0),vec2f(1)),0).rgb;
+   // The shore band in view-space metres: both depths linearised over the
+   // camera's near/far (env.camera, written per frame), not raw [0,1]
+   // buffer values whose spacing stretches with distance.
+   let depthBehind=textureLoad(sceneBehindDepth,vec2i(input.position.xy),0).r;
+   let near=max(env.camera.x,0.1);
+   let far=max(env.camera.y,near+1.0);
+   let linBehind=near*far/(far-depthBehind*(far-near));
+   let linFrag=near*far/(far-input.position.z*(far-near));
+   let shore=clamp(1.0-abs(linBehind-linFrag)/2.0,0.0,1.0);
+   let reflected=select(input.color.rgb*material.color.rgb,reflection,reflectionOn);
+   lit=mix(behind*0.85,reflected,0.45)+vec3f(shore*0.4);
+  }
+ }
  // An unblended draw's surviving pixel is opaque: the retail back buffer
  // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
  // mask's) must not reach a transparent target such as the viewer's doll,

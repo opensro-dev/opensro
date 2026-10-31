@@ -11,7 +11,7 @@ already recorded for the same frame. Capture bindings never sample the target.
 import { WATER_REFLECTION_SIZE, waterTextureProjection } from "@/engine/foundation/rendering/water-reflection";
 import type { GeometryDraw } from "../internal/gpu-contract";
 import type { Retire } from "./retirement";
-const UNIFORM_BYTES = 112;
+const UNIFORM_BYTES = 128;
 
 /*
 ================
@@ -43,7 +43,13 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 		Return true when bind groups must be rebuilt after an option transition.
 		================
 		*/
-		update( matrix: Float32Array | undefined, height: number, above: boolean, seconds: number ) {
+		update(
+			matrix: Float32Array | undefined,
+			height: number,
+			above: boolean,
+			seconds: number,
+			reflections: boolean
+		) {
 			const changed = !!matrix !== !!color;
 			if ( matrix && !color ) {
 				color = device.createTexture( {
@@ -69,6 +75,10 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 				depthView = undefined;
 			}
 			values.fill( 0 );
+			// The Water reflections row rides the uniform with or without a
+			// mirror: the trace is the reflection's only source when the
+			// native mirror is off (pipelines.ts's ssrWaterReflection).
+			values[28] = reflections ? 1 : 0;
 			if ( matrix ) {
 				const angle = Math.fround( Math.fround( seconds * .5 ) * 9 ),
 					c = Math.fround( Math.cos( angle ) ),

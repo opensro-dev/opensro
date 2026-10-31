@@ -90,6 +90,8 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		waterRefraction: false,
+		waterReflections: false,
 		smoothCamera: false,
 		enchantSparks: false,
 		sharedActorRoom: false,

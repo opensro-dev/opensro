@@ -32,7 +32,7 @@ test("reflection remembers format changes while absent and recreates live target
 	try {
 		assert.equal( water.reformat( "rgba16float" ), false );
 		assert.deepEqual( formats, [], "a format preference alone allocates nothing" );
-		water.update( identity(), 0, true, 0 );
+		water.update( identity(), 0, true, 0, false );
 		assert.deepEqual( formats, [ "rgba16float", "depth24plus" ] );
 		const first = water.view();
 		assert.equal( water.reformat( "rgba16float" ), false );
@@ -40,12 +40,12 @@ test("reflection remembers format changes while absent and recreates live target
 		assert.equal( water.reformat( "bgra8unorm" ), true );
 		assert.notEqual( water.view(), first );
 		assert.equal( retired.length, 1 );
-		water.update( undefined, 0, true, 0 );
+		water.update( undefined, 0, true, 0, false );
 		assert.equal( water.reformat( "rgba16float" ), false );
-		water.update( identity(), 0, true, 0 );
-		water.update( undefined, 0, true, 0 );
+		water.update( identity(), 0, true, 0, false );
+		water.update( undefined, 0, true, 0, false );
 		assert.equal( water.reformat( "bgra8unorm" ), false );
-		water.update( identity(), 0, true, 0 );
+		water.update( identity(), 0, true, 0, false );
 		assert.deepEqual( formats, [
 			"rgba16float",
 			"depth24plus",
@@ -101,21 +101,21 @@ test("reflection allocates once, retires after submission, recreates and dispose
 		retirement.retire
 	);
 	assert.equal( gpu.live(), 2 );
-	assert.equal( water.update( undefined, 0, true, 0 ), false );
-	assert.equal( water.update( identity(), 0, true, 0 ), true );
+	assert.equal( water.update( undefined, 0, true, 0, false ), false );
+	assert.equal( water.update( identity(), 0, true, 0, false ), true );
 	const first = water.view();
 	assert.equal( gpu.live(), 4 );
-	assert.equal( water.update( identity(), 0, true, 1 ), false );
+	assert.equal( water.update( identity(), 0, true, 1, false ), false );
 	assert.equal( water.view(), first );
 	retirement.open();
 	const encoder = gpu.device.createCommandEncoder( { label: "water-frame" } );
 	water.encode( /** @type {GPUCommandEncoder} */ (/** @type {unknown} */ (encoder)), [] );
-	assert.equal( water.update( undefined, 0, true, 2 ), true );
+	assert.equal( water.update( undefined, 0, true, 2, false ), true );
 	assert.equal( retirement.waiting(), 2 );
 	assert.doesNotThrow( () => gpu.device.queue.submit( [ encoder.finish() ] ) );
 	retirement.close();
 	assert.equal( gpu.live(), 2 );
-	water.update( identity(), 0, false, 3 );
+	water.update( identity(), 0, false, 3, false );
 	assert.notEqual( water.view(), first );
 	water.dispose();
 	assert.equal( gpu.live(), 0 );

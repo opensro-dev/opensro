@@ -42,7 +42,9 @@ const VIDEO = Object.freeze( {
 	floatBloom: false,
 	hdrToneMap: false,
 	sunShadow: false,
-	perPixelLighting: false
+	perPixelLighting: false,
+	waterRefraction: false,
+	waterReflections: false
 } );
 
 /*

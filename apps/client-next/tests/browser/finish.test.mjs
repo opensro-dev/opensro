@@ -60,7 +60,9 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 					floatBloom: false,
 					hdrToneMap: false,
 					sunShadow: false,
-					perPixelLighting: false
+					perPixelLighting: false,
+					waterRefraction: false,
+					waterReflections: false
 				} );
 				try {
 					const deadline = performance.now() + 15000;

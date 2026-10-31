@@ -663,7 +663,13 @@ export function createRenderer(
 					scene.environment.set( viewerLight.direction, ENVIRONMENT_SUN_DIRECTION );
 				}
 				const shadowOn = experimental.sunShadow && !preview;
-				device.worldView( scene.matrix, scene.environment, shadowOn, viewerLight !== null );
+				device.worldView(
+					scene.matrix,
+					scene.environment,
+					shadowOn,
+					viewerLight !== null,
+					[ scene.camera.near, scene.camera.far ]
+				);
 				presentationCamera = {
 					regionId: scene.originRegion,
 					x: scene.camera.eye[0],
@@ -834,13 +840,18 @@ export function createRenderer(
 					targetSurface = surface;
 				// Port-only, not native. Experimental owns the opt-in; 100 keeps
 				// the native surface and pass order. UI keeps its full resolution.
+				// The reflections row needs the retained frame like the
+				// refraction row does: the stage copies the scene's colour and
+				// depth, and the swap buffer is not readable.
+				const ssrOn = experimental.waterReflections && !preview;
 				const renderScale = sceneRenderScale( experimental, viewport, phone ),
 					scaled = renderScale < 100,
 					sceneWidth = Math.max( 1, Math.round( viewport.width * renderScale / 100 ) ),
 					sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) ),
 					color = surface.acquire(
 						viewport,
-						experimental.postProcessing || !!deferredPlan?.query,
+						experimental.postProcessing || !!deferredPlan?.query || experimental.waterRefraction ||
+							ssrOn,
 						renderScale
 					);
 				const finishDeferred = ( results?: readonly boolean[] ) => {
@@ -881,14 +892,37 @@ export function createRenderer(
 					undefined;
 				// Each owner's list is checked under its own name.
 				// Slices keep the scene's terrain/transparent boundaries exact.
-				const terrainDraws = staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
-					opaqueDraws = staleDraws.live(
-						"world-opaque",
-						scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
+				// The reflections march the frame's own depth, so the water
+				// leaves the main pass for the stage under either row.
+				const waterOn = experimental.waterRefraction || ssrOn,
+					waterDraws: GeometryDraw[] = [];
+				// Port-only water refraction: the blended water surfaces leave
+				// the main pass and the refraction stage redraws them (the
+				// opaque water family - the ice - stays where it is).
+				const withoutWater = ( draws: readonly GeometryDraw[] ) =>
+					waterOn ?
+						draws.filter( draw => {
+							if ( draw.water && draw.blended ) {
+								waterDraws.push( draw );
+								return false;
+							}
+							return true;
+						} ) :
+						draws;
+				const terrainDraws = withoutWater(
+						staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) )
 					),
-					transparentDraws = staleDraws.live(
-						"world-transparent",
-						scene.draws.slice( scene.transparentStart )
+					opaqueDraws = withoutWater(
+						staleDraws.live(
+							"world-opaque",
+							scene.draws.slice( scene.terrainEnd ?? 0, scene.transparentStart )
+						)
+					),
+					transparentDraws = withoutWater(
+						staleDraws.live(
+							"world-transparent",
+							scene.draws.slice( scene.transparentStart )
+						)
 					),
 					liveCharacters = staleDraws.live( "characters", characterDraws ),
 					liveShadows = staleDraws.live( "character-shadows", shadowDraws );
@@ -903,6 +937,8 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
+				const refraction = device.waterRefraction( sceneWidth, sceneHeight, waterOn );
+				device.geometry()!.refractionViews( refraction?.colourView ?? null, refraction?.depthView ?? null );
 				const pending = frame!.draw(
 					scaled ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
@@ -944,10 +980,14 @@ export function createRenderer(
 						matrix: scene.reflectionMatrix,
 						height: scene.waterHeight ?? 0,
 						above: scene.camera.eye[1] >= (scene.waterHeight ?? 0),
-						seconds: timeSeconds
+						seconds: timeSeconds,
+						reflections: ssrOn
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
+						water: refraction && waterDraws.length ?
+							{ draws: waterDraws, stage: refraction } :
+							undefined,
 						sceneScale: scaled ?
 							{
 								view: color,
