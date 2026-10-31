@@ -165,6 +165,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Smooth lighting on characters and objects."
 			},
 			{
+				key: "skyDetail",
+				id: "experimental-sky-detail",
+				label: "Sky detail",
+				description: "Drifting clouds, sun glow and rim light."
+			},
+			{
 				key: "enchantSparks",
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",
