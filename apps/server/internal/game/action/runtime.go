@@ -800,7 +800,7 @@ type Runtime struct {
 	// of times a tick (#2143). Tick goroutine only.
 	tickGate struct {
 		ids  []string
-		held []func()
+		held []tickGateHold
 	}
 	// basicAttackCursor is the world key of the intent the last
 	// advanceBasicAttackIntents call served last; the next call resumes

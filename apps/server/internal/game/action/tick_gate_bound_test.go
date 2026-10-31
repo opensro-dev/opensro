@@ -14,6 +14,8 @@ package action
 import (
 	"testing"
 	"time"
+
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -114,11 +116,13 @@ TestTickGateHoldAllocatesNothing
 
 The gate is taken once per TickHook step, dozens of times a tick, so a
 single allocation here multiplies into the tick budget (#2143). The first
-pass grows the buffers; every later one must reuse them.
+pass grows the buffers; every later one must reuse them. The hold sink is
+wired, as in production, so the report path is what gets measured.
 ================
 */
 func TestTickGateHoldAllocatesNothing(t *testing.T) {
 	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	rt.PublicationHold = func(string, time.Duration) {}
 	rt.LockPublication(testDivision, "test")() // make the lane
 	hold := func() {
 		if !rt.acquireTickGate() {
@@ -129,5 +133,38 @@ func TestTickGateHoldAllocatesNothing(t *testing.T) {
 	hold()
 	if allocs := testing.AllocsPerRun(100, hold); allocs != 0 {
 		t.Fatalf("one gate hold allocated %.0f times, want 0", allocs)
+	}
+}
+
+/*
+================
+TestTickGateReportsALongHold
+
+The tick's hold names itself in the gate-hold report, as every other holder
+does; a stall report that lost the tick would blame only the waiters.
+================
+*/
+func TestTickGateReportsALongHold(t *testing.T) {
+	rt, _, _, _ := newCombatTestRuntime(t, 100)
+	var labels []string
+	rt.PublicationHold = func(label string, elapsed time.Duration) {
+		labels = append(labels, label)
+	}
+	rt.LockPublication(testDivision, "test")() // make the lane
+	labels = nil
+	if !rt.acquireTickGate() {
+		t.Fatal("a free gate cut the step")
+	}
+	rt.releaseTickGate()
+	if len(labels) != 0 {
+		t.Fatalf("a short hold reported %v", labels)
+	}
+	if !rt.acquireTickGate() {
+		t.Fatal("a free gate cut the step")
+	}
+	rt.tickGate.held[0].acquired = time.Now().Add(-2 * simulation.SlowHookThreshold)
+	rt.releaseTickGate()
+	if len(labels) != 1 || labels[0] != "tick" {
+		t.Fatalf("a long hold reported %v, want one tick report", labels)
 	}
 }

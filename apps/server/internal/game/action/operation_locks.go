@@ -219,6 +219,18 @@ func releaseTickPublication(releases []func()) func() {
 
 /*
 ================
+tickGateHold
+
+One publication gate the tick holds, and when it was taken.
+================
+*/
+type tickGateHold struct {
+	lane     *divisionLane
+	acquired time.Time
+}
+
+/*
+================
 tryLockTickPublication
 
 lockTickPublication that gives up after bound (#2143), holding in rt.tickGate
@@ -239,7 +251,7 @@ func (rt *Runtime) tryLockTickPublication(bound time.Duration) bool {
 			}
 			time.Sleep(tickGatePollInterval)
 		}
-		rt.tickGate.held = append(rt.tickGate.held, rt.publicationRelease(lane, "tick"))
+		rt.tickGate.held = append(rt.tickGate.held, tickGateHold{lane: lane, acquired: time.Now()})
 	}
 	return true
 }
@@ -254,7 +266,9 @@ The unbounded form, for a tick past its cut limit, holding in rt.tickGate.
 func (rt *Runtime) waitTickPublication() {
 	rt.tickGate.ids = rt.publicationDivisions(rt.tickGate.ids)
 	for _, id := range rt.tickGate.ids {
-		rt.tickGate.held = append(rt.tickGate.held, rt.LockPublication(id, "tick"))
+		lane := rt.operations.lane(id, &rt.maintenance)
+		lane.publication.Lock()
+		rt.tickGate.held = append(rt.tickGate.held, tickGateHold{lane: lane, acquired: time.Now()})
 	}
 }
 
@@ -263,13 +277,19 @@ func (rt *Runtime) waitTickPublication() {
 releaseTickGate
 
 Gives back what rt.tickGate holds, last taken first, and keeps the buffer.
+A long hold is reported as publicationRelease reports one, without the
+closure it would build per division per step.
 ================
 */
 func (rt *Runtime) releaseTickGate() {
 	held := rt.tickGate.held
 	for i := len(held) - 1; i >= 0; i-- {
-		held[i]()
-		held[i] = nil
+		elapsed := time.Since(held[i].acquired)
+		held[i].lane.releasePublication()
+		if rt.PublicationHold != nil && elapsed >= simulation.SlowHookThreshold {
+			rt.PublicationHold("tick", elapsed)
+		}
+		held[i] = tickGateHold{}
 	}
 	rt.tickGate.held = held[:0]
 }
