@@ -338,9 +338,9 @@ type Runtime struct {
 	// differential test sets it, to the full copy. Nil is the narrow
 	// copy.
 	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
-	// castCopy, when set, replaces the skill press's cast copy
-	// (characterSnapshotCast); only the cast-copy differential test
-	// sets it, to the full copy. Nil is the cast copy.
+	// castCopy, when set, replaces the press/release cast copy
+	// (characterSnapshotCast); only the cast-copy differential tests
+	// set it, to the full or the combat copy. Nil is the cast copy.
 	castCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame

@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -204,6 +205,162 @@ func TestCastPressReadsNoPlainBagRows(t *testing.T) {
 			t.Errorf("skill press: line %d diverged\nnarrow: %.900s\nfull:   %.900s", i, a[i], b[min(i, len(b)-1)])
 			break
 		}
+	}
+}
+
+/*
+================
+crowReleaseCopy
+
+Which copy preparedCrowTrace's release takes: the production cast
+copy, the full copy through the cast seam, or the combat copy through
+the same seam.
+================
+*/
+const (
+	crowReleaseCast = iota
+	crowReleaseFull
+	crowReleaseCombat
+)
+
+/*
+================
+preparedCrowTrace
+
+A crow owner's prepared release, on a bag whose raven record
+rides only in its bag row: the owner charges Guiding Feathers to the
+cap, then the pet's record moves out of ActiveCOS into the bag, so a
+copy that drops bag rows resolves no crow at all. The cast is accepted
+prepared (the monster must be unhurt until the release), the release
+re-copies the caster and strikes, and the trace is the accept and
+release frames and the end state. Armed with the crow, the release's
+impacts carry its empowerment; without it they land plain.
+================
+*/
+func preparedCrowTrace(t *testing.T, copyKind int) string {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+	rt.AttackPetExpansion = true
+	// The crow lane refuses town: stage in the field, follower at the
+	// caster, and the strike target three metres out (roarField's shape
+	// at sword reach instead of thirty metres).
+	c.World.Spawn.RegionID = testInt64(0x62a6)
+	rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
+	rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).follower = simulation.NewPetFollower(c.ActiveCOS.GID, rt.LiveSpawnFor(testDivision, c))
+	lease, ok := rt.casterPopulation(testDivision, c)
+	if !ok {
+		t.Fatal("no caster population")
+	}
+	at := rt.LiveSpawnFor(testDivision, c)
+	at.X += 3
+	if rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{Division: testDivision, Population: lease, RefObjID: 1933, Count: 1, Position: at, NowMs: clock.NowMs()}) != 1 {
+		t.Fatal("no strike target")
+	}
+	rows := rt.Monsters.CombatCandidatesInPopulation(testDivision, lease, at, 1, clock.NowMs(), true)
+	if len(rows) != 1 {
+		t.Fatal("strike target not found")
+	}
+	target := rows[0]
+	learnPetBook(t, c, 50)
+	learnPetBook(t, c, 59)
+	step, ok := rt.elementalCompanion(testDivision, c, c.ActiveCOS.GID, "Crow", clock.NowMs())
+	if !ok {
+		t.Fatal("crow fixture not eligible")
+	}
+	for range 8 {
+		rt.crowAfterAttack(step, []uint32{target.Gid})
+	}
+	if got := step.state.crow.precision[enterworld.ObjectIDForCharacter(c)].stacks; got != crowChargeCap {
+		t.Fatalf("precision stacks = %d, want the cap %d", got, crowChargeCap)
+	}
+	crow := c.ActiveCOS
+	if crow == nil || !crow.Summoned {
+		t.Fatal("crow fixture pet is not a summoned active pet")
+	}
+	c.ActiveCOS = nil
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 15, RefObjID: 3913, Codename: "ITEM_COS_P_RAVEN", StackCount: 1, Summon: crow})
+
+	items := rt.deps.ItemReferences().(cosTestItemSource)
+	items.staticItemSource["ITEM_CH_SWORD_01_A"] = &enterworld.ItemRef{
+		RefObjID: 71,
+		Codename: "ITEM_CH_SWORD_01_A",
+		TypeIDs:  [4]int64{3, 1, 6, 2},
+		Combat: &enterworld.ItemCombatRef{
+			ActionRange:    6,
+			PhysicalAttack: enterworld.ItemAttackRange{Minimum: enterworld.ItemStatRange{Min: 15, Max: 16, PerPlus: 2.4000001}, Maximum: enterworld.ItemStatRange{Min: 16, Max: 18, PerPlus: 2.4000001}},
+			MagicalAttack:  enterworld.ItemAttackRange{Minimum: enterworld.ItemStatRange{Min: 25, Max: 26, PerPlus: 4.0999999}, Maximum: enterworld.ItemStatRange{Min: 28, Max: 31, PerPlus: 4.0999999}},
+			HitRate:        enterworld.ItemStatRange{Min: 24, Max: 30},
+			CriticalRate:   enterworld.ItemStatRange{Min: 3, Max: 15},
+		},
+	}
+	// A damaging non-base skill: Guiding Feathers empowers only those
+	// (crowSkillEmpowers), so the fixture's base attack cannot witness it.
+	// The shipped bow row is the prepared direct skill the projectile
+	// lane already pins (arrowFixture's shape, on this runtime's items).
+	weapon := items.staticItemSource[c.MissionInventory[0].Codename]
+	weapon.TypeIDs[3] = 6
+	weapon.Combat.ActionRange = 180
+	c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	arrow := &enterworld.ItemRef{RefObjID: 62001, Codename: "ITEM_ETC_AMMO_ARROW_01", TypeIDs: [4]int64{3, 3, 4, 1}}
+	items.staticItemSource[arrow.Codename] = arrow
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 7, RefObjID: arrow.RefObjID, Codename: arrow.Codename, TypeFlags: arrow.TypeFlags(), StackCount: 10})
+	skill := shippedOffense(t, "SKILL_CH_BOW_CRITICAL_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.CurrentMP = testInt64(100)
+	rt.CombatRoll = func() (uint32, error) { return 10, nil }
+
+	switch copyKind {
+	case crowReleaseFull:
+		forceFullCastCopy(rt)
+	case crowReleaseCombat:
+		rt.castCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			return rt.characterSnapshotCombat(divisionID, character)
+		}
+	}
+
+	before, _ := rt.Monsters.Get(testDivision, target.Gid)
+	now := clock.NowMs()
+	press, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshotCast(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}, now, rt.handlerDoors())
+	trace := fmt.Sprintf("%+v %v\n", press, decision)
+	prepared, _ := rt.Monsters.Get(testDivision, target.Gid)
+	if prepared.CurrentHP != before.CurrentHP {
+		t.Fatal("the press struck at once; the trace would pin the press copy, not the release")
+	}
+	trace += fmt.Sprintf("%+v\n", rt.advanceProjectileCasts(now+2000))
+	after, _ := rt.Monsters.Get(testDivision, target.Gid)
+	if after.CurrentHP >= before.CurrentHP {
+		t.Fatal("the prepared release never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("hp=%d rows=%s", after.CurrentHP, combatRowsView(c))
+}
+
+/*
+================
+TestPreparedReleaseResolvesTheBagRowCrow
+
+The prepared-cast release takes the cast copy: its strike resolves
+the caster's crow through the bag-row Summon record (the crow lane
+at the strike), so the release lands exactly as on the full copy.
+On the combat copy the row is dropped, no crow answers, and the
+empowerment is silently lost - the failure #1997 left at this root
+when it converted the release and the press lane diverged.
+================
+*/
+func TestPreparedReleaseResolvesTheBagRowCrow(t *testing.T) {
+	cast := preparedCrowTrace(t, crowReleaseCast)
+	full := preparedCrowTrace(t, crowReleaseFull)
+	if cast != full {
+		a, b := strings.Split(cast, "\n"), strings.Split(full, "\n")
+		for i := range a {
+			if i >= len(b) || a[i] != b[i] {
+				t.Fatalf("prepared release: line %d diverged\ncast: %.900s\nfull: %.900s", i, a[i], b[min(i, len(b)-1)])
+			}
+		}
+		t.Fatal("prepared release: cast and full traces differ in length")
+	}
+	if combat := preparedCrowTrace(t, crowReleaseCombat); combat == cast {
+		t.Fatal("prepared release on the combat copy matched: the crow never empowered the release strike")
 	}
 }
 
