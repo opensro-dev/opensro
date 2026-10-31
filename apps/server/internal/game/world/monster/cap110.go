@@ -88,6 +88,7 @@ type cap110Nest struct {
 	MaxCount, RespawnDelayMinSec, RespawnDelayMaxSec int
 	Respawn                                          bool
 	InitialDir                                       uint16
+	SpawnType                                        int
 	ChampionGenPercentage                            int
 	Controls                                         TacticsControls
 	Champion                                         *TacticsControls
@@ -233,7 +234,7 @@ func appendNests(template Template, data []byte, label string, admit func(Monste
 			SpawnPoint: SpawnPoint{RefObjID: ref.RefObjID, RegionID: row.RegionID, X: row.X, Y: row.Y, Z: row.Z},
 			Radius:     row.Radius, GenerateRadius: row.GenerateRadius, MaxCount: row.MaxCount,
 			RespawnDelayMinSec: row.RespawnDelayMinSec, RespawnDelayMaxSec: row.RespawnDelayMaxSec,
-			Respawn: row.Respawn, InitialDir: row.InitialDir, ChampionGenPercentage: row.ChampionGenPercentage,
+			Respawn: row.Respawn, InitialDir: row.InitialDir, SpawnType: row.SpawnType, ChampionGenPercentage: row.ChampionGenPercentage,
 			Controls: row.Controls, HasControls: true, Aggressive: row.Controls.AggressType == 0,
 			SightRange: float64(row.Controls.SightRange), TargetPolicy: row.Controls.ChangeTarget,
 			NativeTacticsFlags: row.Controls.Flags,
