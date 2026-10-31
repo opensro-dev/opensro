@@ -259,3 +259,71 @@ func TestPetBurstKillCreditsNoQuest(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCreditedHitBuildsTheRewardRosterOnlyForAKill
+
+The roster serves a kill alone (#2030): a surviving credited hit must
+not build it, a killing one must. Presence queries witness the build -
+the roster asks once per eligible character it materializes.
+================
+*/
+func TestCreditedHitBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	rt, clock, c, mob := newCombatTestRuntime(t, 10000)
+	presence := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		presence++
+		return true
+	}
+	row := rt.deps.SkillData().(staticSkillSource)[2]
+	snapshot := rt.characterSnapshot(testDivision, c)
+	hit, ok := rt.commitCreditedMonsterHit(testDivision, c, snapshot, row, mob, combat.Result{Damage: 50, ResultFlags: 1}, "test-hit", clock.NowMs())
+	if !ok || len(hit.impacts) == 0 || hit.impacts[0].Fatal {
+		t.Fatalf("the surviving hit did not commit plainly: %+v", hit)
+	}
+	if presence != 0 {
+		t.Fatalf("a surviving hit built the reward roster (%d presence queries)", presence)
+	}
+
+	rt2, clock2, c2, doomed := newCombatTestRuntime(t, 1)
+	presence2 := 0
+	rt2.RewardActorPresent = func(division, name string) bool {
+		presence2++
+		return true
+	}
+	row2 := rt2.deps.SkillData().(staticSkillSource)[2]
+	snapshot2 := rt2.characterSnapshot(testDivision, c2)
+	hit2, ok := rt2.commitCreditedMonsterHit(testDivision, c2, snapshot2, row2, doomed, combat.Result{Damage: 50, ResultFlags: 1}, "test-kill", clock2.NowMs())
+	if !ok || len(hit2.impacts) == 0 || !hit2.impacts[0].Fatal {
+		t.Fatalf("the killing hit did not commit: %+v", hit2)
+	}
+	if presence2 == 0 {
+		t.Fatal("the killing hit never built the reward roster")
+	}
+}
+
+/*
+================
+TestRewardRosterResolvesPosesWhenTheyAreRead
+
+#2030: the roster build resolves no positions; a pose read sees the
+actor where it stands at the read, not where it stood at the build.
+================
+*/
+func TestRewardRosterResolvesPosesWhenTheyAreRead(t *testing.T) {
+	rt, _, actor, _ := newCombatTestRuntime(t, 100)
+	roster := rt.monsterRewardRoster(testDivision, actor, 1000)
+	a, ok := roster.actors[enterworld.ObjectIDForCharacter(actor)]
+	if !ok {
+		t.Fatal("the actor is missing from its own roster")
+	}
+	before := rt.rewardActorPose(testDivision, a, 1000)
+	rt.Worlds.Update(simulation.WorldKey(testDivision, actor.Name),
+		func() simulation.WorldState { panic("the actor world must exist") },
+		func(w *simulation.WorldState) { w.Spawn.X = before.X + 5000 })
+	after := rt.rewardActorPose(testDivision, a, 1000)
+	if after.X != before.X+5000 {
+		t.Fatalf("the pose was frozen at roster build: before %+v, after %+v", before, after)
+	}
+}
