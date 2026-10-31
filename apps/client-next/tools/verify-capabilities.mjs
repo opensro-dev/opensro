@@ -70,6 +70,8 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+// Port-only: the experimental refracted water stage (device/water-refraction.ts).
+const waterRefraction = runtime + "renderer/device/water-refraction.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/VIEWER.md).
@@ -98,7 +100,8 @@ const deviceInternals = [
 	particles,
 	shadows,
 	sunShadow,
-	hdr
+	hdr,
+	waterRefraction
 ];
 export const rules = {
 	createQuerySet: [ timing ],
@@ -370,6 +373,16 @@ for (
 	const name of [
 		"createShaderModule",
 		"createRenderPipeline",
+		"createSampler",
+		"createTexture",
+		"createBindGroup",
+		"beginRenderPass"
+	]
+) rules[name].push( waterRefraction );
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
 		"createTexture",
 		"writeTexture",
 		"createSampler",
@@ -478,6 +491,7 @@ export function verifyCapabilities( base = root ) {
 					shadows,
 					sunShadow,
 					waterReflection,
+					waterRefraction,
 					finish,
 					device,
 					runtime + "renderer/surface/surface.ts"

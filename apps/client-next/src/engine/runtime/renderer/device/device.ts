@@ -14,6 +14,7 @@ import {
 import { createBloom } from "./bloom";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
+import { createWaterRefraction } from "./water-refraction";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
 import { createParticlePresentation } from "./particles";
@@ -24,7 +25,12 @@ import { createUiResources } from "./ui";
 import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
-import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import {
+	ENVIRONMENT_CAMERA_OFFSET,
+	ENVIRONMENT_STAGES2_OFFSET,
+	ENVIRONMENT_STAGES_OFFSET,
+	ENVIRONMENT_UNIFORM_BYTES
+} from "./environment-block";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -79,6 +85,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	// the plain copy to the swapchain, retail samplers, env.stages zero and
 	// env.stages2 zero.
 	let finishEnabled = false, anisotropic = false, bloomFloat = false, hdrOn = false, sunShadowOn = false;
+	// The camera vec4 written per frame (near, far, 0, 0).
+	const cameraValues = new Float32Array( 4 );
 	const stages = new Float32Array( 8 );
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
@@ -97,6 +105,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let flares: ReturnType<typeof createFlares> | null = null;
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
+	let waterStage: ReturnType<typeof createWaterRefraction> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
@@ -451,6 +460,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 			hdr = createHdr( created, navigator.gpu.getPreferredCanvasFormat(), retirement.retire );
 
+			waterStage = createWaterRefraction( created, retirement.retire );
+
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
@@ -545,6 +556,24 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		},
 		/*
 		================
+		waterRefraction
+
+		Prepare the refracted water stage's copy targets (port-only,
+		device/water-refraction.ts); the renderer installs their views into
+		the geometry bindings each frame it draws them.
+		================
+		*/
+		waterRefraction( width, height, enabled ) {
+			if ( phase !== "running" || !waterStage ) throw Error( "Water refraction device is not ready" );
+			return waterStage.prepare(
+				width,
+				height,
+				hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat(),
+				enabled
+			);
+		},
+		/*
+		================
 		sunShadow
 
 		The experimental cascade owner, created by the geometry resources on
@@ -608,14 +637,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			stages.set( [
 				value.heightFog ? 1 : 0,
 				value.dynamicSun ? 1 : 0,
-				// z and w were terrain relief and textured horizon, removed at the
-				// owner's request (2026-10-11); the shaders no longer read them.
-				0,
+				// z was terrain relief, removed at the owner's request (2026-10-11);
+				// it now gates the port-only soft-particle fade.
+				value.softParticles ? 1 : 0,
 				0,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,
-				0
+				value.waterRefraction ? 1 : 0
 			] );
 			// The HDR stage flips every scene target's format: geometry
 			// re-pipelines, the mirror reformats, the portraits retire.
@@ -715,7 +744,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		Publish the frame transform and environment uniforms together.
 		================
 		*/
-		worldView( transform, environment, shadowEnabled = true, directional = false ) {
+		worldView( transform, environment, shadowEnabled = true, directional = false, camera?: readonly number[] ) {
 			if ( phase === "running" ) {
 				// Preview scenes have no cascade; keep the saved preference for world re-entry.
 				stages[5] = sunShadowOn && shadowEnabled ? 1 : 0;
@@ -727,6 +756,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					environment.byteOffset,
 					environment.byteLength
 				);
+				// The camera's near and far for the shaders' depth linearisation.
+				if ( camera ) {
+					cameraValues[0] = camera[0] ?? 1;
+					cameraValues[1] = camera[1] ?? cameraValues[0] + 499;
+					device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_CAMERA_OFFSET, cameraValues );
+				}
 				// The viewer's studio light uses the sun-direction stage's switch for
 				// its own frames only; the saved Experimental choice is kept.
 				const dynamicSun = stages[1]!;
@@ -855,6 +890,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			bloom = null;
 			hdr?.dispose();
 			hdr = null;
+			waterStage?.dispose();
+			waterStage = null;
 			finish?.dispose();
 			finish = null;
 			particleQuery?.dispose();

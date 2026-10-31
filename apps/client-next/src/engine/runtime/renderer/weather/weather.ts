@@ -283,7 +283,8 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 							blend: true,
 							doubleSided: true,
 							unlit: true,
-							fogDisabled: true
+							fogDisabled: true,
+							softDepth: true
 						}
 					}, image );
 					batch = { draw, capacity, positions, colors, image };

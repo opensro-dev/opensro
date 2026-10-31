@@ -102,6 +102,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
+			const water = experimental?.water;
+			const softParticles = experimental?.softParticles;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
@@ -269,7 +271,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+							depthStoreOp: flares || deferred || water ||
+									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
@@ -284,18 +287,32 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && worldUiBundle ) {
+			if ( !bloom && !deferred && !hdrScene && !sceneScale && !water && worldUiBundle ) {
 				pass.executeBundles( [ worldUiBundle ] );
 			}
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+			if (
+				!bloom && !deferred && !hdrScene && !sceneScale && !water && !flares && !thunder && backgroundBundle
+			) {
 				pass.executeBundles( [ backgroundBundle ] );
 			}
 			if (
-				!bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle
+				!bloom && !deferred && !hdrScene && !sceneScale && !water && !flares && !thunder && !preview.length &&
+				uiBundle
 			) {
 				pass.executeBundles( [ uiBundle ] );
 			}
 			pass.end();
+			// Port-only water refraction: the frame without the water is
+			// complete; the stage copies it and redraws the water refracted,
+			// before anything reads the frame.
+			if ( water && depth ) {
+				water.stage.encode( encoder, sceneView, depth, sceneView, depth, water.draws );
+			}
+			// Port-only soft particles: the same copied depth carries their
+			// fade; their overlay follows the water's.
+			if ( softParticles && depth ) {
+				softParticles.overlay( encoder, sceneView, depth, softParticles.draws );
+			}
 			/*
 			================
 			previewPass
@@ -430,7 +447,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				// Port-only, not native: labels keep full-resolution pixels and
 				// scene occlusion after HDR or reduced-resolution scene rendering.
-				if ( (hdrScene || sceneScale) && worldUiBundle ) {
+				if ( (hdrScene || sceneScale || water) && worldUiBundle ) {
 					sceneScale?.resolveDepth( encoder );
 					const labels = encoder.beginRenderPass( {
 						label: "hdr-world-ui",
@@ -448,7 +465,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					labels.executeBundles( [ worldUiBundle ] );
 					labels.end();
 				}
-				if ( flares || thunder || bloom || hdrScene || sceneScale ) {
+				if ( flares || thunder || bloom || hdrScene || sceneScale || water || softParticles ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
 						label: "hud-after-flares",

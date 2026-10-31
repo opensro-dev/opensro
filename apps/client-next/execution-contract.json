@@ -2445,6 +2445,14 @@
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/water-refraction.ts",
+			"functions": [
+				"encode"
+			],
+			"reason": "The frame owner encodes the refracted water stage right after the scene pass, before anything reads the frame."
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/sun-shadow.ts",
 			"functions": [
 				"encode"
@@ -2590,6 +2598,31 @@
 				"createSunDropMarkers",
 				"step"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/renderer.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"setRefractionViews"
+			],
+			"reason": "The renderer installs the water refraction stage's copied frame views into the geometry bindings each frame it draws them."
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"overlay"
+			],
+			"reason": "The frame owner encodes the soft-particle overlay the renderer bound to the split stage, right after the refracted water."
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/renderer.ts",
+			"provider": "src/engine/runtime/renderer/device/water-refraction.ts",
+			"functions": [
+				"overlay",
+				"encode"
+			],
+			"reason": "The renderer binds the split stage's overlay for the weather sprites it took out of the main pass."
 		}
 	],
 	"boundaries": [

@@ -66,6 +66,9 @@ export interface WorldMaterial {
 	 */
 	readonly objectLightmap?: string;
 	readonly water?: boolean;
+	// Port-only soft particles (device/water-refraction.ts's split): the
+	// draw fades where it meets the scene depth. The weather owner sets it.
+	readonly softDepth?: boolean;
 	readonly blend: boolean;
 	readonly doubleSided: boolean;
 	// Presence selects native object vertex lighting; scalar multiplies ambient only.
