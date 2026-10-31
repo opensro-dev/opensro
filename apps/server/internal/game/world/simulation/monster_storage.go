@@ -302,6 +302,22 @@ func (s *monsterStorage) hotRow(gid uint32) (residentMonster, bool) {
 
 /*
 ================
+hotRowSlot
+
+hotRow with the dense slot the row sits in: the behaviour batch
+build stamps the slot on the ref it carries to dispatch (#2133).
+================
+*/
+func (s *monsterStorage) hotRowSlot(gid uint32) (residentMonster, uint32, bool) {
+	slot, ok := s.hotSlotOf(gid)
+	if !ok {
+		return residentMonster{}, 0, false
+	}
+	return s.hot[slot].row, slot, true
+}
+
+/*
+================
 hotRows
 
 Every hot row in slot order (see monsterHotSlot): the walk behind
@@ -335,6 +351,24 @@ func (s *monsterStorage) lookup(gid uint32) (monster.Instance, bool) {
 		return monster.Instance{}, false
 	}
 	return s.hotValue(gid, row), true
+}
+
+/*
+================
+lookupAt
+
+lookup through a slot carried from the behaviour batch build,
+verified against the gid before use. removeHot swaps the last row
+into the hole, so a carried slot can name another actor by dispatch
+time; the caller falls back to lookup on a miss (#2133, the mover
+read's contract). No fallback here: the miss is the signal.
+================
+*/
+func (s *monsterStorage) lookupAt(slot uint32, gid uint32) (monster.Instance, bool) {
+	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
+		return monster.Instance{}, false
+	}
+	return s.hotValue(gid, s.hot[slot].row), true
 }
 
 // monsterSlot.residency values.
