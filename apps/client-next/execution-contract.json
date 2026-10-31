@@ -2590,6 +2590,22 @@
 				"createSunDropMarkers",
 				"step"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/ssao.ts",
+			"functions": [
+				"encode"
+			],
+			"reason": "The frame owner encodes the ambient-occlusion stage right after the scene pass, over the completed depth."
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/renderer.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"setOcclusionView"
+			],
+			"reason": "The renderer installs the occlusion stage's blurred view into the geometry bindings each frame it draws."
 		}
 	],
 	"boundaries": [

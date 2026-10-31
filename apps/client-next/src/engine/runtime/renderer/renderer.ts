@@ -663,7 +663,13 @@ export function createRenderer(
 					scene.environment.set( viewerLight.direction, ENVIRONMENT_SUN_DIRECTION );
 				}
 				const shadowOn = experimental.sunShadow && !preview;
-				device.worldView( scene.matrix, scene.environment, shadowOn, viewerLight !== null );
+				device.worldView(
+					scene.matrix,
+					scene.environment,
+					shadowOn,
+					viewerLight !== null,
+					[ scene.camera.near, scene.camera.far ]
+				);
 				presentationCamera = {
 					regionId: scene.originRegion,
 					x: scene.camera.eye[0],
@@ -903,6 +909,8 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
+				const occlusion = device.ambientOcclusion( sceneWidth, sceneHeight, experimental.ambientOcclusion );
+				device.geometry()!.occlusionView( occlusion?.occlusionView ?? null );
 				const pending = frame!.draw(
 					scaled ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
@@ -948,6 +956,9 @@ export function createRenderer(
 					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
+						ambientOcclusion: occlusion ?
+							{ stage: occlusion, near: scene.camera.near, far: scene.camera.far } :
+							undefined,
 						sceneScale: scaled ?
 							{
 								view: color,

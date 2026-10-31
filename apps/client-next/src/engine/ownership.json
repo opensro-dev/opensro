@@ -238,6 +238,7 @@
     "src/engine/runtime/assets/worker/world/mesh-admission/mesh-admission.ts": "src/engine/runtime/assets/worker/world/world.ts",
     "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/ssao.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts"
   },

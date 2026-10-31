@@ -106,6 +106,24 @@ The experimental sun cascade (device/sun-shadow.ts). The renderer prepares
 it per frame and the frame owner encodes its caster pass.
 ================
 */
+/*
+================
+SSAODraw
+
+The experimental ambient-occlusion stage (device/ssao.ts). The renderer
+prepares it per frame; the frame owner encodes it after the scene pass.
+================
+*/
+export interface SSAODraw {
+	readonly occlusionView: GPUTextureView;
+	encode( encoder: GPUCommandEncoder, frameDepth: GPUTextureView, near: number, far: number ): void;
+}
+
+/*
+================
+SunShadowOwner
+================
+*/
 export interface SunShadowOwner {
 	active(): boolean;
 	cascadeView(): GPUTextureView;
@@ -133,6 +151,11 @@ export interface ExperimentalFrame {
 	readonly hdr?: HdrDraw;
 	readonly sunShadow?: SunShadowOwner;
 	readonly casters?: readonly GeometryDraw[];
+	readonly ambientOcclusion?: {
+		readonly stage: SSAODraw;
+		readonly near: number;
+		readonly far: number;
+	};
 }
 /*
 ================
@@ -163,6 +186,11 @@ export interface DeviceOwner extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	bloom( width: number, height: number, enabled: boolean ): BloomDraw | undefined;
 	hdr( width: number, height: number, enabled: boolean ): HdrDraw | undefined;
+	ambientOcclusion(
+		width: number,
+		height: number,
+		enabled: boolean
+	): SSAODraw | undefined;
 	sunShadow(): SunShadowOwner;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
@@ -177,7 +205,9 @@ export interface DeviceOwner extends Disposable {
 		transform: Float32Array,
 		environment: Float32Array,
 		shadowEnabled?: boolean,
-		directional?: boolean
+		directional?: boolean,
+		// The camera's near and far, for the shaders' depth linearisation.
+		camera?: readonly number[]
 	): void;
 	sky(): ImageDraw | null;
 	thunder( color: readonly number[] ): ImageDraw;
@@ -362,6 +392,9 @@ GeometryCommands
 ================
 */
 export interface GeometryCommands {
+	/** Port-only ambient occlusion: install or clear the occlusion view
+	 * (device/ssao.ts). */
+	occlusionView( view: GPUTextureView | null ): void;
 	// Port-only, not native: coverage-alpha siblings for the fullscreen HDR
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
 	// original draws because their UI consumer retains native alpha blending.

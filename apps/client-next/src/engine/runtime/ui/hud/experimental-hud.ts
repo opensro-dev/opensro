@@ -165,6 +165,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Smooth lighting on characters and objects."
 			},
 			{
+				key: "ambientOcclusion",
+				id: "experimental-ambient-occlusion",
+				label: "Ambient occlusion",
+				description: "Corners and contact points shade their ambient light."
+			},
+			{
 				key: "enchantSparks",
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",

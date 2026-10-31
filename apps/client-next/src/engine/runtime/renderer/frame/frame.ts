@@ -102,6 +102,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
+			const ssao = experimental?.ambientOcclusion;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
@@ -269,7 +270,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+							depthStoreOp: flares || deferred || ssao ||
+									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
@@ -296,6 +298,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				pass.executeBundles( [ uiBundle ] );
 			}
 			pass.end();
+			// Port-only ambient occlusion: the completed frame's depth feeds
+			// the half-res occlusion the next frame's ambient term samples.
+			if ( ssao && depth ) {
+				ssao.stage.encode( encoder, depth, ssao.near, ssao.far );
+			}
 			/*
 			================
 			previewPass

@@ -249,7 +249,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 	// device never compiles them. The float target format is the one owner.
 	const SCENE_FLOAT_FORMAT: GPUTextureFormat = "rgba16float";
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f,stages2:vec4f,shadowMatrix:mat4x4f,camera:vec4f,stages3:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -322,6 +322,9 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 // below never runs and the native frame is untouched.
 @group(0) @binding(13) var sunShadowMap:texture_depth_2d;
 @group(0) @binding(14) var sunShadowSampler:sampler_comparison;
+// Port-only ambient occlusion (device/ssao.ts): the blurred half-res
+// occlusion of the previous frame's depth; white while the row is off.
+@group(0) @binding(17) var occlusionMap:texture_2d<f32>;
 // The retail light is the pinned 45-degree diagonal; the sun-direction
 // stage replaces it with the arc direction env carries (see the stage
 // comment above the constants).
@@ -457,6 +460,15 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
 		let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  var surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
+ // Port-only ambient occlusion (stages3.x, device/ssao.ts): the
+ // previous frame's blurred half-res occlusion shades the ambient term;
+ // the diffuse keeps its direction. The frame's own pixels position it.
+ if(env.stages3.x>0.5&&material.options.y<0.5){
+  let frameSize=vec2f(textureDimensions(occlusionMap));
+  let occlusion=textureSampleLevel(occlusionMap,textureSampler,vec2f(input.position.xy)/frameSize,0).r;
+  let ambient=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
+  surfaceLight=surfaceLight-ambient*(1.0-occlusion);
+ }
  // Per-pixel character lighting (experimental): the retail vs_1_1 path
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same

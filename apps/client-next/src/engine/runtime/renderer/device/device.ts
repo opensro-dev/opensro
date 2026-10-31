@@ -13,6 +13,7 @@ import {
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
 import { createFinish } from "./finish";
+import { createSSAO } from "./ssao";
 import { createHdr } from "./hdr";
 import { createParticleQuery } from "./particle-query";
 import { createGpuAnimationResources } from "./animation";
@@ -24,7 +25,13 @@ import { createUiResources } from "./ui";
 import { createPipelines } from "./pipelines";
 import { createImages } from "./images";
 import { createGeometryResources } from "./geometry";
-import { ENVIRONMENT_STAGES2_OFFSET, ENVIRONMENT_STAGES_OFFSET, ENVIRONMENT_UNIFORM_BYTES } from "./environment-block";
+import {
+	ENVIRONMENT_CAMERA_OFFSET,
+	ENVIRONMENT_STAGES2_OFFSET,
+	ENVIRONMENT_STAGES3_OFFSET,
+	ENVIRONMENT_STAGES_OFFSET,
+	ENVIRONMENT_UNIFORM_BYTES
+} from "./environment-block";
 import type { DeviceOwner, FrameCommands, SurfaceCommands } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
@@ -80,6 +87,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	// env.stages2 zero.
 	let finishEnabled = false, anisotropic = false, bloomFloat = false, hdrOn = false, sunShadowOn = false;
 	const stages = new Float32Array( 8 );
+	// The third stages vec4's storage; x gates the ambient occlusion.
+	const stages3 = new Float32Array( 4 );
+	// The camera vec4 written per frame (near, far, 0, 0).
+	const cameraValues = new Float32Array( 4 );
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
 	let environmentBuffer: GPUBuffer | null = null,
@@ -98,6 +109,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	let bloom: ReturnType<typeof createBloom> | null = null;
 	let hdr: ReturnType<typeof createHdr> | null = null;
 	let finish: ReturnType<typeof createFinish> | null = null;
+	let ssaoStage: ReturnType<typeof createSSAO> | null = null;
 	let particleQuery: ReturnType<typeof createParticleQuery> | null = null;
 	const degradedPipelines = new Set<string>();
 	const depthTextures = new Set<GPUTexture>();
@@ -453,6 +465,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 			finish = createFinish( created, navigator.gpu.getPreferredCanvasFormat() );
 
+			ssaoStage = createSSAO( created, retirement.retire );
+
 			particleQuery = createParticleQuery( created, navigator.gpu.getPreferredCanvasFormat() );
 			/*
 			================
@@ -545,6 +559,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		},
 		/*
 		================
+		ambientOcclusion
+
+		Prepare the half-resolution occlusion stage (device/ssao.ts);
+		the renderer installs its blurred view into the geometry
+		bindings each frame it is drawn.
+		================
+		*/
+		ambientOcclusion( width, height, enabled ) {
+			if ( phase !== "running" || !ssaoStage ) throw Error( "SSAO device is not ready" );
+			return ssaoStage.prepare( width, height, enabled );
+		},
+		/*
+		================
 		sunShadow
 
 		The experimental cascade owner, created by the geometry resources on
@@ -605,6 +632,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		experimentalVideo( value ) {
 			finishEnabled = value.postProcessing;
 			bloomFloat = value.floatBloom;
+			stages3[0] = value.ambientOcclusion ? 1 : 0;
 			stages.set( [
 				value.heightFog ? 1 : 0,
 				value.dynamicSun ? 1 : 0,
@@ -715,7 +743,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		Publish the frame transform and environment uniforms together.
 		================
 		*/
-		worldView( transform, environment, shadowEnabled = true, directional = false ) {
+		worldView( transform, environment, shadowEnabled = true, directional = false, camera?: readonly number[] ) {
 			if ( phase === "running" ) {
 				// Preview scenes have no cascade; keep the saved preference for world re-entry.
 				stages[5] = sunShadowOn && shadowEnabled ? 1 : 0;
@@ -727,11 +755,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					environment.byteOffset,
 					environment.byteLength
 				);
+				// The camera's near and far for the shaders' depth linearisation.
+				if ( camera ) {
+					cameraValues[0] = camera[0] ?? 1;
+					cameraValues[1] = camera[1] ?? cameraValues[0] + 499;
+					device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_CAMERA_OFFSET, cameraValues );
+				}
 				// The viewer's studio light uses the sun-direction stage's switch for
 				// its own frames only; the saved Experimental choice is kept.
 				const dynamicSun = stages[1]!;
 				if ( directional ) stages[1] = 1;
 				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_STAGES_OFFSET, stages );
+				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_STAGES3_OFFSET, stages3 );
 				stages[1] = dynamicSun;
 			}
 		},
@@ -857,6 +892,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			hdr = null;
 			finish?.dispose();
 			finish = null;
+			ssaoStage?.dispose();
+			ssaoStage = null;
 			particleQuery?.dispose();
 			particleQuery = null;
 			geometry?.dispose();

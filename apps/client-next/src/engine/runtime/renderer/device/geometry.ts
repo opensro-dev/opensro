@@ -90,6 +90,9 @@ export function createGeometryResources(
 	lightmapSampling?: ( anisotropic: boolean ) => GPUSampler
 ) {
 	let filtered = true, detail = 2, anisotropic = false, mixedCpuUploadBytes = 0;
+	// Port-only ambient occlusion: the blurred half-res occlusion view
+	// (device/ssao.ts), or null while the row is off (white binds).
+	let occlusionView: GPUTextureView | null = null;
 	// The HDR stage's scene intermediate flips the colour format every
 	// geometry pipeline renders into; sceneBindings swaps every draw over.
 	let floatScene = false, shadowEnabled = false;
@@ -237,6 +240,34 @@ export function createGeometryResources(
 	geometryBinding
 	================
 	*/
+	/*
+	================
+	setOcclusionView
+
+	Port-only ambient occlusion: install or clear the occlusion view;
+	every draw rebinds against its current pipeline.
+	================
+	*/
+	function setOcclusionView( view: GPUTextureView | null ) {
+		if ( occlusionView === view ) return;
+		occlusionView = view;
+		for ( const [draw, meta] of metadata ) {
+			DeviceDraw.rebind(
+				meta.selection,
+				geometryBinding(
+					meta.uniform,
+					meta.instances,
+					meta.material,
+					draw.pipeline,
+					meta.clampedSampling,
+					meta.image,
+					meta.skin,
+					meta.bones,
+					meta.environmentImage
+				)
+			);
+		}
+	}
 	const geometryBinding = (
 		uniform: Binding,
 		storage: Binding,
@@ -259,6 +290,7 @@ export function createGeometryResources(
 				{ binding: 12, resource: waterSampler },
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
+				{ binding: 17, resource: occlusionView ?? white.createView() },
 				{ binding: 0, resource: uniform },
 				{ binding: 1, resource: storage },
 				{ binding: 2, resource: material },
@@ -347,6 +379,7 @@ export function createGeometryResources(
 			retire
 		);
 	const commands: GeometryCommands = Object.freeze( {
+		occlusionView: setOcclusionView,
 		/*
 		================
 		hdrPreview
@@ -1307,6 +1340,7 @@ export function createGeometryResources(
 		worldView( transform: Float32Array ) {
 			current().queue.writeBuffer( worldUniform, 0, transform.buffer as ArrayBuffer, transform.byteOffset, 64 );
 		},
+		occlusionView: setOcclusionView,
 		/*
 		================
 		sunShadow

@@ -70,6 +70,8 @@ const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
+// Port-only: the experimental ambient-occlusion stage (device/ssao.ts).
+const ssao = runtime + "renderer/device/ssao.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/VIEWER.md).
@@ -98,7 +100,8 @@ const deviceInternals = [
 	particles,
 	shadows,
 	sunShadow,
-	hdr
+	hdr,
+	ssao
 ];
 export const rules = {
 	createQuerySet: [ timing ],
@@ -369,6 +372,20 @@ for (
 for (
 	const name of [
 		"createShaderModule",
+		"createSampler",
+		"createBindGroupLayout",
+		"createPipelineLayout",
+		"createRenderPipeline",
+		"createBuffer",
+		"createTexture",
+		"createBindGroup",
+		"beginRenderPass",
+		"writeBuffer"
+	]
+) rules[name].push( ssao );
+for (
+	const name of [
+		"createShaderModule",
 		"createRenderPipeline",
 		"createTexture",
 		"writeTexture",
@@ -477,6 +494,7 @@ export function verifyCapabilities( base = root ) {
 					geometry,
 					shadows,
 					sunShadow,
+					ssao,
 					waterReflection,
 					finish,
 					device,
