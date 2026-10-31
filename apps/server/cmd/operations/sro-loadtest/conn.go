@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,6 +28,14 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
+// botFrameBuffer is the frame channel's depth. The enter-world burst
+// in a crowd is the deepest the stream ever gets: the server's own
+// outbound queue peaked at 816 frames for a bot entering the 500-bot
+// town, so the bot's cushion must be well past that while 500 bots
+// contend for scheduler time. If it ever fills anyway, readLoop closes
+// and says so (overflow), rather than stalling the socket's reader.
+const botFrameBuffer = 8192
+
 // gameConn is one bot's WebSocket session. Frames arrive on the channel
 // readLoop fills; writes are serialized; applied counts the counted
 // opcodes read so far (the stream position the resume ring covers). The
@@ -37,12 +44,13 @@ import (
 // the transport's own rule (transport.CountsOnStream), so the bot's ack
 // position can never drift from the server's ring if the rule moves.
 type gameConn struct {
-	ws      *websocket.Conn
-	writeMu sync.Mutex
-	frames  chan transport.Frame
-	done    chan struct{}
-	applied atomic.Uint32
-	bytesIn atomic.Uint64
+	ws       *websocket.Conn
+	writeMu  sync.Mutex
+	frames   chan transport.Frame
+	done     chan struct{}
+	applied  atomic.Uint32
+	bytesIn  atomic.Uint64
+	overflow atomic.Bool
 }
 
 /*
@@ -61,7 +69,9 @@ func dialGame(ctx context.Context, base, ticket string, timeout time.Duration) (
 		scheme = "wss://"
 	}
 	address = scheme + strings.TrimPrefix(strings.TrimPrefix(address, "http://"), "https://")
-	dialer := websocket.Dialer{Proxy: http.ProxyFromEnvironment, HandshakeTimeout: timeout}
+	// Direct dial, no proxy: the game target is the isolated stack
+	// itself, and a proxy hop would hide the peer the run is measuring.
+	dialer := websocket.Dialer{Proxy: nil, HandshakeTimeout: timeout}
 	ws, resp, err := dialer.DialContext(ctx, address, nil)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
@@ -76,7 +86,7 @@ func dialGame(ctx context.Context, base, ticket string, timeout time.Duration) (
 	// The deadline also covers any pings met on the way and is cleared
 	// once WELCOME lands.
 	_ = ws.SetReadDeadline(time.Now().Add(timeout))
-	c := &gameConn{ws: ws, frames: make(chan transport.Frame, 256), done: make(chan struct{})}
+	c := &gameConn{ws: ws, frames: make(chan transport.Frame, botFrameBuffer), done: make(chan struct{})}
 	if err := c.writeFrame(transport.Frame{
 		Opcode:  transport.OpHello,
 		Payload: transport.EncodeHello(transport.Hello{AdmissionToken: []byte(ticket)}),
@@ -158,14 +168,33 @@ func (c *gameConn) readLoop() {
 		if transport.CountsOnStream(frame.Opcode) {
 			c.applied.Add(1)
 		}
-		select {
-		case c.frames <- frame:
-		default:
+		if !c.offerFrame(frame) {
 			// A bot that stops draining must not stall the reader: drop
 			// to the error path by closing, counted as a failed bot.
 			_ = c.ws.Close()
 			return
 		}
+	}
+}
+
+/*
+================
+offerFrame
+
+Hand one frame to the owning bot. False means the buffer is full: the
+bot is not draining, the reader refuses to stall, and overflow
+remembers that the drop was the bot's, not the server's (the server
+keeps the session detached for a resume; closedGrace in its metrics
+is the tell).
+================
+*/
+func (c *gameConn) offerFrame(frame transport.Frame) bool {
+	select {
+	case c.frames <- frame:
+		return true
+	default:
+		c.overflow.Store(true)
+		return false
 	}
 }
 

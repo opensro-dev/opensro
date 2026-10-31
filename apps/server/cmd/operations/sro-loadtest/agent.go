@@ -19,20 +19,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"strconv"
 	"strings"
 	"time"
+
+	"opensro.online/server/internal/releaseprotocol"
 )
 
+// loadCharacterModel is the model every provisioned load character is
+// created with: the plain adventurer the Agent's own chargen tests use.
+// A load bot needs a valid body, not a wardrobe.
+const loadCharacterModel = "CHAR_CH_MAN_ADVENTURER"
+
 // agentClient is one bot's signed-in Agent session. The cookie jar holds
-// the browser session the sign-in sets; the token endpoints sit behind
-// that same session, exactly as they do for the browser.
+// the browser session the sign-in sets, and the session token the login
+// answers is carried as the bearer on the shard requests, exactly as
+// the browser carries it (handlers.go: handleShardRequest reads bearer
+// claims, not the cookie).
 type agentClient struct {
 	base     string
 	http     *http.Client
 	serverID string
 	division string
+	token    string
 }
 
 // tokenReply is the shared shape of the two ticket mints.
@@ -45,19 +57,45 @@ type tokenReply struct {
 /*
 ================
 newAgentClient
+
+One bot's client. It declares the release protocol this build speaks
+(releaseprotocol.Current - the Agent refuses any other with 426) and
+dials from the bot's own loopback source address (target.go). No proxy:
+a load target is dialed as itself.
 ================
 */
-func newAgentClient(base, serverID, division string, timeout time.Duration) (*agentClient, error) {
+func newAgentClient(base, serverID, division string, timeout time.Duration, sourceIP net.IP) (*agentClient, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, err
 	}
+	transport := &http.Transport{Proxy: nil}
+	if sourceIP != nil {
+		dialer := &net.Dialer{Timeout: timeout, LocalAddr: &net.TCPAddr{IP: sourceIP}}
+		transport.DialContext = dialer.DialContext
+	}
 	return &agentClient{
 		base:     strings.TrimSuffix(base, "/"),
-		http:     &http.Client{Jar: jar, Timeout: timeout},
+		http:     &http.Client{Jar: jar, Timeout: timeout, Transport: transport},
 		serverID: serverID,
 		division: division,
 	}, nil
+}
+
+/*
+================
+declare
+
+The headers every Agent request carries: the release protocol this
+build speaks, and the session bearer once the login has minted it. The
+login itself sends no bearer - there is none yet.
+================
+*/
+func (c *agentClient) declare(req *http.Request) {
+	req.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Current))
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 }
 
 /*
@@ -79,6 +117,7 @@ func (c *agentClient) postJSON(path string, body any, out any) (int, error) {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.declare(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return 0, err
@@ -100,16 +139,20 @@ func (c *agentClient) postJSON(path string, body any, out any) (int, error) {
 ================
 login
 
-POST /title/login with the account credential; success is the session
-cookie the jar keeps plus ok=true in the reply.
+POST /title/login with the account credential; success is ok=true, the
+session cookie the jar keeps, and the session token the shard requests
+carry as bearer. A 426 means the stack speaks another release protocol
+than this tool: the two ship together, so the run stops naming it
+instead of failing inside a decoder downstream.
 ================
 */
 func (c *agentClient) login(accountID, password string) error {
 	var reply struct {
-		OK   bool   `json:"ok"`
-		Code string `json:"code"`
+		OK           bool   `json:"ok"`
+		Code         string `json:"code"`
+		SessionToken string `json:"sessionToken"`
 	}
-	_, err := c.postJSON("/title/login", map[string]any{
+	status, err := c.postJSON("/title/login", map[string]any{
 		"id":         accountID,
 		"password":   password,
 		"serverId":   c.serverID,
@@ -118,9 +161,16 @@ func (c *agentClient) login(accountID, password string) error {
 	if err != nil {
 		return err
 	}
+	if status == http.StatusUpgradeRequired {
+		return fmt.Errorf("agent speaks another release protocol (this tool declares %d); build the tool and the stack from one tree", releaseprotocol.Current)
+	}
 	if !reply.OK {
 		return fmt.Errorf("agent login refused: %s", reply.Code)
 	}
+	if reply.SessionToken == "" {
+		return fmt.Errorf("agent login answered ok without a session token")
+	}
+	c.token = reply.SessionToken
 	return nil
 }
 
@@ -182,6 +232,7 @@ func (c *agentClient) getJSON(path string, out any) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	c.declare(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return 0, err
@@ -227,4 +278,39 @@ func (c *agentClient) characterNames() ([]string, error) {
 		names = append(names, ch.Name)
 	}
 	return names, nil
+}
+
+/*
+================
+createCharacter
+
+POST /character/create with the plain adventurer draft (the body the
+Agent's own chargen tests prove valid). The answer is the native
+result pair: nativeResult 1 created the character, anything else is a
+refusal carrying its native error code.
+================
+*/
+func (c *agentClient) createCharacter(name string) error {
+	var reply struct {
+		NativeResult    int `json:"nativeResult"`
+		NativeErrorCode int `json:"nativeErrorCode"`
+	}
+	_, err := c.postJSON("/character/create", map[string]any{
+		"characterName":  name,
+		"modelCodename":  loadCharacterModel,
+		"heightIndex":    0,
+		"volumeIndex":    0,
+		"weaponIndex":    1,
+		"protectorIndex": 0,
+		"armorSelected":  false,
+		"weaponSelected": true,
+		"divisionId":     c.division,
+	}, &reply)
+	if err != nil {
+		return err
+	}
+	if reply.NativeResult != 1 {
+		return fmt.Errorf("agent character create refused: native error code %d", reply.NativeErrorCode)
+	}
+	return nil
 }
