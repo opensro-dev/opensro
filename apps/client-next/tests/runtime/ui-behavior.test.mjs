@@ -32,6 +32,7 @@ const { SYSTEM_MENU_HEIGHT } = await load( "src/engine/foundation/ui/system-menu
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
+const { emptyStall } = await load( "src/engine/foundation/gameplay/stall.ts" );
 /*
 ================
 assetFixture
@@ -6396,6 +6397,101 @@ test("store window shows Repair and Repair All buttons only when targetCapabilit
 		game.targetCapabilities = 3;
 		scene = f.ui.step( f.state, now += 100 ) ?? scene;
 		assert.equal( f.ui.cursor(), null, "switching to a non-repair store disarms the repair cursor" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("showing a stall switches the main popup to Inventory once", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const control = id => scene.controls.find( row => row.id === id );
+		const inventory = () => !!control( "close-window:Inventory" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		draw();
+		assert.equal( inventory(), false, "a closed stall leaves the popup alone" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.equal( inventory(), true, "5A0DC0 shows the inventory beside the stall" );
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		assert.ok( control( "close-window:Character" ), "the player can switch to another tab" );
+		draw();
+		assert.equal( inventory(), false, "later frames do not force the tab back" );
+		// Closing and showing the stall again is a new edge.
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "visitor", owner: 2, open: true }
+		};
+		draw();
+		assert.equal( inventory(), true, "a visitor's stall show opens the inventory too" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a stall beside a separate window keeps that window open", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const open = name => !!scene.controls.find( row => row.id === "close-window:" + name );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		// 69C7C0 looks at the main popup: another tab of it gives way to
+		// Inventory, while a separate window stays open when the stall appears
+		// (the port keeps its one panel slot on that window instead of drawing
+		// the popup beside it).
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.ok( open( "Inventory" ), "the stall selects Inventory over another main popup tab" );
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		for ( const window of [ "Guild", "Option" ] ) {
+			draw();
+			f.ui.event( { kind: "activate", id: "open-window:" + window } );
+			draw();
+			assert.ok( open( window ), `${window} did not open` );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase: "owner", owner: 1 }
+			};
+			draw();
+			assert.ok( open( window ), `the stall closed ${window}` );
+			assert.equal( open( "Inventory" ), false, `the stall forced Inventory over ${window}` );
+			// Closing the stall again arms the next rising edge.
+			f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+			draw();
+			f.ui.event( { kind: "activate", id: "close-window:" + window } );
+		}
 	} finally {
 		f.dispose();
 	}

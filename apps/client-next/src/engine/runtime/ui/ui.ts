@@ -3152,6 +3152,10 @@ export function createUi(
 	/*
 	================
 	openStallPrompt
+
+	CIFStall_OpenTextInput (5A1A40) builds the price box (528670 mode 10) and
+	focuses the price edit (5A1D9B -> A01100), not the quantity, so a fresh
+	offer's price is typed at once.
 	================
 	*/
 	function openStallPrompt( prompt: StallPrompt ) {
@@ -9247,6 +9251,20 @@ export function createUi(
 			// with the default title (5A1DF0 mode 1); a stall that moved on
 			// closes its prompt.
 			const stallState = next.gameplay?.stall, stallPrompt = stallHud.prompt();
+			// CIFStall::ShowWindow 5A0DC0 -> CGInterface 69C7C0 shows the main popup
+			// and selects the inventory tab (589960 tab 0x46) whenever the stall
+			// window appears. 69C7C0 touches only the main popup, so a separate
+			// window outside it (Guild, Option, the map...) is not closed by the
+			// native client. Port inference: one exclusive panel slot cannot draw
+			// the main popup beside such a window, so the window is kept as it
+			// stands. Edge-triggered so the player may still switch tabs.
+			if (
+				stallHud.windowOpened( stallState?.phase ) && panel !== "Inventory" &&
+				(panel === "" || MAIN_POPUP_PANELS.includes( panel ))
+			) {
+				setPanel( "Inventory" );
+				dirty = true;
+			}
 			const stallChat = stallHud.observeChat( stallState, next.gameplay?.chat?.lines ?? [] );
 			if ( stallChat.cleared || stallChat.appended ) {
 				stallChatScroll.reset();
@@ -10774,7 +10792,14 @@ export function createUi(
 				}
 				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
 				if ( focus === id && caretVisible ) {
-					rect( [ ink[0] + offset + caret - scroll, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
+					// A right-aligned empty edit puts the caret on the clip's right
+					// edge, which the clip excludes; keep the native-looking caret
+					// one pixel inside so 5A1A40's focused price edit stays visible.
+					const caretX = Math.min(
+						ink[0] + ink[2] - EDIT_CARET_WIDTH,
+						Math.max( ink[0], ink[0] + offset + caret - scroll )
+					);
+					rect( [ caretX, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
 						0,
 						0,
 						1,
@@ -18830,6 +18855,10 @@ export function createUi(
 						paths.push( background );
 						const backgroundSize = resources.size( background );
 						if ( backgroundSize ) image( [ ox, oy, backgroundSize[0], backgroundSize[1] ], background );
+						// CIFStallSlot (5A2FED..5A3052) is the whole cell: 0x5A14C0
+						// accepts a drop anywhere on its ifstallslot.txt window and
+						// 5A11C0 reads the index from it, not only the 32x32 icon.
+						const cellRect: UiRect = backgroundSize ? [ ox, oy, backgroundSize[0], backgroundSize[1] ] : r;
 						nativePage( cell, ox, oy, [ 2, 3, 4, 5 ] );
 						const icon = offer ? iconPath( offer.item.icon ) : null;
 						if ( offer && icon ) {
@@ -18851,11 +18880,13 @@ export function createUi(
 						controls.push( {
 							id: "stall-slot:" + slot,
 							label: offer?.item.name ?? "Stall slot " + slot,
-							rect: r,
+							rect: cellRect,
 							kind: "button",
 							disabled: !offer && !(owner && !state.open),
 							draggable: owner && !state.open && !!offer
 						} );
+						// GDR_STALLSLOT_MODIFY is added after the slot, so it stays
+						// topmost over the cell's top-right corner.
 						if ( offer ) {
 							authoredButton(
 								part( 5 ),
