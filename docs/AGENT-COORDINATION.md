@@ -100,7 +100,7 @@ links. In addition:
   conflict on every merge. Agree the order in the log, and rebase the next PR
   onto the previous squash before its final gate.
 - **Native claims are reviewed row by row.** A PR whose behaviour rests on
-  the original carries the native-claims table ([CONTRIBUTING.md](../CONTRIBUTING.md)
+  the original carries the native-claims table ([CONTRIBUTING.md](../.github/CONTRIBUTING.md)
   section 6). The reviewer checks each row against the disassembly or the
   named test, not against a function name, and an approval lists any row it
   could not check. A missing table, or an unchecked row presented as

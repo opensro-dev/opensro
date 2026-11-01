@@ -16,14 +16,14 @@ Before tagging a release:
    then `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
    Then `pnpm assets ledger` must report no unclaimed assets and no missing
    owner (run `pnpm assets build full` if it does); the beta packager
-   refuses otherwise. [docs/ASSET_DELIVERY.md](docs/ASSET_DELIVERY.md)
+   refuses otherwise. [docs/ASSET_DELIVERY.md](ASSET_DELIVERY.md)
    explains the ledger.
 4. `git status --ignored` must list `.generated/`, `temp/` and `.state/` as
    ignored, and nothing generated as tracked.
 5. `pnpm --filter @sro/client-next build:beta` packages the browser release;
    keep its `private/` source maps outside the deployable package. A data
    release is staged from this package (`data_release.py`, see
-   [docs/ASSET_DELIVERY.md](docs/ASSET_DELIVERY.md)) before step 6.
+   [docs/ASSET_DELIVERY.md](ASSET_DELIVERY.md)) before step 6.
 6. Only after packaging and staging: `pnpm assets compact` and
    `pnpm assets check compact`. Compact replaces the loose public files, the
    outdoor world and the loose server projection with their release copies,

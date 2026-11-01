@@ -16,4 +16,4 @@ Fixes target the default branch and the latest release.
 The server must be built with the Go release declared in `apps/server/go.mod`
 or a newer patched release. CI runs `govulncheck` as a blocking gate; reviewed
 exceptions are recorded in
-[ACCEPTED_ADVISORIES.md](apps/server/ops/docs/ACCEPTED_ADVISORIES.md).
+[ACCEPTED_ADVISORIES.md](../apps/server/ops/docs/ACCEPTED_ADVISORIES.md).
