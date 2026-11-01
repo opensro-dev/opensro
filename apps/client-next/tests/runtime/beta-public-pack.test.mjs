@@ -26,6 +26,21 @@ test("public release drops obsolete reports and retains runtime model groups", (
 	assert.equal( index.assets.length, groups.length - 1 );
 });
 
+test("the icon atlas stays out of a public release, wherever its files land", () => {
+	const index = publicIndex( {
+		format: "sro-asset-pack-index",
+		version: 2,
+		groups: [ { name: "ui-atlas" }, { name: "game-data" } ],
+		assets: [
+			{ group: "ui-atlas", path: "/assets/ui-atlas/sheet-0.png" },
+			{ group: "game-data", path: "/assets/ui-atlas/manifest.json" },
+			{ group: "game-data", path: "/assets/data.json" }
+		]
+	} );
+	assert.deepEqual( index.groups.map( group => group.name ), [ "game-data" ] );
+	assert.deepEqual( index.assets.map( asset => asset.path ), [ "/assets/data.json" ] );
+});
+
 /*
 ================
 packOf

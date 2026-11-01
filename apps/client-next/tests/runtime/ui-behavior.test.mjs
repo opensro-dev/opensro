@@ -38,7 +38,7 @@ const { emptyStall } = await load( "src/engine/foundation/gameplay/stall.ts" );
 assetFixture
 ================
 */
-function assetFixture() {
+function assetFixture( atlasInstaller = () => {} ) {
 	let id = 0;
 	const requests = [], results = new Map(), cancelled = [], published = [];
 	const assets = {
@@ -64,7 +64,13 @@ function assetFixture() {
 		},
 		cancel: id => cancelled.push( id )
 	};
-	const resources = createUiAssets( assets, ( ...args ) => published.push( args ), "https://fixture.invalid/" );
+	const resources = createUiAssets(
+		assets,
+		( ...args ) => published.push( args ),
+		"https://fixture.invalid/",
+		undefined,
+		atlasInstaller
+	);
 	return { assets, resources, requests, results, cancelled, published };
 }
 /*
@@ -77,6 +83,18 @@ image must still be noticed; the same contents in a fresh array must not
 reload anything. (In-place edits of an unfrozen array are covered below.)
 ================
 */
+/*
+================
+An owner with no quad packer reads the per-icon files
+================
+*/
+test("an owner that cannot install the atlas never asks for its manifest", () => {
+	const f = assetFixture( null );
+	const icon = "/assets/images/Media_extracted/icon/item/etc/any.png";
+	f.resources.step( [ icon ], 0 );
+	assert.deepEqual( f.requests, [ "https://fixture.invalid" + icon ] );
+});
+
 test("UI demand is compared by content, whichever array carries it", () => {
 	const f = assetFixture();
 	f.resources.step( [ "/a.png", "/b.png" ], 0 );
