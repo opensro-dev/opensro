@@ -10,9 +10,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// wsWriteTimeout bounds a single WebSocket write so a wedged peer cannot
-// stall the session's write loop forever; the session-level idle logic
-// handles the rest.
+// wsWriteTimeout bounds one stall in a WebSocket write, re-armed as
+// the message progresses (writeAllWithinStall): a wedged peer cannot
+// stall the session's write loop forever, and a large message whose
+// peer is still reading is never killed by its own size (#2311); the
+// session-level idle logic handles the rest.
 const wsWriteTimeout = 10 * time.Second
 
 // wsConn adapts a gorilla WebSocket connection to Conn. Frames map 1:1 to
@@ -121,8 +123,22 @@ func (w *wsConn) WriteFrame(f Frame) error {
 		return errors.New("transport: websocket closed")
 	default:
 	}
-	_ = w.c.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-	return w.c.WriteMessage(websocket.BinaryMessage, f.Encode())
+	// One message, written in pieces with the deadline re-armed on
+	// progress: the bytes on the wire are exactly f.Encode(), only
+	// the pacing changed (gorilla frames the pieces itself).
+	arm := func() { _ = w.c.SetWriteDeadline(time.Now().Add(wsWriteTimeout)) }
+	arm()
+	writer, err := w.c.NextWriter(websocket.BinaryMessage)
+	if err != nil {
+		return err
+	}
+	if err := writeAllWithinStall(writer, f.Encode(), arm); err != nil {
+		// The message is unfinished; the write-error path detaches
+		// and closes the socket, so the writer is never closed.
+		return err
+	}
+	arm()
+	return writer.Close()
 }
 
 func (w *wsConn) SupportsUnreliable() bool { return false }
