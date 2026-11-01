@@ -523,6 +523,20 @@ function isStaleRecord( file, staleMs ) {
 
 /*
 ================
+isDeletePendingClaimError
+
+On Windows a directory another process is removing stays in delete-pending
+until its last handle closes, and a mkdir of that name then fails with EPERM
+or EACCES. The holder is leaving, so the claim retries; a real permission
+fault outlasts the spin and is thrown.
+================
+*/
+export function isDeletePendingClaimError( error, platform = process.platform ) {
+	return platform === "win32" && (error?.code === "EPERM" || error?.code === "EACCES");
+}
+
+/*
+================
 acquireStateMutex
 
 mkdir is the claim; the owner record only publishes who holds it, for
@@ -541,6 +555,10 @@ async function acquireStateMutex( lockDir, deadline ) {
 		try {
 			await mkdir( mutexDir );
 		} catch ( error ) {
+			if ( isDeletePendingClaimError( error ) && Date.now() < spinUntil ) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
 			if ( error?.code !== "EEXIST" ) {
 				throw error;
 			}
