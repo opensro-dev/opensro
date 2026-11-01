@@ -313,8 +313,38 @@ test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while
 	banner.step( [ { ...sunNotice, sequence: 1 } ], 100, true );
 	assert.equal( banner.sunDrop(), true );
 	assert.equal( banner.sealTier(), 2 );
-	const starNotice = defined( serverNotification( 0x3667, frame( 0x81, starText ) ) );
+	const moonNotice = defined( serverNotification( 0x3667, frame( 0x81, moonText ) ) );
 	banner.step( [], 8000, true );
-	banner.step( [ { ...starNotice, sequence: 2 } ], 8100, true );
+	banner.step( [ { ...moonNotice, sequence: 2 } ], 8100, true );
 	assert.equal( banner.sunDrop(), false );
+	assert.equal( banner.sealTier(), 1 );
+});
+
+test("a Seal of Star drop notice keeps its chat line but never takes the top-centre banner (owner decision 2026-11-01)", () => {
+	const frame = text => Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const starText = "Looter has dropped Heaven's Cloud Spear (Seal Of Star) from Tiger Girl",
+		moonText = "Looter has dropped Heaven's Cloud Spear (Seal Of Moon) from Tiger Girl",
+		sunText = "Looter has dropped Heaven's Cloud Spear (Seal Of Sun) from Tiger Girl",
+		starPlusText = "Looter advanced Heaven's Cloud Spear (Seal Of Star) to +8";
+	// Only the Star drop loses the banner; Moon, Sun and a plus line
+	// naming a Star all keep it.
+	assert.equal( defined( serverNotification( 0x3667, frame( starText ) ) ).notificationBanner, undefined );
+	assert.equal( defined( serverNotification( 0x3667, frame( moonText ) ) ).notificationBanner, true );
+	assert.equal( defined( serverNotification( 0x3667, frame( sunText ) ) ).notificationBanner, true );
+	assert.equal( defined( serverNotification( 0x3667, frame( starPlusText ) ) ).notificationBanner, true );
+	// The banner queue steps over the Star and still takes the Moon.
+	const banner = createNoticeBanner( "notificationBanner" );
+	const star = defined( serverNotification( 0x3667, frame( starText ) ) ),
+		moon = defined( serverNotification( 0x3667, frame( moonText ) ) );
+	banner.step( [ { ...star, sequence: 1 } ], 100, true );
+	assert.equal( banner.alpha(), 0 );
+	assert.equal( banner.value( () => "" ), "" );
+	banner.step( [ { ...moon, sequence: 2 } ], 200, true );
+	assert.equal( banner.sealTier(), 1 );
+	// In play the Star line still reaches the chat log.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload: frame( starText ) }, 100 );
+	const state = defined( shown.take() );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, starText );
+	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, starText );
 });
