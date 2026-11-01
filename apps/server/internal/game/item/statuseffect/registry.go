@@ -624,21 +624,29 @@ func (r *Registry) Expire(nowMs int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for key, rows := range r.byOwner {
-		r.touchLocked(key)
+		changed := false
 		for i := range rows {
 			if nowMs < rows[i].StartedAtMs {
 				continue
 			}
-			if !rows[i].StopRequested {
-				rows[i].advanceJob(nowMs)
+			if !rows[i].StopRequested && rows[i].advanceJob(nowMs) {
+				changed = true
 			}
 			if !rows[i].StopRequested && rows[i].Expired(nowMs) {
 				rows[i].StopRequested = true
+				changed = true
 				if !r.pendingSet[key] {
 					r.pendingSet[key] = true
 					r.pendingOwners = append(r.pendingOwners, key)
 				}
 			}
+		}
+		// Both per-tick sweeps walk every owner; marking one whose
+		// rows did not move would republish its view each tick and
+		// erase the snapshot saving. A persistent job's clock accrues
+		// every tick, so its owner genuinely changes and stays marked.
+		if changed {
+			r.touchLocked(key)
 		}
 	}
 }
@@ -658,14 +666,19 @@ func (r *Registry) AnyJobCheckpointDue(nowMs int64) bool {
 	defer r.mu.Unlock()
 	due := false
 	for key, rows := range r.byOwner {
-		r.touchLocked(key)
+		changed := false
 		for i := range rows {
 			e := &rows[i]
 			if e.StopRequested {
 				continue
 			}
-			e.advanceJob(nowMs)
+			if e.advanceJob(nowMs) {
+				changed = true
+			}
 			due = due || (e.Persistent && e.jobCheckpointDue)
+		}
+		if changed {
+			r.touchLocked(key)
 		}
 	}
 	return due

@@ -275,6 +275,35 @@ func TestSnapshotSeesTheOtherWriters(t *testing.T) {
 		}
 		viewMatches(t, r, "d", "anna")
 	})
+	t.Run("quiet sweeps keep the view", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		got := r.Snapshot("d", "anna")
+		// Neither per-tick sweep moves a plain row: Expire finds no
+		// deadline and no job clock, and the checkpoint probe finds
+		// no clock either. The published view must stand.
+		r.Expire(5000)
+		r.AnyJobCheckpointDue(5000)
+		again := r.Snapshot("d", "anna")
+		if len(again) != 1 || &again[0] != &got[0] {
+			t.Fatal("a sweep over unchanged rows republished the view")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
+	t.Run("an expiry flip marks the view", func(t *testing.T) {
+		r := NewRegistry()
+		timed := plain
+		timed.ExpiresAtMs = 2000
+		r.Apply(timed)
+		r.Snapshot("d", "anna")
+		// The flip is this owner's only movement this tick: no job clock
+		// runs, so the sweep's flip branch alone must mark it.
+		r.Expire(3000)
+		if rows := r.Snapshot("d", "anna"); len(rows) != 1 || !rows[0].StopRequested {
+			t.Fatal("the expiry flip left the published view stale", rows)
+		}
+		viewMatches(t, r, "d", "anna")
+	})
 	t.Run("link install", func(t *testing.T) {
 		r := NewRegistry()
 		r.Snapshot("d", "anna")
