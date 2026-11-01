@@ -31,10 +31,10 @@ import (
 ================
 TestEnterWorldReleasesTheGateBeforeEncoding
 
-While a slow encoder runs, the division publication gate must be
-takeable: the snapshot is already built, and nothing the encode does
-needs the gate. The measured hold is logged against the encode's
-300 ms: a handler that encodes under the gate holds it that long.
+While the encoder runs, the division publication gate must be free:
+the snapshot is already built, and nothing the encode does needs the
+gate. The fake encoder tries the gate itself, so the answer needs no
+timing: a handler that encodes under the gate fails its TryLock.
 ================
 */
 func TestEnterWorldReleasesTheGateBeforeEncoding(t *testing.T) {
@@ -54,24 +54,21 @@ func TestEnterWorldReleasesTheGateBeforeEncoding(t *testing.T) {
 	c := &enterworld.Character{ID: 3, Name: "asd2", ModelCodename: "CHAR_CH_MAN_ADVENTURER"}
 	source := enterworld.StaticCharacterSource{enterworld.DefaultDivisionID: {c}}
 	var gateMu sync.Mutex
-	var holdStart, holdEnd atomic.Int64
-	encoding := make(chan struct{})
-	var encodeOnce sync.Once
+	var encoded, gateFree atomic.Bool
 	deps := &enterworld.Deps{
 		Roster: &enterworld.Roster{}, Characters: source,
 		Items:             enterworld.NewTextdataItems(filepath.Join(t.TempDir(), "absent")),
 		ResolveDivisionID: enterworld.DevResolveDivisionIDFromCatalog(source),
 		LockPublication: func(string, string) func() {
 			gateMu.Lock()
-			holdStart.Store(time.Now().UnixNano())
-			return func() {
-				holdEnd.Store(time.Now().UnixNano())
-				gateMu.Unlock()
-			}
+			return gateMu.Unlock
 		},
 		EncodeEntryPayload: func(*enterworld.BootstrapResult) ([]byte, error) {
-			encodeOnce.Do(func() { close(encoding) })
-			time.Sleep(300 * time.Millisecond)
+			if gateMu.TryLock() {
+				gateFree.Store(true)
+				gateMu.Unlock()
+			}
+			encoded.Store(true)
 			return []byte("entry-payload"), nil
 		},
 	}
@@ -88,22 +85,6 @@ func TestEnterWorldReleasesTheGateBeforeEncoding(t *testing.T) {
 		return false
 	})
 	conn.inbound <- transport.Frame{Opcode: transport.OpEnterWorld, Payload: transport.EncodeEnterWorld(authenticated.Entry("0", c.Name))}
-	select {
-	case <-encoding:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the entry encode never started")
-	}
-	probed := make(chan struct{})
-	go func() {
-		gateMu.Lock()
-		gateMu.Unlock()
-		close(probed)
-	}()
-	select {
-	case <-probed:
-	case <-time.After(150 * time.Millisecond):
-		t.Fatal("the publication gate was still held while the entry encoded")
-	}
 	wait.Eventually(t, 10*time.Second, "the enter-world answer", func() bool {
 		for _, f := range conn.frames() {
 			if f.Opcode == transport.OpEnterWorldResult {
@@ -112,5 +93,10 @@ func TestEnterWorldReleasesTheGateBeforeEncoding(t *testing.T) {
 		}
 		return false
 	})
-	t.Logf("entry gate hold %v against a 300ms encode", time.Duration(holdEnd.Load()-holdStart.Load()))
+	if !encoded.Load() {
+		t.Fatal("the entry never reached its encoder")
+	}
+	if !gateFree.Load() {
+		t.Fatal("the publication gate was still held while the entry encoded")
+	}
 }
