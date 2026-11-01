@@ -198,8 +198,9 @@ func TestDropRefusals(t *testing.T) {
 }
 
 // A WORN item cannot be ground-dropped (notice 01:6d; the retail drop
-// dialog sub_68d430 refuses an equipment source before composing the
-// packet - LANE-4, COORD seq 93). The gate must refuse ONLY the
+// dialog, client CGInterface_RequestItemGroundDrop, refuses an equipment
+// source before composing the packet - LANE-4, COORD seq 93). The gate
+// must refuse ONLY the
 // equipment-source drop: a bag drop must still succeed, so a broken drop
 // plane can never masquerade as a working gate.
 func TestDropRefusesEquippedItemButBagDropStillWorks(t *testing.T) {

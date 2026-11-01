@@ -115,6 +115,16 @@ func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 	division := requestShardID(r)
 	api.store.ReapMaturedDeletions()
 	accountID := requestAccountID(r)
+	// Queued name changes apply before the list is answered (port-only,
+	// #1689): an applied rename simply shows its new name, and a refused
+	// one rides its row as renameCancelled so the select screen can say
+	// why the scroll's rename did not happen.
+	renameCancelled := map[int64]string{}
+	for _, outcome := range api.store.ApplyPendingRenames(division, accountID, api.now().UnixMilli(), api.characterNameAllowed) {
+		if !outcome.Applied {
+			renameCancelled[outcome.CharacterID] = outcome.Reason
+		}
+	}
 	var rows []map[string]interface{}
 	api.store.ReadCharacterSelection(division, func(characters []*domain.Character, blockers map[int64]string) {
 		rows = make([]map[string]interface{}, 0, len(characters))
@@ -123,6 +133,9 @@ func (api *API) handleCharacterList(w http.ResponseWriter, r *http.Request) {
 				row := api.createdCharacterJSON(c)
 				if blocker := blockers[c.ID]; blocker != "" {
 					row["deletionBlocker"] = blocker
+				}
+				if reason := renameCancelled[c.ID]; reason != "" {
+					row["renameCancelled"] = reason
 				}
 				rows = append(rows, row)
 			}

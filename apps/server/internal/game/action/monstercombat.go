@@ -43,7 +43,7 @@ func monsterOwnsDefaultSkill(instance monster.Instance, skillID uint32) bool {
 MonsterAttackPlan
 
 MonsterAttackPlan resolves the authored RefObjChar default-skill set. A
-requested id must still belong to that set; zero makes 561B00's weighted
+requested id must still belong to that set; zero makes the native weighted
 choice among only the complete attack rows, so malformed data can never
 become a visual-only monster swing.
 ==================
@@ -60,7 +60,7 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 			return plan, true
 		}
 	} else if monsterOwnsDefaultSkill(instance, requestedSkillID) {
-		// 5472A0 reads the active skill before dispatching the selector.
+		// The reference server reads the active skill before dispatching the selector.
 		// A retained summon must not change bands (or replace a retained
 		// ordinary attack) when damage/HP changes during approach.
 		row, exists := rt.deps.SkillData().SkillByID(requestedSkillID)
@@ -96,7 +96,7 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 	}
 	var skill enterworld.SkillRow
 	if requestedSkillID != 0 {
-		// A retained skill is reused as it is (5472A0); its weight was read
+		// A retained skill is reused as it is, as natively; its weight was read
 		// when it was chosen.
 		if len(valid) == 0 {
 			return zero, false
@@ -119,7 +119,7 @@ func (rt *Runtime) MonsterAttackPlan(instance monster.Instance, requestedSkillID
 ==================
 monsterWeightedSkill
 
-CAISkill_Basic_SelectConditionalThenWeighted (561B00): each default skill
+The native default-skill choice: each default skill
 with a non-zero weight (RefSkill +0x164, column 66) enters with that
 weight, raised by half of what its reach - the target's body radius, the
 skill's range and the monster's own - exceeds the target's distance
@@ -209,11 +209,11 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 			rt.Monsters.RejectSummonCommand(divisionID, instance.Gid, nowMs)
 		}
 		if result.Accepted {
-			// 4C1C30: a job monster's own attack rearms its idle timer.
+			// Natively a job monster's own attack rearms its idle timer.
 			rt.Monsters.RefreshJobMonster(divisionID, instance.Gid, nowMs)
 		}
 		if release == nil && result.Accepted {
-			// 5A1A40 reads the live action-speed keeper, including Frostbite
+			// The native cast time reads the live action-speed keeper, including Frostbite
 			// and Slow. The verified helper owns its float32 store boundaries.
 			speed := (monsterAbnormalContext{rt}).Param(instance, 0x8c)
 			rt.Monsters.CompleteMonsterSkillCommand(divisionID, instance.Gid, skill.AICommandDurationMs(speed), nowMs)
@@ -222,12 +222,12 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	character := rt.findCharacterByGid(divisionID, targetGid)
 	if character == nil {
 		// A hit addressed to a COS gid (a mounted rider's ride, redirected
-		// below, or a pet a test names) lands on the pet, including the 590680
-		// status roll. CGObjMob_EvaluateHostility (529929) only credits the
+		// below, or a pet a test names) lands on the pet, including the native
+		// status roll. The native hostility evaluation only credits the
 		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
-			// 529110: a COS answers the job test with its owner's state.
-			if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(rt.characterSnapshot(divisionID, owner))) {
+			// Natively a COS answers the job test with its owner's state.
+			if release == nil && instance.JobTargetRefused(rt.characterPartyJobClass(divisionID, owner)) {
 				return result
 			}
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
@@ -239,17 +239,22 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		}
 		return result
 	}
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+	// Admission copies the victim only when it may be struck: presence,
+	// life and - for an unowned command - the job refusal are field
+	// facts weighed on the live record in the copy's own door pass
+	// (#1943). The admitted copy still feeds spacing, stats and the
+	// strike, exactly as the detached record did.
+	snapshot := rt.characterSnapshotAdmitted(divisionID, character, func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			(release != nil || !instance.JobTargetRefused(enterworld.PartyJobClass(live)))
+	})
+	if snapshot == nil {
 		return result
 	}
-	// 529110: a job monster refuses its own side at admission, before the
+	// Natively a job monster refuses its own side at admission, before the
 	// ride swap (a ride answers with its rider's job). The zero result sends
 	// the monster home rather than retrying a strike it may never make.
-	if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(snapshot)) {
-		return result
-	}
-	// Only hostile-target skills swap (59B5F3 tests the target flag); summons
+	// Only hostile-target skills swap (natively the target flag is tested); summons
 	// and self effects keep their own branches below.
 	if ride := ridingCOS(snapshot); release == nil && ride != 0 && ok && skill.TargetRequired &&
 		!skill.Summon.Present && !skill.MonsterSelfEffect.Pinned {
@@ -261,7 +266,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	result.TargetAlive = true
 
 	if !monster.AllowsTargetStatus(instance.Ref.TidWord, instance.Nest.NativeTacticsFlags, snapshot.NativeBodyStatus) {
-		// 587630 binds ssou to RefSkill+354. The unique completion
+		// Natively ssou binds to RefSkill+354. The unique completion
 		// side effect is applied by MonsterState even on command refusal.
 		if ok {
 			result.Refusal = simulation.MonsterAttackCommandRejected
@@ -300,7 +305,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	monsterPose := mover.LivePoseAt(nowMs, nil)
 	playerPose := rt.liveSpawn(simulation.WorldKey(divisionID, snapshot.Name), snapshot, nowMs)
 	spacing, spacingOK := rt.monsterToPlayerCombatSpacing(instance, snapshot, rt.monsterActionReach(instance, skill))
-	// SR_GameServer 585C67/585CD1 revalidates an owned cast, not its
+	// The reference server revalidates an owned cast, not its
 	// AutoCommand approach radius. Target movement after admission cannot
 	// cancel release. Identity, life, status and coordinate plane still apply.
 	if !spacingOK || !worldgeom.SamePlane(monsterPose.RegionID, playerPose.RegionID) {
@@ -313,6 +318,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// The approach owner must retain its skill and reacquire live range,
 		// not turn this unissued command into damage failure or lost aggro.
 		result.Refusal = simulation.MonsterAttackApproachRequired
+		return result
+	}
+	if release == nil && rt.monsterLineBlocked(mover, playerPose, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
 		return result
 	}
 	attacker, err := combat.MonsterInstanceStats(instance)
@@ -357,4 +366,28 @@ func (rt *Runtime) findCharacterByGid(divisionID string, gid uint32) *enterworld
 		}
 	}
 	return nil
+}
+
+/*
+================
+monsterLineBlocked
+
+The line-of-sight check of a monster's skill command. The original server
+validates every skill command, a monster's included, with the same checks
+as a player's cast; one of them asks the region manager's line-of-sight
+query and refuses 0x3010 when the line is blocked. A monster on another
+cave floor or behind a wall therefore never strikes through it: the
+command is refused, and the AI keeps its target and retries on its next
+tick, as for any refused command. Only the command is judged; an owned
+cast's release is not, since the original's later cast checks leave line
+of sight out. Notes: ../research/investigations/world/monster-line-of-sight-20261029.md.
+================
+*/
+func (rt *Runtime) monsterLineBlocked(mover monster.MoverState, to simulation.Spawn, nowMs int64) bool {
+	if rt.LineOfSight == nil {
+		return false
+	}
+	pose := mover.LivePoseAt(nowMs, nil)
+	from := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	return !rt.LineOfSight(from, mover.LiveNavOwner(nowMs), to)
 }

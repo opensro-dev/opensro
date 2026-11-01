@@ -3,19 +3,19 @@
 
 playerdisplacement.go - a struck player knocked down or back
 
-SkillCombat_CalculateHitOutcome rolls a hit's displacement on any victim,
+The reference server's hit outcome rolls a hit's displacement on any victim,
 a player as much as a monster. A knockdown needs
-SkillCombat_AllowsDisplacementOutcome (58E540): the model's RefObjChar
+its displacement admission: the model's RefObjChar
 flag bit 0, not already down (motion 8) or in motion 0x12, not seated
 (motion 4), not riding (state +0xE), no standing wall (+0xC0C). Its chance
-is Formulae_CalculateStatusEffectProbability (40FC30, combat.KnockdownChance)
+is the status-effect probability formula (combat.KnockdownChance)
 on the attacker's history key 0x44000000 | skill; it displaces twenty units
-and holds motion 8 for KORecover + action duration + 0.5 s (58FF7A). A
+and holds motion 8 for KORecover + action duration + 0.5 s. A
 knockback needs only the flag's bit 1 and no knockdown on the same record,
 rolls the row's chance on key 0x45000000 | skill and pushes the authored
-distance (590157).
+distance.
 
-While a player is down, CGObjChar_HandleMoveCommand (4B0EA0) drops its
+While a player is down, the native move command drops its
 ground commands and its commands wait (skillCastPostureBlocked); a hit on
 it reads motion 8 (reqc). This file owns the state; the strike owners plan
 and commit it.
@@ -34,12 +34,12 @@ import (
 )
 
 const (
-	// knockdownRollKey and knockbackRollKey are 58FF5C's and 5901B5's
+	// knockdownRollKey and knockbackRollKey are the native rolls'
 	// probability history keys.
 	knockdownRollKey uint32 = 0x44000000
 	knockbackRollKey uint32 = 0x45000000
 	// knockbackHoldMs is the knockback's displacement hold, as the monster
-	// owner's (590157 schedules two seconds).
+	// owner's (natively two seconds).
 	knockbackHoldMs = 2000
 	// displacementFlagKnockdown and displacementFlagKnockback are the
 	// RefObjChar column 87 bits.
@@ -85,7 +85,7 @@ type displacementRoll struct {
 ================
 planPlayerDisplacement
 
-58FF7A and 590157 for one surviving player impact. Nil when the row
+The native knockdown and knockback for one surviving player impact. Nil when the row
 displaces nothing or the rolls fail.
 ================
 */
@@ -119,7 +119,7 @@ type displacementTarget struct {
 ================
 planActorDisplacement
 
-58E540/58FF7A/590157 share the roll and displacement for every actor class.
+The native admission, roll and displacement are shared for every actor class.
 ================
 */
 func (rt *Runtime) planActorDisplacement(r displacementRoll, target displacementTarget) (*playerDisplacement, error) {
@@ -154,7 +154,7 @@ func (rt *Runtime) planActorDisplacement(r displacementRoll, target displacement
 ================
 playerDisplaceable
 
-58E540 for a player victim.
+The native displacement admission for a player victim.
 ================
 */
 func (rt *Runtime) playerDisplaceable(division string, victim *enterworld.Character, now int64) bool {
@@ -178,8 +178,8 @@ Inside the victim's door: the victim stops where the displacement ends,
 its preparing casts and command end, and the hold starts. Returns the
 impact's wire point and the victim's withdrawn casts.
 
-The push walks as a move (593D24 -> CGObjPC_MoveByStepUnlessMounted 4EF300
--> CGObjChar_MoveByStep 48B920 -> CGObj_MoveTo 485740): the move query runs
+The push walks as a move (the reference server's step move for a
+dismounted player, then the object move): the move query runs
 from the victim's own cell, a refused walk leaves it where it stood, and an
 admitted one ends where the walk came to rest, short of a blocked edge.
 ================
@@ -214,7 +214,7 @@ func (rt *Runtime) commitPlayerDisplacementInDoor(division string, victim *enter
 walkDisplacement
 
 The point and surface owner a pushed character's walk from its own cell
-reaches. A refused walk (CGObj_MoveTo's blocked result) keeps the live
+reaches. A refused walk (the native move's blocked result) keeps the live
 point and owner.
 ================
 */
@@ -256,7 +256,7 @@ func (rt *Runtime) PlayerKnockedDown(division, name string, now int64) bool {
 ================
 PlayerMotionLocked
 
-4B0EA0's motion gate for the movement lane: a knocked-down player's
+The native move command's motion gate for the movement lane: a knocked-down player's
 ground command is dropped.
 ================
 */

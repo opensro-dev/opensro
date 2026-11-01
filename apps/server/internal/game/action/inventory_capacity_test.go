@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -78,9 +79,11 @@ func TestGachaRequiresPresentedInventoryCapacity(t *testing.T) {
 			before := character.Snapshot()
 			frames, reason := rt.HandleGachaRoll(testDivision, character, body)
 			if !expanded {
-				if reason == "" || len(frames) != 0 || draws != 0 || !reflect.DeepEqual(character.Snapshot(), before) {
+				if reason == "" || draws != 0 || !reflect.DeepEqual(character.Snapshot(), before) {
 					t.Fatal("unpresented slot consumed a lottery roll or changed the character")
 				}
+				// A slot beyond the presented bag limit answers 0x1806.
+				assertGachaRefusal(t, frames, gacha.OpResult, 0x1806)
 				return
 			}
 			if reason != "" || draws != 1 || character.MissionInventory[0].RefObjID != rt.GachaCatalog.WinCard.RefObjID {

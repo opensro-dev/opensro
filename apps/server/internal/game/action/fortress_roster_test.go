@@ -21,7 +21,7 @@ import (
 ================
 rosterRow
 
-One decoded roster row (76C870 case 0xF's read order).
+One decoded roster row (client 76C870 case 0xF's read order).
 ================
 */
 type rosterRow struct {

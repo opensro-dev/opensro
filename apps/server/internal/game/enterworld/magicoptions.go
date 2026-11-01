@@ -18,7 +18,7 @@ import (
 )
 
 // The magic-option definition plane: the v1.150 magicoption.txt rows the
-// client's CSOItem magic-option parse resolves per wire param (sub_78b1b0
+// client's CSOItem magic-option parse resolves per wire param (CSOItem_DeserializeMagicOptions
 // REINFORCE leg: the encoded u64's low u16 is a param id that MUST exist in
 // the client's magicOptionDefsByParamId3e4 table - a miss throws "missing
 // required magic-option definition"). The server therefore ships a
@@ -36,14 +36,14 @@ import (
 MagicOptionRow
 
 MagicOptionRow is one magicOptionSnapshot row: exactly the
-MagicOptionDefRecord fields the client's sub_78b1b0 reads - optionName
+MagicOptionDefRecord fields the client's CSOItem_DeserializeMagicOptions reads - optionName
 (the MATTR_* identity; equality with MATTR_REINFORCE_ITEM sets the +0x30
 reinforce flag) and paramName (a '-' in it decrements the visible-option
 count +0x85).
 ==================
 */
 type MagicOptionRow struct {
-	// Native body+0x4c..0x54, consumed by 563700/55b540.
+	// Native body+0x4c..0x54, consumed by client 563700/55b540.
 	RangeWords *[3]uint32 `json:"rangeWords,omitempty"`
 	ParamID    uint32     `json:"paramId"`
 	OptionName string     `json:"optionName"`
@@ -52,7 +52,7 @@ type MagicOptionRow struct {
 	// snapshot metadata for humans reading the JSON, not a client input.
 	Degree int64 `json:"degree"`
 	// Tag is column 7, the packed ASCII code the server's option switch
-	// (498690 / 496A70) dispatches on ('str', 'fz', 'hr', ...). Server-only.
+	// dispatches on ('str', 'fz', 'hr', ...). Server-only.
 	Tag uint32 `json:"-"`
 	// Descriptors are the ten (word, flag) pairs at columns 29..48 with
 	// flag 1, minus the 'xxx' fillers: the authored equipment-family words
@@ -244,7 +244,7 @@ EncodeMagicOption
 
 EncodeMagicOption packs one reinforce-leg wire param: low u16 = the
 magicoption.txt param id, high u32 = the modifier magnitude (the client
-stores the high dword as the map value, sub_78b1b0 @0x0078b29f).
+stores the high dword as the map value, client 78B1B0 @0x0078b29f).
 ==================
 */
 func EncodeMagicOption(paramID uint32, magnitude uint32) uint64 {
@@ -327,7 +327,7 @@ AvatarMagicOptionRow
 
 One avatar part's grantable options: the TID4 (1 hat, 2 dress,
 3 attachment) and the codenames of its magicoptionassign.txt row. The
-grant window (CSOItem_FillAvatarMagicOptionCandidates 78C720) lists
+grant window (client CSOItem_FillAvatarMagicOptionCandidates 78C720) lists
 these, resolved through the magicOptionSnapshot definitions.
 ==================
 */

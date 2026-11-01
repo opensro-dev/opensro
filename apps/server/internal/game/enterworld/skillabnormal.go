@@ -19,7 +19,7 @@ const (
 encodedAbnormalParams
 
 encodedAbnormalParams projects the tagRefSkill abnormal pointers
-(SkillGlobal_BuildParameterIndex 587630): one block per status tag, the
+(the server's parameter index): one block per status tag, the
 puls period and the caster getv requests at +500/+504/+53C. Repeated
 blocks overwrite their pointer; the walk stops at ssou like every other
 primary-block reader.
@@ -75,15 +75,15 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 				out.Rcur = int32(args[0])
 				out.RcurSet = true
 			}
-		case 0x72657375: // resu -> +0x330 (588F8B): level ceiling, EXP percent
+		case 0x72657375: // resu -> +0x330: level ceiling, EXP percent
 			out.AdmitDeadParty = true
 			out.ResuMaxLevel, out.ResuExpPercent = args[0], args[1]
 		case 0x726d7574: // rmut -> +0x4AC: the skill a revival starts
 			out.Rmut = args[0]
 		case tagEfr: // efr: the first word selects slot +0x28C/+0x290/+0x294
-			// Only kind 1 (+0x28C) is the action area: SkillAction_Instant and
-			// SkillAction_Projectile dispatch 58CB70 from it; kind 2 feeds
-			// CastLifecycle_ProcessPersistent and is not a cure area.
+			// Only kind 1 (+0x28C) is the action area: the instant and
+			// projectile actions dispatch their area call from it; kind 2 feeds
+			// the persistent cast lifecycle and is not a cure area.
 			if len(args) >= 6 && args[0] == 1 {
 				out.EffectArea = abnormal.EffectArea{
 					Present: true, Kind: args[0], Shape: args[1], Radius: args[2],

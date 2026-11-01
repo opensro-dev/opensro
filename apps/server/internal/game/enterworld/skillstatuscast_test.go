@@ -85,7 +85,7 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 		{"reqi-twice", true},
 		{"tant-and-tnt2", true},
 		{"tnt2-then-tant", true},
-		// 4AECA4 tests the byte against zero: 2 resumes the attack as 1 does.
+		// The server tests the byte against zero: 2 resumes the attack as 1 does.
 		{"continue-two", true},
 		{"duplicate-status", false},
 		{"duplicate-tnt2", false},
@@ -127,7 +127,7 @@ func TestStatusCastAdmissionBoundaries(t *testing.T) {
 			if ok != tc.valid {
 				t.Fatalf("admission=%v, want %v", ok, tc.valid)
 			}
-			// With both aggression words, tant's (300) wins (5903F6).
+			// With both aggression words, tant's (300) wins.
 			wantFlat := uint32(242)
 			if tc.mode == "tant-and-tnt2" || tc.mode == "tnt2-then-tant" {
 				wantFlat = 300

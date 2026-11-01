@@ -45,7 +45,7 @@ type NpcQuestOption struct {
 	Complete             bool
 	Immediate            bool
 	// AcceptRowSymbol replaces an offer's yes/no with this one row, which
-	// accepts (QNO_WC_POTION_4's _01 [NEXT], 897680).
+	// accepts (QNO_WC_POTION_4's _01 [NEXT]).
 	AcceptRowSymbol string
 }
 
@@ -70,9 +70,9 @@ const npcDialogRefuseRow = "SN_TALK_COMMON_DENY"
 ================
 NpcDialogPage
 One page of an NPC's story before a quest offer: a prompt and the single
-reply row that turns the page (Rahid 5's 8A03F0 pages _01.._08). A page
+reply row that turns the page (Rahid 5's pages _01.._08). A page
 with a RefuseSymbol adds it as the second row; choosing it refuses the
-quest through NpcQuestHooks.Refuse (KT_SMITH_2's _01 page, 8A77A0).
+quest through NpcQuestHooks.Refuse (KT_SMITH_2's _01 page).
 ================
 */
 type NpcDialogPage struct {
@@ -231,7 +231,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 	conversation, ok := rt.NpcDialogs.Get(divisionID, character.Name)
 	if !ok {
 		// Informational Confirm terminates the interaction: later server
-		// 516670 -> 5107C0, v1.150 client 761820 closes on B4B3 [1].
+		// quest talk does the same; v1.150 client 761820 closes on B4B3 [1].
 		// Re-sending the base prompt creates an endless Confirm loop.
 		if choice == 1 {
 			if selected, bound := rt.Selected.Get(divisionID, character.Name); bound {
@@ -271,7 +271,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			return frames, ""
 		}
 		if conversation.Pending.SideTalk {
-			// 89FDA0 speaks the pending line and clears its bit on the next
+			// The native quest dialog speaks the pending line and clears its bit on the next
 			// step; closing the line is that step, so it is recorded here.
 			rt.NpcDialogs.Clear(divisionID, character.Name)
 			if rt.NpcQuests.Finish == nil {

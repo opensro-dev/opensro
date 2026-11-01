@@ -3,8 +3,8 @@
 
 threat_arithmetic_test.go - the threat percent is applied on the FPU
 
-AccumulateThreat (5903EC..5904D3) forms (percent / 100.0 + 1.0) * acc and
-SplitLinkedThreat (5A042D..5A0452) percent / 100.0 * aggression, both
+The server's threat accumulation forms (percent / 100.0 + 1.0) * acc and
+its linked-threat split percent / 100.0 * aggression, both
 truncated. percent / 100 is inexact in binary, so integer
 acc * (100 + percent) / 100 and aggression * percent / 100 differ from the
 native result; the vectors below are those differences.

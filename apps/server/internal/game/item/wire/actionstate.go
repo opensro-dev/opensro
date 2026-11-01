@@ -3,9 +3,11 @@
 
 actionstate.go - the native object-command queue response
 
-75BAA0 reads kind, queued count and the kind-three error byte. 6932D7 and
-67D140 cancel on a ground click only when that count is exactly one. Combat,
-Trace and pickup share this contract; it is not a pickup-specific latch.
+The client's CPSMission_OnActionResponse0xB2CD reads kind, queued count
+and the kind-three error byte. CGInterface_MoveToWorldPoint (0x6932D7)
+and CGInterface_IsObjectActionBlocked cancel on a ground click only when
+that count is exactly one. Combat, Trace and pickup share this contract;
+it is not a pickup-specific latch.
 
 ===========================================================================
 */

@@ -110,7 +110,7 @@ func TestLinkedDamageProgramAdmissionIsAtomic(t *testing.T) {
 	}{
 		{"mana switch", manaLinkFields(join(link, lks2, lkdh, tail)), true},
 		{"without lks2", manaLinkFields(join(link, lkdh, tail)), true},
-		// 5A04A0 pays both words as authored, each held at word 2, and the
+		// The mana share pays both words as authored, each held at word 2, and the
 		// native index keeps lkdh wherever it is authored.
 		{"damage before link", manaLinkFields(join(lkdh, link, tail)), true},
 		{"damage without link", manaLinkFields(join(lkdh, tail)), false},
@@ -143,7 +143,7 @@ func TestLinkedDamageProgramAdmissionIsAtomic(t *testing.T) {
 ================
 TestLinkedDamageWordsAreAdmittedAsAuthored
 
-CSkillManager_DistributeSharedDamage (5A04A0) pays an lkdh link's HP word
+The server's shared-damage distribution pays an lkdh link's HP word
 and MP word as authored, each held at word 2: an HP word, a zero share, a
 share above the whole damage and a zero cap all admit with their words.
 ================

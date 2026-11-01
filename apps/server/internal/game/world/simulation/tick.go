@@ -12,7 +12,6 @@ import (
 	"context"
 	"opensro.online/server/internal/domain"
 	"runtime/debug"
-	"sort"
 	"sync"
 	"time"
 
@@ -318,10 +317,15 @@ never had and the reason for the migration. Each tick it
 ==================
 */
 type Ticker struct {
-	Source   SessionSource
-	Push     Pusher
-	Roster   []NpcDef
-	Interval time.Duration
+	Source SessionSource
+	Push   Pusher
+	Roster []NpcDef
+	// WorldNpcs names the runtime objects standing in one world instance
+	// (a quest instance's exit gate, action/questgate.go). They join the
+	// static roster in that world's sessions' NPC scope pass only. Nil
+	// means none.
+	WorldNpcs func(world uint32) []NpcDef
+	Interval  time.Duration
 	// ShardCount is the fixed worker count. Values <= 0 use
 	// DefaultTickShards. Division IDs are assigned by a stable hash.
 	ShardCount int
@@ -367,8 +371,24 @@ type Ticker struct {
 	// states is coordinator-owned. Each value is used only by the worker that
 	// owns its division, so hot-path state needs no cross-shard mutex.
 	states map[string]*divisionTickState
-	done   chan struct{}
-	once   sync.Once
+	// The preparation scratch below is coordinator-owned and kept between
+	// ticks: the drained-resume set, the live-division set, the division
+	// work list and the session order. The order is rebuilt only when
+	// session membership changes (attach/detach); a tick whose snapshot
+	// carries the same sessions is placed into the kept order instead of
+	// re-sorted. Nothing here outlives the tick that filled it: the work
+	// list and the resumed set are consumed synchronously before the next
+	// prepareTick runs.
+	resumedScratch map[string]bool
+	liveScratch    map[string]bool
+	workScratch    []divisionTickWork
+	orderKeys      []sessionOrderKey
+	orderIndex     map[sessionOrderKey]int
+	orderScratch   []int
+	orderUsed      []bool
+	orderValues    []SessionSnapshot
+	done           chan struct{}
+	once           sync.Once
 }
 
 /*
@@ -615,97 +635,6 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 
 /*
 ================
-prepareTick
-================
-*/
-func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
-	tick := t.tickIndex
-	t.tickIndex++
-
-	sessions := t.Source.SnapshotSessions()
-
-	// The resume registry drains once per tick, before any leg runs, so a
-	// mark can never be served twice or leak into a later tick. A drained
-	// identity with no snapshot here (the character re-entered under a new
-	// scene revision, or has not entered yet) is dropped: that entry
-	// bootstraps its own state.
-	resumedIDs := map[string]bool{}
-	if source, ok := t.Source.(ResumeSource); ok {
-		for _, id := range source.DrainResumedSessions() {
-			resumedIDs[id] = true
-		}
-	}
-	sort.SliceStable(sessions, func(i, j int) bool {
-		if sessions[i].DivisionID != sessions[j].DivisionID {
-			return sessions[i].DivisionID < sessions[j].DivisionID
-		}
-		if sessions[i].SessionID != sessions[j].SessionID {
-			return sessions[i].SessionID < sessions[j].SessionID
-		}
-		return sessions[i].CharacterID < sessions[j].CharacterID
-	})
-
-	if t.states == nil {
-		t.states = make(map[string]*divisionTickState)
-	}
-	liveDivisions := make(map[string]bool)
-	work := make([]divisionTickWork, 0)
-	for i := 0; i < len(sessions); {
-		j := i + 1
-		for j < len(sessions) && sessions[j].DivisionID == sessions[i].DivisionID {
-			j++
-		}
-		divisionID := sessions[i].DivisionID
-		liveDivisions[divisionID] = true
-		state := t.states[divisionID]
-		if state == nil {
-			state = &divisionTickState{
-				settled:    make(map[string]int64),
-				shownPeers: make(map[string]map[uint32]bool),
-				monsters:   cloneMonsterMoverOps(t.Monsters),
-			}
-			t.states[divisionID] = state
-		}
-		if state.monsters != nil {
-			state.monsters.divisionID = divisionID
-			state.monsters.watch = &t.watch
-		}
-		work = append(work, divisionTickWork{
-			divisionID: divisionID,
-			sessions:   sessions[i:j],
-			state:      state,
-			resumed:    resumedIDs,
-		})
-		i = j
-	}
-	// Actor lifetimes belong to allocated worlds. Removing the last session
-	// must not delete the division's AI work before it reaches PENDING.
-	if t.Monsters != nil && t.Monsters.Monsters != nil {
-		for _, divisionID := range t.Monsters.Monsters.behaviorDivisions() {
-			if liveDivisions[divisionID] {
-				continue
-			}
-			liveDivisions[divisionID] = true
-			state := t.states[divisionID]
-			if state == nil {
-				state = &divisionTickState{settled: make(map[string]int64), shownPeers: make(map[string]map[uint32]bool), monsters: cloneMonsterMoverOps(t.Monsters)}
-				t.states[divisionID] = state
-			}
-			state.monsters.divisionID = divisionID
-			state.monsters.watch = &t.watch
-			work = append(work, divisionTickWork{divisionID: divisionID, state: state, resumed: resumedIDs})
-		}
-	}
-	for divisionID := range t.states {
-		if !liveDivisions[divisionID] {
-			delete(t.states, divisionID)
-		}
-	}
-	return tick, work
-}
-
-/*
-================
 tickShardForDivision
 ================
 */
@@ -734,6 +663,7 @@ func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 	clone := *source
 	clone.shownMonsters = nil
 	clone.breachLogged = nil
+	clone.scopeMemo = nil
 	return &clone
 }
 
@@ -902,14 +832,22 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 
 	// All authored NPCs (including ferry managers and city gates) must enter
 	// and leave with the viewer throughout travel, not only during login.
-	if frames := NpcScopeFrames(t.Roster, session, nowMs); len(frames) != 0 {
+	roster := t.Roster
+	if t.WorldNpcs != nil {
+		if extra := t.WorldNpcs(session.WorldInstance); len(extra) > 0 {
+			roster = append(append(make([]NpcDef, 0, len(t.Roster)+len(extra)), t.Roster...), extra...)
+		}
+	}
+	if frames := NpcScopeFrames(roster, session, nowMs); len(frames) != 0 {
 		t.Push.PushToSession(session.SessionID, frames)
 	}
 
 	// Leg 1: the per-session NPC entity tick.
+	// An empty batch delivers nothing (Bridge.deliver), so skip the push.
 	if session.NpcsEnabled && len(t.Roster) > 0 {
-		frames := NpcMoveFrames(t.Roster, session.NpcAnchor, tick)
-		t.Push.PushToSession(session.SessionID, frames)
+		if frames := NpcMoveFrames(t.Roster, session.NpcAnchor, tick); len(frames) != 0 {
+			t.Push.PushToSession(session.SessionID, frames)
+		}
 	}
 
 	// Legs 2+3: the other-player movement broadcast.

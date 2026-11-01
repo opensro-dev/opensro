@@ -38,7 +38,7 @@ type skillTravelPlan struct {
 ================
 planSkillTravel
 
-5862E0 queries movement from the caster's own cell. Navigation refusal leaves
+The reference server queries movement from the caster's own cell. Navigation refusal leaves
 all authority unchanged; clipping retains the surface actually reached.
 ================
 */
@@ -90,7 +90,7 @@ func (rt *Runtime) commitSkillTravel(key string, character *enterworld.Character
 ================
 chargeSkillGoal
 
-5862E0's tel3 branch caps the three-dimensional displacement at its range.
+The reference server's tel3 branch caps the three-dimensional displacement at its range.
 Within range it backs off the target by both body radii along that vector,
 preserving target height before the navigation query resolves the surface.
 ================

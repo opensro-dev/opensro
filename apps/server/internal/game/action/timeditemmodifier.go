@@ -3,7 +3,7 @@
 
 timeditemmodifier.go - timed item stat blocks become instance-owned writes
 
-594AC0 installs hpi/mpi on parameters 3/4, er/hr on 9/11, and stri/inti on
+The native buff modifier pass installs hpi/mpi on parameters 3/4, er/hr on 9/11, and stri/inti on
 1/2. The common registry removes the same writes at cancellation and expiry.
 
 ===========================================================================
@@ -46,7 +46,7 @@ timedItemModifierWrites
 
 Each authored word is unsigned and rounded to float32 at the native call
 boundary. Percent-sum and flat are separate channels, not a precomputed bonus.
-irgc is shared: 594AC0 installs it for an item job and a skill buff
+irgc is shared: the native buff modifier pass installs it for an item job and a skill buff
 (Harmony therapy) alike.
 ================
 */

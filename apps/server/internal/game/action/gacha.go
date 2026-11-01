@@ -5,7 +5,7 @@ gacha.go - Magic Pop machine interaction, ticket rolls, and Gori prize exchange
 
 Owns 0x7338 machine opening, 0x7053 ticket roll to win/loss vouchers, and
 0x71BE voucher redemption through Gori (NPC_CH_GACHA_OPERATOR), including the
-native 725720 equipment property roll (+1..+5 OptLevel, 5-bit white variance
+native equipment property roll (+1..+5 OptLevel, 5-bit white variance
 + durability, and blue magic options).
 
 ===========================================================================
@@ -50,6 +50,75 @@ func GachaPoolV2FromEnv() bool {
 	return true
 }
 
+// Native Magic Pop refusal codes, answered [2][u8 code] on the request's
+// reply opcode (0xB053 for the roll, 0xB1BE for the exchange). The reference
+// server's dispatcher looks the gid up first (no such object: 0; wrong plane
+// or non-adjacent sector: 3; beyond the class hit range: 4); its handlers
+// then refuse in this order: no gacha service or set 0x1C0F, slot at or
+// beyond the bag limit 0x1806, empty slot 0x1809, item not a ticket 0x1806,
+// no win entry 2, mutation failure 5. A gid naming an object of another kind
+// also reads as no such object here: the roster holds NPCs only. The native
+// expired-ticket refusal 0x183D has no port trigger: bag rows carry no
+// period state.
+const (
+	gachaRefusalNoObject   uint16 = 0
+	gachaRefusalNoEntry    uint16 = 2
+	gachaRefusalOutOfScope uint16 = 3
+	gachaRefusalTooFar     uint16 = 4
+	gachaRefusalFailed     uint16 = 5
+	gachaRefusalBadSlot    uint16 = 0x1806
+	gachaRefusalEmptySlot  uint16 = 0x1809
+	gachaRefusalNoService  uint16 = 0x1C0F
+)
+
+/*
+================
+gachaRefusal
+
+The one frame a refused roll or exchange answers with. A refusal that sent
+nothing left the client in its waiting phase for good: it leaves that phase
+only on the reply opcode.
+================
+*/
+func gachaRefusal(opcode uint16, code uint16) []wire.Frame {
+	return []wire.Frame{{Opcode: opcode, Payload: gacha.EncodeRefusal(code)}}
+}
+
+/*
+================
+gachaNpcAdmission
+
+The native admission shared by the roll and the exchange: the gid names a
+live object (else code 0), in the viewer's plane and adjacent sectors (3),
+inside the NPC class hit range (4). The caller then tests its own service
+mark and answers 0x1C0F. There is no selected-object test: closing the NPC
+talk window releases the selection (0x74B3) while the Magic Pang window
+stays open, and the reference server still answers the roll. The reason is
+empty only when the NPC is admitted; the code is meaningful only beside a
+reason (an admitted NPC and a missing object both carry 0).
+================
+*/
+func (rt *Runtime) gachaNpcAdmission(
+	divisionID string,
+	character *enterworld.Character,
+	gid uint32,
+) (simulation.NpcDef, uint16, string) {
+	if !rt.NpcSpawn.Enabled {
+		return simulation.NpcDef{}, gachaRefusalNoObject, "the NPC roster is not live"
+	}
+	npc, ok := rt.npcForGID(gid)
+	if !ok {
+		return simulation.NpcDef{}, gachaRefusalNoObject, fmt.Sprintf("gid %d names no roster NPC", gid)
+	}
+	if !rt.npcVisibleTo(divisionID, character, npc) {
+		return simulation.NpcDef{}, gachaRefusalOutOfScope, fmt.Sprintf("gid %d is outside the viewer's sector scope", gid)
+	}
+	if !rt.npcWithinHitRange(divisionID, character, npc) {
+		return simulation.NpcDef{}, gachaRefusalTooFar, fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	}
+	return npc, 0, ""
+}
+
 // gachaOperatorCodename is the exchange operator Gori (RefObj 9252).
 const gachaOperatorCodename = "NPC_CH_GACHA_OPERATOR"
 
@@ -88,7 +157,7 @@ func secureGachaRoll() (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("gacha: random source: %w", err)
 	}
-	// Native 9DD338 returns 15 bits; 4C8010..4C8015 takes %10000.
+	// Native rand() returns 15 bits; the reference server takes %10000.
 	// Keep its distribution while retaining the server-owned secure source.
 	return uint32(value.Uint64()) % gachaRollDenominator, nil
 }
@@ -112,8 +181,9 @@ func (rt *Runtime) registerGacha(hub *transport.Hub) {
 		frames, refusal := rt.HandleGachaRoll(divisionID, character, payload)
 		if refusal != "" {
 			log.Debugf("gacha: 0x7053 refused for %s: %s", character.Name, refusal)
-			return
 		}
+		// A refusal carries its one [2][code] frame: dropping it would strand
+		// the client in its waiting phase until relog.
 		sendFrames(session, frames)
 	})
 	hub.Handle(gacha.OpExchange, func(
@@ -187,10 +257,12 @@ func (rt *Runtime) HandleGachaNpcAction(
 ================
 HandleGachaRoll
 
-HandleGachaRoll applies one atomic Magic Pop transaction. The exact
-v1.150 request binds all three authorities: selected machine gid, selected
-gachaitemset entry id and ticket inventory slot. On commit the ticket row
-becomes a native win/loss result card; 0x3645 reaches the client before
+HandleGachaRoll applies one atomic Magic Pop transaction. The request
+names the machine gid, the gachaitemset entry and the ticket slot.
+Admission is the native one (gachaNpcAdmission, then gacha set, bag limit,
+ticket row, entry lookup); every refusal answers one B053 [2][u8 code],
+the native answer the client's waiting phase ends on. On commit the ticket
+row becomes a native win/loss result card; 0x3645 reaches the client before
 B053 so CIFGhaCha_ApplyResult observes the new ref and reward map.
 ================
 */
@@ -203,31 +275,53 @@ func (rt *Runtime) HandleGachaRoll(
 		return nil, "characterNotFound"
 	}
 	if rt.GachaCatalog == nil || rt.GachaRoll == nil {
-		return nil, "Gacha catalogue or random source is unavailable"
+		return gachaRefusal(gacha.OpResult, gachaRefusalFailed), "Gacha catalogue or random source is unavailable"
 	}
 	request, err := gacha.DecodeRollRequest(payload)
 	if err != nil {
-		return nil, err.Error()
+		return gachaRefusal(gacha.OpResult, gachaRefusalBadSlot), err.Error()
 	}
 	// The wire shape bound; the authority door checks the character's capacity.
 	if request.InventorySlot < inventory.EquipmentSlotEnd ||
 		request.InventorySlot >= inventory.MaxBagEnd {
-		return nil, fmt.Sprintf("inventory slot %d is outside the bag", request.InventorySlot)
+		return gachaRefusal(gacha.OpResult, gachaRefusalBadSlot),
+			fmt.Sprintf("inventory slot %d is outside the bag", request.InventorySlot)
 	}
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
-	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok ||
-		selected != request.BoundNpcGID {
-		return nil, "bound NPC is not the current selected object"
+	npc, code, reason := rt.gachaNpcAdmission(divisionID, character, request.BoundNpcGID)
+	if reason != "" {
+		return gachaRefusal(gacha.OpResult, code), reason
 	}
-	npc, ok := rt.gachaNpcForGID(divisionID, character, request.BoundNpcGID)
-	if !ok {
-		return nil, fmt.Sprintf("gid %d is not a live Gacha roster NPC", request.BoundNpcGID)
+	if !rt.GachaCatalog.HasNpc(npc.RefObjID) {
+		return gachaRefusal(gacha.OpResult, gachaRefusalNoService),
+			fmt.Sprintf("NPC RefObjID %d has no v1.150 Gacha set", npc.RefObjID)
+	}
+	if !inventory.IsBagSlot(request.InventorySlot, inventory.BagEnd(character)) {
+		return gachaRefusal(gacha.OpResult, gachaRefusalBadSlot),
+			fmt.Sprintf("inventory slot %d is beyond the bag limit", request.InventorySlot)
+	}
+	rowIndex := -1
+	for index := range character.MissionInventory {
+		if character.MissionInventory[index].Slot == int64(request.InventorySlot) {
+			rowIndex = index
+			break
+		}
+	}
+	if rowIndex < 0 {
+		return gachaRefusal(gacha.OpResult, gachaRefusalEmptySlot),
+			fmt.Sprintf("inventory slot %d is empty", request.InventorySlot)
+	}
+	if row := &character.MissionInventory[rowIndex]; row.RefObjID != rt.GachaCatalog.Card.RefObjID ||
+		row.TypeFlags != rt.GachaCatalog.Card.TypeFlags ||
+		row.Codename != rt.GachaCatalog.Card.Codename {
+		return gachaRefusal(gacha.OpResult, gachaRefusalBadSlot),
+			fmt.Sprintf("inventory slot %d holds no Magic Pop ticket", request.InventorySlot)
 	}
 	prize, ok := rt.GachaCatalog.PrizeForNpc(npc.RefObjID, request.SelectedEntryID)
 	if !ok {
-		return nil, fmt.Sprintf(
+		return gachaRefusal(gacha.OpResult, gachaRefusalNoEntry), fmt.Sprintf(
 			"entry %d is not mapped to NPC RefObjID %d",
 			request.SelectedEntryID,
 			npc.RefObjID,
@@ -291,7 +385,7 @@ func (rt *Runtime) HandleGachaRoll(
 			result = rt.GachaCatalog.WinCard
 			code = gacha.ResultWin
 		}
-		// 4EDE1B..4EDE77 writes both parameters for either result card.
+		// Natively both parameters are written for either result card.
 		magicOptions := []uint64{uint64(prize.RewardRefObjID), uint64(prize.Quantity)}
 		delta := gacha.EncodeResultItemDelta(request.InventorySlot, result.RefObjID, prize.RewardRefObjID, prize.Quantity)
 		*row = enterworld.InventoryRow{
@@ -310,7 +404,7 @@ func (rt *Runtime) HandleGachaRoll(
 		return true
 	})
 	if !committed {
-		return nil, failure
+		return gachaRefusal(gacha.OpResult, gachaRefusalFailed), failure
 	}
 	if rt.GachaPoolV2 {
 		outcome := "lose"
@@ -346,13 +440,13 @@ func (rt *Runtime) gachaNpcForGID(
 ================
 prepareGachaRewardItem
 
-4ED910 mutates the voucher to the prize item and calls 725720
-(Loot_InitializeSpecialEquipmentProperties) with a zeroed override spec
+Natively the voucher mutates to the prize item and the special equipment
+property roll runs with a zeroed override spec
 (all 26 v1.150 gachaitemset.txt rows carry param1..4 == 0). Non-equipment
 returns immediately without drawing from DropRoll; equipment (TID 3.1.*.*)
 rolls a low-biased +1..+5 enhancement level (minimum of two 1..5 draws),
-5-bit white-stat variance + tier-0 durability (727590), and blue magic
-options (7276A0: 100% entry for Rarity == 2 Seal of Star, 31/101 for
+5-bit white-stat variance + tier-0 durability, and blue magic
+options (100% entry for Rarity == 2 Seal of Star, 31/101 for
 normal gear).
 ================
 */
@@ -395,13 +489,13 @@ func (rt *Runtime) prepareGachaRewardItem(reward *enterworld.ItemRef, quantity u
 ================
 HandleGachaExchange
 
-HandleGachaExchange answers 0x71BE [operatorGid] from the talk row 5DB67B
-sends once 642270 found a voucher in the bag. Per 4C8130 -> 4ED910 -> 725720,
+HandleGachaExchange answers 0x71BE [operatorGid] from the client's talk row 5DB67B
+sends once 642270 found a voucher in the bag. Per the reference server's exchange,
 the lowest-slot win or loss voucher is consumed and its recorded pair,
-reference id then quantity, becomes bag items with 725720 rolling +1..+5
+reference id then quantity, becomes bag items with the native roll giving +1..+5
 OptLevel, 5-bit white variance + durability, and blue magic options on
 equipment rewards. The voucher leaves by a 0x3645 quantity of zero rather
-than a row delete, because that is the update 7654B0 turns into
+than a row delete, because that is the update client 7654B0 turns into
 UIIT_MSG_GACHA_EXCHANGE.
 
 The removal is pinned to the slot whose pair was read, never to the codename:
@@ -420,24 +514,25 @@ func (rt *Runtime) HandleGachaExchange(
 		return nil, "characterNotFound"
 	}
 	if rt.GachaCatalog == nil {
-		return nil, "Gacha catalogue is unavailable"
+		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed), "Gacha catalogue is unavailable"
 	}
 	gid, err := gacha.DecodeExchangeRequest(payload)
 	if err != nil {
-		return nil, err.Error()
+		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalBadSlot), err.Error()
 	}
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
-	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
-		return nil, "bound NPC is not the current selected object"
+	// The native admission (gachaNpcAdmission), then the operator service:
+	// natively an NPC without it refuses 0x1C0F and one with no exchangeable
+	// voucher refuses 5, each answered [2][u8 code] on 0xB1BE.
+	npc, code, reason := rt.gachaNpcAdmission(divisionID, character, gid)
+	if reason != "" {
+		return gachaRefusal(gacha.OpExchangeResult, code), reason
 	}
-	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
-	if !ok || npc.Codename != gachaOperatorCodename {
-		return nil, fmt.Sprintf("gid %d is not a live Gacha exchange operator", gid)
-	}
-	if !rt.npcWithinHitRange(divisionID, character, npc) {
-		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
+	if npc.Codename != gachaOperatorCodename {
+		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalNoService),
+			fmt.Sprintf("gid %d is not a live Gacha exchange operator", gid)
 	}
 
 	failure := "no exchangeable voucher"
@@ -501,7 +596,7 @@ func (rt *Runtime) HandleGachaExchange(
 		character.MissionInventory = rows
 		// The native client wants the voucher's quantity update, not a row delete,
 		// and first: the freed slot is the first free one, so the reward usually
-		// lands in it, and 7654B0 must still find the voucher there.
+		// lands in it, and client 7654B0 must still find the voucher there.
 		quantityFrame := wire.Frame{
 			Opcode:  gacha.OpItemStateDelta,
 			Payload: wire.NewWriter(4).U8(slot).U8(8).U16(0).Payload(),
@@ -510,7 +605,7 @@ func (rt *Runtime) HandleGachaExchange(
 		return true
 	})
 	if !committed {
-		return nil, failure
+		return gachaRefusal(gacha.OpExchangeResult, gachaRefusalFailed), failure
 	}
 	return frames, ""
 }

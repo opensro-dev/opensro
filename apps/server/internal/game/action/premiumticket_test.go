@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-premiumticket_test.go - 49C2B0 cases 3 and 4, the premium time tickets
+premiumticket_test.go - the special consumable's cases 3 and 4, the premium time tickets
 
 ===========================================================================
 */

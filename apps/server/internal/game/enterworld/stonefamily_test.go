@@ -172,7 +172,7 @@ func TestItemStoneTooltipMask(t *testing.T) {
 	}
 
 	// A repair stone searches its own fourth description, not the
-	// option's words (557C50): the option says weapon, the description
+	// option's words (client 557C50): the option says weapon, the description
 	// says honor, and only honor prints.
 	repair := stoneTestRef(7, "MATTR_REPAIR")
 	repair.ParamDescriptions[3] = "honor"
@@ -188,7 +188,7 @@ func TestItemStoneTooltipMask(t *testing.T) {
 		t.Fatalf("attribute stone tooltip mask = %v, %v", mask, ok)
 	}
 
-	// 557C50 prints the row even when the option does not resolve: a
+	// Client 557C50 prints the row even when the option does not resolve: a
 	// present zero, where the binder mask stays unpublished.
 	fields := ItemStoneNativeFields(base, stoneTestRef(1, "MATTR_MISSING"), magic)
 	mask, ok = fields.Lookup("stoneTooltipMask")

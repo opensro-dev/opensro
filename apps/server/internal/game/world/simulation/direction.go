@@ -7,9 +7,9 @@ The v1.150 client has two ways to move: a ground destination (0x7738 mode
 1) and a direction walk (0x7738 mode 0). The direction walk is what a click
 on the sky, or on anything the ground pick misses, produces:
 CGInterface_MoveToWorldPoint (0x6932A0) falls through to
-CNavigationDeadreckon_SendAngleMoveCommand (0x877F30), which ships the
+CNavigationDeadreckon_SendAngleMoveCommand (client 0x877F30), which ships the
 camera ray's yaw with angular flag 1 (GO). The ack then starts
-CNavigationController_StartDirectMove (0x86D150): nav state 2, which has
+CNavigationController_StartDirectMove (client 0x86D150): nav state 2, which has
 no arrival and walks until the region manager's ground move test blocks it.
 
 The reference server mirrors it with its command mover: the
@@ -34,7 +34,7 @@ const (
 	// mover's moving latch only when it is present).
 	AngularFlagGo uint8 = 0x01
 	// AngularFlagSteerLeft and AngularFlagSteerRight are the arrow-key
-	// steering bits MovementController_SetDirectionVector (0x877FB0) keeps
+	// steering bits MovementController_SetDirectionVector (client 0x877FB0) keeps
 	// client-side; the server's command mover turns pi rad/s while
 	// one is held. The v1.150 client never puts them on 0x7738 (0x877F30
 	// always writes flag 1), so the port reads only AngularFlagGo.
@@ -45,7 +45,7 @@ const (
 // Steer and stop opcodes of the direction walk.
 const (
 	// OpClientSteerRequest is 0x72CF [u16 heading]: a new heading for a
-	// walking mover (CNavigationDeadreckon_SendSteeringUpdate 0x877540).
+	// walking mover (client CNavigationDeadreckon_SendSteeringUpdate 0x877540).
 	OpClientSteerRequest uint16 = 0x72CF
 	// OpObjectSteer is 0xB2CF [u32 gid][u16 heading]
 	// (CPSMission_OnEntityUpdateAngle0xB2CF 0x775A90): the client sets the
@@ -53,7 +53,7 @@ const (
 	// ignored.
 	OpObjectSteer uint16 = 0xB2CF
 	// OpClientDirectionStopRequest is 0x72F5 [u16 heading]: the Up-arrow
-	// release (CNavigationDeadreckon_SendAngleUpdatePacket 0x8777B0). The
+	// release (client CNavigationDeadreckon_SendAngleUpdatePacket 0x8777B0). The
 	// answer is the 0xB2F5 source correction (wire.OpObjectSourceCorrection).
 	OpClientDirectionStopRequest uint16 = 0x72F5
 	// ClientHeadingRequestSize is the body size of 0x72CF and 0x72F5.
@@ -66,14 +66,14 @@ const (
 // every tick until the move test blocks it. The port's live plane needs a
 // goal for its segment, so the walk is planned as consecutive legs. 1000
 // units is the ground pick's own ray cap (SWorld_PickGroundTerrainAndNavigation
-// 0x88D340): a click that misses the ground within it is what starts a
+// client 0x88D340): a click that misses the ground within it is what starts a
 // direction walk, so a leg covers the distance a destination click could not.
 const DirectionLegUnits = 1000.0
 
 // DirectionLegLookaheadMs is how long before a leg matures the next one is
 // planned. INFERENCE: 500 ms is the client's own direction cadence
 // (CIObject_ScheduleStateTimer(this, 7, 500) behind
-// CNavigationDeadreckon_UpdateMovementHeading 0x8779B0). Planning inside
+// client CNavigationDeadreckon_UpdateMovementHeading 0x8779B0). Planning inside
 // the leg keeps the tick from publishing a settle between legs.
 const DirectionLegLookaheadMs int64 = 500
 

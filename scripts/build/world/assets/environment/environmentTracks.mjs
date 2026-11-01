@@ -4,15 +4,15 @@
 //
 // Each track is sampled per frame by the time-of-day and written into a MapRenderer env
 // field. Order below is the FILE read order (matches the on-disk env-entry layout and the
-// native sampling order in sub_8a7d10 @ 0x008a7d10).
+// native sampling order in SWorld_UpdateEnvironmentLighting @ 0x008a7d10).
 //
-//   vec3 sampler sub_4dc920, scalar sampler sub_4dcab0; field block MapRenderer+0x682f..+0x68cb.
+//   vec3 sampler EnvironmentVectorTrack_SampleAtTime, scalar sampler EnvironmentScalarTrack_SampleAtTime; field block MapRenderer+0x682f..+0x68cb.
 
 // Scalar post-sample transforms (applied to the raw sampled value before the native store):
 //   identity     : value as-is (consumer may clamp, e.g. star clamps to [-1,1])
 //   halfBias      : (value + 1) * 0.5  -> remaps [-1,1] to [0,1]
 //   invHalfBias   : 2 - (clamp(value,-1,1) + 1)  -> inverted half-bias of the [-1,1]-clamped
-//                   sample (native clamp is in the COMMON path sub_8a7d10 @008a806c, applies to all envs)
+//                   sample (native clamp is in the COMMON path SWorld_UpdateEnvironmentLighting @008a806c, applies to all envs)
 //   scaledCcbee8  : value * data_ccbee8 (runtime scale constant; consumer not yet wired)
 export const ENV_SCALAR_TRANSFORM = {
   identity: "identity",

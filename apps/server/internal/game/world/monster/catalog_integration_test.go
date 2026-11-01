@@ -234,7 +234,8 @@ func TestNestPromotionProducesChampionAndGiantRarity(t *testing.T) {
 		HasChampionTactics:    true,
 		ChampionTactics:       ChampionTactics{Aggressive: true, SightRange: 150, NativeTacticsFlags: 0x200},
 	}}))
-	// Per 5607B0 attempt: promotion roll, split roll, heading, replacement.
+	// Per the reference server's hatch attempt: promotion roll, split roll,
+	// heading, replacement.
 	// Both pass the promotion roll; the first split is in the native <=14
 	// giant band, the second in the >14 champion band.
 	registry.SetRandomSource(crtWords(t, 0, 14, 0, 0, 0, 0, 15, 0, 0, 0))
@@ -256,7 +257,8 @@ func TestNestPromotionProducesChampionAndGiantRarity(t *testing.T) {
 	if instances[0].Rarity() != 4 || instances[1].Rarity() != 1 {
 		t.Fatalf("rarities = %d/%d, want giant(4)/champion(1)", instances[0].Rarity(), instances[1].Rarity())
 	}
-	// 560968 -> 5F6EB0: both grades run on the champion tactics row, while
+	// The hatch's promotion path: both grades run on the champion tactics
+	// row, while
 	// population fields stay with the nest.
 	for _, instance := range instances {
 		tactics := ResolveTactics(instance)
@@ -281,7 +283,7 @@ func TestNestWithoutChampionTacticsIsNeverPromoted(t *testing.T) {
 		ChampionGenPercentage: 100,
 		MaxCount:              1,
 	}}))
-	// 560903: a zero champion tactics id skips the promotion before any roll;
+	// A zero champion tactics id skips the promotion before any roll;
 	// only the heading and the replacement roll draw.
 	registry.SetRandomSource(crtWords(t, 0, 0, 0))
 	registry.StartDivision("division")
@@ -449,7 +451,8 @@ func TestGeneratedSpawnNormalizesRegionAndUsesGroundAuthority(t *testing.T) {
 		GenerateRadius: 40,
 		MaxCount:       1,
 	}}))
-	// Heading, replacement, then 531240: outer band (<70), full fraction of
+	// Heading, replacement, then the banded spawn-radius draw: outer band
+	// (<70), full fraction of
 	// the band (2/3r + 1/3r = r) and angle 0, so the candidate is 40 units
 	// east of an anchor 10 units from the sector edge.
 	registry.SetRandomSource(crtWords(t, 0, 0, 0, 32767, 0, 0))

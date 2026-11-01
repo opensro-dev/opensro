@@ -3,11 +3,9 @@
 
 status.go - the abnormal status table and its parameter sources
 
-Package abnormal ports the native abnormal-state engine of SR_GameServer
-(v1.188 research executable): the per-hit roll SkillCombat_RollAbnormalStatus
-(590680), the 32-slot owner block initialised by GCharAbnormalState_Initialize
-(4A40C0), admission CGObjChar_ApplyAbnormalStateRecord (4A4270), the update
-CGObjChar_UpdateAbnormalStates (4A4390) and the per-status callbacks at
+Package abnormal ports the native abnormal-state engine of the reference server
+(v1.188 research executable): the per-hit roll, the 32-slot owner block,
+admission of a status record, the per-tick update and the per-status callbacks at
 block+0xE0C. It has no world dependencies: owners adapt it to monsters and
 players through the Owner interface.
 
@@ -51,10 +49,10 @@ const (
 	TimeBomb
 )
 
-// SlotCount is the block's fixed slot array (4A40C0 initialises 0x20 slots).
+// SlotCount is the block's fixed slot array (the server initialises 0x20 slots).
 const SlotCount = 32
 
-// Bit is g_adwAbnormalStatusBit (C63EC8): identity except slots 2 and 3,
+// Bit is the server's abnormal-status bit table: identity except slots 2 and 3,
 // which swap so burn is mask bit 3 and electric shock mask bit 2.
 /*
 ================
@@ -71,7 +69,7 @@ func (s Status) Bit() uint32 {
 	return 1 << s
 }
 
-// Category is tagSkillStatusEffect+06 (5AA450): 1 for the level-carrying
+// Category is the status-effect record's +06: 1 for the level-carrying
 // element statuses, 2 for grade-carrying statuses, 0 otherwise.
 /*
 ================
@@ -98,7 +96,7 @@ Source
 
 Source is one tagRefSkill abnormal parameter block in native field order.
 Key is the per-actor probability key the roll passes in ECX (the field
-ordinal), Resist the CSkillManager status-resistance index of statuses 6+.
+ordinal), Resist the server skill manager's status-resistance index of statuses 6+.
 ==================
 */
 type Source struct {
@@ -109,13 +107,13 @@ type Source struct {
 	Arity  uint8
 }
 
-// Sources lists the 23 parameter blocks in 590680 evaluation order.
+// Sources lists the 23 parameter blocks in the roll's evaluation order.
 // tagRefSkill offsets: 30C..320 then 430..474 (448 is stns, not a status).
 var Sources = [...]Source{
 	{0x667a, Freeze, 0x01000000, -1, 2},
 	{0x6662, Frostbite, 0x02000000, -1, 2},
 	{0x6573, ElectricShock, 0x03000000, -1, 3},
-	{0x6275, Burn, 0x04000000, -1, 3}, // 590B24: one caster key shared across victims and imbues
+	{0x6275, Burn, 0x04000000, -1, 3}, // one caster key shared across victims and imbues
 	{0x7073, Poison, 0x05000000, -1, 3},
 	{0x7a62, Zombie, 0x06000000, -1, 2},
 	{0x7365, Sleep, 0x07000000, 0, 3},
@@ -166,7 +164,7 @@ type Param struct {
 	Args    [6]uint32
 }
 
-// Caster getv keys read by 590680 through CSkillManager_GetSkillModifier.
+// Caster getv keys the roll reads through the skill owner's modifier lookup.
 const (
 	KeyPoisonDamage   uint32 = 0x52504455 // RPDU, tagRefSkill+500
 	KeyPoisonDuration uint32 = 0x52505455 // RPTU, tagRefSkill+504
@@ -198,18 +196,18 @@ type SkillParams struct {
 	Curl                            bool
 	Rcur                            int32
 	RcurSet                         bool
-	// EffectArea is the kind-1 efr (0x656672) block at RefSkill+0x28C.
+	// EffectArea is the kind-1 efr block at RefSkill+0x28C.
 	// Select 4 or 5 forces the party selector unless the shape is already 5 or 6.
 	EffectArea EffectArea
 	// AdmitDeadParty is the resu tag (0x72657375) stored at RefSkill+0x330.
-	// TargetSelection_Party skips the alive check when that pointer is set.
+	// The party selector skips the alive check when that tag is set.
 	// Word 0 is the highest level it revives (0x3012 above it, none when
 	// 0), word 1 the percent of the last EXP loss it returns.
 	AdmitDeadParty bool
 	ResuMaxLevel   uint32
 	ResuExpPercent uint32
 	// Rmut is the rmut tag (0x726D7574, RefSkill+0x4AC): the skill a
-	// resurrected player starts on accepting (TrsWaitResponse_OnResponse).
+	// resurrected player starts with on accepting the resurrection.
 	Rmut uint32
 }
 
@@ -228,7 +226,7 @@ type EffectArea struct {
 	Reduction, Select               uint32
 }
 
-// CurePresent reports a curt or curl block. Both null skips 593F50's cure.
+// CurePresent reports a curt or curl block. Both null skips the server's cure.
 /*
 ================
 CurePresent
@@ -254,7 +252,7 @@ func (p SkillParams) Present() bool {
 }
 
 // Stun reports tagRefSkill+450. Its presence bypasses the magical-wall
-// exclusion for other statuses; a wall still excludes Stun itself (591E7C).
+// exclusion for other statuses; a wall still excludes Stun itself.
 /*
 ================
 Stun

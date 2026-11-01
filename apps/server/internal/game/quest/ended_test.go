@@ -6,7 +6,8 @@ ended_test.go - the Khotan blacksmith's fork and the ended quest state
 Exercise the shipped definitions: SMITH_2 and ACCESSORY_2 open after the
 third ACCESSORY_1; refusing SMITH_2's first page ends the blacksmith line
 and opens the accessory line; pressing Accept ends the accessory line,
-even when the acceptance itself is refused (8A77A0). An ended quest that
+even when the acceptance itself is refused (as the server's SMITH_2 talk
+does). An ended quest that
 was completed keeps its completion, its count and its login wire row.
 
 ===========================================================================
@@ -165,7 +166,7 @@ func TestKhotanRefusalNeedsALiveOffer(t *testing.T) {
 TestKhotanAcceptEndsTheAccessoryLine
 
 Accepting SMITH_2 ends ACCESSORY_2 and ACCESSORY_3; so does an Accept the
-acceptance refuses (8A7857 skips only the start).
+acceptance refuses (the server's SMITH_2 talk skips only the start).
 ================
 */
 func TestKhotanAcceptEndsTheAccessoryLine(t *testing.T) {

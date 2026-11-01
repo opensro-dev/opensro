@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-impactfinish_test.go - the shared impact tail against 5874D0 and 58FD41
+impactfinish_test.go - the shared impact tail against the server's monster scale and tail
 
 ===========================================================================
 */
@@ -19,7 +19,7 @@ import (
 ================
 TestMonsterDamageScaleFollowsTheJumpTable
 
-Every grade arm of 5875A8, for a solo (population kind 0) and a party
+Every grade arm of the server's monster damage-scale jump table, for a solo (population kind 0) and a party
 (kind 1) monster, and an unknown kind falling back to 1.
 ================
 */
@@ -50,9 +50,9 @@ func TestMonsterDamageScaleFollowsTheJumpTable(t *testing.T) {
 ================
 TestScaleDamageExactTruncatesTheExactProduct
 
-58FD0A..58FD3A multiply on the x87 stack, where a 32-bit damage times a
+The server's tail multiplies on the x87 stack, where a 32-bit damage times a
 float32 scale is exact, then truncate. Compare against an exact rational
-product across the scales 5874D0 can return.
+product across the scales the monster damage-scale routine can return.
 ================
 */
 func TestScaleDamageExactTruncatesTheExactProduct(t *testing.T) {
@@ -75,7 +75,7 @@ func TestScaleDamageExactTruncatesTheExactProduct(t *testing.T) {
 ================
 TestFinishImpactAppliesPercentScaleThenFloor
 
-58FC3F..58FD59 in order: percent, monster scale, then the att floor. A
+The server's impact tail in order: percent, monster scale, then the att floor. A
 blocked or slain record keeps its zero; a non-att zero stays zero; life
 steal skips the percent it already took.
 ================
@@ -104,7 +104,7 @@ func TestFinishImpactAppliesPercentScaleThenFloor(t *testing.T) {
 			t.Errorf("%s: damage %d, want %d", row.name, got, row.want)
 		}
 	}
-	// 58F0A2: a defender its wall fully covers skips the tail, so the
+	// A defender its wall fully covers skips the tail, so the
 	// wall's absorption leaves it at zero instead of the att floor's 1.
 	if got := FinishImpact(Result{}, ImpactTail{Attack: true, Covered: true, MonsterAttacker: true, AttackerRarity: 4}); got.Damage != 0 {
 		t.Errorf("covered defender took %d, want 0", got.Damage)

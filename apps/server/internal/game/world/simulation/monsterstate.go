@@ -46,8 +46,21 @@ type divisionMonsterState struct {
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
 	instances        monsterStorage
-	uniqueNotices    []Frame
-	uniqueDeaths     map[uint32]bool
+	// interestMemo holds populationInterestGIDs results per viewer
+	// interest block. Reconciled block membership has already absorbed
+	// the instant, so an entry lives until a mover crosses a block edge
+	// or the actors or static lists change (interestMemoStamp).
+	interestMemoStamp interestMemoStamp
+	interestMemo      map[worldgeom.InterestBlock][]uint32
+	// interestStatics is byRegion without the gids that have a mover,
+	// rebuilt when interestStaticsStamp stops matching.
+	interestStatics      map[uint16][]uint32
+	interestStaticsStamp interestStaticsStamp
+	// byRegionGeneration advances on every byRegion write
+	// (listRegionGid, removeRegionGid).
+	byRegionGeneration uint64
+	uniqueNotices      []Frame
+	uniqueDeaths       map[uint32]bool
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline
@@ -93,13 +106,19 @@ type MonsterState struct {
 	regionDormancy  bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
-	players              func(string, int64) []PopulationPlayer
-	mu                   sync.Mutex
-	template             monster.Template
-	counter              uint32
-	divs                 map[string]*divisionMonsterState
-	worldAllocators      map[string]*instance.Registry
-	worldPopulations     map[populationKey]*divisionMonsterState
+	players          func(string, int64) []PopulationPlayer
+	mu               sync.Mutex
+	template         monster.Template
+	counter          uint32
+	divs             map[string]*divisionMonsterState
+	worldAllocators  map[string]*instance.Registry
+	worldPopulations map[populationKey]*divisionMonsterState
+	// popHint is the population key and population the last
+	// populationForObject scan answered with. populationForObject
+	// verifies it against the registry and the population's own rows
+	// before believing it; see there (#2029).
+	popHintKey           populationKey
+	popHintState         *divisionMonsterState
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest

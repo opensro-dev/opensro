@@ -42,7 +42,7 @@ func noticeText(raw []byte) string {
 	return wire.DecodeWindows1252(raw)
 }
 
-// 519900 -> 5DF070: session restriction, master, text filter, life and byte
+// Reference server: session restriction, master, text filter, life and byte
 // limits precede DB operation 7. Client v1.150 uses B220 with a one-byte error;
 // research B477/68xx values are never copied directly onto this wire.
 func (r *InviteRuntime) handleNoticeEdit(s *transport.Session, _ uint16, payload []byte) {

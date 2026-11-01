@@ -3,9 +3,9 @@
 
 combattarget.go - the object an attack command pursues and strikes
 
-CGCharAutoCommandActor keeps a target object ID; the object behind it may
-be a monster or, once PvP admits it (CGObjPC_CanAttackTarget 52BF90), a
-player or a player's COS (a transport, horse or pet), which 5293A0 judges
+The command actor keeps a target object ID; the object behind it may
+be a monster or, once PvP admits it (the reference server's attack-target check), a
+player or a player's COS (a transport, horse or pet), which the attack validation judges
 through its owner (cosTargetRefusal). The attack intents and the prepared-cast release resolve their
 target here so the walk into reach, the range test and the life test read
 one rule for every kind. The cast itself splits by kind: monsters take
@@ -75,9 +75,11 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 	if player.ID == attacker.ID {
 		return combatTarget{}, false
 	}
-	snapshot := rt.characterSnapshot(division, player)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) ||
-		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(attacker) {
+	snapshot := rt.characterSnapshotAdmitted(division, player, func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			domain.CharacterWorldInstance(live) == domain.CharacterWorldInstance(attacker)
+	})
+	if snapshot == nil {
 		return combatTarget{}, false
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
@@ -86,27 +88,96 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 
 /*
 ================
+combatTargetExists
+
+resolveCombatTarget's verdict alone, for the readers that ask only
+whether the target still stands (the waiting cast's per-tick verdict,
+#2139): the same gates in the same order, but no record is detached
+and no pose is sampled. The player and COS gates judge the live
+record under the one read door (characterAdmitted) - the discarded
+copies they used to detach cost a whole record per question (the
+player victim's clone alone measures 20 allocs, ~16 KB on a
+production-shaped record). The COS reference check reads only the
+pet's codename, object id and brood stage plus static item data, so
+it weighs the same inputs on the live pet as on the detached one.
+================
+*/
+func (rt *Runtime) combatTargetExists(division string, attacker *enterworld.Character, gid uint32) bool {
+	if attacker == nil || gid == 0 {
+		return false
+	}
+	if target, ok := rt.characterMonster(division, attacker, gid); ok {
+		if target.CurrentHP == 0 || rt.Monsters == nil {
+			return false
+		}
+		_, ok := rt.Monsters.Mover(division, target.Gid)
+		return ok
+	}
+	if player := rt.findCharacterByGid(division, gid); player != nil {
+		if player.ID == attacker.ID {
+			return false
+		}
+		return rt.characterAdmitted(division, player, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live) &&
+				domain.CharacterWorldInstance(live) == domain.CharacterWorldInstance(attacker)
+		})
+	}
+	owner := rt.characterByCosGID(division, gid)
+	var pet *enterworld.CharacterCOS
+	if !rt.characterAdmitted(division, owner, func(live *enterworld.Character) bool {
+		if live.ID == attacker.ID || live.DeletePending ||
+			domain.CharacterWorldInstance(live) != domain.CharacterWorldInstance(attacker) {
+			return false
+		}
+		pet = live.CompanionByGID(gid)
+		return pet != nil && pet.Summoned && pet.CurrentHP != 0 &&
+			(pet.NativeBodyStatus < mercenaryBodyHiddenFirst || pet.NativeBodyStatus > mercenaryBodyHiddenLast)
+	}) {
+		return false
+	}
+	ref, found := rt.cosReference(pet)
+	return found && ref.TidWord>>11 != domain.PickupPetBand
+}
+
+/*
+================
 resolveCOSTarget
 
 A living, summoned COS of another character in the attacker's world
-instance, with its owner. 5291D0 refuses a dead COS, a hidden COS (body
+instance, with its owner. The reference server refuses a dead COS, a hidden COS (body
 modes 6..7) and a pickup pet (+0x43C) whoever attacks it; a protected COS
 (body modes 2..4) still resolves here so cosTargetRefusal can answer
-5291D0's 0x3020, and a ridden COS stays a target (the mounted trader's
-transport). The owner need not be alive: 5293A0 judges the owner's
+the reference server's 0x3020, and a ridden COS stays a target (the mounted trader's
+transport). The owner need not be alive: the attack validation judges the owner's
 relations, not its life.
+
+The owner's copy is the pet-owner view (SnapshotCompanion, #2030): an
+area query resolves every pet of every player standing in it. Its
+readers are audited: cosTargetRefusal and the pet lanes'
+worldPlayerEnemy read the owner's ID, name, world, body status, level,
+PK, aggressions, guild, the job-suit slot and the ridden transport's
+cargo, and the strike itself takes the live owner (target.player).
 ================
 */
 func (rt *Runtime) resolveCOSTarget(division string, attacker *enterworld.Character, gid uint32, now int64) (combatTarget, bool) {
 	owner := rt.characterByCosGID(division, gid)
-	snapshot := rt.characterSnapshot(division, owner)
-	if snapshot == nil || snapshot.ID == attacker.ID || snapshot.DeletePending ||
-		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(attacker) {
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(live *enterworld.Character) bool {
+		if live.ID == attacker.ID || live.DeletePending ||
+			domain.CharacterWorldInstance(live) != domain.CharacterWorldInstance(attacker) {
+			return false
+		}
+		pet := live.CompanionByGID(gid)
+		return pet != nil && pet.Summoned && pet.CurrentHP != 0 &&
+			(pet.NativeBodyStatus < mercenaryBodyHiddenFirst || pet.NativeBodyStatus > mercenaryBodyHiddenLast)
+	})
+	if snapshot == nil {
 		return combatTarget{}, false
 	}
+	// Admission judged the companion's summons, life and form on the
+	// live record in the same door pass that detached this copy, so
+	// the copy's companion carries the same verdict.
 	pet := snapshot.CompanionByGID(gid)
-	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 ||
-		pet.NativeBodyStatus >= mercenaryBodyHiddenFirst && pet.NativeBodyStatus <= mercenaryBodyHiddenLast {
+	if pet == nil {
 		return combatTarget{}, false
 	}
 	ref, found := rt.cosReference(pet)

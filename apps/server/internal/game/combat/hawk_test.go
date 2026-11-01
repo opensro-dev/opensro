@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-hawk_test.go - the attacking hawk's strike formulas (40F1B0 / 40F3D0)
+hawk_test.go - the attacking hawk's strike formulas (physical and magical lanes)
 
 ===========================================================================
 */

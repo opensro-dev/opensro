@@ -43,7 +43,7 @@ type GroundItemRecord struct {
 	// generations are deliberately excluded from persistence.
 	PopulationWorld uint32   `json:"populationWorld,omitempty"`
 	MagicOptions    []uint64 `json:"magicOptions,omitempty"`
-	// TransformRefObjID survives a dropped monster capsule (4B2B26).
+	// TransformRefObjID survives a dropped monster capsule (the server's drop keeps it).
 	TransformRefObjID uint32  `json:"transformRefObjId,omitempty"`
 	Gid               uint32  `json:"gid"`
 	RefObjID          uint32  `json:"refObjId"`
@@ -75,6 +75,40 @@ type GroundSnapshot struct {
 	Version    int                           `json:"version"`
 	GidCounter uint32                        `json:"gidCounter"`
 	Divisions  map[string][]GroundItemRecord `json:"divisions"`
+}
+
+/*
+================
+GroundChange
+
+One persisted row the registry changed since the store last
+acknowledged it: Record is the row as it stands now, or nil when the
+gid is gone (a pickup, an expiry, a closed division).
+================
+*/
+type GroundChange struct {
+	Division string
+	Gid      uint32
+	Record   *GroundItemRecord
+}
+
+/*
+================
+GroundChanges
+
+What the store must persist to make the disk equal the registry at
+Revision. Full means the change set is unknown (a Restore, or a
+registry the store has never acknowledged): Snapshot then carries the
+whole plane and Rows is empty. Otherwise Rows holds exactly the
+changed gids, sorted by division then gid.
+================
+*/
+type GroundChanges struct {
+	Revision   uint64
+	GidCounter uint32
+	Full       bool
+	Snapshot   GroundSnapshot
+	Rows       []GroundChange
 }
 
 // ItemCount returns the number of records across all divisions.

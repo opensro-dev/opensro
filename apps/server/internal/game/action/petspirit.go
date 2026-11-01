@@ -128,7 +128,17 @@ func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Fra
 	if state == nil || state.character == nil {
 		return nil
 	}
-	owner := rt.characterSnapshot(key.division, state.character)
+	// Runs for every pet per tick: copy the owner only when the pet
+	// still holds Resolve stacks to expire (#1943), and then only the
+	// pet-owner view (#2030): the checks below read the companion, the
+	// job suit slot, life and town.
+	owner := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		pet := c.CompanionByGID(key.gid)
+		return pet != nil && pet.ResolveStacks != 0
+	})
+	if owner == nil {
+		return nil
+	}
 	pet := owner.CompanionByGID(key.gid)
 	if pet == nil || pet.ResolveStacks == 0 {
 		return nil

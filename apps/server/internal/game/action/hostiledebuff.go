@@ -191,7 +191,7 @@ The pet recipient (cosdebuff.go): the word installs on the companion,
 judged through its owner at admission (cosTargetRefusal), and no damage
 is dealt, so nothing here can attribute a kill - the owner's attacked
 registration and the caster's hostile registration are the monster and
-player arms' pair (4E1DF0 via 52A1E0, 4E27C0), exactly as the plain hit
+player arms' pair (the reference server's battle-entry pair), exactly as the plain hit
 registers them.
 ================
 */

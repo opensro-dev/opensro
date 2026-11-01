@@ -622,7 +622,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	mover.Activity = monster.NewActivityCadence(uint32(nowMs), s.randomWord())
 	state.movers.set(gid, mover)
 	state.behavior.set(gid, 0)
-	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], gid)
+	state.listRegionGid(spawn.RegionID, gid)
 	state.gidNests[gid] = index
 	// Native bookkeeping: count the spawn before re-rolling the delay.
 	n.live++
@@ -737,7 +737,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	state.behavior.remove(gid)
 	delete(state.aiTimers, gid)
 	delete(state.gidNests, gid)
-	removeRegionGid(state.byRegion, instance.Spawn.RegionID, gid)
+	state.removeRegionGid(instance.Spawn.RegionID, gid)
 	if attached {
 		s.nestDeath(state, index, at.UnixMilli())
 	}
@@ -825,19 +825,33 @@ func (state *divisionMonsterState) pendingRefills() int {
 removeRegionGid
 ================
 */
-func removeRegionGid(byRegion map[uint16][]uint32, regionID uint16, gid uint32) {
-	gids := byRegion[regionID]
+func (state *divisionMonsterState) removeRegionGid(regionID uint16, gid uint32) {
+	gids := state.byRegion[regionID]
 	for index, candidate := range gids {
 		if candidate != gid {
 			continue
 		}
+		state.byRegionGeneration++
 		gids[index] = gids[len(gids)-1]
 		gids = gids[:len(gids)-1]
 		if len(gids) == 0 {
-			delete(byRegion, regionID)
+			delete(state.byRegion, regionID)
 		} else {
-			byRegion[regionID] = gids
+			state.byRegion[regionID] = gids
 		}
 		return
 	}
+}
+
+/*
+================
+listRegionGid
+
+The one way into byRegion: the interest scan's static lists key on
+byRegionGeneration.
+================
+*/
+func (state *divisionMonsterState) listRegionGid(regionID uint16, gid uint32) {
+	state.byRegionGeneration++
+	state.byRegion[regionID] = append(state.byRegion[regionID], gid)
 }

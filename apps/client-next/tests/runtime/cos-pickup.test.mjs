@@ -485,3 +485,13 @@ test("ordinary riding horse uses its private record without a public owner tail"
 	assert.throws( () => gameplay.command( { kind: "cos-ride", gid: 2, mounted: true }, 3, horse, f.frame.local ) );
 	gameplay.dispose();
 });
+
+test("a refused target stays retired through a republication until it despawns", () => {
+	const f = fixture();
+	const entity = f.drop( 901, 10 );
+	f.owner.result( { selector: 8, subtype: 2, itemGid: 901, gid: 7, result: 2 }, 0 );
+	f.owner.track( { kind: "spawn", entity } );
+	assert.equal( f.owner.isRetired( 901 ), true );
+	f.owner.track( { kind: "despawn", gid: 901 } );
+	assert.equal( f.owner.isRetired( 901 ), false );
+});

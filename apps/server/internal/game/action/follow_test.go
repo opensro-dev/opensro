@@ -89,7 +89,7 @@ func TestFollowPursuesHoldsAndResumesWithoutCombat(t *testing.T) {
 ================
 TestFollowAdmitsARider
 
-A rider may Trace: 4ACD7A refuses only attack and skill commands while
+A rider may Trace: natively only attack and skill commands are refused while
 mounted. The ridden pursuit is the vehicle's move: it goes to the vehicle
 movement owner for the COS GID, as the client's own 0x769E move does, and
 no run switch is sent for the rider.
@@ -253,5 +253,26 @@ func TestFollowNativeDistanceBands(t *testing.T) {
 		if moving != row.moving || goal.X != row.x {
 			t.Fatalf("distance %v: goal %+v, moving %v", row.distance, goal, moving)
 		}
+	}
+}
+
+/*
+================
+TestFollowGoalStaysOnTheCaveFloor
+
+Trace in a cave (BR-261027-1949-D17E): a Jangan floor's locals run far
+outside the outdoor square, and the pursuit goal stays on the leader's
+floor at the straight-line point instead of folding into a cave region
+that does not exist.
+================
+*/
+func TestFollowGoalStaysOnTheCaveFloor(t *testing.T) {
+	spacing := simulation.CombatSpacing{ActorBodyRadius: 4, TargetBodyRadius: 4, ActionReach: followInnerGap}
+	from := simulation.Spawn{RegionID: 0x8006, X: -13706, Y: 0, Z: 5568}
+	target := from
+	target.X += 200
+	goal, moving := followGoal(from, target, spacing)
+	if !moving || goal.RegionID != from.RegionID || goal.X != from.X+142 || goal.Z != from.Z {
+		t.Fatalf("cave goal = %+v (moving %v), want region %#x at (%v, %v)", goal, moving, from.RegionID, from.X+142, from.Z)
 	}
 }

@@ -9,7 +9,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
-const { mallCurrencyRows, mallPageLayout, compactMallBagLayout } = await import(
+const { mallCurrencyRows, mallPageLayout, mallPageNumberPresentation, compactMallBagLayout } = await import(
 	"../../src/engine/foundation/ui/item-mall-layout.ts"
 );
 
@@ -265,6 +265,15 @@ test("reserved list clamps its page after removing the last item", () => {
 		previous: 0,
 		next: 8
 	} );
+});
+
+test("the current page number takes the highlight colour and styled face", () => {
+	assert.deepEqual( mallPageNumberPresentation( 2, 2 ), {
+		color: [ 1, 0x99 / 255, 0x51 / 255, 1 ],
+		fontStyle: 2
+	} );
+	assert.deepEqual( mallPageNumberPresentation( 1, 2 ), { color: undefined, fontStyle: 0 } );
+	assert.deepEqual( mallPageNumberPresentation( 3, 2 ), { color: undefined, fontStyle: 0 } );
 });
 
 test("reservation requires confirmation and batch purchases advance once per receipt", () => {

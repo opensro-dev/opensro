@@ -3,7 +3,7 @@
 
 observed_route_test.go - tests for OpResult.Around through the real hub
 
-A heal's effect add is published around its recipient (484D90), not around
+A heal's effect add is published around its recipient, not around
 the caster. These drive hubHandler, the path Runtime.Register installs,
 over a real transport session whose observed set is set by hand.
 

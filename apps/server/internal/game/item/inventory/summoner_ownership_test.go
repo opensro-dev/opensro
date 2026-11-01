@@ -69,9 +69,9 @@ func TestSummonerTransferPreservesDetachedRecordAndRejectsDuplication(t *testing
 		}
 	}
 
-	// CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) permits moving or
-	// swapping an active companion scroll within the owner's bag and updates
-	// its retained InventorySlot, while still refusing equipment sockets.
+	// The server's inventory slot-move dispatch permits moving or swapping
+	// an active companion scroll within the owner's bag and updates its
+	// retained InventorySlot, while still refusing equipment sockets.
 	activeA := domain.CloneCOS(pet)
 	activeA.Summoned = true
 	activeA.InventorySlot = 13

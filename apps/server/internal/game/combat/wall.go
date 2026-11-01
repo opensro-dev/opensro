@@ -3,11 +3,11 @@
 
 wall.go - an impact against a defender standing behind a Force wall
 
-58E5F0 resolves the wall first. 40EBE0 / 40EEF0 are the ordinary lane
+The hit-outcome routine resolves the wall first, through the ordinary lane
 formulas with the defender's defense and parry replaced by the wall's pw
-words, and they return 0 for a lane the wall does not cover. Then the
+words, which return 0 for a lane the wall does not cover. Then the
 defender's own lanes are resolved and every lane the wall covers is
-zeroed (58F02A..58F03D), whatever the wall absorbed. Both use the one
+zeroed, whatever the wall absorbed. Both use the one
 critical decision already rolled for the hit.
 
 ===========================================================================
@@ -19,7 +19,7 @@ import "opensro.online/server/internal/game/enterworld"
 
 // WallOutcome is one impact's split: Defender is what the defender takes,
 // Absorbed what the wall's lanes computed, Covered whether every lane of
-// the attack was a wall lane (58F06B..58F0A6; otherwise the absorb record
+// the attack was a wall lane (otherwise the absorb record
 // is type 8).
 /*
 ================
@@ -73,7 +73,7 @@ func ResolveCalculationAgainstWall(attacker, defender Stats, input WallCalculati
 		wallAttack := calculation
 		wallAttack.Lanes = walled
 		wallAttack.wall = true
-		// atca (58F52F) and da scale the defender's record, not the wall's.
+		// atca and da scale the defender's record, not the wall's.
 		wallAttack.Attack.Atca = false
 		wallAttack.Attack.DownAttack = enterworld.SkillDownAttack{}
 		absorbed, err := ResolveCalculation(attacker, shield, wallAttack, roll)
@@ -100,7 +100,7 @@ func ResolveCalculationAgainstWall(attacker, defender Stats, input WallCalculati
 	if err != nil {
 		return WallOutcome{}, err
 	}
-	// The record's flag byte is the roll's (58EF0C), not the surviving lane's.
+	// The record's flag byte is the roll's, not the surviving lane's.
 	if critical && attack.Flags&physicalAttackFlag != 0 {
 		result.ResultFlags = result.ResultFlags&^normalResultFlag | 2
 	}

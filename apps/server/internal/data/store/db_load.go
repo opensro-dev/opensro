@@ -79,6 +79,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, fmt.Errorf("validating economy ledger: %w", err)
 		}
 	}
+	if currentLayout >= 11 {
+		if err := validateNameReservations(db); err != nil {
+			return nil, fmt.Errorf("validating name reservations: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},
@@ -99,6 +104,12 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	out.meta.JobRankings, err = loadJobRankings(db)
 	if err != nil {
 		return nil, err
+	}
+	if currentLayout >= 11 {
+		out.nameReservations, err = loadNameReservations(db)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	rows, err := db.Query("SELECT division, id, name_lower, record FROM characters ORDER BY division, id")

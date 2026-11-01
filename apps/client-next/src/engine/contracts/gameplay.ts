@@ -388,6 +388,8 @@ export type GameplayCommand =
 	| { readonly kind: "pickup"; readonly gid: number; }
 	// The pickup shortcut: the worker chooses the item (pickup-nearest.ts).
 	| { readonly kind: "pickup-nearest"; }
+	// Auto Select: the worker chooses the monster (select-nearest.ts).
+	| { readonly kind: "select-nearest-monster"; }
 	// A click on another player: the worker decides whether it attacks
 	// (player-attack.ts). Sent before the click's select.
 	| { readonly kind: "player-interact"; readonly gid: number; readonly alt: boolean; }
@@ -443,6 +445,9 @@ export type GameplayCommand =
 		readonly reverseChoice?: number;
 		// The port-only map choice's point id (reverse-return-map.ts).
 		readonly reverseMapPoint?: number;
+		// The name-change scroll's new name (#1689, port-only): the entry
+		// window's text, carried raw in the use tail.
+		readonly renameName?: string;
 	}
 	| {
 		readonly kind: "navigation";
@@ -801,6 +806,8 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_MOONLIT_THIEF_SUIT rule, published at world
 	// entry: level-20 thief suits draw the Moonlit Ash model (equipment-appearance.ts).
 	readonly moonlitThiefSuit?: boolean;
+	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
+	readonly raisedGoldCaps?: boolean;
 	// The Experimental "Homing projectiles" row (port-only, default off):
 	// target-bone projectiles re-read the victim's socket in flight instead of
 	// flying to the launch-captured endpoint (effects.ts).
@@ -832,6 +839,9 @@ export interface GameplayState extends MoverPublication {
 	// The flag-war timer and carrier, owned by the gameplay worker.
 	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; };
 	readonly targetTaxRate?: number;
+	// targetGateRows is a quest exit gate's rows (talk bit 0x8000000):
+	// each a row of action 0x2A whose click sends 0x7495 type 3.
+	readonly targetGateRows?: readonly GateRow[];
 	readonly shopCompletionRevision?: number;
 	readonly shop?: import("@/engine/foundation/gameplay/commerce").ShopState;
 	readonly masteryTotalOverride?: number;
@@ -980,3 +990,13 @@ export interface VitalState {
 	readonly abnormalLevels?: readonly { readonly bit: number; readonly level: number; }[];
 	readonly deathState?: boolean;
 }
+
+/*
+================
+GateRow
+
+One quest exit gate row, as the grant carries it: kind 0 is the return
+(SN_TALK_COMMON_INS_WADDUNGOT), 1 a text symbol, 2 a numbered point.
+================
+*/
+export type GateRow = { readonly kind: number; readonly symbol?: string; readonly point?: number; };

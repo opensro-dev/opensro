@@ -81,7 +81,8 @@ function sourceGates() {
 		"tests/runtime/application-release.test.mjs",
 		"tests/runtime/cos-item-use.test.mjs",
 		"tests/runtime/cos-hud.test.mjs",
-		"tests/runtime/release-smoke.test.mjs"
+		"tests/runtime/release-smoke.test.mjs",
+		"tests/runtime/terrain-frustum-cull.test.mjs"
 	];
 	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
 }

@@ -10,9 +10,9 @@ type wasteBand struct {
 	prize Prize
 }
 
-// 6BCA80's LOSE preparation (6BD072..6BD70E), including the explicit
-// float32 stores and fractional redistribution. A raw cumulative sum is
-// not equivalent, even when authored weights happen to total 10000.
+// The server's LOSE preparation, including the explicit float32 stores
+// and fractional redistribution. A raw cumulative sum is not equivalent,
+// even when authored weights happen to total 10000.
 func prepareWastePool(prizes []Prize) ([]wasteBand, error) {
 	var total uint64
 	for _, p := range prizes {

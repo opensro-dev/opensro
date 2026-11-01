@@ -212,9 +212,9 @@ func TestClipMovementPathObjectAware(t *testing.T) {
 		},
 		{
 			// Crossing the deck's north rail (outline 0x3 at z=520): an
-			// Start lies on the shared diagonal: native 428F40 first nudges
+			// Start lies on the shared diagonal: client 428F40 first nudges
 			// it into cell 0. Intersect that corrected chord with the north
-			// rail, then apply the cell-1 centroid inset (45C1B0).
+			// rail, then apply the cell-1 centroid inset (client 45C1B0).
 			name: "railClipsObjectClass",
 			from: deck(500, 500), to: deck(500, 540),
 			wantOutcome: ClipBlocked, wantClass: ClipClassObject,

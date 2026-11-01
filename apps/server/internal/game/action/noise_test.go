@@ -32,7 +32,7 @@ const (
 	// noiseDistance places the Bard well inside that sight.
 	noiseDistance = 20
 	// everyEffectEvent raises every event bit an action can retire
-	// effects on (5A16C0), the casts of the Bard's own attacks included.
+	// effects on, the casts of the Bard's own attacks included.
 	everyEffectEvent = 0xff
 )
 
@@ -248,7 +248,7 @@ func TestNoiseLastsFifteenMinutes(t *testing.T) {
 ================
 TestNoiseDoesNotBlockMonsterAreaSplash
 
-5A1AD0 -> 5A1ADE calls vtable +0x58C (4A98A0) with checkFirstAttack=0:
+The native hostile-target check evaluates hostility with checkFirstAttack=0:
 when a regular monster executes an area attack on an unprotected primary
 target, a nearby Bard under Noise and its summoned companion both take
 collateral splash damage.

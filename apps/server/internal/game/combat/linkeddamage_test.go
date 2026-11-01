@@ -39,7 +39,7 @@ func TestFenceShareMovesItsLane(t *testing.T) {
 			t.Fatalf("%s: kept %+v moved %d", tc.name, got, moved)
 		}
 	}
-	// The move never exceeds the hit (5A1050).
+	// The move never exceeds the hit, as in the server's linked-damage split.
 	if got, moved := FenceShare(15, 99, Result{Damage: 10, PhysicalDamage: 700, MagicalDamage: 300}); moved != 10 || got.Damage != 0 {
 		t.Fatalf("overdrawn hit: kept %+v moved %d", got, moved)
 	}

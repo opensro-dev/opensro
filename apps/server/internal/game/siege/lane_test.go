@@ -88,7 +88,7 @@ func TestLaneRunsAWarWednesday(t *testing.T) {
 ================
 TestFortressListMatchesTheClientReadOrder
 
-76C870 case 0: u8 count; per fortress u32 id, sized name, four u32, u8
+Client 76C870 case 0: u8 count; per fortress u32 id, sized name, four u32, u8
 [+u32], u8 [+u32]; u8 period flags; u32 guild fortress.
 ================
 */

@@ -40,6 +40,12 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native (#1976): a fifth chat tab, Event, holding the
+	// shard's channel-7 event notices (seal drops, plus results, item
+	// breaks, job kills) that otherwise land in All. On unless turned off
+	// (the owner's choice, 2026-10-28); off is the native four tabs with
+	// notices in All.
+	readonly eventChatTab: boolean;
 	// Port-only, not native: use only the male warrior loading artwork.
 	// Off by default so both original loading backgrounds remain available.
 	readonly safeLoadingScreen: boolean;
@@ -68,6 +74,9 @@ export interface ExperimentalOptions {
 	readonly enchantSparks: boolean;
 	// Port-only wolf skill tree controls; requires the server's matching opt-in.
 	readonly attackPetTraining: boolean;
+	// Port-only, not native: the Actions window gains Auto Select (action 1005,
+	// select-nearest.ts). Native holds the code but no row or key reaches it.
+	readonly autoSelect: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
@@ -176,9 +185,11 @@ export interface ExperimentalOptions {
 	// (70C550). Off unless turned on.
 	readonly transportAutoPotion: boolean;
 	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
-	// first and fall back to the WebSocket when the path fails. Off unless
-	// turned on: the WebSocket stays the default until #1450's
-	// measurements say otherwise. Applies from the next connect.
+	// first and fall back to the WebSocket when the path fails. On unless
+	// turned off (#1451 step 3): WebTransport is the
+	// default connect and the one bounded attempt remembers a failed QUIC
+	// path for the session, so off stays one setting away for anyone whose
+	// path cannot carry it. Applies from the next connect.
 	readonly webTransport: boolean;
 	// Port-only, not native: left-clicking the attack pet's mini panel
 	// (CIFPetMiniInfo 6B3460 / 6B3760) or a companion's status portrait
@@ -227,6 +238,11 @@ export interface ExperimentalOptions {
 	// the top seal reads differently the moment it lands. Other players'
 	// drops are never marked. Off unless turned on.
 	readonly sunDropMarker: boolean;
+	// Port-only, not native: the portal-out cue (SND_WARP, gatein.wav) when
+	// the world arrives. The native row has no traced caller - the gate at
+	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
+	// native arrival is silent. Off unless turned on.
+	readonly warpArrivalSound: boolean;
 }
 
 /*
@@ -363,7 +379,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -383,6 +399,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		eventChatTab: record.eventChatTab !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
@@ -414,10 +431,11 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		attackPetTraining: enabled( "attackPetTraining" ),
+		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),
-		webTransport: enabled( "webTransport" ),
+		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,
 		petPickupFilter: enabled( "petPickupFilter" ),
@@ -429,22 +447,31 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
-		sunDropMarker: enabled( "sunDropMarker" )
+		sunDropMarker: enabled( "sunDropMarker" ),
+		warpArrivalSound: enabled( "warpArrivalSound" )
 	};
 }
 
-// Where the preferences are kept (the platform saves them).
-export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+// Where the preferences are kept (the platform saves them). The key's
+// version bumped with the WebTransport default flip (#1451 step 3): a
+// record saved under the previous key carries the old explicit default
+// for that row, so it migrates on read without its webTransport value
+// and the new default reaches every saved profile. A choice stored
+// under the current key is kept as written.
+export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:2";
+export const PREVIOUS_EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
 
 /*
 ================
 storedExperimentalOptions
 
 The saved preferences from storage, or the defaults when there are none or
-they cannot be read. The platform owns saving them; an owner that must act
-before the platform starts (the asset worker's texture variant) reads them
-here. Throws only for a stored value that is not JSON, which the platform
-reports.
+they cannot be read. A record found only under the previous key migrates
+without its webTransport value (see the key above); the platform's next
+save writes the current key and retires the old one. The platform owns
+saving them; an owner that must act before the platform starts (the asset
+worker's texture variant) reads them here. Throws only for a stored value
+that is not JSON, which the platform reports.
 ================
 */
 export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | undefined ): {
@@ -452,7 +479,20 @@ export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | u
 	readonly raw: unknown;
 } {
 	const stored = storage?.getItem( EXPERIMENTAL_STORAGE_KEY ) ?? null;
-	const raw = stored === null ? null : JSON.parse( stored );
+	if ( stored !== null ) {
+		const raw: unknown = JSON.parse( stored );
+		return { options: experimentalOptions( raw ), raw };
+	}
+	const previous = storage?.getItem( PREVIOUS_EXPERIMENTAL_STORAGE_KEY ) ?? null;
+	if ( previous === null ) {
+		return { options: experimentalOptions(), raw: null };
+	}
+	const parsed: unknown = JSON.parse( previous );
+	if ( typeof parsed !== "object" || parsed === null || Array.isArray( parsed ) ) {
+		return { options: experimentalOptions( parsed ), raw: parsed };
+	}
+	const raw: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
+	delete raw.webTransport;
 	return { options: experimentalOptions( raw ), raw };
 }
 
@@ -525,6 +565,7 @@ export interface ExperimentalGameplay {
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
+	readonly warpArrivalSound?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -546,6 +587,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
+		warpArrivalSound: options.warpArrivalSound,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

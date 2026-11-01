@@ -1,0 +1,22 @@
+# ===========================================================================
+# opensro-wtprobe-runner.service - one off-host WebTransport probe run.
+# Installed on the runner host (vps0, owner 2026-10-28), never on the game
+# host. Replace @RUNNER@ with the directory holding wtprobe_verdict.py and
+# sro-wtprobe, @ORIGIN@ with the public HTTPS origin, and @GAME_HOST@ with
+# the game host; the push key is the runner user's ~/.ssh/id_ed25519 (#1984).
+# ===========================================================================
+[Unit]
+Description=Probe OpenSRO WebTransport from outside the game host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=opensro-wtprobe-runner
+ExecStart=/usr/bin/python3 @RUNNER@/wtprobe_verdict.py --probe @RUNNER@/sro-wtprobe --origin @ORIGIN@ --out @RUNNER@/verdict.json --push opensro-wtprobe@@GAME_HOST@
+TimeoutStartSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

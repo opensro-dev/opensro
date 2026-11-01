@@ -3,10 +3,10 @@
 
 death.go - how a player's death is classified and what it costs
 
-CGObjPC_ResolveDeathKind (4E6EC0) classifies a death by its killer
-(CGObjPC_ResolvePvpKillRelation 4E6590) and dispatches the penalty:
-CGObjPC_ApplyDeathPenalty (4E6980) for player, monster and guild-war
-deaths, CGObjPC_ApplyJobDeathPenalty (4E6820) for a job wearer killed by
+The server's death classifier sorts a death by its killer
+(through the PvP kill-relation check) and dispatches the penalty:
+the death penalty for player, monster and guild-war
+deaths, the job death penalty for a job wearer killed by
 an opposing job monster. This file owns the rules; progression owns the
 EXP arithmetic and the action runtime the item move.
 
@@ -19,7 +19,7 @@ package pk
 ================
 DeathKind
 
-The byte 4E6EC0 stores at victim+0x1CB4 (the 0x3011 death notice).
+The byte the death classifier stores at victim+0x1CB4 (the 0x3011 death notice).
 ================
 */
 type DeathKind uint8
@@ -34,14 +34,14 @@ const (
 	DeathSpecialWorld DeathKind = 6
 )
 
-// deathProtectedLevel: 4E6A1B loses nothing at level 10 or below.
+// deathProtectedLevel: the death penalty takes nothing at level 10 or below.
 const deathProtectedLevel = 10
 
 /*
 ================
 Penalized
 
-4E6EC0 runs 4E6980 for kinds 3, 4 and 5 only.
+The classifier runs the death penalty for kinds 3, 4 and 5 only.
 ================
 */
 func (k DeathKind) Penalized() bool {
@@ -52,7 +52,7 @@ func (k DeathKind) Penalized() bool {
 ================
 Murderer
 
-4E69CB: the victim pays the murderer's rates when its penalty is positive
+The death penalty: the victim pays the murderer's rates when its penalty is positive
 and the death is not a guild-war kill.
 ================
 */
@@ -64,7 +64,7 @@ func Murderer(penalty uint32, kind DeathKind) bool {
 ================
 LossRule
 
-4E6980's rate table. Percent is the float32 constant multiplied into the
+The death penalty's rate table. Percent is the float32 constant multiplied into the
 level's required EXP, CapFactor multiplies leveldata column 5, SP is the
 skill points taken. A thief-monster killer halves the cap.
 ================
@@ -82,7 +82,7 @@ DeathLoss
 
 The rule for a penalized death above level 10, or false when the death
 costs no EXP. killerPlayer selects the player rates; killerThief is a
-thief monster (CGObj_IsThiefMonster, vtable +0x3B4).
+thief monster (the object's thief-monster test, vtable +0x3B4).
 ================
 */
 func DeathLoss(kind DeathKind, level uint8, penalty uint32, killerPlayer, killerThief bool) (LossRule, bool) {
@@ -106,7 +106,7 @@ func DeathLoss(kind DeathKind, level uint8, penalty uint32, killerPlayer, killer
 ================
 DeathRelief
 
-4E6D12: a murderer's death lowers the penalty by 600 (monster) or 200
+The death penalty's relief: a murderer's death lowers the penalty by 600 (monster) or 200
 (player); both lower the daily count by one.
 ================
 */
@@ -124,7 +124,7 @@ func DeathRelief(kind DeathKind) (penalty int32, daily int32) {
 ================
 DropChance
 
-CGObjPC_GetDeathItemDropChance (4E6930): the percent rolled as
+The server's death drop chance: the percent rolled as
 rand() % 101 <= chance.
 ================
 */
@@ -146,7 +146,7 @@ func DropChance(penalty uint32) int32 {
 ================
 KillerEXPDoubled
 
-4E69F5: the killer's PvP EXP doubles when the victim was a murderer.
+The death penalty: the killer's PvP EXP doubles when the victim was a murderer.
 ================
 */
 func KillerEXPDoubled(victimPenalty uint32, kind DeathKind) bool {
@@ -158,7 +158,7 @@ func KillerEXPDoubled(victimPenalty uint32, kind DeathKind) bool {
 DeathPenalty
 
 What one death costs, as the action runtime resolved it for progression:
-the 4E6980 rate row, or a job death (4E6820) with the killer's level, and
+the death penalty's rate row, or a job death with the killer's level, and
 the victim's parameter 0x101 (the percent of the EXP loss it keeps).
 ================
 */

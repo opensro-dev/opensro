@@ -622,7 +622,7 @@ func TestShippedActionHandlerKinds(t *testing.T) {
 TestProjectileHandlerSkipsMPDecrease
 
 The cut follows the handler, not the flying speed: the same row at speed
-0 loses the cut once it runs SkillAction_Projectile.
+0 loses the cut once it runs the projectile handler.
 ==================
 */
 func TestProjectileHandlerSkipsMPDecrease(t *testing.T) {

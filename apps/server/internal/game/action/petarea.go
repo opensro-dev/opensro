@@ -26,7 +26,12 @@ petAreaTargets
 
 The candidate mask is the authored hostile/object mask (24). Guild soldiers
 use the owner's world-context predicate; ordered attack pets use the owner's
-ordinary attack permission. Each target retains its own body radius.
+ordinary attack permission. Each target retains its own body radius. The
+ordinary permission refuses an aggression weight of exactly one on the
+target's record alone (areaTargetAggressionRefusal), so that player is
+refused before its copy is detached; the soldier's query admits any
+target with a non-empty aggression map (presence, never the weights),
+so a weight-one player is its candidate and always pays for the copy.
 ================
 */
 func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, skill enterworld.SkillRow) []petCombatTarget {
@@ -81,22 +86,30 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		}
 	}
 	world := domain.CharacterWorldInstance(step.snapshot)
+	soldier := step.ref.TidWord>>11 == domain.MercenaryBand
+	admitPlayer := func(live *enterworld.Character) bool {
+		return soldier || !areaTargetAggressionRefusal(live)
+	}
 	for _, present := range rt.PopulationPlayers(step.key.division, step.nowMs) {
 		if present.World != world || !worldgeom.SamePlane(present.Spawn.RegionID, from.RegionID) {
 			continue
 		}
 		owner := rt.findCharacterByGid(step.key.division, present.GID)
-		snapshot := rt.characterSnapshot(step.key.division, owner)
+		// The copy is the companion copy: the refusal chains and the
+		// body-radius door below read the victim's slot-8 cape/job
+		// equipment, relation scalars and model ref - never plain bag
+		// or avatar rows (#2030; TestPetAreaVictimsReadNothingOutsideTheCompanionCopy).
+		snapshot := rt.characterSnapshotCompanionAdmitted(step.key.division, owner, admitPlayer)
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}
-		// 528F40 excludes same-team player targets before owner permission.
+		// Natively same-team player targets are excluded before owner permission.
 		// INFERENCE: apply that companion rule to secondary owners and their
 		// companions too, so area selection cannot bypass team protection.
 		if rt.companionTeamRefusal(step.snapshot, snapshot) != 0 {
 			continue
 		}
-		if step.ref.TidWord>>11 == domain.MercenaryBand {
+		if soldier {
 			if !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 				continue
 			}
@@ -140,7 +153,7 @@ func (rt *Runtime) strikePetTarget(step petCombatStep, target petCombatTarget, s
 ================
 strikePetTargets
 
-58E5F0 reduces the running share after each victim. B245/B505 names all
+The native hit outcome reduces the running share after each victim. B245/B505 names all
 victims under one token, and one finalize closes the action.
 ================
 */

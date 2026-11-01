@@ -19,8 +19,9 @@ import (
 ================
 TestOwnerFollowOriginalMachineSteering
 
-549F80 and its original vector/CRT helpers execute in the fixture generator.
-Only the timer, formation goal provider and command sinks are injected.
+The native follow steering and its original vector/CRT helpers execute in
+the fixture generator. Only the timer, formation goal provider and command
+sinks are injected.
 ================
 */
 func TestOwnerFollowOriginalMachineSteering(t *testing.T) {

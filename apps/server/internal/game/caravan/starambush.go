@@ -4,7 +4,7 @@
 starambush.go - a fixed ambush per caravan star (port-only, not native)
 
 Natively an ambush is the star rating plus one on half the draws, doubled
-on 2% (Caravan_CalculateBanditSpawnCount 60C460, SpawnCount). The owner
+on 2% (the server's bandit spawn count, SpawnCount). The owner
 approved the balance advisor's fixed table as a server setting
 (2026-10-15): 1 star 2 bandits, 2 stars 3, 3 stars 4, 4 stars 7, 5 stars
 10, with no extra draw and no doubling. The table replaces the shard's
@@ -47,7 +47,7 @@ func StarAmbushFromEnv() bool {
 StarAmbushCount
 
 The table's bandits for a star rating. A rating of 0 counts as 1, as
-60C460 does; above 5 counts as 5.
+the native spawn count does; above 5 counts as 5.
 ================
 */
 func StarAmbushCount(stars uint32) int {

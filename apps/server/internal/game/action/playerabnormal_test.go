@@ -66,7 +66,7 @@ func TestMonsterStunLandsOnThePlayer(t *testing.T) {
 	}
 }
 
-// 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
+// Client 77C110: mask, then each set bit low to high as duration/100, elapsed/100,
 // and one byte (level for 0x203F, grade for 0x017FCFC0, otherwise 0).
 /*
 ================
@@ -114,6 +114,37 @@ func TestPlayerAbnormalGates(t *testing.T) {
 		if rt.PlayerMovementBlocked(testDivision, c.Name) != tc.move || rt.playerCastBlocked(testDivision, c.Name) != tc.cast {
 			t.Fatalf("%v move %v cast %v", tc.status, rt.PlayerMovementBlocked(testDivision, c.Name), rt.playerCastBlocked(testDivision, c.Name))
 		}
+	}
+}
+
+/*
+================
+TestPlayerMovementBlockedReadsFactsNotACopy
+
+Guard for the #1943 movement-gate slice: the gate reads the mounted
+flag and COS GID as values under the read door. On this rig the former
+whole-record copy measured 29 allocations per call; the fact path
+measures 8, so the bound leaves headroom while a returning clone
+(29 and up with any real bag) still trips it.
+================
+*/
+func TestPlayerMovementBlockedReadsFactsNotACopy(t *testing.T) {
+	rt, clock, c, source := newCombatTestRuntime(t, 100)
+	equipCombatTestPet(t, rt, c, 2)
+	c.ActiveCOS.Mounted = true
+	owner := rt.newCosAbnormalOwner(testDivision, c, clock.NowMs())
+	record := abnormal.Record{Status: abnormal.Freeze, Level: 1, DurationMs: 10000, SourceGID: source.Gid}
+	owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
+	owner.changed = owner.block.Apply(owner, record, clock.NowMs())
+	owner.commit()
+
+	allocs := testing.AllocsPerRun(200, func() {
+		if !rt.PlayerMovementBlocked(testDivision, c.Name) {
+			t.Fatal("expected blocked")
+		}
+	})
+	if allocs > 16 {
+		t.Fatalf("movement gate allocations %v, want <= 16 (whole-record copy back?)", allocs)
 	}
 }
 

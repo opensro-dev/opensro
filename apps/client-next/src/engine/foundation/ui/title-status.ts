@@ -1,4 +1,4 @@
-// Internal title opcode 0xff3, sub_749550. Transport failures stay distinct
+// Internal title opcode 0xff3, CPSTitle_OnPacketReceived. Transport failures stay distinct
 // from native credential failures; there is no invented retry count.
 export function titleStatusKey( status: number | undefined, argument?: number ): string | undefined {
 	switch ( status ) {

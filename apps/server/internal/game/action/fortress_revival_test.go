@@ -12,10 +12,10 @@ import (
 ================
 TestFortressWarRevivesBySide
 
-601700 during Jangan's war: the holder's guild revives at
+Natively, during Jangan's war, the holder's guild revives at
 GATE_JA_REVIVAL_GATE inside the fortress, everyone else at one of the
 field gates that lead in; outside a war the appointed town stands. The
-revival grace lasts 11 seconds in a siege world (4DF484).
+revival grace lasts 11 seconds in a siege world.
 ================
 */
 func TestFortressWarRevivesBySide(t *testing.T) {
@@ -60,7 +60,7 @@ func TestFortressWarRevivesBySide(t *testing.T) {
 ================
 TestFortressAllyRevivesAtTheFortressGate
 
-601700: a guild in the holder's union revives at a fortress gate inside
+Natively a guild in the holder's union revives at a fortress gate inside
 the fortress world (TID4 1), not at the holder's revival gate.
 ================
 */

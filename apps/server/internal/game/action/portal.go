@@ -42,14 +42,18 @@ type portalDestination struct {
 	id, ref  uint32
 	code     string
 	building bool
-	// fortressGate is a building of TypeID 4/1/1/1 (TypeId_IsFortressGate
-	// 4F8820): the field gates of a fortress, not its town portal.
+	// fortressGate is a building of TypeID 4/1/1/1 (the reference server's
+	// fortress gate test): the field gates of a fortress, not its town portal.
 	fortressGate bool
 	// gateKind is the TID4 of a 4/1/1 teleport building, which
-	// CRefData_FindWorldTeleportByKind (51D260) selects revival gates by: 1
+	// the reference server's teleport lookup by kind selects revival gates by: 1
 	// a fortress gate, 2 a fortress's revival gate.
 	gateKind uint8
 	recall   bool
+	// returnPoint is CanGotoResurrectPos (column 11): the reference
+	// server's teleport row reader gives the object service 9, the talk row
+	// that sends the player to their return point (0x7495 type 1).
+	returnPoint bool
 	// world is GenWorldID, the RefGameWorld the gate spawn lies in.
 	world instance.DefinitionID
 	spawn simulation.Spawn
@@ -62,9 +66,9 @@ portalCondition
 */
 type portalCondition struct{ kind, minimum, maximum uint32 }
 
-// portalConditionTransport is Restrict kind 2: CRefTeleportLink_CheckState
-// (513A70, 513B1A..513B34) refuses 0x1C10 while the player's first summoned
-// COS is a transport (vt+0x2EC -> 4827F0 tests TID band 2).
+// portalConditionTransport is Restrict kind 2: the reference server's
+// teleport link check refuses 0x1C10 while the player's first summoned
+// COS is a transport (vt+0x2EC tests TID band 2).
 const portalConditionTransport uint32 = 2
 
 // portalConditionThiefSuitTransport is Restrict kind 7 (the Alexandria
@@ -118,10 +122,13 @@ type portalCatalog struct {
 	// walkIns maps a TELEPORT event zone's codename to its teleport's one
 	// link (walkin.go).
 	walkIns map[string]portalLink
+	// questGate is the quest instance exit gate's building row
+	// (INS_QUEST_TELEPORT, questgate.go); nil when the data lacks it.
+	questGate *questGateBuilding
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
-// position. Conditions are the ordered triples consumed by native 513A70.
+// position. Conditions are the ordered triples the native link check consumes.
 /*
 ================
 loadPortalCatalog
@@ -202,6 +209,13 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if len(r) > 2 {
 			c.buildings[r[2]] = id
 		}
+		if len(r) > 2 && r[2] == questGateCodename {
+			gate, e := questGateBuildingRow(r)
+			if e != nil {
+				return nil, e
+			}
+			c.questGate = gate
+		}
 	}
 	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "teleportdata.txt"))
 	if len(rows) == 0 {
@@ -250,6 +264,10 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 		if e != nil || recall > 1 {
 			return nil, fmt.Errorf("teleportdata recall eligibility at row %d", i+1)
 		}
+		returnPoint, e := number(r[11])
+		if e != nil || returnPoint > 1 {
+			return nil, fmt.Errorf("teleportdata return point eligibility at row %d", i+1)
+		}
 		world, e := strconv.ParseUint(r[12], 10, 16)
 		if e != nil {
 			return nil, fmt.Errorf("teleportdata world at row %d", i+1)
@@ -258,7 +276,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 			return nil, fmt.Errorf("teleportdata row %d names unknown world %d", i+1, world)
 		}
 		c.destinations[id] = portalDestination{id: id, ref: ref, code: r[2], building: buildings[ref],
-			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, world: instance.DefinitionID(world),
+			fortressGate: fortressGates[ref], gateKind: gateKinds[ref], recall: recall == 1, returnPoint: returnPoint == 1, world: instance.DefinitionID(world),
 			spawn: simulation.Spawn{RegionID: uint16(region), X: xyz[0], Y: xyz[1], Z: xyz[2]}}
 		if ref != 0 {
 			if _, exists := c.sources[ref]; exists {
@@ -355,7 +373,7 @@ func parsePortalCatalog(dir string) (*portalCatalog, error) {
 buildingGateSpawn
 
 The gate spawn of the teleport whose object is the named building: a
-return scroll's Param4 (4A0380 reads it through the reference data's
+return scroll's Param4 (the reference server reads it through the reference data's
 +0x190 teleport link).
 ================
 */
@@ -382,6 +400,24 @@ portalFailure
 */
 func portalFailure(code byte) OpResult {
 	return OpResult{Frames: []wire.Frame{{Opcode: 0xb495, Payload: []byte{2, code}}}}
+}
+
+/*
+================
+questTeleportFrames
+
+A successful 0x7495 use raises the quest lane's used-a-teleport event
+(native event 0x26: the use kind and the gate's gid) once the move has
+landed and before the success answer; the native use handler fires it
+in the success tail every kind shares. The lane answers with any
+frames the event earns. No seam wired, no event.
+================
+*/
+func (rt *Runtime) questTeleportFrames(c *enterworld.Character, kind uint8, gid uint32) []wire.Frame {
+	if rt.UpdateQuestTeleport == nil {
+		return nil
+	}
+	return rt.UpdateQuestTeleport(c, kind, gid)
 }
 
 /*
@@ -414,12 +450,26 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 			}
 		}
 	}
+	// The reference server gives a teleport's object service 8 as its
+	// first link attaches, so a source with no link (the Bandit Den gate)
+	// offers no destination row.
+	linked := map[uint32]bool{}
+	for key := range catalog.links {
+		linked[key[0]] = true
+	}
 	for i := range rt.NpcRoster {
 		if id, ok := catalog.sources[rt.NpcRoster[i].RefObjID]; ok {
-			rt.NpcRoster[i].TalkFlags = (rt.NpcRoster[i].TalkFlags &^ simulation.NpcTalkFlagRecallPoint) | simulation.NpcTalkFlagTeleport
-			rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
+			rt.NpcRoster[i].TalkFlags &^= simulation.NpcTalkFlagRecallPoint | simulation.NpcTalkFlagTeleport | simulation.NpcTalkFlagResurrectPoint
+			if linked[id] {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagTeleport
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceTeleport)
+			}
 			rt.NpcRoster[i].RebirthPoint = simulation.Spawn{}
 			destination := catalog.destinations[id]
+			if destination.returnPoint {
+				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagResurrectPoint
+				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceResurrectPoint)
+			}
 			if destination.recall && destination.spawn.RegionID != 0 && destination.spawn.RegionID&0x8000 == 0 {
 				rt.NpcRoster[i].TalkFlags |= simulation.NpcTalkFlagRecallPoint
 				rt.NpcRoster[i].Services = rt.NpcRoster[i].Services.With(simulation.NpcServiceRecallPoint)
@@ -431,7 +481,7 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 }
 
 // v1.150 6FEF10 sends a runtime source identity and an authored destination
-// id. 75B930 consumes [2,error-byte] refusals. The NPC source must still be
+// id. Client 75B930 consumes [2,error-byte] refusals. The NPC source must still be
 // selected and resident when the authoritative operation commits.
 /*
 ================
@@ -455,6 +505,19 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		}
 		return rt.handleReverseReturn(division, c, gid, choice)
 	}
+	if e == nil && kind == gateInstanceTravel {
+		choice, e := r.U8()
+		if e != nil || r.Done() != nil {
+			return portalFailure(2)
+		}
+		return rt.handleQuestGate(division, c, gid, choice)
+	}
+	if e == nil && kind == gateTownReturn {
+		if r.Done() != nil {
+			return portalFailure(2)
+		}
+		return rt.handleGateTownReturn(division, c, gid)
+	}
 	if e != nil || kind != 2 {
 		return portalFailure(0x0f)
 	}
@@ -469,7 +532,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	source := rt.portals.destinations[sourceID]
-	// 4F30E1: a murderer (PvP state 2) may not pass a building gate (the
+	// Reference server: a murderer (PvP state 2) may not pass a building gate (the
 	// source object's vtable +0x44), 0x1C16; a ferry still carries one.
 	if source.building && murderer(c) {
 		return portalFailure(errCodeMurdererGate)
@@ -489,10 +552,11 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		return portalFailure(refusal)
 	}
 	// The gate fee's tax goes to the gate's fortress once the move holds
-	// (CGObjPC_HandleTeleportUseRequest0x705A_Body, 4F331D).
+	// (the reference server's teleport use handler).
 	var collected int64
 	settled := func() { rt.collectFortressTax(division, npc, collected) }
-	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled}, func() (int64, OpResult, bool) {
+	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled,
+		arrived: func() []wire.Frame { return rt.questTeleportFrames(c, 2, gid) }}, func() (int64, OpResult, bool) {
 		mask := uint32(0)
 		if rt.QuestTravelBlocks != nil {
 			mask = rt.QuestTravelBlocks(c)
@@ -504,7 +568,7 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
 		transport := rt.hasSummonedTransportCOS(c)
-		traveller := portalTraveller{questMask: mask, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
+		traveller := portalTraveller{questMask: mask, intoDen: arrival.code == denGateCode, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange),
 			transportAdmitted: rt.JobGoodsTeleport}
 		if failure := portalAdmission(c, source, link, traveller); failure != 0 {
 			return 0, portalFailure(failure), false
@@ -532,6 +596,10 @@ type gateTravel struct {
 	world       instance.ID
 	reason      string
 	settled     func()
+	// arrived runs with settled, once the move can no longer roll
+	// back; its frames join the traveller's answer (a 0x7495 use
+	// raises its quest event there). Nil stays silent.
+	arrived func() []wire.Frame
 }
 
 /*
@@ -541,7 +609,8 @@ commitGateTravel
 Moves the character through a gate to destination: admit runs inside the
 character transaction and answers the fee to charge, or the refusal to
 send. A move into another world transfers the population session; a
-failed transfer or re-entry rolls the move and the fee back. The caller
+failed transfer or re-entry rolls the move and the fee back. settled
+and arrived run only once the move can no longer roll back. The caller
 holds the division lock.
 ================
 */
@@ -632,7 +701,11 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	if travel.settled != nil {
 		travel.settled()
 	}
-	return OpResult{Frames: append(missionReentryFrames(packets), corpses...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
+	var arrived []wire.Frame
+	if travel.arrived != nil {
+		arrived = travel.arrived()
+	}
+	return OpResult{Frames: append(append(missionReentryFrames(packets), corpses...), arrived...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
 }
 
 /*
@@ -675,8 +748,17 @@ func (rt *Runtime) portalSourceNpc(division string, c *enterworld.Character, gid
 	return npc, sourceID, 0
 }
 
+const (
+	// denGateCode is the Bandit Den's teleport (teleportdata GATE_TD).
+	denGateCode = "GATE_TD"
+	// errCodeGateQuestBlock is 0x1C17: the quest operation bit 0x40000.
+	errCodeGateQuestBlock byte = 0x17
+	// errCodeDenJob is 0x1C18: a trader or a hunter may not enter the den.
+	errCodeDenJob byte = 0x18
+)
+
 // gateTransportRange is how far a summoned transport may stand from its
-// owner and still travel through a gate (4F2B50 case 2: Vec3_Length of the
+// owner and still travel through a gate (the teleport use handler, case 2: the length of the
 // relative position against 1000.0, else 0x1C13).
 const gateTransportRange = 1000.0
 
@@ -690,7 +772,10 @@ stands beyond gateTransportRange.
 ================
 */
 type portalTraveller struct {
-	questMask    uint32
+	questMask uint32
+	// intoDen is a link whose target is the Bandit Den (GATE_TD): the
+	// reference server compares the link's target teleport, not its source.
+	intoDen      bool
 	transportCOS bool
 	transportFar bool
 	// transportAdmitted is the port-only SRO_JOB_GOODS_TELEPORT rule: a
@@ -698,27 +783,38 @@ type portalTraveller struct {
 	transportAdmitted bool
 }
 
-// 4F2D05: the quest bit blocks buildings and the special GATE_TD route;
-// it does not turn ordinary ferries into town gates. 513A70 separately checks
-// the authored transport-COS restriction on ferry links.
+// Reference server: the quest bit blocks buildings and the route into the
+// Bandit Den; it does not turn ordinary ferries into town gates. The link
+// check separately checks the authored transport-COS restriction on ferry
+// links.
 /*
 ================
 portalAdmission
 
-In 4F2B50 case 2's order: the quest bit, then a summoned transport beyond
-gateTransportRange (0x1C13: it would be left behind), then the link's
-conditions (513A70), then the fee.
+In the reference server's teleport use order (case 2): the quest bit at a
+building, then a summoned transport beyond gateTransportRange (0x1C13: it
+would be left behind), then the den rules when the link's TARGET is the
+Bandit Den (the quest bit 0x1C17, then a trader or hunter 0x1C18: only a
+thief or a jobless player enters), then the link's conditions, then the fee.
 ================
 */
 func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, traveller portalTraveller) byte {
 	if !enterworld.CharacterAlive(c) || c.DeletePending {
 		return 2
 	}
-	if traveller.questMask&0x40000 != 0 && (source.building || source.code == "GATE_TD") {
-		return 0x17
+	if traveller.questMask&0x40000 != 0 && source.building {
+		return errCodeGateQuestBlock
 	}
 	if traveller.transportCOS && traveller.transportFar {
 		return 0x13
+	}
+	if traveller.intoDen {
+		if traveller.questMask&0x40000 != 0 {
+			return errCodeGateQuestBlock
+		}
+		if c.Job.Type == domain.JobTrader || c.Job.Type == domain.JobHunter {
+			return errCodeDenJob
+		}
 	}
 	for _, condition := range link.conditions {
 		switch condition.kind {

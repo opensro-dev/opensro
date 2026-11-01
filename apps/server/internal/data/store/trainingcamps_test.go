@@ -223,7 +223,7 @@ func TestTrainingCampAdmissionRefusesInvalidAggregateCommands(t *testing.T) {
 ================
 TestTrainingCampOpenChecksThenBurnsTheFee
 
-4E4680's refusals in its order (dead, level, gold, already in a camp) change
+The server's camp open check refuses in its order (dead, level, gold, already in a camp) change
 nothing; an accepted opening burns the fee, installs the camp and its one
 master row, books an academy_fee ledger row, and survives a reopen.
 ================
@@ -360,7 +360,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 		t.Fatalf("open camp refused: %d", refusal)
 	}
 
-	// Disband before 7 days (604,800 s, 0x005DD350 @ 0x005DD36A) refuses with TrainingCampDisbandWait and remaining seconds.
+	// Disband before 7 days (604,800 s, the reference server's disband-wait check) refuses with TrainingCampDisbandWait and remaining seconds.
 	disbandEarly := s.TrainingCamps().DisbandCamp(testDivision, master.ID, now0+3600_000)
 	if disbandEarly.Refusal != domain.TrainingCampDisbandWait || disbandEarly.RemainingSeconds != 604800-3600 {
 		t.Fatalf("early disband = %+v", disbandEarly)
@@ -381,7 +381,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 		}
 	}
 
-	// Master cannot leave via LeaveCamp; student 3 cannot leave before 24h (0x005195B3 -> 0x005DD3F0).
+	// Master cannot leave via LeaveCamp; student 3 cannot leave before 24h (the server's leave handler asks its join-cooldown check).
 	if res := s.TrainingCamps().LeaveCamp(testDivision, master.ID, now0); res.Refusal != domain.TrainingCampLeaveIsMaster {
 		t.Fatalf("master leave = %+v", res)
 	}
@@ -431,7 +431,7 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	}
 
 	// Student 1 (joinLevel=10) graduates voluntarily with satisfaction 4 (Very Satisfied):
-	// Master honor = 40-10 = 30, camp evaluation = +5 (0x00ADE9A4[4]), GraduateCount = 1, Rank = 1 (ranking 1 <= 5).
+	// Master honor = 40-10 = 30, camp evaluation = +5 (the reference server's satisfaction ladder -3, -1, 1, 3, 5 at index 4), GraduateCount = 1, Rank = 1 (ranking 1 <= 5).
 	grad1 := s.TrainingCamps().Graduate(testDivision, student1.ID, 4, now0+10_000)
 	if grad1.Refusal != domain.TrainingCampGraduateAccepted || !grad1.AwardedExp ||
 		grad1.Camp.GraduateCount != 1 || grad1.Camp.EvaluationPoints != 5 || grad1.Camp.EvaluationRank != 1 ||
@@ -440,8 +440,8 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 	}
 
 	// Compulsory graduation of student 2:
-	//   - at level 40 (< 41, 0x00519883: cmp dl, 0x28; jbe -> 0x6822) refuses with TrainingCampGraduateCompulsoryLevelLow;
-	//   - at level 41 succeeds with satisfaction 2 (+1 evaluation point per 0x005198A4, +20 honor points).
+	//   - at level 40 (< 41: the server compares the level with 0x28 and refuses with 0x6822) refuses with TrainingCampGraduateCompulsoryLevelLow;
+	//   - at level 41 succeeds with satisfaction 2 (+1 evaluation point, as the server's compulsory graduation grants, +20 honor points).
 	if compLvl40 := s.TrainingCamps().CompulsoryGraduate(testDivision, master.ID, student2.Name, now24h); compLvl40.Refusal != domain.TrainingCampGraduateCompulsoryLevelLow {
 		t.Fatalf("level-40 compulsory grad = %+v, want TrainingCampGraduateCompulsoryLevelLow", compLvl40)
 	}
@@ -495,7 +495,8 @@ func TestTrainingCampHonorLifecycleAndPersistence(t *testing.T) {
 ================
 TestTrainingCampGraduationHonorFormulasAndTierBoundaries
 
-Verifies the native SR_GameServer.exe (0x00519600, 0x005DDD50, 0x005E3730) and
+Verifies the reference server's graduation handler, its camp graduation-points
+update and its graduation honor award, and the
 _TRAINING_CAMP_MEMBER_GRADUATE / _TRAINING_CAMP_UPDATEHONORRANK rules:
   - joinLevel <= 30 grants Master (40 - joinLevel) and Sub-Mentor (40 - joinLevel)/10
     even when satisfaction == 0 (-3 evaluation delta).
@@ -554,7 +555,7 @@ func TestTrainingCampGraduationHonorFormulasAndTierBoundaries(t *testing.T) {
 		}
 	}
 
-	// Stage subMentor as Kind 1 (Sub-Mentor, v1.188 0x005DF704..0x005DF713: level > 0x27 -> Kind 1).
+	// Stage subMentor as Kind 1 (Sub-Mentor: the reference server assigns Kind 1 when level > 0x27).
 	s.campMembers[testDivision][opened.Camp.ID][1].Kind = 1
 
 	setLevel(app15, 40)

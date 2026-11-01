@@ -52,7 +52,8 @@ const strings = {
 };
 const text = s => strings[s] ?? "";
 test( "published native catalogue admits every skill and rejects shifted columns", NATIVE_ONLY, () => {
-	assert.equal( catalog.size, 27835 );
+	// 27835 retail skills plus the 230 Qin-Shi tomb monster skills (#2024).
+	assert.equal( catalog.size, 28065 );
 	assert.throws( () => decodeTooltipSkills( { ...source, columns: source.columns.slice( 1 ) } ), /catalogue/ );
 } );
 test("all published skill tooltips compose without unresolved prerequisite or parameter crashes", () => {

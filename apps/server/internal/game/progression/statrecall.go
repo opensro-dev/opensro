@@ -7,7 +7,7 @@ ITEM_MALL_STATS_POINT_RECALL (and its _50LV.._81LV level-limited copies,
 type 3/3/13/13). Neither binary carries the rule: the v1.150 client keeps
 only the "Stat Withdrawal" / "Withdraw all stat points?" strings and sends
 the ordinary 0x75BD use, and the v1.188 server's special-consumable switch
-(49C2B0 case 0xC) no longer handles the type. INFERRED from the item's own
+(case 0xC) no longer handles the type. INFERRED from the item's own
 description ("Recalls all the stat points you have earned so far") and this
 server's growth rule (levelup.go: per new maximum level +1 STR and +1 INT
 automatically and 3 free points): STR and INT return to their automatic

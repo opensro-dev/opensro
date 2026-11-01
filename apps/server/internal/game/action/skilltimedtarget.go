@@ -6,7 +6,7 @@ skilltimedtarget.go - timed effects cast on an allied player
 The Warrior's guards (GUARDA_INTERCEPT, ALL_BLOCK, MAGIC_BLOCK) are the
 timed defense program of skilltimedeffect.go aimed at a player within
 column 21's range. The caster pays; the target receives an independent
-instance in context mode 2 (5830B0), which 59F0E0 never re-checks
+instance in context mode 2, which the native equipment re-evaluation never re-checks
 against anyone's equipment.
 
 ===========================================================================
@@ -73,7 +73,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 		return rt.acceptLinkedTargetEffect(division, c, snapshot, target, view, cast, skill, now)
 	}
 
-	// 58381F: the caster's HLBP, else HLSM, rides the recipient's context.
+	// Natively the caster's HLBP, else HLSM, rides the recipient's context.
 	presentation := EffectPresentation{Phase: 2}
 	if d := skill.TimedEffect; d.PhysicalAddend || d.MagicalAddend {
 		stats, _, err := rt.playerCombatStats(division, snapshot)

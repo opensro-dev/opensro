@@ -15,9 +15,8 @@ import (
 	"sync"
 )
 
-// State is the server effect-row lifecycle observed by
-// CSkillManager_FindActiveBuffBySkillID (v1.188
-// SR_GameServer 0x59ef90). Only states 1 and 2 are eligible for the native
+// State is the server effect-row lifecycle observed by the server's
+// active-buff lookup. Only states 1 and 2 are eligible for the native
 // client-cancellation action.
 /*
 ================
@@ -35,7 +34,7 @@ const (
 // the replacement family; voluntary cancellation uses the exact SkillID.
 // InstanceToken optionally distinguishes parallel instances.
 //
-// ClientCancelable mirrors ActiveCharacterEffect_RequestStop(effect, false):
+// ClientCancelable mirrors the native non-forced stop request:
 // the UI request is not a privileged purge and cannot remove an effect whose
 // server descriptor forbids voluntary cancellation.
 /*
@@ -83,7 +82,7 @@ type Effect struct {
 	// restoration when this visible buff temporarily contributes zero.
 	MovementPercent uint32
 	// HidePenaltyPercent and HideBonusPercent are the two PercentProduct
-	// sources a hide installs on walk and run (5965D9, 596652): minus its
+	// sources a hide installs on walk and run: minus its
 	// speed word under the instance's own key, plus STSP under key 6. They
 	// leave with the instance, never through the haste slot.
 	HidePenaltyPercent uint32
@@ -107,8 +106,8 @@ type Effect struct {
 	DurationPresent  bool
 	StartedAtMs      int64 // native duration origin; persistent jobs use their own clock
 	ClientCancelable bool
-	// StopRequested is the server-side live flag cleared by
-	// ActiveCharacterEffect_RequestStop(effect, false). The request owner does
+	// StopRequested is the server-side live flag cleared by the native
+	// non-forced stop request. The request owner does
 	// not erase the row or emit the ended-instance packet; the character-effect
 	// update owns that second phase.
 	StopRequested bool
@@ -154,6 +153,12 @@ type Registry struct {
 	byOwner       map[string][]Effect
 	pendingOwners []string
 	pendingSet    map[string]bool
+	// views is the published snapshot of each owner's rows; stale names the
+	// owners whose rows moved since their view was copied. A view is never
+	// edited after publication: a refresh stores a fresh copy, so a reader
+	// ranging an older view keeps one consistent list.
+	views map[string][]Effect
+	stale map[string]bool
 }
 
 /*
@@ -166,6 +171,8 @@ func NewRegistry() *Registry {
 		castingStates: make(map[string]CastingConflictSnapshot),
 		byOwner:       make(map[string][]Effect),
 		pendingSet:    make(map[string]bool),
+		views:         make(map[string][]Effect),
+		stale:         make(map[string]bool),
 		links:         make(map[string]Link),
 		threatOwners:  make(map[string]uint32),
 		quotaOwners:   make(map[string]uint32),
@@ -180,6 +187,24 @@ ownerKey
 */
 func ownerKey(divisionID, characterName string) string {
 	return strings.ToLower(divisionID) + "\x00" + strings.ToLower(characterName)
+}
+
+/*
+================
+touchLocked
+
+Every writer of an owner's rows calls this under r.mu, whether it appends,
+replaces, edits in place or deletes the row set. The next Snapshot then
+republishes the view; unchanged owners keep serving the copy already out.
+Over-marking costs one re-copy, never correctness.
+================
+*/
+func (r *Registry) touchLocked(key string) {
+	if r.views == nil {
+		r.views = make(map[string][]Effect)
+		r.stale = make(map[string]bool)
+	}
+	r.stale[key] = true
 }
 
 // Apply inserts or replaces the exact {group, instance} identity for one
@@ -199,7 +224,8 @@ func (r *Registry) Apply(effect Effect) bool {
 ================
 ApplyAfterRetirement
 
-59BB80 walks old active instances before later installations. Retire stopped
+The reference server's skill queue processing walks old active instances
+before later installations. Retire stopped
 rows before the incoming instance contributes parameters or casting states.
 Validation failure leaves the old retirement queue intact.
 ================
@@ -230,6 +256,7 @@ func (r *Registry) apply(effect Effect, retire bool) ([]Effect, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := ownerKey(effect.DivisionID, effect.CharacterName)
+	r.touchLocked(key)
 	// B6A0 addresses tokens without a character GID. A published nonzero token
 	// therefore has one owner throughout a division, including pending stops.
 	if effect.InstanceToken != 0 {
@@ -314,6 +341,7 @@ func (r *Registry) RequestVoluntaryStop(
 	defer r.mu.Unlock()
 
 	key := ownerKey(divisionID, characterName)
+	r.touchLocked(key)
 	rows := r.byOwner[key]
 	for index, effect := range rows {
 		if effect.SkillID != skillID ||
@@ -382,6 +410,7 @@ drains its owner. The regular tick safely skips it; linked peers stay queued.
 ================
 */
 func (r *Registry) drainStoppedOwnerLocked(key string) []Effect {
+	r.touchLocked(key)
 	rows := r.byOwner[key]
 	for i := range rows {
 		if rows[i].StopRequested {
@@ -397,8 +426,9 @@ func (r *Registry) drainStoppedOwnerLocked(key string) []Effect {
 				r.retireLinkHalfLocked(effect)
 			}
 			if effect.jobClockPresent {
-				// 582F93 -> embedded trigger -> 651480(reason=1).
-				// This callback belongs to teardown, not the stop request.
+				// The contribution retirement path reaches the embedded
+				// trigger and the skill-keeper retirement (reason=1). This
+				// callback belongs to teardown, not the stop request.
 				effect.jobClock.retire(1)
 				effect.jobCheckpointDue = false
 			}
@@ -419,7 +449,10 @@ func (r *Registry) drainStoppedOwnerLocked(key string) []Effect {
 	return ended
 }
 
-// Snapshot returns an owner-isolated copy for diagnostics and tests.
+// Snapshot returns the owner's published rows for diagnostics and readers.
+// The slice is the registry's own copy: callers must not store it beyond the
+// read or mutate its elements. A stale owner is recopied once; readers racing
+// that refresh keep the previous consistent view.
 /*
 ================
 Snapshot
@@ -431,8 +464,18 @@ func (r *Registry) Snapshot(divisionID, characterName string) []Effect {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rows := r.byOwner[ownerKey(divisionID, characterName)]
-	return append([]Effect(nil), rows...)
+	key := ownerKey(divisionID, characterName)
+	if view, ok := r.views[key]; ok && !r.stale[key] {
+		return view
+	}
+	view := append([]Effect(nil), r.byOwner[key]...)
+	if r.views == nil {
+		r.views = make(map[string][]Effect)
+		r.stale = make(map[string]bool)
+	}
+	r.views[key] = view
+	delete(r.stale, key)
+	return view
 }
 
 /*
@@ -454,6 +497,8 @@ func (r *Registry) Forget(divisionID, characterName string) {
 	delete(r.byOwner, key)
 	delete(r.castingStates, key)
 	delete(r.pendingSet, key)
+	delete(r.views, key)
+	delete(r.stale, key)
 	r.mu.Unlock()
 }
 
@@ -473,6 +518,7 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := ownerKey(divisionID, characterName)
+	r.touchLocked(key)
 	var ended, kept []Effect
 	rows := r.byOwner[key]
 	for i := range rows {
@@ -481,8 +527,9 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 		}
 	}
 	for _, effect := range rows {
-		// 59FFD3 forces selection of every unprotected application. A
-		// presentation-only buff (a planted trap's board entry) ends too.
+		// The server's selected-retirement predicate forces selection of
+		// every unprotected application. A presentation-only buff (a
+		// planted trap's board entry) ends too.
 		if RetirementSelected(true, 0, false, 0, false, false, effect.DeathProtected || effect.Persistent) {
 			r.changeEffectStatesLocked(key, effect, true)
 			if effect.LinkToken != 0 {
@@ -502,8 +549,9 @@ func (r *Registry) RetireBodyStatusesOnDeath(divisionID, characterName string) [
 }
 
 // Expired is the shared retirement and consumer boundary. Ordinary duration
-// effects use native 5830B0:5851E5..5851E7 (unsigned elapsed > duration+rider),
-// including zero duration. Durable jobs use the native online-seconds clock.
+// effects use the native persistent-cast expiry check (unsigned elapsed >
+// duration+rider), including zero duration. Durable jobs use the native
+// online-seconds clock.
 // No caller should infer liveness from a positive remaining-duration display.
 /*
 ================
@@ -576,20 +624,29 @@ func (r *Registry) Expire(nowMs int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for key, rows := range r.byOwner {
+		changed := false
 		for i := range rows {
 			if nowMs < rows[i].StartedAtMs {
 				continue
 			}
-			if !rows[i].StopRequested {
-				rows[i].advanceJob(nowMs)
+			if !rows[i].StopRequested && rows[i].advanceJob(nowMs) {
+				changed = true
 			}
 			if !rows[i].StopRequested && rows[i].Expired(nowMs) {
 				rows[i].StopRequested = true
+				changed = true
 				if !r.pendingSet[key] {
 					r.pendingSet[key] = true
 					r.pendingOwners = append(r.pendingOwners, key)
 				}
 			}
+		}
+		// Both per-tick sweeps walk every owner; marking one whose
+		// rows did not move would republish its view each tick and
+		// erase the snapshot saving. A persistent job's clock accrues
+		// every tick, so its owner genuinely changes and stays marked.
+		if changed {
+			r.touchLocked(key)
 		}
 	}
 }
@@ -608,14 +665,20 @@ func (r *Registry) AnyJobCheckpointDue(nowMs int64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	due := false
-	for _, rows := range r.byOwner {
+	for key, rows := range r.byOwner {
+		changed := false
 		for i := range rows {
 			e := &rows[i]
 			if e.StopRequested {
 				continue
 			}
-			e.advanceJob(nowMs)
+			if e.advanceJob(nowMs) {
+				changed = true
+			}
 			due = due || (e.Persistent && e.jobCheckpointDue)
+		}
+		if changed {
+			r.touchLocked(key)
 		}
 	}
 	return due
@@ -647,7 +710,8 @@ func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []EndedBatch
-	for _, rows := range r.byOwner {
+	for key, rows := range r.byOwner {
+		r.touchLocked(key)
 		var batch EndedBatch
 		for i := range rows {
 			e := &rows[i]
@@ -669,8 +733,9 @@ func (r *Registry) TakeJobCheckpoints(nowMs int64) []EndedBatch {
 	return out
 }
 
-// RetireEvent implements synchronous 5A16C0 event-mask teardown. Producers
-// bind only descriptors with nonzero activity and execution context mode 1.
+// RetireEvent implements the server's synchronous event-mask teardown.
+// Producers bind only descriptors with nonzero activity and execution
+// context mode 1.
 /*
 ================
 RetireEvent
@@ -680,6 +745,7 @@ func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := ownerKey(division, name)
+	r.touchLocked(key)
 	rows := r.byOwner[key]
 	var ended, kept []Effect
 	for i := range rows {
@@ -707,7 +773,7 @@ func (r *Registry) RetireEvent(division, name string, mask uint8) []Effect {
 }
 
 // RetireInstances is the synchronous RequestRetirement of chosen instances
-// (CSkillManager_ProcessDamageEffects 5A1691): the same teardown as
+// (the server's damage-effect retirement): the same teardown as
 // RetireEvent, selected by instance token instead of event bit.
 /*
 ================
@@ -725,6 +791,7 @@ func (r *Registry) RetireInstances(division, name string, tokens []uint32) []Eff
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := ownerKey(division, name)
+	r.touchLocked(key)
 	rows := r.byOwner[key]
 	var ended, kept []Effect
 	for i := range rows {

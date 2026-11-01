@@ -1,4 +1,4 @@
-// Package eventdispatch projects native 63D190/63CCE0 control flow. It is a
+// Package eventdispatch projects the server's event dispatch control flow. It is a
 // shared prerequisite, not proof that gameplay event producers are installed.
 package eventdispatch
 

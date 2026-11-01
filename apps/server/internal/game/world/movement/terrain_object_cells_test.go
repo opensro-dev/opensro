@@ -106,7 +106,7 @@ func terrainCellRegion(t *testing.T, owners [][]uint16) navmeshRegion {
 ================
 TestTerrainCellsFollowObjectOrdinals
 
-Object 0 is a real object (4413B0 checks only the upper bound), and a cell
+Object 0 is a real object (client 4413B0 checks only the upper bound), and a cell
 names its placement by nvm ordinal. A malformed row the port drops owns
 nothing and shifts nobody; an ordinal past the entry list is refused.
 ================

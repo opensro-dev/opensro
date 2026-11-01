@@ -124,7 +124,7 @@ func TestBuybackRefusalsPreserveLedgerAndInventory(t *testing.T) {
 	}
 }
 
-// No matching definition is skipped by native 78B527.
+// No matching definition is skipped by the client (78B527).
 type emptyBuybackMagic struct{}
 
 func (emptyBuybackMagic) MagicOptionByParamID(uint32) (*enterworld.MagicOptionRow, bool) {

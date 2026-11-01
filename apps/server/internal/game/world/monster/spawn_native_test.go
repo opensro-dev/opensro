@@ -31,7 +31,7 @@ func TestNativeTypeWordPacksTID4AboveTheClientWord(t *testing.T) {
 	}
 	for tid4, want := range map[uint8]bool{1: false, 2: true, 3: true, 4: false} {
 		if got := TradeNpcMonster(MonsterRef{TidWord: 0x00C6, TypeID4: tid4}); got != want {
-			t.Errorf("TID4 %d trade NPC = %v, want %v (482640 / 4826E0)", tid4, got, want)
+			t.Errorf("TID4 %d trade NPC = %v, want %v (native classification admits thief/hunter TID4 2/3 only)", tid4, got, want)
 		}
 	}
 	if TradeNpcMonster(MonsterRef{TidWord: 0x0146, TypeID4: 2}) {
@@ -218,6 +218,6 @@ func TestSpawnCollisionFallbackClasses(t *testing.T) {
 	}
 	cos := MonsterRef{TidWord: 0x01C6, TypeID4: 3}
 	if !SpawnCollisionFallsBackToCentre(cos, 0) || SpawnCollisionFallsBackToCentre(MonsterRef{TidWord: 0x01C6, TypeID4: 2}, 0) {
-		t.Fatal("44B460 admits COS TID4 3/4 only")
+		t.Fatal("the native spawn-centre fallback admits COS TID4 3/4 only")
 	}
 }

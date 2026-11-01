@@ -133,9 +133,9 @@ func findFrame(frames []wire.Frame, opcode uint16) (wire.Frame, bool) {
 ==================
 TestMonsterMaskTransformsUntilItsInstanceEnds
 
-493C30 -> 4F00F0: the mask is spent, 0x323A names the monster to every
+Natively the mask is spent, 0x323A names the monster to every
 observer, walk and run become the monster's; ending the instance
-(4F0210) restores the player's speeds and clears the skin, and so does
+(the native transform clear) restores the player's speeds and clears the skin, and so does
 death.
 ==================
 */
@@ -184,7 +184,7 @@ func TestMonsterMaskTransformsUntilItsInstanceEnds(t *testing.T) {
 ==================
 TestMonsterMaskRefusals
 
-493C30 answers 2 before casting; 58DE46 refusals reach the player as
+Natively the capsule answers 2 before casting; msch refusals reach the player as
 their 0xB070 code followed by item-use result 5. Nothing is spent.
 ==================
 */
@@ -239,7 +239,7 @@ func TestMonsterMaskRefusals(t *testing.T) {
 ==================
 TestTransformedPlayerStrikesWithTheMonsterSkill
 
-59E650: a transformed player's basic attack is the monster's first
+Natively a transformed player's basic attack is the monster's first
 default skill, even though it names a weapon the player does not hold;
 untransformed, the same engage uses the sword's base attack.
 ==================
@@ -278,7 +278,7 @@ func TestTransformIsNotPersisted(t *testing.T) {
 ==================
 TestAMaskedPlayerHasOnlyItsBasicAttack
 
-4AE601 / 515B8E: while transformed a skill press answers 0x3030 and
+Natively while transformed a skill press answers 0x3030 and
 berserk refuses; the same presses work once the mask ends.
 ==================
 */
@@ -311,7 +311,7 @@ func TestAMaskedPlayerHasOnlyItsBasicAttack(t *testing.T) {
 ==================
 TestMountingEndsTheMask
 
-CGObjPC_MountCOSAndBroadcast (4EC68F) retires an msch 1 instance.
+The native mount retires an msch 1 instance.
 ==================
 */
 func TestMountingEndsTheMask(t *testing.T) {

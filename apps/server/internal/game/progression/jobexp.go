@@ -3,12 +3,12 @@
 
 jobexp.go - a job member's job experience and grade
 
-CGObjPC_AddJobExp (4E2830) and CJobInfo_AddJobExp (60DD90). A gain below
+The server's player job-EXP add and its job-info add. A gain below
 grade 7 that reaches the grade's requirement (leveldata column 6 + job - 1
 of the grade's row) advances one grade and keeps the remainder; any other
 gain accumulates. A loss floors at zero and does nothing when there is no
 job experience. Before either, a thief's or hunter's delta also moves the
-week's contribution (CJobInfo_AddContribution 60E0A0, +0x24, clamped to
+week's contribution (the job-info contribution add, +0x24, clamped to
 0..2,000,000,000; domain.CharacterJob.WeeklyReward), which the weekly close
 ranks and pays from the pools. Each change publishes v1.150
 0x35EE [u8 job][u8 grade][u32 exp] (v1.188 0x30E6).
@@ -27,9 +27,9 @@ import (
 const (
 	// OpJobExpUpdate is v1.150 CPSMission_OnJobTypeLevelUpdate0x35EE.
 	OpJobExpUpdate uint16 = 0x35ee
-	// maxJobGrade is 60DE5C's grade < 7 gate.
+	// maxJobGrade is the job-info add's grade < 7 gate.
 	maxJobGrade = 7
-	// maxJobContribution is 60E0A0's clamp (TrijobMgr.cpp line 0x132).
+	// maxJobContribution is the contribution add's clamp (TrijobMgr.cpp line 0x132).
 	maxJobContribution = 2000000000
 )
 

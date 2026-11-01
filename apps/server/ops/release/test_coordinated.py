@@ -392,6 +392,100 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "not allowed"):
 			receiver.request(self.config, "stage", {"operation": "confirm-coordinated"}, self.root / "unused")
 
+	# ================
+	# fail_the_revert
+	#
+	# The revert restores the client but the retained server refuses to
+	# redeploy: the journal waits in revert-failed with the candidate
+	# server still live.
+	# ================
+	def fail_the_revert(self):
+		original = deploy.deploy.side_effect
+		deploy.deploy.side_effect = RuntimeError("Nomad refuses the retained server")
+		with self.assertRaisesRegex(RuntimeError, "refuses the retained"):
+			coordinated.revert(self.config, "browser smoke failed", self.edge)
+		deploy.deploy.side_effect = original
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "revert-failed")
+		self.assertEqual(self.live_client(), self.live.resolve())
+
+	# ================
+	# test_a_failed_revert_resumes_forward
+	#
+	# Resume reinstalls the candidate client and returns to verifying;
+	# only evidence recorded after the resume confirms the pair (the
+	# earlier evidence predates the phase and confirm refuses it).
+	# ================
+	def test_a_failed_revert_resumes_forward(self):
+		self.publish()
+		self.record_evidence(self.report())
+		self.fail_the_revert()
+		result = coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(result["phase"], "verifying")
+		self.assertEqual(self.live_client(), self.tree.resolve())
+		pending = read_state(self.config["production_state"])
+		self.assertEqual(pending["operation"]["phase"], "verifying")
+		self.assertEqual(len(pending["operation"]["resumes"]), 1)
+		with self.assertRaisesRegex(ValueError, "no browser evidence"):
+			self.confirm()
+		self.record_evidence(self.report())
+		self.assertIsNone(self.confirm()["operation"])
+
+	# ================
+	# test_resume_refuses_without_a_failed_revert
+	# ================
+	def test_resume_refuses_without_a_failed_revert(self):
+		with self.assertRaisesRegex(ValueError, "no coordinated release"):
+			coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.publish()
+		with self.assertRaisesRegex(ValueError, "not in a failed revert"):
+			coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "verifying")
+		self.assertEqual(self.live_client(), self.tree.resolve())
+
+	# ================
+	# test_resume_refuses_when_the_retained_server_is_live
+	#
+	# Forward recovery exists only while the candidate server is the
+	# live one; a retained server back in place is an operator's state.
+	# ================
+	def test_resume_refuses_when_the_retained_server_is_live(self):
+		self.publish()
+		self.fail_the_revert()
+		retained = json.loads((self.module / "release.json").read_text())
+		retained["commit"] = self.state["server"]["commit"]
+		write_state(self.module / "release.json", retained)
+		with self.assertRaisesRegex(RuntimeError, "live server is not the release being resumed"):
+			coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "revert-failed")
+		self.assertEqual(self.live_client(), self.live.resolve())
+
+	# ================
+	# test_resume_refuses_a_changed_staged_client
+	# ================
+	def test_resume_refuses_a_changed_staged_client(self):
+		self.publish()
+		self.fail_the_revert()
+		(self.tree / "index.html").write_bytes(b"tampered")
+		with self.assertRaisesRegex(ValueError, "changed after validation"):
+			coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "revert-failed")
+		self.assertEqual(self.live_client(), self.live.resolve())
+
+	# ================
+	# test_resume_is_a_publication_key_operation
+	#
+	# The staging key cannot resume; the publication key reaches the
+	# resume (and its own refusal while no revert has failed).
+	# ================
+	def test_resume_is_a_publication_key_operation(self):
+		self.publish()
+		with self.assertRaisesRegex(ValueError, "not allowed"):
+			receiver.request(self.config, "stage", {"operation": "resume-coordinated", "nonce": NONCE},
+				self.root / "unused")
+		with self.assertRaisesRegex(ValueError, "not in a failed revert"):
+			receiver.request(self.config, "publish", {"operation": "resume-coordinated", "nonce": NONCE},
+				self.root / "unused")
+
 
 # ================
 # OwnershipTests
@@ -450,6 +544,29 @@ class OwnershipTests(PairFixture, unittest.TestCase):
 		self.assertEqual(read_state(self.config["production_state"]), before)
 		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, go_binary("agent", NEW_COMMIT))])
 		self.assertIsNone(self.confirm()["operation"])
+
+	# ================
+	# test_a_takeover_resume_is_journaled_and_alerted
+	#
+	# A publisher that did not open the operation cannot resume it; a
+	# takeover resumes only with its reason in the journal first.
+	# ================
+	def test_a_takeover_resume_is_journaled_and_alerted(self):
+		self.publish()
+		original = deploy.deploy.side_effect
+		deploy.deploy.side_effect = RuntimeError("Nomad refuses the retained server")
+		with self.assertRaisesRegex(RuntimeError, "refuses the retained"):
+			coordinated.revert(self.config, "browser smoke failed", self.edge)
+		deploy.deploy.side_effect = original
+		with self.assertRaisesRegex(ValueError, "another publisher"):
+			coordinated.resume(self.config, {"nonce": "d" * 32}, self.edge)
+		result = coordinated.resume(self.config, {"takeover": "the publisher host is gone"}, self.edge)
+		self.assertEqual(result["phase"], "verifying")
+		operation = read_state(self.config["production_state"])["operation"]
+		takeover = operation["takeovers"][-1]
+		self.assertEqual((takeover["action"], takeover["reason"]), ("resume", "the publisher host is gone"))
+		self.assertEqual(len(operation["resumes"]), 1)
+		self.assertTrue(any("resumed to verifying" in message for message in self.alerts))
 
 	# ================
 	# test_a_takeover_is_journaled_and_alerted_before_it_acts
@@ -680,6 +797,31 @@ class MaintenanceFlowTests(PairFixture, unittest.TestCase):
 		deploy.deploy.side_effect = original
 		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "revert-failed")
 		self.assertEqual(self.gate(), {"accounts": [PROBE]})
+
+	# ================
+	# test_a_failed_revert_resumes_behind_the_closed_gate
+	#
+	# Forward recovery never lets players in: an open gate refuses the
+	# resume, and the gate stays closed until the resumed pair confirms.
+	# ================
+	def test_a_failed_revert_resumes_behind_the_closed_gate(self):
+		self.publish()
+		original = deploy.deploy.side_effect
+		deploy.deploy.side_effect = RuntimeError("upgrade backup is missing or changed; restore refused")
+		with self.assertRaisesRegex(RuntimeError, "restore refused"):
+			coordinated.revert(self.config, "browser smoke failed", self.edge)
+		deploy.deploy.side_effect = original
+		(self.module / deploy.MAINTENANCE_GATE).unlink()
+		with self.assertRaisesRegex(ValueError, "gate is not closed"):
+			coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "revert-failed")
+		deploy.shut_gate(self.config)
+		result = coordinated.resume(self.config, {"nonce": NONCE}, self.edge)
+		self.assertEqual(result["phase"], "verifying")
+		self.assertEqual(self.gate(), {"accounts": [PROBE]})
+		self.record_evidence(self.report())
+		self.assertIsNone(self.confirm()["operation"])
+		self.assertIsNone(self.gate())
 
 	# ================
 	# test_a_failed_rollout_keeps_the_gate_closed

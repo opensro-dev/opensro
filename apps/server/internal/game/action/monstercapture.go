@@ -4,8 +4,8 @@
 monstercapture.go - the Monster Mask and Beast Mask skills
 
 The Rogue targets a monster corpse. Within reach the cast absorbs it:
-SkillCombat_ApplySkillEffectsToTargets (593F63) has the caster create the
-row's item (vtable +0x254, 4AA680) on the ground at the caster's position,
+The reference server's skill effect step has the caster create the
+row's item (vtable +0x254) on the ground at the caster's position,
 owned by the caster, with the corpse's RefObj as the item data. That
 Essence of the Dead is picked up and used like any mask (transform.go).
 
@@ -30,8 +30,8 @@ import (
 ==================
 captureTargetRefusal
 
-58D2F4 for an mcap row, and the corpse test of 594010: the target must be
-dead, of normal grade (CGObjMob_GetBaseGrade, else 0x3033), an ordinary
+The native target validation for an mcap row, and the native corpse test: the target must be
+dead, of normal grade (its base grade, else 0x3033), an ordinary
 monster (TID4 2, 3 and 4 - thieves, hunters and quest monsters - give
 0x3006) and no higher than the cap (0x3035).
 ==================
@@ -67,7 +67,8 @@ func (rt *Runtime) acceptMonsterCapture(division string, c, snapshot *enterworld
 	}
 	intent := basicAttackIntent{CaptureCast: true, DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID}
 	rt.setCombatIntent(intent)
-	return rt.advanceCaptureIntent(c, intent, rt.Now().UnixMilli())
+	// The cast handler accepts the capture: its commits are immediate.
+	return rt.advanceCaptureIntent(c, intent, rt.Now().UnixMilli(), rt.handlerDoors())
 }
 
 /*
@@ -77,7 +78,7 @@ advanceCaptureIntent
 Walks to the corpse like any targeted command, then executes.
 ==================
 */
-func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAttackIntent, now int64) OpResult {
+func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAttackIntent, now int64, doors characterDoors) OpResult {
 	division := intent.DivisionID
 	snapshot := rt.characterSnapshot(division, c)
 	skills := rt.deps.SkillData()
@@ -111,11 +112,11 @@ func (rt *Runtime) advanceCaptureIntent(c *enterworld.Character, intent basicAtt
 		if !rt.pursuitSteerDue(intent, worldKey, snapshot, to, now) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now)
+		return rt.approachIntentTarget(c, snapshot, intent, spacing, from, to, now, doors)
 	}
 
 	rt.ClearCombatIntent(division, intent.CharacterName)
-	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now)
+	transition, transitioned := rt.enterBasicAttackRange(c, snapshot, worldKey, to, now, doors)
 	if !transitioned {
 		return OpResult{}
 	}

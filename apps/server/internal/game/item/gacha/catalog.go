@@ -140,7 +140,8 @@ func LoadCatalog(textdataDir string, items enterworld.ItemRefSource) (*Catalog, 
 	if catalog.Card, err = resolveItem(items, CardCodename); err != nil {
 		return nil, err
 	}
-	// 4DD770 indexes the ticket's authored Desc1 (lose) / Desc2 (win).
+	// The server's param-description lookup indexes the ticket's authored
+	// Desc1 (lose) / Desc2 (win).
 	ticket, _ := items.ItemRefByCodename(CardCodename)
 	if catalog.WinCard, err = resolveItem(items, ticket.ParamDescriptions[1]); err != nil {
 		return nil, err
@@ -442,8 +443,8 @@ func (c *Catalog) RewardCodenames() []string {
 	return append([]string(nil), c.rewardCodenames...)
 }
 
-// WastePrizeForNpc uses the native inclusive cumulative-key lookup
-// (4CC620..4CC623). It is deliberately distinct from the strict win test.
+// WastePrizeForNpc uses the native inclusive cumulative-key lookup. It
+// is deliberately distinct from the strict win test.
 func (c *Catalog) WastePrizeForNpc(npc uint32, sample uint32) (Prize, bool) {
 	if c == nil || sample >= 10000 {
 		return Prize{}, false

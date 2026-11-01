@@ -96,8 +96,8 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	if _, code := rt.offensiveCost(division, snapshot, skill, now); code != 0 {
 		return offensiveRefusal(code)
 	}
-	// Command acceptance runs phase 0x37 (4ACED4), which carries the ammo
-	// bit 0x20 (58E32D): an empty bow is refused at the press, before the
+	// Command acceptance runs phase 0x37, which carries the ammo
+	// bit 0x20 (the reference server's cost check): an empty bow is refused at the press, before the
 	// approach walks the archer into range.
 	if skill.Ammunition.Count != 0 {
 		if _, valid := rt.planEquippedAmmunition(snapshot, loadout.WeaponKind, ammunitionSpent(skill, true)); !valid {
@@ -107,7 +107,7 @@ func (rt *Runtime) beginOffensiveSkill(division string, c, snapshot *enterworld.
 	reach := rt.playerActionReach(division, snapshot, skill, loadout)
 	intent := basicAttackIntent{DivisionID: division, CharacterName: c.Name, TargetGid: cast.TargetGid, SkillID: skill.ID, ActionReach: reach, SingleCast: true}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(c, intent, now)
+	return rt.advanceBasicAttackIntent(c, intent, now, rt.handlerDoors())
 }
 
 /*

@@ -7,10 +7,10 @@ on a period
 The Warlock's Soul Chaos (SKILL_EU_WARLOCK_SOULA_CHAOS_A and _B) is
 dura(ms) puls(ms) efr(2, shape, radius, most, reduction, select) pdmg(amount)
 reqi getv(SAAA): a category-3 instance on its caster. efr kind 2 is
-RefSkill +0x290, which CastLifecycle_ProcessPersistent selects afresh with
-TargetSelection_DispatchByShape each time puls (+0x384) has elapsed, then
-strikes the victims through SkillCombat_CalculateHitOutcome (pdmg,
-Formulae_CalculateFixedSkillDamage 40F5F0) and publishes them in one B0BC.
+RefSkill +0x290, which the server's persistent cast lifecycle selects afresh with
+its shape dispatch each time puls (+0x384) has elapsed, then
+strikes the victims through its hit-outcome calculation (pdmg,
+its fixed-damage formula) and publishes them in one B0BC.
 
 ===========================================================================
 */
@@ -80,7 +80,7 @@ func compileSkillPulseArea(fields []string, row SkillRow) (SkillPulseArea, bool)
 				ReductionPercent: uint8(a[4]), Select: uint8(a[5])}
 		case tagFixedDamage:
 			out.Fixed.Amount = op.Arguments[0]
-		case tagReqi: // row.Reqi; 59F0E0 retires the instance on unequip
+		case tagReqi: // row.Reqi; the equipment re-check retires the instance on unequip
 		case tagGetv:
 			slot, known := SkillParameterFromKey(op.Arguments[0])
 			if !known {

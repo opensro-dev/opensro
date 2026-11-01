@@ -25,7 +25,7 @@ const (
 ================
 equipmentResourceWrites
 
-Native 497C20..497C4D tests the weapon subclass and inserts +50 into max MP's
+The server's equipment pass tests the weapon subclass and inserts +50 into max MP's
 percentage-sum channel, owned by the item. This is independent of degree,
 variance, plus, codename and learned Bard skills. Ordinary keeper rebuilding
 therefore removes it when the equipment disappears or loses durability.

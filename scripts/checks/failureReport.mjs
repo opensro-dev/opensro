@@ -70,15 +70,30 @@ export function failureSummary( result ) {
 
 /*
 ================
+runsGoTest
+
+Whether a step's command is `go test` (the tests and race steps), the only
+kind whose output names failing packages. A failed lint or vet step names
+files and lines instead, so its missing package is no sign that the
+command itself broke.
+================
+*/
+export function runsGoTest( label ) {
+	return label.startsWith( "tests" ) || label === "race";
+}
+
+/*
+================
 failureReport
 
 One failed step's printed block: the summary line, the failing packages
-(or the note that the output names none), then the full captured output.
+(or, for a go test step, the note that the output names none), then the
+full captured output.
 ================
 */
 export function failureReport( result ) {
 	const lines = [ `--- ${failureSummary( result )} ---` ];
-	if ( failingPackages( result.output ).length === 0 && result.code !== 0 ) {
+	if ( runsGoTest( result.label ) && failingPackages( result.output ).length === 0 && result.code !== 0 ) {
 		lines.push(
 			"the output names no failing package: the command itself failed " +
 				"(killed, or a toolchain-level error) before reporting one"
@@ -86,4 +101,22 @@ export function failureReport( result ) {
 	}
 	lines.push( result.output );
 	return lines.join( "\n" );
+}
+
+/*
+================
+printFailureReports
+
+Write every failed step's report to stream, resolving once the stream has
+taken all of it. The gate throws next. On Linux a write to a pipe is
+asynchronous, and a process that throws before the write drains exits
+with the report cut at the pipe buffer (about 128 KiB on the CI runner's
+Node): the go test tail, which carries the FAIL lines, never arrives.
+================
+*/
+export function printFailureReports( failed, stream = process.stderr ) {
+	const text = failed.map( ( result ) => `\n${failureReport( result )}\n` ).join( "" );
+	return new Promise( ( resolve, reject ) => {
+		stream.write( text, ( error ) => error ? reject( error ) : resolve() );
+	} );
 }

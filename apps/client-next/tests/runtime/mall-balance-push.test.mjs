@@ -166,3 +166,41 @@ test("a malformed balance push is refused", () => {
 		assert.throws( () => mall.balance( json( bad ) ), /Invalid mall balance/ );
 	}
 });
+
+/*
+================
+a mall request's reference hold stops at its limit
+
+The first hold fixes the limit, so a stream that never ends cannot keep a
+lost request open (#2148).
+================
+*/
+test("a mall request's reference hold stops at its limit", () => {
+	const mall = createMall();
+	mall.open( 0 );
+	for ( let at = 5000; at <= 90000; at += 5000 ) {
+		mall.holdUntil( at + 10000, at + 90000 );
+		mall.step( at );
+	}
+	mall.step( 94999 );
+	mall.holdUntil( 104999, 184999 );
+	assert.throws( () => mall.step( 95000 ), /Mall request timed out/ );
+});
+
+/*
+================
+a new mall request takes a fresh reference limit
+
+The limit belongs to one request: the next must not inherit a spent one.
+================
+*/
+test("a new mall request takes a fresh reference limit", () => {
+	const mall = createMall();
+	mall.open( 0 );
+	mall.holdUntil( 10000, 90000 );
+	mall.reset();
+	mall.open( 200000 );
+	mall.holdUntil( 215000, 290000 );
+	mall.step( 214999 );
+	assert.throws( () => mall.step( 215000 ), /Mall request timed out/ );
+});

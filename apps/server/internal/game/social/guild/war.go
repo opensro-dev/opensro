@@ -67,7 +67,7 @@ type WarRuntime struct {
 	PeerPending func(division, name string) bool
 	Near        func(division string, first, second *enterworld.Character) bool
 	// InFlagWarWorld reports whether a master stands in a timed event world
-	// (the flag war; TimedWorldEventMgr_HasWorldRecord 648220). The port has
+	// (the flag war; the native timed-event world lookup). The port has
 	// no flag war yet (#826), so production leaves it nil.
 	InFlagWarWorld func(division string, character *enterworld.Character) bool
 	Now            func() time.Time
@@ -149,7 +149,7 @@ func (r *WarRuntime) masterByGuildName(division, name string) *enterworld.Charac
 ================
 warAdmission
 
-5C6B60's declaration order. 5C8510 separately admits consent.
+The native declaration order. A separate step admits consent.
 ================
 */
 func (r *WarRuntime) warAdmission(division string, actor, target *enterworld.Character, terms domain.GuildWarTerms) (pendingWar, uint8) {
@@ -200,9 +200,9 @@ func (r *WarRuntime) warAdmission(division string, actor, target *enterworld.Cha
 			return proposal, 0x41
 		}
 	}
-	// CGuildMgr_ProposeGuildWar (5C6EA1, 5C6EC7): both masters in a timed
-	// event world (the flag war) refuse with 0x4C79. 648220 looks up the
-	// TimedWorldEventMgr's record (its callers are CFlagWorld_*), not a
+	// The native war proposal: both masters in a timed
+	// event world (the flag war) refuse with 0x4C79. The lookup reads the
+	// timed world event's record (its callers are the flag world's), not a
 	// fortress: two masters in a fortress world may declare war.
 	if r.InFlagWarWorld != nil && r.InFlagWarWorld(division, actor) && r.InFlagWarWorld(division, target) {
 		return proposal, 0x79
@@ -340,7 +340,7 @@ func (r *WarRuntime) ApplyConsent(s *transport.Session, division string, actor *
 		return
 	}
 	actor = characterSnapshot(r.deps, division, actor)
-	// 5C8510 repeats master and funds checks, without another range check.
+	// The native consent repeats master and funds checks, without another range check.
 	refusal := uint8(0)
 	first, _, firstCode := r.unions.unionActor(division, inviter)
 	second, _, secondCode := r.unions.unionActor(division, actor)
@@ -388,7 +388,7 @@ func (r *WarRuntime) ApplyConsent(s *transport.Session, division string, actor *
 ================
 expireProposal
 
-46CE20 ends an unanswered transaction with 4C10. Only the initiating live
+The native transaction timeout ends an unanswered transaction with 4C10. Only the initiating live
 session receives the receipt; a reconnect does not inherit the transaction.
 ================
 */

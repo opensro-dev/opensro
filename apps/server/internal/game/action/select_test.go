@@ -23,7 +23,7 @@ import (
 // W3 base falsifiers for the 0x745A object select/interact handler; W5
 // extends, and the NPC-select lane appends the 0xB45A emission pins. The
 // wire bytes are the client contract: exactly [u32le gid] (native
-// NPC-click trace body 41 0D 03 00, and the sub_692ba0 4-byte append).
+// NPC-click trace body 41 0D 03 00, and the client 692BA0 4-byte append).
 // The live roster-NPC grant answers the 0xB45A talk grant (hand-rolled
 // oracle bytes below); player and ground grants and every refusal stay
 // frameless - see the select.go package comment.
@@ -226,7 +226,7 @@ func TestObjectSelectMonsterGrantCarriesCurrentHPAndEnforcesViewerScope(t *testi
 TestObjectSelectRefusesMalformedSilentlyAndAnswersUnknown
 
 A malformed body stays silent. A well-formed gid that resolves to nothing
-gets 50FE50's answer, [2][3]: without it the client held its selection
+gets the reference server's answer, [2][3]: without it the client held its selection
 pending until the reply timeout, with no target window and a dead X.
 ================
 */
@@ -463,7 +463,7 @@ func b45aGrantOracle(gid, flags uint32) []byte {
 // talk window opens from: the live roster-NPC grant carries exactly one
 // 0xB45A frame whose bytes match the hand-rolled oracle - NPC_EU_SMITH's
 // word is 0x8000000B: shop, talk, repair and the smith avatar magic grant
-// (4C6350 option 0x20; 75AE50 dispatches the client grant window).
+// (service option 0x20; 75AE50 dispatches the client grant window).
 /*
 ================
 TestObjectSelectNpcGrantAnswersTheTalkGrant

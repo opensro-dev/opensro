@@ -120,7 +120,7 @@ TestCosMountCannotInterruptCommittedAttack
 
 The real skill owner supplies the busy state; no test-only mount flag can
 stand in for the casting instance checked by the native manager. The
-attack also starts the battle state, which the 74B5 door (5119FA) refuses
+attack also starts the battle state, which the 74B5 door refuses
 first with 0xB; it is cleared here so both doors reach the busy check.
 ================
 */
@@ -158,7 +158,7 @@ func TestCosMountCannotInterruptCommittedAttack(t *testing.T) {
 ================
 TestCosMountRefusedInBattle
 
-5119FA: a rider in battle state is refused with 0xB before the vehicle is
+Natively a rider in battle state is refused with 0xB before the vehicle is
 examined; the same request mounts once the battle state lapses, and getting
 off is never refused for battle.
 ================
@@ -197,7 +197,7 @@ func TestCosMountRefusedInBattle(t *testing.T) {
 ================
 TestCosMountRefusedWhileTheRiderHasAMotion
 
-5119D5: a set motion byte (GetMotionState 4AA590) refuses the mount with 5
+A set motion byte refuses the mount with 5
 before the battle check. Moving, seated, changing posture and the 1.5 s thaw
 the freeze leaves behind each hold it; the same request mounts once the
 byte is clear.

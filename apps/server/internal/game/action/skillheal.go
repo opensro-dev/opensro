@@ -3,12 +3,12 @@
 
 skillheal.go - heal amounts and their application
 
-Both native heal routines, CSkillManager_ApplySkillHeal (5A0850) for a cast
-and CSkillManager_ApplyHealRecovery (5A09F0) for the eshp aura, run the
+Both native heal routines, the skill heal for a cast
+and the heal recovery for the eshp aura, run the
 same three steps: a base amount from the heal block, the recipient's
-0xAA / 0xAB scale (which rhru buffs raise, 594AC0), then the caster's
+0xAA / 0xAB scale (which rhru buffs raise), then the caster's
 weapon term. The total reaches the recipient through
-CGObjChar_ApplyReducedRecovery (4A86A0).
+the reduced-recovery path.
 
 ===========================================================================
 */
@@ -35,8 +35,8 @@ maximum. Keep this choice explicit before applying common recovery rules.
 type healRoutine uint8
 
 const (
-	healCast healRoutine = iota // 5A0850: a percent raises the flat amount
-	healAura                    // 5A09F0: a percent is a share of the maximum
+	healCast healRoutine = iota // the skill heal: a percent raises the flat amount
+	healAura                    // the heal recovery: a percent is a share of the maximum
 )
 
 /*
@@ -51,7 +51,7 @@ AMOUNTS
 ==================
 skillHealAmounts
 
-The amount half of 5A0850 / 5A09F0 for one recipient.
+The amount half of the native heal routines for one recipient.
 ==================
 */
 func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterworld.Character, skill enterworld.SkillRow, routine healRoutine) (hp, mp int64, ok bool) {
@@ -70,10 +70,10 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 		}
 		up = casterStats.SkillParameters[enterworld.ParameterHealRecoveryUp]
 	}
-	// 59425E: a heal that reads getv HLRU raises both percent words by the
-	// caster's value (Faith). The aura's pulse runs the same code: native
-	// CastLifecycle_ProcessPersistent reaches SkillCombat_ApplySkillEffectsToTargets
-	// through SkillCombat_EngageSkill (584337, 58547B), the only HLRU reader.
+	// Natively a heal that reads getv HLRU raises both percent words by the
+	// caster's value (Faith). The aura's pulse runs the same code: the native
+	// persistent cast reaches the skill effect step
+	// through the skill engage, the only HLRU reader.
 	heal.HPPercent += up
 	heal.MPPercent += up
 	if routine == healAura {
@@ -102,7 +102,7 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 ================
 skillHealShareAmounts
 
-594397..59441D scales the authored HP/MP flat words before 5A0850 applies
+Natively the authored HP/MP flat words are scaled before the skill heal applies
 percent bonuses, recipient recovery amplification and the full weapon term.
 The share does not reduce those later contributions independently.
 ================
@@ -117,8 +117,8 @@ func (rt *Runtime) skillHealShareAmounts(division string, recipient, caster *ent
 ==================
 castHealBase
 
-5A0850: a percent word raises its flat amount by that percent of itself
-(5A08B0 / 5A08E2). nmh (+0x598) instead takes the HP percent of maximum
+The native skill heal: a percent word raises its flat amount by that percent of itself.
+nmh (+0x598) instead takes the HP percent of maximum
 HP. The MP percent always works on the flat amount.
 ==================
 */
@@ -142,7 +142,7 @@ func castHealBase(heal enterworld.SkillHeal, maxHP int64) (hp, mp int64) {
 ==================
 auraHealBase
 
-5A09F0: a percent word replaces its flat amount with that share of the
+The native heal recovery: a percent word replaces its flat amount with that share of the
 recipient's maximum. The MP product is a 32-bit IMUL read unsigned.
 ==================
 */
@@ -186,7 +186,7 @@ func healScale(amount int64, param float32) int64 {
 ==================
 weaponHealBonus
 
-411080 for mwhh and mwmh: the caster's slot-6 item, its magical attack and
+The native weapon heal bonus for mwhh and mwmh: the caster's slot-6 item, its magical attack and
 the caster's absorption ratio. An empty slot adds nothing.
 ==================
 */
@@ -221,7 +221,7 @@ type magicalWeapon struct {
 ================
 casterMagicalWeapon
 
-The caster's magical weapon term inputs (411080's reads). A weapon whose
+The caster's magical weapon term inputs (the native formula's reads). A weapon whose
 reference or variance cannot be read fails; an empty slot does not.
 ================
 */
@@ -267,8 +267,8 @@ APPLICATION
 ==================
 applySkillRecovery
 
-CGObjChar_ApplyReducedRecovery (4A86A0) into
-CGObjChar_ApplyHealthAndManaOffset (4A87D0), source 0x40:
+The native reduced-recovery path into
+the health and mana offset, source 0x40:
 
   - the recipient's 0x8F / 0x90 cut each amount (Panic / Combustion)
   - a negative result becomes 0

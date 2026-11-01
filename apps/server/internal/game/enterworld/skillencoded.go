@@ -32,7 +32,7 @@ func encodedMultiImpactCount(fields []string) (uint8, bool) {
 	return 0, false
 }
 
-// 84B2F0 starts at info+194[1], column 69. Consume complete blocks;
+// Client 84B2F0 starts at info+194[1], column 69. Consume complete blocks;
 // a numeric argument can equal a tag without defining that parameter.
 func encodedTailContainsTag(fields []string, wanted int64) bool {
 	for index := skilldataColEncodedTail; index < len(fields); {
@@ -95,10 +95,10 @@ func textdataByte(value string) (uint8, bool) {
 ==================
 encodedEffectRider
 
-85fb20 consumes a token when info+0x61 (column 8) is nonzero.
-84b2f0 binds record+0x274 to the zero-argument efta marker.
+Client 85fb20 consumes a token when info+0x61 (column 8) is nonzero.
+Client 84b2f0 binds record+0x274 to the zero-argument efta marker.
 This projection is version-specific to the admitted shipped skill table.
-84B2F0's getv branch indexes its argument, not a top-level tag.
+Client 84B2F0's getv branch indexes its argument, not a top-level tag.
 ==================
 */
 func encodedEffectRider(fields []string) bool {
@@ -136,7 +136,7 @@ func encodedStealthDuration(fields []string) bool {
 	return false
 }
 
-// 84B2F0: descriptor references stop at ssou; parameter words are never tags.
+// Client 84B2F0: descriptor references stop at ssou; parameter words are never tags.
 func encodedPrimaryParameterEquals(fields []string, tag uint32, parameter int, value uint32, anyOccurrence bool) bool {
 	matched := false
 	for i := skilldataColEncodedTail; i < len(fields); {
@@ -157,7 +157,7 @@ func encodedPrimaryParameterEquals(fields []string, tag uint32, parameter int, v
 	return matched
 }
 
-// 84B2F0 stores one pointer per tag, so a later block replaces an earlier one.
+// Client 84B2F0 stores one pointer per tag, so a later block replaces an earlier one.
 func encodedLastParameters(fields []string, tag uint32) ([]uint32, bool) {
 	var values []uint32
 	found := false
@@ -179,7 +179,7 @@ func encodedLastParameters(fields []string, tag uint32) ([]uint32, bool) {
 	return values, found
 }
 
-// SkillSpeedBuff projects the hste/hst2 pointers read by 6DE630 and 6E2580.
+// SkillSpeedBuff projects the hste/hst2 pointers read by client 6DE630 and 6E2580.
 type SkillSpeedBuff struct {
 	Present, Active bool
 }

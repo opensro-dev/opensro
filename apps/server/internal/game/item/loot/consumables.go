@@ -204,7 +204,8 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 	}
 	if s.Version >= 2 {
 		// As equipment: an empty class falls to the next lower class with
-		// items (724120); the generator zeroes one with nothing below it.
+		// items (the server's assigned-item selection); the generator
+		// zeroes one with nothing below it.
 		for family, e := range c.families {
 			for level, row := range e.classes[0] {
 				for _, class := range row {
@@ -287,7 +288,8 @@ func rollMillion(roll func() (uint32, error)) (uint32, bool) {
 	return ((b << 15) | a) % 1000000, true
 }
 
-// AssignedDrops handles random groups first, then fixed rows (724e30/724a00).
+// AssignedDrops handles random groups first, then fixed rows, in the
+// server's order.
 // Both are keyed by monster codename. Results are plans, never inventory grants.
 /*
 ================
@@ -358,8 +360,9 @@ func (c consumableCatalog) assigned(monster string, limit int, roll func() (uint
 	return out
 }
 
-// Native 7245c0 sets inventory capacity and category passes; 726a70 sets
-// repeated class-selection attempts within a category, stopping at success.
+// The server's drop-list build sets inventory capacity and category
+// passes, and sets repeated class-selection attempts within a category,
+// stopping at success.
 /*
 ================
 MonsterDropBudget

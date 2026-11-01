@@ -3,8 +3,8 @@
 
 skillcost.go - skill MP costs and cooldowns
 
-Checks run from Skill_ValidatePrerequisitesAndCost (58D8F0); the amount
-actually charged is the prepared snapshot (58312C / 5867DC), which later
+Checks run from the native skill prerequisite and cost check; the amount
+actually charged is the prepared snapshot of the cast, which later
 regeneration or drain must not change.
 
 ===========================================================================
@@ -30,9 +30,9 @@ CHECKS
 ==================
 resourceCostAt
 
-The admission MP check (58E20A..58E2B1): flat plus vitalPercent of maximum
+The admission MP check: flat plus vitalPercent of maximum
 MP, then a player's parameter 0x8D rate (ftol(rate / 100 * cost),
-58E25F), against the current gauge. 58E2B1 compares strictly, so exact MP
+natively), against the current gauge. The check compares strictly, so exact MP
 is enough. A row without parsed consumption is refused 0x3003.
 ==================
 */
@@ -52,7 +52,7 @@ func resourceCostAt(currentMP, maxMP int64, skill enterworld.SkillRow, rate floa
 ==================
 hpCostRefusal
 
-58E1B6..58E292: the HP cost is the flat word plus the percent of maximum
+Natively the HP cost is the flat word plus the percent of maximum
 HP (truncated); current HP below it refuses 0x3013. The HP check runs
 before the MP check.
 ==================
@@ -124,7 +124,7 @@ func (rt *Runtime) checkedCost(division string, c *enterworld.Character, skill e
 ==================
 skillCoolingDown
 
-CCooltimeManager_IsCooldownAvailable (64C1A0), negated. A nonzero shared
+The native cooldown availability check, negated. A nonzero shared
 group (ref+8F) reads the group map, otherwise the skill's own entry. The
 deadline itself is already available.
 ==================
@@ -137,7 +137,7 @@ func skillCoolingDown(c *enterworld.Character, skill enterworld.SkillRow, nowMs 
 ==================
 skillCooldownDeadline
 
-When the skill's cooldown entry expires (0 when none applies). 64C1CD
+When the skill's cooldown entry expires (0 when none applies). The native check
 bypasses both maps for an authored zero duration; a shared group selects
 its own map and does not also consult the skill map.
 ==================
@@ -171,7 +171,7 @@ func (rt *Runtime) offensivePhaseCost(division string, c *enterworld.Character, 
 stagePhaseCost
 
 offensivePhaseCost for one stage of a skill sequence. A linked stage
-(rootID != 0) is admitted without the cooldown (4AECE7 returns the linked
+(rootID != 0) is admitted without the cooldown (the skill-cast auto command returns the linked
 row to admission state 2, see acceptSkillStagePhaseAt) and its cost check
 skips it too: the stage rows share the root's group, whose cooldown the
 root installed when it fired, so checking it refused every second hit of
@@ -213,7 +213,7 @@ func (rt *Runtime) phaseCost(division string, c *enterworld.Character, skill ent
 ================
 skillCharge
 
-skillCharge is the prepared snapshot 58312C stores on the context: HP at
+skillCharge is the prepared snapshot the native cast stores on the context: HP at
 +0x10, MP at +0x14. Release charges it as prepared.
 ================
 */
@@ -224,8 +224,8 @@ type skillCharge struct{ mp, hp int64 }
 preparedExecutionHPCost
 
 The flat word plus the percent of CURRENT HP (admission uses maximum HP).
-Persistent 58312C divides on x87 before multiplying. Instant 58682F and
-projectile 5857B0 instead wrap a signed 32-bit product before dividing by 100;
+A persistent cast divides on x87 before multiplying. Instant and
+projectile casts instead wrap a signed 32-bit product before dividing by 100;
 the same prepared-cost arithmetic owns MP. HP never applies the MP rate.
 ================
 */
@@ -249,9 +249,9 @@ preparedExecutionMPCost
 
 The charged amount (combat.PreparedCost) at the caster's parameter 0x8D
 rate, then its MP Decrease cuts. Instant and persistent casts take the
-cuts; SkillAction_Projectile, picked by RefSkill+0x168 in
-SkillActionHandler (589B50), does not. The rate is 100 until a dcmp buff
-(Dancing of Mana) lowers it (594AC0 0x5963F7).
+cuts; the projectile action, picked by RefSkill+0x168 in
+the native skill action handler, does not. The rate is 100 until a dcmp buff
+(Dancing of Mana) lowers it.
 ==================
 */
 func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, error) {
@@ -273,7 +273,7 @@ func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Charac
 vitalPercent
 
 percent of a vital as the native cost code forms it: fild vital, fild
-percent, fdiv 100.0, fmulp, then truncation (58E1D6, 58E214, 583170).
+percent, fdiv 100.0, fmulp, then truncation.
 The division comes first, so this is vital * (percent / 100), which is not
 (vital * percent) / 100: 41 % of 300 is 122 here.
 ==================
@@ -324,7 +324,7 @@ func (rt *Runtime) commitOffensiveCost(division string, c *enterworld.Character,
 ================
 commitOffensiveResources
 
-commitOffensiveResources is 593558 -> 4A8770: MP through ConsumeMana, HP
+commitOffensiveResources is the native resource consumption: MP through ConsumeMana, HP
 clamped to leave 1 (a skill's HP cost never kills).
 ================
 */
@@ -346,7 +346,7 @@ func (rt *Runtime) commitOffensiveResources(division string, c *enterworld.Chara
 registerOffensiveCooldown
 
 Drops expired entries, then starts the skill's cooldown. A nonzero ref+8F
-also starts the shared group's (64C862 / 64CC20).
+also starts the shared group's.
 ==================
 */
 func registerOffensiveCooldown(c *enterworld.Character, skill enterworld.SkillRow, nowMs int64) {

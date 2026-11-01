@@ -52,9 +52,9 @@ func (rt *Runtime) petStrikeCOS(step petCombatStep, target petCombatTarget, skil
 	if !outcome.strike.fatal {
 		return petStrikeResult{strike: outcome.strike, fatal: outcome.strike.fatal}, true
 	}
-	// 4E27F4 -> 4E1F60 for a pet's fatal hit: the pet's owner is the
+	// Natively, for a pet's fatal hit, the pet's owner is the
 	// killer, classified against the COS's owner, booked before its own
-	// penalty relief for the COS (4EB6B0). The hit already settled inside
+	// penalty relief for the COS. The hit already settled inside
 	// the victim owner's door; the booking takes a door holding both.
 	killer, victimOwner := step.state.character, target.player
 	cosLevel := live.Level

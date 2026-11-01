@@ -22,8 +22,9 @@ import (
 MonsterAbnormalContext
 
 MonsterAbnormalContext supplies what MonsterState cannot own: caster
-resolution (ObjMgr_FindByID and life state), the actor's CZoeZoeRnd stream
-and parameter reads that include self effects (combat stats).
+resolution (finding the caster object and its life state), the actor's
+seeded random stream and parameter reads that include self effects
+(combat stats).
 ==================
 */
 type MonsterAbnormalContext interface {

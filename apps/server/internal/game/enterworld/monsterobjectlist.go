@@ -33,7 +33,7 @@ func MonsterSpawnConfigFromEnv() MonsterSpawnConfig {
 }
 
 // monsterWireDef converts a registry instance to the mission-plane row.
-// Native sub_859d40 consumes name-mask bit 0 as the visible CIGIDObject
+// Client 859D40 consumes name-mask bit 0 as the visible CIGIDObject
 // name at +0x108, so this is the localized characterdata/textdataname value,
 // never the internal MOB_* codename during a healthy retail-data load.
 func monsterWireDef(instance monster.Instance, nowMs int64) simulation.MonsterDef {
@@ -138,7 +138,7 @@ can create (Template.CreatableRefs), so a GM LOADMONSTER or a quest
 script spawn resolves in the browser as it does in the native client,
 which holds the whole characterdata (#369). A thief or hunter's row also
 carries its country byte: 861720 picks the skin pool its body comes from by
-record +0x9d, the Country column (808AD0 stores it at +0x9c and +0x9d).
+record +0x9d, the Country column (client 808AD0 stores it at +0x9c and +0x9d).
 ================
 */
 func PublicMonsterRefObjRows(registry *simulation.MonsterState) []RefObjRow {
@@ -165,7 +165,7 @@ func monsterRefObjRow(ref monster.MonsterRef) RefObjRow {
 	return RefObjRow{
 		RefObjID: ref.RefObjID,
 		// The client's RefObj word carries TID4 in bits 11-15: its
-		// thief/hunter (861B00) and headquarters (4FA0B0) rows read
+		// thief/hunter (client 861B00) and headquarters (4FA0B0) rows read
 		// extra fields by it.
 		TidWord:     monster.NativeTypeWord(ref),
 		Codename:    ref.Codename,

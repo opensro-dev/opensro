@@ -162,9 +162,55 @@ func TestStorageRefusesUnstorableItemsAndOverdrafts(t *testing.T) {
 
 /*
 ================
+TestStorageGoldDepositCaps
+
+Off, one deposit moves at most the native 100,000,000. On, a
+1,000,000,000 deposit is accepted and one above the raised cap is
+refused. The guild warehouse shares storageMutation, so it shares this.
+================
+*/
+func TestStorageGoldDepositCaps(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		on       bool
+		amount   uint32
+		accepted bool
+	}{
+		{"off native ceiling", false, 100_000_000, true},
+		{"off above native", false, 100_000_001, false},
+		{"on one billion", true, 1_000_000_000, true},
+		{"on above raised", true, 1_000_000_001, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, c, authority := storageFixture(t)
+			rt.RaisedGoldCaps = tc.on
+			setGold(c, 2_000_000_000)
+			// The test's encoder applies the native client's 100,000,000
+			// clamp, so the payload is written by hand: the server must
+			// refuse a larger amount on its own.
+			r := rt.HandleItemMove(testDivision, c, []byte{
+				wire.MoveTypeStorageGoldDeposit,
+				byte(tc.amount), byte(tc.amount >> 8), byte(tc.amount >> 16), byte(tc.amount >> 24),
+			})
+			accepted := r.Frames[0].Payload[0] == 1
+			if accepted != tc.accepted {
+				t.Fatalf("deposit %d answered % X, want accepted=%v", tc.amount, r.Frames[0].Payload, tc.accepted)
+			}
+			if tc.accepted && authority.room.Gold != int64(tc.amount) {
+				t.Fatalf("room gold %d, want %d", authority.room.Gold, tc.amount)
+			}
+			if !tc.accepted && authority.room.Gold != 0 {
+				t.Fatalf("refused deposit changed the room to %d", authority.room.Gold)
+			}
+		})
+	}
+}
+
+/*
+================
 TestStorageFollowsTheNpcRangeAndFunctionState
 
-The room list takes the 4A8E10 range gate and answers too far; moves need
+The room list takes the hit-range gate and answers too far; moves need
 the storage function an in-range request opened, as trades do.
 ================
 */
@@ -223,7 +269,7 @@ func TestWarehouseTicketOpensTheRoomAnywhere(t *testing.T) {
 		t.Fatalf("remote deposit = %+v", r)
 	}
 	// A new selection leaves the ticket's room open (native reads the
-	// warehouse-open record, 524090); the window's close ends it.
+	// warehouse-open record); the window's close ends it.
 	rt.Selected.Set(testDivision, c.Name, 17)
 	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 0, DestSlot: slot, NpcGID: self})
 	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 0 {
@@ -250,7 +296,7 @@ BR-261011-1342-EE58 ("can not put gold in storage"): the client selects
 the keeper again (0x745A) when it is clicked with the window open, which
 ended the port's selection-held function state, so every gold move was
 refused. Native warehouse moves read the player's own warehouse-open
-record (526CE0 gold, 524160 deposit), never the selection.
+record (the gold and deposit moves), never the selection.
 ================
 */
 func TestStorageStaysOpenAcrossANewSelection(t *testing.T) {
@@ -291,7 +337,7 @@ TestStorageQuickMovesOntoAStackMergeAsTheDragDoes
 
 The auto-stack quick move (port-only, storageautostack.go) aims a deposit
 or a withdrawal at a matching stack. The server needs no new rule: the
-native whole transfer (TransferWholeTo, 756A60) merges it.
+client whole transfer (TransferWholeTo, 756A60) merges it.
 ================
 */
 func TestStorageQuickMovesOntoAStackMergeAsTheDragDoes(t *testing.T) {

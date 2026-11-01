@@ -66,7 +66,7 @@ type Runtime struct {
 	// ride from inside the commit).
 	CommitPartyJoin func(divisionID, ownerName, joinerName string, optionBits uint8) string
 	// PartyMemberInfoFor renders the joiner's masked member-info record
-	// (the sub_75db30 wire shape) through internal/game/social/party's ONE encoder - the
+	// (the CPartyMemberInfo_ReadMasked wire shape) through internal/game/social/party's ONE encoder - the
 	// 0x75BF owner notify's tail.
 	PartyMemberInfoFor func(divisionID, name string) ([]byte, bool)
 
@@ -389,7 +389,7 @@ func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload [
 		listingOwner = r.PartyListingOwnerFor(divisionID, character.Name)
 	}
 	curPage, pageCount, rows := r.board.PartyPage(divisionID, ownerKey(divisionID, listingOwner), page)
-	// A listing names its party (v1.188 CPartyMatch_SubmitShardJob 5BF2A0
+	// A listing names its party (the reference server's party match shard job
 	// stores the party ID, not a count), so the count is the party's size
 	// as each page is asked for. The registration snapshot went stale as
 	// soon as anyone joined or left. rows is the page's own copy.
@@ -551,7 +551,7 @@ func (r *Runtime) SessionClosed(s *transport.Session) {
 }
 
 // Party-matching refusal codes (category 2), from the server register
-// precheck sub_514170 and its purpose test sub_5BF240 (0x2C0A, 0x2C1D,
+// precheck and its purpose test (0x2C0A, 0x2C1D,
 // 0x2C23); the v1.150 client shows them as UIIT_MSG_PARTYERR_* /
 // UIIT_MSG_PARTYMATCH_RECORD_ERROR_* through the 0x200 notice table.
 const (
@@ -561,7 +561,7 @@ const (
 	partyMatchErrPurpose        uint8 = 0x23
 )
 
-// minPartyCreatorLevel is the level a partyless registrant needs: sub_514170
+// minPartyCreatorLevel is the level a partyless registrant needs: the native precheck
 // refuses level < 5 with 0x2C0A when the character has no party.
 const minPartyCreatorLevel = 5
 
@@ -586,7 +586,8 @@ func (r *Runtime) levelCap() int64 {
 ================
 preparePartyRegistration
 
-Retail 63BBA0/63C010 validate the form; authority independently enforces
+Retail CGInterface_Uses_UIIT_MSG_PARTYMATCH_RECORD_ERROR_LEVEL and
+CIFPartyMatchRegister_Initialize validate the form; authority enforces
 it. A party member who is not the master is refused (0x1D), a partyless
 registrant below level 5 too (0x0A); a party's listing takes the party's
 options. Returns the refusal code, 0 when admitted.

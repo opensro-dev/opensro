@@ -3,7 +3,7 @@
 
 thief5_test.go - QNO_CA_THIEF_5's reply closes one follow-up for good
 
-8C6180 accepts the quest with either reply and ends the follow-up that
+The server's talk handler accepts the quest with either reply and ends the follow-up that
 reply turned away from: the fake evidence (_02) ends QNO_CA_THIEF_6_2,
 refusing the thief's deal (_04) ends QNO_CA_THIEF_6_1.
 

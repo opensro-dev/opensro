@@ -5,8 +5,8 @@ itembuffreplacement_test.go - a buff item and a cast buff refuse each other
 
 The 20% damage scroll (cbuf, packed states 4 and 5) and the Chinese fire
 attack-up buff (state 4) cannot both be active. Natively both directions
-refuse 0x300C: a cast through 58E2F4, an item's skill through 59B8D0, which
-runs the same 58D8F0 with mask 0xFFFF. #bug-reports: "can't use lightning
+refuse 0x300C: a cast through the skill admission, an item's skill through the
+indirect skill start, which runs the same admission with mask 0xFFFF. #bug-reports: "can't use lightning
 and fire damage buffs with the 20% damage scroll open".
 
 ===========================================================================
@@ -26,7 +26,7 @@ import (
 const (
 	// buffScrollSlot is the scroll's bag slot.
 	buffScrollSlot = 21
-	// refusedReplacement is 58E2F4's refusal.
+	// refusedReplacement is the native admission's refusal.
 	refusedReplacement = 0x300c
 	// buffReleaseStep is how far each tick moves while the buff casts.
 	buffReleaseStep = 100 * time.Millisecond

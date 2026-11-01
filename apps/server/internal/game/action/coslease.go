@@ -41,8 +41,8 @@ type companionLeaseUse struct {
 ================
 extendCompanionLease
 
-49D8F0 reads one owned inventory slot and accepts only an existing pickup
-record. 49DA27..49DA57 adds Param1 minutes to max(expiry, now), and 49DAC1
+Natively the renewal reads one owned inventory slot and accepts only an existing pickup
+record. It adds Param1 minutes to max(expiry, now), and
 restores the alive bit without creating a world actor.
 ================
 */
@@ -83,7 +83,7 @@ func (rt *Runtime) extendCompanionLease(use companionLeaseUse, result *OpResult)
 		return false
 	}
 	pet.RentalExpiresAtUnix = base + seconds
-	// 49DABC -> 4497D0 changes expiry; 49DACE -> 44A7A0 changes
+	// The native renewal changes the expiry and then
 	// the alive bit only. Renewal preserves retained HP and MP.
 	pet.StateFlags |= 1
 	pet.RefreshRentalTimes(use.nowUnix)

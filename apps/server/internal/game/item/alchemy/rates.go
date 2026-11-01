@@ -4,7 +4,8 @@
 rates.go - the shard's reinforcement rate table (port-only, not native)
 
 Natively an elixir's chance at each plus is authored in its own parameters
-(probability, 505F00): a B-grade elixir gives 50% for +1, falling to 12%
+(the reference server's probability field): a B-grade elixir gives 50% for
++1, falling to 12%
 from +10, and a matching lucky powder adds its own authored chance. Players
 asked for a gentler curve, and the owner approved it as a server setting
 (2026-10-11) that returns to native with one value.

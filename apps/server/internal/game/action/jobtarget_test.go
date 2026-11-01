@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-jobtarget_test.go - a job monster never strikes its own side (529110)
+jobtarget_test.go - a job monster never strikes its own side
 
 ===========================================================================
 */
@@ -17,7 +17,7 @@ import (
 ================
 TestJobMonsterStrikesOnlyTheOpposingSide
 
-CGObjChar_ValidateAttackTarget (529110) at the monster's attack admission:
+The native attack target validation at the monster's attack admission:
 a thief monster strikes a trader or hunter but never a thief, a hunter
 monster strikes a thief but never a trader or hunter, neither strikes a
 player without a suit (job state 4), and an ordinary monster strikes

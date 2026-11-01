@@ -50,6 +50,8 @@ export function createMall() {
 	let request: MallPurchase | "catalog" | null = null;
 	let staged: MallState | undefined;
 	let deadline = 0;
+	// The latest deadline a hold may reach, fixed by the request's first hold.
+	let holdLimit = 0;
 	let revision = 0;
 	let expired = false;
 
@@ -64,6 +66,7 @@ export function createMall() {
 			const frame = { opcode: MALL_CATALOG_CONTROL, payload: new Uint8Array() };
 			request = "catalog";
 			deadline = now + REQUEST_TIMEOUT_MS;
+			holdLimit = 0;
 			if ( state ) state = { ...state, pending: true, error: undefined };
 			return frame;
 		},
@@ -86,6 +89,7 @@ export function createMall() {
 			) throw Error( "Mall purchase exceeds current authority" );
 			request = { ...next };
 			deadline = now + REQUEST_TIMEOUT_MS;
+			holdLimit = 0;
 			staged = undefined;
 			state = { ...state, pending: true, error: undefined };
 			const frame = { opcode: ITEM_MOVE_REQUEST, payload };
@@ -168,6 +172,16 @@ export function createMall() {
 			// Revision acknowledges a request to the HUD's purchase queue. A wallet
 			// publication changes the displayed balance without completing that request.
 			state = { ...state, ...next };
+		},
+		/*
+  ================
+  holdUntil
+  ================
+  */
+		holdUntil( until: number, limit: number ) {
+			if ( !request ) return;
+			holdLimit ||= limit;
+			deadline = Math.max( deadline, Math.min( until, holdLimit ) );
 		},
 		/*
   ================

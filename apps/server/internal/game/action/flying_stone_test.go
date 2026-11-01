@@ -106,7 +106,7 @@ func TestFlyingStoneShippedChainAndBleedingLifecycle(t *testing.T) {
 		}
 	}
 	after, _ := rt.Monsters.Get(testDivision, target.Gid)
-	// An equal-grade re-roll never refreshes the slot (4A4270).
+	// An equal-grade re-roll never refreshes the slot.
 	if !tailSeen || after.CurrentHP >= first.CurrentHP || enterworld.CurrentMP(c) != 450 || bleedingSlot(after).StartedAt != firstBleed.StartedAt {
 		t.Fatalf("tail/cost/replacement: seen=%v mp=%d bleed=%+v", tailSeen, enterworld.CurrentMP(c), bleedingSlot(after))
 	}

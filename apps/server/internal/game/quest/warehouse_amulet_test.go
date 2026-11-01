@@ -4,9 +4,9 @@
 warehouse_amulet_test.go - Irina's amulet orders (QNO_WC_WAREHOUSE_W_2/_3)
 
 Exercise the compiled definitions: a hunted amulet becomes authentic or
-flawed on a right-click (895BC0 / 8970F0) until the order's count is held,
-the hunt itself never gates the pay (vf17C's one required mission), the
-second run is offered with _07 and one OK row (895740), and the second
+flawed on a right-click (one server handler per order) until the order's count is held,
+the hunt itself never gates the pay (the quest's one required mission), the
+second run is offered with _07 and one OK row (the order's talk handler), and the second
 order waits for the first completed twice.
 
 ===========================================================================

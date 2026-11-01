@@ -3,11 +3,11 @@ package enterworld
 import "opensro.online/server/internal/game/world/instance"
 
 // DefaultSiegeFortressDataRows is the exact enabled v1.150 projection of
-// textdata/siegefortress.txt loaded by sub_7f22d0 case 0x36 into
+// textdata/siegefortress.txt loaded by client 7F22D0 case 0x36 into
 // CGlobalDataManager+0x488.
 //
-// The last source column is deliberately retained: sub_5d8930 resolves the
-// selected fortress official's effective RefObj codename and sub_7d4b90
+// The last source column is deliberately retained: client 5D8930 resolves the
+// selected fortress official's effective RefObj codename and client 7D4B90
 // matches it against the record's final +0x20 wstring (character data begins
 // at +0x24). Dropping that column makes the 0x34 fortress-application row a
 // silent no-op even though the NPC and menu render correctly.

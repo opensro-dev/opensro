@@ -6,8 +6,8 @@ job_rewards_test.go - what a job player earns from a kill and a sale
 #bug-reports (2026-10-10) said killing the opposite job and a trade run
 pay nothing. These pin both rewards end to end against the shipped level
 table: a job kill pays job EXP and three times the lower level's monster
-basis (4E1F60, 4E20B9), and a trader's profitable sale pays the hunters
-in its party their share (5BCFF0).
+basis, and a trader's profitable sale pays the hunters
+in its party their share.
 
 ===========================================================================
 */

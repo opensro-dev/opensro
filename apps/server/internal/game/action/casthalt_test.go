@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-casthalt_test.go - a cast stops its caster's walk (59B5F6)
+casthalt_test.go - a cast stops its caster's walk
 
 ===========================================================================
 */
@@ -97,7 +97,7 @@ func TestSelfBuffCastStopsTheRunningCaster(t *testing.T) {
 ================
 TestInstantImbueKeepsTheWalk
 
-Fire Force is an instant activity: 4AD870 runs it beside the walk.
+Fire Force is an instant activity: natively it runs beside the walk.
 ================
 */
 func TestInstantImbueKeepsTheWalk(t *testing.T) {

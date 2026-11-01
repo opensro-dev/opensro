@@ -164,7 +164,7 @@ func TestMarchBardPassivesAndWeaponAdmission(t *testing.T) {
 ================
 TestSharedPartySelectionNativeBoundary
 
-March, Heal Shield and party invisibility all dispatch select 5 to 58BEF0.
+March, Heal Shield and party invisibility all dispatch select 5 to the native party selector.
 Test the selector contract directly, including its lack of a target-cap read.
 ================
 */

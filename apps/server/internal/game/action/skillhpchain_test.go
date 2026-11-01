@@ -5,7 +5,7 @@ skillhpchain_test.go - Dare Devil and Crutial Rush pay their HP at each stage
 
 Both European HP-ratio combos (SKILL_EU_WARRIOR_TWOHANDA_CRY_B and
 SKILL_EU_WARRIOR_DUALA_WHIRLWIND_B) author their root's 10 % HP ratio
-again on the second stage. 4AECE7 returns the next row to admission; 5867DC prepares its own
+again on the second stage. The reference server returns the next row to admission and prepares its own
 resource snapshot, so the second stage also consumes its authored HP.
 
 ===========================================================================

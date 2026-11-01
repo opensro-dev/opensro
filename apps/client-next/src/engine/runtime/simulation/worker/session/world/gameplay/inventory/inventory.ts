@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
 	nativeStackIdentity,
 	planContainerMove,
@@ -89,10 +90,9 @@ import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-cont
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
-// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
-// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
-// its bag size at world entry. The server sends it only with
-// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+// Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
+// grows the bag live when a paid expansion completes and announces the new
+// size here, in the same session, with no world entry in between.
 const STORAGE_CAPACITY_OPCODE = 0x3092;
 const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
@@ -133,6 +133,8 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
+			// The latest deadline references may reach, fixed by the first hold.
+			referenceLimit?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -142,6 +144,9 @@ export function createInventory(
 	// The street stall the player keeps or stands at, and the stall network
 	// window (stall.ts); a purchase lands on this owner's slots.
 	let stall: StallState = emptyStall();
+	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the stall offer
+	// price field to u64 (stall.ts); the world entry publishes it.
+	let raisedGoldCaps = false;
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
@@ -696,6 +701,7 @@ bootstrap
 		*/
 		bootstrap( value: unknown ) {
 			bindingMoves = [];
+			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
@@ -826,7 +832,7 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs } );
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, widePrice: raisedGoldCaps } );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {
@@ -877,7 +883,7 @@ stallCommand
 ================
 		*/
 		stallCommand( command: StallCommand ) {
-			const request = stallRequest( stall, command );
+			const request = stallRequest( stall, command, raisedGoldCaps );
 			stall = request.state;
 			for ( const frame of request.frames ) send( frame );
 			return request.frames.at( -1 ) ?? null;
@@ -1208,10 +1214,26 @@ cosTransferred
 				throw Error( "Invalid COS transfer result" );
 			}
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
-			if (
-				!pending || pending.opcode !== 0xb06d || pending.movementType !== p[1] || pending.cosGid !== gid ||
-				record.gid !== gid || pending.source !== p[6] || pending.destination !== p[7]
-			) throw Error( "Unmatched COS transfer result" );
+			const matched = pending && pending.opcode === 0xb06d && pending.movementType === p[1] &&
+				pending.cosGid === gid && record.gid === gid && pending.source === p[6] &&
+				pending.destination === p[7];
+			if ( !matched ) {
+				// Native 756CF0 arms 0x1A/0x1B hold no request to match: the
+				// result applies to the bags it names, and a replayed copy of
+				// an already-applied transfer finds its source slot empty and
+				// changes nothing. The port keeps its pending only as the
+				// authority for what a live request may consume: a result
+				// whose source item is already gone is a duplicate or a
+				// re-entry replay and is set aside, never a session failure.
+				// A mismatched result against a live pending whose source
+				// item is still present stays fatal, as before.
+				if ( record.gid !== gid ) return record;
+				const sourcePresent = p[1] === 0x1b ?
+					slots.has( p[6]! ) :
+					(record.inventory?.some( row => row.slot === p[6] ) ?? false);
+				if ( !sourcePresent ) return record;
+				if ( pending ) throw Error( "Unmatched COS transfer result" );
+			}
 			const next = planCosTransfer(
 				record,
 				[ ...slots.values() ],
@@ -1523,6 +1545,24 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 		},
 		/*
 ================
+holdForReferences
+
+Every open answer waits behind the reference frames (gameplay
+referenceProgress), so none can have been lost before until. The first hold
+fixes limit, and later frames cannot move it: a stream that never ends must
+not keep an answer open forever.
+================
+		*/
+		holdForReferences( until: number, limit: number ) {
+			if ( pending ) {
+				const referenceLimit = pending.referenceLimit ?? limit;
+				const deadline = Math.max( pending.deadline, Math.min( until, referenceLimit ) );
+				pending = { ...pending, deadline, referenceLimit };
+			}
+			mall.holdUntil( until, limit );
+		},
+		/*
+================
 use
 ================
 		*/
@@ -1533,8 +1573,12 @@ use
 				throw new Error( "Item use unavailable" );
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
-			// The Global Chatting item carries its line (693C90); nothing else does.
-			const tail = isGlobalChatItem( item.typeFlags ) ?
+			// The Global Chatting item carries its line (693C90); the
+			// name-change scroll carries its new name (#1689); nothing
+			// else leaves the companion tail path.
+			const tail = isNameChangeScrollItem( item.refObjId ) ?
+				nameChangeTail( context?.renameName ?? "" ) :
+				isGlobalChatItem( item.typeFlags ) ?
 				globalChatTail( message ?? "" ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
@@ -1709,8 +1753,9 @@ receive
 			if ( op === 0xb373 || op === 0xb651 ) {
 				if ( p[0] !== 1 ) {
 					if ( p.length !== (p[0] === 2 ? 2 : 1) ) throw Error( "Invalid alchemy rejection" );
-					// A stone whose roll failed (0xB651 [2, 0x23]; native 50338F/
-					// 50376F spend the stone) is a finished attempt: 62B0B0's 0x80
+					// A stone whose roll failed (0xB651 [2, 0x23]; the server
+					// spends the stone on the failed roll) is a finished attempt:
+					// CIFAlchemyReinforce_ShowResult's (client @0x0062b0b0) 0x80
 					// arm plays the failure effect and writes the failure line, so
 					// it records an outcome. Every other code is a refusal and
 					// finishes nothing.

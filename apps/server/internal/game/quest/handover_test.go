@@ -3,10 +3,10 @@
 
 handover_test.go - two-leg deliveries: hand over, then report
 
-A deliver mission with +0x110 clear (the 872040 default) only latches at
-its NPC: 91CA00 takes the items, gives the exchange back, and the quest
-then pays at its start NPC, or back at the hand-over NPC. QNO_WC_ACCESSORY_3
-takes firecrackers to Jinjin and her receipt back to Yeosun.
+A deliver mission with +0x110 clear (the mission constructor's default)
+only latches at its NPC: the server's hand-over takes the items, gives the
+exchange back, and the quest then pays at its start NPC, or back at the
+hand-over NPC. QNO_WC_ACCESSORY_3 takes firecrackers to Jinjin and her receipt back to Yeosun.
 
 ===========================================================================
 */
@@ -89,8 +89,8 @@ func TestFirecrackersHandOverThenReportToYeosun(t *testing.T) {
 ================
 TestHandOverNpcPaysOnceHandedOver
 
-CBasicQuest_vf154 admits both NPCs of the quest's table: back at Jinjin,
-the handed-over quest pays as it would at Yeosun.
+The server's quest reward step admits both NPCs of the quest's table: back
+at Jinjin, the handed-over quest pays as it would at Yeosun.
 ================
 */
 func TestHandOverNpcPaysOnceHandedOver(t *testing.T) {
@@ -165,7 +165,7 @@ func TestHandOverRefusesARecordWithoutItsNode(t *testing.T) {
 ================
 TestHandOverPagesPrecedeTheHandOver
 
-91CA00 pages a delivery's hand-over (+0xBF): QNO_CA_THIEF_4's NPC shows
+The server pages a delivery's hand-over (+0xBF): QNO_CA_THIEF_4's NPC shows
 three pages before the hand-over line _12, and QNO_EU_EASTEU_8's smith one
 page [NEXT] before _07, instead of handing over on the first page.
 ================
@@ -200,7 +200,7 @@ func TestHandOverPagesPrecedeTheHandOver(t *testing.T) {
 TestParallelDeliveriesHandOverInEitherOrder
 
 QNO_CH_POTION_4 carries Doji's medicine and Bori's book together. Each
-latches its own mission at its own NPC (91CEB0's per-mission bit), the
+latches its own mission at its own NPC (the hand-over's per-mission bit), the
 other's +0x108 line reminds the player of what is left, the journal moves
 to the remaining NPC, and Yangyun pays once both are handed over.
 ================

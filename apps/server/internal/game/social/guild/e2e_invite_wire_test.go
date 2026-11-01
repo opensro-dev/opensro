@@ -32,7 +32,7 @@ package guild_test
 //	               enter-world carries the two-member 0x32C4.
 //
 // A second test pins the shared-opcode COEXISTENCE with party: the
-// cross-lane prompt dismissal in both directions (the sub_5c8210
+// cross-lane prompt dismissal in both directions (the native
 // mirror), a byte-identical {01 01} routing to the party lane while
 // party holds the pending, and to the guild lane while guild does.
 
@@ -474,7 +474,7 @@ func TestGuildInviteConsentEndToEndOverWire(t *testing.T) {
 }
 
 // TestGuildInvitePartyOneProposalPerPlayerEndToEnd pins the native
-// one-transaction-per-player rule (46F420) across the shared 0x3393: a
+// one-transaction-per-player rule across the shared 0x3393: a
 // waiting party proposal makes the guild invite fail silently, a waiting
 // guild proposal makes the party invite fail with {2, 2} on B0D5 and
 // B452, and byte-identical {01 01} answers route to the lane that holds
@@ -489,7 +489,7 @@ func TestGuildInvitePartyOneProposalPerPlayerEndToEnd(t *testing.T) {
 
 	race := func() *int64 { v := enterworld.RaceChina; return &v }
 	gender := func() *int64 { v := enterworld.GenderMale; return &v }
-	// 513F90: a party proposer needs level 5.
+	// Reference server: a party proposer needs level 5.
 	proposerLevel := int64(5)
 	seeds := []*enterworld.Character{
 		{Name: invE2ENameH, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender(), Level: &proposerLevel},

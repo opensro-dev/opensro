@@ -3,7 +3,7 @@
 
 skilltrap.go - complete quest-trap programs from the native skill table
 
-The indirect item path creates a stationary CGSkillObject, not a resident
+The indirect item path creates a stationary skill object, not a resident
 character buff. Keep its authored targets and lifetime together so admission,
 world scans and quest dispatch cannot disagree about the same skill.
 
@@ -26,7 +26,7 @@ const (
 ================
 SkillQuestTrap
 
-48D690 stops matching at the first zero target. Preserve all three words,
+The server's skill-object tick stops matching at the first zero target. Preserve all three words,
 including empty lists used by the promotion item rows in v1.150 media.
 ================
 */
@@ -42,7 +42,7 @@ type SkillQuestTrap struct {
 ================
 compileQuestTrap
 
-48CCC0 and 48CEA0 own qest mode 1, stationary monster scans and expiry.
+The server's skill-object spawn and tick own qest mode 1, stationary monster scans and expiry.
 Require the complete shipped program. Unknown instructions cannot be ignored
 just because a familiar trap tag appears elsewhere in the row.
 ================
@@ -96,10 +96,10 @@ func compileQuestTrap(fields []string) SkillQuestTrap {
 
 const (
 	combatTrapHide = 0x68696465
-	// combatTrapScanMs reuses the quest trap's stationary update cadence
-	// (48CEA0); the combat trap's lnks second word is its owner distance.
+	// combatTrapScanMs reuses the quest trap's stationary update cadence;
+	// the combat trap's lnks second word is its owner distance.
 	CombatTrapScanMs = questTrapScanMs
-	// SkillFieldScanMs is the same 48CEA0 pass for a buff field (efr kind 3).
+	// SkillFieldScanMs is the same skill-object tick pass for a buff field (efr kind 3).
 	SkillFieldScanMs = questTrapScanMs
 	// att flag lanes (combat/formula.go): 0x04 physical, 0x08 magical.
 	physicalAttackFlagBit = 0x04
@@ -110,7 +110,7 @@ const (
 ================
 SkillCombatTrap
 
-A planted CGSkillObject that strikes the first hostile monster to enter its
+A planted skill object that strikes the first hostile monster to enter its
 trigger radius (efr kind 3), then retires. Attack and Area are the authored
 att and kind-1 efr of the explosion; statuses come from the row's blocks.
 lnks is read as the timed-effect link: group, owner distance, live traps
@@ -213,11 +213,11 @@ func compileCombatTrap(fields []string, row SkillRow) SkillCombatTrap {
 ================
 SkillTrapField
 
-A planted CGSkillObject in object mode 1 without the trap word (the Rogue's
-Poison Trap): CGSkillObject_SpawnAtOwner (48CCC0) picks mode 1 for a
-hostile execution selector, and each 48CEA0 pass collects up to MaxTargets
-hostiles within Radius of the object. CGSkillObject_ExecuteCollectedAttackRecipients
-(48D9B0) strikes the collection once PulseMs has passed since its last
+A planted skill object in object mode 1 without the trap word (the Rogue's
+Poison Trap): the server's spawn picks mode 1 for a
+hostile execution selector, and each tick pass collects up to MaxTargets
+hostiles within Radius of the object. Its collected-attack execution
+strikes the collection once PulseMs has passed since its last
 strike; the row's status blocks are the strike. Without trap (+0x4A0) the
 object never detonates: it lives its dura.
 ================
@@ -282,7 +282,7 @@ func compileTrapField(fields []string, row SkillRow) SkillTrapField {
 				return SkillTrapField{}
 			}
 			trap.Radius, trap.MaxTargets, trap.Select = a[2], a[3], uint8(a[5])
-		case tagReqi: // row.Reqi; 58D480 admits before dispatch
+		case tagReqi: // row.Reqi; admitted before dispatch
 		case tagGetv:
 			if _, known := SkillParameterFromKey(a[0]); !known {
 				return SkillTrapField{}

@@ -46,7 +46,7 @@ func resurrectionScrollFixture(hp int64) (*enterworld.Character, staticItemSourc
 ================
 TestResurrectionScrollExpRoundsUp
 
-49FFE8..49FFF9: a float32 remainder above 1e-6 adds one, where the skill's
+Natively a float32 remainder above 1e-6 adds one, where the skill's
 refund truncates.
 ================
 */
@@ -111,7 +111,7 @@ func TestResurrectionScrollRevivesTheDeadWhereTheyLie(t *testing.T) {
 ================
 TestResurrectionScrollRefusesTheLiving
 
-49FF35: anything but life state 2 answers 0x1887.
+Natively anything but life state 2 answers 0x1887.
 ================
 */
 func TestResurrectionScrollRefusesTheLiving(t *testing.T) {
@@ -124,7 +124,7 @@ func TestResurrectionScrollRefusesTheLiving(t *testing.T) {
 ================
 TestFireworkPublishesItsVisualToEveryone
 
-49ACA0 family 6 succeeds for a living user; 510980 then sends the item's
+The native family 6 succeeds for a living user; the use handler then sends the item's
 0x305C (v1.150 0x3449) to the user and the nearby sessions.
 ================
 */

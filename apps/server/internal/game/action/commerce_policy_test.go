@@ -116,8 +116,8 @@ func TestBuybackLivesWithLogicalSessionAndNotPersistedCharacter(t *testing.T) {
 ================
 TestPurchaseTaxFillsTheTreasury
 
-6186D0 credits the bound fortress with the taxed price minus the untaxed
-one; an ordinary item sale collects nothing (no sale path calls 486330).
+A native purchase credits the bound fortress with the taxed price minus the untaxed
+one; an ordinary item sale collects nothing (no native sale path accumulates tax).
 ================
 */
 func TestPurchaseTaxFillsTheTreasury(t *testing.T) {

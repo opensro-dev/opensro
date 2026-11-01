@@ -3,7 +3,7 @@
 
 min_level_test.go - a compiled quest opens at its class's minimum level
 
-CBasicQuest_MeetsPrerequisites (9262A0) admits a quest when the character's
+The server's quest prerequisite check admits a quest when the character's
 level reaches condition table 0xC2 +0x4 (flag 1). The questdata level
 (+0x23) only picks the marker. QNO_EU_EASTEU_4 sets 2 and lists 12: the
 Sunset Witch offers it from level 2, under the red scroll until 12.

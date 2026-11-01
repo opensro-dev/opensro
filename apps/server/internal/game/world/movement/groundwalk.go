@@ -69,7 +69,7 @@ func (rt *Runtime) groundStep(from simulation.Spawn, owner simulation.NavOwner, 
 	}
 	if rt.PathGuard != nil {
 		// A step the clip already constrained rests at the native
-		// contact (CRTNavMeshTerrain_Move 404970..40499C); an endpoint
+		// contact (CRTNavMeshTerrain_Move (client range 404970..40499C)); an endpoint
 		// verdict on that rest classifies the obstacle's own edge tile
 		// and must not discard the step (Case B2). Coverage refusals
 		// still refuse, constrained or not.

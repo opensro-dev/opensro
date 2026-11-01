@@ -49,7 +49,7 @@ func TestFollowRepeatedControllerLookupLossAndReturn(t *testing.T) {
 		state := s.division("summon")
 		state.instances.set(parent.Gid, parent)
 		state.movers.set(parent.Gid, leader)
-		state.byRegion[parent.Spawn.RegionID] = append(state.byRegion[parent.Spawn.RegionID], parent.Gid)
+		state.listRegionGid(parent.Spawn.RegionID, parent.Gid)
 		s.mu.Unlock()
 		frames, _ = ops.stopOrAdvanceFollow("summon", child, mover, lostAt+100)
 		mover, _ = s.Mover("summon", child.Gid)

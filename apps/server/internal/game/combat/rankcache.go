@@ -69,13 +69,13 @@ var rankRows = rankRowCache{entries: make(map[int64]*rankRowEntry), order: list.
 ================
 sourceIdentity
 
-A comparable identity for a skill source: its pointer, for the pointer and
+A comparable identity for a data source: its pointer, for the pointer and
 map sources the server and tests use. 0 means "not cacheable": the rows are
 computed fresh every time.
 ================
 */
-func sourceIdentity(skills enterworld.SkillDataSource) uintptr {
-	value := reflect.ValueOf(skills)
+func sourceIdentity(source any) uintptr {
+	value := reflect.ValueOf(source)
 	switch value.Kind() {
 	case reflect.Pointer, reflect.Map:
 		return value.Pointer()

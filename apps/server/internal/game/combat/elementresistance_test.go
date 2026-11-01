@@ -19,7 +19,8 @@ import (
 ================
 TestElementResistanceWritesFollowTheMask
 
-595698..5957EE: one flat write of the value to 0x1B+i per mask bit i.
+The installer's element-resistance branch: one flat write of the value to
+0x1B+i per mask bit i.
 ================
 */
 func TestElementResistanceWritesFollowTheMask(t *testing.T) {

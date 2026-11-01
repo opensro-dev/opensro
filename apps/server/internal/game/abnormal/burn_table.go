@@ -1,6 +1,7 @@
 package abnormal
 
-// burnDamageTable is v1.188 SR_GameServer C63C94..C63EC8, a uint32 table
-// indexed by the bu block's third argument (590BF2). Client/data authority
+// burnDamageTable is the v1.188 reference server's uint32 burn-damage data
+// table, indexed by the bu block's third argument when the server rolls the
+// status. Client/data authority
 // remains v1.150; no fitted damage formula.
 var burnDamageTable = [...]uint16{0, 8, 9, 11, 12, 14, 15, 17, 19, 20, 22, 24, 26, 29, 31, 33, 36, 39, 41, 44, 47, 50, 54, 57, 61, 64, 68, 72, 76, 81, 85, 90, 95, 100, 106, 111, 117, 123, 129, 136, 142, 149, 157, 164, 172, 180, 189, 197, 206, 216, 226, 236, 246, 257, 268, 280, 292, 305, 318, 331, 345, 359, 374, 389, 405, 422, 439, 457, 475, 494, 513, 533, 554, 576, 598, 621, 645, 670, 695, 721, 749, 777, 806, 835, 866, 898, 931, 965, 1000, 1036, 1074, 1112, 1152, 1193, 1236, 1280, 1325, 1371, 1419, 1469, 1520, 1573, 1627, 1683, 1741, 1800, 1862, 1925, 1991, 2058, 2127, 2199, 2272, 2348, 2427, 2507, 2590, 2676, 2764, 2855, 2949, 3045, 3145, 3247, 3352, 3461, 3573, 3688, 3806, 3928, 4054, 4183, 4316, 4454, 4595, 4740, 4890, 5044, 5202, 5365, 5533}

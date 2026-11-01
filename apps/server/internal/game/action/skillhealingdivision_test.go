@@ -6,7 +6,7 @@ skillhealingdivision_test.go - Healing Division heals the lowest HP ratio
 Healing Division (efr(1,6,300,2,50,5) eshp heal mwhh): the party member
 around the caster with the lowest HP ratio takes the whole heal, and the
 next lowest ratio around it half of it: with no primary target, eshp sorts
-the chain by HP ratio (TargetSelection_Chain 58C170, 58C633/58C640).
+the chain by HP ratio (the reference server's chain selector).
 
 ===========================================================================
 */

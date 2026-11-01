@@ -483,7 +483,7 @@ TestCoolingDownSkillPressNeverStopsAutoAttack
 
 Ice River Force pressed again on cooldown dropped every attack: the press
 arrived mid-swing, was queued unchecked and replaced the auto-attack, then
-was refused when the swing closed. 4ACC40 validates first (mask 0x37): the
+was refused when the swing closed. The reference server validates first (mask 0x37): the
 press answers 0x3005 and the swings carry on.
 ================
 */
@@ -498,7 +498,7 @@ func TestCoolingDownSkillPressNeverStopsAutoAttack(t *testing.T) {
 		t.Fatal("fixture: the first swing is not open")
 	}
 	// The skill's own cooldown, keyed as the server reads it (shared group
-	// first, 64C1A0).
+	// first, as the reference server's cooldown check does).
 	if skill.CoolTimeGroup != 0 {
 		if c.SharedSkillCooldowns == nil {
 			c.SharedSkillCooldowns = map[uint8]int64{}

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skillposition.go - position skills: teleports and dashes (5862E0 / 593540)
+skillposition.go - position skills: teleports and dashes
 
 ===========================================================================
 */
@@ -50,8 +50,8 @@ func positionSkillGoal(from, requested simulation.Spawn, limit uint32) (simulati
 ================
 acceptPositionSkill
 
-Called under the division action lock. Native 5862E0 plans and navigates;
-593540 commits the destination with the vitals debit before publication.
+Called under the division action lock. The native position effect plans and navigates;
+the skill engage commits the destination with the vitals debit before publication.
 ================
 */
 func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow) OpResult {
@@ -117,14 +117,14 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 	rt.bindResidentRegion(key, now)
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token}
-	// 5862E0: tele (Ghost Walk) travels (bit 8), tel2 (the Wizard's
+	// Natively tele (Ghost Walk) travels (bit 8), tel2 (the Wizard's
 	// Teleport) lands at once (bit 2). The server's position is the
 	// destination in both, from this commit on.
 	open := wire.SkillCastTravelFrame(success, point)
 	if skill.PositionEffect.Teleport {
 		open = wire.SkillCastTeleportFrame(success, point)
 	}
-	// Instant native handler emits release (58701F); guided arrival owns the
+	// The instant native handler emits release; guided arrival owns the
 	// client close (8DD550). A zero-time finalize would truncate the dash.
 	release := wire.SkillCastReleaseFrame(token, gid)
 	return OpResult{Frames: []wire.Frame{open, release, vitals}, Broadcast: []wire.Frame{open, release}, ActorPrivate: []wire.Frame{vitals}}

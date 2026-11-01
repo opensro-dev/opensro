@@ -20,9 +20,7 @@ const { createGameplay } = await import(
 const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
 const {
 	createNoticeBanner,
-	notificationBannerPaths,
-	SUN_DROP_BANNER_COLOR,
-	SUN_DROP_BANNER_TEXT_RGB
+	notificationBannerPaths
 } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
 const { chatLineText, chatLineColor } = await import( "../../src/engine/foundation/ui/chat-presentation.ts" );
 test("server refusal reaches the independent native red notice and pink chat log", () => {
@@ -188,12 +186,12 @@ test("a plus notice for a +7 item (channel 0x81, the body's plus byte) answers t
 	const short = defined( serverNotification( 0x3667, linked( text, body( 7, 10 ) ) ) );
 	assert.equal( short.dropPlus, true );
 	assert.equal( short.plusSeven, undefined );
-	// No further channel was introduced: an 0x83 frame is not a notice
-	// (0x82 is the item-break channel, #1738).
+	// No further channel was introduced: an 0x84 frame is not a notice
+	// (0x82 is the item-break channel, #1738; 0x83 the rename channel, #1689).
 	assert.equal(
 		serverNotification(
 			0x3667,
-			Buffer.concat( [ Buffer.from( [ 0x83, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
+			Buffer.concat( [ Buffer.from( [ 0x84, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] )
 		),
 		null
 	);
@@ -314,9 +312,9 @@ test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while
 	const banner = createNoticeBanner( "notificationBanner" );
 	banner.step( [ { ...sunNotice, sequence: 1 } ], 100, true );
 	assert.equal( banner.sunDrop(), true );
-	assert.deepEqual( SUN_DROP_BANNER_COLOR, [ 180, 120, 16 ] );
-	assert.deepEqual( SUN_DROP_BANNER_TEXT_RGB, [ 1, 215 / 255, 80 / 255 ] );
+	assert.equal( banner.sealTier(), 2 );
 	const starNotice = defined( serverNotification( 0x3667, frame( 0x81, starText ) ) );
-	banner.step( [ { ...starNotice, sequence: 2 } ], 200, true );
+	banner.step( [], 8000, true );
+	banner.step( [ { ...starNotice, sequence: 2 } ], 8100, true );
 	assert.equal( banner.sunDrop(), false );
 });

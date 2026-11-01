@@ -10,7 +10,8 @@ package chat
 // Transport-free pins for the 0x7367 decode and the HandleChat routing:
 // every wire body asserted BYTE-EXACT against hand-rolled expectations
 // (never against this package's own encoders), so the client agent's
-// parser folds (sub_753290 / sub_753760) are pinned against the same
+// parser folds (client CPSMission_OnChatSendErrorResponse0xB367 /
+// CPSMission_HandleChatBroadcast0x3667) are pinned against the same
 // contract.
 
 import (
@@ -563,7 +564,7 @@ TestHandleChatSuitedSenderSpeaksUnderJobAlias
 
 While the author is dressed in a job suit, every composed chat line
 carries the job alias instead of the character name (native
-CGObjPC_GetNickName 4DDC50). Deliveries still route by character name,
+the job alias getter). Deliveries still route by character name,
 and an author who owns an alias but is not wearing the suit speaks
 under the character name.
 ================

@@ -5,7 +5,7 @@ skillmasterypassives_test.go - the Chinese mastery passives that raise a stat
 
 The bow (hr), lightning (er), spear (hpi), water (mpi) and fire (dru)
 passives were refused by the passive qualifier and raised nothing. A
-learned passive is a standing instance; 594AC0 installs its block.
+learned passive is a standing instance; the buff modifier install installs its block.
 
 ===========================================================================
 */

@@ -3,9 +3,13 @@
 test_cap110_rewards.py - the monsters' database rewards and their items.
 ===========================================================================
 """
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import cap110_items as items
+import cap110_monsters as monsters
 import cap110_rewards as rewards
 
 
@@ -70,6 +74,40 @@ class RewardsTest(unittest.TestCase):
 		self.assertEqual(list(got["Groups"]), [str(rewards.GROUP_BASE + 2)])
 		self.assertEqual(got["Groups"][str(rewards.GROUP_BASE + 2)], [{"Codename": "ITEM_ETC_SD_TOKEN_01", "Probability": 1.0}])
 		self.assertEqual(rewards.reward_items(got), ["ITEM_A", "ITEM_ETC_SD_TOKEN_01"])
+
+	# ================
+	# test_an_installed_qinshi_population_earns_its_rules
+	#
+	# The qinshi nest file's presence is the ask (#1800 step 2): its
+	# monsters join the rewarded population, a family never installed
+	# contributes nothing.
+	# ================
+	def test_an_installed_qinshi_population_earns_its_rules(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			(root / monsters.POPULATION_FILE).write_text(
+				json.dumps({"Rows": [{"Codename": "MOB_SD_SPHINX"}]}), encoding="utf-8")
+			(root / monsters.QINSHI_FILE).write_text(
+				json.dumps({"Rows": [{"Codename": "MOB_TQ_TOMBGUARD"}, {"Codename": "MOB_QT_TQ_SCOUT"}]}), encoding="utf-8")
+			population = rewards.population_codes(root)
+		self.assertEqual(population, {"MOB_SD_SPHINX", "MOB_TQ_TOMBGUARD", "MOB_QT_TQ_SCOUT"})
+		got = rewards.project_rewards(
+			[fixed("MOB_TQ_TOMBGUARD", "ITEM_ETC_ARCHEMY_STONE"), fixed("MOB_GOD_UNRELATED", "ITEM_B")],
+			[random("MOB_QT_TQ_SCOUT", 7)], [member(7, "ITEM_ETC_SD_TOKEN_01")], population)
+		self.assertEqual([r["Monster"] for r in got["Fixed"]], ["MOB_TQ_TOMBGUARD"])
+		self.assertEqual([(r["Monster"], r["Group"]) for r in got["Random"]], [("MOB_QT_TQ_SCOUT", rewards.GROUP_BASE + 7)])
+
+	# ================
+	# test_no_qinshi_file_no_qinshi_rules
+	# ================
+	def test_no_qinshi_file_no_qinshi_rules(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			(root / monsters.POPULATION_FILE).write_text(
+				json.dumps({"Rows": [{"Codename": "MOB_SD_SPHINX"}]}), encoding="utf-8")
+			population = rewards.population_codes(root)
+		got = rewards.project_rewards([fixed("MOB_TQ_TOMBGUARD", "ITEM_A")], [], [], population)
+		self.assertEqual(got["Fixed"], [])
 
 	# ================
 	# test_imported_groups_never_share_a_native_group_id

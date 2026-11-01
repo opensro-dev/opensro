@@ -29,7 +29,7 @@ import (
 ================
 TestFortressStructureListNamesEveryZone
 
-634850 / 61E000: Jangan's two standing structures (zones 84 and 85) list
+The native structure list: Jangan's two standing structures (zones 84 and 85) list
 with zero construction minutes, in zone order; an unknown fortress answers
 code 3; and the dispatcher hands action 0x18 to the NPC service admission
 (service 0x19) instead of refusing it as unknown.
@@ -83,7 +83,7 @@ func structureByRef(t *testing.T, rt *Runtime, refObjID uint32) monster.Instance
 ================
 TestFortressStructureRepairRestoresFullHP
 
-634950 / 4CFD50 in order: a war refuses 0x18, a zone of another fortress
+The native repair in order: a war refuses 0x18, a zone of another fortress
 0x26, an unknown zone 3, a purse that cannot buy every missing point 0x30
 (charging nothing), and an undamaged structure 0x31. A paid repair
 restores full hit points for one gold a point (the fixture authors no
@@ -168,7 +168,7 @@ func TestFortressStructureRepairRestoresFullHP(t *testing.T) {
 ================
 TestStructureRepairCostFollowsTheRecordPrice
 
-4CFD50 with an authored price: CostRepair 20000 over 10000 hit points is
+The native repair cost with an authored price: CostRepair 20000 over 10000 hit points is
 two gold a point, so 2500 missing points cost 5000, and a purse one short
 refuses.
 ================
@@ -219,7 +219,7 @@ func gateFixture(t *testing.T) (*Runtime, uint32, monster.Instance) {
 ================
 TestGatePulleyOpensAndShutsItsGate
 
-634C90: a pulley naming no gate answers 0x27 to an open request and 0x28
+The native pulley: a pulley naming no gate answers 0x27 to an open request and 0x28
 to a shut one, a gate of another fortress 0x29, a destroyed gate 0x3C;
 otherwise the requested word becomes the gate's state and the reply
 carries the fortress, the zone and that word.

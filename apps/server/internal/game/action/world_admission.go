@@ -56,8 +56,8 @@ func (rt *Runtime) admitPopulationSession(division, name string, session uint64)
 transferPopulationSession
 
 Moves an admitted session's membership into another world's live layer:
-the population half of the PC world teleport (CGObjPC vtable +0x378, called
-by 4F2B50). The new membership is taken first so a full layer refuses
+the population half of the PC world teleport (player vtable +0x378, called
+by the teleport use handler). The new membership is taken first so a full layer refuses
 without leaving the old one. Returns the previous admission for rollback.
 The caller holds the division lock.
 ================

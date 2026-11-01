@@ -18,9 +18,17 @@ suit must not hide its wearer from a mute or a ban. The character name
 never reaches the public API either; resolving a suited author's line to
 their character would defeat the suit's anonymity.
 
-One Feed per GameWorld, written by the chat owner, the item owner and the
-notice bridge, read by the public API. It is memory only: a restart
-starts it empty, as the in-game history does.
+One Feed per GameWorld, written by the chat owner, the item owner, the
+notice bridge and the gameplay announcer, read by the public API. It is
+memory only: a restart starts it empty, as the in-game history does.
+
+Two streams, each with its own bound. The transcript holds what people
+say (chat, Global, operator notices). The events stream holds the
+automated gameplay announcements (seal drops, enhancement advances, job
+kills, breaks). They were one ring once, and on a busy shard a seal
+drop every minute pushed every human line off the site (owner,
+2026-10-28): a machine producer must never decide how long people's
+words stay up.
 
 Port-only, not native: the original has no website.
 
@@ -35,14 +43,19 @@ import (
 	"unicode"
 )
 
-// MaxLines is how many lines the feed keeps per division.
+// MaxLines is how many transcript lines the feed keeps per division.
 const MaxLines = 10
 
-// Line kinds, as the public API names them.
+// MaxEvents is how many gameplay announcements the feed keeps per division.
+const MaxEvents = 20
+
+// Line kinds, as the public API names them. KindEvent lines go to the
+// events stream; every other kind is transcript.
 const (
 	KindChat   = "chat"
 	KindGlobal = "global"
 	KindNotice = "notice"
+	KindEvent  = "event"
 )
 
 /*
@@ -70,9 +83,10 @@ Feed
 ================
 */
 type Feed struct {
-	mu    sync.Mutex
-	lines map[string][]Line
-	now   func() time.Time
+	mu     sync.Mutex
+	lines  map[string][]Line
+	events map[string][]Line
+	now    func() time.Time
 }
 
 /*
@@ -81,7 +95,22 @@ New
 ================
 */
 func New() *Feed {
-	return &Feed{lines: map[string][]Line{}, now: time.Now}
+	return &Feed{lines: map[string][]Line{}, events: map[string][]Line{}, now: time.Now}
+}
+
+/*
+================
+appendBounded
+
+rows with line appended, the oldest dropped past limit.
+================
+*/
+func appendBounded(rows []Line, line Line, limit int) []Line {
+	if len(rows) == limit {
+		copy(rows, rows[1:])
+		rows = rows[:limit-1]
+	}
+	return append(rows, line)
 }
 
 /*
@@ -109,10 +138,12 @@ func printable(text string) string {
 ================
 Record
 
-Appends a line, dropping the oldest past MaxLines. author is the author's
-character name (empty for a notice), character the display name the line
-shows. Text is made printable first; nothing left is not a line. A nil
-feed records nothing, so wiring may leave it out.
+Appends a line to its stream: a KindEvent line to the events (bound
+MaxEvents), any other to the transcript (bound MaxLines), dropping the
+stream's oldest. author is the author's character name (empty for a
+notice or an event), character the display name the line shows. Text is
+made printable first; nothing left is not a line. A nil feed records
+nothing, so wiring may leave it out.
 ================
 */
 func (f *Feed) Record(division, kind, author, character, text string) {
@@ -123,14 +154,31 @@ func (f *Feed) Record(division, kind, author, character, text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
+	line := Line{At: f.now(), Kind: kind, Character: character, Author: author, Text: text}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	rows := f.lines[division]
-	if len(rows) == MaxLines {
-		copy(rows, rows[1:])
-		rows = rows[:MaxLines-1]
+	if kind == KindEvent {
+		f.events[division] = appendBounded(f.events[division], line, MaxEvents)
+		return
 	}
-	f.lines[division] = append(rows, Line{At: f.now(), Kind: kind, Character: character, Author: author, Text: text})
+	f.lines[division] = appendBounded(f.lines[division], line, MaxLines)
+}
+
+/*
+================
+Events
+
+The division's gameplay announcements, oldest first, as a detached copy.
+They have no author, so no mute or ban filter applies.
+================
+*/
+func (f *Feed) Events(division string) []Line {
+	if f == nil {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Line(nil), f.events[division]...)
 }
 
 /*
@@ -162,7 +210,8 @@ func (f *Feed) Purge(division, character string) {
 ================
 Lines
 
-A detached copy, oldest first, without the lines whose author hidden
+The transcript as a detached copy (never the events), oldest first,
+without the lines whose author hidden
 reports (a muted character). hidden receives the author's character
 name, never the display name. hidden may be nil.
 ================

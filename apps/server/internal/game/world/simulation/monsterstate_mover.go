@@ -37,6 +37,31 @@ func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState,
 	return mover, true
 }
 
+/*
+================
+livePose
+
+livePose reads one actor's live pose without expanding or validating a
+whole mover value - the read vanishInSafeZone weighs once per advanced
+actor. A gid the mover storage cannot place reads through the same
+synthesized spawn mover Mover would build, so the pose is Mover's.
+================
+*/
+func (s *MonsterState) livePose(divisionID string, gid uint32, nowMs int64) (monster.Pose, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if pose, ok := state.movers.livePoseAt(gid, nowMs, nil); ok {
+		return pose, true
+	}
+	instance, ok := state.instances.lookup(gid)
+	if !ok {
+		return monster.Pose{}, false
+	}
+	return monster.NewSpawnMover(instance, s.nowMillis()).LivePoseAt(nowMs, nil), true
+}
+
 // CommitMover replaces an instance's mover value. Whole-value commits keep
 // mutation behind the simulation authority boundary. True means this value
 // was accepted, not merely that its GID exists. Frame-producing planners must

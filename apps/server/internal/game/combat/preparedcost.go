@@ -4,7 +4,7 @@
 preparedcost.go - the MP a cast is charged
 
 The execution context snapshots the cost when the cast is prepared
-(58312C persistent, 5867DC instant). The server runs its FPU with
+(by the persistent and the instant preparation paths). The server runs its FPU with
 FPCW 0x27F (53-bit precision), so the x87 stack is IEEE double here.
 
 ===========================================================================
@@ -47,11 +47,11 @@ func PreparedCost(current, flat uint32, percent uint16, persistent, player bool,
 ==================
 ApplyMPDecrease
 
-The WIMD / BDMD / HLMD cuts on a prepared MP cost:
-instant 5868F1 / 58695F / 5869CD, persistent 58327A / 5832E6 / 583352.
+The WIMD / BDMD / HLMD cuts on a prepared MP cost: three cuts on the
+instant preparation path, the same three on the persistent one.
 
 For each modifier the skill asks for (getv), the caster's value v
-(CSkillManager_GetSkillModifier 5A0330) gives
+(the server's skill-modifier lookup) gives
 
 	cost = trunc(unsigned(cost) * (1 - unsigned(v) / 100))
 
@@ -59,9 +59,10 @@ FISTP keeps the low dword, so v > 100 wraps; there is no clamp. A modifier
 the caster lacks reads 0 and leaves the cost alone. Projectile casts read
 none of these.
 
-58436B and 58535D are actor vfunc +0x55C calls, not HLMD. 58528A scales
-only BDMD onto the vfunc +0x10C amount before vfunc +0x308: the same cut,
-taken when the persistent context is rebuilt.
+Two other calls in the persistent path are actor vfunc +0x55C calls, not
+HLMD. The persistent rebuild scales only BDMD onto the vfunc +0x10C amount
+before vfunc +0x308: the same cut, taken when the persistent context is
+rebuilt.
 ==================
 */
 func ApplyMPDecrease(cost int32, mask enterworld.SkillParameterMask, values enterworld.SkillParameterValues) int32 {
@@ -83,7 +84,7 @@ func ApplyMPDecrease(cost int32, mask enterworld.SkillParameterMask, values ente
 ==================
 CutMPCost
 
-One percent cut of a prepared MP cost, the 5868F1 arithmetic every MP
+One percent cut of a prepared MP cost, the instant WIMD cut's arithmetic every MP
 Decrease key uses: cost x (1 - percent / 100), stored by FISTP.
 ==================
 */

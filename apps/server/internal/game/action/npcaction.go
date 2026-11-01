@@ -90,7 +90,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
-	// 510262: an NPC function request ends the requester's hide first,
+	// Natively an NPC function request ends the requester's hide first,
 	// whatever becomes of the request.
 	rt.deps.Update(character, "npc-action-hide", func() bool {
 		return rt.retireHide(divisionID, character, rt.Now().UnixMilli())
@@ -109,7 +109,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	if npc.TalkFlags&mask == 0 {
 		return nil, fmt.Sprintf("NPC %s does not grant action mask 0x%X", npc.Codename, mask)
 	}
-	// 510250 runs 4A8E10 before any NPC function; a dialog the client kept
+	// The native NPC function request runs the hit-range check before any NPC function; a dialog the client kept
 	// open while walking away is refused here with the "too far" notice.
 	if !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
@@ -152,15 +152,15 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		ack := wire.EncodeNpcInteractionAck(mask)
 		if mask == simulation.NpcTalkFlagSpecialTrade {
 			// Client 75AF59 reads a mode byte after the special-trade mask.
-			// Server 510500 publishes +42405: the ordinary shard mode is 0.
+			// The reference server publishes +42405: the ordinary shard mode is 0.
 			ack = append(ack, 0)
 		}
 		frames := []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: ack}}
 		// 7046 writes interaction state 5 for a shop over the warehouse's 6:
-		// one slot, so an open warehouse ends (526CE0 refuses 0x1834).
+		// one slot, so an open warehouse ends (the warehouse move refuses 0x1834).
 		rt.endStorageInteraction(divisionID, character.Name)
 		if rt.Commerce != nil {
-			// 510250 sets the shop function state (5); trades check it.
+			// The native request sets the shop function state (5); trades check it.
 			rt.Selected.OpenFunction(divisionID, character.Name, gid)
 			frames = append(frames, rt.shopCatalog(divisionID, character, gid))
 		}
@@ -217,4 +217,38 @@ func (rt *Runtime) npcForCurrentViewer(divisionID string, character *enterworld.
 		return npc, true
 	}
 	return simulation.NpcDef{}, false
+}
+
+/*
+================
+npcForGID
+
+The roster NPC with this object id, before any viewer test. The gacha
+handlers answer a gid that names nothing (native code 0) differently from
+one outside the viewer's sector scope (code 3), so they look the roster up
+in two steps where npcForCurrentViewer folds them.
+================
+*/
+func (rt *Runtime) npcForGID(gid uint32) (simulation.NpcDef, bool) {
+	for _, npc := range rt.NpcRoster {
+		if npc.ObjectID == gid {
+			return npc, true
+		}
+	}
+	return simulation.NpcDef{}, false
+}
+
+/*
+================
+npcVisibleTo
+
+True while the NPC stands in the viewer's plane and sector scope.
+================
+*/
+func (rt *Runtime) npcVisibleTo(divisionID string, character *enterworld.Character, npc simulation.NpcDef) bool {
+	world := rt.Worlds.Snapshot(
+		simulation.WorldKey(divisionID, character.Name),
+		func() simulation.WorldState { return simulation.SeedWorldState(character) },
+	)
+	return simulation.NpcVisibleAt(npc, world.LiveSpawnAt(rt.Now().UnixMilli()))
 }

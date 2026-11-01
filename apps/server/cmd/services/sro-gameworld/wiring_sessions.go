@@ -32,6 +32,7 @@ installSessionLifecycle
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
 	// Port-only: the economy ledger's committed gold per reason.
 	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
+	hub.SetStoreLockMetrics(func() any { return authorityStore.LockTiming() })
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
 	// Players a non-walk path placed inside a closed object (placementguard.go).
@@ -48,7 +49,7 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	// block in the same order as the send (guild/baseline.go).
 	game.deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return game.deps.Guilds })
 	hub.OnSessionClose(func(session *transport.Session, cause error) {
-		game.sessionClosed(session, cause)
+		game.sessionClosed(session, cause, authorityStore)
 		guild.ForgetSession(session)
 	})
 }
@@ -110,6 +111,9 @@ func (game *gameplayPlane) worldBound(
 	game.items.BindRecoverySession(divisionID, character, session.ID)
 	game.movement.WorldBound(session, divisionID, character)
 	community.FriendWorldBound(game.deps, game.presence, divisionID, character)
+	// #1689 (port-only): a rename applied at login is announced to the
+	// character's online friends and guild members, once.
+	community.RenameNoticeWorldBound(game.deps, game.presence, divisionID, character)
 	game.parties.WorldBound(session, divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
@@ -146,7 +150,7 @@ cause is the transport's close cause: a server shutdown is no player's
 disconnect, so the port-only trader cargo rule skips it.
 ================
 */
-func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error) {
+func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error, authorityStore *store.Store) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
 	if game.friends != nil {
 		game.friends.SessionClosed(session)
@@ -166,5 +170,6 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.DropInstanceInvite(divisionID, character.Name)
 		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
+		authorityStore.ReleaseCommittedCopy(divisionID, character.ID)
 	}
 }

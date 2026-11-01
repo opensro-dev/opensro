@@ -104,32 +104,52 @@ func TestZombiePotionDamagesHPAndRestoresMP(t *testing.T) {
 		return true
 	})
 	result := useBagItem(rt, c, potion(40, 30))
-	// 49AA70 at level 1, STR/INT 20: HP 40 -> 41, MP 30 -> 31.
+	// Reference server recovery at level 1, STR/INT 20: HP 40 -> 41, MP 30 -> 31.
 	if c.CurrentHP == nil || *c.CurrentHP != 59 || c.CurrentMP == nil || *c.CurrentMP != 81 {
 		t.Fatalf("hp %v mp %v frames %d", c.CurrentHP, c.CurrentMP, len(result.Frames))
 	}
 }
 
-func TestZombiePotionKillsThroughTheDeathPath(t *testing.T) {
+/*
+================
+TestZombiePotionStopsAtOneHPWithoutDeath
+
+The v1.150 rule as reported by the owner: the zombie potion reverses the
+heal into damage, but the damage stops at one HP and never kills. MP still
+recovers as before.
+================
+*/
+func TestZombiePotionStopsAtOneHPWithoutDeath(t *testing.T) {
 	rt, clock, c, m := newCombatTestRuntime(t, 100)
-	one := int64(10)
-	c.CurrentHP = &one
+	hp := int64(10)
+	c.CurrentHP = &hp
+	mp := int64(50)
+	c.CurrentMP = &mp
 	rt.deps.Update(c, "zombie", func() bool {
 		rt.applyPlayerAbnormalInDoor(testDivision, c, false, []abnormal.Record{{
 			Status: abnormal.Zombie, DurationMs: 10000, Level: 1, SourceGID: m.Gid,
 		}}, clock.NowMs())
 		return true
 	})
-	result := useBagItem(rt, c, potion(80, 10))
-	if c.CurrentHP == nil || *c.CurrentHP != 0 {
-		t.Fatalf("hp %v", c.CurrentHP)
+	result := useBagItem(rt, c, potion(80, 30))
+	// Reference server recovery at level 1, STR/INT 20: HP 80 -> 81, more
+	// than the 10 HP held, so the reversed damage stops at the floor. MP
+	// 30 -> 31 still recovers.
+	if c.CurrentHP == nil || *c.CurrentHP != 1 {
+		t.Fatalf("hp %v, want 1", c.CurrentHP)
 	}
-	if !saw(result.Frames, 0x3122) {
-		t.Fatal("lethal potion did not publish the dead frame")
+	if c.CurrentMP == nil || *c.CurrentMP != 81 {
+		t.Fatalf("mp %v, want 81", c.CurrentMP)
+	}
+	if !enterworld.CharacterAlive(c) {
+		t.Fatal("zombie potion killed the player")
+	}
+	if saw(result.Frames, wire.OpObjectStateRefresh) || saw(result.Frames, wire.OpDeathNotice) {
+		t.Fatalf("zombie potion sent a death frame: %+v", result.Frames)
 	}
 }
 
-// 49B710 deals the potion's whole HP amount while zombie is set, even when a
+// The reference server deals the potion's whole HP amount while zombie is set, even when a
 // full gauge would absorb none of it as healing.
 func TestZombiePotionAtFullHPStillDamages(t *testing.T) {
 	rt, clock, c, m := newCombatTestRuntime(t, 100)
@@ -142,7 +162,7 @@ func TestZombiePotionAtFullHPStillDamages(t *testing.T) {
 		return true
 	})
 	useBagItem(rt, c, potion(40, 0))
-	// 49AA70 at level 1, STR 20: Param1 40 -> 41.
+	// Reference server recovery at level 1, STR 20: Param1 40 -> 41.
 	if c.CurrentHP == nil || *c.CurrentHP != maxHP-41 {
 		t.Fatalf("hp %v want %d", c.CurrentHP, maxHP-41)
 	}
@@ -173,7 +193,7 @@ func TestCureAlwaysConsumesAndLocksItsLane(t *testing.T) {
 	}
 }
 
-// 4A6560 shuffles the selection before the limit: with two matching slots,
+// The reference server shuffles the selection before the limit: with two matching slots,
 // i=1 swaps with rand()%2, so rand 0 cures the higher slot and 1 the lower.
 func TestPillLimitFollowsTheNativeShuffle(t *testing.T) {
 	for _, tc := range []struct {

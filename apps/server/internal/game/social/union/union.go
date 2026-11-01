@@ -3,12 +3,12 @@
 
 union.go - the guild unions of every division
 
-Package union owns which guilds stand together (CAlliance). A union is up
+Package union owns which guilds stand together (the native alliance). A union is up
 to eight guilds in fixed slots, the leading guild in slot 0
-(CAlliance_SetGuildSlot 5B8C70, CAlliance_GetMasterGuildID 5B9260); a
-guild sits in at most one (its CGuild +0x50 alliance id). The guild lane
+(the native slot setter and master-guild getter); a
+guild sits in at most one (its guild +0x50 alliance id). The guild lane
 proposes and answers, the fortress war asks who is allied with a holder
-(CSiegeFortressMgr_IsGuildAlliedWithFortress 61D300), union chat asks
+(the fortress manager's alliance test), union chat asks
 whose lines reach whom. Every change saves before its caller goes on.
 
 The shard decides joins and removals; its rules are not in the
@@ -141,7 +141,7 @@ func (a *Authority) Of(divisionID string, guildID int64) (domain.AllianceRecord,
 ================
 Allied
 
-Two different guilds of one union (61D300 compares alliance ids).
+Two different guilds of one union (the native test compares alliance ids).
 ================
 */
 func (a *Authority) Allied(divisionID string, guildA, guildB int64) bool {
@@ -186,7 +186,7 @@ func Count(record domain.AllianceRecord) int {
 Join
 
 Puts joiner in the leader's union, founding one with the leader in slot 0
-and the joiner in slot 1 when the leader stands in none (5CA5A0 sets both
+and the joiner in slot 1 when the leader stands in none (the reference server sets both
 slots of a new union). The joiner takes the first free slot otherwise.
 ================
 */

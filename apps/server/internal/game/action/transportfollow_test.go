@@ -116,7 +116,7 @@ func TestDismountedTransportFollowsItsTrader(t *testing.T) {
 ================
 TestDismountedTransportFollowsAThief
 
-The rule keys on the transport (CGObj_IsVehicleCOS, TID4 2), never on the
+The rule keys on the transport (a vehicle COS, TID4 2), never on the
 owner's job: a thief's dismounted transport follows the thief exactly as a
 trader's follows the trader, and holds no tether.
 ================

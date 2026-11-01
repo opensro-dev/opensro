@@ -57,7 +57,7 @@ TestWorldSpaceParityCases
 Verifies that worldgeom matches the shared client/server world-space parity
 cases in testdata/world-space-cases.json. On cross-region dungeon and
 dungeon/outdoor pairs, client worldDelta follows SWorld_CalculateRegionOffsetVector
-(0x00888140, zero region offset whenever either endpoint has 0x8000 set),
+(client 0x00888140, zero region offset whenever either endpoint has 0x8000 set),
 whereas worldgeom.Delta only short-circuits equal dungeon RegionIDs; those
 cases pin delta for the client and serverDelta for Go.
 ================

@@ -3,8 +3,9 @@ package wire
 // Type-flag band predicates for the CIItem ground spawn row.
 //
 // The row's shape depends on the item's 16-bit itemdata type-flag word, which
-// the client's sub_777220 dispatch cascade tests bit-field by bit-field before
-// handing the stream to sub_86e4e0 CIItem_ParseSpawnPacket. All three bands
+// the client's CPSMission_DeserializeObjectSpawn dispatch cascade tests
+// bit-field by bit-field before handing the stream to
+// CIItem_ParseGroundSpawn. All three bands
 // share the "not a character, item class 0x0C" prefix and then diverge on the
 // 0x60 pair and the 0x780 group, so they are mutually exclusive.
 
@@ -33,30 +34,33 @@ func IsEquipmentBand(typeFlags uint16) bool {
 }
 
 // IsEtcBand reports the ordinary ETC/item family parsed by the
-// CSOItem_ParseFromStream non-gold branch. Its inventory body carries a u16
-// stack count, followed by the small subtype-specific tails below.
+// CSOItem_Deserialize non-gold branch (client 0x78C830). Its inventory body
+// carries a u16 stack count, followed by the small subtype-specific tails
+// below.
 func IsEtcBand(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x60
 }
 
-// IsMonsterCapsule is sub_42E750: TID 3.2.2, the monster mask. Its CSOItem
-// body is the RefObjID and the captured monster (42E54B, client 78C830).
+// IsMonsterCapsule tests TID 3.2.2, the monster mask. Its CSOItem body
+// is the RefObjID and the captured monster (client CSOItem_Deserialize).
 func IsMonsterCapsule(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x40 && typeFlags&0x780 == 0x100
 }
 
-// IsCosSummoner is the client's 550170 (TID 3.2.1, the pet flutes and
-// scrolls). Its body is the RefObjID and CGItemCOSSummoner's record
-// (492D40): u8 1 when no pet was ever made from it, else the pet's state,
+// IsCosSummoner is the client's CItemData_IsCosSummoner (TID 3.2.1, the
+// pet flutes and scrolls). Its body is the RefObjID and the native
+// summoner record:
+// u8 1 when no pet was ever made from it, else the pet's state,
 // RefObj, name and timers, which this server does not keep per item.
 func IsCosSummoner(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x40 && typeFlags&0x780 == 0x80
 }
 
-// cosSummonerNoRecord is 492D40's byte for a summoner without a pet.
+// cosSummonerNoRecord is the native byte for a summoner without a pet.
 const cosSummonerNoRecord = 1
 
-// UsesIndexedMagicParams is the exact sub_550870 predicate. Gacha result
+// UsesIndexedMagicParams is the exact predicate of the client's
+// CItemData_IsGachaCard_Tid3_14_Tid4_2. Gacha result
 // cards (TID 3.3.14.2) carry two opaque u64 values that the client indexes as
 // key 0 = reward RefObjID and key 1 = reward quantity; they are not
 // magicoption.txt reinforce rows.
@@ -66,7 +70,8 @@ func UsesIndexedMagicParams(typeFlags uint16) bool {
 		typeFlags&0xF800 == 0x1000
 }
 
-// EtcCarriesPlusByte is the sub_550660/sub_550730 pair consumed by the ETC
+// EtcCarriesPlusByte is the client's CItemData_IsConsumableFamily11Kind1
+// and CItemData_IsConsumableFamily11Kind2 pair, consumed by the ETC
 // parser after its u16 stack count (TID3 11, TID4 1 or 2).
 func EtcCarriesPlusByte(typeFlags uint16) bool {
 	return IsEtcBand(typeFlags) &&
@@ -76,8 +81,9 @@ func EtcCarriesPlusByte(typeFlags uint16) bool {
 
 // IsCodenameBand reports whether the row carries a length-prefixed ASCII
 // string (the ETC 0x400 trade goods and 0x480 quest item groups): the owner
-// label CIItem_ParseGroundSpawn (86E5D8) keeps at +0x288 and the name
-// plate shows as "(*owner)" for trade goods (86E84D), "(owner)" otherwise.
+// label CIItem_ParseGroundSpawn (client 86E5D8) keeps at +0x288 and the
+// name plate shows as "(*owner)" for trade goods (client 86E84D),
+// "(owner)" otherwise.
 func IsCodenameBand(typeFlags uint16) bool {
 	if !isItemClass(typeFlags) || typeFlags&0x60 != 0x60 {
 		return false
@@ -88,7 +94,8 @@ func IsCodenameBand(typeFlags uint16) bool {
 
 // IsGoldBand reports whether the row carries a u32 amount: the whole group
 // 0x280 (TID 3.3.5), as the v1.150 client parses it (ItemTid_IsEtcType5
-// 4FB2A0 in CSOItem_Deserialize 78C9E4). It is a wire width, not a meaning:
+// in client CSOItem_Deserialize, 78C9E4). It is a wire width, not a
+// meaning:
 // the group also holds the later shop tokens (IsGoldHeap).
 func IsGoldBand(typeFlags uint16) bool {
 	return isItemClass(typeFlags) && typeFlags&0x60 == 0x60 && typeFlags&0x780 == 0x280
@@ -102,9 +109,9 @@ const (
 )
 
 // IsGoldHeap reports a gold heap (TID 3.3.5.0, ITEM_ETC_GOLD_*): the gold
-// band without the shop tokens, which v1.188 excludes the same way in
-// CGItem_IsGold (483159..483163) and CInstanceItem_Serialize_Helper
-// (42FE3B..42FE45). Native v1.150 data has no tokens, so the two agree there.
+// band without the shop tokens, which v1.188 excludes the same way in its
+// gold test and its instance serializer. Native v1.150 data has no tokens,
+// so the two agree there.
 func IsGoldHeap(typeFlags uint16) bool {
 	return IsGoldBand(typeFlags) && typeFlags&tid4Mask != shopTokenTID
 }
@@ -113,7 +120,8 @@ func IsGoldHeap(typeFlags uint16) bool {
 //
 // It rides either the single-object spawn 0x30D7 or an object-list chunk
 // 0x3417. The single-object path additionally reads a one-byte appear flag
-// through the entity's vtable +0x68 (sub_86e210) that the list path skips, so
+// through the entity's vtable +0x68 (client CIItem_DeserializeSpawnState)
+// that the list path skips, so
 // callers select it with WithAppearTail.
 type GroundItemRow struct {
 	RefObjID uint32
@@ -123,14 +131,14 @@ type GroundItemRow struct {
 	// Codename is the registry's own bookkeeping; it is not on the wire.
 	Codename string
 	// OwnerLabel is the IsCodenameBand string: a trade goods drop's original
-	// job alias (the goods record's owner, 490930), empty otherwise.
+	// job alias (the goods record's owner), empty otherwise.
 	OwnerLabel string
 	// GoldAmount is only carried by IsGoldBand rows.
 	GoldAmount uint32
 	Gid        uint32
 	Position
 	// HasOwner gates the conditional owner JID dword in
-	// CIItem_ParseSpawnPacket @0x86e4e0. Omitting OwnerJID while setting this
+	// client CIItem_ParseGroundSpawn. Omitting OwnerJID while setting this
 	// byte shifts tint and the optional appear tail into the dword read.
 	HasOwner uint8
 	OwnerJID uint32
@@ -145,7 +153,8 @@ type GroundItemRow struct {
 //
 // The codename band emits the owner label, empty when the drop has none.
 // The client formats a non-empty label onto the name plate only for this
-// band (86E82E..86E8AD), so the server that wrote it sent the goods' owner:
+// band (client 86E82E..86E8AD), so the server that wrote it sent the
+// goods' owner:
 // dropped trade goods show the trader who bought them.
 func (g GroundItemRow) Encode() []byte {
 	w := NewWriter(40).U32(g.RefObjID)

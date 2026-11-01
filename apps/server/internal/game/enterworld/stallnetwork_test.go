@@ -3,7 +3,7 @@ package enterworld
 import "testing"
 
 // W3 base falsifiers for the 0x7427 stall-network leave handler; W5
-// extends. The wire contract is the sub_702960 asm truth: the body is
+// extends. The wire contract is the client 702960 asm truth: the body is
 // EMPTY (ctor -> submit with no AppendBytes), so exactly len==0 accepts
 // and any payload byte is a shape the retail client cannot compose.
 // No reply frames exist on this plane at all (0xB427 is a 1-byte native

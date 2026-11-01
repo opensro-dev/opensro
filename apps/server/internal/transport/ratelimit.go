@@ -27,14 +27,15 @@ import (
 //   - The keepalive machinery (PING/PONG/BYE/HELLO, opcodes 0x0001-0x0005)
 //     is handled inside Session.readLoop and NEVER reaches Hub.dispatch, so
 //     it is structurally outside the limiter — no exemption needed.
-//   - 0x72CD target/action requests are user-driven. sub_693190 may add a
+//   - 0x72CD target/action requests are user-driven. The client's
+//     CGInterface_CancelSkillForKeyboardMove (0x693190) may add a
 //     throttled bare cancel/recovery frame during manual movement, at most
 //     once per 2s while its motion-state gate is active = <=0.5/s extra.
 //   - 0x7738 movement: one frame per ground click
 //     (goMissionBootstrapClient.sendMissionMove); the native client can
 //     add an occasional EVENT-DRIVEN resend (CharMovement_ResendGoalMove
-//     sub_878100 on an accepted tiny-retarget, latch cleared after one
-//     resend in sub_878410) — never a per-frame repeat, so the fastest
+//     client 878100 on an accepted tiny-retarget, latch cleared after one
+//     resend in client 878410) — never a per-frame repeat, so the fastest
 //     sustained rate stays human click-spam at ~8-10/s plus stragglers.
 //   - 0x72CF steer / 0x72F5 stop while a direction walk runs: the drift
 //     correction of CNavigationDeadreckon_UpdateMovementHeading re-arms

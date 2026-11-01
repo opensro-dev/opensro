@@ -4,8 +4,8 @@ package textguard
 
 import "bytes"
 
-// Rejected reports the 7312F0 predicate for the web port's Windows-1252 lane.
-// Input is encoded bytes, not UTF-8. 6B2B00 lowercases ASCII, copying each
+// Rejected reports the native rejected-text predicate for the web port's Windows-1252 lane.
+// Input is encoded bytes, not UTF-8. The native copy lowercases ASCII, copying each
 // high-bit byte together with its following byte without case conversion.
 func Rejected(input []byte) bool {
 	if end := bytes.IndexByte(input, 0); end >= 0 {

@@ -4,8 +4,8 @@
 premiumclock.go - the premium ticket's daily allotment
 
 A premium time ticket (premiumticket.go) raises the EXP and skill-EXP
-keepers for its whole period, but CTJ_PremiumKeeper (SR_GameServer:
-CTJ_PremiumKeeper_Load 6524B0, CTJ_PremiumKeeper_Tick 6529D0) applies them
+keepers for its whole period, but the reference server's premium keeper job
+(its load and its tick) applies them
 only while the day's allotment lasts. The ticket's Param3 is that
 allotment in milliseconds a day (10,800,000: three hours; the PLUS ticket
 five).
@@ -48,7 +48,7 @@ const (
 ================
 premiumClockRoll
 
-Brings a clock to the day nowMs falls in (CTJ_PremiumKeeper_Load's loop):
+Brings a clock to the day nowMs falls in (the premium keeper load's loop):
 each day passed shifts today's remainder into the carry and refills today.
 ================
 */
@@ -73,7 +73,7 @@ func premiumClockRoll(clock *domain.PremiumClock, nowMs int64) bool {
 ================
 premiumClockSpend
 
-Spends elapsed online time, carry first (CTJ_PremiumKeeper_Tick).
+Spends elapsed online time, carry first (the premium keeper tick).
 ================
 */
 func premiumClockSpend(clock *domain.PremiumClock, elapsedMs int64) {
@@ -146,7 +146,7 @@ premiumSpendLedger.take
 
 Advances an owner's row to nowMs and reports whether its spend is due for a
 commit: the allotment it holds runs out on this tick, or 600 seconds passed
-(CTJ_PremiumKeeper_Tick's state write, 652EE3 -> 652F60, which still runs
+(the premium keeper tick's state write, which still runs
 while the period lasts with the allotment spent). A spent allotment has
 nothing left to run out: it waits for the cadence, the day's refill or the
 period's end, or it would commit the unchanged clock on every tick.

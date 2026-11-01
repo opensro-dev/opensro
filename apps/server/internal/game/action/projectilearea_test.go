@@ -20,7 +20,7 @@ import (
 ==================
 TestBowAreaShotsResolveAtReleaseAndSpendOneArrow
 
-585A1F: a pierce (shape 4, a line) and a special shot (shape 1, around
+Reference server: a pierce (shape 4, a line) and a special shot (shape 1, around
 the caster) start without results, then at release select their victims,
 damage them with the authored falloff, charge MP once and spend one arrow.
 ==================
@@ -105,7 +105,7 @@ TestThrownBladesResolveAtReleaseWithoutAmmunition
 SKILL_CH_SWORD_SPECIAL_*: a projectile (speed 400) from a sword with no
 cnsm. Like the bow's shots it strikes nothing at the start and resolves
 its area at release - around the target (shape 6) or the caster (shape 1)
-- charging MP once; 587F57 has nothing to debit, so the empty
+- charging MP once; the native parameter index has nothing to debit, so the empty
 secondary socket neither refuses the cast nor changes. GEOMGI is the
 same thrown blade with a single target (no efr).
 ==================

@@ -63,7 +63,7 @@ var stoneFamilyWords = []struct {
 	{"honor", stoneFamilyHonor},
 }
 
-// Tooltip target word bits, in the order 557C50 tests them. Mirrored by
+// Tooltip target word bits, in the order client 557C50 tests them. Mirrored by
 // STONE_TARGET_SYMBOLS in the client's item-tooltip-stone.ts; change both
 // together.
 const (
@@ -109,7 +109,7 @@ stoneFamilyMaskFor
 
 The native binder joins the stone's family words and substring-searches the
 target word in the joined text. The client's compare is case-sensitive
-(0x0062B6D0 reaches the ordinal wide-string find with no case fold; the
+(client 0x0062B6D0 reaches the ordinal wide-string find with no case fold; the
 client's separate case-insensitive compare serves MATTR_REPAIR instead),
 so this search runs on the text as authored. The shipped descriptors and
 the searched literals are all lowercase, which keeps the two readings in
@@ -130,7 +130,7 @@ func stoneFamilyMaskFor(text string) uint32 {
 ================
 stoneTooltipMaskFor
 
-557C50 substring-searches the stone's text once per word in
+Client 557C50 substring-searches the stone's text once per word in
 stoneTooltipWords order and prints the matching UIIT_STT_* type symbols
 after the "UIIT_STT_TARGET_ITEM: " label. The find is the ordinal
 wide-string one: case-sensitive, and 'ring' matches inside 'earring',
@@ -162,11 +162,11 @@ stone publishes the mask even when it is zero - presence distinguishes
 "checked, admits nothing" (the native kind gate folded into the mask)
 from "not published".
 
-The tooltip mask follows 557C50 instead of the binder: it searches the
+The tooltip mask follows client 557C50 instead of the binder: it searches the
 same haystacks in the tooltip's own word order, and a stone whose first
 parameter description is MATTR_REPAIR searches its fourth description
-(0x557F86 compares the description against the whole 12-char literal),
-never the option's words. 557C50 prints the row even when the option
+(client 0x557F86 compares the description against the whole 12-char literal),
+never the option's words. Client 557C50 prints the row even when the option
 does not resolve - its text stays empty - so an unresolved magic stone
 publishes a zero tooltip mask where the binder mask stays unpublished.
 The option's ten authored words ride in Descriptors; the shipped table
@@ -199,7 +199,7 @@ func ItemStoneNativeFields(fields NativeFields, ref *ItemRef, magic MagicOptionS
 	}
 	option, found := source.MagicOptionByCodenameDegree(ref.ParamDescriptions[0], int64(degree))
 	if !found {
-		// 557C50 prints the row with an empty text: label only.
+		// Client 557C50 prints the row with an empty text: label only.
 		return fields.With("stoneTooltipMask", 0)
 	}
 	joined := strings.Join(option.Descriptors, " ")

@@ -35,9 +35,22 @@ func RegionIDForSectors(sectorX, sectorY int) uint16 {
 	return worldgeom.RegionIDForSectors(sectorX, sectorY)
 }
 
-// RegionIDFromSeedLocal resolves which region a seed-local position landed in,
-// server.mjs missionRegionIdFromSeedLocal.
+/*
+================
+RegionIDFromSeedLocal
+
+Which region a seed-local position landed in, server.mjs
+missionRegionIdFromSeedLocal. A cave floor has no sectors: its locals
+are its own frame and run far outside the outdoor 1920 square (a Jangan
+floor sits near x -13580), so a point on it stays on it. Folding it by
+sector would name a cave region that does not exist and lose every
+approach and Trace goal on that floor.
+================
+*/
 func RegionIDFromSeedLocal(seedRegionID uint16, localX, localZ, regionSize float64) uint16 {
+	if PlaneKindOf(seedRegionID) == PlaneCave {
+		return seedRegionID
+	}
 	seedX := SectorX(seedRegionID)
 	seedY := SectorY(seedRegionID)
 	return RegionIDForSectors(
@@ -93,8 +106,8 @@ func WorldDistance2D(a, b Spawn) float64 {
 // plane (headingWordToward, monstertick.go) and the NPC patrol
 // (ComputeNpcPatrolState, npc.go).
 //
-// Native 8791A0 yields MODEL yaw (zero faces -Z). Before serialization,
-// 853550 subtracts pi/2; spawn decoder 852F80 calls 8535A0 to add it back.
+// The client's 8791A0 yields MODEL yaw (zero faces -Z). Before serialization,
+// client 853550 subtracts pi/2; spawn decoder 852F80 calls 8535A0 to add it back.
 // Therefore the wire bearing is atan2(dz,dx), not atan2(dx,-dz).
 // Keep the existing server rounding policy; client serialization truncates.
 func headingWordFromDelta(dx, dz float64) uint16 {

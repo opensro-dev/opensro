@@ -55,7 +55,7 @@ func jobFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character) {
 ================
 TestJobGuildJoinAliasAndWithdraw
 
-5120F0: level 20 joins the trader guild at its NPC, once; the alias is
+Natively level 20 joins the trader guild at its NPC, once; the alias is
 checked then taken; withdrawing frees a trader at once.
 ================
 */
@@ -99,7 +99,7 @@ func TestJobGuildJoinAliasAndWithdraw(t *testing.T) {
 ================
 TestJobAliasChangeCostsLevelTimesFiftyThousand
 
-512540: a first alias is free; changing one costs level x 50,000 gold
+Natively a first alias is free; changing one costs level x 50,000 gold
 (0xC350), tested before the name and answered 0x4807 short; the check mode
 never charges, and a paid change sends the new balance.
 ================
@@ -140,7 +140,7 @@ func TestJobAliasChangeCostsLevelTimesFiftyThousand(t *testing.T) {
 ================
 TestJobSuitDressesAfterTenSeconds
 
-524950: the suit move answers nothing but the dress bar; ten seconds later
+Natively the suit move answers nothing but the dress bar; ten seconds later
 the move is carried out and answered. Without an alias it refuses at once.
 ================
 */
@@ -177,7 +177,7 @@ func TestJobSuitDressesAfterTenSeconds(t *testing.T) {
 ================
 TestThiefDenScrollRefusesAnyoneButADressedThief
 
-4A0380: THIEFDEN answers 0x186A to anyone not dressed as a thief.
+Natively THIEFDEN answers 0x186A to anyone not dressed as a thief.
 ================
 */
 func TestThiefDenScrollRefusesAnyoneButADressedThief(t *testing.T) {
@@ -198,9 +198,8 @@ func TestThiefDenScrollRefusesAnyoneButADressedThief(t *testing.T) {
 ================
 TestJobSuitActivationHoldsTheSuit
 
-4E9EA9: a suit just worn waits ten state ticks (+0x2178) before it is
-active; until then it cannot come off (0x47), and a hit ends the wait
-(4E1EF4).
+Natively a suit just worn waits ten state ticks (+0x2178) before it is
+active; until then it cannot come off (0x47), and a hit ends the wait.
 ================
 */
 func TestJobSuitActivationHoldsTheSuit(t *testing.T) {
@@ -236,7 +235,7 @@ func TestJobSuitActivationHoldsTheSuit(t *testing.T) {
 ================
 TestJobSuitStripOutsideTownAnswersAtOnce
 
-CGItemEquip_CanUnequip (497340): a worn suit comes off only where players
+Natively a worn suit comes off only where players
 may not fight. Outside a town the move is refused at once with 0xA2,
 which the client words as UIIT_MSG_JOBITEM_WEAR_ERR_NOPOSITION; in a town
 the dress bar starts. Region 0x5F76 is the report's (thread "trader flag
@@ -272,5 +271,38 @@ func TestJobSuitStripOutsideTownAnswersAtOnce(t *testing.T) {
 				t.Fatalf("in a town: %#x % x, want the dress bar", frame.Opcode, frame.Payload)
 			}
 		}
+	}
+}
+
+/*
+================
+TestJobAliasRefusesACharacterName
+
+An alias may not equal another character's name - any casing, and even
+while that character is pending deletion: a suited player speaks under
+the alias, so taking a real name would impersonate its owner. The
+reference server's alias validity never consults character names; that
+impersonation is a native bug we do not copy (owner, 2026-10-28), so
+the refusal is unconditional. A name nobody owns still takes.
+================
+*/
+func TestJobAliasRefusesACharacterName(t *testing.T) {
+	rt, _, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1}
+	other := testCharacter()
+	other.ID, other.Name = 44, "Berk"
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {c, other}}
+	alias := func(name string) OpResult {
+		return rt.HandleJobAlias(testDivision, c, wire.NewWriter(5+len(name)).U32(jobTestNpc).U8(jobAliasModeCreate).Str(name).Payload())
+	}
+	if out := alias("berk"); !bytes.Equal(out.Frames[0].Payload[:2], []byte{2, jobErrAliasTaken}) || c.Job.Alias != "" {
+		t.Fatalf("alias equal to a character name: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
+	}
+	other.DeletePending = true
+	if out := alias("Berk"); !bytes.Equal(out.Frames[0].Payload[:2], []byte{2, jobErrAliasTaken}) || c.Job.Alias != "" {
+		t.Fatalf("alias equal to a deleted-pending name: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
+	}
+	if out := alias("Merchant"); out.Frames[0].Payload[0] != 1 || c.Job.Alias != "Merchant" {
+		t.Fatalf("a free alias refused: %x alias %q", out.Frames[0].Payload, c.Job.Alias)
 	}
 }

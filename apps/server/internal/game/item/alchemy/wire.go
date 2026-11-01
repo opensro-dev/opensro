@@ -53,8 +53,8 @@ func ResultFrames(op uint16, before []inventory.Item, result Outcome) []wire.Fra
 	if result.Success {
 		status = 1
 	}
-	// Native 50376F/50338F: an unsuccessful stone attempt consumes the
-	// stone and returns 0x5423, not a synthetic unchanged equipment body.
+	// Natively, an unsuccessful stone attempt consumes the stone and
+	// returns 0x5423, not a synthetic unchanged equipment body.
 	if op == OpStoneResult && !result.Success {
 		return append(frames, wire.Frame{Opcode: op, Payload: []byte{2, 0x23}})
 	}

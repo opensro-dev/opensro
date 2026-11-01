@@ -327,7 +327,7 @@ func TestFortressTaxCollectionConcurrentConservation(t *testing.T) {
 ================
 TestFortressTaxCollectionTemporaryHolder
 
-61D280 selects TempGuildID when nonzero, otherwise GuildID. With both tax
+The server's fortress holder lookup selects TempGuildID when nonzero, otherwise GuildID. With both tax
 and war periods active, only the temporary holder's master may collect.
 ================
 */

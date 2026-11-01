@@ -72,6 +72,12 @@ type Config struct {
 	KeepaliveInterval time.Duration
 	// IdleTimeout detaches a client that answered nothing at all.
 	IdleTimeout time.Duration
+	// EntryBootstrapBound caps how long a scene admission may sit with
+	// its bootstrap (or refusal) still unenqueued before the session is
+	// closed with a logged cause. A completed entry enqueues in well
+	// under a second; this bound only fires when the entry lane is
+	// wedged, so a slow real entry can never hit it.
+	EntryBootstrapBound time.Duration
 	// OutboundQueue and OutboundQueueBytes bound pending reliable and
 	// coalesced frames per session. Keeping both limits prevents tiny-frame
 	// floods and a few catalogue-sized frames from consuming unbounded memory.
@@ -152,6 +158,7 @@ func DefaultConfig() Config {
 		GracePeriod:           30 * time.Second,
 		KeepaliveInterval:     20 * time.Second,
 		IdleTimeout:           60 * time.Second,
+		EntryBootstrapBound:   30 * time.Second,
 		OutboundQueue:         8192,
 		OutboundQueueBytes:    32 << 20,
 		RateLimitPerSec:       25,
@@ -184,6 +191,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.IdleTimeout == 0 {
 		c.IdleTimeout = d.IdleTimeout
+	}
+	if c.EntryBootstrapBound == 0 {
+		c.EntryBootstrapBound = d.EntryBootstrapBound
 	}
 	if c.OutboundQueue == 0 {
 		c.OutboundQueue = d.OutboundQueue

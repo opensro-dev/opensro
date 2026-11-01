@@ -243,8 +243,8 @@ func TestTargetedHealWithoutTargetStaysRefused(t *testing.T) {
 TestGroupHealingHealsTheCasterAndPartyInRange
 
 Group Healing is efr[1,1,250,8,0,5]: select bit 0 adds the caster, and
-TargetSelection_Party (58BEF0) adds every living member within 250. Three
-members in range are healed by the 5A0850 amount, one at 300 and one dead
+the native party selection adds every living member within 250. Three
+members in range are healed by the skill heal amount, one at 300 and one dead
 member are not. Each member gets its own 0x33A6, the caster its own.
 ==================
 */
@@ -375,7 +375,7 @@ TestRaveMelodyConvertsHPToMP
 Rave Melody's shape: a flat MP heal paid with a flat HP cost. The level-1
 fixture holds 200 HP, below the shipped 495, so the shipped row keeps its
 program and the test scales its two words by the same 1.2 ratio. The HP
-check refuses 0x3013 below the cost (58E1B6); the charge (58312C) and the
+check refuses 0x3013 below the cost; the charge and the
 MP recovery publish one 0x33A6, also when MP was already full.
 ==================
 */
@@ -781,7 +781,7 @@ func TestPartyHealOverTimeInstallsReachEachClientOnce(t *testing.T) {
 ==================
 TestMutationRevivalProposesTypeEight
 
-4EA0D0 proposes type 8 for a resu row with an rmut skill (Reverse
+Natively a resu row with an rmut skill proposes type 8 (Reverse
 Oblation, REBIRTHA_SPECIAL); the client asks the REBIRTH_MUTATION question.
 ==================
 */

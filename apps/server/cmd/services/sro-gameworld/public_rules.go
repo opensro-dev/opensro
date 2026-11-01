@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
@@ -26,21 +27,23 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/townarea"
 	"opensro.online/server/internal/platform/economy"
 )
 
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
-	monster.EnvTrainingDummy:        "GM-only training targets",
-	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:            "GM-only training targets",
+	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -68,6 +71,11 @@ var unlistedSettings = map[string]string{
 	// rule players meet (their client is offered the same world either
 	// way).
 	"SRO_WEBTRANSPORT_PUBLIC": "operator transport serving switch, not a gameplay rule",
+	// Build-time inputs (#1745): the variant build's import tools read
+	// them when the server data is built; the GameWorld reads neither,
+	// so there is no running rule for the page to state.
+	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
+	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -100,6 +108,8 @@ func publicRules() publicstats.RulesResponse {
 	pharaohGear, _ := monster.PharaohGearRateFromEnv()
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
+	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -127,6 +137,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
+				Native: "There is no temple instance.",
+				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
+				Why:    "Instanced group hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
+				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
+				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
+				Why:    "Levels 91-99 gain a hunting ground in the optional cap-110 expansion."},
 			{Flag: monster.EnvPharaohGearRate, On: pharaohGear > 1,
 				Native: "A Pharaoh Tomb elite or unique rolls its equipment at the original rate.",
 				Now:    fmt.Sprintf("A Pharaoh Tomb elite or unique rolls its equipment %d times as often.", pharaohGear),
@@ -215,6 +233,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
+				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
+				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
+				Native: "The event helmets trade like any other item.",
+				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
+				Why:    "A helmet the event paid was never meant to reach a market."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -227,10 +253,6 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
 				Why:    "Testers spend their time on the systems under test, not on walking."},
-			{Flag: quest.EnvInstantInventoryExpansion, On: quest.InstantInventoryExpansionFromEnv(),
-				Native: "A bigger bag takes effect at the next world entry.",
-				Now:    "A bigger bag takes effect at once.",
-				Why:    "Relogging to see new slots read as a bug."},
 			{Flag: companion.EnvPetPacing, On: companion.PoliciesFromEnv().Pacing,
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
@@ -239,6 +261,11 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
+				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
+				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
+					groupedGold(int64(action.RaisedStallPriceLimit)), groupedGold(int64(action.RaisedStorageGoldDepositLimit))),
+				Why: "Large trades and shared warehouse funds needed more room than the original's caps allowed; the original caps return with one setting."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
 				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
@@ -251,10 +278,18 @@ func publicRules() publicstats.RulesResponse {
 				Native: "NPC shops sell the v1.150 stock.",
 				Now:    "Some NPC shops also sell extra goods for gold, such as elixirs and degree-9 stones.",
 				Why:    "Beta balance: gold buys enhancement."},
+			{Flag: commerce.EnvJanganAlchemyShop, On: janganAlchemyOn,
+				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
+				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
+				Why:    "A player's request: one alchemy shop in Jangan."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
 				Why:    "Beta balance: the outfits were already in the game data."},
+			{Flag: action.EnvNameChangeScroll, On: action.NameChangeScrollFromEnv(),
+				Native: "A character's name never changes.",
+				Now:    "The Item Mall sells a name-change scroll for 500 silk; the new name applies at the next login, renames cool down for 30 days, and the old name stays reserved for 90 days.",
+				Why:    "Owner decision (#1689): a paid, rate-limited way to fix a name."},
 			{Flag: simulation.EnvBetaPlayerMap, On: simulation.BetaPlayerMapEnabled(),
 				Native: "The world map shows only your own position.",
 				Now:    "The world map also shows other players.",
@@ -303,6 +338,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "With a trade transport out you cannot use a town gate, a return scroll or the reverse return (ferries are allowed).",
 				Now:    "You can use town gates, return scrolls and the reverse return with a trade transport out; the transport travels with you.",
 				Why:    "Requested for the beta, for testing trade runs; the original returns with one setting."},
+			{Flag: townarea.EnvThiefCartTownAreas, On: thiefCartTownAreasOn,
+				Native: "A thief with a transport out is stopped at a town's protected ground; the outer streets of some towns are open ground the cart can reach.",
+				Now:    "The cart is also stopped at the walls of those towns (Hotan, Constantinople and Samarkand).",
+				Why:    "Owner decision: thieves should not bring stolen goods into any part of a town."},
 			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
 				Native: "Job kills earn job EXP only.",
 				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +
@@ -322,6 +361,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Most Wanted rule.",
 				Now:    "After every job kill that counts toward Most Wanted, you see your progress to the next wanted level, such as \"Most Wanted: 3/10 to LV 1\". Only you see it.",
 				Why:    "Requested after players could not tell whether their kills counted; the rule without the notice returns with one setting."},
+			{Flag: action.EnvMostWantedCOSKills, On: action.MostWantedFromEnv() && action.MostWantedCOSKillsFromEnv(),
+				Native: "There is no Most Wanted rule.",
+				Now:    "A job kill your attack pet or other companion delivers counts toward your streak, wanted level and bounties as if you had dealt the blow yourself.",
+				Why:    "Requested so a companion's killing blow is not lost to the rule; the original returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +
@@ -342,6 +385,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",
 				Why:    "Picked for the beta by the community's balance advisor; the original look returns with one setting."},
+			{Flag: chat.EnvWhisperJobAlias, On: chat.WhisperJobAliasEnabled(),
+				Native: "A whisper resolves its target by character name only; a job alias cannot be whispered to.",
+				Now:    "A whisper typed to the job alias of a player wearing their job suit reaches that player.",
+				Why:    "Every name a player can see should be a name the server can route to."},
 			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",
@@ -460,6 +507,9 @@ func publicRules() publicstats.RulesResponse {
 			{Title: "Storage Ctrl+click",
 				Native: "Items move between bag and storage by dragging.",
 				Now:    "Ctrl+click also moves an item between bag and storage."},
+			{Title: "Job alias names",
+				Native: "A job alias may equal another character's name, and a new character may take a name that equals an existing job alias.",
+				Now:    "Both are refused: an alias may not equal another character's name when set, and a character name may not equal an existing job alias at creation."},
 			{Title: "Double-click attack",
 				Native: "A second click on a monster that drifted can miss it.",
 				Now:    "A second press on the same monster within half a second attacks it."},

@@ -90,7 +90,7 @@ func TestAuthoredBasicWeaponRangesAndCasterPursuit(t *testing.T) {
 TestReachAddsCasterRangeParameters
 ================
 */
-// 4ADAB8: a row that asks for CBRA or WIRU adds the caster's value; a row
+// Reference server: a row that asks for CBRA or WIRU adds the caster's value; a row
 // that does not ignores it. The shipped passives set exactly those values.
 func TestReachAddsCasterRangeParameters(t *testing.T) {
 	crossbow := shippedOffense(t, "SKILL_EU_CROSSBOW_BASE_01")

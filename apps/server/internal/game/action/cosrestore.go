@@ -22,7 +22,7 @@ import (
 ================
 restoreCharacterCOS
 
-4FA430 recreates saved nonpersistent vehicles and calls 4EC640 when usable.
+The reference server recreates saved nonpersistent vehicles and mounts them when usable.
 The caller holds the division lock. This updates authority before packets
 are composed; bootstrap never invents a relation solely for presentation.
 ================
@@ -80,7 +80,7 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 				pet.CurrentHP = ref.MaxHP
 				changed = true
 			}
-			// 4FA430 restores only records whose alive and summoned bits are set.
+			// The reference server restores only records whose alive and summoned bits are set.
 			// A retained corpse remains on the item for revival, not in the world.
 			if pet.CurrentHP == 0 || pet.StateFlags&1 == 0 || (ref.TidWord>>11 == 4 && pet.RentalExpiresAtUnix <= now) {
 				pet.Summoned = false
@@ -113,7 +113,7 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 			return changed
 		}
 		// A transport summoned before summons kept the reference capacity
-		// (itemuse.go, 4404A1..4404DA) was saved without its cargo bag; it
+		// (itemuse.go) was saved without its cargo bag; it
 		// comes back with the authored one.
 		if pet.Container == nil && ref.InventoryCapacity > 0 {
 			pet.Container = &domain.COSContainer{Capacity: ref.InventoryCapacity}

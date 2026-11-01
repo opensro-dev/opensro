@@ -9,6 +9,7 @@ lanes own their targets, damage and rewards. No summon survives logout.
 package action
 
 import (
+	"encoding/binary"
 	"strings"
 
 	"opensro.online/server/internal/domain"
@@ -23,6 +24,11 @@ const broodHatchMs int64 = 30000
 const broodLifeMs int64 = 600000
 const broodWindOpcode uint16 = 0x3FBA
 const broodDeathMultiplier = 5
+
+// The 0x33A6 vitals body is [u32 gid][u16 source][u8 updateMask]...; mask
+// bit 0x01 means the body carries HP (simulation.HPRefreshPayload).
+const vitalsUpdateMaskOffset = 6
+const vitalsUpdateMaskHP uint8 = 0x01
 
 /*
 ================
@@ -125,6 +131,46 @@ func (rt *Runtime) broodSpawnFrame(division string, state *petSession, pet *doma
 
 /*
 ================
+crowBroodSource
+
+The companion the brood lifecycle answers for: the summoned record
+under this gid, else a brood-stage crow still waiting in the roster.
+Admission and the advance itself resolve through here so the two can
+never disagree about which pet a gid names.
+================
+*/
+func crowBroodSource(c *enterworld.Character, gid uint32) *domain.CharacterCOS {
+	if source := c.CompanionByGID(gid); source != nil {
+		return source
+	}
+	var found *domain.CharacterCOS
+	c.VisitCompanions(func(candidate *domain.CharacterCOS) bool {
+		if candidate.GID == gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
+			found = candidate
+		}
+		return found == nil
+	})
+	return found
+}
+
+/*
+================
+hasBroodFrom
+
+Whether any brood pet of c was laid by the crow gid.
+================
+*/
+func hasBroodFrom(c *enterworld.Character, gid uint32) bool {
+	for _, pet := range c.Brood {
+		if pet.BroodSource == gid {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -136,20 +182,29 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	if state == nil {
 		return nil
 	}
-	snapshot := rt.characterSnapshot(key.division, state.character)
-	source := snapshot.CompanionByGID(key.gid)
-	if source == nil {
-		for _, candidate := range snapshot.Companions() {
-			if candidate.GID == key.gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
-				source = candidate
-				break
-			}
-		}
-	}
-	if source != nil && companion.PetKind(source.Codename) != "Crow" || key.gid >= broodGIDBase {
+	// Runs for every pet per tick: copy the owner only when the check
+	// below would let this gid through - every other pet (and every
+	// brood-space gid) is refused before any state moves (#1943). A crow
+	// with no brood out needs no copy at all: only the recharge below
+	// runs for it, and that reads the live record inside its own door.
+	// The copy is the companion copy (#2030): every reader below - the
+	// source and its brood, life, town, and the death storm's pet-combat
+	// step - reads companions, equipment and world facts, never a plain
+	// bag row or the avatar inventory.
+	crow := false
+	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		source := crowBroodSource(c, key.gid)
+		crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+		return crow && hasBroodFrom(c, key.gid)
+	})
+	if !crow {
 		return nil
 	}
-	valid := source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
+	valid := false
+	if snapshot != nil {
+		source := crowBroodSource(snapshot, key.gid)
+		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
+	}
 	var output []wire.Frame
 	var reuse []wire.Frame
 	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
@@ -170,6 +225,9 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		reuse = rt.petTrainingStateFrames(live, now)
 		return true
 	})
+	if snapshot == nil {
+		return simFrames(reuse)
+	}
 	for _, pet := range snapshot.Brood {
 		if pet.BroodSource != key.gid {
 			continue
@@ -184,7 +242,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 			if valid && child != nil && pet.BroodStage == 2 && pet.BroodBook == 3 {
 				rt.broodDeathStorm(key, child, snapshot, pet, now)
 			}
-			rt.deps.Update(state.character, "crow-brood-remove", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-remove", func() bool {
 				kept := state.character.Brood[:0]
 				for _, live := range state.character.Brood {
 					if live.GID != pet.GID {
@@ -203,7 +261,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		}
 		if hatch {
 			var clone *domain.CharacterCOS
-			rt.deps.Update(state.character, "crow-brood-hatch", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-hatch", func() bool {
 				live := state.character.CompanionByGID(pet.GID)
 				if live == nil || live.CurrentHP == 0 || live.BroodStage != 1 {
 					return false
@@ -281,7 +339,9 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 		skill.ActionArea = enterworld.SkillOffensiveArea{}
 		if hit, committed := rt.strikePetTarget(step, target, skill); committed {
 			public := hit.strike.public
-			if current, found := rt.Monsters.Get(key.division, target.gid); found {
+			// A target with an abnormal state already got its HP in the strike's
+			// abnormal vitals frame (monsterImpactAbnormalFrames); send one refresh.
+			if current, found := rt.Monsters.Get(key.division, target.gid); found && !hasVitalsFrameFor(public, target.gid) {
 				public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(target.gid, 0, current.CurrentHP)})
 			}
 			// The dying clone cannot publish a normal cast result after despawning.
@@ -299,4 +359,25 @@ func (rt *Runtime) broodDeathStorm(key petOwnerKey, state *petSession, snapshot 
 			break
 		}
 	}
+}
+
+/*
+================
+hasVitalsFrameFor
+
+Reports whether frames already carry gid's HP in a vitals update, so the
+death burst never publishes the target's HP twice. A vitals update without
+the HP bit (an abnormal- or MP-only body) does not count.
+================
+*/
+func hasVitalsFrameFor(frames []wire.Frame, gid uint32) bool {
+	for _, frame := range frames {
+		if frame.Opcode != simulation.OpVitalsUpdate || len(frame.Payload) <= vitalsUpdateMaskOffset {
+			continue
+		}
+		if binary.LittleEndian.Uint32(frame.Payload) == gid && frame.Payload[vitalsUpdateMaskOffset]&vitalsUpdateMaskHP != 0 {
+			return true
+		}
+	}
+	return false
 }

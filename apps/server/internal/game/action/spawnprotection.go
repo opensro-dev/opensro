@@ -3,13 +3,13 @@
 
 spawnprotection.go - the untouchable grace after a revival
 
-CGObjPC_TeleportToTown (4DF290), the revival arm (arg2 == 1), clears the
+The reference server's town teleport, the revival arm (arg2 == 1), clears the
 abnormal states, changes LIFE and motion, and then calls
-CGObjChar_SetBodyModeAndScheduleRestore (4A9FC0, vtable +0x318) with body
-mode 2 for 6.0 seconds, 11.0 in a siege world (CGameWorldMgr_CallGameWorldSlot31
-is CGameWorld_Siege_IsSiege 600C50). Body mode 2 makes the
-character untouchable: monsters skip it as a target (540DE0) and attackers
-are refused (5291D0), so a revived player is not killed again before they
+sets the body mode and schedules its restore (vtable +0x318) with body
+mode 2 for 6.0 seconds, 11.0 in a siege world (the world's siege test).
+Body mode 2 makes the
+character untouchable: monsters skip it as a target and attackers
+are refused, so a revived player is not killed again before they
 can act. When the time is up the scheduled restore returns the body mode,
 unless something else has replaced it meanwhile. The helper then adds one
 HP; callers own further HP/MP recovery. Both self-rebirth and an accepted
@@ -29,7 +29,7 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 )
 
-// reviveUntouchableMs is the 6.0 s float 4DF484 passes for an ordinary
+// reviveUntouchableMs is the 6.0 s float the reference server passes for an ordinary
 // world, siegeReviveUntouchableMs the 11.0 s for a siege world.
 const (
 	reviveUntouchableMs      = 6000
@@ -140,7 +140,7 @@ func (rt *Runtime) grantReviveUntouchable(division string, character *enterworld
 ================
 advanceBodyRestores
 
-The scheduled restores of 4A9FC0: retire each due body mode if its owner
+The scheduled body-mode restores: retire each due body mode if its owner
 still holds it, and publish the change to the character and its peers.
 ================
 */

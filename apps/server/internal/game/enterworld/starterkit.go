@@ -43,7 +43,7 @@ any v1.150 speed item carries). Its skilleffectset row
 SKILL_ETC_SPEED_UP_BASIC_01 names lightning_gyeonggong_keep_b.efp, so the
 buff shows the green keep loop. The mall +100% scroll has the same speed
 but its effect row is keyed by the group name SKILL_MALL_MOVE_SPEED_UP_100;
-91E720 resolves that through FindOrRegisterSkillIdByName to a new named
+Client 91E720 resolves that through FindOrRegisterSkillIdByName to a new named
 record, never skill 5411, so the original client shows no buff VFX for it.
 ================
 */

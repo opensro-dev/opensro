@@ -66,8 +66,8 @@ func validateOffensiveSequence(source SkillDataSource, rootID uint32) ([]SkillRo
 		if !valid || lifetime == 0 && !row.PositionEffect.Charge {
 			return nil, false
 		}
-		// 4AECE7..4AED02 resolves the next row and returns to state 2;
-		// 4AEB11 validates its resources and 5867DC prepares its own charge.
+		// The server resolves the next row and returns to state 2;
+		// its resource check validates its resources and its instant action prepares its own charge.
 		// A linked stage need not repeat the root's resource amounts.
 		if len(sequence) > 0 && (!row.ChainSub || !row.Consumption.Pinned) {
 			return nil, false

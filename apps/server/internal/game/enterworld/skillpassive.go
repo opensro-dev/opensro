@@ -2,7 +2,7 @@ package enterworld
 
 // SkillPassiveCritical is the completely admitted flat cr + one weapon reqi
 // passive program. It is not an executing-skill modifier or a timed buff.
-// Native: kind 4 (client +828), reqi -> server +3A0; 594AC0 contributes
+// Native: kind 4 (client +828), reqi -> server +3A0; the server contributes
 // cr[0] to Param12 channel 0 after the equipment predicate succeeds.
 type SkillPassiveCritical struct {
 	Pinned     bool

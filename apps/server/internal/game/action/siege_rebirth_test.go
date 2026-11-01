@@ -3,10 +3,10 @@
 
 siege_rebirth_test.go - the siege corpse clock and the rebirth refusal
 
-Every death starts the corpse clock (CGObjPC+0x1CD4: 180 ticks from
-CGObjPC::OnDeath 52CFBA), and while the clock still reads above 165 -
+Every death starts the corpse clock (the player's +0x1CD4: 180 ticks from
+the native death), and while the clock still reads above 165 -
 the first 15 ticks - a rebirth request inside an active siege world is
-refused outright (50FEE0, 510086..5100D6), whatever the death kind.
+refused outright, whatever the death kind.
 
 ===========================================================================
 */
@@ -29,7 +29,7 @@ import (
 ================
 TestSiegeDeathStartsTheCorpseClock
 
-CGObjPC::OnDeath (52CDB0) stamps the corpse clock on every death, so an
+The native death stamps the corpse clock on every death, so an
 ordinary player kill and a team kill stamp it exactly like a fortress
 kill; the fortress kill is the one that also records the special-world
 kind.
@@ -75,7 +75,7 @@ siegeCorpse
 
 A level-80 team-death corpse lying in the Jangan fortress world inside
 a war-active division. The corpse arrives through the death door, which
-stamps its clock (52CFBA); the kind byte is set to the free-battle kill
+stamps its clock; the kind byte is set to the free-battle kill
 the refusal exists for.
 ================
 */

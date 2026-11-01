@@ -130,6 +130,17 @@ func TestResumedClientGetsNpcPositionsRepushed(t *testing.T) {
 		t.Fatalf("resume welcome = resumed %v session %d, want resumed session %d", w2.Resumed, w2.SessionID, w.SessionID)
 	}
 
+	// The hub writes WELCOME inside attach and fires OnSessionResumed after
+	// it, so the client can read WELCOME before the bridge holds the mark.
+	// Wait for the mark: a tick that ran first would drain nothing, and the
+	// re-push would land on the next tick instead (correct, but not this one).
+	bridge := ticker.Source.(*Bridge)
+	wait.Eventually(t, 4*time.Second, "resume mark recorded", func() bool {
+		bridge.resumeMu.Lock()
+		defer bridge.resumeMu.Unlock()
+		return len(bridge.resumed) != 0
+	})
+
 	// The tick that serves the resume (tick index 1) re-pushes corrections.
 	ticker.RunTick(now + 100)
 	corrected := map[uint32]wire.ObjectSourceCorrection{}

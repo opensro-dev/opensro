@@ -311,7 +311,7 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 	if profile.Y >= terrainY-spawnUndergroundToleranceUnits {
 		return false
 	}
-	// 403D20 arbitrates terrain and object cells against the incoming Y.
+	// Client 403D20 arbitrates terrain and object cells against the incoming Y.
 	// A stair can be BELOW the heightmap. Terrain-only rescue corrupts a
 	// valid saved deck stand and loses its layer before movement even starts.
 	if surfaceAt != nil {
@@ -375,7 +375,7 @@ func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn
 // codename row, then the race/gender start-profile fallback). The letter
 // lane stamps it on outgoing mail as senderModelRefId - the client's
 // CIFLetterSlot race mark and CIFLetterRead portrait resolve from it
-// (sub_822d10 record +0x1c).
+// (client 822D10 record +0x1c).
 func CharacterModelRef(character *Character, roster *Roster) uint32 {
 	return ResolveCharacterAppearanceIdentity(character, roster).ModelRef
 }

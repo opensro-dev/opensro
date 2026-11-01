@@ -35,8 +35,9 @@ func (e AttachedEffect) Encode(layout AttachedEffectLayout) ([]byte, error) {
 }
 
 // OpEndedEffectInstances is the v1.150 counted attached-effect teardown
-// packet handled by CPSMission_HandlePacketB6A0 (sub_7759b0). The v1.188
-// server dump's corresponding CharacterEffects_BroadcastEndedInstancesB072
+// packet handled by the client's CPSMission_OnEffectTeardownTokens0xB6A0
+// (client 7759B0). The v1.188 server dump's corresponding
+// CharacterEffects_BroadcastEndedInstancesB072
 // proves the producer lifecycle and the same [count][u32 instance ids] body;
 // opcode numbers differ between those protocol revisions.
 const OpEndedEffectInstances uint16 = 0xB6A0

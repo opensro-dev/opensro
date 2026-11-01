@@ -52,6 +52,9 @@ func (r *Registry) RemovePopulation(division string, population Population) []It
 	}
 	if len(removed) != 0 {
 		r.revision++
+		for _, item := range removed {
+			r.stampLocked(division, item.Gid)
+		}
 	}
 	sort.Slice(removed, func(i, j int) bool { return removed[i].Gid < removed[j].Gid })
 	return removed

@@ -26,7 +26,7 @@ const (
 ==================
 TestBlessingAddsTheCastersHLBP
 
-58381F / 59520C: the ally's physical defense rises by defp's 23 plus the
+Natively the ally's physical defense rises by defp's 23 plus the
 caster's HLBP (9 from a learned passive); with no target the blessing
 lands on the caster.
 ==================

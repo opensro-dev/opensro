@@ -21,7 +21,7 @@ import (
 TestPetRunSpeedPolicyLeavesVehiclesAndWalkingAlone
 
 Pacing slows only the run a grab or growth pet moves with; the native
-parameter the follow and battle rules compare (548A30) keeps its value.
+parameter the follow and battle rules compare keeps its value.
 ================
 */
 func TestPetRunSpeedPolicyLeavesVehiclesAndWalkingAlone(t *testing.T) {
@@ -47,7 +47,7 @@ func TestPetRunSpeedPolicyLeavesVehiclesAndWalkingAlone(t *testing.T) {
 TestPacedFollowSpeedMatchesNativeAtFullFactor
 
 A paced pet already at its native full speed installs nothing: the battle
-reset (548A30) compares the native parameter, not the paced one, so it
+reset compares the native parameter, not the paced one, so it
 does not resend the speed every tick.
 ================
 */

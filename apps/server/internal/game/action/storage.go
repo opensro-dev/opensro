@@ -10,7 +10,7 @@ them into atomic store transactions. The wire is item/wire/storage.go.
 Admission rules:
   - the selected object is a live warehouse NPC (capability 0x4);
   - only bag slots trade with the room, never the equipment sockets
-    ("Ooops! Trying to store equiped item to chest!", SR_GameServer 45AF70);
+    ("Ooops! Trying to store equiped item to chest!" in the reference server);
   - a deposited item must be storable: CanBorrow (itemdata token 19,
     RefObjData+0xA7) has bit 0x80, or the client's own check raises
     UIIT_MSG_STRGERR_INVALID_TARGET_STORAGE (1:0x43, CIFStorage_OnSlotTransfer);
@@ -18,7 +18,7 @@ Admission rules:
     is authored per unit (potion 1, a 890-gold sword 21).
 
 The remote warehouse ticket (ITEM_MALL_WAREHOUSE_TICKET, 3/3/13/10) has no
-native rule in either binary: v1.188 49C2B0 case 9 falls through, and the
+native rule in either binary: v1.188's special-consumable case 9 falls through, and the
 v1.150 client only starts cooldown 0x1A on its 0xB04C success
 (CPSMission_OnItemUseResponse0xB5BD). INFERENCE: the ticket opens the
 same room with the player standing in for the NPC. A spent ticket selects
@@ -115,7 +115,7 @@ openStorageNpc
 The warehouse a move may use: the one the character's warehouse session
 names, while its keeper is still live (a ticket names the character's own
 gid). Native warehouse moves read the player's own warehouse-open record
-(pc+0x1D88: CGObjPC_ItemMove_StorageGold 526CE0, _StorageDeposit 524160),
+(pc+0x1D88: the native storage gold and deposit moves),
 never the selection, so selecting the keeper again, or anything else,
 while the window is open leaves the room usable.
 ================
@@ -165,7 +165,7 @@ func (rt *Runtime) storageSession(divisionID, characterName string) (uint32, boo
 endStorageInteraction
 
 Another interaction took the player's one native interaction state (a
-shop, an exchange, a stall, death): the open warehouse ends, as 526CE0 and
+shop, an exchange, a stall, death): the open warehouse ends, as the native gold move and
 the item handlers then refuse it.
 ================
 */
@@ -233,7 +233,7 @@ func (rt *Runtime) HandleStorageList(divisionID string, character *enterworld.Ch
 		return nil, "the selected object is not a warehouse NPC"
 	}
 	// INFERENCE: the list request is the storage row's first step, so it
-	// takes the same 4A8E10 range gate as the function request that follows.
+	// takes the same hit-range gate as the function request that follows.
 	if !rt.remoteStorageOpen(divisionID, character, gid) && !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
 	}
@@ -283,6 +283,11 @@ storableItem
 ================
 */
 func (rt *Runtime) storableItem(item inventory.Item) bool {
+	// Port-only, not native (halloween.go): a sealed event helmet never
+	// enters either warehouse, however storable its row is.
+	if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+		return false
+	}
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil {
 		return false
@@ -324,7 +329,7 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	// Item moves name the NPC; gold moves name none and use the open
-	// warehouse (526CE0 reads the open record, not the selection).
+	// warehouse (natively the open record is read, not the selection).
 	gid := q.NpcGID
 	if q.MovementType != wire.MoveTypeStorage && q.MovementType != wire.MoveTypeStorageDeposit && q.MovementType != wire.MoveTypeStorageWithdraw {
 		gid, _ = rt.storageSession(divisionID, character.Name)
@@ -332,10 +337,10 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 	if !rt.openStorageNpc(divisionID, character, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	// _StorageRoomMove 523EC0, _StorageDeposit 524160 and _StorageWithdraw
-	// 524090 run CGObjPC_CheckNpcFunctionTargetInRange (4E72A0 -> 4A8E10)
+	// The native room move, deposit and withdraw item moves
+	// run the NPC-function range test
 	// on the packet's keeper and answer its code: 4 beyond the range. Gold
-	// (526CE0) has no range test. A ticket's room has no keeper to reach.
+	// has no range test. A ticket's room has no keeper to reach.
 	if gid != enterworld.ObjectIDForCharacter(character) && (q.MovementType == wire.MoveTypeStorage ||
 		q.MovementType == wire.MoveTypeStorageDeposit || q.MovementType == wire.MoveTypeStorageWithdraw) {
 		if npc, live := rt.npcForCurrentViewer(divisionID, character, gid); !live || !rt.npcWithinHitRange(divisionID, character, npc) {
@@ -421,7 +426,12 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			}
 		case wire.MoveTypeStorageGoldDeposit:
 			amount := int64(q.GoldAmount)
-			if amount <= 0 || amount > gold {
+			// The client caps a deposit at 100,000,000 natively (59A430);
+			// SRO_RAISED_GOLD_CAPS raises both sides to 1,000,000,000.
+			if amount <= 0 || uint64(amount) > rt.storageGoldDepositLimit() {
+				return storageRefusal(wire.ErrCodeInvalidRequest)
+			}
+			if amount > gold {
 				return storageRefusal(wire.ErrCodeNotEnoughGold)
 			}
 			if storage.Gold > math.MaxInt64-amount {

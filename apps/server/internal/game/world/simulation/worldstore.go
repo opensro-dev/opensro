@@ -14,6 +14,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/namekey"
 )
 
 /*
@@ -53,11 +54,13 @@ func NewWorldStore() *WorldStore {
 ================
 WorldKey
 
-WorldKey is the store key for one character.
+WorldKey is the store key for one character; the key's shape is defined
+once in platform/namekey so this store and the hub's session bindings
+can never drift apart.
 ================
 */
 func WorldKey(divisionID, characterName string) string {
-	return divisionID + ":" + strings.ToLower(characterName)
+	return namekey.Key(divisionID, characterName)
 }
 
 /*

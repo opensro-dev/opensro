@@ -1,8 +1,9 @@
 package combat
 
-// RealModifiers projects 59DF20 -> 599840. A real instruction selects native
-// tables with its first word, supplies a value with its second and a key with
-// its third. Contributions belong to execution contexts, not skill IDs.
+// RealModifiers projects the server's real-modifier tables. A real
+// instruction selects native tables with its first word, supplies a value
+// with its second and a key with its third. Contributions belong to
+// execution contexts, not skill IDs.
 // This container alone does not admit a skill: its consumers and installation
 // prerequisites must also be executable before the plan compiler admits it.
 type RealModifiers struct {
@@ -61,7 +62,8 @@ func (r *RealModifiers) Contributions(mask, key uint32) []RealContribution {
 }
 
 // Strongest selects the highest unsigned grade, then the highest unsigned
-// value within that grade (5999E0 -> 599740, both decrement end()).
+// value within that grade (the server's strongest-entry walk decrements
+// end() at both levels).
 func (r *RealModifiers) Strongest(mask uint32) (grade, value uint32) {
 	for key, entries := range r.tables[mask] {
 		if len(entries) != 0 && key >= grade {

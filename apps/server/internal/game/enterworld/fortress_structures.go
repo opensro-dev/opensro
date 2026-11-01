@@ -8,7 +8,7 @@ zone (STRUCTURE_POS_JA_GATE_01), its kind, its default structure codename
 and its world; navmesh\objectstring.ifo places it (the server bundle's
 world-authority/structure-zones.json). The retail shard keeps installed
 structures in _SiegeFortressStruct and installs new ones through
-_SiegeFortressStructInsert; nothing in SR_GameServer creates a fortress's
+_SiegeFortressStructInsert; nothing in the server creates a fortress's
 first structures, which a new shard's database holds.
 
 INFERENCE: a fresh shard's fortress holds, on every placed zone of kinds 1

@@ -25,7 +25,8 @@ charData
 
 charData is the subset of the 0x32B3 chunk this lane asserts, parsed
 with BuildLocalPlayerEntryPayload's exact field order (internal/game/enterworld/
-wire.go; itself byte-pinned to the native reader sub_863880/sub_866e50).
+wire.go; itself byte-pinned to the native readers
+CICPlayer_DeserializeBaseRecord and SkillList_DeserializeLearned).
 ==================
 */
 type charData struct {
@@ -39,7 +40,8 @@ type charData struct {
 	CurrentMP   uint32
 	Masteries   map[uint32]uint8
 	Skills      []uint32
-	// The 0x32B3 quest block's three section id lists (sub_8673d0):
+	// The 0x32B3 quest block's three section id lists
+	// (CICPlayer_DeserializeQuestSections):
 	// walked so a populated section cannot hide behind the skill pins.
 	CompletedQuests []uint32
 	ActiveQuests    []uint32
@@ -94,7 +96,7 @@ func parseCharData(t *testing.T, payload []byte) charData {
 	// Inventory block: u8 capacity, u8 count, per item u8 slot + the
 	// VARIABLE-length CSOItem equipment body (17 fixed bytes + u8
 	// magicParamCount + count x u64 - BuildEquipmentItemBody /
-	// sub_78b1b0).
+	// CSOItem_DeserializeMagicOptions).
 	skipItemBody := func(what string) {
 		skip(4+1+8+4, what+" body head")
 		magicCount, err := r.U8()
@@ -110,7 +112,8 @@ func parseCharData(t *testing.T, payload []byte) charData {
 	}
 
 	// Avatar block: u8 capacity + u8 count + count x [u8 slot + the same
-	// variable CSOItem body] (sub_8675f0 avatar loop).
+	// variable CSOItem body] (CICPlayer_DeserializeEnteredInventoryAndInitializeHud's
+	// avatar loop).
 	skip(1, "avatar capacity")
 	avatarCount, err := r.U8()
 	fail("avatar count", err)
@@ -121,8 +124,8 @@ func parseCharData(t *testing.T, payload []byte) charData {
 
 	// Mastery list: the lead byte is discarded by the native reader,
 	// which takes marker-1 rows until the marker-2 terminator
-	// (sub_866e50's first loop) - there is no count and no 255 cap, so
-	// past 255 rows the lead byte wraps unread (#1480).
+	// (SkillList_DeserializeLearned's first loop) - there is no count
+	// and no 255 cap, so past 255 rows the lead byte wraps unread (#1480).
 	_, err = r.U8()
 	fail("mastery lead byte", err)
 	for row := 0; ; row++ {
@@ -141,7 +144,8 @@ func parseCharData(t *testing.T, payload []byte) charData {
 		out.Masteries[id] = level
 	}
 
-	// Skill list: the same marker grammar (sub_866e50's second loop):
+	// Skill list: the same marker grammar (SkillList_DeserializeLearned's
+	// second loop):
 	// lead byte discarded, per row marker 1 + u32 id + u8 value(1),
 	// until marker 2.
 	_, err = r.U8()
@@ -165,7 +169,8 @@ func parseCharData(t *testing.T, payload []byte) charData {
 		out.Skills = append(out.Skills, id)
 	}
 
-	// Quest block (sub_8673d0's three counted sections; the composer
+	// Quest block (CICPlayer_DeserializeQuestSections' three counted
+	// sections; the composer
 	// emits all three for real since the 2026-07-29 quest wave, so this
 	// parser walks the full grammar instead of stopping blind after the
 	// skills - a populated section cannot hide from the e2e assertions).
@@ -177,7 +182,8 @@ func parseCharData(t *testing.T, payload []byte) charData {
 		fail("completed quest id", err)
 		out.CompletedQuests = append(out.CompletedQuests, id)
 	}
-	// Section 2: active SQuestInfo records (sub_788210 flag-gated body).
+	// Section 2: active SQuestInfo records (the flag-gated body of
+	// SQuestInfo_Deserialize).
 	activeCount, err := r.U8()
 	fail("active quest count", err)
 	for i := 0; i < int(activeCount); i++ {

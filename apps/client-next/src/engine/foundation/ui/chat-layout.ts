@@ -116,6 +116,10 @@ export interface ChatLayoutInput {
 	// Port-only: link a drop/plus notice's player and item (Experimental
 	// "Links in notices"); omitted or false keeps every line plain.
 	noticeLinks?: boolean;
+	// Port-only, not native (#1976, Experimental "Event chat tab"): a fifth
+	// tab holding the channel-7 event notices, which All then skips.
+	// Omitted or false keeps the native four tabs, notices in All included.
+	eventTab?: boolean;
 	welcome: string;
 	copy: ( key: string ) => string;
 	size: ( path: string ) => readonly [number, number] | undefined;
@@ -166,6 +170,10 @@ export function chatLayout( state: ChatLayoutInput ) {
 		white = [ 1, 1, 1, 1 ] as const,
 		gold = [ 219 / 255, 201 / 255, 155 / 255, 1 ] as const,
 		full: UiRect = [ 0, 0, width, height ];
+	// The Event tab (eventTab) is index 4; a saved selection past the tabs
+	// the row currently offers reads as the last offered tab.
+	const tabCount = state.eventTab ? 5 : 4,
+		activeTab = Math.min( Math.max( 0, tab ), tabCount - 1 );
 	// Only the displayed rows change: resizing must not overwrite the saved size.
 	const chatWidth = state.compact ? Math.max( 0, Math.min( 399, width ) ) : 399,
 		bottom = state.compact ? Math.max( 0, Math.min( height - 20, state.compact.bottom ) ) : 52,
@@ -181,7 +189,7 @@ export function chatLayout( state: ChatLayoutInput ) {
 			requestedRows,
 		backgroundWidth = Math.max( 0, chatWidth - 18 ),
 		textWidth = Math.max( 1, chatWidth - 34 ),
-		tabPitch = state.compact ? Math.max( 0, Math.min( 51, (chatWidth - 46) / 4 ) ) : 51,
+		tabPitch = state.compact ? Math.max( 0, Math.min( 51, (chatWidth - 46) / tabCount ) ) : 51,
 		total = rows ? 62 + rows * 56 : 20,
 		y = height - bottom - total;
 	let scrolling = { range: 0, travel: 0, bounds: [ 0, 0, 0, 0 ] as UiRect };
@@ -213,30 +221,41 @@ button
 		image( bg, [ 18, y + 37 + rows * 56, backgroundWidth, 4 ], layout.GDR_CHAT_BG_DOWN!.uv );
 		button( "chat-whispers", "Whisper list", layout.GDR_BUTTON_WHISPERLIST!.texture, [ 15, y, 16, 20 ] );
 		button( "chat-hide", "See/hide chatting", layout.GDR_BUTTON_CHATTABHIDE!.texture, [ 30, y, 16, 20 ] );
-		const keys = [ "UIIT_CTL_CHAT_ALL", "UIIT_CTL_PARTY", "UIIT_CTL_GUILD", "UIIT_STT_GUILD_RESPECT_ALLY" ];
+		// The native four captions come from the string table; the port-only
+		// Event tab has no native string and captions itself.
+		const keys: readonly (string | null)[] = [
+			"UIIT_CTL_CHAT_ALL",
+			"UIIT_CTL_PARTY",
+			"UIIT_CTL_GUILD",
+			"UIIT_STT_GUILD_RESPECT_ALLY",
+			...(state.eventTab ? [ null ] : [])
+		];
 		if ( !hidden ) {
 			keys.forEach( ( key, i ) => {
+				const label = key === null ? "Event" : copy( key );
 				const r: UiRect = [ 45 + i * tabPitch, y, tabPitch + 1, 20 ];
 				image( "/assets/images/Media_extracted/interface/chattingwnd/chat_tab.png", r );
 				const caption: UiRect = [ r[0] + 5, r[1] + 4, Math.max( 0, r[2] - 5 ), 14 ];
 				quads.push(
 					...text(
-						copy( key ),
+						label,
 						caption,
 						caption,
-						i === tab ? white : [ 180 / 255, 180 / 255, 180 / 255, 1 ],
-						{ hAlign: 1, fontStyle: i === tab ? 2 : 0 }
+						i === activeTab ? white : [ 180 / 255, 180 / 255, 180 / 255, 1 ],
+						{ hAlign: 1, fontStyle: i === activeTab ? 2 : 0 }
 					)
 				);
 				controls.push( {
 					id: "chat-tab:" + i,
-					label: copy( key ),
+					label,
 					kind: "button",
 					rect: r,
-					selected: tab === i
+					selected: activeTab === i
 				} );
 				blocks.push( r );
-				if ( i === tab ) {
+				// The authored lamps cover the native four tabs only; the
+				// Event tab selects by its bold white caption alone.
+				if ( i === activeTab && i < 4 ) {
 					const lamp = layout[
 						[
 							"GDR_STATIC_ALLLAMP",
@@ -254,9 +273,9 @@ button
 				}
 			} );
 		}
-		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][tab];
+		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][activeTab];
 		const all = [
-			...(tab === 0 && lines.length < 128 ?
+			...(activeTab === 0 && lines.length < 128 ?
 				textLines( welcome, textWidth, measure, true ).map( value => ({
 					value,
 					color: gold,
@@ -268,8 +287,16 @@ button
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
-			// Stall lines belong to the stall window's own chat box.
-			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
+			// Stall lines belong to the stall window's own chat box. With the
+			// Event tab offered, channel-7 event notices live only there:
+			// All skips them and the native tabs never carried them.
+			...lines.filter( l => {
+				if ( l.channel === STALL_CHAT_CHANNEL ) return false;
+				if ( !state.eventTab ) return activeTab === 0 || l.channel === channel;
+				if ( activeTab === 4 ) return l.channel === 7;
+				if ( activeTab === 0 ) return l.channel !== 7;
+				return l.channel === channel;
+			} ).flatMap(
 				l => {
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),

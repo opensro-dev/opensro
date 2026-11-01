@@ -53,7 +53,7 @@ func assertSkillCastClose(t *testing.T, routed []simulation.DivisionFrames, divi
 		t.Fatalf("finalize payload = % X (%d bytes), want exactly %d", finalize.Payload, len(finalize.Payload), skillCastFinalizeLen)
 	}
 	if finalize.Payload[0] != 0x02 {
-		t.Fatalf("finalize mode = 0x%02X, want mode 2 (CIDecoSkill_RequestCancellation at 0x8DCF40)", finalize.Payload[0])
+		t.Fatalf("finalize mode = 0x%02X, want mode 2 (client CIDecoSkill_RequestCancellation at 0x8DCF40)", finalize.Payload[0])
 	}
 	if got := binary.LittleEndian.Uint32(finalize.Payload[2:]); got != token {
 		t.Fatalf("finalize token = 0x%X, want the success frame's 0x%X (a miss is a SILENT skip - the bracket never closes)", got, token)
@@ -107,6 +107,28 @@ newCombatTestRuntimeAtLevel
 ================
 */
 func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonster(t, monsterHP, level, 0)
+}
+
+/*
+================
+newCombatTestRuntimeBandit
+
+The combat fixture with a job bandit for its target: typeID4 2 is a
+thief bandit, 3 a hunter bandit (the jobmonster.go type words). The
+bandit stands where the ordinary fixture monster stands.
+================
+*/
+func newCombatTestRuntimeBandit(t *testing.T, monsterHP uint32, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonster(t, monsterHP, 1, typeID4)
+}
+
+/*
+================
+newCombatTestRuntimeMonster
+================
+*/
+func newCombatTestRuntimeMonster(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
 	const region = uint16(0x62A8)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
@@ -114,6 +136,7 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	ref := monster.MonsterRef{
 		RefObjID:   1933,
 		TidWord:    0x00c6, // Authored monster class; actor-class gates must run in fixtures too.
+		TypeID4:    typeID4,
 		Codename:   "MOB_CH_MANGNYANG",
 		Level:      level,
 		MaxHP:      monsterHP,

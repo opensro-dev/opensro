@@ -47,8 +47,17 @@ func (rt *Runtime) crowSupportRecipients(step petCombatStep, party, allowTown bo
 	from := rt.liveSpawn(simulation.WorldKey(step.key.division, step.snapshot.Name), step.snapshot, step.nowMs)
 	for gid := range rt.auraParty(step.key.division, step.snapshot) {
 		member := rt.findCharacterByGid(step.key.division, gid)
-		snapshot := rt.characterSnapshot(step.key.division, member)
-		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !rt.petExpansionAllowed(snapshot, step.pet) || !allowTown && rt.inTown(step.key.division, snapshot) {
+		// A dead or deletion-pending member is refused on its live
+		// facts; only an admitted member pays for the copy the runtime
+		// checks below read (#1943). The copy is the pet-owner view:
+		// those checks (expansion gate, town, session name, spawn)
+		// read the relation slot, World and scalars, never other worn
+		// rows, plain bag rows or avatar rows (#2030;
+		// TestTailwindRecipientsReadNothingOutsideTheCompanionCopy).
+		snapshot := rt.characterSnapshotCompanionAdmitted(step.key.division, member, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live)
+		})
+		if snapshot == nil || !rt.petExpansionAllowed(snapshot, step.pet) || !allowTown && rt.inTown(step.key.division, snapshot) {
 			continue
 		}
 		session := rt.petSessionFor(step.key.division, snapshot.Name, 0)
@@ -77,7 +86,10 @@ func (rt *Runtime) advanceTailwind(key petOwnerKey, now int64) {
 	var level uint8
 	eligible := false
 	if state != nil {
-		step, eligible = rt.elementalCompanionEligibility(key.division, state.character, key.gid, "Crow", now, true)
+		// A crow without Tailwind slotted is refused before its owner is
+		// copied: the Passive check below would refuse it anyway (#1943).
+		q := elementalQuery{gid: key.gid, kind: "Crow", allowTown: true, passive: "Tailwind"}
+		step, eligible = rt.elementalCompanionMatching(key.division, state.character, q, now)
 		if eligible {
 			skill, level, eligible = companion.Passive(step.pet, "Tailwind", companion.ModifiersFor(step.pet))
 		}

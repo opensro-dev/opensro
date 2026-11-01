@@ -24,7 +24,7 @@ TestWindlessSpearSecondHitIgnoresTheRootCooldown
 SKILL_CH_SPEAR_FRONTAREA_D_01 (Windless Spear) has a 3000 ms cooldown and
 chains to SKILL_CH_SPEAR_FRONTAREA_D2_01 in the same group 709. The root
 installs the group cooldown when it fires; the linked stage is admitted
-without it (4AECE7), so its cost check must skip it too, or the second hit
+without it (reference server), so its cost check must skip it too, or the second hit
 is refused 0x3005.
 ================
 */

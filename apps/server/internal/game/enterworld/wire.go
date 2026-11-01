@@ -8,6 +8,8 @@ wire.go - projects authoritative game state into native protocol records
 package enterworld
 
 import (
+	"encoding/json"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
@@ -30,9 +32,13 @@ const (
 	OpcodeVitalsUpdate        uint16 = 0x33a6
 )
 
-// Packet is one {nativeOpcode, payload} bootstrap packet. Payload marshals as
-// a JSON number array exactly like the Node side (never base64, which is what
-// encoding/json would do to a []byte).
+// Packet is one {nativeOpcode, payload} bootstrap packet. The payload
+// rides as bytes; its JSON form is a number array exactly like the Node
+// side (never base64, which is what encoding/json would do to a []byte),
+// so MarshalJSON and UnmarshalJSON below convert at the JSON boundary
+// only. The packet used to carry []int end to end, so every wire frame
+// paid a byte-to-int-to-byte round trip, the 0x0007 entry blob included
+// (#1820).
 /*
 ================
 Packet
@@ -41,7 +47,49 @@ Packet
 type Packet struct {
 	Scope        []domain.ObjectScopeChange `json:"-"`
 	NativeOpcode uint16                     `json:"nativeOpcode"`
-	Payload      []int                      `json:"payload"`
+	Payload      []byte                     `json:"payload"`
+}
+
+/*
+================
+MarshalJSON
+
+Emits the payload as a JSON number array, byte for byte the form the
+[]int payload produced.
+================
+*/
+func (p Packet) MarshalJSON() ([]byte, error) {
+	payload := make([]int, len(p.Payload))
+	for index, value := range p.Payload {
+		payload[index] = int(value)
+	}
+	return json.Marshal(struct {
+		NativeOpcode uint16 `json:"nativeOpcode"`
+		Payload      []int  `json:"payload"`
+	}{NativeOpcode: p.NativeOpcode, Payload: payload})
+}
+
+/*
+================
+UnmarshalJSON
+
+Reads the number-array payload MarshalJSON emits.
+================
+*/
+func (p *Packet) UnmarshalJSON(data []byte) error {
+	var decoded struct {
+		NativeOpcode uint16 `json:"nativeOpcode"`
+		Payload      []int  `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	p.NativeOpcode = decoded.NativeOpcode
+	p.Payload = make([]byte, len(decoded.Payload))
+	for index, value := range decoded.Payload {
+		p.Payload[index] = byte(value)
+	}
+	return nil
 }
 
 // NewPacket ports buildMissionBootstrapPacket.
@@ -51,10 +99,8 @@ NewPacket
 ================
 */
 func NewPacket(nativeOpcode uint16, payload []byte) Packet {
-	body := make([]int, len(payload))
-	for index, value := range payload {
-		body[index] = int(value)
-	}
+	body := make([]byte, len(payload))
+	copy(body, payload)
 	return Packet{NativeOpcode: nativeOpcode, Payload: body}
 }
 
@@ -108,7 +154,7 @@ func CosObjectIDForCharacter(c *Character) (uint32, bool) {
 }
 
 // MaxMagicOptionsPerItem is the client's MAX_MAGPARAM_PER_ITEM: the count
-// byte is asserted <= 12 at parse (sub_78b1b0 @0x0078b224, soitem.cpp:0x13b
+// byte is asserted <= 12 at parse (client 78B1B0 @0x0078b224, soitem.cpp:0x13b
 // int3 on fail), so emission clamps rather than hand a hand-edited store
 // record the power to assert-crash the client.
 const MaxMagicOptionsPerItem = 12
@@ -120,7 +166,7 @@ const MaxMagicOptionsPerItem = 12
 const AvatarCapacityDefault int64 = 5
 
 // BuildItemBody ports the inventory branches of
-// CSOItem_ParseFromStream/sub_78c830. Equipment rows retain the historical
+// the client's CSOItem_ParseFromStream/78C830. Equipment rows retain the historical
 // 18-byte base. ETC rows carry a u16 stack count and, for TID 3.3.14.2 Gacha
 // result cards, the native indexed two-u64 reward parameters.
 /*
@@ -236,7 +282,7 @@ func BuildVitalsRefreshPayload(c *Character) []byte {
 
 // BuildLocalPlayerEntryPayload ports buildV150LocalPlayerEntryPayload: the
 // 0x32B3 char-data chunk. Field order/widths are byte-identical to the WIP
-// sub_863880 CICPlayer_BindRecords reconstruction; see the Node builder for
+// CICPlayer_DeserializeBaseRecord CICPlayer_BindRecords reconstruction; see the Node builder for
 // the per-field provenance comments. Bytes must not drift - REV-1 diffs this
 // against the Node output.
 /*
@@ -297,7 +343,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	writer.U32(0)                              // wireValue844
 	writer.U32(uint32(currentHp))
 	writer.U32(uint32(currentMp))
-	// data_cf0100 is misleadingly named in the decompiler: sub_8675f0
+	// data_cf0100 is misleadingly named in the decompiler: client 8675F0
 	// immediately feeds this byte to CICUser_ApplyStateFlags779. It is the
 	// authoritative two-bit visual-flags seed, not an unrelated option byte.
 	writer.U8(ResolveVisualFlags(character))
@@ -311,7 +357,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	writer.U16(total)
 	writer.U32(penalty)
 
-	// Inventory block (sub_8675f0 step 2): u8 size, u8 count, then per item
+	// Inventory block (client 8675F0 step 2): u8 size, u8 count, then per item
 	// u8 slot + the CSOItem body bytes. The size is the character's capacity
 	// byte, the only place the v1.150 client learns it (CICPlayer+0x1848).
 	// The count is a u8; the clamp is unreachable through the equip-roster
@@ -332,15 +378,15 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.Bytes(BuildItemBody(item))
 	}
 
-	// Avatar block (sub_8675f0 ~L451-482): u8 capacity (native reads and
-	// discards it at 0x8677a9; the WIP fold retains it as
+	// Avatar block (client 8675F0 ~L451-482): u8 capacity (native reads and
+	// discards it at client 0x8677a9; the WIP fold retains it as
 	// avatarCapacityWire8677a9) + u8 count + count x [u8 slot + full
 	// CSOItem body]. Rows come from the persisted avatar inventory
 	// (Character.AvatarInventory - see its field doc for the content
 	// constraints); an avatar-less record emits the same [5][0] bytes as
 	// before. Every emitted refObjId rides the refItemSnapshot with its
 	// full record (buildRefItemSnapshot walks the avatar rows), because an
-	// unseeded ref DESYNCS the client stream (sub_78c830 L182-183).
+	// unseeded ref DESYNCS the client stream (CSOItem_Deserialize L182-183).
 	avatarCapacity, avatarRoster := AvatarWireItems(character)
 	// AvatarWireItems already caps its rows at 0xff; this clamp is the
 	// defensive count-site twin so the u8 count can never disagree with
@@ -359,7 +405,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U8(uint8(slot))
 		writer.Bytes(BuildItemBody(item))
 	}
-	// Mastery list (the reader's first loop in sub_866e50): per row a marker
+	// Mastery list (the reader's first loop in client 866E50): per row a marker
 	// byte 1 + u32 masterydata id + u8 level, terminated by marker 2. Rows
 	// come from the persisted character masteries (schema v4: the racial
 	// set, seeded at level 1); a mastery-less record emits the same empty
@@ -381,8 +427,8 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// Skill list (the reader's second loop, same marker framing): per row
 	// u32 skilldata id + one value byte. Rows come from the persisted
 	// learned skills (schema v5); the value byte is 1, the native entry
-	// ctor's own default (sub_866e50 @0x00866e81 seeds value=1 before the
-	// read) and what the learn ack path inserts (sub_8509f0 @0x00850a35).
+	// ctor's own default (client 866E50 @0x00866e81 seeds value=1 before the
+	// read) and what the learn ack path inserts (client 8509F0 @0x00850a35).
 	// A skill-less record emits the same empty [0][2] bytes as before.
 	// The v1.150 reader (SkillList_DeserializeLearned, client 0x866e50)
 	// discards the lead byte and takes rows until the terminator marker
@@ -397,7 +443,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U8(1)
 	}
 	writer.U8(2)
-	// Quest block (sub_8673d0's three counted sections). Section 1 -
+	// Quest block (client 8673D0's three counted sections). Section 1 -
 	// COMPLETED quest refs: u8 count + count x u32 questdata id LE, read
 	// into the CICPlayer +0x18d0 container's completed list (ids are
 	// v1.150-native questdata rows - see the CompletedQuestIds field
@@ -412,7 +458,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U32(questID)
 	}
 	// Section 2 - ACTIVE quests: u8 count + count x [u32 refId +
-	// SQuestInfo body] (client parse sub_788210; field emission is
+	// SQuestInfo body] (client parse SQuestInfo_Deserialize; field emission is
 	// FLAG-DRIVEN, see the ActiveQuestRecord doc - a flags/field mismatch
 	// desyncs the stream). An empty list emits the same single zero byte
 	// the composer hardcoded before this section was modeled.
@@ -446,7 +492,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 				writeWireString(writer, node.Description)
 				if node.ObjectiveSentinel {
 					// The 0xFF count sentinel: NO value array bytes
-					// (sub_785c60 @0x785d03 wrap).
+					// (client 785C60 @0x785d03 wrap).
 					writer.U8(0xff)
 					continue
 				}
@@ -477,8 +523,8 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	}
 	// Section 3 - TRACKED quest records: u8 count + count x [u32 refId,
 	// u8 flags, u8 valueA, u16 word, 6 tail bytes, u32 optional iff
-	// flags&0x02] (client sub_8673d0 @0x8674a0..0x867524; applied by
-	// sub_866c60 - the browser client's hosted apply drives the CIFQuest
+	// flags&0x02] (client CICPlayer_DeserializeQuestSections @0x8674a0..0x867524; applied by
+	// CPSMission_Calls_CPlayer_GetVisibilityMap - the browser client's hosted apply drives the CIFQuest
 	// +0x398 tracked id the minimap quest pass gates on). An empty list
 	// emits the same single zero byte as before.
 	trackedQuests := character.TrackedQuests
@@ -561,15 +607,15 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// object GID, not a database row id.
 	writer.U32(objectID)
 	// Privilege byte -> CICPlayer+0x1890: the local full-character
-	// deserialize sub_8675f0 reads u32 +0x1894 (the JID dword above,
-	// @0x867a80) then THIS u8 (@0x867a90) - the position is byte-critical.
-	// Bit 0 is the v1.150 GM privilege flag, tested by sub_862a70
+	// deserialize (client 8675F0) reads u32 +0x1894 (the JID dword above,
+	// client @0x867a80) then THIS u8 (@0x867a90) - the position is byte-critical.
+	// Bit 0 is the v1.150 GM privilege flag, tested by CICPlayer_IsTestGM
 	// ("movzx eax, byte [ecx+0x1890]; and eax, 1"); its consumers are
-	// Console_IsAllowed @0x004fa670 (console/GM-command availability -
+	// client Client_IsDebugCommandAllowed @0x004fa670 (console/GM-command availability -
 	// bit 0 OR the retail session byte +0x12f), the GM default chat
 	// channel mode 3 in CIFChatViewer_HandleChatInputKey @0x006aed90,
 	// and the 30F2/33C4/3647 mission handlers. Bit 1 enables the PC-room
-	// event interface (862A80 -> 683B40 -> 547750(1)); other bits stay 0.
+	// event interface (client 862A80 -> 683B40 -> 547750(1)); other bits stay 0.
 	var privilegeByte1890 uint8
 	if character.GMPrivilege {
 		privilegeByte1890 |= 0x01
@@ -584,7 +630,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	writer.U16(character.AutoPotion.Cure)
 	writer.U8(character.AutoPotion.Timing)
 	// Chunk C of the entered stream: the WHISPER-BLOCK list (client fold
-	// sub_77ad10 between the auto-potion chunk above and the fortress-war
+	// client 77AD10 between the auto-potion chunk above and the fortress-war
 	// id below - the insert position is byte-critical, one moved read
 	// desyncs the whole OnMyCharacterEntered parse). Wire: u8 count, then
 	// per name u16 len + ANSI bytes (stream.readString). The persisted
@@ -604,7 +650,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// "No fortress war" sentinel 0x10001 (a literal 0 reads as war id 0 and
 	// closes the world-map follow gate).
 	writer.U32(entryFortressWorld(entry))
-	// Event-group list (client fold sub_77b220 @0x0077b2f4..): u8 count +
+	// Event-group list (client fold CPSMission_OnMyCharacterEntered @0x0077b2f4..): u8 count +
 	// count x u32 groupId LE. Every id sets the client's event-start slot;
 	// id 1 additionally fires the render-option pair and the
 	// UIIT_MSG_EVENT_START guide message. Ids are POLICY content (declared
@@ -625,7 +671,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	return writer.Payload()
 }
 
-// buildQuickSlotHudStatePayload renders the exact sub_778460 block:
+// buildQuickSlotHudStatePayload renders the exact client 778460 block:
 // mode 7, u8 count, then count x {u8 slot, u8 kind, u32 payload}. Persisted
 // rows are normalized by slot so a hand-edited duplicate cannot produce two
 // competing writes to one CIFUnderBar control during reveal.

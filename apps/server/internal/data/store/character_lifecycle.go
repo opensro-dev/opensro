@@ -67,13 +67,16 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	if !nativeCharacterNameShapePattern.MatchString(c.Name) {
 		return fmt.Errorf("%w: %q violates the native name shape (letters, digits, underscore)", ErrCharacterNameInvalid, c.Name)
 	}
-	// Native name-length bound: 2..12 inclusive. Three v1.150 client sites
-	// gate it with the same unsigned idiom (len - 2 > 0xa), refusing len < 2
-	// or len > 12: @0x0072bef7 / @0x0072faa7 (UIO_MSG_ERROR_CHARACTER_NAME_
-	// STRING) and @0x007342f0 (UIO_MSG_ERROR_CHARACTER_NAME); the shipped
-	// string tells the player "Only 12 English letters are available.[Min.,
-	// Max.]". The retail SERVER enforced it too (charselect SMERR vector
-	// @0x00cc9e60: UIO_SMERR_NOT_ALLOWED_CHARNAME + the NAME_STRING key).
+	// Native name-length bound: 2..12 inclusive. Three v1.150 client
+	// sites gate it with the same unsigned idiom (len - 2 > 0xa),
+	// refusing len < 2 or len > 12 (CPSCharacterCreate_ValidateNameLocally
+	// and CPSCharacterCreate_ValidateNameEdit raise
+	// UIO_MSG_ERROR_CHARACTER_NAME_STRING, the rename window's
+	// CPSCharacterSelect_ValidateNameChangeEdit raises
+	// UIO_MSG_ERROR_CHARACTER_NAME); the shipped string tells the
+	// player "Only 12 English letters are available.[Min., Max.]". The
+	// retail server enforced it too, refusing with
+	// UIO_SMERR_NOT_ALLOWED_CHARNAME.
 	// The client counts an edit-control length; the
 	// charset gate above has already restricted the name to ASCII
 	// [A-Za-z0-9_], so byte length == rune count == UTF-16 code-unit count -
@@ -90,6 +93,23 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 		if strings.EqualFold(existing.Name, c.Name) {
 			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
 		}
+		if existing.Job.Alias != "" && strings.EqualFold(existing.Job.Alias, c.Name) {
+			// A new name may not take a job alias already spoken for:
+			// the alias would shadow (or be shadowed by) the new
+			// character in every typed-name path, and a suited player
+			// could be impersonated by registration. The reference
+			// server never refuses this clash; that is a native bug
+			// we do not copy (owner, 2026-10-28), so the refusal is
+			// unconditional. It reuses the duplicate-name error class
+			// (and therefore the client's name-taken reply).
+			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
+		}
+	}
+	// A name a rename gave up inside its 90-day hold (#1689) is not
+	// free for a new character: re-registering it at once is the
+	// impersonation the reservation exists to close.
+	if s.nameReservedLocked(divisionID, c.Name, s.now().UnixMilli(), 0) {
+		return fmt.Errorf("%w: %q in division %s", ErrNameReserved, c.Name, divisionID)
 	}
 	owned := 0
 	for _, existing := range s.characters[divisionID] {

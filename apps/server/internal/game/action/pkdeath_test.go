@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-pkdeath_test.go - a player's death costs what 4E6EC0 says
+pkdeath_test.go - a player's death costs what the reference server's death kind says
 
 A murderer killed by a monster is relieved (-600, daily -1); a penalty of
 30000 or more always drops an item; a job wearer killed by an opposing job
@@ -167,7 +167,7 @@ func TestJobWearerKilledByThiefIsAJobDeath(t *testing.T) {
 ================
 TestMonsterKillEasesThePenalty
 
-4C42F0 -> 4EB6B0: a monster four levels above its killer eases 10.
+Reference server: a monster four levels above its killer eases 10.
 ================
 */
 func TestMonsterKillEasesThePenalty(t *testing.T) {

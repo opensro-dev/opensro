@@ -50,7 +50,6 @@ rewardActor
 type rewardActor struct {
 	world     uint32
 	character *enterworld.Character
-	pose      simulation.Spawn
 	party     *RewardParty
 }
 
@@ -77,7 +76,16 @@ authoritative character pointers, then enter a single UpdateMany transaction.
 ================
 */
 func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Character, now int64) rewardRoster {
-	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor)}
+	// The division list is taken before the read door: CharactersForDivision
+	// takes the store's read lock itself, and a second read lock inside the
+	// door waits behind any queued writer while the door holds that writer
+	// off. The slice is a fresh copy of the live pointers, so
+	// the field reads below stay inside the door.
+	characters := rt.deps.CharactersForDivision(division)
+	// Sized for the whole division: the roster runs per credited hit, and
+	// growing the map and slice from empty was most of its cost (#2031).
+	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor, len(characters)),
+		characters: make([]*enterworld.Character, 0, len(characters))}
 	parties := []RewardParty(nil)
 	if rt.RewardParties != nil {
 		parties = rt.RewardParties(division)
@@ -88,12 +96,6 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 			memberParty[gid] = &parties[i]
 		}
 	}
-	// The division list is taken before the read door: CharactersForDivision
-	// takes the store's read lock itself, and a second read lock inside the
-	// door waits behind any queued writer while the door holds that writer
-	// off. The slice is a fresh copy of the live pointers, so
-	// the field reads below stay inside the door.
-	characters := rt.deps.CharactersForDivision(division)
 	rt.deps.Read(division, func() {
 		for _, c := range characters {
 			if c == nil || c.DeletePending {
@@ -103,11 +105,26 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 				continue
 			}
 			gid := enterworld.ObjectIDForCharacter(c)
-			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, pose: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), party: memberParty[gid]}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: memberParty[gid]}
 			r.characters = append(r.characters, c)
 		}
 	})
 	return r
+}
+
+/*
+================
+rewardActorPose
+
+The actor's live position at the moment a settlement or share decision
+reads it. The roster build used to resolve every division member's spawn
+(a world-key build and a mover lookup each) although only the winner and
+its party are ever range-checked (#2030); resolving at the read keeps the
+value at kill-decision time, which is what the range rules judge.
+================
+*/
+func (rt *Runtime) rewardActorPose(division string, a rewardActor, now int64) simulation.Spawn {
+	return rt.liveSpawn(simulation.WorldKey(division, a.character.Name), a.character, now)
 }
 
 /*
@@ -130,7 +147,7 @@ contributor as their loot representative.
 ================
 */
 func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint32]rewardActor) []monsterRewardGroup {
-	// 4C44A0 visits the source map by unsigned GID. Equal representative
+	// The reference server visits the source map by unsigned GID. Equal representative
 	// contributions keep the first source, even if input snapshots are shuffled.
 	rows = append([]simulation.MonsterContribution(nil), rows...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CreditGID < rows[j].CreditGID })
@@ -169,7 +186,7 @@ func monsterRewardGroups(rows []simulation.MonsterContribution, actors map[uint3
 ================
 withinPartyRewardRange
 
-5BCC50 calls planar 430AD0 with Y zero. Dungeon deltas use local X/Z.
+The reference server measures planar distance with Y zero. Dungeon deltas use local X/Z.
 ================
 */
 func withinPartyRewardRange(a, b simulation.Spawn) bool {
@@ -190,8 +207,8 @@ func withinPartyRewardRange(a, b simulation.Spawn) bool {
 ================
 isPartyMonster
 
-CGObjMob_IsPartyMonster (4C0DD0): the rarity byte's high nibble is exactly
-1. Formulae_GetLevelDiffScale (410FD0) then halves EXP (0.5f at 0xB45B68)
+The reference server's party-monster test: the rarity byte's high nibble is exactly
+1. The level-difference scale then halves EXP (0.5f)
 when the monster's level is below the receiver's (or the party average).
 ================
 */
@@ -215,10 +232,10 @@ func rewardLevel(c *enterworld.Character) int64 {
 ================
 partyRewardFactors
 
-5BCD43..5BCED7 spills bonus and level shares independently to float32.
+The reference server spills bonus and level shares independently to float32.
 
 evenFloor is a deliberate beta deviation (the growth switch turns it on):
-native CParty_DistributeKillExperience weights each share by level alone,
+the native party kill EXP distribution weights each share by level alone,
 so a level 1 beside a level 23 took 1/24 of its own kill EXP and party
 power-levelling fell ~13x behind soloing. With the floor no member's share
 drops below an even 1/N split; higher levels keep their larger share.
@@ -369,7 +386,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			out.others = append(out.others, award)
 		}
 	}
-	// 4E27C0 -> 4E1F60: the killing blow's job wearer earns job EXP for a
+	// The reference server's PvP kill rewards: the killing blow's job wearer earns job EXP for a
 	// thief or hunter monster (pkreward.go). Only a player's own blow reaches
 	// it in the original; a pet's or COS's fatal hit pays no job EXP.
 	if actor != nil && !roster.companionKill {
@@ -397,7 +414,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	origin := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	originWorld := uint32(impact.Population.ID)
 	if a, ok := roster.actors[winner]; ok {
-		origin = a.pose
+		origin = rt.rewardActorPose(division, a, now)
 		originWorld = a.world
 	}
 	var count uint16
@@ -417,7 +434,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = []float32{factor}
 		} else {
 			for _, gid := range g.party.Members {
-				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, a.pose) {
+				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, rt.rewardActorPose(division, a, now)) {
 					members = append(members, a)
 				}
 			}
@@ -445,7 +462,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			} else if private := wire.ProgressionPrivateFrames(frames); len(private) > 0 {
 				out.others = append(out.others, RecipientFrames{a.character.ID, private})
 			}
-			// 4EAC24: the recipient's attack pets share the award even when
+			// Reference server: the recipient's attack pets share the award even when
 			// the owner's own EXP came to nothing.
 			petFrames, petArea := rt.awardAttackPetExperience(a.character, impact.Instance, g.damage, factors[i], now)
 			out.public = append(out.public, petArea...)
@@ -470,6 +487,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// hunted, so it never counts either, however it died.
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
+		}
+		// The Halloween daily cap (halloween.go) counts the same
+		// committed loot the same way: every minted box, GM-spawned
+		// kills excluded, lands on the winner before the next kill.
+		if !impact.Instance.GMSpawned {
+			rt.countHalloweenBoxes(a.character, drops, now)
 		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)

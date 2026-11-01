@@ -10,7 +10,7 @@ import (
 // nativeSkillCastLinks reproduces v1.150 7E9170 -> 7E5CC0. The ordered
 // skill-ID map is walked after loading. A root receives its own ID at
 // extendedInfo+260; all its successors receive that ROOT, not ChainNext.
-// 7754B0 filters zero/self when choosing the B245 continuation branch.
+// Client 7754B0 filters zero/self when choosing the B245 continuation branch.
 // Cycles are rejected instead of hanging the exporter on malformed custom data.
 func nativeSkillCastLinks(next map[uint32]uint32) (map[uint32]uint32, error) {
 	ids := make([]uint32, 0, len(next))
@@ -44,8 +44,8 @@ func nativeSkillCastLinks(next map[uint32]uint32) (map[uint32]uint32, error) {
 	return roots, nil
 }
 
-// 84C653..84C66B: pmhp's four-word body is indexed at CSkillData+10C.
-// 8DCF61..8DCF6F reads its THIRD word (+8), comparing it with 100.
+// Client 84C653..84C66B: pmhp's four-word body is indexed at CSkillData+10C.
+// Client 8DCF61..8DCF6F reads its THIRD word (+8), comparing it with 100.
 // Descriptor pointers are last-write-wins and stop at ssou; numeric arguments
 // are never scanned as tags. The production parameter-arity table is injected
 // so this projection shares the existing loader's decoding boundary.

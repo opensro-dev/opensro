@@ -100,7 +100,7 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 			return grounditem.Item{}, false
 		}
 		row.VarianceBits, row.Durability = variance, durability
-		// 724E30 initializes variance and authored options, not random blues.
+		// The native loot step initializes variance and authored options, not random blues.
 		// All version-compatible authored modifier sets are empty in this catalog.
 		if !chosen.Assigned {
 			magic, entered, err := loot.EquipmentMagic(chosen.Codename, rt.DropRoll)

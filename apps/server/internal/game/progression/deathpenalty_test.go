@@ -3,8 +3,8 @@
 
 deathpenalty_test.go - the native death penalty arithmetic
 
-4E6980's float32 rate constants, the murderer's SP loss, the 0x101 share
-a premium keeps, and the job death of 4E6820.
+The server's float32 death-penalty rate constants, the murderer's SP loss, the 0x101 share
+a premium keeps, and the job death.
 
 ===========================================================================
 */
@@ -86,7 +86,7 @@ func TestMurdererLosesSkillPoints(t *testing.T) {
 ================
 TestJobDeathTakesJobExperience
 
-4E6820: job EXP trunc(40 * 10 * 0.125) * 3 = 150, then EXP basis 30 * 6.
+Job death: job EXP trunc(40 * 10 * 0.125) * 3 = 150, then EXP basis 30 * 6.
 ================
 */
 func TestJobDeathTakesJobExperience(t *testing.T) {
@@ -126,7 +126,7 @@ func TestJobExpGradesUpOnce(t *testing.T) {
 ================
 TestJobExpMovesThiefAndHunterContribution
 
-60DD90 -> 60E0A0: a thief's or hunter's job EXP delta moves the week's
+The server's job-EXP add: a thief's or hunter's job EXP delta moves the week's
 contribution, floored at 0 and capped at 2,000,000,000; a trader's does
 not (traders contribute on sales).
 ================

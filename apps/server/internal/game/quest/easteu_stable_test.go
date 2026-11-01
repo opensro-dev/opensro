@@ -5,8 +5,9 @@ easteu_stable_test.go - the Sunset Witch's stable and Uvetino's holy water
 
 Exercise the compiled QNO_EU_EASTEU_1 -> _2 -> _3 chain: holy water used by
 the stable purifies it for ten seconds and yields a Stable Filth on a roll
-(8AA700 / 8AA630), the Witch asks for holy water while none is held
-(8AA0C0), and Uvetino gives ten a day once his own order is done (8AB070).
+(the server's holy-water use and purify timer), the Witch asks for holy
+water while none is held (her talk handler), and Uvetino gives ten a day
+once his own order is done (QNO_EU_EASTEU_3's talk handler).
 
 ===========================================================================
 */

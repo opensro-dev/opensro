@@ -55,7 +55,7 @@ func refusedGrant(reason string) grantOutcome {
 // online members with the full 0x32C4 guild block.
 //
 // The v1.150 member delta has no grant-name arm: CIFGuildMember_
-// OnMemberUpdated (5E9D20) reads mask 0x20 as an ASCII string into the
+// OnMemberUpdated reads mask 0x20 as an ASCII string into the
 // member NAME (+0x04), and 0x40 is the fortress role. Sending the title
 // there renamed the grantee in every roster ("why is my name Bubu?") and
 // broke their own [Guild * title] board, which finds the member by name.
@@ -65,7 +65,7 @@ func refusedGrant(reason string) grantOutcome {
 // only by the 0x30D7 parse) until they next come into view, as native.
 //
 // Port-only, not native: v1.188 hands the grant to the shard manager
-// (CGObjPC_HandleGuildUpdateNickname7256, 517B70) and its push to the other
+// (the v1.188 nickname-update handler) and its push to the other
 // members was not found; the earlier port sent subOp-6 &0x20, which v1.150
 // applies to the member name. Whatever native sent, the v1.150 delta cannot
 // carry a title, so this re-seed is a deliberate deviation that fixes it. Beyond the shared leader gate the
@@ -167,7 +167,7 @@ func ValidFortressRole(role uint8) bool {
 // &0x40 delta to the other online members. The role byte must sit in
 // ValidFortressRole; the shared grantTarget front carries the leader
 // gate (position grant has NO guild-level gate - only the name grant's
-// arm is level-gated @0x005e20f6).
+// arm is level-gated client-side).
 func HandlePositionGrant(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) grantOutcome {
 	request, err := DecodePositionGrantRequest(payload)
 	if err != nil {
@@ -177,7 +177,8 @@ func HandlePositionGrant(deps Dependencies, divisionID string, actor *enterworld
 		return refusedGrant(fmt.Sprintf("fortress role %#x outside the pinned domain (0/1/2/4/8/0x10/0x20)", request.Position))
 	}
 	// The commander is the guild master's own role: the client's grant
-	// window offers 0, 2, 4, 8, 0x10 and 0x20 only (5F4D70), the retail
+	// window offers 0, 2, 4, 8, 0x10 and 0x20 only (client
+	// CIFGuildFortressGrant_OnPositionRadio), the retail
 	// _Guild_FnAddMember gives it to MemberClass 0, and
 	// _Guild_Delegate_Master refuses (-1002) a master without it. A grant
 	// can neither hand it out nor take it from the master.

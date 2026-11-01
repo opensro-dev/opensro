@@ -114,6 +114,9 @@ type Hub struct {
 	// placementMetrics reads the placement guard's counters
 	// (SetPlacementMetrics); nil publishes no block.
 	placementMetrics atomic.Pointer[func() map[string]uint64]
+	// storeLockMetrics reads the authority lock's waits, holds and commit
+	// phases (SetStoreLockMetrics); nil publishes no block.
+	storeLockMetrics atomic.Pointer[func() any]
 }
 
 /*
@@ -542,6 +545,16 @@ func (h *Hub) AcceptConn(conn Conn) {
 			if errors.Is(attachErr, errResumeGap) {
 				if hello.HasPosition {
 					h.metrics.resumeGap.Add(1)
+					// The refusal line (#2146): what the client reported
+					// against the ring that refused it. Without it the
+					// resume_gap metric counts a cause nobody can name.
+					d := sess.ResumeRefusal(hello.LastApplied)
+					log.WithFields(log.Fields{
+						"session": sess.ID, "kind": conn.Kind(), "remote": conn.RemoteAddr(),
+						"reason": d.Reason, "reported": d.Reported, "floor": d.Floor,
+						"oldest": d.Oldest, "head": d.Head, "ringFrames": d.RingFrames,
+						"queuedFrames": d.QueuedFrames, "queuedBytes": d.QueuedBytes,
+					}).Info("transport: resume refused; reported position not covered")
 				} else {
 					h.metrics.resumeNoPosition.Add(1)
 				}

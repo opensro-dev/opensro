@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -56,6 +57,59 @@ func TestReturnLocationUsesLiveRegionBinding(t *testing.T) {
 	}
 	if *restored.World.SavedReturn != saved {
 		t.Fatal("return did not persist")
+	}
+}
+
+/*
+================
+TestResidentRegionTickStepUsesTheDeferredDoor
+
+The resident-region tick step and the movement settle are the same
+binding through different doors (#1820): the tick's write joins the
+tick's batched commit, a handler's settle still commits before its
+answer.
+================
+*/
+func TestResidentRegionTickStepUsesTheDeferredDoor(t *testing.T) {
+	rt, c := newActiveEffectTestRuntime(t, staticSkillSource{})
+	rt.Monsters = simulation.NewMonsterState(monster.TemplateFromParts(nil, nil))
+	deps := rt.deps.(*enterworld.Deps)
+	var immediate, deferred []string
+	deps.UpdateCharacter = func(_ *enterworld.Character, label string, fn func() bool) bool {
+		immediate = append(immediate, label)
+		return fn()
+	}
+	deps.UpdateCharacterDeferred = func(_ *enterworld.Character, label string, fn func() bool) bool {
+		deferred = append(deferred, label)
+		return fn()
+	}
+	key := simulation.WorldKey(testDivision, c.Name)
+	start := simulation.Spawn{RegionID: 0x5c5c, X: 1800, Y: 20, Z: 100}
+	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn = start })
+	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
+		t.Fatal(err)
+	}
+	goal := start
+	goal.RegionID++
+	goal.X = 300
+	rt.Worlds.Update(key, func() simulation.WorldState { panic("unexpected seed") }, func(w *simulation.WorldState) {
+		w.Spawn = goal
+		w.MoveSegment = &simulation.MoveSegment{From: start, StartedAtMs: 1000, ArrivesAtMs: 2000}
+	})
+	immediate, deferred = nil, nil
+	rt.advanceResidentRegions(1500)
+	if len(immediate) != 0 || len(deferred) != 1 || deferred[0] != "region-return-location" {
+		t.Fatalf("tick step doors = immediate %v, deferred %v; want one deferred region-return-location", immediate, deferred)
+	}
+	goal.RegionID++
+	rt.Worlds.Update(key, func() simulation.WorldState { panic("unexpected seed") }, func(w *simulation.WorldState) {
+		w.Spawn = goal
+		w.MoveSegment = nil
+	})
+	immediate, deferred = nil, nil
+	rt.AdvanceResidentRegion(testDivision, c.Name, 3000)
+	if len(deferred) != 0 || len(immediate) != 1 || immediate[0] != "region-return-location" {
+		t.Fatalf("settle doors = immediate %v, deferred %v; want one immediate region-return-location", immediate, deferred)
 	}
 }
 

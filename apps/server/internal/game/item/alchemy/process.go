@@ -124,7 +124,7 @@ func (c *Catalog) Compound(items []inventory.Item, r ProcessRequest, roll Roll) 
 		if len(r.Slots) != 1 {
 			return out, Refusal(0x10)
 		}
-		// 508BB0 resolves the four authored output/quantity pairs; 508750
+		// The server resolves the four authored output/quantity pairs and
 		// charges (reference price / 1000 + 1) Rondo per material unit.
 		var rondo uint64
 		for _, slot := range r.Slots {
@@ -152,7 +152,7 @@ func (c *Catalog) Compound(items []inventory.Item, r ProcessRequest, roll Roll) 
 		}
 		out.Completed = r.Quantity
 	} else {
-		// 509450/509D00: one tablet produces one stone, with the four
+		// On the server, one tablet produces one stone, with the four
 		// exact element grades/amounts named by its reference row.
 		if len(r.Slots) != 5 || r.Quantity != 1 {
 			return out, Refusal(0x10)
@@ -183,8 +183,8 @@ func (c *Catalog) Compound(items []inventory.Item, r ProcessRequest, roll Roll) 
 		if !ok || (!stone && !potion) {
 			return out, Refusal(8)
 		}
-		// 509E4B..509E6A initializes Plus=0 and rolls assimilation only for
-		// stones; the manufacture call at 509EB8 grants ONE output. Potion
+		// The server initializes Plus=0 and rolls assimilation only for
+		// stones; its manufacture call grants ONE output. Potion
 		// tablets use the same five inputs but carry a skill/degree parameter,
 		// not an assimilation distribution or manufactured quantity.
 		var plus uint8
@@ -203,7 +203,7 @@ func (c *Catalog) Compound(items []inventory.Item, r ProcessRequest, roll Roll) 
 }
 
 func stoneAssimilation(ref Reference, roll Roll) (uint8, error) {
-	// Tablet manufacture, 509BC0: parameter 2 only, nonempty distribution.
+	// Tablet manufacture on the server: parameter 2 only, nonempty distribution.
 	values := assimilationValues(ref.Params[1])
 	if len(values) == 0 {
 		return 0, fmt.Errorf("alchemy: missing assimilation distribution %s", ref.Name)

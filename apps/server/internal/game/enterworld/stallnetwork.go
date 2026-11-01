@@ -8,15 +8,15 @@ import (
 )
 
 // OpcodeStallNetworkLeave is the C->S stall-network (vendor-browse) leave
-// request. The ONLY producer is sub_702960 /
+// request. The ONLY producer is client 702960 /
 // CGInterface_SendStallNetworkClose7427, whose body is EMPTY by asm truth:
-// the CanSendOpcode gate (@0x702987), the CMsgStreamBuffer ctor
-// (@0x702998) and the submit (@0x7029ca) run with NO AppendBytes between
+// the CanSendOpcode gate (client @0x702987), the CMsgStreamBuffer ctor
+// (client @0x702998) and the submit (@0x7029ca) run with NO AppendBytes between
 // them. The client sends it from the window-close path only while a browse
-// session is active (sub_69db80 -> StallNetwork_IsActive), then clears the
+// session is active (client 69DB80 -> StallNetwork_IsActive), then clears the
 // active flag ITSELF - it does not wait for any answer.
 //
-// The S->C twin 0xB427 (sub_767260) is a 1-byte sink natively (reads one
+// The S->C twin 0xB427 (client 767260) is a 1-byte sink natively (reads one
 // byte, no side effects) and is NOT folded or wired in the browser rebuild;
 // the byte retail sends is unpinned (analogy-only). So this handler pushes
 // NO reply - the eventguide 0x707B posture - and emitting a guessed 0xB427
@@ -36,7 +36,7 @@ func HandleStallNetworkLeave(character *Character, payload []byte) error {
 		return fmt.Errorf("bootstrap: stallNetworkLeave with no character")
 	}
 	if len(payload) != 0 {
-		return fmt.Errorf("bootstrap: stallNetworkLeave payload %d bytes, native body is empty (sub_702960 appends nothing)", len(payload))
+		return fmt.Errorf("bootstrap: stallNetworkLeave payload %d bytes, native body is empty (client 702960 appends nothing)", len(payload))
 	}
 	return nil
 }

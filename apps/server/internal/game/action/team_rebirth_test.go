@@ -3,9 +3,9 @@
 
 team_rebirth_test.go - tests for the death notice and the team-death rebirth
 
-A death tells its victim its kind (529D6D, 0x37CE on the v1.150 client),
+A death tells its victim its kind (0x37CE on the v1.150 client),
 and a team death (free-battle capes, arena) revives where it fell at any
-level whatever the choice (50FEE0, 5100D6); any other death keeps the
+level whatever the choice (reference server); any other death keeps the
 beginner gate on the present point.
 
 ===========================================================================
@@ -129,7 +129,7 @@ func TestTeamDeathTownRuleSetting(t *testing.T) {
 ================
 TestSessionEndForgetsTheDeathKind
 
-CGObjPC_ResetRuntimeState (4DE9ED, 4DEA23) zeroes the death kind and the
+The reference server's runtime reset zeroes the death kind and the
 last EXP loss with the actor, so a corpse that relogs takes the town rule
 and refunds no earlier loss.
 ================

@@ -36,7 +36,7 @@ func TestUnfinishedQuestDialogueCannotMutateQuest(t *testing.T) {
 TestSideTalkRecordsItsLineThroughFinish
 
 A side-talk row speaks its line once and records it as heard through the
-quest owner (89FDA0's pending bit); a refusal answers the NPC's base line.
+quest owner (the native pending bit); a refusal answers the NPC's base line.
 ================
 */
 func TestSideTalkRecordsItsLineThroughFinish(t *testing.T) {
@@ -282,7 +282,7 @@ func TestQuestOfferPagesTurnBeforeTheQuestion(t *testing.T) {
 ================
 TestQuestOfferAcceptRowAcceptsWithoutAQuestion
 
-QNO_WC_POTION_4's _01 shows one NEXT row and NEXT accepts (897680): no
+QNO_WC_POTION_4's _01 shows one NEXT row and NEXT accepts: no
 yes/no confirm opens, and only that row is answered.
 ================
 */

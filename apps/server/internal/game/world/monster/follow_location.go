@@ -1,7 +1,8 @@
 package monster
 
-// FollowLocationCompatible models only the region-word predicate at v1.188
-// 430CE0..430D34. Outdoor sectors are adjacent in each unsigned byte axis;
+// FollowLocationCompatible models only the region-word predicate in the
+// reference server's sector-adjacency helper. Outdoor sectors are adjacent
+// in each unsigned byte axis;
 // they do not wrap. Both dungeon-tagged words pass this native helper, but
 // that does NOT establish shared dungeon-instance identity or navigation.
 func FollowLocationCompatible(left, right uint16) bool {

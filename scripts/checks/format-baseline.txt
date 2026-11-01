@@ -66,7 +66,6 @@ apps/client-next/src/engine/foundation/gameplay/feedback-levels.ts
 apps/client-next/src/engine/foundation/gameplay/game-options.ts
 apps/client-next/src/engine/foundation/gameplay/guide.ts
 apps/client-next/src/engine/foundation/gameplay/hunting.ts
-apps/client-next/src/engine/foundation/gameplay/inventory-notices.ts
 apps/client-next/src/engine/foundation/gameplay/item-activation.ts
 apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts
 apps/client-next/src/engine/foundation/gameplay/merchant-branches.ts
@@ -82,7 +81,6 @@ apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts
 apps/client-next/src/engine/foundation/gameplay/target-notices.ts
 apps/client-next/src/engine/foundation/gameplay/training.ts
-apps/client-next/src/engine/foundation/gameplay/travel.ts
 apps/client-next/src/engine/foundation/gameplay/vitals.ts
 apps/client-next/src/engine/foundation/gameplay/weather.ts
 apps/client-next/src/engine/foundation/gameplay/whisper-block.ts
@@ -108,7 +106,6 @@ apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
-apps/client-next/src/engine/foundation/ui/action-layout.ts
 apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
@@ -148,10 +145,8 @@ apps/client-next/src/engine/foundation/ui/resource-error.ts
 apps/client-next/src/engine/foundation/ui/retained-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
-apps/client-next/src/engine/foundation/ui/sound-catalog.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
-apps/client-next/src/engine/foundation/ui/unique-banner.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
 apps/client-next/src/engine/foundation/ui/vital-warning.ts
 apps/client-next/src/engine/runtime/assets/worker/entry.ts
@@ -352,7 +347,6 @@ scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
 scripts/build/data/buildGInterfaceSectionsAsset.mjs
-scripts/build/data/buildQuestDataAsset.mjs
 scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/server/serverGameDataArchive.mjs

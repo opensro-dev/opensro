@@ -1,6 +1,6 @@
 package enterworld
 
-// nativeNameAttackContent projects 7F85A0. 84B2F0 installs pointers for
+// nativeNameAttackContent projects client 7F85A0. 84B2F0 installs pointers for
 // these blocks even when their numeric parameters are zero.
 func nativeNameAttackContent(fields []string) bool {
 	if len(fields) <= 68 {

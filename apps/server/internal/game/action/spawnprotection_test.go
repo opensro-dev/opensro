@@ -19,7 +19,7 @@ import (
 ================
 TestRevivalIsUntouchableForSixSeconds
 
-4DF484: a revived player is body mode 2 (untouchable) for 6 s, published to
+Natively a revived player is body mode 2 (untouchable) for 6 s, published to
 the player and its peers, then restored.
 ================
 */

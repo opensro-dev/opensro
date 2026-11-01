@@ -23,7 +23,7 @@ func (rt *Runtime) alchemyBonuses(division string, character *enterworld.Charact
 			}
 		}
 	}
-	// 498E96 adds equipped luca magic values to AD. LUCK (charge protection)
+	// Natively equipped luca magic values add to AD. LUCK (charge protection)
 	// is a different tag and is consumed by the reinforcement rule itself.
 	if character.AvatarInventory != nil {
 		for _, row := range character.AvatarInventory.Rows {

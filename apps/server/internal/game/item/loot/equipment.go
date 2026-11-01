@@ -99,7 +99,7 @@ const (
 	// _RefDropClassSel_Equip and _RareEquip both carry 36).
 	vsroEquipmentWidth = 36
 	// thresholdScale turns a cumulative float32 probability into the
-	// million-roll threshold (7244F0).
+	// million-roll threshold (the server's class-for-level selection).
 	thresholdScale = 1_000_000
 	// negligibleProbability is a class too small to be rolled.
 	negligibleProbability = 0.000001
@@ -167,7 +167,7 @@ func compileClassTable(rows [][]float32, width int) ([][]classThreshold, error) 
 			if p <= negligibleProbability {
 				continue
 			}
-			// float32 accumulation is the native one (7244F0).
+			// float32 accumulation is the native one.
 			cumulative += p
 			sum = float64(cumulative)
 			table[level] = append(table[level], classThreshold{group, uint32(sum * thresholdScale)})
@@ -226,7 +226,7 @@ func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 		b.alternatives[r.Type] = append(b.alternatives[r.Type], uint32(len(b.refs)-1))
 	}
 	if source.Version >= 2 {
-		// selectEquipment walks down from an empty class (724120), so a
+		// selectEquipment walks down from an empty class, so a
 		// class without a v1.150 item is kept when one below it holds items.
 		// The v2 generator zeroes and logs a class with nothing at or below
 		// it; one that reaches the runtime is a broken catalog.
@@ -247,12 +247,12 @@ func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 ================
 equipmentClassStep
 
-Native SR_GameServer 0x00726E60 sets the drop table's class-fallback stride
-(+0x30) to 1 for ordinary equipment (0x00726EE3) and 3 for rare equipment
-(0x00726F19), because rare classes are interleaved [Star, Moon, Sun] per
-degree (G = 3*(D-1) + tier). 0x00724120 subtracts that stride both when a
-class bucket holds no items (0x007241BF) and when a picked item's required
-level exceeds the monster's level (0x007242A4).
+The native server sets the drop table's class-fallback stride (+0x30)
+to 1 for ordinary equipment and 3 for rare equipment, because rare
+classes are interleaved [Star, Moon, Sun] per degree (G = 3*(D-1) +
+tier). The class fallback subtracts that stride both when a class
+bucket holds no items and when a picked item's required level exceeds
+the monster's level.
 ================
 */
 func equipmentClassStep(rare bool) int {
@@ -281,7 +281,7 @@ func (c equipmentCatalog) anyAtOrBelow(group int, rare bool) bool {
 }
 
 // EquipmentGroup preserves float32 accumulation and native lower_bound
-// inclusivity (7244f0 / 72e000). No per-kill table allocation or sorting.
+// inclusivity. No per-kill table allocation or sorting.
 /*
 ================
 EquipmentGroup
@@ -317,7 +317,8 @@ func groupAt(row []classThreshold, roll uint32) (int, bool) {
 ================
 SpecialEquipmentGroup
 
-725600 uses a deterministic level/class map rather than the ordinary chance.
+The server's special-group selection uses a deterministic level/class map
+rather than the ordinary chance.
 Reconstruction: the v1.150-compatible ordinary class row supplies that class;
 selectEquipment retains the native lower-class fallback for unavailable tiers.
 ================
@@ -326,8 +327,9 @@ func SpecialEquipmentGroup(level uint8) (int, bool) {
 	return EquipmentGroup(level, false, 0)
 }
 
-// SelectEquipment implements 724120: weighted assignment, required-level
-// fallback preserving the native type, then inclusive absolute admission.
+// SelectEquipment implements the server's assigned-item selection:
+// weighted assignment, required-level fallback preserving the native type,
+// then inclusive absolute admission.
 // Missing version-specific content is never replaced by an invented item ID.
 /*
 ================

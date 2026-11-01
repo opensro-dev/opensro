@@ -241,7 +241,7 @@ func TestFatalMonsterAttackCommitsAndReturnsDeathProgression(t *testing.T) {
 	if len(pushed) != 0 {
 		t.Fatalf("monster combat invoked an asynchronous character callback: %+v", pushed)
 	}
-	// The EXP loss, then the monster-death notice (kind 4, 529D6D).
+	// The EXP loss, then the monster-death notice (kind 4).
 	if private := privateFramesOf(result); len(private) != 2 || private[0].Opcode != wire.OpExpUpdate ||
 		private[1].Opcode != wire.OpDeathNotice || private[1].Payload[0] != uint8(pk.DeathMonster) {
 		t.Fatalf("same-turn death progression = %+v, want target-only 30D2 then 37CE {4}", private)

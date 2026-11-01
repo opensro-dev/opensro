@@ -89,7 +89,7 @@ func TestBootstrapReRaisesOnlyLiveStillResolvingPetSkillWindowsAfterTheReset(t *
 		t.Fatalf("0x3691 length = %d, want %d", len(got), len(want))
 	}
 	for index, value := range want {
-		if got[index] != int(value) {
+		if got[index] != value {
 			t.Fatalf("0x3691[%d] = 0x%02X, want 0x%02X (payload %v)", index, got[index], value, got)
 		}
 	}

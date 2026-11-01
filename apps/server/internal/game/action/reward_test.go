@@ -45,8 +45,8 @@ func TestMonsterEXPDoesNotSaturateAtSignedDword(t *testing.T) {
 	c := &enterworld.Character{Level: testInt64(4), Masteries: []enterworld.CharacterMastery{{ID: 257, Level: 4}}}
 	target := rewardTestMangnyang()
 	target.Ref.ExpToGive = 3_000_000_000
-	// Three levels below: all factors are exactly one. Native 410352
-	// returns EDX:EAX; 4EA7D9/4EA87C retain that 64-bit lane.
+	// Three levels below: all factors are exactly one. The native formula
+	// returns EDX:EAX; the kill EXP grant retains that 64-bit lane.
 	exp, _ := monsterKillReward(c, target, testCombatRewardLevels())
 	if exp != 3_000_000_000 {
 		t.Fatalf("EXP narrowed before sharing: %d", exp)
@@ -59,7 +59,7 @@ func TestMonsterContributionHasNativeMinimumFraction(t *testing.T) {
 	target.Ref.MaxHP = 1_000_000_000
 	target.Ref.ExpToGive = 1_000_000_000
 	exp, _ := monsterContributionReward(c, target, testCombatRewardLevels(), 1, 1, false)
-	// B45C84 is slightly below 1e-6; the unspilled EXP product truncates
+	// The native constant is slightly below 1e-6; the unspilled EXP product truncates
 	// to 999. Spilling the product to float32 here incorrectly yields 1000.
 	if exp != 999 {
 		t.Fatalf("fraction clamp or premature EXP spill: %d", exp)

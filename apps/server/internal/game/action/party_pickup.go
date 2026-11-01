@@ -12,8 +12,10 @@ package action
 
 import (
 	"math"
+	"slices"
 	"strings"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
@@ -37,8 +39,8 @@ const questAlchemyPrefix = "ITEM_QNO_RM_ARCHEMY"
 ================
 isPersonalQuestPickupItem
 
-ItemTID_IsQuestItem (42FDC0: TypeID1=3, TypeID2=3, TypeID3=9)
-without the ITEM_QNO_RM_ARCHEMY prefix (525DE9, 4D5560, 4D5755).
+The native quest item test (TypeID1=3, TypeID2=3, TypeID3=9)
+without the ITEM_QNO_RM_ARCHEMY prefix.
 ================
 */
 func isPersonalQuestPickupItem(item grounditem.Item) bool {
@@ -49,10 +51,65 @@ func isPersonalQuestPickupItem(item grounditem.Item) bool {
 
 /*
 ================
+partyShareRoster
+
+The share lanes' slice of the reward roster: the picker and its party
+members, resolved with the roster's own eligibility (deletion and
+presence over the division list, read inside the same read door), but
+without materializing every other character in the division four
+times per pickup (#2030). Only actors are built; the participant
+list stays empty and no settlement ever receives this roster.
+================
+*/
+func (rt *Runtime) partyShareRoster(division string, self *enterworld.Character) rewardRoster {
+	r := rewardRoster{division: division, actors: map[uint32]rewardActor{}}
+	if self == nil {
+		return r
+	}
+	selfGID := enterworld.ObjectIDForCharacter(self)
+	var party *RewardParty
+	if rt.RewardParties != nil {
+		parties := rt.RewardParties(division)
+		// The last listing wins, as the full roster's member map has it.
+		for i := range parties {
+			if slices.Contains(parties[i].Members, selfGID) {
+				party = &parties[i]
+			}
+		}
+	}
+	wanted := map[uint32]bool{selfGID: true}
+	if party != nil {
+		for _, gid := range party.Members {
+			wanted[gid] = true
+		}
+	}
+	// The division list is taken before the read door, exactly as the
+	// full roster takes it: the store read lock must not nest.
+	characters := rt.deps.CharactersForDivision(division)
+	rt.deps.Read(division, func() {
+		for _, c := range characters {
+			if c == nil || c.DeletePending {
+				continue
+			}
+			gid := enterworld.ObjectIDForCharacter(c)
+			if !wanted[gid] {
+				continue
+			}
+			if rt.RewardActorPresent != nil && !rt.RewardActorPresent(division, c.Name) {
+				continue
+			}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: party}
+		}
+	})
+	return r
+}
+
+/*
+================
 partyPickupRecipient
 
-Server 525F5F..52606F: item-share bit, rotating member alive (life byte 1,
-525FAE), same packed world, 3D distance <= 1000; fallback is the picker. Quest items stay personal,
+The reference server: item-share bit, rotating member alive (life byte 1),
+same packed world, 3D distance <= 1000; fallback is the picker. Quest items stay personal,
 except the native alchemy prefix.
 ================
 */
@@ -63,12 +120,13 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 	if isPersonalQuestPickupItem(item) {
 		return picker
 	}
-	roster := rt.monsterRewardRoster(division, picker, nowMs)
+	roster := rt.partyShareRoster(division, picker)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(picker)]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
 		return picker
 	}
-	from := monster.Pose{RegionID: origin.pose.RegionID, X: origin.pose.X, Y: origin.pose.Y, Z: origin.pose.Z}
+	originPose := rt.rewardActorPose(division, origin, nowMs)
+	from := monster.Pose{RegionID: originPose.RegionID, X: originPose.X, Y: originPose.Y, Z: originPose.Z}
 	for range origin.party.Members {
 		gid := rt.NextPartyLootMember(division, picker.Name)
 		candidate, found := roster.actors[gid]
@@ -76,7 +134,8 @@ func (rt *Runtime) partyPickupRecipient(division string, picker *enterworld.Char
 			!enterworld.CharacterAlive(candidate.character) {
 			continue
 		}
-		to := monster.Pose{RegionID: candidate.pose.RegionID, X: candidate.pose.X, Y: candidate.pose.Y, Z: candidate.pose.Z}
+		candidatePose := rt.rewardActorPose(division, candidate, nowMs)
+		to := monster.Pose{RegionID: candidatePose.RegionID, X: candidatePose.X, Y: candidatePose.Y, Z: candidatePose.Z}
 		x, y, z := monster.NativeActorRelative(from, to)
 		squared := float32(float64(x)*float64(x) + float64(y)*float64(y) + float64(z)*float64(z))
 		if math.Sqrt(float64(squared)) <= sharedLootRange {
@@ -100,24 +159,25 @@ type goldShare struct {
 ================
 partyGoldShares
 
-CGObjPC_CreditPickedUpGold (4EACA0) and CParty_DistributeGold (5BC7F0): with
+The reference server's picked-up gold credit and party gold split: with
 the item-share option set, the heap the rotation handed to recipient is split
 among the recipient and every party member, in party-list order, who is
 online, in the recipient's world and within 1000 of the recipient
-(CParty_IsWithinShareRange: 3D, float32 sum of squares, <= 1000.0). Life is
+(3D, float32 sum of squares, <= 1000.0). Life is
 not checked. share = amount / n and the recipient also takes amount % n;
 when share is 0 the recipient takes the whole heap. Returns nil when no
 split applies (no party, option clear).
 ================
 */
 func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Character, amount uint32, nowMs int64) []goldShare {
-	roster := rt.monsterRewardRoster(division, recipient, nowMs)
+	roster := rt.partyShareRoster(division, recipient)
 	self := enterworld.ObjectIDForCharacter(recipient)
 	origin, found := roster.actors[self]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
 		return nil
 	}
-	from := monster.Pose{RegionID: origin.pose.RegionID, X: origin.pose.X, Y: origin.pose.Y, Z: origin.pose.Z}
+	originPose := rt.rewardActorPose(division, origin, nowMs)
+	from := monster.Pose{RegionID: originPose.RegionID, X: originPose.X, Y: originPose.Y, Z: originPose.Z}
 	var eligible []*enterworld.Character
 	for _, gid := range origin.party.Members {
 		member, ok := roster.actors[gid]
@@ -125,7 +185,8 @@ func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Charac
 			continue
 		}
 		if gid != self {
-			to := monster.Pose{RegionID: member.pose.RegionID, X: member.pose.X, Y: member.pose.Y, Z: member.pose.Z}
+			memberPose := rt.rewardActorPose(division, member, nowMs)
+			to := monster.Pose{RegionID: memberPose.RegionID, X: memberPose.X, Y: memberPose.Y, Z: memberPose.Z}
 			if member.world != origin.world || !withinGoldShareRange(from, to) {
 				continue
 			}
@@ -155,7 +216,7 @@ func (rt *Runtime) partyGoldShares(division string, recipient *enterworld.Charac
 ================
 withinGoldShareRange
 
-CParty_IsWithinShareRange (5BDB30): the squared distance is stored as
+The native share range test: the squared distance is stored as
 float32 before the square root, and an unordered result is refused.
 ================
 */
@@ -172,8 +233,8 @@ inSharedLootParty
 Whether c is in a live party whose item-share option bit (0x02) is set.
 ================
 */
-func (rt *Runtime) inSharedLootParty(division string, c *enterworld.Character, nowMs int64) bool {
-	roster := rt.monsterRewardRoster(division, c, nowMs)
+func (rt *Runtime) inSharedLootParty(division string, c *enterworld.Character) bool {
+	roster := rt.partyShareRoster(division, c)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(c)]
 	return found && origin.party != nil && origin.party.Options&sharedLootOption != 0
 }
@@ -204,8 +265,8 @@ routeSharedPickup
 
 Movement/action completion belongs to the picker; inventory, currency and
 quest receipts belong to the awarded member. Public scoop/despawn is shared.
-When a player pickup's rotated recipient has a full bag, CPlayer_ExecuteGroundPickup
-(526343..5263B2) sends 0x1807 (ErrCodeStorageFull) to the recipient and
+When a player pickup's rotated recipient has a full bag, the native ground pickup
+sends 0x1807 (ErrCodeStorageFull) to the recipient and
 returns 0x18DA (ErrCodePartyInventoryFull) to the picker.
 
 The awarded member may never have seen the drop, so its receipts lead with
@@ -251,18 +312,18 @@ func (rt *Runtime) routeSharedPickup(result OpResult, g pickupGrant) OpResult {
 ================
 partyLootNotice
 
-CParty_BroadcastLootNotice (5BDC80): after a granted pickup in a party
+The reference server's party loot notice: after a granted pickup in a party
 whose item-share option is set, every member learns what the recipient got.
-Gold never announces: CPlayer_ExecuteGroundPickup keeps the object's
-is-gold slot (vtable +0x7C, stored at 5262AA) and skips the call when it
-is set (5263C8).
+Gold never announces: the native ground pickup keeps the object's
+is-gold slot (vtable +0x7C) and skips the call when it
+is set.
 ================
 */
-func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item, nowMs int64) []RecipientFrames {
+func (rt *Runtime) partyLootNotice(division string, picker, recipient *enterworld.Character, item grounditem.Item) []RecipientFrames {
 	if item.IsGold() {
 		return nil
 	}
-	roster := rt.monsterRewardRoster(division, picker, nowMs)
+	roster := rt.partyShareRoster(division, picker)
 	origin, found := roster.actors[enterworld.ObjectIDForCharacter(picker)]
 	if !found || origin.party == nil || origin.party.Options&sharedLootOption == 0 {
 		return nil

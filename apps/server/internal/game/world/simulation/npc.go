@@ -9,7 +9,7 @@ import (
 )
 
 // NpcDef is one roster NPC. TidWord is the RE-pinned RefObj typeflag word the
-// client's sub_851420 cascade classifies as NPC (0x0146 for the probe row).
+// client's GIDObject_SelectRuntimeClassAndSpawn cascade classifies as NPC (0x0146 for the probe row).
 type TeleportGateBounds struct {
 	FortressID uint32  `json:"fortressId,omitempty"`
 	Radius     float64 `json:"radius"`
@@ -69,7 +69,7 @@ type NpcDef struct {
 	RebirthPoint Spawn
 	// NpcTalkStoreGroups is the v1.150 refshopgroup -> refmappingshopgroup
 	// -> refmappingshopwithtab -> refshoptab media chain projected into the
-	// exact rows consumed by client sub_5d5be0. It belongs beside the roster
+	// exact rows consumed by client CIFNPCTalk_AppendStoreTabRows. It belongs beside the roster
 	// row because both are RefObj/PK2 bootstrap data, not packet policy.
 	NpcTalkStoreGroups []NpcTalkStoreGroup
 }
@@ -190,7 +190,7 @@ func NpcShopSpawn() Spawn {
 // Patrol tuning (server.mjs missionNpcPatrolSpanZ / missionNpcPatrolStepPerTick).
 // The pattern is fixture policy - each NPC ping-pongs between its spawn point
 // and +20u on Z at 5u per coarse tick - but the emitted 0x30E3 bytes are
-// asm-pinned (sub_775cb0) and must match the reference builder exactly.
+// asm-pinned (client CPSMission_OnEntitySpeedMode0x30E3) and must match the reference builder exactly.
 const (
 	NpcPatrolSpanZ       = 20.0
 	NpcPatrolStepPerTick = 5.0
@@ -210,9 +210,9 @@ type PatrolState struct {
 //
 // THE HEADING WAS MIRRORED UNTIL NOW, AND THE PARITY FIXTURE PINNED THE MIRROR.
 // This function used to document and emit "+z -> 0, -z -> pi". Native is the
-// opposite: yaw 0 faces -Z (Math_YawToDirVec sub_8788c0 = {sin(yaw), 0,
-// -cos(yaw)}, cos negation at 0x8788f0; Math_DirVecToYaw sub_8791a0 inverts as
-// acos(-z/len) mirrored for x<0, negation at 0x8791f7 - REV's binary pin, board
+// opposite: yaw 0 faces -Z (Math_YawToDirVec client Vec3_FromYaw = {sin(yaw), 0,
+// -cos(yaw)}, cos negation at client 0x8788f0; Math_DirVecToYaw Vec3_NormalizeAndCalculateYaw inverts as
+// acos(-z/len) mirrored for x<0, negation at client 0x8791f7 - REV's binary pin, board
 // seq742). This patrol is pure +/-Z travel, and +/-Z is exactly where the
 // mirror is a FULL pi rather than a partial error, so NPC_EU_SMITH faced
 // exactly backwards on both legs, always - the same defect class as BUG-11 on
@@ -294,10 +294,10 @@ func NpcStation(npc NpcDef, anchor Spawn) Spawn {
 	}
 }
 
-// BuildNpcCreateRow encodes one object-list create row (sub_777220 ->
-// CICNPC sub_8625f0), byte-for-byte the reference buildV150NpcCreateRow:
-// RefObjID, the shared sub_85fb20 object block (object id, region, xyz,
-// heading, packed movement, speeds, ref count), then the sub_859d40 name
+// BuildNpcCreateRow encodes one object-list create row (client CPSMission_DeserializeObjectSpawn ->
+// CICNPC CICNPC_InitializeAppearanceAndSpawn), byte-for-byte the reference buildV150NpcCreateRow:
+// RefObjID, the shared client CICharactor_DeserializeSpawnData object block (object id, region, xyz,
+// heading, packed movement, speeds, ref count), then the client CICharactor_DeserializeTalkOrShopOptions name
 // mask + name. Rides the 0x3417 object-list chunk (bootstrap) - the
 // consumer wraps it.
 func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
@@ -339,7 +339,7 @@ func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
 		U8(0).
 		U8(0).
 		U8(0).
-		// +0x24c walk-speed / +0x250 run-speed sources (sub_85fb20).
+		// +0x24c walk-speed / +0x250 run-speed sources (client CICharactor_DeserializeSpawnData).
 		F32(float32(walkSpeed)).
 		F32(float32(runSpeed)).
 		// +0x4d8 scale source: the client computes 100.0/value with an fld
@@ -351,6 +351,26 @@ func BuildNpcCreateRow(npc NpcDef, anchor Spawn) []byte {
 	name := []byte(npc.Name)
 	w.U16(uint16(len(name))).Bytes(name)
 	return w.Payload()
+}
+
+/*
+================
+npcPatrolCount
+
+How many roster NPCs patrol. The frame builders size their slice by it:
+the world roster is every authored NPC and few or none patrol, so a
+slice sized to the roster cost every session an allocation per tick for
+frames it never held (#1820 part C).
+================
+*/
+func npcPatrolCount(roster []NpcDef) int {
+	count := 0
+	for index := range roster {
+		if roster[index].Patrol {
+			count++
+		}
+	}
+	return count
 }
 
 // npcPatrolPose converts a PatrolState into the shared wire position.
@@ -367,7 +387,11 @@ func npcPatrolPose(state PatrolState) wire.Position {
 // NpcMoveFrames is one 0x30E3 source move per roster NPC for the given tick
 // (the entity-tick payload the reference npc-tick pull seam served).
 func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -390,7 +414,11 @@ func NpcMoveFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 // snaps the remote entity onto the server's canonical track (the lenient
 // PathCtl re-seed the native runs).
 func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -409,7 +437,7 @@ func NpcCorrectionFrames(roster []NpcDef, anchor Spawn, tick int64) []Frame {
 }
 
 // NpcMoveStateFrames is one 0x3122 run/walk refresh per roster NPC: run on
-// odd ticks, walk on even ticks (sub_858450 mode 3 = run, 2 = walk), so the
+// odd ticks, walk on even ticks (client CICharactor_ApplyMovementMode mode 3 = run, 2 = walk), so the
 // packet is a real state CHANGE. On-demand exercise seam in the reference
 // (npc-state pull), not part of the periodic entity tick.
 func NpcMoveStateFrames(roster []NpcDef, tick int64) []Frame {
@@ -421,7 +449,11 @@ func NpcMoveStateFrames(roster []NpcDef, tick int64) []Frame {
 }
 
 func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
-	frames := make([]Frame, 0, len(roster))
+	patrols := npcPatrolCount(roster)
+	if patrols == 0 {
+		return nil
+	}
+	frames := make([]Frame, 0, patrols)
 	for index := range roster {
 		if !roster[index].Patrol {
 			continue
@@ -437,8 +469,8 @@ func npcMoveStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 }
 
 // NpcLifeStateFrames is one 0x3122 life refresh per roster NPC: revive on odd
-// ticks, kill on even ticks (sub_777b60 life value 1/2), exercising both real
-// timer paths (death arms sub_a00b30, revive clears via sub_a00980).
+// ticks, kill on even ticks (client CPSMission_OnEntityStateUpdate0x3122 life value 1/2), exercising both real
+// timer paths (death arms client CIObject_ScheduleStateTimer, revive clears via CIObject_ClearStateTimer).
 // On-demand exercise seam like NpcMoveStateFrames.
 func NpcLifeStateFrames(roster []NpcDef, tick int64) []Frame {
 	value := wire.LifeStateDead
@@ -465,7 +497,7 @@ func npcStateFrames(roster []NpcDef, channel, value uint8) []Frame {
 }
 
 // NpcDespawnFrames is one 0x36AB despawn per roster NPC (the same 4-byte gid
-// wire the pickup path sends; sub_777310 -> vt+0x4c). The trigger seam is the
+// wire the pickup path sends; client CPSMission_OnEntityDespawn36AB -> vt+0x4c). The trigger seam is the
 // caller's - session exit or out-of-range removal.
 func NpcDespawnFrames(roster []NpcDef) []Frame {
 	frames := make([]Frame, 0, len(roster))

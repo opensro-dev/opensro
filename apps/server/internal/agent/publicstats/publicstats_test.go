@@ -375,6 +375,9 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		return []chatfeed.Line{{At: time.UnixMilli(1000), Kind: chatfeed.KindChat, Character: "Kekw", Author: "Kekw", Text: "hi"},
 			{At: time.UnixMilli(2000), Kind: chatfeed.KindNotice, Text: "Maintenance"}}
 	}
+	s.src.Events = func() []chatfeed.Line {
+		return []chatfeed.Line{{At: time.UnixMilli(3000), Kind: chatfeed.KindEvent, Text: "Kekw got a Seal of Star"}}
+	}
 	// A guild with a union partner and a fortress, so every optional field meets the schema.
 	s.src.Guilds = func() []GuildEntry {
 		return []GuildEntry{{ID: 1, Name: "Silk", Level: 2, Members: []GuildEntryMember{{CharID: 1}}, Union: []int64{2}, Fortress: "jangan",
@@ -398,6 +401,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/schedule":             "/public/v1/schedule",
 		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
 		"/public/v1/chat":                 "/public/v1/chat",
+		"/public/v1/events":               "/public/v1/events",
 		"/public/v1/guilds":               "/public/v1/guilds?q=s",
 	}
 	if len(endpoints) != len(samples) {

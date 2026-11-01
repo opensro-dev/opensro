@@ -3,8 +3,8 @@
 
 actionspeed.go - the native action-speed publication
 
-Server 4AA530 publishes parameter 8C separately from movement. The v1.150
-client consumes this layout at 775EB0 under opcode 3453.
+The reference server publishes parameter 8C separately from movement. The
+v1.150 client consumes this layout at 775EB0 under opcode 3453.
 
 ===========================================================================
 */

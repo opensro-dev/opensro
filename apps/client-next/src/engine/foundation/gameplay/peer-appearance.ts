@@ -13,7 +13,7 @@ import { sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import { equipmentHoldType } from "./name-color";
 import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
 import type { EntityEquipment, EntityState } from "@/engine/contracts/world";
-// Native sub_868a80 slot table; wire authority: server/item/wire/playerspawnrow.go.
+// Native ItemRecord_GetEquipSlotIndex slot table; wire authority: server/item/wire/playerspawnrow.go.
 /*
 ================
 equipmentBand
@@ -36,9 +36,10 @@ export function equipmentSlot( t: number ) {
 	if ( group === 7 ) return 8;
 	return -1;
 }
-// TransformSkin_WriteBlock (4DD6B0) after the RefObj: a player skin (TID
+// The transform-skin block written after the RefObj: a player skin (TID
 // 1/1, a Duplicate) carries a discarded byte and the copied worn items;
-// 85C060 dresses only equipment-band items with a slot, at plus 0.
+// CICharactor_ApplyTransformationSkin (client @0x0085c060) dresses only
+// equipment-band items with a slot, at plus 0.
 /*
 ================
 transformSkinTail

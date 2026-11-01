@@ -195,9 +195,45 @@ variable "cap110_set_bonuses" {
   default = "off"
 }
 
+# Port-only, not native: the degree-11 equipment and skill tiers (#1745),
+# consumed at build time by the variant build's import tools; the
+# GameWorld reads neither at runtime.
+variable "cap110_items" {
+  type    = string
+  default = "off"
+}
+
+variable "cap110_skills" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the optional Pharaoh Tomb 1-3 population. It needs
 # cap110_monsters on as well; GameWorld refuses to start otherwise.
 variable "pharaoh_tomb" {
+  type    = string
+  default = "off"
+}
+
+# Port-only, not native: the optional Qin-Shi tomb upper-floor population
+# (#1800). It needs cap110_monsters on as well; GameWorld refuses to start
+# otherwise.
+variable "cap110_qinshi" {
+  type    = string
+  default = "off"
+}
+
+# Port-only, not native: the temple band instances (#1800 step 3). It
+# needs cap110_monsters on as well; GameWorld refuses to start otherwise.
+variable "cap110_temple" {
+  type    = string
+  default = "off"
+}
+
+# Port-only, not native: the name-change scroll (#1689) - the Item Mall
+# lists it for 500 silk and a use queues a rename for the next login.
+# "off" is native: names never change.
+variable "name_change_scroll" {
   type    = string
   default = "off"
 }
@@ -207,6 +243,25 @@ variable "pharaoh_tomb" {
 variable "pharaoh_tomb_gear_rate" {
   type    = string
   default = "1"
+}
+
+# Port-only, not native: the Halloween Day event. "off" is native. "on" needs
+# halloween_event_window, START/END in UTC; without a valid window it stays off.
+variable "halloween_event" {
+  type    = string
+  default = "off"
+}
+
+variable "halloween_event_window" {
+  type    = string
+  default = ""
+}
+
+# Port-only, not native: seals the event's helmets at every transfer door.
+# Stays on after the event ends, so they stay with whoever earned them.
+variable "halloween_helmet_seal" {
+  type    = string
+  default = "off"
 }
 
 # beta_silk is the silk one in-world hour earns into the account's real Item
@@ -397,6 +452,15 @@ variable "most_wanted_bounty_transfer" {
 # after every counted kill (port-only, not native; owner decision
 # 2026-10-24). "off" says nothing until a new wanted level.
 variable "most_wanted_streak_notice" {
+  type    = string
+  default = "off"
+}
+
+# most_wanted_cos_kills counts a job kill delivered on a companion for
+# Most Wanted like a player kill, credited to the companion's owner
+# (port-only, not native; owner decision 2026-10-28). "off", the
+# default, is native.
+variable "most_wanted_cos_kills" {
   type    = string
   default = "off"
 }
@@ -634,6 +698,15 @@ variable "trade_job_hunter_percent_cap" {
   default = "60"
 }
 
+# raised_gold_caps raises the stall price cap to ten billion and the
+# warehouse gold deposit cap to one billion (port-only, not native).
+# Anything but "on" keeps the native caps (one billion and one hundred
+# million) and the native u32 stall-offer wire.
+variable "raised_gold_caps" {
+  type    = string
+  default = "off"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 # On, the destinations are the VSRO client's refoptionalteleport table when
@@ -729,6 +802,17 @@ variable "beta_growth_bands" {
   default = ""
 }
 
+# whisper_job_alias arms the port-only job-alias whisper rules (#1982;
+# owner, 2026-10-28: default ON): a whisper typed to a dressed player's
+# job alias resolves to them, and the whisper block list also matches a
+# dressed sender's alias. "off" restores the native name-only whisper
+# resolution. The alias/name collision refusals are unconditional and
+# not behind this switch.
+variable "whisper_job_alias" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_skill_exp_rate" {
   type    = string
   default = "1"
@@ -759,6 +843,16 @@ variable "beta_drop_mix" {
 # "tab:item:price,..." is an operator list; "off" is the v1.150 stock.
 # A malformed value stops GameWorld at boot.
 variable "shop_extra_goods" {
+  type    = string
+  default = "on"
+}
+
+# jangan_alchemy_shop renames Jangan's grocer "OpenSRO Alchemy - Jangan"
+# and regroups the extra-goods alchemy stock onto three tabs (port-only,
+# not native; owner decision 2026-10-28, #1850). It acts only while
+# shop_extra_goods is "on"; "off" restores the native name and tabs.
+# A malformed value stops GameWorld at boot.
+variable "jangan_alchemy_shop" {
   type    = string
   default = "on"
 }
@@ -836,6 +930,15 @@ variable "job_goods_teleport" {
   default = "off"
 }
 
+# thief_cart_town_areas stops a thief's transport at the town walls that
+# regioninfo.txt places in battlefield regions, not only at a town's
+# protected regions (port-only, not native; owner decision 2026-10-28,
+# #1985). "off" is native. A malformed value stops GameWorld at boot.
+variable "thief_cart_town_areas" {
+  type    = string
+  default = "on"
+}
+
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
 # attribute stones out of every monster drop (port-only, not native, beta
 # balance; owner 2026-10-13): players buy them from the Jangan shops. "off"
@@ -875,14 +978,6 @@ variable "beta_drop_cap" {
 variable "beta_gold_rate" {
   type    = string
   default = "1"
-}
-
-# instant_inventory_expansion makes quest bag slots usable at the turn-in
-# (port-only, not native: v1.150 learns its bag size at world entry). The
-# owner approved it on for the beta; "off" restores the native wait.
-variable "instant_inventory_expansion" {
-  type    = string
-  default = "on"
 }
 
 variable "beta_rare_rate" {
@@ -1014,9 +1109,22 @@ variable "cpu" {
   default = 6000
 }
 
+# The live shard keeps about 560 MB of heap and 970 MB of runtime memory
+# (2026-10-28, #1943). At 1024 the soft limit below (768MiB) sat under
+# that: the collector ran about once a second, its assists and write
+# barriers landing on the tick, with RSS 800 MB of a 1024 MB cgroup.
+# 3072 gives a 2304MiB soft limit and room for GOGC below to work.
 variable "memory_mb" {
   type    = number
-  default = 1024
+  default = 3072
+}
+
+# GOGC for the GameWorld (owner decision 2026-10-28, #1943): 200 lets
+# the heap grow to three times the live set between collections, half
+# as many cycles as Go's default 100, still bounded by GOMEMLIMIT.
+variable "gogc" {
+  type    = string
+  default = "200"
 }
 
 # sro-nomad replaces __SHARD_ID__ with the validated catalog ID before
@@ -1128,6 +1236,7 @@ job "sro-gameworld-__SHARD_ID__" {
         # references): the collector then ran almost without pause and took
         # 82% of 3.6 cores with one player online.
         GOMEMLIMIT                              = "${floor(var.memory_mb * 3 / 4)}MiB"
+        GOGC                                    = var.gogc
         SRO_SHARD_CATALOG_PATH                  = var.catalog_path
         SRO_SHARD_ID                            = var.shard_id
         SRO_AGENT_URL_REQUIRE                   = "1"
@@ -1150,8 +1259,16 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_MONSTERS                = var.cap110_monsters
         SRO_CAP110_LEVEL100                = var.cap110_level100
         SRO_CAP110_SET_BONUSES             = var.cap110_set_bonuses
+        SRO_CAP110_ITEMS                   = var.cap110_items
+        SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
+        SRO_CAP110_QINSHI                  = var.cap110_qinshi
+        SRO_CAP110_TEMPLE                  = var.cap110_temple
+        SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
+        SRO_HALLOWEEN_EVENT                = var.halloween_event
+        SRO_HALLOWEEN_EVENT_WINDOW         = var.halloween_event_window
+        SRO_HALLOWEEN_HELMET_SEAL          = var.halloween_helmet_seal
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
@@ -1170,6 +1287,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_TEST_BOUNTY             = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER         = var.most_wanted_bounty_transfer
         SRO_MOST_WANTED_STREAK_NOTICE           = var.most_wanted_streak_notice
+        SRO_MOST_WANTED_COS_KILLS               = var.most_wanted_cos_kills
         SRO_TRADE_TIERS                         = var.trade_tiers
         SRO_TELEPORT_GRACE                      = var.teleport_grace
         SRO_PREMIUM_UPGRADE                     = var.premium_upgrade
@@ -1209,6 +1327,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_JOB_TRADER_PERCENT_CAP        = var.trade_job_trader_percent_cap
         SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER = var.trade_job_hunter_percent_per_trader
         SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
+        SRO_RAISED_GOLD_CAPS                    = var.raised_gold_caps
         SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
         SRO_GM_SETSPEED                         = var.gm_setspeed
         SRO_GM_TRAINING_DUMMY                   = var.gm_training_dummy
@@ -1220,10 +1339,10 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ATTACK_PET_EXPANSION                = var.attack_pet_expansion
         SRO_BETA_GROWTH                         = var.beta_growth
         SRO_BETA_GROWTH_BANDS                   = var.beta_growth_bands
+        SRO_WHISPER_JOB_ALIAS                   = var.whisper_job_alias
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
-        SRO_INSTANT_INVENTORY_EXPANSION         = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only
@@ -1236,6 +1355,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_DROP_CAP                       = var.beta_drop_cap
         SRO_BETA_DROP_MIX                       = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS                    = var.shop_extra_goods
+        SRO_JANGAN_ALCHEMY_SHOP                 = var.jangan_alchemy_shop
         SRO_MALL_EXTRA_GOODS                    = var.mall_extra_goods
         SRO_ALCHEMY_NO_ASSIMILATION             = var.alchemy_no_assimilation
         SRO_CARAVAN_BANDIT_CAP                  = var.caravan_bandit_cap
@@ -1244,6 +1364,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRANSPORT_FOLLOW                    = var.transport_follow
         SRO_TRANSPORT_FOLLOW_TETHER             = var.transport_follow_tether
         SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
+        SRO_THIEF_CART_TOWN_AREAS               = var.thief_cart_town_areas
         SRO_ELIXIR_DROPS_OFF                    = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF          = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9              = var.beta_shop_only_degree9
@@ -1252,6 +1373,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALEXANDRIA                          = var.alexandria
         SRO_PUBLIC_API_ADDR                     = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH               = "${NOMAD_SECRETS_DIR}/public-api-token"
+        SRO_STAFF_WEBHOOK_PATH                  = "${NOMAD_SECRETS_DIR}/staff-webhook"
         TRANSPORT_WT_ADDR                       = var.transport_wt_addr != "" ? var.transport_wt_addr : "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                       = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                      = var.cert_dir
@@ -1290,6 +1412,22 @@ EOH
 EOH
 
         destination = "secrets/public-api-token"
+        change_mode = "noop"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      # The staff Discord webhook for ops-only alerts (the served
+      # WebTransport pair, #1447). index, as above: absent renders empty,
+      # and the GameWorld then only logs. It reads the file at every post,
+      # so a rotated webhook applies without a restart.
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ index . "staff_discord_webhook" }}{{ end }}
+EOH
+
+        destination = "secrets/staff-webhook"
         change_mode = "noop"
         perms       = "0600"
         uid         = var.task_uid

@@ -16,8 +16,8 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
-// 596004 tests two bits per parameter: 4+1 0xAE, 4+2 0xAF, 8+1 0xB0,
-// 8+2 0xB1. Bits here are post-parse (588C3B / 588C52 already applied).
+// Natively two bits are tested per parameter: 4+1 0xAE, 4+2 0xAF, 8+1 0xB0,
+// 8+2 0xB1. Bits here are post-parse (the parse's adjustments already applied).
 func TestOdarWritesFollowBitPairs(t *testing.T) {
 	for _, tc := range []struct {
 		bits uint32
@@ -57,7 +57,7 @@ func TestBuffModifierWordsAreUnsigned(t *testing.T) {
 ================
 TestHrWritesHitRatePercentThenFlat
 
-594AC0 files hr on parameter 11: word 1 in the percent-sum channel, then
+The buff installer files hr on parameter 11: word 1 in the percent-sum channel, then
 word 0 flat, both unsigned. An item program that already files the block
 owns it, so the skill-side copy is dropped.
 ================

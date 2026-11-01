@@ -42,7 +42,7 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 // and 6), not experimental stages.
 //
 // Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
-// native client authored (sub_4dc920 start/end): the same start/end
+// native client authored (EnvironmentVectorTrack_SampleAtTime start/end): the same start/end
 // uniforms drive an exp2 falloff with a height term and a horizon tint,
 // which keeps the mid-range clear, softens the horizon and lets peaks
 // rise out of the haze. Off, the retail linear ramp and colours stand.

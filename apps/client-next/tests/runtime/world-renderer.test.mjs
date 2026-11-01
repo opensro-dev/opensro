@@ -77,6 +77,66 @@ test("retail object visibility advances offscreen and with a stationary camera, 
 	assert.equal( world.prepare( geometry, textures, 1, 3 ).draws.length, 0 );
 	world.dispose( geometry, textures );
 });
+
+test("texture motion accumulates within a scene, restarts on rebuild, and survives device loss", () => {
+	const world = createWorldRenderer(), transforms = [];
+	const geometry = {
+		upload: () => ({ instanceCount: 1 }),
+		release() {},
+		updateInstances: draw => draw,
+		/*
+		================
+		updateTextureTransform
+		================
+		*/
+		updateTextureTransform( draw, matrix ) {
+			transforms.push( [ ...matrix ] );
+		}
+	};
+	const textures = { upload: () => ({}), release() {} };
+	// A rebuilt scene is a new object with the same deterministic group id
+	// and the same authored velocity: exactly what re-entering a region
+	// hands the renderer.
+	const visit = () => {
+		const value = scene( "fountain" );
+		value.groups[0].material.uvVelocity = [ .25, -.5, .75, 1, -2, 3 ];
+		return value;
+	};
+	const identity8 = [ 1, 0, 0, 0, 0, 1, 0, 0 ],
+		halfSecond = [ 1.125, .375, -1, 0, -.25, 1.5, 1.5, 0 ],
+		oneSecond = [ 1.25, .75, -2, 0, -.5, 2, 3, 0 ];
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 10 );
+	assert.deepEqual( transforms.at( -1 ), identity8, "a spawned instance starts at identity" );
+	world.prepare( geometry, textures, 1, 10.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond );
+	world.prepare( geometry, textures, 1, 11 );
+	assert.deepEqual( transforms.at( -1 ), oneSecond, "the matrix keeps accumulating in the scene" );
+	// Leaving and re-entering: the rebuilt scene respawns the instance.
+	world.scene( null );
+	world.prepare( geometry, textures, 1, 11.5 );
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 12 );
+	assert.deepEqual(
+		transforms.at( -1 ),
+		identity8,
+		"leaving and re-entering restarts the transform instead of keeping the shear"
+	);
+	world.prepare( geometry, textures, 1, 12.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond, "the new instance accumulates from identity" );
+	// A recomposition (a region crossing rebuilds the scene around the same
+	// resident groups) is a respawn too, not a continuation.
+	world.scene( visit() );
+	world.prepare( geometry, textures, 1, 13 );
+	assert.deepEqual( transforms.at( -1 ), identity8, "a scene rebuild restarts the transform" );
+	world.prepare( geometry, textures, 1, 13.5 );
+	assert.deepEqual( transforms.at( -1 ), halfSecond );
+	// Device loss re-commits the identical scene object: same visit, same clock.
+	world.invalidate();
+	world.prepare( geometry, textures, 1, 14 );
+	assert.deepEqual( transforms.at( -1 ), oneSecond, "device loss keeps the resident clock's phase" );
+	world.dispose( geometry, textures );
+});
 /*
 ================
 scene
@@ -955,12 +1015,13 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	assert.ok( edge.length );
 	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( lastIndexCount, 1536 );
-	// Cross the LOD boundary while looking away. Terrain is chosen by eye cell,
-	// not by view (the GPU clips what is behind), so the crossing stitches the
-	// edge at once and turning back changes nothing.
+	// Cross the LOD boundary while looking away. The eye cell chooses the
+	// LOD and the frustum culls the ranges turned away from (A2D1B0), so
+	// the crossing submits nothing and stitches nothing; turning back
+	// stitches the edge at once and changes nothing else.
 	world.camera( { eye: [ -960, 500, 10 ], target: [ -2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-	assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
-	assert.ok( edge.every( i => positions[i] === 10 ) );
+	assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
+	assert.ok( edge.every( i => positions[i] === 0 ) );
 	assert.equal( prepare( -960 ), draw );
 	assert.ok( edge.every( i => positions[i] === 10 ) );
 	const writes = [ indexWrites, positionWrites ];
@@ -977,7 +1038,7 @@ test("LOD selection keeps GPU resources and restores stitched edge heights", asy
 	}
 	for ( const [x, height] of [ [ -960, 10 ], [ -1280, 0 ], [ -960, 10 ] ] ) {
 		world.camera( { eye: [ x, 500, 10 ], target: [ x - 2000, 500, 10 ], fov: Math.PI / 3, near: 1, far: 5000 } );
-		assert.equal( world.prepare( geometry, images, 1 ).draws[0], draw );
+		assert.equal( world.prepare( geometry, images, 1 ).draws.length, 0 );
 		assert.equal( prepare( x ), draw );
 		assert.ok( edge.every( i => positions[i] === height ) );
 	}

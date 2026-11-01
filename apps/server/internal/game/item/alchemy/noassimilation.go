@@ -3,9 +3,9 @@
 
 noassimilation.go - stones without assimilation (port-only, not native)
 
-Natively a successful stone may then assimilate (assimilate; 5035D9 for
-attribute stones, 503CD2 for magic stones): with the stone's assimilation
-chance (its Plus) one white stat is rerolled, or a magic option. The owner
+Natively a successful stone may then assimilate (the native assimilation
+step, per stone kind): with the stone's assimilation chance (its Plus)
+one white stat is rerolled, or a magic option. The owner
 approved removing it as a server setting (2026-10-13): with
 SRO_ALCHEMY_NO_ASSIMILATION on, a successful attribute or magic stone
 changes only its own stat and nothing else on the item moves. Unset or

@@ -3,8 +3,8 @@
 
 resultrecipient_test.go - a landed hit stands a seated player
 
-593AE8: SkillCombat_ApplyResultRecipients stands a seated recipient
-(CGObjChar_RequestMotionChange(recipient, 0)) for any unabsorbed hit.
+The reference server's result-recipient pass stands a seated recipient
+(a motion change to 0) for any unabsorbed hit.
 
 ===========================================================================
 */

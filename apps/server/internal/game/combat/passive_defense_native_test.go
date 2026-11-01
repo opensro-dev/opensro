@@ -86,7 +86,7 @@ func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 TestPassiveDefenseFollowsItsEquipment
 ================
 */
-// 59F0E0: a passive defense with reqi contributes only while the equipment
+// The reqi walk: a passive defense with reqi contributes only while the equipment
 // passes the walk - here a staff (primary TID4 15) in slot 6.
 func TestPassiveDefenseFollowsItsEquipment(t *testing.T) {
 	staff := &enterworld.ItemRef{Codename: "ITEM_EU_STAFF_TEST", TypeIDs: [4]int64{3, 1, 6, 15}}

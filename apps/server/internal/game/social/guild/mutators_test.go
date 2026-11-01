@@ -203,7 +203,7 @@ func TestHandleCreateEmitsB663Oracle(t *testing.T) {
 		t.Fatalf("create refused: %s", outcome.Refusal)
 	}
 	if outcome.GuildID != 1 || outcome.SelectedTargetGid != 0x00C40001 {
-		t.Fatalf("outcome = id %d gid %#x, want 1 / 0xC40001", outcome.GuildID, outcome.SelectedTargetGid)
+		t.Fatalf("outcome = id %d gid %#x, want 1 / 0x%X", outcome.GuildID, outcome.SelectedTargetGid, 0x00C40001)
 	}
 	if want := createAckOracle(alfa.ID, 0); !bytes.Equal(outcome.AckPayload, want) {
 		t.Errorf("0xB663 payload = % X, want the oracle % X", outcome.AckPayload, want)

@@ -81,7 +81,7 @@ func TestAttackPetWalksItsFormsAcrossLevels(t *testing.T) {
 ================
 TestAttackPetAtItsOwnersLevelOnlyBanks
 
-4D6370: a pet level with its owner keeps EXP one short of its next level.
+Reference server: a pet level with its owner keeps EXP one short of its next level.
 ================
 */
 func TestAttackPetAtItsOwnersLevelOnlyBanks(t *testing.T) {
@@ -127,7 +127,7 @@ func TestOwnersKillFeedsTheSummonedAttackPet(t *testing.T) {
 ================
 TestPlayerKillFeedsThePetTheLowerLevelsBasis
 
-4FCDA0: leveldata +0x1C of min(pet, victim) level, doubled for a murderer.
+Reference server: leveldata +0x1C of min(pet, victim) level, doubled for a murderer.
 ================
 */
 func TestPlayerKillFeedsThePetTheLowerLevelsBasis(t *testing.T) {
@@ -215,7 +215,7 @@ func TestBetaPetExpNeverPassesTheOwner(t *testing.T) {
 ================
 TestNativePetExpLoopHasNoOwnerCap
 
-With the beta pace off the level-up loop is 4D65F1's: no owner check, so a
+With the beta pace off the level-up loop is the native one: no owner check, so a
 gain big enough walks the forms past an owner the pet started below.
 ================
 */

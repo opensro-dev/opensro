@@ -5,7 +5,7 @@ damagescroll_test.go - the damage scroll raises imbued hits
 
 ITEM_MALL_DAMAGE_INC_20P_SCROLL casts SKILL_MALL_DAMAGE_INC_20P_SCROLL_01:
 cbuf, dura 30 min, dru 20/20. dru adds word 0 to the basic damage rates
-(0x80/0x81) and word 1 to the skill rates (0x82/0x83) (595A97). A fire
+(0x80/0x81) and word 1 to the skill rates (0x82/0x83). A fire
 imbue's share is its own attack block with the basic bit set, so the scroll
 must raise it as it raises the weapon's own hit.
 

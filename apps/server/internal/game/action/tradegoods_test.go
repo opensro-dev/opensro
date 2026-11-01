@@ -36,7 +36,7 @@ func TestTradeCargoOwnerSurvivesDropPickupAndCharacterRestore(t *testing.T) {
 		t.Fatalf("ground identity: %+v", drops)
 	}
 	// The current holder and public-drop ownership do not change the cargo
-	// origin. A thief with a transport may take another's goods (525DC0);
+	// origin. A thief with a transport may take another's goods;
 	// they land in its cargo.
 	c.Job = domain.CharacterJob{Type: domain.JobThief, Grade: 1, Alias: "DifferentHolder"}
 	c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: 8, RefObjID: 200, Codename: "SUIT",

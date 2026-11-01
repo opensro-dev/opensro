@@ -4,7 +4,7 @@
 pvp_test.go - players striking players, and what a kill costs and pays
 
 The pair stands in a PvP region (0x62AA) beside each other; the attacker
-already holds the victim as an aggressor, which 5293A0 admits before its
+already holds the victim as an aggressor, which the native target validation admits before its
 level gates, so the level-1 fixture rows stay valid.
 
 ===========================================================================
@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
@@ -88,7 +89,7 @@ func TestPlayerBasicAttackStrikesPlayer(t *testing.T) {
 ================
 TestPlayerAttackRefusesPartyMember
 
-5293A0: party protection precedes every other relation.
+Natively party protection precedes every other relation.
 ================
 */
 func TestPlayerAttackRefusesPartyMember(t *testing.T) {
@@ -109,8 +110,8 @@ func TestPlayerAttackRefusesPartyMember(t *testing.T) {
 ================
 TestMurderBooksTheKiller
 
-4E1F60 kind 3: total +1, penalty (total+1)/2*1200, daily +1 at an even
-level, and the PvP EXP of 4105D0 (two level-1 players: 24 * 1.09 = 26).
+The native kill rewards, kind 3: total +1, penalty (total+1)/2*1200, daily +1 at an even
+level, and the native PvP EXP (two level-1 players: 24 * 1.09 = 26).
 ================
 */
 func TestMurderBooksTheKiller(t *testing.T) {
@@ -164,7 +165,7 @@ func TestMurdererVictimDoublesPvpExperience(t *testing.T) {
 ================
 TestJobKillExperienceRatio
 
-4103E0: the victim's basis against the killer's, held to 0.5..1.5, halved
+The native job kill formula: the victim's basis against the killer's, held to 0.5..1.5, halved
 for a trader killer.
 ================
 */
@@ -236,6 +237,146 @@ func TestAreaCandidatesIncludeHostilePlayers(t *testing.T) {
 
 /*
 ================
+TestAreaCandidatesRefuseWithoutCopyingTheRefused
+
+A player the attack validation refuses on its own record facts alone
+(one aggression weight) is weighed by the field-only pre-filter under
+the door (#1943): no candidate, and the weighing must not pay for a
+detached copy of the refused player. The same pair with no such fact
+is copied and judged outside (TestAreaCandidatesIncludeHostilePlayers).
+================
+*/
+func TestAreaCandidatesRefuseWithoutCopyingTheRefused(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	a.Aggressions = nil
+	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+	// A carried bag of production shape, so one detached copy costs
+	// what the live shard pays for it; plain stack rows move no
+	// verdict the walk reads.
+	for slot := int64(20); slot < 60; slot++ {
+		v.MissionInventory = append(v.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, MagicOptions: []uint64{1}})
+	}
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	now := clock.NowMs()
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	q := areaQuery{selects: 24, division: testDivision, caster: a, skill: skill, center: rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now), reach: 50, now: now}
+	if got := rt.areaPlayerCandidates(q); len(got) != 0 {
+		t.Fatalf("the pre-filtered player became an area candidate: %+v", got)
+	}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, v) })
+	candidateAllocs := testing.AllocsPerRun(20, func() { rt.areaPlayerCandidates(q) })
+	t.Logf("allocs: one character copy %.0f, refused candidate walk %.0f", copyAllocs, candidateAllocs)
+	if candidateAllocs >= copyAllocs {
+		t.Fatalf("refused players still pay for their copy: %.0f allocs; one copy is %.0f",
+			candidateAllocs, copyAllocs)
+	}
+}
+
+/*
+================
+TestAreaPlayerPreRefusalOnlyRefusesWhatTheValidationRefuses
+
+Every refusal the field-only pre-filter gives under the door is one
+the full attack validation gives on the same pair, so skipping the
+copy cannot move a verdict. The firing cases keep the pair's admitting
+relation armed (the caster's aggression, which the validation admits
+on later in its order than the pre-filter's facts), and the control
+cases pin the neighbouring facts that must not refuse.
+================
+*/
+func TestAreaPlayerPreRefusalOnlyRefusesWhatTheValidationRefuses(t *testing.T) {
+	attack := enterworld.SkillAttack{Present: true}
+	firing := []struct {
+		name  string
+		skill enterworld.SkillRow
+		arm   func(a, v *enterworld.Character)
+	}{
+		{name: "building row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Building: true}}},
+		{name: "land row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Land: true}}},
+		{name: "dead-body row on a living player",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets:     enterworld.SkillTargets{DeadBody: true},
+				Replacement: statuseffect.ReplacementDescriptor{MatchesExecutionSelector: true}}},
+		{name: "monster-only enemy row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{EnemyM: true}}},
+		{name: "resurrection level cap",
+			skill: enterworld.SkillRow{Attack: attack,
+				Abnormal: abnormal.SkillParams{AdmitDeadParty: true, ResuMaxLevel: 10}},
+			arm: func(a, v *enterworld.Character) { v.Level = testInt64(50) }},
+		{name: "one aggression weight",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+			}},
+		{name: "one aggression weight, selector row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Replacement: statuseffect.ReplacementDescriptor{MatchesExecutionSelector: true}},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 1}
+			}},
+	}
+	for _, tc := range firing {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, clock, a, v := newPvpPair(t)
+			if tc.arm != nil {
+				tc.arm(a, v)
+			}
+			if !areaPlayerPreRefusal(v, tc.skill) {
+				t.Fatal("the pre-filter does not refuse")
+			}
+			if code := rt.hostilePlayerRefusalWith(testDivision, a, v, tc.skill, clock.NowMs(), playerAttackArea); code == 0 {
+				t.Fatal("the pre-filter refuses a pair the full validation admits")
+			}
+		})
+	}
+	controls := []struct {
+		name  string
+		skill enterworld.SkillRow
+		arm   func(a, v *enterworld.Character)
+	}{
+		{name: "plain hostile row",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm:   func(a, v *enterworld.Character) { v.Aggressions = nil }},
+		{name: "two aggression weights",
+			skill: enterworld.SkillRow{Attack: attack},
+			arm: func(a, v *enterworld.Character) {
+				v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): 2}
+			}},
+		{name: "animal building row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{Present: true, Animal: true, Building: true}}},
+		{name: "resurrection under the cap",
+			skill: enterworld.SkillRow{Attack: attack,
+				Abnormal: abnormal.SkillParams{AdmitDeadParty: true, ResuMaxLevel: 10}},
+			arm: func(a, v *enterworld.Character) { v.Level = testInt64(5) }},
+		// The permission gate admits DontCare before the dead-body and
+		// enemy columns, so these rows must reach the full validation.
+		{name: "dont-care dead-body row on a living player",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{DontCare: true, DeadBody: true}}},
+		{name: "dont-care monster-only enemy row",
+			skill: enterworld.SkillRow{Attack: attack,
+				Targets: enterworld.SkillTargets{DontCare: true, EnemyM: true}}},
+	}
+	for _, tc := range controls {
+		_, _, a, v := newPvpPair(t)
+		if tc.arm != nil {
+			tc.arm(a, v)
+		}
+		if areaPlayerPreRefusal(v, tc.skill) {
+			t.Fatalf("%s: the pre-filter refuses", tc.name)
+		}
+	}
+}
+
+/*
+================
 jobKillLevels
 
 A level source with only the dg.txt gold basis the job formulas read.
@@ -260,7 +401,7 @@ func (l jobKillLevels) WithdrawalGoldBasis(level int64) (int64, bool) {
 ================
 TestThiefMonsterKillPaysHunterJobExp
 
-4E1F60's monster branch: a hunter's killing blow on a thief monster earns
+The native kill rewards' monster branch: a hunter's killing blow on a thief monster earns
 job EXP; a thief monster killed outside job mode earns none.
 ================
 */
@@ -329,8 +470,8 @@ func TestCompanionKillOfAThiefMonsterPaysNoJobExp(t *testing.T) {
 ================
 TestPlayerAttackPKLimitsApplyOnlyToNeutrals
 
-5293A0: a neutral target is refused at the attacker's daily limit
-(0x3014); an aggressor target is a legal enemy (52B6D0) whose attack
+Natively a neutral target is refused at the attacker's daily limit
+(0x3014); an aggressor target is a legal enemy whose attack
 never reads the limits.
 ================
 */
@@ -353,7 +494,7 @@ func TestPlayerAttackPKLimitsApplyOnlyToNeutrals(t *testing.T) {
 ================
 TestJobAttackIgnoresTheSuitActivation
 
-529521 admits opposing jobs before 529557 reads +0x2178, so a suit still
+The native target validation admits opposing jobs before it reads +0x2178, so a suit still
 activating fights at once; no 0x3019 WAITFOR_JOB_ACTIVATE is sent.
 ================
 */
@@ -378,10 +519,10 @@ func TestJobAttackIgnoresTheSuitActivation(t *testing.T) {
 TestPlayerUnderPKLevelFightsOnlyARetainedOpponent
 
 BR-261006-1818: below level 20 a player is refused (0x3016) on a neutral,
-for basic attacks and skills alike (both reach 5293A0), unless the target
-is already in its aggression map; then 5293A0 admits before the level
+for basic attacks and skills alike (both reach the native target validation), unless the target
+is already in its aggression map; then the validation admits before the level
 floor, so it may keep fighting that player. The client refuses the click
-below 20 (693EF9) but sends the skill, which is why only skills landed.
+below 20 (client 693EF9) but sends the skill, which is why only skills landed.
 ================
 */
 func TestPlayerUnderPKLevelFightsOnlyARetainedOpponent(t *testing.T) {
@@ -402,7 +543,7 @@ func TestPlayerUnderPKLevelFightsOnlyARetainedOpponent(t *testing.T) {
 ================
 TestAttackingAMurdererLeavesTheAttackerWhite
 
-4E25C0: a murderer is a legal opponent, so hitting one records no
+Natively a murderer is a legal opponent, so hitting one records no
 aggression and the attacker does not turn purple; hitting a neutral does.
 ================
 */
@@ -461,7 +602,7 @@ func TestAreaSelectChoosesItsKinds(t *testing.T) {
 ================
 TestPlayerKnockbackWalksThroughTheMoveQuery
 
-CGObj_MoveTo moves a pushed player through the move query from its own
+The native object move moves a pushed player through the move query from its own
 cell: a refused walk leaves it where it stood, a clipped walk ends at the
 rest, and the published point is where it landed.
 ================
@@ -521,7 +662,7 @@ func TestPlayerKnockbackWalksThroughTheMoveQuery(t *testing.T) {
 ================
 TestAreaStrikesSpareNeutralPlayers
 
-5293A0's control flags, as 5A1AD0 passes them for an area victim. Both
+The native target validation's control flags, as the hostile-target check passes them for an area victim. Both
 players are level 20 in a battle region and the caster is white.
 
   - A neutral target the caster is not fighting: a direct attack is legal

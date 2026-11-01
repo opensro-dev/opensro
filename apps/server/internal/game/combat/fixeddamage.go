@@ -3,8 +3,8 @@
 
 fixeddamage.go - the hits whose damage is a word, not an att lane
 
-Formulae_CalculateFixedSkillDamage (40F5F0, pdmg) and
-Formulae_CalculateLifeSteal (40F750, lfst). Neither reads defense, parry
+The reference server's fixed skill damage formula (pdmg) and its life
+steal formula (lfst). Neither reads defense, parry
 or the STR/INT balance; both are cut by the target's level advantage at
 2.5 percent a level, never below a tenth of their base.
 
@@ -18,9 +18,9 @@ import "math"
 const (
 	// levelAdvantageCut is the 2.5 percent a level both formulas take.
 	levelAdvantageCut = 2.5
-	// fixedDamageFloorPercent is 40F5F0's base * 10 / 100.
+	// fixedDamageFloorPercent is the fixed damage formula's base * 10 / 100.
 	fixedDamageFloorPercent = 10
-	// lifeStealFloor is 40F750's float32 0.1.
+	// lifeStealFloor is the life steal formula's float32 0.1.
 	lifeStealFloor = float32(0.1)
 )
 
@@ -44,8 +44,8 @@ func levelAdvantageCutOf(base float64, attackerLevel, defenderLevel uint8) (int6
 ================
 FixedSkillDamage
 
-40F5F0: the pdmg amount plus the caster's power addend; against a higher
-level, the advantage cut held at base * 10 / 100.
+The fixed damage formula: the pdmg amount plus the caster's power addend;
+against a higher level, the advantage cut held at base * 10 / 100.
 ================
 */
 func FixedSkillDamage(amount, power uint32, attackerLevel, defenderLevel uint8) uint32 {
@@ -62,7 +62,7 @@ func FixedSkillDamage(amount, power uint32, attackerLevel, defenderLevel uint8) 
 ================
 LifeSteal
 
-40F750: base is lfst + the caster's power addend + the mwhs weapon share.
+The life steal formula: base is lfst + the caster's power addend + the mwhs weapon share.
 The advantage cut is floored at trunc(base * 0.1f); a cut or a floor above
 the target's HP takes exactly that HP. Otherwise the victim's area percent
 scales the result, truncated.

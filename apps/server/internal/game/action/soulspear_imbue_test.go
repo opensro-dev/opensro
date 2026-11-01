@@ -5,7 +5,7 @@ soulspear_imbue_test.go - Soul Spear Emperor's second stage with an imbue
 
 #bug-reports: Soul Spear Emperor (SKILL_CH_SPEAR_STUN_D) sometimes loses
 its D2 stage, and players linked it to an active imbue. An imbue is an
-instant self effect that keeps the current attack (4AD870 dispatches it
+instant self effect that keeps the current attack (the reference server dispatches it
 before the command queue), so neither an active imbue nor one pressed
 between the stages may cancel the server-owned D2 stage.
 

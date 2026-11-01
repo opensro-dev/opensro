@@ -3,11 +3,10 @@
 
 monster_interest_scan_test.go - the interest scan keeps its answers
 
-populationInterestGIDs keeps a seen set only for movers the index marks
-as listed in more than one region, and contains checks the hot tier
-first. referenceInterestGIDs is the scan as it was; random populations and
-viewers must get the same slice from both, and the benchmarks time the
-average crowd and the worst case for duplicates.
+populationInterestGIDs answers from the mover block index.
+referenceInterestGIDs walks the candidate regions the way the scan did before
+that index; random populations and viewers, queried at instants in any
+order, must get the same slice from both, and the benchmarks time a leg.
 
 ===========================================================================
 */
@@ -16,6 +15,7 @@ package simulation
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"slices"
 	"sort"
 	"testing"
@@ -38,7 +38,7 @@ The scan before this change: candidates' seen set, both-tier contains.
 func referenceInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
 	var out []uint32
 	for gid := range state.movers.candidates(viewer) {
-		_, hot := state.instances.hot[gid]
+		_, hot := state.instances.hotSlotOf(gid)
 		_, cold := state.instances.cold[gid]
 		if !hot && !cold {
 			continue
@@ -257,6 +257,144 @@ and removed and re-added: the index's multi-region marks must follow every
 change, so the scan still equals the reference after each step.
 ================
 */
+/*
+================
+BenchmarkPopulationInterestLeg
+
+One leg of interest scans: fifty viewers over one crowd at one instant,
+the shape runScopeVisibility pays per tick. The first viewer's scan is
+the marked scan's cost; the other forty-nine are where a shared pose
+memo (or its absence) shows.
+================
+*/
+func BenchmarkPopulationInterestLeg(b *testing.B) {
+	state := interestScanCrowd(3000, 300)
+	viewers := make([]worldgeom.RegionXZ, 50)
+	r := rand.New(rand.NewSource(7))
+	for i := range viewers {
+		viewers[i] = interestScanViewer(r)
+	}
+	for _, viewer := range viewers {
+		if !slices.Equal(populationInterestGIDs(state, viewer, 500), referenceInterestGIDs(state, viewer, 500)) {
+			b.Fatal("the scans disagree")
+		}
+	}
+	b.ReportAllocs()
+	nowMs := int64(500)
+	for b.Loop() {
+		nowMs += 100
+		for _, viewer := range viewers {
+			populationInterestGIDs(state, viewer, nowMs)
+		}
+	}
+}
+
+/*
+================
+TestPopulationInterestScanRetiresPosesOnReset
+
+A scan warms whatever pose sharing the scan keeps; a mover re-set to a
+pose outside the viewer's ring must leave the next scan at the same
+instant. A pose memo that outlives a mover commit fails this test.
+================
+*/
+func TestPopulationInterestScanRetiresPosesOnReset(t *testing.T) {
+	state := interestScanCrowd(0, 0)
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	near := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+	// Same region (so the mover stays a scan candidate) but three
+	// blocks over: only the pose read can take it out of the scan.
+	far := monster.Pose{RegionID: interestScanRegion, X: 100, Z: 100}
+	state.instances.set(1, monster.Instance{Gid: 1, CurrentHP: 1})
+	state.movers.set(1, monster.MoverState{Pose: near})
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{1}) {
+		t.Fatalf("warm scan = %v, want [1]", got)
+	}
+	state.movers.set(1, monster.MoverState{Pose: far})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("scan after re-set = %v, want no gids (stale pose?)", got)
+	}
+	state.movers.remove(1)
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("scan after remove = %v, want no gids", got)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanRetiresMembershipOnCommit
+
+A scan warms the per-block memo; spawns and removals committed between
+two scans at the same instant must change the next scan. A memo keyed
+on the instant alone (or on one store's writes alone) fails this test.
+================
+*/
+func TestPopulationInterestScanRetiresMembershipOnCommit(t *testing.T) {
+	state := interestScanCrowd(0, 0)
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("warm scan = %v, want no gids", got)
+	}
+	// A static spawn lands the production way: instance row, then the
+	// region index entry (no mover, so the static ring walk owns it).
+	state.instances.set(1, monster.Instance{Gid: 1, CurrentHP: 1, Spawn: monster.SpawnPoint{RegionID: interestScanRegion, X: 960, Z: 960}})
+	if state.byRegion == nil {
+		state.byRegion = make(map[uint16][]uint32)
+	}
+	state.listRegionGid(interestScanRegion, 1)
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{1}) {
+		t.Fatalf("scan after static spawn = %v, want [1] (stale memo?)", got)
+	}
+	state.instances.remove(1)
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("scan after static remove = %v, want no gids (stale memo?)", got)
+	}
+	// A mover committed far away stays out; re-committed inside the
+	// ring it must appear at the same instant.
+	farPose := monster.Pose{RegionID: interestScanRegion + 0x303, X: 960, Z: 960}
+	nearPose := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+	state.instances.set(2, monster.Instance{Gid: 2, CurrentHP: 1})
+	state.movers.set(2, monster.MoverState{Pose: farPose})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("scan with far mover = %v, want no gids", got)
+	}
+	state.movers.set(2, monster.MoverState{Pose: nearPose})
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{2}) {
+		t.Fatalf("scan after mover commit = %v, want [2] (stale memo?)", got)
+	}
+}
+
+/*
+================
+BenchmarkPopulationInterestLegClustered
+
+The clustered leg: fifty viewers standing in the centre block's
+neighbourhood over one crowd, the town and event-wave shape. Viewers in
+one interest block share one visible set, so the leg's cost should
+track occupied blocks, not sessions.
+================
+*/
+func BenchmarkPopulationInterestLegClustered(b *testing.B) {
+	state := interestScanCrowd(3000, 300)
+	viewers := make([]worldgeom.RegionXZ, 50)
+	for i := range viewers {
+		viewers[i] = worldgeom.RegionXZ{RegionID: interestScanRegion, X: 900 + float64(i%7)*20, Z: 900 + float64(i/7)*20}
+	}
+	for _, viewer := range viewers {
+		if !slices.Equal(populationInterestGIDs(state, viewer, 500), referenceInterestGIDs(state, viewer, 500)) {
+			b.Fatal("the scans disagree")
+		}
+	}
+	b.ReportAllocs()
+	nowMs := int64(500)
+	for b.Loop() {
+		nowMs += 100
+		for _, viewer := range viewers {
+			populationInterestGIDs(state, viewer, nowMs)
+		}
+	}
+}
+
 func TestPopulationInterestScanFollowsResetMovers(t *testing.T) {
 	r := rand.New(rand.NewSource(17))
 	state := interestScanPopulation(r, 600)
@@ -287,5 +425,120 @@ func TestPopulationInterestScanFollowsResetMovers(t *testing.T) {
 	}
 	if flips < 500 {
 		t.Fatalf("only %d single/multi-region flips", flips)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanSurvivesTheDirtyBound
+
+Past maxMoverBlockDirty the notes are dropped and the next scan rebuilds;
+a population nobody viewed for a long burst must answer exactly anyway.
+================
+*/
+func TestPopulationInterestScanSurvivesTheDirtyBound(t *testing.T) {
+	r := rand.New(rand.NewSource(23))
+	state := interestScanPopulation(r, 600)
+	viewer := interestScanViewer(r)
+	populationInterestGIDs(state, viewer, 500)
+	for i := 0; i <= maxMoverBlockDirty; i++ {
+		state.movers.set(uint32(1+r.Intn(600)), interestScanRow(r))
+	}
+	if state.movers.blocks.built {
+		t.Fatal("the bound did not drop the notes")
+	}
+	if got, want := populationInterestGIDs(state, viewer, 500), referenceInterestGIDs(state, viewer, 500); !slices.Equal(got, want) {
+		t.Fatalf("after the bound:\n got  %v\n want %v", got, want)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanHoldsAcrossQuietTicks
+
+The point of the index: a tick in which nobody crossed a block edge
+serves the memo without a rescan, and any change that can alter the
+answer retires it. The memo map's identity tells which happened.
+================
+*/
+func TestPopulationInterestScanHoldsAcrossQuietTicks(t *testing.T) {
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	pose := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	state.instances.set(1, monster.Instance{Gid: 1, CurrentHP: 1})
+	state.movers.set(1, monster.MoverState{Pose: pose})
+	state.instances.set(2, monster.Instance{Gid: 2, CurrentHP: 1})
+	state.movers.set(2, monster.MoverState{Pose: pose})
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{1, 2}) {
+		t.Fatalf("first scan = %v", got)
+	}
+
+	// A new instant and a commit that stays in its block keep the memo.
+	first := reflect.ValueOf(state.interestMemo).Pointer()
+	state.movers.set(1, monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion, X: 961, Z: 960}})
+	state.instances.set(2, monster.Instance{Gid: 2, CurrentHP: 7})
+	populationInterestGIDs(state, viewer, 600)
+	if reflect.ValueOf(state.interestMemo).Pointer() != first {
+		t.Fatal("a quiet tick retired the memo")
+	}
+
+	// A removed actor's mover row stays; the answer must still lose it.
+	state.instances.remove(2)
+	if got := populationInterestGIDs(state, viewer, 600); !slices.Equal(got, []uint32{1}) {
+		t.Fatalf("after the actor left: %v", got)
+	}
+
+	// A mover leaving the viewer's blocks retires it too.
+	far := monster.Pose{RegionID: interestScanRegion + 2, X: 960, Z: 960}
+	state.movers.set(1, monster.MoverState{Pose: far})
+	if got := populationInterestGIDs(state, viewer, 600); len(got) != 0 {
+		t.Fatalf("after the mover left: %v", got)
+	}
+}
+
+/*
+================
+TestPopulationInterestScanFollowsStaticChanges
+
+A static entry joins and leaves through the region list and through
+gaining a mover, and a moved spawn is read fresh: none may be masked by
+the memo or by the static lists.
+================
+*/
+func TestPopulationInterestScanFollowsStaticChanges(t *testing.T) {
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 960, Z: 960}
+	spawn := monster.SpawnPoint{RegionID: interestScanRegion, X: 960, Z: 960}
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: spawn})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("unlisted static visible: %v", got)
+	}
+	state.listRegionGid(interestScanRegion, 5)
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{5}) {
+		t.Fatalf("listed static = %v", got)
+	}
+	away := spawn
+	away.X = 0
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: away})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("static read its old spawn: %v", got)
+	}
+	state.instances.set(5, monster.Instance{Gid: 5, CurrentHP: 1, Spawn: spawn})
+	state.removeRegionGid(interestScanRegion, 5)
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("unlisted static stayed: %v", got)
+	}
+	state.listRegionGid(interestScanRegion, 5)
+	populationInterestGIDs(state, viewer, 500)
+	// With a mover far away, the listing no longer places it.
+	state.movers.set(5, monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion + 2, X: 960, Z: 960}})
+	if got := populationInterestGIDs(state, viewer, 500); len(got) != 0 {
+		t.Fatalf("a static with a mover stayed at its spawn: %v", got)
+	}
+	state.movers.remove(5)
+	if got := populationInterestGIDs(state, viewer, 500); !slices.Equal(got, []uint32{5}) {
+		t.Fatalf("a mover-less actor did not return to its spawn: %v", got)
 	}
 }

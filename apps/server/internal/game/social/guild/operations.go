@@ -23,18 +23,18 @@ const (
 	NoticeContentsMaxBytes = domain.GuildNoticeBodyBytes
 	// PermMaskNoticeEdit / PermMaskKick / PermMaskInvite are the
 	// permMask bits the client arms the matching buttons on (invite:
-	// mask & 0x1, sub_5e1e80 @0x005e2047). The mask is the ONLY
-	// evidenced check: the client never grade-gates these buttons, so
-	// grade 0 (leader) gets NO implicit bypass here - a leader holds
-	// the bits because the create door granted the full mask (a
-	// documented DECISION, LeaderPermMask below).
+	// mask & 0x1, client CIFGuildMember_RefreshButtons). The mask is
+	// the ONLY evidenced check: the client never grade-gates these
+	// buttons, so grade 0 (leader) gets NO implicit bypass here - a
+	// leader holds the bits because the create door granted the full
+	// mask (a documented DECISION, LeaderPermMask below).
 	PermMaskNoticeEdit uint32 = 0x10
 	PermMaskKick       uint32 = 0x2
 	PermMaskInvite     uint32 = 0x1
-	// PermMaskStorage is the warehouse bit 5C7440 asks of a non-master
-	// (CGuild_MemberHasPermission(member, 8)).
+	// PermMaskStorage is the warehouse bit the reference server asks of a non-master
+	// (a member permission check for 8).
 	PermMaskStorage uint32 = 0x8
-	// LeaderGrade is the member grade the client's sub_826610 fold
+	// LeaderGrade is the member grade the client's SGuildData_ReadGuildBlock_826610 fold
 	// publishes as the leader name (grade 0 = leader).
 	LeaderGrade uint8 = 0
 	// LeaderPermMask is the creating leader's initial permission mask.

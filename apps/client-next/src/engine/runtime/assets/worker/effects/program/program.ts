@@ -338,7 +338,7 @@ export function createEffectPrograms() {
 					if ( nodes.length >= 127 ) throw new Error( "Effect node budget exceeded" );
 					for ( const op of rotations ) {
 						if ( op.start === 0 && op.spacing === 0 && op.end === 0 ) {
-							// Native sub_b0c290 returns count=0 (period < 1e-6); sub_b143c0 skips scheduling.
+							// Native CEESourceListLineState_ResolveFrameWindow returns count=0 (period < 1e-6); CEESourceListLineState_ScheduleCommands skips scheduling.
 							continue;
 						}
 						const matrix = particleRotation( op.parameter );

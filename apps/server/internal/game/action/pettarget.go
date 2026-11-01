@@ -30,9 +30,9 @@ type petCombatTarget struct {
 ================
 petAttackBodyAllowed
 
-528F5D..528FA5 rejects a companion in body mode 2 and player or companion
+Natively the COS check rejects a companion in body mode 2 and player or companion
 victims in modes 2 through 4 before consulting the owner's attack
-permission, and 529304..529324 also rejects a companion victim whose owner
+permission, and the attackable check also rejects a companion victim whose owner
 is in modes 2 through 4. Read the companion's own mode: owner transitions
 do not always propagate to it.
 ================

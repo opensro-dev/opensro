@@ -122,7 +122,7 @@ func TestBuildObjectListRowsDivisionScoped(t *testing.T) {
 	if len(packets) != 8 {
 		t.Fatalf("packet count = %d, want 8 (one ground row)", len(packets))
 	}
-	if packets[5].NativeOpcode != OpcodeObjectListStart || !reflect.DeepEqual(packets[5].Payload, []int{0x01, 0x01, 0x00}) {
+	if packets[5].NativeOpcode != OpcodeObjectListStart || !reflect.DeepEqual(packets[5].Payload, []byte{0x01, 0x01, 0x00}) {
 		t.Errorf("object list start = %+v, want count 1", packets[5])
 	}
 	if packets[6].NativeOpcode != OpcodeObjectListChunk {

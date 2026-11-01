@@ -120,6 +120,8 @@ dispose
 	} );
 	owners.renderer.setCharacterPreview = () => {};
 	owners.renderer.setSelectionDecal = () => {};
+	// The frame hands the free-fly arm its keys before each world step.
+	owners.world.setFreeCameraKeys = () => {};
 	Object.assign( owners.characters, { frameWork() {} } );
 	Object.assign( owners.platform, {
 		report: value => reports.push( value ),

@@ -5,13 +5,13 @@ goodsteleport.go - town teleport with a trade transport out
 
 Port-only, not native (owner decision 2026-10-15, at the balance advisor's
 request for testing). Natively a summoned transport refuses town travel:
-a town gate's link carries Restrict kind 2 (CRefTeleportLink_CheckState
-513A70: 0x1C10, the client's 0x10), a return scroll refuses it (4A0380:
-0x5E) and the guide's reverse return refuses it (4F2B50 case 5: 0x10).
+a town gate's link carries Restrict kind 2 (the teleport link's state
+check: 0x1C10, the client's 0x10), a return scroll refuses it (0x5E) and
+the guide's reverse return refuses it (teleport use case 5: 0x10).
 With SRO_JOB_GOODS_TELEPORT on, those three let the trader through and
 the transport travels with them, as it does on a ferry
 (relocateReturningPet). A transport standing too far from the gate still
-cannot come along (4F2B50's range rule, 0x13); a reverse return to a point
+cannot come along (the native range rule, 0x13); a reverse return to a point
 in a dungeon still refuses a transport, since no COS ever enters one
 natively; and the premium limited commands keep their native refusal,
 which the client applies itself.

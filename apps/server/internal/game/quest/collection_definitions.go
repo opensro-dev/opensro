@@ -5,8 +5,9 @@ package quest
 // increased EXP are deliberately overridden by the shipped client text.
 var collectionQuestSpecs = []QuestSpec{
 	{
-		// Compiled prerequisite for KT armor -> timed KT accessory. v1.188
-		// 897DB0 initializes an ordinary collection mission; v1.150 text
+		// Compiled prerequisite for KT armor -> timed KT accessory. The
+		// reference server's compiled ARMOR_1 class initializes an ordinary
+		// collection mission; v1.150 text
 		// independently confirms 20 shells and the reward below.
 		Codename: "QNO_WC_ARMOR_1", KindByte: 1, Objective: ObjectiveCollect,
 		CollectItemCodename: "ITEM_QNO_WC_ARMOR_1", CollectCount: 20,

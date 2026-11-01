@@ -4,8 +4,8 @@
 trade_special_test.go - the bandit traders' two favours (TRADE_*_SPECIAL)
 
 Exercise the shipped QNO_TRADE_CH_SPECIAL2_1 definition: the dressed-trader
-gate (9262A0 flag 0x1000), a delivery and a hunt in either order, the start
-NPC's line naming whichever is left (8CB8A0), and the pay's own bag-full
+gate (prerequisite flag 0x1000), a delivery and a hunt in either order, the start
+NPC's line naming whichever is left, and the pay's own bag-full
 line.
 
 ===========================================================================

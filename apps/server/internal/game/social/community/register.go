@@ -26,7 +26,8 @@ func Register(hub *transport.Hub, deps Dependencies) {
 // whisperBlockHubHandler adapts HandleWhisperBlock onto the hub: resolve
 // the bound character through the session identity keys (never a
 // client-supplied name), apply, answer with the 0xB66F ack the outcome
-// composed (sub_771550 - success applies the add/remove to the blocking
+// composed (client CPSMission_OnAliasActionResponse0xB66F - success
+// applies the add/remove to the blocking
 // panel live, results 1/2/3 msgbox), log. A nil Ack stays silent on the
 // wire (decode refusals and the cancel miss); the enter-world chunk-C
 // reseed remains the full-list channel (see WhisperBlockOutcome).

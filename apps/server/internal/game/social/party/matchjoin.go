@@ -26,7 +26,7 @@ import (
 MaskedMemberInfoFor
 
 MaskedMemberInfoFor renders one character's masked member-info record
-(the sub_75db30 wire shape, mask 0x37 full-info subset) off the live
+(the CPartyMemberInfo_ReadMasked wire shape, mask 0x37 full-info\nsubset) off the live
 character record - the tail of the match lane's 0x75BF owner notify.
 ok=false when the name resolves to no division character.
 ==================
@@ -46,8 +46,9 @@ MatchJoinPrecheck
 MatchJoinPrecheck answers a request-time refusal reason ("" = ok) for
 a proposed match join: the joiner must be partyless, and the owner -
 when already partied - must lead a non-full party (the client gates
-listing REGISTRATION on leadership the same way, sub_6356a0
-@0x63577d, so a non-leader owner is a stale listing). Everything is
+listing REGISTRATION on leadership the same way
+(CGInterface_Uses_UIIT_MSG_PARTYMATCH_RECORD_ERROR_AGAIN), so a
+non-leader owner is a stale listing). Everything is
 re-validated at commit time; this precheck only spares the owner a
 prompt that could never commit.
 ==================
@@ -80,7 +81,8 @@ AdmitMatchJoin
 AdmitMatchJoin commits one ACCEPTED match join: the owner partyless
 FORMS a two-member party (leader = owner; optionBits = the LISTING's
 type bits, which the registering client folded from the live
-party-settings words - sub_63bba0 @0x0063bc2c..0x0063bc53 - so the
+party-settings words -
+CGInterface_Uses_UIIT_MSG_PARTYMATCH_RECORD_ERROR_LEVEL - so the
 listing is the only bit source that exists), the owner partied JOINS
 the joiner into their roster. Both paths run the EXISTING consent
 commit legs, so the pinned frames (0xB0D5 + 0x35D6 seeds, the 0x3E58
@@ -105,8 +107,8 @@ func (r *Runtime) AdmitMatchJoin(divisionID, ownerName, joinerName string, optio
 	if !joinerOnline {
 		return "joiner logged off"
 	}
-	// ShardManager 44F850 (0x7C16) tests the joiner against the party's job
-	// class (44ED20) when the join is requested; the commit repeats it, as
+	// The shard manager (0x7C16) tests the joiner against the party's job
+	// class when the join is requested; the commit repeats it, as
 	// the consent commits do, so a suit changed meanwhile cannot slip in.
 	if !enterworld.JobsMayParty(r.matchPartyJobClass(divisionID, owner), enterworld.PartyJobClass(joiner)) {
 		return "opposing job classes"

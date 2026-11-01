@@ -169,6 +169,8 @@ export interface DeviceOwner extends Disposable {
 	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
 	readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }>;
 	uiTexture( id: string, image: UiTexture | null ): void;
+	// Port-only, not native: the icon atlas mapping (foundation/ui/icon-atlas.ts).
+	uiAtlas( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ): void;
 	// targetWidth: the frame's physical width, so the UI pass knows its pixels per UI unit.
 	ui( scene: UiScene | null, targetWidth?: number ): readonly UiDraw[];
 	// directional: light along the environment's sun direction this frame

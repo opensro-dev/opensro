@@ -20,13 +20,13 @@ const monsterTestDivision = "DIV_A"
 // departure).
 const monsterTestRegion = 0x60a8
 
-func monsterInstanceByRef(t *testing.T, registry *MonsterState, refObjID uint32) monster.Instance {
+func monsterInstanceByRef(t testing.TB, registry *MonsterState, refObjID uint32) monster.Instance {
 	t.Helper()
 	return monsterInstanceByRefIn(t, registry, refObjID, monsterTestRegion)
 }
 
 // monsterInstanceByRefIn is monsterInstanceByRef for a population in region.
-func monsterInstanceByRefIn(t *testing.T, registry *MonsterState, refObjID uint32, region uint16) monster.Instance {
+func monsterInstanceByRefIn(t testing.TB, registry *MonsterState, refObjID uint32, region uint16) monster.Instance {
 	t.Helper()
 	registry.StartDivision(monsterTestDivision)
 	registry.AdvancePopulation(registry.CurrentTimeMillis())
@@ -39,14 +39,14 @@ func monsterInstanceByRefIn(t *testing.T, registry *MonsterState, refObjID uint3
 	return monster.Instance{}
 }
 
-func monsterLegFixture(t *testing.T, tactics monster.Tactics) (*MonsterMoverOps, monster.Instance) {
+func monsterLegFixture(t testing.TB, tactics monster.Tactics) (*MonsterMoverOps, monster.Instance) {
 	t.Helper()
 	return monsterLegFixtureIn(t, tactics, monsterTestRegion)
 }
 
 // monsterLegFixtureIn is monsterLegFixture with its nests in region (a
 // cave region puts the actor on the cave plane).
-func monsterLegFixtureIn(t *testing.T, tactics monster.Tactics, region uint16) (*MonsterMoverOps, monster.Instance) {
+func monsterLegFixtureIn(t testing.TB, tactics monster.Tactics, region uint16) (*MonsterMoverOps, monster.Instance) {
 	t.Helper()
 	template := monster.Template{
 		Refs: map[uint32]monster.MonsterRef{
@@ -964,8 +964,8 @@ func TestSettleCorrectionMatchesTheGoalTheClientWasGiven(t *testing.T) {
 
 // TestHeadingWordTowardUsesNativeYawConvention pins BUG-11's root cause.
 //
-// Native yaw 0 faces -z: Math_YawToDirVec (sub_8788c0) is
-// {sin(yaw), 0, -cos(yaw)}, and Math_DirVecToYaw (sub_8791a0) inverts it as
+// Native yaw 0 faces -z: Math_YawToDirVec (client Vec3_FromYaw) is
+// {sin(yaw), 0, -cos(yaw)}, and Math_DirVecToYaw (client Vec3_NormalizeAndCalculateYaw) inverts it as
 // acos(-z/len) mirrored for x<0 - algebraically Atan2(dx, -dz).
 //
 

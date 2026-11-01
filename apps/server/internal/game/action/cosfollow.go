@@ -3,7 +3,7 @@
 
 cosfollow.go - returning a commanded pet to its existing follow owner
 
-Native 6A271B checks the command class (gold/cash pet), then emits tag 9.
+The client (6A271B) checks the command class (gold/cash pet), then emits tag 9.
 The command cancels outstanding target work; normal follower advancement owns
 the return path and its collision checks. It never moves the player.
 
@@ -35,7 +35,7 @@ func (rt *Runtime) handleCosFollowCommand(division string, c *enterworld.Charact
 	if state == nil || state.character != c || state.follower == nil || state.follower.GID() != gid {
 		return OpResult{}
 	}
-	// AI event 0x1A (CAIState_OnOwnerFollowOrder 559600): leave BATTLE.
+	// AI event 0x1A (the reference server's owner-follow order): leave BATTLE.
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}, state, rt.Now().UnixMilli())
 	result := OpResult{}
 	if state.pickup != nil {

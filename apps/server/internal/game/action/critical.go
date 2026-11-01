@@ -50,7 +50,7 @@ func (rt *Runtime) resolveCombat(actor criticalActor, skill enterworld.SkillRow,
 }
 
 // resolveCombatBehindWall splits the hit when the defender stands behind a
-// Force wall (58E5F0); the one critical decision serves both records.
+// Force wall; the one critical decision serves both records.
 /*
 ================
 resolveCombatBehindWall
@@ -90,7 +90,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	rt.criticals.mu.Lock()
 	defer rt.criticals.mu.Unlock()
 	actor.character = strings.ToLower(actor.character)
-	key := skill.ID & 0xffffff // 58ED8C..58ED97: key is 0x43000000 | skill ID.
+	key := skill.ID & 0xffffff // key is 0x43000000 | skill ID.
 	previous := rt.criticals.actors[actor][key]
 	critical, next := false, previous
 	if request.lanes&4 != 0 {
@@ -98,7 +98,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		if err != nil {
 			return combat.WallOutcome{}, err
 		}
-		// 58EB64: the defender's evade critical (0x39) cuts the chance.
+		// The defender's evade critical (0x39) cuts the chance.
 		rate = combat.EvadedCriticalRate(rate, defender)
 		critical, next, err = combat.CriticalOutcome(float64(rate), previous, rt.CombatRoll)
 		if err != nil {
@@ -119,7 +119,7 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 	if err != nil {
 		return combat.WallOutcome{}, err
 	}
-	// 58F0C1..58F0F3: after the wall's share, every impact of an attack
+	// After the wall's share, every impact of an attack
 	// skill rolls the target's block chance on the attacker's history
 	// (key 0x42000000 | skill); a block drops the defender's damage.
 	if skill.Attack.Present {
@@ -133,9 +133,9 @@ func (rt *Runtime) resolveCombatRequest(request combatRequest) (combat.WallOutco
 		if blocked {
 			out.Defender = combat.Result{ResultFlags: out.Defender.ResultFlags, Blocked: true}
 		} else if skill.CkChance != 0 {
-			// 58F74E: an unblocked ck impact rolls its kill chance (key
+			// An unblocked ck impact rolls its kill chance (key
 			// 0x48000000 | skill). A kill is record 0x86 with no damage,
-			// and the target group is marked dead (58F774..58F784). Only
+			// and the target group is marked dead. Only
 			// the anti-bot stone's MSKILL_AUTOMOB_ATTACK01 carries ck.
 			killKey := 0x48000000 | skill.ID&0xffffff
 			slain, killNext, err := combat.CriticalOutcome(float64(skill.CkChance), rt.criticals.actors[actor][killKey], rt.CombatRoll)

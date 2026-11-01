@@ -6,8 +6,8 @@ caster
 
 The Warlock's Life Drain (SKILL_EU_WARLOCK_BLOODA_LIFEDRAIN_A and _B) is
 lfst(amount) mwhs(percent) [efr] ds(...) getv(BSHP), cast on an enemy with
-no att block. SkillCombat_CalculateHitOutcome (58F4B5) makes the hit's
-damage Formulae_CalculateSkillHeal (40F750): the lfst amount plus the
+no att block. The server's hit-outcome calculation makes the hit's
+damage its heal formula: the lfst amount plus the
 caster's BSHP and the mwhs share of its magical weapon, cut by the target's
 level advantage, held at the target's HP, scaled by the victim's area
 percent; the caster recovers what was taken. The status blocks roll as on

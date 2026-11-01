@@ -4,11 +4,11 @@
 trade.go - C6 trade.json: what each trader pays for trade goods
 
 A trade good sold to a foreign trader is priced by that trader's quotation
-(_ItemQuotation, commerce.TradeQuotationPrice, native 4C8810) over the
+(_ItemQuotation, commerce.TradeQuotationPrice, the native quotation) over the
 good's reference price. The sale path admits only a fixed-rate quotation
 (lower bound equal to upper), so only those rows are listed. A thief
 buyer pays three quarters of the reference price for any good
-(ThiefGoodsValue, 4C81D0), which the file states once. Prices are before
+(ThiefGoodsValue), which the file states once. Prices are before
 the fortress tax, which depends on the fortress's owner at the time.
 
 ===========================================================================

@@ -76,13 +76,15 @@ function fixture( options = {} ) {
 						id: `${region}:${part}`,
 						originRegion: origin,
 						warnings: [],
-						groups: [ {
-							id: `${part}:${region}`,
+						groups: Array.from( { length: options.sceneGroups ?? 1 }, ( _, groupIndex ) => ({
+							id: `${part}:${region}:${groupIndex}`,
 							...(part === "terrain" ? { terrainSector: region } : {}),
 							center: [ 0, 0, 0 ],
 							radius: 10000,
 							material: {
-								texture: `/assets/${region}${options.blockTextures ? ".texture" : ".png"}`,
+								texture: groupIndex === 0 ?
+									`/assets/${region}${options.blockTextures ? ".texture" : ".png"}` :
+									`/assets/${region}-${groupIndex}.png`,
 								color: [ 1, 1, 1, 1 ],
 								alphaCutoff: 0,
 								blend: false,
@@ -96,7 +98,7 @@ function fixture( options = {} ) {
 								instances: identity(),
 								transform: identity()
 							}
-						} ]
+						}) )
 					}
 				} );
 			} else if ( decode === "png" ) {
@@ -603,4 +605,25 @@ test("a crossing requests terrain only for the regions it adds, in one anchor", 
 	assert.equal( f.world.stats().pendingGroups, 0 );
 	f.stream.dispose();
 	f.world.dispose();
+});
+
+test("leaving for the dock pauses the retained scene's stream (#1975)", () => {
+	const f = fixture( { sceneGroups: 8 } );
+	// Enter region 1 and let its scene admit with textures still streaming.
+	for ( let i = 0; i < 10 && f.world.stats().pendingTextures === 0; i++ ) f.step( 1 );
+	assert.ok( f.world.stats().pendingTextures > 0, "the admitted scene still has textures to stream" );
+	const issued = f.requests.length;
+	// On the dock there is no world pose. The retained scene takes what
+	// already landed but issues nothing new: the incoming scene's stage
+	// may only ask for a slot at its own step, and a stream that refills
+	// every frame leaves it none until the whole queue drains (#1975).
+	for ( let i = 0; i < 4; i++ ) {
+		f.stream.step( null );
+		f.world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
+		assert.equal( f.stream.error(), null );
+	}
+	assert.equal( f.requests.length, issued, "the retained scene issued new work while the player is away" );
+	// Back in the world the same stream resumes and finishes.
+	for ( let i = 0; i < 12; i++ ) f.step( 1 );
+	assert.equal( f.world.stats().pendingTextures, 0 );
 });

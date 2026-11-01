@@ -2,7 +2,8 @@ package monster
 
 import "math"
 
-// NativeActorRelative is research-server v1.188 430BA0. Dungeon region words
+// NativeActorRelative is the reference server's relative-position
+// computation. Dungeon region words
 // are not outdoor sector coordinates. World/population eligibility belongs
 // to the caller; this arithmetic does not authorize crossing instances.
 func NativeActorRelative(from, to Pose) (x, y, z float32) {
@@ -22,7 +23,8 @@ func NativeActorRelative(from, to Pose) (x, y, z float32) {
 		float32(dz + float64(float32(to.Z)) - float64(float32(from.Z)))
 }
 
-// NativeActorDistance is 53D7A0 followed by the caller's float32 spill.
+// NativeActorDistance is the reference server's actor distance followed by
+// the caller's float32 spill.
 // Incompatible planes deliberately overflow the squared length to +Inf;
 // replacing that with ordinary sector distance can admit a false target.
 func NativeActorDistance(from, to Pose) float32 {

@@ -50,11 +50,11 @@ async function clickAcceptance( rowOn ) {
 		await page.addInitScript( rowOn => {
 			if ( rowOn ) {
 				localStorage.setItem(
-					"sro:v1150:experimental-options:1",
+					"sro:v1150:experimental-options:2",
 					JSON.stringify( { mainThreadOwnWalk: true } )
 				);
 			} else {
-				localStorage.removeItem( "sro:v1150:experimental-options:1" );
+				localStorage.removeItem( "sro:v1150:experimental-options:2" );
 			}
 			const WorkerBase = window.Worker;
 			window.__entry = {
@@ -205,7 +205,7 @@ async function clickAcceptance( rowOn ) {
 		// The row's seeded state survived boot: the run measures the
 		// presenter it claims to measure.
 		const storedRow = await page.evaluate( () => {
-			const raw = localStorage.getItem( "sro:v1150:experimental-options:1" );
+			const raw = localStorage.getItem( "sro:v1150:experimental-options:2" );
 			return raw ? JSON.parse( raw ).mainThreadOwnWalk === true : false;
 		} );
 		assert.equal( storedRow, rowOn, "the Experimental row seeding did not survive boot" );

@@ -247,7 +247,7 @@ func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 	// (the Moon class's 64 over the native 3) times its native one
 	// and every Star/Moon item stays at its native number (while G26
 	// items with ref.Level > 76 step 26-3=23 into G23 degree-8 Sun per
-	// native 0x00724120); at 81, where all 51 G26 items satisfy
+	// the native selection); at 81, where all 51 G26 items satisfy
 	// ref.Level <= 81, every degree-9 Sun item is at the capped
 	// multiplier (320 over the native 6) and every other
 	// item (including degree-8 Sun) stays at 1x; and a multiplier of 1
@@ -273,7 +273,7 @@ func TestSunScaleComposedChancesMatchTheRow(t *testing.T) {
 		}
 		if isDegree8SunCodename(c.Codename) {
 			// G26 items with ref.Level in 77..81 step by 3 (G26 -> G23) at
-			// monster level 76 under native 0x00724120 (#1222).
+			// monster level 76 under the native selection (#1222).
 			if c.Chance < base {
 				t.Fatalf("level 76 %s chance %v, want >= native %v", c.Codename, c.Chance, base)
 			}

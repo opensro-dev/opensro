@@ -3,8 +3,8 @@
 
 follow.go - player Trace admission and persistent pursuit
 
-Native command family 3 (4AE3D0) follows a living player. Its navigator
-(4B0490) shares normal movement collision and publication, but never owns
+Native command family 3 follows a living player. Its navigator
+shares normal movement collision and publication, but never owns
 a combat skill. The existing command slot provides cancellation ordering.
 
 ===========================================================================
@@ -47,7 +47,7 @@ func (rt *Runtime) stopFollowMovement(division string, character, snapshot *ente
 	}
 	nowMs := rt.Now().UnixMilli()
 	from := rt.liveSpawn(key, snapshot, nowMs)
-	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, rt.handlerDoors())
 	return stopped
 }
 
@@ -64,8 +64,8 @@ func (rt *Runtime) beginFollow(division string, character *enterworld.Character,
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || teleportBlocks(snapshot.NativeTeleportMode) {
 		return OpResult{DiagnosticRefusal: "follow-character-unavailable"}
 	}
-	// A rider may Trace: 4ACD7A refuses only attack (1) and skill (4)
-	// commands while mounted, never this family (3).
+	// A rider may Trace: natively only attack (1) and skill (4) commands
+	// are refused while mounted, never this family (3).
 	if stand, seated := rt.standForSeatedCommand(division, character, nowMs); seated {
 		return stand
 	}
@@ -86,15 +86,16 @@ func (rt *Runtime) beginFollow(division string, character *enterworld.Character,
 	intent.FollowSession = admission.(populationAdmission).session
 	rt.Pending.Clear(grounditem.PendingKey(division, snapshot.Name))
 	rt.setCombatIntent(intent)
-	return rt.advanceFollowIntent(character, intent, nowMs)
+	// beginFollow answers the 0x7045 handler: its commits are immediate.
+	return rt.advanceFollowIntent(character, intent, nowMs, rt.handlerDoors())
 }
 
 /*
 ================
 followActors
 
-4AD030 family 3 checks player type, life and adjacent sectors. The navigator
-also retires at more than 1,000 units (4B05A5). Lease equality adds the
+Native family 3 checks player type, life and adjacent sectors. The navigator
+also retires at more than 1,000 units. Lease equality adds the
 port's explicit world-instance boundary to those native object checks.
 ================
 */
@@ -130,7 +131,7 @@ func (rt *Runtime) followActors(actor *enterworld.Character, intent basicAttackI
 ================
 followGoal
 
-4B0490 holds inside the outer band and aims for the inner band. Overlapping
+The native pursuit holds inside the outer band and aims for the inner band. Overlapping
 bodies back away by the sum of their radii. The native direction is 3D,
 but movement keeps the actor's height until navigation resolves the floor.
 ================
@@ -169,7 +170,7 @@ No cast lookup, cooldown or damage path can run for this command. Retain
 the intent while waiting in range so a moving target can lead again.
 ================
 */
-func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	snapshot := rt.characterSnapshot(intent.DivisionID, character)
 	target, spacing, ok := rt.followActors(snapshot, intent, nowMs)
 	if !ok || rt.skillCastPostureBlocked(intent.DivisionID, snapshot, nowMs) {
@@ -177,7 +178,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 		if snapshot != nil && !teleportBlocks(snapshot.NativeTeleportMode) && enterworld.CharacterAlive(snapshot) {
 			key := simulation.WorldKey(intent.DivisionID, snapshot.Name)
 			from := rt.liveSpawn(key, snapshot, nowMs)
-			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs)
+			stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, nowMs, doors)
 			return stopped
 		}
 		return OpResult{}
@@ -199,14 +200,14 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 	}
 	return rt.commitIntentMovement(character, snapshot, intentMovement{
 		intent: intent, from: from, target: to, goal: goal, nowMs: nowMs,
-	})
+	}, doors)
 }
 
 /*
 ================
 commitRiddenIntentMovement
 
-A rider's pursuit step is the vehicle's move. Native 4ACD7A admits Trace
+A rider's pursuit step is the vehicle's move. Natively Trace is admitted
 mounted (it tests the mount only for attack and skill commands), and a
 ridden step belongs to the vehicle's movement owner as the client's own
 0x769E move does: the acknowledgement names the COS GID and the vehicle

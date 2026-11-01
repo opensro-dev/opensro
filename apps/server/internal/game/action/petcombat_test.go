@@ -141,8 +141,8 @@ func TestAttackPetKillsOrderedMonsterForItsOwner(t *testing.T) {
 TestAttackPetKillOfACOSBooksMurderForItsOwner
 
 A pet's fatal hit on another player's COS books the kill for the pet's
-owner against the COS's owner (4E27F4 -> 4E1F60), then eases the owner's
-penalty by the COS gap (4EB6B0): the pet is never booked itself.
+owner against the COS's owner (reference server), then eases the owner's
+penalty by the COS gap: the pet is never booked itself.
 ================
 */
 func TestAttackPetKillOfACOSBooksMurderForItsOwner(t *testing.T) {
@@ -343,5 +343,63 @@ func TestFollowCancelsPreparedCompanionAttack(t *testing.T) {
 	after, _ := rt.Monsters.Get(testDivision, m.Gid)
 	if closed != 1 || after.CurrentHP != before.CurrentHP {
 		t.Fatalf("cancel closes=%d hp=%d/%d", closed, before.CurrentHP, after.CurrentHP)
+	}
+}
+
+/*
+================
+TestPetStrikeBuildsTheRewardRosterOnlyForAKill
+
+#2030 strike gate, pet site: a pet strike whose planned damage cannot
+kill doors the owner alone and builds no reward roster; a killing
+strike keeps the roster-wide door and pays its owner. Presence queries
+witness the build, as in the skill lane's pin.
+================
+*/
+func TestPetStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 10000, attackPetBand)
+	presence := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		presence++
+		return true
+	}
+	if result := rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, m.Gid)); len(result.Frames) != 0 {
+		t.Fatalf("the order itself answers nothing: %+v", result.Frames)
+	}
+	tickPetCombat(t, rt, clock, 100, func() bool {
+		live, ok := rt.Monsters.Get(testDivision, m.Gid)
+		return !ok || live.CurrentHP < m.CurrentHP
+	})
+	if presence != 0 {
+		t.Fatalf("a pet strike that cannot kill built the reward roster (%d presence queries)", presence)
+	}
+	if got := rt.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a plain pet strike counted %d surprise fatals", got)
+	}
+
+	rt2, clock2, c2, m2 := newPetCombatRuntime(t, 100, attackPetBand)
+	presence2 := 0
+	rt2.RewardActorPresent = func(division, name string) bool {
+		presence2++
+		return true
+	}
+	var credited []string
+	rt2.UpdateExperience = func(recipient *enterworld.Character, exp, sexp int64, source uint32) ([]wire.Frame, bool) {
+		credited = append(credited, recipient.Name)
+		return nil, true
+	}
+	rt2.HandleCosCommand(testDivision, c2, petAttackOrder(c2.ActiveCOS.GID, m2.Gid))
+	tickPetCombat(t, rt2, clock2, 100, func() bool {
+		live, ok := rt2.Monsters.Get(testDivision, m2.Gid)
+		return !ok || live.CurrentHP == 0
+	})
+	if presence2 == 0 {
+		t.Fatal("a pet's killing strike never built the reward roster")
+	}
+	if len(credited) != 1 || credited[0] != c2.Name {
+		t.Fatalf("the pet's kill credited %v, want the owner %q", credited, c2.Name)
+	}
+	if got := rt2.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a pet's killing strike counted %d surprise fatals", got)
 	}
 }

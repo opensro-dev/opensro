@@ -10,7 +10,7 @@ import (
 HandleVisualFlags
 
 The full retail 0x7683 -> 0xB683 round trip. The client composes both known
-bits: the options page sets the beginner mark (4BADC0) and the Action
+bits: the options page sets the beginner mark (client 4BADC0) and the Action
 window's Helper status toggles the helper mark (695420 action 1011).
 Neither binary shows a server rule for the helper bit, so it is inferred to
 be the player's own choice, accepted as sent. Above level 19 the beginner

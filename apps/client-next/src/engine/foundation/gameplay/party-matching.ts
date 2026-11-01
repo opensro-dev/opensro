@@ -441,6 +441,53 @@ export function partyDefaultPurpose( job: number ): number {
 	return job === 2 ? 3 : job === 1 || job === 3 ? 2 : 0;
 }
 
+// The record form's title box and the register/modify frame both hold 50
+// characters (the form setup gives edit 0x31 a 0x32 limit at 63C2F9, right
+// after 63BE00 fills the default), so a longer localised default is cut to fit.
+export const PARTY_TITLE_MAX_LENGTH = 50;
+// 63BE00 indexes its default table with the purpose radio (this+0x7C4):
+// Hunting, Quest, Trader, Thief. The catalogue numbers do not follow that
+// order: DEFAULT2 is the trader's, DEFAULT3 the quest's.
+const PARTY_DEFAULT_TITLE_KEYS = [
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT3",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT2",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4"
+] as const;
+/*
+================
+partyDefaultTitleKey
+
+The default title of each purpose, in the radio's order. Purpose 0 (the
+jobless default) stands in for an out-of-range byte, which the radio and
+partyPurposeAllowed never produce.
+================
+*/
+export function partyDefaultTitleKey( purpose: number ): string {
+	return PARTY_DEFAULT_TITLE_KEYS[purpose] ?? PARTY_DEFAULT_TITLE_KEYS[0]!;
+}
+/*
+================
+partyFormTitle
+
+What 63BE00 leaves in the title box for `current` and `purpose`: an empty box,
+or one still holding any of the four defaults, becomes the selected purpose's
+default; a title the player typed is never replaced. The comparison uses the
+same 50-character cut the box applies, so a cut default still counts as one.
+================
+*/
+export function partyFormTitle(
+	current: string,
+	purpose: number,
+	strings: Readonly<Record<string, string>>
+): string {
+	const title = ( key: string ) => (strings[key] ?? "").slice( 0, PARTY_TITLE_MAX_LENGTH );
+	if ( !current.length || PARTY_DEFAULT_TITLE_KEYS.some( key => title( key ) === current ) ) {
+		return title( partyDefaultTitleKey( purpose ) );
+	}
+	return current;
+}
+
 /*
 ================
 PartyMatchLocal

@@ -152,11 +152,18 @@ type Metrics struct {
 	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
 	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
-	HandlerMs   map[string]Histogram     `json:"handler_ms"`
-	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
-	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
+	HandlerMs map[string]Histogram `json:"handler_ms"`
+	// UnhandledOpcodes splits unhandled_opcode_frames by opcode, up to
+	// maxUnhandledOpcodes distinct values (timing.go, #2147).
+	UnhandledOpcodes map[string]uint64        `json:"unhandled_opcodes"`
+	TickPhaseMs      map[string]Histogram     `json:"tick_phase_ms"`
+	SlowHooks        map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
+	// PublicationHolds is each labelled publication-gate holder's slow
+	// holds (>= 100 ms, timing.go): who kept the gate longest, beside the
+	// slow steps that only waited on it.
+	PublicationHolds map[string]SlowHookStats `json:"publication_holds"`
 	// TickCommit counts the ticks' batched authority commits (timing.go);
 	// tick_phase_ms.commit is their flush time.
 	TickCommit TickCommitStats `json:"tick_commit"`
@@ -173,6 +180,9 @@ type Metrics struct {
 	// PlacementInsideObject counts players a non-walk path placed inside an
 	// object no walk can enter, by the path (action/placementguard.go).
 	PlacementInsideObject map[string]uint64 `json:"placement_inside_object,omitempty"`
+	// StoreLock is the authority store's lock waits, write holds and commit
+	// phases (store/lock_timing.go), when the GameWorld installed them.
+	StoreLock any `json:"store_lock,omitempty"`
 	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
 	// goroutines since start (runtime_stats.go).
 	Runtime RuntimeStats `json:"runtime"`
@@ -200,6 +210,18 @@ the transport never imports the store that counts.
 */
 func (h *Hub) SetEconomyMetrics(read func() map[string]uint64) {
 	h.economyMetrics.Store(&read)
+}
+
+/*
+==================
+SetStoreLockMetrics
+
+Installs the provider of the store_lock block, as SetEconomyMetrics does:
+the transport never imports the store that times its lock.
+==================
+*/
+func (h *Hub) SetStoreLockMetrics(read func() any) {
+	h.storeLockMetrics.Store(&read)
 }
 
 /*
@@ -316,6 +338,9 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.petCombatMetrics.Load(); read != nil && *read != nil {
 		metrics.PetCombat = (*read)()
+	}
+	if read := h.storeLockMetrics.Load(); read != nil && *read != nil {
+		metrics.StoreLock = (*read)()
 	}
 	if read := h.placementMetrics.Load(); read != nil && *read != nil {
 		if counts := (*read)(); len(counts) > 0 {

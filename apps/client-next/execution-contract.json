@@ -86,7 +86,8 @@
 				"receiveLifecycle",
 				"step",
 				"ready",
-				"error"
+				"error",
+				"failure"
 			]
 		},
 		{
@@ -1050,7 +1051,9 @@
 				"setCameraWaypoints",
 				"setCameraZoomRail",
 				"setCursorVisible",
+				"setDamageNumbers",
 				"setFreeCamera",
+				"setFreeCameraSpeed",
 				"setRenderMode",
 				"setWorldFieldOfView"
 			]
@@ -2196,6 +2199,7 @@
 			"consumer": "src/engine/runtime/bug-report/bug-report.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
+				"assets",
 				"context",
 				"gpu",
 				"network",
@@ -2586,6 +2590,14 @@
 				"createSunDropMarkers",
 				"step"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/resources/resources.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"installIconAtlas"
+			],
+			"reason": "The image owner reports the installed icon atlas mapping (foundation/ui/icon-atlas.ts) to the renderer through the runtime extension hook."
 		}
 	],
 	"boundaries": [
@@ -4158,7 +4170,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "72c0c606449aca3824eab947da090ca0bafa3598270adad929d1eb5d9a876c7d",
+			"sourceSha256": "744f9ae246d43ecf41ae5da726f587a7fa37abe1cd41ef19fe432d7f38827664",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

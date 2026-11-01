@@ -15,11 +15,12 @@ import (
 )
 
 // PARTIAL GetSplitEligibility: ordinary stack arithmetic projection of
-// 0x004B9D40 / 0x00490230. Subtype/options and COS restrictions
-// are not represented here; this is not a complete native eligibility gate.
-// Checks whether the target slot can merge an incoming item.
-// Native 0x004B9D40 specifically checks record+20/+24 != 0 (target.RecordID != 0).
-// If RecordID == 0, returns 0 even if other fields match.
+// the server's split-eligibility check. Subtype/options and COS
+// restrictions are not represented here; this is not a complete native
+// eligibility gate. Checks whether the target slot can merge an incoming
+// item. The native check specifically checks record+20/+24 != 0
+// (target.RecordID != 0). If RecordID == 0, returns 0 even if other
+// fields match.
 /*
 ================
 GetSplitEligibility
@@ -33,7 +34,7 @@ func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap u
 	if !ok {
 		return 0
 	}
-	// Native 004B9D40 check: record+20/+24 != 0
+	// Native check: record+20/+24 != 0
 	if target.RecordID == 0 || wire.IsCosSummoner(target.TypeFlags) || wire.IsCosSummoner(incoming.TypeFlags) || target.Summon != nil || incoming.Summon != nil {
 		return 0
 	}
@@ -54,8 +55,8 @@ func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap u
 	return int32(mergeQty)
 }
 
-// splitInventoryRow projects native 4B9C60's zero record identity onto a new
-// portable row. Mutable options must not alias the source record.
+// splitInventoryRow projects the native split's zero record identity onto
+// a new portable row. Mutable options must not alias the source record.
 /*
 ================
 cloneInventoryRow
@@ -79,7 +80,7 @@ func splitInventoryRow(source Item, slot uint8, quantity uint16) Item {
 	return row
 }
 
-// PARTIAL portable SplitItem; not complete native 0x004B9C60 factory closure.
+// PARTIAL portable SplitItem; not the complete native factory closure.
 // Splits quantity from sourceSlot into empty destSlot with rollback protection.
 // Newly split item in native Silkroad starts with RecordID == 0 (unpersisted in DB)
 // until assigned by the persistence layer or an optional identity allocator.
@@ -181,8 +182,8 @@ func (t *CosParamTable) Finalize() {
 type CosItemPredicate func(item *Item) int32
 type CosSubtypeProducer func(item *Item, table *CosParamTable)
 
-// PARTIAL portable ReconcileCosParamEntries (0x004BA940): subtype producers and
-// actual COS lifecycle/DB finalization must be supplied by the owning subsystem.
+// PARTIAL portable ReconcileCosParamEntries: subtype producers and actual
+// COS lifecycle/DB finalization must be supplied by the owning subsystem.
 // Reconciles COS parameter table across container slots.
 // Native guards:
 //   - storageKind MUST be 0 (inventory), 3 (guild), or 4 (chest).
@@ -199,7 +200,7 @@ type CosSubtypeProducer func(item *Item, table *CosParamTable)
 // Entry scan:
 //   - Reads entry count after producers execute.
 //   - Only resets unengaged entries (IsEngaged == false).
-//   - Finalizes table via sub_431550.
+//   - Finalizes the table via the native vector finalizer.
 /*
 ================
 ReconcileCosParamEntries

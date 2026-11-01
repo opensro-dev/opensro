@@ -12,6 +12,9 @@ package transport
 
 import (
 	"slices"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // PublishedObjects returns only scope changes admitted to this scene's queue.
@@ -121,10 +124,16 @@ BeginSceneAdmission
 */
 func (s *Session) BeginSceneAdmission() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sceneRevision++
 	s.sceneLoading = true
+	s.sceneLoadingSince = time.Now()
+	s.sceneBootstrapEnqueued = false
 	s.clearObservedLocked()
+	revision := s.sceneRevision
+	s.mu.Unlock()
+	// One line per scene transition: a scene stuck loading is otherwise
+	// invisible in the log until its held commands time out (#1978).
+	log.WithFields(log.Fields{"session": s.ID, "revision": revision}).Info("transport: scene loading")
 }
 
 // ObjectScopeChange accompanies the object's complete creation or removal
@@ -258,6 +267,23 @@ func (s *Session) SendSceneUnreliableKeyed(revision uint64, opcode uint16, key u
 	return s.sendSceneUnreliableKeyed(opcode, key, payload, &revision)
 }
 
+/*
+================
+MarkSceneBootstrapEnqueued
+
+The enter lane calls this after it publishes a refusal answer for the
+current scene (the success path rides the reset batch, which marks
+itself in sendSceneObjectBatch). The keepalive watchdog measures the
+admission against this mark: a scene still unmarked at the entry bound
+has no answer on the wire at all, which is the wedged-entry signature.
+================
+*/
+func (s *Session) MarkSceneBootstrapEnqueued() {
+	s.mu.Lock()
+	s.sceneBootstrapEnqueued = true
+	s.mu.Unlock()
+}
+
 // Initial admission still owns WorldBound hooks; scene-ready only releases
 // existing world visibility, preserving session-owned effects and companions.
 /*
@@ -274,7 +300,9 @@ func (s *Session) FinishSceneReentry() bool {
 	s.sceneLoading = false
 	hooks := s.sceneReadyHooks
 	s.sceneReadyHooks = nil
+	revision := s.sceneRevision
 	s.mu.Unlock()
+	log.WithFields(log.Fields{"session": s.ID, "revision": revision}).Info("transport: scene live")
 	for _, hook := range hooks {
 		hook()
 	}
@@ -416,6 +444,9 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		clear(s.lossy)
 		s.lossyKeys = nil
 		s.lossyBytes = 0
+		// The reset batch is this scene's bootstrap: its enqueue below
+		// is the moment the scene has an answer on the wire.
+		s.sceneBootstrapEnqueued = true
 	}
 	for _, frame := range frames {
 		s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})

@@ -62,6 +62,7 @@ type directionWalk struct {
 	goal           simulation.Spawn
 	moving         bool
 	blocked        bool
+	thiefCargo     bool
 	groundRevision uint64
 }
 
@@ -156,6 +157,9 @@ type directionLeg struct {
 	goal    simulation.Spawn
 	walk    simulation.NavWalk
 	blocked bool
+	// thiefCargo marks a leg the thief transport rule ended: the walk's
+	// stop shows the same notice a refused destination move does.
+	thiefCargo bool
 }
 
 /*
@@ -182,18 +186,29 @@ func (rt *Runtime) constrainDirectionLeg(character *enterworld.Character, from s
 		return standingLeg(from, fromOwner)
 	}
 	if rt.CanEnterRegion != nil && !rt.CanEnterRegion(character, end.RegionID) {
-		end = rt.enterableLegEnd(character, from, end)
+		end = furthestAdmitted(from, end, func(at simulation.Spawn) bool { return rt.CanEnterRegion(character, at.RegionID) })
 		blocked = true
 	}
+	// A thief's transport stops at the first protected region it would enter
+	// (#721): the reference server refuses that step with the thief-cart
+	// notice (v1.150 shows it for 0x3058 kind 1), and the walk ends there
+	// (#1985: the notice comes with the stop).
+	thiefCargo := false
+	if rt.thiefCargoCrossingBlocked(character, from, end) {
+		end = furthestAdmitted(from, end, func(at simulation.Spawn) bool { return !rt.thiefCargoCrossingBlocked(character, from, at) })
+		blocked, thiefCargo = true, true
+	}
 	if end.RegionID == from.RegionID && end.X == from.X && end.Z == from.Z {
-		return standingLeg(from, fromOwner)
+		leg := standingLeg(from, fromOwner)
+		leg.thiefCargo = thiefCargo
+		return leg
 	}
 
 	if rt.groundEnabled {
-		return directionLeg{goal: end, blocked: blocked}
+		return directionLeg{goal: end, blocked: blocked, thiefCargo: thiefCargo}
 	}
 	end, walk := rt.walkOwners(from, fromOwner, end)
-	return directionLeg{goal: end, walk: walk, blocked: blocked}
+	return directionLeg{goal: end, walk: walk, blocked: blocked, thiefCargo: thiefCargo}
 }
 
 /*
@@ -210,16 +225,17 @@ func standingLeg(from simulation.Spawn, fromOwner simulation.NavOwner) direction
 
 /*
 ================
-enterableLegEnd
+furthestAdmitted
 
-The furthest point of the chord from -> to that stands in a region the
-character may enter. The world-area policy is the same gate a destination
-click meets at its endpoint; a walk that reaches a closed area stops at its
-border instead of being refused outright, since the client is already
-walking. Assumes from is enterable (the character stands there).
+The furthest point of the chord from -> to that admitted accepts. A
+direction walk that reaches a closed area (the world-area policy, the same
+gate a destination click meets at its endpoint) or a region its transport
+may not enter stops at that border instead of being refused outright,
+since the client is already walking. Assumes from is admitted (the
+character stands there) and the refusal is one border along the chord.
 ================
 */
-func (rt *Runtime) enterableLegEnd(character *enterworld.Character, from, to simulation.Spawn) simulation.Spawn {
+func furthestAdmitted(from, to simulation.Spawn, admitted func(simulation.Spawn) bool) simulation.Spawn {
 	best := from
 	low, high := 0.0, 1.0
 	for i := 0; i < directionAccessBisections; i++ {
@@ -230,7 +246,7 @@ func (rt *Runtime) enterableLegEnd(character *enterworld.Character, from, to sim
 			mid,
 		)
 		candidate := simulation.Spawn{RegionID: planar.RegionID, X: planar.X, Y: from.Y + (to.Y-from.Y)*mid, Z: planar.Z, Angle: to.Angle}
-		if rt.CanEnterRegion(character, candidate.RegionID) {
+		if admitted(candidate) {
 			best, low = candidate, mid
 		} else {
 			high = mid
@@ -256,6 +272,14 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	var result simulation.MoveResult
 	committed, refusal := rt.commitMove(character, admission, func(world *simulation.WorldState) {
 		result = simulation.ApplyDirectionLeg(world, enterworld.ObjectIDForCharacter(character), walk.request, leg.goal, nowMs)
+		// The ground walker steps an angular segment along its heading until
+		// terrain stops it and never arrives at the goal, so a leg a rule cut
+		// short (a closed area, a thief's transport at a town) must end at
+		// its goal: without this a sky or moon walk crossed the border the
+		// clip stopped it at (#1985).
+		if leg.blocked && world.MoveSegment != nil {
+			world.MoveSegment.GroundAngular = false
+		}
 		// Same rule as a destination commit: the spans belong to the chord
 		// walked from this live point and nothing else.
 		if result.LiveBefore == live {
@@ -271,6 +295,7 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	walk.groundRevision = committed.GroundRevision()
 	walk.moving = committed.MoveSegment != nil
 	walk.blocked = leg.blocked
+	walk.thiefCargo = leg.thiefCargo
 	rt.directions.set(admission.worldKey, walk)
 	return result, committed, nil
 }
@@ -332,7 +357,7 @@ One walk's tick, under its character lock:
   - an open leg inside DirectionLegLookaheadMs of its arrival is followed
     by the next leg from the live point;
   - a blocked leg ends the walk once it matures, with the 0xB2F5 correction
-    for the mover.
+    for the mover, and the thief transport notice when that rule stopped it.
 
 ================
 */
@@ -383,10 +408,15 @@ func (rt *Runtime) continueDirectionWalk(key string, nowMs int64) (simulation.Di
 		}
 		rt.directions.clear(key)
 		correction := directionCorrectionFrame(activeMoverGID(walk.character, walk.cosGID), admission.world.Spawn)
+		frames := []simulation.Frame{{Opcode: correction.Opcode, Payload: correction.Payload}}
+		if walk.thiefCargo {
+			notice := thiefCargoTownNotice()
+			frames = append(frames, simulation.Frame{Opcode: notice.Opcode, Payload: notice.Payload})
+		}
 		return simulation.DivisionFrames{
 			DivisionID:      walk.divisionID,
 			OnlyCharacterID: walk.character.ID,
-			Frames:          []simulation.Frame{{Opcode: correction.Opcode, Payload: correction.Payload}},
+			Frames:          frames,
 		}, true
 	}
 	if nowMs < arrivesAtMs-simulation.DirectionLegLookaheadMs {
@@ -406,7 +436,7 @@ activeMoverGID
 
 The gid a 0xB2F5 for this mover must name. A rider on a live summoned
 mount is moved by the mount: native ignores a correction naming a
-mounted character (OnEntityMoveUpdate0xB2F5 0x775B50 returns early
+mounted character (OnEntityMoveUpdate0xB2F5 client 0x775B50 returns early
 while the rider's mounted flag is set), so the stop names the command
 mover when one is known, the live summoned mount when the command came
 without one, and the character itself for any other mover.
@@ -426,7 +456,7 @@ func activeMoverGID(character *enterworld.Character, cosGID uint32) uint32 {
 ================
 directionCorrectionFrame
 
-The 0xB2F5 source correction (OnEntityMoveUpdate0xB2F5 0x775B50:
+The 0xB2F5 source correction (OnEntityMoveUpdate0xB2F5 client 0x775B50:
 HaltAndSetYaw + ReseedSourcePosition) that stops a mover at spawn.
 ================
 */

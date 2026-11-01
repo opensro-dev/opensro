@@ -3,8 +3,8 @@
 
 deathnotice.go - the death notice that sets the death box's rebirth mode
 
-CGObjPC_ProcessNormalDeath (server 529B10, 529D6D) sends the victim one
-byte, its death kind (victim+0x1CB4), as server opcode 0x3011. The v1.150
+The native server sends the victim one byte, its death kind
+(victim+0x1CB4), as opcode 0x3011. The v1.150
 client reads it as 0x37CE (CPSMission_OnDeathNoticeSetRebirthMode 74FE50)
 and stores it at CGInterface+0x640 (67B2E0); the death box labels its first
 button from that byte (CIFMessageBox_ConfigureByType 52FF33).

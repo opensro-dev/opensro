@@ -55,11 +55,11 @@ func TestShippedPetFoodUsesAuthoredPercentAndNativeBoundary(t *testing.T) {
 			t.Fatalf("satiety wire = %x", payload)
 		}
 		if enterworld.CurrentHP(c) != ownerHP || c.ActiveCOS.CurrentHP != petHP || c.PetPotionCooldowns != [3]int64{} ||
-			// Only the item's own visual is public (510980 sends 0x305C for every use).
+			// Only the item's own visual is public (the item use sends 0x305C for every use).
 			len(result.Broadcast) != 2 || result.Broadcast[1].Opcode != wire.OpItemUseVisual {
 			t.Fatal("feeding changed vitals, reuse timers or public state")
 		}
-		// 49D6E7: the HGP potion's sparkle plays on the pet it fed.
+		// The HGP potion's sparkle plays on the pet it fed.
 		if gid := binary.LittleEndian.Uint32(result.Broadcast[1].Payload); gid != c.ActiveCOS.GID {
 			t.Fatalf("pet food sparkle on %d, want pet %d", gid, c.ActiveCOS.GID)
 		}

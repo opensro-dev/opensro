@@ -250,7 +250,7 @@ function isCapturedMonster( entity: import("@/engine/contracts/world").EntitySta
 stageBinding
 
 One of a stage's two 0x18-byte attachment bindings (+0x3C start, +0x54
-target): the bone sub_91e720 decoded from its token, the +0x08 / +0x09
+target): the bone CSkillEffectManager_ParseSkillEffectRecord decoded from its token, the +0x08 / +0x09
 flags, and the authored native model-space offset.
 ================
 */

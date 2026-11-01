@@ -1,6 +1,6 @@
 package combat
 
-// OffsetVital follows 4A66F0/4A6790: ADD wraps at 32 bits, then the
+// OffsetVital follows the server's HP/MP offset routines: ADD wraps at 32 bits, then the
 // resulting signed value is clamped to zero and the signed maximum.
 func OffsetVital(current, maximum uint32, delta int32) uint32 {
 	value := int32(current + uint32(delta))
@@ -13,7 +13,7 @@ func OffsetVital(current, maximum uint32, delta int32) uint32 {
 	return uint32(value)
 }
 
-// ConsumeMana uses the nonnegative cost from 4A8770, rather than allowing
+// ConsumeMana uses the nonnegative cost the server's mana spend takes, rather than allowing
 // an overflowing prepared cost to become a mana grant.
 func ConsumeMana(current, maximum uint32, cost int32) uint32 {
 	if cost <= 0 {

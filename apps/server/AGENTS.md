@@ -93,3 +93,17 @@ subset, govulncheck). Each step is skipped when its inputs match a recorded
 pass, so an unchanged tree checks in about half a second;
 `SRO_CHECK_FORCE=1` runs every step and `SRO_GO_TEST_CACHE=off` reruns every
 test.
+
+Before every push, run `pnpm task check:server:changed`. It runs what CI's
+server shards would run, scoped to the packages the branch changes since its
+merge base with origin/main:
+- gofmt and a whole-module build;
+- vet and golangci-lint on those packages;
+- their tests, plus `internal/gates`, the architecture boundaries any
+  package change can break;
+- the race subset they touch.
+
+It takes about a minute and is not a heavy run, so it needs no machine-wide
+slot. Hand-picked `go test` packages are not a substitute: they miss lint
+and the boundary gate, which is how a branch goes red in CI. The full gate
+and CI still run everything.

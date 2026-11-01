@@ -26,6 +26,39 @@ import (
 
 /*
 ================
+TestPartyShareRosterResolvesOnlyTheParty
+
+#2030: a share lookup asks presence only for the party it can pay.
+With three bystanders standing in the same division, the gold share
+still splits between picker and peer - and never asks about anyone
+else. The full reward roster asked about every character present.
+================
+*/
+func TestPartyShareRosterResolvesOnlyTheParty(t *testing.T) {
+	rt, _, picker, peer, _ := sharedPickupFixture(t)
+	source := fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)
+	for i := range 3 {
+		by := picker.Snapshot()
+		by.ID = int64(40 + i)
+		by.Name = "Bystander" + string(rune('0'+i))
+		source[testDivision] = append(source[testDivision], by)
+	}
+	asked := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		asked++
+		return true
+	}
+	shares := rt.partyGoldShares(testDivision, picker, 101, rt.Now().UnixMilli())
+	if len(shares) != 2 || shares[0].character != picker || shares[1].character != peer {
+		t.Fatalf("shares = %+v, want the picker and the peer", shares)
+	}
+	if asked > 2 {
+		t.Fatalf("the share lookup asked presence for %d characters, want at most the 2 party members", asked)
+	}
+}
+
+/*
+================
 sharedPickupFixture
 ================
 */
@@ -125,7 +158,7 @@ func goldRefreshesFor(result OpResult, id int64) []wire.GoldRefresh {
 ================
 TestSharedGoldSplitsEquallyAroundTheRotatedRecipient
 
-CParty_DistributeGold: 101 between two members is 50 each, and the member
+The native party gold split: 101 between two members is 50 each, and the member
 the rotation chose also takes the remainder. Every share is announced
 (notify 1); the 0xFE receipt stays with the chosen recipient.
 ================
@@ -172,7 +205,7 @@ func TestSharedGoldSplitsEquallyAroundTheRotatedRecipient(t *testing.T) {
 TestSoloGoldPickupRefreshesSilently
 
 Without a split the 0xFE receipt announces the heap, so the balance refresh
-carries notify 0 (4EAD12), never a second message.
+carries notify 0, never a second message.
 ================
 */
 func TestSoloGoldPickupRefreshesSilently(t *testing.T) {
@@ -254,7 +287,7 @@ func TestSharedGoldSkipsAnotherWorldAndOutOfRangeMembers(t *testing.T) {
 TestSharedItemSkipsADeadMember
 
 The item rotation hands a pickup only to a living member (life byte 1,
-525FAE); a dead member's turn passes and the picker keeps the item.
+as natively); a dead member's turn passes and the picker keeps the item.
 ================
 */
 func TestSharedItemSkipsADeadMember(t *testing.T) {
@@ -272,7 +305,7 @@ func TestSharedItemSkipsADeadMember(t *testing.T) {
 ================
 TestPartyMonsterIsHighNibbleOne
 
-CGObjMob_IsPartyMonster (4C0DD0): (rarity & 0xF0) == 0x10, nothing wider.
+The native party-monster test: (rarity & 0xF0) == 0x10, nothing wider.
 ================
 */
 func TestPartyMonsterIsHighNibbleOne(t *testing.T) {
@@ -319,7 +352,7 @@ func sharedPetFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterworl
 ================
 TestPetPickupRunsThePartyItemShare
 
-525DC0 runs the item-share rotation for a pet's pickup (move type 0x11)
+The native rotation runs item share for a pet's pickup (move type 0x11)
 as for the owner's own: over two pickups the rotation hands one potion to
 the peer's inventory and leaves the other in the pet's bag, and the pet's
 gold pickup is split between the members.
@@ -471,8 +504,8 @@ func partyLootNoticesFor(result OpResult, id int64) [][]byte {
 ================
 TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns
 
-CCOS_ExecuteGroundPickup (4D515E..4D517A) and CPlayer_ExecuteGroundPickup
-(5263C8..5263DF) call CParty_BroadcastLootNotice (5BDC80) after every
+Natively both the COS and the player ground pickups
+broadcast the party loot notice after every
 granted non-gold pickup in an item-share party, including when the rotation
 selects the pet owner and the item lands in the pet bag (move type 0x11).
 ================
@@ -491,7 +524,7 @@ func TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns(t *testing.T) {
 	wantPicker := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(picker), potion.RefObjID, potion.TypeFlags, 1)
 	wantPeer := wire.EncodePartyLootNotice(enterworld.ObjectIDForCharacter(peer), potion.RefObjID, potion.TypeFlags, 1)
 
-	// 4D5545: pet gold pickup must not advance the party item-share cursor, and
+	// Pet gold pickup must not advance the party item-share cursor, and
 	// shared pet pickup frames must never include the player 0xB2CD latch.
 	goldRes := pick(heap(grounditem.Item{GoldAmount: 40}))
 	for _, f := range goldRes.Frames {
@@ -523,7 +556,7 @@ func TestPetPickupEmitsPartyLootNoticeOnOwnerAndPeerTurns(t *testing.T) {
 ================
 TestSharedPlayerPickupFullRecipientBagRoutes07ToRecipientAndDAToPicker
 
-CPlayer_ExecuteGroundPickup (526343..5263B2): when the party rotation selects
+The native player ground pickup: when the party rotation selects
 another member whose player bag is full (0x1807), the recipient receives
 0xB06D [2, 0x07] (ErrCodeStorageFull) and the picker receives 0xB06D [2, 0xDA]
 (ErrCodePartyInventoryFull) plus the 0xB2CD release.
@@ -567,8 +600,7 @@ func TestSharedPlayerPickupFullRecipientBagRoutes07ToRecipientAndDAToPicker(t *t
 ================
 TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull
 
-CCOS_SelectPickupRecipient (4D5715..4D5744) and CCOS_ExecuteGroundPickup
-(4D5143, 4D52B6..4D54C6):
+The native COS pickup recipient choice and COS ground pickup:
  1. When the rotated party member's player bag is full and they have no pickup
     pet, the picker's owner receives 0xB69E [2, 8, 0x9C, pickerPet, item].
  2. When the rotated party member has a summoned pickup pet with free space,
@@ -604,7 +636,7 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 	cmd1 := wire.NewWriter(9).U32(pickerPetGID).U8(wire.CosCommandPickupTag).U32(drop1.Gid).Payload()
 
 	// 1. Peer has no free bag slot (even with a below-cap potion stack at slot 13) and no pickup pet:
-	// 4D570C probes CGStorage_FindFirstEmptySlot(0x0D) == 0xFF and refuses with 0x9C without merging.
+	// Natively the first-empty-slot probe from 0x0D returns 0xFF and refuses with 0x9C without merging.
 	rt.NextPartyLootMember(testDivision, picker.Name)
 	noPetRes := rt.HandleCosCommand(testDivision, picker, cmd1)
 	assertCosPickupAck(t, noPetRes.Frames, pickerPetGID, drop1.Gid, false)
@@ -612,7 +644,7 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 		t.Fatalf("peer without pet full-bag result = %+v, want 0x9C to picker and no peer frame", noPetRes)
 	}
 	if peer.MissionInventory[0].StackCount != 3 {
-		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists at 4D570C)", peer.MissionInventory[0].StackCount)
+		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists, as natively)", peer.MissionInventory[0].StackCount)
 	}
 
 	// 2. Summon a 1-slot pickup pet for peer and rotate back to peer: drop1 spills to peer's pet without merging into slot 13.
@@ -665,10 +697,10 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 ================
 TestManualCosItemMoveKeepsB06DErrorCodesOnFullBags
 
-CGObjPC_OnItemMoveRequest (50F87A) dispatches 0x706D move type 0x11 to
-CPlayer_ExecuteGroundPickup (526090), which uses 0xB06D error codes (0x07 /
+The native item move request dispatches 0x706D move type 0x11 to
+the player ground pickup, which uses 0xB06D error codes (0x07 /
 0xDA) rather than the 0x769E command codes (0x9C / 0xB4 / 0xB5) or peer-pet
-spillover from CCOS_SelectPickupRecipient (4D5510).
+spillover from the COS pickup recipient choice.
 ================
 */
 func TestManualCosItemMoveKeepsB06DErrorCodesOnFullBags(t *testing.T) {
@@ -751,7 +783,7 @@ func TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate(t *testing.T)
 		OwnerJID: 0x7777777, DroppedAt: rt.Now(),
 	})
 	res := rt.grantPeerCosPickup(testDivision, picker, peer, drop, wire.PickupAnim{Gid: peerPetGID}, petPickupAt{
-		now: rt.Now(), command: true,
+		now: rt.Now(), command: true, doors: rt.handlerDoors(),
 	})
 	if len(res.Broadcast) != 0 || len(peer.ActiveCOS.Container.Rows) != 0 || len(rt.Ground.All(testDivision)) != 1 {
 		t.Fatalf("grantPeerCosPickup bypassed OwnerJID recheck: res=%+v rows=%+v", res, peer.ActiveCOS.Container.Rows)
@@ -794,7 +826,7 @@ func TestSharedPickupRecipientGetsTheReferenceBeforeTheGrant(t *testing.T) {
 ================
 TestSharedPetPickupSpillGivesThePeerTheReferenceFirst
 
-#1612, pet path: CCOS_ExecuteGroundPickup spills a shared pickup into the
+#1612, pet path: the native COS ground pickup spills a shared pickup into the
 rotated member's pickup pet (0xB06D [1][0x11][pet gid][slot][item]). That
 member may never have seen the drop either, so its reference row leads.
 ================

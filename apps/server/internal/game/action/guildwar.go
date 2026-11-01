@@ -23,7 +23,7 @@ const guildWarMasterReach = 300
 ================
 GuildWarMastersNear
 
-5C6B60 compares the relative three-dimensional distance against 300.
+The reference server compares the relative three-dimensional distance against 300.
 ================
 */
 func (rt *Runtime) GuildWarMastersNear(division string, first, second *enterworld.Character) bool {
@@ -38,7 +38,7 @@ func (rt *Runtime) GuildWarMastersNear(division string, first, second *enterworl
 ================
 prepareGuildWarCombat
 
-4E1F60 calls 5C6FB0 only for kind 5; cape, job and siege kills take their
+The reference server's PvP kill rewards score the guild war only for kind 5; cape, job and siege kills take their
 own rewards even when the same guilds are also fighting a declared war.
 ================
 */
@@ -61,8 +61,8 @@ func (rt *Runtime) prepareGuildWarCombat(division string, victim *enterworld.Cha
 ================
 prepareCOSGuildWarCombat
 
-prepareGuildWarCombat for a COS victim: 5C7000 checks the actual victim
-(5C71D7) and, because it is a COS, scores from the COS's own level against
+prepareGuildWarCombat for a COS victim: the reference server checks the actual victim
+and, because it is a COS, scores from the COS's own level against
 the killer's, not from its owner's level.
 ================
 */

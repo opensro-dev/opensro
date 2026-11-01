@@ -8,7 +8,7 @@ import (
 )
 
 // Monster and player producers must encode the same wire bearings, including
-// the model-yaw offset applied by native spawn decoder 8535A0.
+// the model-yaw offset applied by the client spawn decoder 8535A0.
 func TestHeadingWordTowardUsesNativeYawConvention(t *testing.T) {
 	const quarter = 0xffff / 4.0
 	cases := []struct {

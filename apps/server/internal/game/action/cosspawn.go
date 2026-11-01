@@ -40,8 +40,9 @@ func (rt *Runtime) EntryCompanionSpawn(division string, character *enterworld.Ch
 ================
 companionAdmissionSpawn
 
-4FBAE0 supplies radius 20 to 5F6EB0 for attack/pickup pets. The latter uses
-531240's shared sampler and falls back to the centre on blocked COS moves.
+The reference server supplies radius 20 to the monster spawn for attack/pickup
+pets. The latter uses the shared banded sampler and falls back to the centre on
+blocked COS moves.
 The caller holds the division lock, never petMu, across geometry admission.
 ================
 */

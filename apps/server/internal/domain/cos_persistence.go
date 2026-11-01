@@ -15,9 +15,9 @@ package domain
 ================
 COSRental
 
-492D40 writes kind 0 or 5; kind 5 additionally carries a tag and flag.
-Absolute deadlines survive offline time. RemainingSeconds is the native
-projection cached at the last authority checkpoint.
+The server's rental writer writes kind 0 or 5; kind 5 additionally carries a
+tag and flag. Absolute deadlines survive offline time. RemainingSeconds is
+the native projection cached at the last authority checkpoint.
 ================
 */
 type COSRental struct {
@@ -55,7 +55,7 @@ func CloneCOS(source *CharacterCOS) *CharacterCOS {
 ================
 COSItemState
 
-492D20 derives the item state from the retained record's alive/summoned bits.
+The server derives the item state from the retained record's alive/summoned bits.
 State 1 means the item has never acquired a record, not a dormant companion.
 ================
 */
@@ -86,7 +86,7 @@ func (c *Character) Companions() []*CharacterCOS {
 		return nil
 	}
 	var pets []*CharacterCOS
-	c.visitCompanions(func(pet *CharacterCOS) bool {
+	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		pets = append(pets, pet)
 		return true
 	})
@@ -95,16 +95,17 @@ func (c *Character) Companions() []*CharacterCOS {
 
 /*
 ================
-visitCompanions
+VisitCompanions
 
 Visits the records Companions returns, in the same order, without building
 the slice; visit returns false to stop. Lookups by GID run on every pet,
 combat and abnormal tick for every character a division walk touches, and
 the slice cost an allocation per call plus a walk of the whole bag (#1820).
+Read-door admission checks use it for the same reason (#2032).
 The order is the one canonical order: Companions is built from it.
 ================
 */
-func (c *Character) visitCompanions(visit func(*CharacterCOS) bool) {
+func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
 	if c == nil {
 		return
 	}
@@ -145,7 +146,7 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 	}
 	var found *CharacterCOS
 	duplicate := false
-	c.visitCompanions(func(pet *CharacterCOS) bool {
+	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		if pet.Summoned && pet.GID == gid {
 			if found != nil {
 				duplicate = true
@@ -165,7 +166,7 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 ================
 RefreshRentalTimes
 
-Native 492D40 clamps calendar-time differences to a signed wire dword. The
+The native rental writer clamps calendar-time differences to a signed wire dword. The
 clock belongs to the authority caller, so offline time cannot pause leases.
 ================
 */

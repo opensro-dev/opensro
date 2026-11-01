@@ -1,0 +1,11 @@
+[Unit]
+Description=Probe OpenSRO WebTransport from outside every sixty seconds
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=1
+Unit=opensro-wtprobe-runner.service
+
+[Install]
+WantedBy=timers.target

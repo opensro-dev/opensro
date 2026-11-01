@@ -20,7 +20,7 @@ import (
 ==================
 TestMountedPlayerCommandsAreRefused
 
-4ACD7A refuses both command kinds with the kind-3 notice and leaves the
+The native command step refuses both command kinds with the kind-3 notice and leaves the
 target untouched; dismounted, the same attack lands.
 ==================
 */

@@ -23,7 +23,7 @@ import (
 TestLearningForceIncreasingRaisesTheShownMaximumMP
 
 SKILL_CH_WATER_PASSIVE_A_01 (Force Increasing) is mpi 102 0: flat 102 on
-maximum MP (594AC0 0x5954DF). Learning it must resend the stat block with
+maximum MP (the buff installer's mpi block). Learning it must resend the stat block with
 the raised maximum, as a defense passive does; before, only defense
 passives refreshed it and the client kept the old maximum until a relog.
 ================

@@ -27,7 +27,7 @@ import (
 monsterAbnormalContext
 
 monsterAbnormalContext resolves what MonsterState cannot own for the
-abnormal engine: casters (by durable name, as ObjMgr_FindByID does by GID),
+abnormal engine: casters (by durable name, as the native object lookup does by GID),
 per-actor probability streams and parameters that include self effects.
 ==================
 */
@@ -76,7 +76,7 @@ func (c monsterAbnormalContext) SourceExists(division string, gid uint32, name s
 		return true
 	}
 	if name == "" && gid != 0 {
-		return c.rt.captureAbnormalSource(division, gid).exists
+		return c.rt.captureAbnormalSourceLife(division, gid).exists
 	}
 	return false
 }
@@ -90,11 +90,14 @@ Read source life state from its authority before assigning periodic damage credi
 */
 func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name string) bool {
 	if character := c.caster(division, gid, name); character != nil {
-		snapshot := c.rt.characterSnapshot(division, character)
-		return snapshot == nil || !enterworld.CharacterAlive(snapshot)
+		// Only the life fact is weighed, so read it as a value under
+		// the read door instead of detaching the whole record (#1943);
+		// the snapshot's nil case is the nil character excluded above.
+		alive, _, _ := c.rt.characterLifeState(division, character)
+		return !alive
 	}
 	if name == "" && gid != 0 {
-		return c.rt.captureAbnormalSource(division, gid).dead
+		return c.rt.captureAbnormalSourceLife(division, gid).dead
 	}
 	return false
 }
@@ -179,7 +182,7 @@ func (c monsterAbnormalContext) RetiresSkill(skillID uint32, all bool) bool {
 ================
 abnormalRandom
 
-abnormalRandom is the caster's CZoeZoeRnd stream (keyed by ECX) and the
+abnormalRandom is the caster's own random stream (keyed by the caster) and the
 process rand() the time bomb draws.
 ================
 */
@@ -230,8 +233,8 @@ func (r *abnormalRandom) Rand() int32 {
 ================
 rollPlayerOnMonster
 
-rollPlayerOnMonster ports 590680 for a player's hit on a monster target.
-Confusion eligibility belongs to target admission (58D2F2); 590680 does
+rollPlayerOnMonster ports the native abnormal roll for a player's hit on a monster target.
+Confusion eligibility belongs to target admission; the roll does
 not discard a successful roll by monster type or grade.
 ================
 */
@@ -250,7 +253,7 @@ func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character,
 		TargetLevel: target.Ref.Level,
 		TargetBonus: ctx.Param(target, 0xa9),
 		CasterLevel: stats.Level,
-		// CSkillManager_GetSkillModifier: the caster's learned setv dictionary.
+		// The native skill modifier lookup: the caster's learned setv dictionary.
 		CasterModifier: func(key uint32) (uint32, bool) {
 			slot, known := enterworld.SkillParameterFromKey(key)
 			if !known {
@@ -275,8 +278,8 @@ func (rt *Runtime) rollPlayerOnMonster(division string, c *enterworld.Character,
 monsterAbnormalFrames
 
 monsterAbnormalFrames publishes the consequences of a committed impact or
-update: withdrawn casts (570), the B2F5 stop (4A9430), the 376F speed pair
-(4AA410) and the vitals mask (4A5C60 dirty bit 0x100).
+update: withdrawn casts (570), the B2F5 stop, the 376F speed pair
+and the vitals mask (dirty bit 0x100).
 ==================
 */
 func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Instance, effects simulation.MonsterAbnormalEffects) []wire.Frame {
@@ -308,7 +311,7 @@ func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Insta
 ================
 advanceMonsterAbnormals
 
-advanceMonsterAbnormals runs 4A4390 for every monster with an active block:
+advanceMonsterAbnormals runs the native abnormal update for every monster with an active block:
 expiry, damage-over-time ticks, time-bomb detonation and mask publication.
 ================
 */
@@ -317,10 +320,42 @@ func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFra
 		return nil
 	}
 	var out []simulation.DivisionFrames
+	// One reward roster per division serves the whole pass: the roster
+	// is a division snapshot (membership, poses, parties), and building
+	// it per monster was the abnormal pass's largest allocation (#2029).
+	rosters := make(map[string]*rewardRoster)
 	for _, candidate := range rt.Monsters.AbnormalCandidates() {
-		out = append(out, rt.advanceMonsterAbnormal(candidate.DivisionID, candidate.Instance.Gid, nowMs)...)
+		out = append(out, rt.advanceMonsterAbnormalInPass(candidate.DivisionID, candidate.Instance.Gid, nowMs, rosters)...)
 	}
 	return out
+}
+
+/*
+================
+passRoster
+
+The settling roster for one abnormal candidate. Within a pass the
+first candidate of a division builds the roster and later candidates
+copy it, so the snapshot freezes at the pass's first abnormal - a
+window of one tick. The per-monster verdict (companionKill) is
+written to the copy only, never to the shared snapshot. A nil cache
+(a lone advance outside a pass) always builds fresh.
+
+monsterRewardRoster ignores its actor argument today; if that ever
+changes, this sharing must go.
+================
+*/
+func (rt *Runtime) passRoster(cache map[string]*rewardRoster, division string, character *enterworld.Character, nowMs int64) rewardRoster {
+	if cache != nil {
+		if shared, ok := cache[division]; ok {
+			return *shared
+		}
+	}
+	built := rt.monsterRewardRoster(division, character, nowMs)
+	if cache != nil {
+		cache[division] = &built
+	}
+	return built
 }
 
 /*
@@ -328,9 +363,22 @@ func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFra
 advanceMonsterAbnormal
 
 Commit periodic damage and rewards together, then publish the resulting life, loot and status changes.
+A lone advance outside a pass always builds its own reward roster.
 ================
 */
 func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int64) []simulation.DivisionFrames {
+	return rt.advanceMonsterAbnormalInPass(division, gid, nowMs, nil)
+}
+
+/*
+================
+advanceMonsterAbnormalInPass
+
+advanceMonsterAbnormal within a pass: rosters carries the pass's
+per-division reward rosters (nil outside a pass).
+================
+*/
+func (rt *Runtime) advanceMonsterAbnormalInPass(division string, gid uint32, nowMs int64, rosters map[string]*rewardRoster) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	plan, ok := rt.Monsters.PlanAbnormalUpdate(division, gid, nowMs)
@@ -350,7 +398,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 			}
 		}
 	}
-	roster := rt.monsterRewardRoster(division, character, nowMs)
+	roster := rt.passRoster(rosters, division, character, nowMs)
 	// A pet's or COS's burn credits its owner's rewards but no quest kill.
 	roster.companionKill = companion
 	var impact simulation.MonsterDamageResult
@@ -391,8 +439,8 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		private = append(private, privateFrames{id, frames})
 	}
 	for _, hit := range plan.Effects.Hits {
-		// 52A33D emits 3058 privately to the credited source; v1.150's
-		// handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
+		// The reference server emits 3058 privately to the credited source; v1.150's
+		// client handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
 		// own public presentation below.
 		if source := ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
 			if hit.Damage > 0 {
@@ -459,8 +507,8 @@ type privateFrames struct {
 ================
 timeBombFrame
 
-timeBombFrame is 59B300's detonation broadcast (research B0BC), v1.150
-B3C6 type 4 (7756D0): flags (80 fatal), victim gid, u16 damage.
+timeBombFrame is the native detonation broadcast (research B0BC), v1.150
+B3C6 type 4 (client 7756D0): flags (80 fatal), victim gid, u16 damage.
 ================
 */
 func timeBombFrame(gid, damage uint32, fatal bool) wire.Frame {
@@ -504,7 +552,7 @@ func (rt *Runtime) monsterImpactAbnormalFrames(division string, gid uint32, impa
 ================
 rollMonsterImpactStatus
 
-590680 uses a creature's level without the player's learned setv modifiers.
+The native abnormal roll uses a creature's level without the player's learned setv modifiers.
 The source is the companion, independently of the owner's reward credit.
 ================
 */
@@ -532,7 +580,7 @@ func (rt *Runtime) rollMonsterImpactStatus(caster monsterImpactCaster, params *a
 rewardOwner
 
 A companion's periodic damage retains the companion as source while the
-owner receives experience and loot, as for a direct COS kill (4E6590).
+owner receives experience and loot, as for a direct COS kill.
 ================
 */
 func (c monsterAbnormalContext) rewardOwner(division string, gid uint32, name string) *enterworld.Character {

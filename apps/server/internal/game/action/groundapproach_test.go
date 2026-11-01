@@ -9,8 +9,10 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -112,5 +114,48 @@ func TestGroundCollisionPreservesQueuedReplacementAndStationaryCommand(t *testin
 				}
 			}
 		})
+	}
+}
+
+/*
+================
+TestGroundApproachRetiresEachStopUnderItsOwnLane
+
+The drain caches one division's lane across neighbouring stops, but a
+stop of another division still retires under its own lane: keeping the
+first lane across a division change would retire that division's stop
+behind the wrong lock, where the division's request work cannot order
+against it. Each release must observe its own division's lane held.
+Fewer stops than the lane-run cap, so only a division change can
+release and re-take a lane.
+================
+*/
+func TestGroundApproachRetiresEachStopUnderItsOwnLane(t *testing.T) {
+	rt := NewRuntime(&enterworld.Deps{}, nil)
+	released := 0
+	rt.PushCharacterFrames = func(divisionID, characterName string, frames []wire.Frame) {
+		lane := rt.operations.lane(divisionID, &rt.maintenance)
+		if lane.TryLock() {
+			lane.Unlock()
+			t.Errorf("stop %s/%s released outside its division lane", divisionID, characterName)
+		}
+		if len(frames) != 1 || frames[0].Opcode != wire.OpActionState {
+			t.Errorf("stop %s/%s pushed %v, want one action-state release", divisionID, characterName, frames)
+		}
+		released++
+	}
+	for _, division := range []string{testDivision, "other-division"} {
+		for i := 0; i < 3; i++ {
+			name := fmt.Sprintf("walker-%s-%d", division, i)
+			rt.Pending.ArmGround(grounditem.Pending{
+				Key: grounditem.PendingKey(division, name), DivisionID: division,
+				CharacterName: name, MovementRevision: 7,
+			})
+			rt.RetireGroundApproach(division, name, 7)
+		}
+	}
+	rt.retireGroundApproaches()
+	if released != 6 {
+		t.Fatalf("releases = %d, want one per armed stop", released)
 	}
 }

@@ -10,7 +10,10 @@ monster the native client lacks was dropped. This carries the Alexandria and
 tomb monsters' own rules instead: the fixed drops (_RefMonster_AssignedItemDrop),
 the random groups (_RefMonster_AssignedItemRndDrop, _RefDropItemGroup), and the
 few ETC items they name that the native item table does not have (alchemy
-materials, tokens). The supplied exports are data, never executable input.
+materials, tokens). The qinshi family's rules (#1800 step 2) ride the same
+projection: its monsters join the rewarded population when its nest file
+does, and a rule the server cannot represent refuses exactly as the field
+family's does. The supplied exports are data, never executable input.
 
 The rules are written as cap110-rewards.txt, which the server reads at startup
 (loot/cap110.go). The imported items go in their own item shard.
@@ -185,11 +188,13 @@ def occupied_identities(text_root, later_rows):
 # ================
 # population_codes
 #
-# The monsters this build installed: the field and, when asked, the tomb.
+# The monsters this build installed: the field and, when asked, the
+# tomb and the qinshi family (#1800 step 2). A family's nest file is
+# present exactly when its switch built it, so presence is the ask.
 # ================
 def population_codes(text_root):
 	codes = set()
-	for name in (monsters.POPULATION_FILE, monsters.TOMB_FILE):
+	for name in (monsters.POPULATION_FILE, monsters.TOMB_FILE, monsters.QINSHI_FILE):
 		path = text_root / name
 		if path.exists():
 			codes.update(row["Codename"] for row in json.loads(path.read_text(encoding="utf-8"))["Rows"])

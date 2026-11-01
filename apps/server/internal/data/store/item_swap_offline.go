@@ -170,13 +170,13 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 	if s.commitFail != nil {
 		return nil, s.commitFail
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, next := range characters {
-		if err := upsertCharacterTx(tx, division, next); err != nil {
+		if err := tx.upsertCharacter(division, next); err != nil {
 			return nil, err
 		}
 	}
@@ -184,16 +184,16 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 		if err := validateAccountStorage(storage); err != nil {
 			return nil, fmt.Errorf("storage %s: %w", account, err)
 		}
-		if err := writeAccountStorageTx(tx, account, storage); err != nil {
+		if err := writeAccountStorageTx(tx.Tx, account, storage); err != nil {
 			return nil, err
 		}
 	}
 	for id, guild := range guilds {
-		if err := replaceGuildTx(tx, division, id, guild, s.guildMembers[division][id]); err != nil {
+		if err := replaceGuildTx(tx.Tx, division, id, guild, s.guildMembers[division][id]); err != nil {
 			return nil, err
 		}
 	}
-	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprint(s.now().UnixMilli())); err != nil {
+	if err := upsertMetaTx(tx.Tx, metaKeyUpdatedAtMs, fmt.Sprint(s.now().UnixMilli())); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

@@ -34,7 +34,7 @@ func (rt *Runtime) WithdrawalHooks() progression.WithdrawalHooks {
 ================
 finishWithdrawal
 
-59FA85 retires the old skill's attached instances before rebuilding derived
+Natively the old skill's attached instances retire before rebuilding derived
 parameters. Retirement uses the common owner, including durable jobs,
 movement, body state and linked effects. The caller holds the character
 door and division lock after all fallible planning has succeeded.

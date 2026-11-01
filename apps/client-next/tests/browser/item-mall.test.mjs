@@ -196,6 +196,20 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 							disabled: c.disabled,
 							value: c.value
 						}) ),
+						pageColors: Object.fromEntries(
+							(semantics?.controls ?? [])
+								.filter( c => c.id.startsWith( "item-mall-page:" ) )
+								.map( c => {
+									const run = scene?.quads.find( q =>
+										q.run &&
+										q.rect[0] + q.rect[2] / 2 >= c.rect[0] &&
+										q.rect[0] + q.rect[2] / 2 <= c.rect[0] + c.rect[2] &&
+										q.rect[1] + q.rect[3] / 2 >= c.rect[1] &&
+										q.rect[1] + q.rect[3] / 2 <= c.rect[1] + c.rect[3]
+									);
+									return [ c.id, run?.color ];
+								} )
+						),
 						commands
 					};
 				},
@@ -377,6 +391,9 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 				if ( name === "catalogue" ) {
 					assert.equal( row.controls.filter( c => c.id.startsWith( "item-mall-buy:" ) ).length, 6 );
 					assert.equal( row.controls.filter( c => c.id.startsWith( "item-mall-page:" ) ).length, 2 );
+					// The current page number draws in the highlight colour; the rest stay white.
+					assert.deepEqual( row.pageColors["item-mall-page:0"], [ 1, 0x99 / 255, 0x51 / 255, 1 ] );
+					assert.deepEqual( row.pageColors["item-mall-page:1"], [ 1, 1, 1, 1 ] );
 					const tab = row.controls.find( c => c.id === "item-mall-tab:0" );
 					assert.deepEqual( tab.rect, [ 250, 127, 60, 24 ] );
 				}
@@ -425,6 +442,8 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 			await fixture.evaluate( f => f.activate( "item-mall-page:1" ) );
 			const secondPage = await fixture.evaluate( f => f.draw() );
 			assert.equal( secondPage.controls.filter( c => c.id.startsWith( "item-mall-buy:" ) ).length, 2 );
+			assert.deepEqual( secondPage.pageColors["item-mall-page:1"], [ 1, 0x99 / 255, 0x51 / 255, 1 ] );
+			assert.deepEqual( secondPage.pageColors["item-mall-page:0"], [ 1, 1, 1, 1 ] );
 			await fixture.evaluate( f => f.activate( "item-mall-reserve:0" ) );
 			const reservation = await fixture.evaluate( f => f.draw() );
 			assert.deepEqual( reservation.controls.map( c => c.id ), [

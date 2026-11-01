@@ -18,8 +18,8 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// fortressTaxPrecision is the x87 precision CGObj_CalculateFortressTax
-// (486390) divides at: the server process keeps the CRT's default control
+// fortressTaxPrecision is the x87 precision the reference server's fortress
+// tax divides at: the server process keeps the CRT's default control
 // word 0x27F, 53-bit.
 const fortressTaxPrecision = 53
 
@@ -28,7 +28,7 @@ const fortressTaxPrecision = 53
 commerceTax
 
 A merchant's or gate's adjustment, from the fortress it is bound to
-(NpcDef.FortressID). CGObj_GetFortressTaxRate (4862A0): an unbound object
+(NpcDef.FortressID). Natively an unbound object
 charges nothing, a ratio of zero or below applies to everyone, and a
 positive ratio spares the holder guild and its allies (fortressDefender).
 commerce.AdjustPrice applies the exemption to a positive ratio only.
@@ -53,10 +53,10 @@ func (rt *Runtime) commerceTax(division string, npc simulation.NpcDef, c *enterw
 ================
 collectFortressTax
 
-CGObj_AccumulateFortressTax (486330): the tax a purchase, a gate fee or a
+The reference server's tax accumulation: the tax a purchase, a gate fee or a
 trade goods sale actually paid goes to the bound fortress's treasury.
 Callers pass the taxed amount minus the untaxed one, as
-CShopApp_ChargePurchaseAndAccumulateTax (6186D0) does; the authority ignores
+the reference server's shop purchase does; the authority ignores
 anything not positive.
 ================
 */

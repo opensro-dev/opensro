@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-graph.go - dependency propagation over parameter elements (4B3060 / 4B3130)
+graph.go - dependency propagation over parameter elements (native link and write)
 
 Detached, bounded parameter projection with synchronous propagation in native
 source-identity order. Parameter IDs index the topology directly; bucket
@@ -15,6 +15,7 @@ package paramkeeper
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -23,8 +24,9 @@ const maxGraphNodeID = 512
 const bucketAllocated uint32 = 1 << 31
 
 // NodeDefinition gives each parameter a distinct source identity for dependency
-// propagation. In native this identity is the CParam pointer, not its numeric
-// parameter ID. External modifiers must not reuse these reserved identities.
+// propagation. In native this identity is the parameter element's own pointer,
+// not its numeric parameter ID. External modifiers must not reuse these reserved
+// identities.
 type NodeDefinition struct {
 	ID        uint16
 	SourceKey uint32
@@ -98,7 +100,7 @@ type arenaEntry struct {
 
 // Graph is a detached, bounded parameter projection. It has no effect timers,
 // persistence, live character pointers or keeper-specific 23/24 callbacks.
-// Successful operations propagate synchronously as in 4B3130; invalid inputs
+// Successful operations propagate synchronously as in the native write; invalid inputs
 // and arithmetic errors leave the entire projection unchanged.
 type Graph struct {
 	topology *graphTopology
@@ -138,6 +140,36 @@ func (g *Graph) ApplyBatch(writes []Write) error {
 	}
 	g.buckets = next.buckets
 	g.entries = next.entries
+	g.dirty = true
+	return nil
+}
+
+/*
+================
+Graph.ApplyBatchInPlace
+
+ApplyBatchInPlace is ApplyBatch for a graph the caller owns outright
+and discards on error (a fresh Clone being built up): the same source
+validation, the same writes in the same order, the same errors, but
+applied onto the receiver instead of onto a swapped-in copy of its
+state. On error the receiver is left partially applied and must be
+dropped, which the owning caller already does.
+================
+*/
+func (g *Graph) ApplyBatchInPlace(writes []Write) error {
+	for _, w := range writes {
+		if err := g.checkExternalSource(w.Parameter, w.Source); err != nil {
+			return err
+		}
+	}
+	// The same entry headroom ApplyBatch's copy reserves, so applying
+	// does not grow the arena in steps.
+	g.entries = slices.Grow(g.entries, len(writes)+len(g.topology.dependents))
+	for _, w := range writes {
+		if _, err := g.apply(g.nodeIndex(w.Parameter), w.Channel, w.Source, w.Value); err != nil {
+			return err
+		}
+	}
 	g.dirty = true
 	return nil
 }
@@ -192,9 +224,9 @@ func NewGraph(definitions []NodeDefinition) (*Graph, error) {
 ================
 Graph.Link
 
-Link registers a target without publishing a value. 4B3060 keys its map by
-the target CParam pointer and preserves the first registration, including
-its channel. 4B3130 subsequently writes the source's value under its pointer
+Link registers a target without publishing a value. The native link keys its map by
+the target element pointer and preserves the first registration, including
+its channel. The native write subsequently writes the source's value under its pointer
 identity into that target/channel. Invalid cyclic graphs are rejected here.
 ================
 */
@@ -295,6 +327,38 @@ func (g *Graph) Apply(id uint16, channel Channel, source uint32, value float32) 
 	if err == nil && changed {
 		g.buckets = next.buckets
 		g.entries = next.entries
+		g.dirty = true
+	}
+	return changed && err == nil, err
+}
+
+/*
+================
+Graph.ApplyInPlace
+
+Apply for a graph the caller owns outright and discards on error (a
+fresh Clone being built up): the same source validation, the same
+refusals, the same errors, but applied onto the receiver instead of
+onto a swapped-in copy of its state - ApplyBatchInPlace's contract
+for one write. On error the receiver is left partially applied and
+must be dropped, which the owning caller already does. The full
+projection's abnormal writes land one per modifier (#2030); a whole
+state copy per write was their measured cloneState cost.
+================
+*/
+func (g *Graph) ApplyInPlace(id uint16, channel Channel, source uint32, value float32) (bool, error) {
+	if err := g.checkExternalSource(id, source); err != nil {
+		return false, err
+	}
+	idx := g.nodeIndex(id)
+	if channel >= channelCount || !finite(value) {
+		return false, fmt.Errorf("paramkeeper: invalid channel %d or non-finite modifier", channel)
+	}
+	if value == g.topology.definitions[idx].Ignore {
+		return false, nil
+	}
+	changed, err := g.apply(idx, channel, source, value)
+	if err == nil && changed {
 		g.dirty = true
 	}
 	return changed && err == nil, err

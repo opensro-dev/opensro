@@ -48,7 +48,7 @@ type BasicAttackEngage struct {
 ================
 FollowTarget
 
-Client 695420 action 1003 emits [01 03 01 gid]. Server 4AE3D0 starts
+Client 695420 action 1003 emits [01 03 01 gid]. The reference server starts
 pursuit of another player without creating a skill or attack instance.
 ================
 */

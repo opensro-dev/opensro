@@ -7,9 +7,9 @@ The Warlock's lfst hits (enterworld/skilllifesteal.go) run the ordinary
 offensive release, single target or area: admission, cost, approach, the
 hit record, the status rolls, aggression, rewards and the cast bracket
 are skillcombat.go's and skillarea.go's. This file owns what lfst
-changes: the hit's value (Formulae_CalculateLifeSteal 40F750, called from
-SkillCombat_CalculateHitOutcome 58F4B5 in place of the att lanes) and the
-caster's recovery of it (CGObjChar_ApplyReducedRecovery, source 0x40).
+changes: the hit's value (the reference server's life-steal formula, called from
+its hit outcome in place of the att lanes) and the
+caster's recovery of it (reduced recovery, source 0x40).
 
 ===========================================================================
 */
@@ -30,8 +30,8 @@ const fullAreaPercent = 100
 ================
 lifeStealBase
 
-40F750's base: lfst, the caster's BSHP when the row reads it (getv
-+0x534), and the mwhs share of the magical weapon (411080). Reads the
+The life-steal formula's base: lfst, the caster's BSHP when the row reads it (getv
++0x534), and the mwhs share of the magical weapon. Reads the
 caster's stats, so it runs before the commit door.
 ================
 */

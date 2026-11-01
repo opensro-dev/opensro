@@ -23,7 +23,7 @@ package enterworld
 
 const (
 	// tagThreatDecrease is dtnt {flat, percent}: the client tooltip
-	// (sub_7f9bd0, +0x19C) prints "Aggro <flat> decrease" and
+	// (client 7F9BD0, +0x19C) prints "Aggro <flat> decrease" and
 	// "Aggro <percent>% decrease".
 	tagThreatDecrease = 0x64746e74
 
@@ -38,7 +38,7 @@ const (
 	decreaseCasterAreaShape = 1
 
 	// decreaseAreaSelect is efr select 16 (0x10), the non-character
-	// objects of TargetSelection_AroundSource (58A020): monsters. The
+	// objects of the server's around-source selection: monsters. The
 	// Warrior's taunts select their victims with the same word.
 	decreaseAreaSelect = 16
 )

@@ -180,6 +180,8 @@ func TestRahidCompiledQuestChain(t *testing.T) {
 	}
 	rt.KillUpdater()(c, rahid6TahometCodename, 0)
 	w.update()
+	*w.nowMs += rahid6KillGraceMs
+	w.update()
 	if captureItemCount(c, rahid6BundleCodename) != 0 || captureItemCount(c, rahid6NecklaceCodename) != 1 ||
 		len(w.returned) != 1 || w.returned[0] != c.Name || len(w.closed) != 1 || w.closed[0] != w.lease ||
 		domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance || c.World.InstanceReturn != nil {

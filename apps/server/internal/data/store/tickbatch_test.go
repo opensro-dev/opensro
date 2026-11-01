@@ -318,3 +318,85 @@ func TestDeferredDoorOutsideABatchCommitsAtOnce(t *testing.T) {
 		t.Fatal("a deferred door with no batch open waited")
 	}
 }
+
+/*
+================
+diskRecord
+
+The stored record bytes a reboot would load for one character.
+================
+*/
+func diskRecord(t *testing.T, db *sql.DB, name string) string {
+	t.Helper()
+	var record string
+	if err := db.QueryRow("SELECT record FROM characters WHERE division = ? AND name_lower = ?", testDivision, strings.ToLower(name)).Scan(&record); err != nil {
+		t.Fatal(err)
+	}
+	return record
+}
+
+/*
+================
+storedPairRecords
+
+One mutation sequence - a pair update on the first two characters,
+then a single update on a third the pair never touched - landed
+through the immediate doors, or through the deferred doors inside one
+tick batch. Returns the three stored records.
+================
+*/
+func storedPairRecords(t *testing.T, deferred bool) (string, string, string) {
+	t.Helper()
+	s, a, b := batchFixture(t)
+	c := &enterworld.Character{Name: "BatchC", Gold: int64Ptr(100)}
+	if err := s.CreateCharacter(testDivision, "batch-account", c); err != nil {
+		t.Fatal(err)
+	}
+	disk := diskOpen(t, s)
+	pair := func() bool {
+		a.Gold = int64Ptr(41)
+		b.Gold = int64Ptr(42)
+		return true
+	}
+	if deferred {
+		s.BeginTickBatch()
+		if !s.UpdateCharactersDeferred([]*enterworld.Character{a, b}, "test", pair) {
+			t.Fatal("the deferred pair door refused")
+		}
+		if !s.UpdateCharacterDeferred(c, "test", setGold(c, 77)) {
+			t.Fatal("the deferred door refused")
+		}
+		if diskGold(t, disk, "BatchA") != 100 || diskGold(t, disk, "BatchB") != 100 || diskGold(t, disk, "BatchC") != 100 {
+			t.Fatal("a deferred update reached the disk before the tick's end")
+		}
+		if stats := s.FlushTickBatch(); stats.Err != nil {
+			t.Fatalf("flush: %v", stats.Err)
+		}
+	} else {
+		if !s.UpdateCharacters([]*enterworld.Character{a, b}, "test", pair) {
+			t.Fatal("the immediate pair door refused")
+		}
+		if !s.UpdateCharacter(c, "test", setGold(c, 77)) {
+			t.Fatal("the immediate door refused")
+		}
+	}
+	return diskRecord(t, disk, "BatchA"), diskRecord(t, disk, "BatchB"), diskRecord(t, disk, "BatchC")
+}
+
+/*
+================
+TestDeferredDoorStoresTheImmediateDoorsBytes
+
+The tick conversion's behaviour pin: deferring a door changes when its
+rows land, never what lands. The same mutations through the deferred
+doors and one tick-end flush store byte-identical records to the
+immediate doors.
+================
+*/
+func TestDeferredDoorStoresTheImmediateDoorsBytes(t *testing.T) {
+	nowA, nowB, nowC := storedPairRecords(t, false)
+	laterA, laterB, laterC := storedPairRecords(t, true)
+	if nowA != laterA || nowB != laterB || nowC != laterC {
+		t.Fatalf("stored bytes differ:\nimmediate: %s / %s / %s\ndeferred:  %s / %s / %s", nowA, nowB, nowC, laterA, laterB, laterC)
+	}
+}

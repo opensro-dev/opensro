@@ -253,7 +253,7 @@ func TestGMPlayerTeleportNeedsPrivilege(t *testing.T) {
 ================
 TestGMMoveToNpcMovesToRosterOrMonsterNest
 
-520350 (_GetNPCPosByCodename) resolves the NPC or monster nest by codename
+The native GM move-to-NPC command resolves the NPC or monster nest by codename
 and teleports the GM to its coordinates when both live in the default
 world.
 ================
@@ -287,7 +287,7 @@ func TestGMMoveToNpcMovesToRosterOrMonsterNest(t *testing.T) {
 ================
 TestGMInstanceOpensAndClosesTimedLayers
 
-0x0051FA99..0x0051FBDC -> 0x005F7440 / 0x005F7520: layer == 0 opens the first
+The native GM layer command: layer == 0 opens the first
 free layer on a timed instance world (and refuses permanent world 1);
 layer > 0 evacuates players inside that layer to their return point and closes
 the population.
@@ -295,7 +295,7 @@ the population.
 */
 func TestGMInstanceOpensAndClosesTimedLayers(t *testing.T) {
 	f := newGMTeleportFixture(t)
-	// Permanent world 1 cannot open a dynamic layer (5EC530 checks NativeType != 0).
+	// Permanent world 1 cannot open a dynamic layer (native check: NativeType != 0).
 	openWorld1 := []byte{gmcommand.SubOpenWorld, 1, 0, 0, 0}
 	if out := gmcommand.HandleGmCommand(f.deps, nil, testDivision, f.gm, openWorld1, f.rt); !bytes.Equal(out.Ack, []byte{2, gmcommand.SubOpenWorld}) {
 		t.Fatalf("world 1 open ack = % X", out.Ack)

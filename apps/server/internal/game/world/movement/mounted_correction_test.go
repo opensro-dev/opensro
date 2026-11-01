@@ -3,7 +3,7 @@
 
 mounted_correction_test.go - a mounted walk's 0xB2F5 names the mount
 
-Native ignores a correction naming a mounted character (775B50 returns
+Native ignores a correction naming a mounted character (client 775B50 returns
 early for a flagged rider), so every stop the port issues for a mounted
 mover must name the COS. These tests pin that at both stop producers.
 

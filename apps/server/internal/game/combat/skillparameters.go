@@ -20,7 +20,7 @@ func parameterAttackPoint(point float64, values enterworld.SkillParameterValues,
 		}
 	}
 	if !magical {
-		// 40DF11..40DFD7: mutually exclusive, unlike the magical lane.
+		// Physical lane weapon powers: mutually exclusive, unlike the magical lane.
 		for _, slot := range [...]enterworld.SkillParameter{enterworld.ParameterDaggerPower, enterworld.ParameterCrossbowPower, enterworld.ParameterOneHandPower, enterworld.ParameterTwoHandPower, enterworld.ParameterDualPower} {
 			if bindings.Has(slot) {
 				apply(slot)
@@ -28,7 +28,7 @@ func parameterAttackPoint(point float64, values enterworld.SkillParameterValues,
 			}
 		}
 	} else {
-		// 40E212..40E439: each present elemental/class modifier applies in order.
+		// Magical lane: each present elemental/class modifier applies in order.
 		for _, slot := range [...]enterworld.SkillParameter{enterworld.ParameterEarthPower, enterworld.ParameterColdPower, enterworld.ParameterFirePower, enterworld.ParameterLightningPower, enterworld.ParameterDotPower, enterworld.ParameterBloodPower, enterworld.ParameterMusicPower, enterworld.ParameterHolyPower} {
 			if bindings.Has(slot) {
 				apply(slot)
@@ -38,8 +38,9 @@ func parameterAttackPoint(point float64, values enterworld.SkillParameterValues,
 	return point
 }
 
-// stealthStrikePoint is 40E4B9: a physical strike whose command was issued
-// in stealth adds the caster's DGAA value, unsigned, to its attack point.
+// stealthStrikePoint is the physical lane's stealth step: a physical strike
+// whose command was issued in stealth adds the caster's DGAA value,
+// unsigned, to its attack point.
 func stealthStrikePoint(point float64, attacker Stats, bindings enterworld.SkillParameterMask, magical bool) float64 {
 	if magical || !attacker.StealthStrike || !bindings.Has(enterworld.ParameterStealthStrike) {
 		return point

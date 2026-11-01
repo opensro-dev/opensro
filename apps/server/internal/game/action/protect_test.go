@@ -5,7 +5,7 @@ protect_test.go - the Warrior's Protect (GUARDA_AGGRO_A)
 
 Protect is the Cleric blessings' lnks pair with lkag instead of stat
 writes: while the link holds, the protected member's aggression on a
-monster is split and the Warrior's share is dispatched first (5A03A0).
+monster is split and the Warrior's share is dispatched first.
 
 ===========================================================================
 */

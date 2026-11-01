@@ -43,7 +43,7 @@ func TestKnockdownReleaseOwnsDamageDisplacementAndRecovery(t *testing.T) {
 				rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, target.CurrentHP, []simulation.MonsterDamagePlan{{GID: target.Gid, Knockdown: &simulation.MonsterKnockdownPlan{Pose: mover.Pose, UntilMs: now + 10000}}})
 			}
 			cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target.Gid}
-			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 			if decision != skillCastAccepted || len(start.Frames) != 1 || len(start.Frames[0].Payload) != 19 {
 				t.Fatalf("preparation: %+v", start)
 			}

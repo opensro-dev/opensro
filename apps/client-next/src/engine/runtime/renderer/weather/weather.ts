@@ -291,35 +291,70 @@ export function createWeather( random?: PresentationRandom, sound?: ( event: Sou
 				}
 				batch.positions.fill( 0 );
 				batch.colors.fill( 1 );
+				// The corners are the same for every particle of a kind - the
+				// camera axes and the rain's right are per-frame constants, and
+				// the splash's own scale is the only per-particle term. Hoisted
+				// out of the particle loop, the per-particle work is the vertex
+				// write itself, with no per-particle corner allocations.
+				let e0x = 0, e0y = 0, e0z = 0, e1x = 0, e1y = 0, e1z = 0, e2x = 0, e2y = 0, e2z = 0;
+				if ( kind === 0 ) {
+					e0y = 10;
+					e1x = rainRight[0]! * .3;
+					e1z = rainRight[2]! * .3;
+					e2x = -rainRight[0]! * .3;
+					e2z = -rainRight[2]! * .3;
+				} else if ( kind !== 1 ) {
+					e0x = up[0]! * .5;
+					e0y = up[1]! * .5;
+					e0z = up[2]! * .5;
+					e1x = (right[0]! - up[0]!) * .5;
+					e1y = (right[1]! - up[1]!) * .5;
+					e1z = (right[2]! - up[2]!) * .5;
+					e2x = (-right[0]! - up[0]!) * .5;
+					e2y = (-right[1]! - up[1]!) * .5;
+					e2z = (-right[2]! - up[2]!) * .5;
+				}
 				for ( let i = 0; i < rows.length; i++ ) {
 					const p = rows[i]!;
-					const scale = Math.fround( p.age / 300 ),
-						corners = kind === 1 ?
-							[ [ -scale, 0, scale ], [ scale, 0, scale ], [ scale, 0, -scale ], [ -scale, 0, scale ], [
-								scale,
-								0,
-								-scale
-							], [ -scale, 0, -scale ] ] :
-							kind === 0 ?
-							[ [ 0, 10, 0 ], [ rainRight[0]! * .3, 0, rainRight[2]! * .3 ], [
-								-rainRight[0]! * .3,
-								0,
-								-rainRight[2]! * .3
-							] ] :
-							[
-								up.map( v => v * .5 ),
-								right.map( ( v, k ) => (v - up[k]!) * .5 ),
-								right.map( ( v, k ) => (-v - up[k]!) * .5 )
-							];
-					for ( let j = 0; j < vertices; j++ ) {
-						const c = corners[j]!;
-						const at = (i * vertices + j) * 3;
-						batch.positions[at] = p.x + c[0]!;
-						batch.positions[at + 1] = p.y + c[1]!;
-						batch.positions[at + 2] = p.z + c[2]!;
-						if ( kind === 1 ) {
-							batch.colors[(i * vertices + j) * 4 + 3] = (255 - Math.trunc( scale * 63 )) / 255;
-						}
+					if ( kind === 1 ) {
+						const scale = Math.fround( p.age / 300 ),
+							alpha = (255 - Math.trunc( scale * 63 )) / 255;
+						let at = i * vertices * 3, ca = i * vertices * 4 + 3;
+						batch.positions[at] = p.x - scale;
+						batch.positions[at + 1] = p.y;
+						batch.positions[at + 2] = p.z + scale;
+						batch.positions[at + 3] = p.x + scale;
+						batch.positions[at + 4] = p.y;
+						batch.positions[at + 5] = p.z + scale;
+						batch.positions[at + 6] = p.x + scale;
+						batch.positions[at + 7] = p.y;
+						batch.positions[at + 8] = p.z - scale;
+						batch.positions[at + 9] = p.x - scale;
+						batch.positions[at + 10] = p.y;
+						batch.positions[at + 11] = p.z + scale;
+						batch.positions[at + 12] = p.x + scale;
+						batch.positions[at + 13] = p.y;
+						batch.positions[at + 14] = p.z - scale;
+						batch.positions[at + 15] = p.x - scale;
+						batch.positions[at + 16] = p.y;
+						batch.positions[at + 17] = p.z - scale;
+						batch.colors[ca] = alpha;
+						batch.colors[ca + 4] = alpha;
+						batch.colors[ca + 8] = alpha;
+						batch.colors[ca + 12] = alpha;
+						batch.colors[ca + 16] = alpha;
+						batch.colors[ca + 20] = alpha;
+					} else {
+						const at = i * vertices * 3;
+						batch.positions[at] = p.x + e0x;
+						batch.positions[at + 1] = p.y + e0y;
+						batch.positions[at + 2] = p.z + e0z;
+						batch.positions[at + 3] = p.x + e1x;
+						batch.positions[at + 4] = p.y + e1y;
+						batch.positions[at + 5] = p.z + e1z;
+						batch.positions[at + 6] = p.x + e2x;
+						batch.positions[at + 7] = p.y + e2y;
+						batch.positions[at + 8] = p.z + e2z;
 					}
 				}
 				gpu.updatePositions( batch.draw, batch.positions, batch.colors );

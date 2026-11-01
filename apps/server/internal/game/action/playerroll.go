@@ -3,7 +3,7 @@
 
 playerroll.go - the status rolls a hit makes on a player
 
-SkillCombat_RollAbnormalStatus (590680) against a player victim: the
+The reference server's abnormal status roll against a player victim: the
 victim's keeper and learned passives supply its side (playerVictimRollInput),
 the attacker its level, source and, for a player, its learned setv
 dictionary. A monster, an attack pet and a player each roll through here.
@@ -24,7 +24,7 @@ import (
 ==================
 rollMonsterOnPlayer
 
-rollMonsterOnPlayer ports 590680 for a monster's hit on a player.
+rollMonsterOnPlayer ports the native abnormal roll for a monster's hit on a player.
 ==================
 */
 func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instance, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
@@ -35,7 +35,7 @@ func (rt *Runtime) rollMonsterOnPlayer(division string, instance monster.Instanc
 ==================
 rollCreatureOnPlayer
 
-590680 for a non-player attacker (a monster, an attack pet) on a player:
+The native abnormal roll for a non-player attacker (a monster, an attack pet) on a player:
 the attacker contributes its level and object ID, the victim its side.
 ==================
 */
@@ -56,9 +56,9 @@ func (rt *Runtime) rollCreatureOnPlayer(division string, source uint32, level ui
 ==================
 rollPlayerOnPlayer
 
-590680 for a player's hit on a player: the victim's side as for a
+The native abnormal roll for a player's hit on a player: the victim's side as for a
 monster's hit, the caster's level and learned setv dictionary
-(CSkillManager_GetSkillModifier) as for a player's hit on a monster.
+(the native skill modifier lookup) as for a player's hit on a monster.
 ==================
 */
 func (rt *Runtime) rollPlayerOnPlayer(division string, caster *enterworld.Character, casterStats combat.Stats, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
@@ -87,10 +87,10 @@ func (rt *Runtime) rollPlayerOnPlayer(division string, caster *enterworld.Charac
 ==================
 playerVictimRollInput
 
-The victim's side of 590680 for a player target: its keeper supplies
+The victim's side of the native abnormal roll for a player target: its keeper supplies
 element resists (1B..20), flat reductions (91..96, which reat passives
 raise) and the disease bonus (A9); its learned real passives supply the
-status-resistance buckets (59DE50); a standing wall masks its records.
+status-resistance buckets; a standing wall masks its records.
 ==================
 */
 func playerVictimRollInput(params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) abnormal.RollInput {
@@ -109,7 +109,7 @@ func playerVictimRollInput(params *abnormal.SkillParams, target *enterworld.Char
 		in.WallMask = &wall.Mask
 	}
 	for i := range in.TargetResist {
-		// 5909FB reads shock from 1D; 590B39 reads burn from 1E. Keeper
+		// Natively shock reads from 1D and burn from 1E. Keeper
 		// parameters follow roll order, not the block's Burn/ES slot order.
 		in.TargetResist[i] = param(abnormalElementResistBase + uint16(i))
 		in.TargetFlat[i] = param(abnormalFlatResistanceBase + uint16(i))
@@ -121,7 +121,7 @@ func playerVictimRollInput(params *abnormal.SkillParams, target *enterworld.Char
 ==================
 fileEffectResistance
 
-59DF20 files a real under the execution context that installs it, so a
+The reference server files a real under the execution context that installs it, so a
 resistance buff (Holy Word, Poison Circle) resists like a learned passive
 while its instance lives. The victim's installed effects join the learned
 buckets with the same highest-grade/highest-flat rule (combat.FileStatusResistance).

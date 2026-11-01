@@ -107,7 +107,7 @@ func placeWalker(rt *Runtime, c *enterworld.Character, x float64) {
 ================
 TestWalkingIntoTheCaveMouthTeleportsInside
 
-Entering the mouth's zone runs 4EF480: a level-20 player is refused by
+Entering the mouth's zone runs the native teleport command: a level-20 player is refused by
 the link's level condition (the teleport answer's 0x15) and stays; standing
 on in the zone does not ask again; a level-60 player who walks back in
 arrives at the cave's GATE_DUNGEON_DH_OUT point with nothing charged.
@@ -177,7 +177,7 @@ func TestAPlayerAdmittedInsideAZoneIsNotMoved(t *testing.T) {
 ================
 TestWalkInRefusesTeleportingAndRiding
 
-4EF480's notices: a player standing in teleport mode hears its last
+The native teleport command's notices: a player standing in teleport mode hears its last
 teleport is still working (0x3058 kind 3), a riding one, or one with a
 transport out, that a COS cannot enter (kind 4); none moves. A teleporting
 player still walking is let through, as natively.
@@ -200,7 +200,7 @@ func TestWalkInRefusesTeleportingAndRiding(t *testing.T) {
 	if moved || len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{walkInNoticeCOSCannotEnterGates}) {
 		t.Fatalf("rider: %+v", out)
 	}
-	// A transport out but not ridden is an active vehicle too (4FD7F0).
+	// A transport out but not ridden is an active vehicle too.
 	c.ActiveCOS.Mounted = false
 	out, moved = rt.enterWalkIn(testDivision, c, link, false)
 	if moved || len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{walkInNoticeCOSCannotEnterGates}) {

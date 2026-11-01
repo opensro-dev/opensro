@@ -6,7 +6,7 @@ transportbag_test.go - a summoned transport carries its cargo bag
 Players with a transport out were told "Cannot obtain special products
 without a summoned transport": a new transport record had no bag, so the
 trade goods pickup and purchase found no cargo. Native creation
-(CCOSDatabaseJob_InitializeOperation 4404A1..4404DA) keeps the reference
+(the native COS database job) keeps the reference
 capacity for everything but pets.
 
 ===========================================================================

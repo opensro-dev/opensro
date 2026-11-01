@@ -36,6 +36,7 @@ const {
 	"../../src/engine/foundation/ui/pet-training.ts"
 );
 const { PET_DESIGN } = await import( "../../src/engine/foundation/ui/pet-design-data.ts" );
+const { cosHpText, cosStatusRatios } = await import( "../../src/engine/foundation/ui/cos-command.ts" );
 const { quickSlotDrag, quickSlotDrop, quickSlotCommand, PET_SKILL_SHORTCUT_BASE } = await import(
 	"../../src/engine/foundation/gameplay/quickslots.ts"
 );
@@ -344,6 +345,57 @@ test("server combat profile updates HP, defenses and magical attack while legacy
 	assert.throws( () =>
 		training.receive( { opcode: OP_PET_TRAINING_STATE, payload: Uint8Array.from( [ ...base, ...tail, 0 ] ) }, 0 )
 	);
+});
+
+/*
+================
+unasked state push drives the HP display
+
+#1896: under the expansion the server lowers a pet's max (a level-40
+wolf: 6858 catalog, 350 server) and pushes the state unasked at
+summon, restore, potion and growth. A default client - which never
+asks, the Experimental row only gates the ask - must then read a pet
+healed to its server max as full, not as 350/6858 (5%).
+================
+*/
+test("a pet at its pushed server max reads 350/350 (100%), not 5% of the catalog max", () => {
+	const training = createPetTraining( () => null );
+	const tail = new Uint8Array( 10 ), view = new DataView( tail.buffer );
+	tail[0] = 1;
+	view.setUint32( 1, 350, true );
+	view.setUint16( 5, 100, true );
+	view.setUint16( 7, 100, true );
+	tail[9] = 1;
+	training.receive(
+		{ opcode: OP_PET_TRAINING_STATE, payload: Uint8Array.from( [ ...statePayload( [], [] ), ...tail ] ) },
+		0
+	);
+	const catalog = {
+		maxHp: 6858,
+		physicalDefence: 100,
+		magicalDefence: 100,
+		icon: "",
+		rideable: false,
+		skills: [],
+		hit: 100,
+		parry: 100
+	};
+	const reference = petReference( catalog, training.state() );
+	assert.equal( reference?.maxHp, 350 );
+	const pet = {
+		gid: 9,
+		refObjId: 100,
+		band: 3,
+		hp: 350,
+		mp: 0,
+		status: 0,
+		dead: false,
+		satiety: 10000,
+		commandMode: 1
+	};
+	assert.equal( cosHpText( pet, reference ), "350/350 (100%)" );
+	assert.equal( cosStatusRatios( pet, reference ).hp, 1 );
+	assert.equal( cosHpText( pet, catalog ), "350/6858 (5%)" );
 });
 
 /*

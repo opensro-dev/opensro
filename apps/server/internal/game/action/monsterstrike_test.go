@@ -84,7 +84,7 @@ func TestMonsterAreaStrikesEveryVictimAtItsShare(t *testing.T) {
 	if enterworld.CurrentHP(far) != before {
 		t.Fatal("a player outside the area was struck")
 	}
-	// The area result names both victims (target-major records, 8E0190).
+	// The area result names both victims (target-major records, client 8E0190).
 	payload := result.Frames[0].Payload
 	for _, gid := range []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(near)} {
 		if !bytes.Contains(payload, binary.LittleEndian.AppendUint32(nil, gid)) {
@@ -166,7 +166,7 @@ func TestMonsterAreaStrikesACompanionInside(t *testing.T) {
 ================
 TestGradedMonsterStrikeTakesTheNativeDamageScale
 
-SkillCombat_GetMonsterDamageScale (5874D0) at 58FD05: a giant's (grade 4)
+The reference server's monster damage scale: a giant's (grade 4)
 landed strike deals 1.5 times the damage the same strike from a normal
 monster deals, truncated after the multiply.
 ================

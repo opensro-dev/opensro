@@ -106,8 +106,9 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "zoe-refused"}
 	case SubMobKill:
-		// sub_751ec0 selects case 5 (no tail) for result 1 and the generic
-		// system message for result 2, like every other relayed command.
+		// NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0) selects case 5
+		// (no tail) for result 1 and the generic system message for
+		// result 2, like every other relayed command.
 		if len(status) > 0 {
 			if owner, ok := status[0].(interface {
 				KillGMMonster(string, string, uint32, bool) bool
@@ -129,7 +130,8 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		if !status[0].ToggleGMBodyStatus(divisionID, sender.Name, value) {
 			return Outcome{Ack: EncodeRequestFailure(request), Refusal: "body-status-refused"}
 		}
-		// 751EC0: both subcommands select case 5 (no success tail).
+		// NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0): both subcommands
+		// select case 5 (no success tail).
 		return Outcome{Ack: []byte{AckResultOK, request.Subcmd}}
 	case SubGoTown:
 		if len(status) > 0 {
@@ -179,9 +181,10 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "siege-period-refused"}
 	case SubFlagWorld:
-		// 0x0051FCF3..0x0051FD7D (subcmd 0x30): reads u8 flagCmd, sends
-		// 0x74B0 [u8(3), u32(flagCmd)] to ShardManager (CFlagWorldMgr Capture
-		// the Flag, a v1.188 battle-arena feature outside v1.150), and
+		// The reference server's special-command handler (subcmd 0x30) reads
+		// u8 flagCmd, sends 0x74B0 [u8(3), u32(flagCmd)] to its shard manager
+		// (the Capture the Flag world, a v1.188 battle-arena feature outside
+		// v1.150), and
 		// unconditionally replies [1, 0x30].
 		return Outcome{Ack: []byte{AckResultOK, SubFlagWorld}}
 	case SubSetTime:
@@ -237,9 +240,10 @@ type PlayerTeleports interface {
 	RecallUserGM(division, name, target string) bool
 }
 
-// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. 51DE90
-// acks the teleport it performed with [1, subcmd]; an empty name, a target
-// not in the world or a refused move is the result-2 ack.
+// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. The
+// server's GM handler acks the teleport it performed with [1, subcmd]; an
+// empty name, a target not in the world or a refused move is the result-2
+// ack.
 func handlePlayerTeleport(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: teleport 0x%02X refused", request.Subcmd)}
 	if !request.HasName || request.Name == "" || len(status) == 0 {
@@ -274,8 +278,9 @@ type QuestTools interface {
 }
 
 // handleQuestTool honors /INITQ, /RESETQ, /COMPQ and /REMOVEQ (subs 0x1B,
-// 0x1C, 0x1D, 0x1E). 751EC0 selects case 5 (no tail) for result 1 and the
-// generic system message for result 2, like every other relayed command. An
+// 0x1C, 0x1D, 0x1E). NetMsg_OnGmCommandAck_B5B6 (client @0x00751ec0)
+// selects case 5 (no tail) for result 1 and the generic system message
+// for result 2, like every other relayed command. An
 // empty codename is a refusal; the owner refuses an unknown or inactive quest.
 func handleQuestTool(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: quest tool 0x%02X refused", request.Subcmd)}
@@ -317,7 +322,8 @@ type BodyStatusCommands interface {
 
 // handleFindUser honors /FINDUSER (subcmd 0x01): resolve the target name in
 // the sender's division and answer with the result-1 guide message the
-// client's sub_751ec0 case-0 arm presents. Read-only - it mutates nothing.
+// client's NetMsg_OnGmCommandAck_B5B6 case-0 arm presents. Read-only -
+// it mutates nothing.
 // A target that is unknown or offline is refused with the result-2 ack (the
 // native FINDUSER-fail leg, generic subcmd-1 system message).
 func handleFindUser(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {

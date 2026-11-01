@@ -6,7 +6,7 @@ import "opensro.online/server/internal/game/enterworld"
 ==================
 AccumulateThreat
 
-5903EC..5904D3, once per impact. Each impact updates the SAME action/target
+The server's threat update, once per impact. Each impact updates the SAME action/target
 accumulator, so two hits are not equivalent to multiplying the summed
 damage once. The percent is applied on the FPU: fild word 1 (unsigned),
 fdiv 100.0, fadd 1.0, fmul the accumulator (unsigned), FISTP under
@@ -27,7 +27,7 @@ func AccumulateThreat(previous, damage uint32, modifier enterworld.SkillThreat) 
 ==================
 SplitLinkedThreat
 
-5A042D..5A0452: fild lkag word 0 (unsigned), fdiv 100.0, fimul the
+The server's linked-threat split: fild lkag word 0 (unsigned), fdiv 100.0, fimul the
 incoming aggression (signed), CRT_ftol truncating toward zero; the member
 keeps the rest, low dword. lkag word 1 is never read. Damage never enters
 this transfer.

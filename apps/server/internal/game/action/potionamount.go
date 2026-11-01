@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-potionamount.go - potion HP / MP amounts (CGItemExpendable_CalculateRecoveryAmount 49AA70)
+potionamount.go - potion HP / MP amounts
 
 ===========================================================================
 */
@@ -18,7 +18,7 @@ import (
 ==================
 potionAmount
 
-potionAmount is 49AA70 (CGItemExpendable_CalculateRecoveryAmount): one
+potionAmount is the native recovery amount formula: one
 potion's HP and MP amounts before any gauge clamps them. The v1.150 client
 never predicts these amounts, so the server rule is the v1.188 one.
 
@@ -64,7 +64,7 @@ func computePotionAmount(ref *enterworld.ItemRef, level uint8, strength, intelle
 	return out, true
 }
 
-// levelGrowth is 49AA70's inline 1.02^(level-1): binary exponentiation on
+// levelGrowth is the native inline 1.02^(level-1): binary exponentiation on
 // the x87 stack, stored to a double before use.
 func levelGrowth(level uint8) float64 {
 	exponent := int(level) - 1
@@ -85,7 +85,7 @@ func levelGrowth(level uint8) float64 {
 	return result
 }
 
-// crtFtol is CRT_ftol: truncation toward zero, with the native
+// crtFtol is the C runtime's float-to-int conversion: truncation toward zero, with the native
 // out-of-range result for NaN or overflow.
 func crtFtol(v float64) int64 {
 	if math.IsNaN(v) || v >= 2147483648 || v < -2147483648 {

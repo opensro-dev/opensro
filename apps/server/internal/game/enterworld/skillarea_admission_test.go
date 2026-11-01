@@ -30,7 +30,7 @@ func TestAreaAdmissionRetainsShapeAndRejectsUnimplementedEffects(t *testing.T) {
 			}
 			row := SkillRow{CombatPinned: true, TimingPinned: true, ActionRangePinned: true, TargetRequired: true, Attack: SkillAttack{ImpactCount: 1}}
 			parseSkillOffense(fields, &row)
-			// fz/ps are status blocks rolled by 590680 and executed by the
+			// fz/ps are status blocks rolled by the server and executed by the
 			// abnormal engine; 6B64 remains an unimplemented instruction.
 			want := tail != 0x6b64 && (shape >= 1 && shape <= 4 || shape == 6)
 			if row.OffensiveStagePinned != want || row.DirectOffensePinned != want {

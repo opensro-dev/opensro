@@ -60,7 +60,7 @@ func clearCaptureClock(c *enterworld.Character, at int) wire.Frame {
 ================
 releaseCapture
 
-8B9DDF decrements the capture timer; its zero branch removes the captured
+The server's Ivy capture minute decrements the capture timer; its zero branch removes the captured
 item and restores the mission instead of invoking generic quest abandonment.
 ================
 */
@@ -92,7 +92,7 @@ func (rt *Runtime) releaseCapture(c *enterworld.Character, at int, rule captureR
 ================
 advanceCaptureMinute
 
-8B9F18 publishes ten- and five-minute warnings. Timer corrections occur on
+The same server minute publishes ten- and five-minute warnings. Timer corrections occur on
 ten-minute boundaries; the browser counts the intervening seconds locally.
 ================
 */

@@ -89,7 +89,7 @@ func TestItemUseRecoveryCooldownLanesAndExactExpiry(t *testing.T) {
 						duration = 15100
 					}
 					if percent {
-						// 49AA70 takes the percentage arm only when both absolute
+						// The reference server takes the percentage arm only when both absolute
 						// params are zero; that arm locks 4.1 s for every country.
 						ref.RecoveryHPPercent, ref.RecoveryMPPercent = ref.RecoveryHP, ref.RecoveryMP
 						ref.RecoveryHP, ref.RecoveryMP = 0, 0
@@ -400,7 +400,7 @@ func TestMPRecoveryServerGuardAfterClientIconExpiry(t *testing.T) {
 	}
 }
 
-// 49D240: without a live COS, a pet potion refuses with 0x1871 and a pet
+// Reference server: without a live COS, a pet potion refuses with 0x1871 and a pet
 // cure with 3; neither borrows the player's recovery or cure.
 /*
 ================

@@ -909,7 +909,7 @@ projectedNativeRowsForBlock
 				return (v[0] ?? 0) !== 0 ?
 					[ `${text( "UIIT_STT_MONSTER" )} ${text( "PARAM_LV" )} ${text( "PARAM_MAX" )} ${v[0]}` ] :
 					[];
-			// sub_7f9bd0 @0x7ff386..0x7ff48b: both one-dword boosts use
+			// CSkillParameters_AppendLocalizedTooltip @0x7ff386..0x7ff48b: both one-dword boosts use
 			// "%s %d%% %s" with PARAM_INCREASE.
 			case 0x278:
 				return (v[0] ?? 0) !== 0 ? [ `${text( "PARAM_ALCU" )} ${v[0]}% ${increase}` ] : [];
@@ -933,7 +933,7 @@ projectedNativeRowsForBlock
 	}
 
 	/**
-	 * The projection-backed portion of sub_7f9bd0's direct parameter formatter.
+	 * The projection-backed portion of CSkillParameters_AppendLocalizedTooltip's direct parameter formatter.
 	 * Values are decoded upstream from the complete Param2..Param50 stream; this
 	 * helper owns only the native row text/order. It is exported so CH/EU fixture
 	 * rows can pin exact output without constructing the helper-bubble chrome.
@@ -952,7 +952,7 @@ CSkillData_BuildProjectedDirectParamRows
 		const includeAttack = options.includeAttack !== false;
 		const direct = row.directTooltipParams;
 
-		// sub_7f9bd0 is not numeric-offset ordered.  This list follows its exact
+		// CSkillParameters_AppendLocalizedTooltip is not numeric-offset ordered.  This list follows its exact
 		// control-flow order and the map implements native last-writer ownership
 		// when the source stream assigns the same CSkillData slot more than once.
 		const blocksByOffset = new Map<number, NativeParamBlock>();
@@ -1086,7 +1086,7 @@ CSkillData_BuildProjectedDirectParamRows
 	}
 
 	/**
-	 * Browser twin of sub_7f8720 + sub_803c40. The accumulator retains the last
+	 * Browser twin of CSkillData_AccumulateTooltipParams + CSkillData_FormatTooltipParams. The accumulator retains the last
 	 * block (and therefore the last chance/power/grade) while its byte-sized
 	 * application count adds each participating record's raw mc count, or one
 	 * when that record has no mc block.

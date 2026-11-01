@@ -1,6 +1,5 @@
 # Node-side test files that still have type errors under tsconfig.tests.json.
 # This ledger only shrinks: fix a file, then run `node tools/verify-test-types.mjs --update`.
-tests/architecture/bsr-dependency-audit.test.mjs
 tests/architecture/dev-updates.test.mjs
 tests/architecture/execution.test.mjs
 tests/architecture/frame-barriers.test.mjs

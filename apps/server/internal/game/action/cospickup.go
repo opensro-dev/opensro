@@ -20,17 +20,17 @@ import (
 
 const (
 	cosPickupSucceeded uint8 = 1
-	// The native 77DD10 result table retires unavailable targets for code 2.
+	// The client's 77DD10 result table retires unavailable targets for code 2.
 	// Generic invalid/lifecycle refusals use that client-defined class; the
 	// later server's broader error namespace is not copied onto the 1.150 wire.
 	cosPickupUnavailable uint8 = 2
-	// 4D535C / 4D541E: 0x189C (low byte 0x9C) arms 77DD10's 3 s pet retry
+	// Reference server: 0x189C (low byte 0x9C) arms the client's 77DD10 3 s pet retry
 	// backoff without disabling auto-pickup when a shared-loot party member
 	// (or the owner in an item-share party on a personal quest drop) cannot
 	// accept the item.
 	cosPickupRetryBackoff uint8 = 0x9C
-	// 77DD10 disables automatic pickup for B4/B5. 4D52AC emits 0x18B4 when a
-	// COS container is full; 4D5442 emits 0x18B5 when the owner's player bag
+	// Client 77DD10 disables automatic pickup for B4/B5. The reference server emits 0x18B4 when a
+	// COS container is full, and 0x18B5 when the owner's player bag
 	// is full on a personal quest drop outside an item-share party.
 	cosPickupBagFull      uint8 = 0xB4
 	cosPickupOwnerBagFull uint8 = 0xB5
@@ -40,7 +40,7 @@ const (
 ================
 cosPickupAcknowledgement
 
-74FCD0 reads a result byte only for failure, and always reads the item GID
+Client 74FCD0 reads a result byte only for failure, and always reads the item GID
 for selector 8. The inventory receipt alone does not clear command pending.
 ================
 */
@@ -76,7 +76,7 @@ func finishCosPickupCommand(result OpResult, command wire.CosCommand) OpResult {
 			switch frame.Payload[1] {
 			case wire.ErrCodeStorageFull:
 				code = cosPickupBagFull
-			case cosPickupOwnerBagFull, cosPickupRetryBackoff:
+			case cosPickupBagFull, cosPickupOwnerBagFull, cosPickupRetryBackoff:
 				code = frame.Payload[1]
 			}
 		}
@@ -114,7 +114,7 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 		return refused
 	}
 	request := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: command.CosGid, GroundGID: command.TargetGid}
-	result := rt.applyCosGroundAt(division, c, request, cosGroundAttempt{now: rt.Now(), allowApproach: true, command: true})
+	result := rt.applyCosGroundAt(division, c, request, cosGroundAttempt{now: rt.Now(), allowApproach: true, command: true, doors: rt.handlerDoors()})
 	return finishCosPickupCommand(result, command)
 }
 
@@ -123,8 +123,8 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 expireCosPickup
 
 The pet left PICKITEM (battle, displacement, relocation to its owner) with
-a pickup still pending. CAIState_PICKITEM_OnExit (55AD60) answers the owner
-then: a pending target sends its failure (55ADF0) before the state clears.
+a pickup still pending. The reference server's PICKITEM exit answers the owner
+then: a pending target sends its failure before the state clears.
 Expiring the deadline lets the pet's next tick retire it through
 finishPendingCosPickup, which answers the 0xB06D (and the command, when one
 asked). Clearing the slot instead left the request unanswered, and the
@@ -151,7 +151,7 @@ func finishPendingCosPickup(state *petSession, result OpResult) OpResult {
 	}
 	request := *state.pickup
 	state.pickup = nil
-	// Leaving PICKITEM is a state change (53FF30).
+	// Leaving PICKITEM is a state change.
 	resetPetStuck(state)
 	if state.pickupCommand {
 		result = finishCosPickupCommand(result, wire.CosCommand{CosGid: request.CosGID, TargetGid: request.GroundGID})

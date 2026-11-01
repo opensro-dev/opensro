@@ -253,13 +253,21 @@ func (deployment *deployment) planVariables(
 				err,
 			)
 		}
+		// The one item each variable may change while its job runs: the
+		// webhook its template renders with change_mode noop or restart.
+		restartable := ""
 		if variable.path == agentVariablePath {
 			variable.items = keepBugReportWebhook(variable.items, existing, deployment.BugReports.Off)
 			desired[index] = variable
+			restartable = bugReportWebhookItem
+		} else if _, gameWorld := managedGameWorldVariableJobID(variable.path); gameWorld {
+			variable.items = keepStaffWebhook(variable.items, existing, deployment.StaffWebhookOff)
+			desired[index] = variable
+			restartable = staffWebhookItem
 		}
 		current[variable.path] = existing
 		if existing == nil ||
-			!stringMapsEqual(existing.Items, variable.items) && !onlyBugReportWebhookDiffers(existing.Items, variable.items) {
+			!stringMapsEqual(existing.Items, variable.items) && !onlyItemDiffers(existing.Items, variable.items, restartable) {
 			changedJobs[variable.jobID] = variable.path
 		}
 	}
@@ -327,10 +335,22 @@ remove it while the Agent runs.
 ================
 */
 func onlyBugReportWebhookDiffers(current, desired nomad.VariableItems) bool {
+	return onlyItemDiffers(current, desired, bugReportWebhookItem)
+}
+
+/*
+================
+onlyItemDiffers
+
+Whether the two item sets are equal once item is set aside. An empty item
+sets nothing aside.
+================
+*/
+func onlyItemDiffers(current, desired nomad.VariableItems, item string) bool {
 	strip := func(items nomad.VariableItems) map[string]string {
 		out := make(map[string]string, len(items))
 		for name, value := range items {
-			if name != bugReportWebhookItem {
+			if item == "" || name != item {
 				out[name] = value
 			}
 		}
@@ -448,6 +468,11 @@ func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
 		// an empty file and the GameWorld leaves the privacy write unserved.
 		if token := deployment.Secrets.PublicAPIToken; token != "" && game.PublicAPIAddr != "off" {
 			gameWorldItems[publicAPITokenItem] = token
+		}
+		// Absent, not empty, without one: the template renders an empty
+		// file and the GameWorld's certificate alert only logs.
+		if webhook := deployment.StaffWebhook; webhook != "" {
+			gameWorldItems[staffWebhookItem] = webhook
 		}
 		jobID := gameWorldJobPrefix + game.Definition.ID
 		desired = append(desired, desiredVariable{

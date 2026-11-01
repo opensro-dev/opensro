@@ -6,11 +6,10 @@ skillhostiledebuff.go - a timed buff instance cast on an enemy
 Vital Spot-Muscle and Vital Spot-Spirit (SKILL_CH_WATER_CANCEL_A / _B)
 are handler-3 buffs whose required target is an enemy: bbuf, dura, one
 terd or thrd word and tant. The target's skill manager installs the
-instance like any buff, and CSkillManager_ApplyBuffModifiersToActor
-(594AC0) writes the word, negated, to the recipient's parameter on the
-flat channel: terd (+0x2DC) to 9, evasion (59591A), thrd (+0x2E0) to 0xB,
-hit rate (595954). tagRefSkill_MatchesExecutionSelector reads both words
-(589E9B, 589EBF), so the cast is a hostile execution: attack rules admit a
+instance like any buff, and the server's buff installer
+writes the word, negated, to the recipient's parameter on the
+flat channel: terd (+0x2DC) to 9, evasion, thrd (+0x2E0) to 0xB,
+hit rate. Its execution-selector match reads both words, so the cast is a hostile execution: attack rules admit a
 player target. tant is the aggression the hit leaves on a monster.
 
 ===========================================================================

@@ -743,7 +743,7 @@ func (rt *Runtime) flagWarReconcile(match *flagWarMatch, nowMs int64) []simulati
 		unlock()
 		if s.character != nil && s.gone {
 			character := s.character
-			rt.deps.Update(character, "flagwar-anchor-clear", func() bool {
+			rt.deps.UpdateDeferred(character, "flagwar-anchor-clear", func() bool {
 				if character.World != nil {
 					character.World.InstanceReturn = nil
 				}

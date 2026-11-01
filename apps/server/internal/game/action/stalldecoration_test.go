@@ -21,10 +21,10 @@ import (
 ================
 TestStallDecorationIsAppliedAndShown
 
-49B9F0 case 3: using a booth item consumes it and keeps its reference as
+The native item use case 3: using a booth item consumes it and keeps its reference as
 the character's decoration; the next stall opens with it (0x30DF). The
 purchased decoration wins over a running premium BFI1 booth (native
-4F0F00 reads the persistent decoration unless a per-session 0x7160
+lookup reads the persistent decoration unless a per-session 0x7160
 override is set); the premium booth shows only when nothing was
 purchased, and its expiry falls back to the default stall.
 ================

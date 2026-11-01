@@ -3,8 +3,8 @@
 
 skillobject_test.go - dynamic-object row layout from native write primitives
 
-The fixed byte vector is derived from 48CE60/484FB0/487CE0 instruction widths.
-It is not described as a captured production packet.
+The fixed byte vector is derived from the reference server's serialize
+instruction widths. It is not described as a captured production packet.
 
 ===========================================================================
 */

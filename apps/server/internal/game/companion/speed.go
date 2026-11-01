@@ -58,10 +58,11 @@ const petRunSpeedScale = 0.8
 ================
 RunSpeed
 
-Port-only, not native: with Pacing, grab and growth pets move at four
-fifths of their projected run speed. It scales a speed the pet is given to
-move with, never the native parameter the follow and battle rules compare
-(548A30). Vehicle and captured quest actor speeds keep their values.
+Port-only, not native: with Pacing, grab and growth pets move at four fifths
+of their projected run speed. It scales a speed the pet is given to move
+with, never the native parameter the follow and battle rules compare (the
+server's follow-run install). Vehicle and captured quest actor speeds keep
+their values.
 ================
 */
 func (p Policies) RunSpeed(band uint16, speed float32) float32 {

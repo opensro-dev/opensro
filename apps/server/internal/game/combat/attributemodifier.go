@@ -32,8 +32,8 @@ const (
 ================
 AttributeEffectWrites
 
-595481 installs hpi; 595C4E installs apau; 5961E3 installs pmdg mode two.
-59613F installs pmhp's percentage on maximum HP through channel 1.
+The effect installer's cases install hpi, apau and pmdg mode two.
+Its pmhp case installs the percentage on maximum HP through channel 1.
 Convert the unsigned operand before negation, matching the x87 path.
 ================
 */
@@ -56,13 +56,13 @@ func AttributeEffectWrites(a enterworld.SkillAttributeBoost) []paramkeeper.Write
 		}
 	}
 	if a.MaxHPPenalty {
-		// 59615D pushes channel 1, not pmdg's channel 2. Other HP
+		// The pmhp case pushes channel 1, not pmdg's channel 2. Other HP
 		// percentage bonuses must add to this penalty before multiplication.
 		writes = append(writes,
 			paramkeeper.Write{Parameter: attributeMaxHP, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.HPPenaltyPercent))})
 	}
 	if a.DefensePenalty {
-		// 0x596279 / 0x5962AC push channel 1 with the negated percents.
+		// The defense-penalty case pushes channel 1 with the negated percents.
 		writes = append(writes,
 			paramkeeper.Write{Parameter: attributePhysicalDefense, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.PhysicalDefensePenalty))},
 			paramkeeper.Write{Parameter: attributeMagicalDefense, Channel: paramkeeper.PercentSum, Value: float32(-float64(a.MagicalDefensePenalty))})
@@ -85,7 +85,7 @@ const (
 ================
 HostileDebuffWrites
 
-594AC0 59591A..5959A0: an enemy-cast buff's terd writes minus its word to
+The effect installer's terd/thrd case: an enemy-cast buff's terd writes minus its word to
 evasion (9) and thrd to hit rate (0xB), each on the flat channel.
 ================
 */

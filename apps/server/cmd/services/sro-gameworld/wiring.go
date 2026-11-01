@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
@@ -72,6 +73,9 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// certificateWatch is the served WebTransport pair's staff alert
+	// (ops only, #1447); it reports nothing outside the public posture.
+	certificateWatch *transport.CertificateWatch
 	// killStatsFlush writes the final kill-stat rollup at shutdown
 	// (port-only, #1639); nil while SRO_KILL_STATS is off.
 	killStatsFlush  func() error
@@ -258,6 +262,13 @@ func newGameWorldApplication(
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
 	authority.agentAPI.InstallSettings(settingsapi.Path, settingsHandler)
+	// Port-only: the staff console's search of the moderation chat log.
+	chatLogHandler, err := chatlog.OperatorHandler(store.DirForShardFromEnv(ownedShard.ID),
+		filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"))
+	if err != nil {
+		return nil, fmt.Errorf("chat log: %w", err)
+	}
+	authority.agentAPI.InstallChatLog(chatlog.OperatorPath, chatLogHandler)
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -280,6 +291,7 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("gameplay construction: %w", err)
 	}
+	installCertificateWatch(application, ts, ownedShard.ID)
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
@@ -532,6 +544,14 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.sealBoard != nil {
 		group.Go(func() error {
 			application.sealBoard.Run(groupContext)
+			return nil
+		})
+	}
+	if application.certificateWatch != nil {
+		group.Go(func() error {
+			ticker := time.NewTicker(transport.CertificateCheckInterval)
+			defer ticker.Stop()
+			application.certificateWatch.Run(groupContext, ticker.C)
 			return nil
 		})
 	}

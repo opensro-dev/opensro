@@ -31,8 +31,8 @@ func (rt *Runtime) twoHanded(item inventory.Item) bool {
 	return ok && ref != nil && ref.NativeFields.Get("twoHanded") == 1
 }
 
-// Native 525380 rejects ammo with absent/mismatched main hand. 525237 and
-// 52531D append companion moves to the same result. Work on the caller's
+// Natively ammo with an absent/mismatched main hand is rejected, and the
+// companion moves append to the same result. Work on the caller's
 // temporary inventory; a failed capacity check must never commit half a swap.
 func (rt *Runtime) completeEquipmentPair(inv *inventory.Inventory, source, destination uint8) ([]wire.SubMove, *inventory.Fault) {
 	if source != 6 && source != 7 && destination != 6 && destination != 7 {

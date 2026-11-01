@@ -30,8 +30,9 @@ const maxQuestWireRecords = 255
 Runtime
 
 Owns definition lookups and quest mutations. Completion pays rewards and
-appends history; abandonment removes only the active record. Client 75C1D0
-shares their presentation branch, but persistence preserves the distinction.
+appends history; abandonment removes only the active record.
+CPSMission_OnNetProcessInLog0x31ED shares their presentation branch, but
+persistence preserves the distinction.
 ================
 */
 type Runtime struct {
@@ -54,9 +55,6 @@ type Runtime struct {
 	// quest-reward authority transaction. It opens no door itself, allowing
 	// quest completion, gold, and experience to commit atomically.
 	ApplyExperience func(character *enterworld.Character, expDelta, skillExpDelta int64, sourceGid uint32) ([]wire.Frame, bool)
-	// InstantInventoryExpansion presents quest bag slots at the turn-in
-	// (port-only, not native; instant_expansion.go).
-	InstantInventoryExpansion bool
 	// instanceHandlers is the instanced-world handler registry
 	// (instance_handlers.go), keyed by instance definition.
 	instanceHandlers instanceHandlerTable
@@ -70,10 +68,15 @@ type Runtime struct {
 	// InstanceReturn returns one character to its transfer anchor and
 	// InstanceClose ends a layer; PushCharacterFrames delivers frames
 	// to one character by name; NowMs is the runtime clock.
-	InstanceInvite      func(leader *enterworld.Character, call InstanceInviteCall) InstanceInviteOutcome
-	InstancePartyFacts  func(c *enterworld.Character) InstancePartyFacts
-	InstanceReturn      func(c *enterworld.Character) bool
-	InstanceClose       func(lease instance.Lease)
+	InstanceInvite     func(leader *enterworld.Character, call InstanceInviteCall) InstanceInviteOutcome
+	InstancePartyFacts func(c *enterworld.Character) InstancePartyFacts
+	InstanceReturn     func(c *enterworld.Character) bool
+	InstanceClose      func(lease instance.Lease)
+	// SpawnExitGate raises a quest instance's exit gate beside the point
+	// its boss fell, and RemoveExitGates takes a world's gates down when
+	// its layer closes (action/questgate.go). Nil raises nothing.
+	SpawnExitGate       func(world instance.ID, fell simulation.Spawn) bool
+	RemoveExitGates     func(world instance.ID)
 	PushCharacterFrames func(name string, frames []wire.Frame)
 	NowMs               func() int64
 	// rahid6 is the Rahid 6 programme's state (rahid6.go).
@@ -375,7 +378,8 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		if suppliesTraps {
 			acceptanceItems = append(acceptanceItems, inventory.ItemAmount{Codename: supply.item, Count: uint32(supply.count)})
 		}
-		// 897680 takes what it consumes before it grants the delivery, in the
+		// The server's POTION_4 start talk takes what it consumes before it
+		// grants the delivery, in the
 		// same inventory transaction here.
 		acceptanceTaken := acceptanceConsumption(character, def)
 		if len(acceptanceItems) > 0 || len(acceptanceTaken) > 0 {
@@ -391,7 +395,8 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			character.MissionInventory = rows
 			inventoryFrames = frames
 		}
-		// 8B2420 grants Cerberus's first scissors without stamping the day:
+		// The server's Cerberus talk grants the first scissors without stamping
+		// the day:
 		// only a refill spends it.
 		if suppliesTraps && !supply.spendAtGrant {
 			setCaptureSupply(character, def.RefID, rt.CalendarNow().Day, false)
@@ -465,7 +470,7 @@ type NpcOption struct {
 	Branches                                 []NpcBranch
 	Informational                            bool
 	// SideTalk rows speak PromptSymbol and record it as heard through
-	// AdvanceNpcQuest (89FDA0's pending bit).
+	// AdvanceNpcQuest (the server Rahid 4 dialogue talk's pending bit).
 	SideTalk bool
 	Complete bool
 	// AcceptRowSymbol, on an offer, is its one reply row, which accepts
@@ -557,7 +562,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		// a character that lost a level keeps its turn-in (as MarkerStates).
 		if !active && admissionLevel(def) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
 			prompt, accept, row := def.OfferPromptSymbol, def.AcceptResponseSymbol, def.OfferAcceptRowSymbol
-			// Native 9206ec..92073f: DifferentString only selects the
+			// The server's configured-event dispatch: DifferentString only selects the
 			// after-one-clear offer when the persisted completion count > 0.
 			if def.RepeatOfferPromptSymbol != "" && completionCount(character, def.RefID) > 0 {
 				prompt = def.RepeatOfferPromptSymbol
@@ -660,14 +665,15 @@ func (rt *Runtime) HandleRewardSelect(character *enterworld.Character, payload [
 		return OpResult{}, fmt.Errorf("quest reward: id %d has no loaded definition", refID)
 	}
 	if def.KindByte != 2 {
-		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 opens the reward window (sub_5c26e0)", def.Codename, refID, def.KindByte)
+		return OpResult{}, fmt.Errorf("quest reward: %s (id %d) is kind %d - only kind 2 opens the reward window", def.Codename, refID, def.KindByte)
 	}
 
 	result, err := rt.completeReward(character, def)
 	if err != nil {
 		return result, err
 	}
-	// 75C370 consumes successful B29A and triggers SND_QUEST. The
+	// CPSMission_OnQuestAcceptResponse0xB29A consumes successful B29A and
+	// triggers SND_QUEST. The
 	// journal delta alone cannot acknowledge the native reward operation.
 	ack := append([]byte{1}, payload...)
 	result.Frames = append(result.Frames, wire.Frame{Opcode: 0xb29a, Payload: ack})
@@ -780,7 +786,8 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 		if force {
 			turnInGold = 0
 		}
-		// 8CF8F0 asks for the fee once the objective is met, before any
+		// The server's EXINVENTORY_3 talk asks for the fee once the objective is
+		// met, before any
 		// reward is paid: a character short of it keeps the quest.
 		if turnInGold > 0 && creditGold(character.Gold, 0) < turnInGold {
 			refusal = &dialogueRefusal{
@@ -805,7 +812,8 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 				consume[index].Count *= count
 			}
 			if waitingBranch(def, character.ActiveQuests[at]) {
-				// 89E670's waiting branch never needed the objective items:
+				// The server Rahid 2 talk's waiting branch never needed the objective
+				// items:
 				// whatever was gathered leaves with the quest instead.
 				consume = consume[:0]
 				for _, item := range collectionConsumption(def) {
@@ -878,7 +886,8 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
 		if def.RewardGold > 0 || turnInGold > 0 {
-			// The fee leaves after the reward is paid (8CF8F0), checked above.
+			// The fee leaves after the reward is paid (as the server's
+			// EXINVENTORY_3 talk does), checked above.
 			balance := creditGold(character.Gold, def.RewardGold) - turnInGold
 			character.Gold = &balance
 			goldFrame = &wire.Frame{
@@ -886,12 +895,13 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 				Payload: wire.GoldRefresh{Balance: uint64(balance), Notify: true}.Encode(),
 			}
 		}
-		// Slots follow the items and gold, as 924CF0 pays them. A grant past
-		// the capacity limit is refused and the quest still completes: 4E19D0's
-		// refusal is ignored by its caller.
-		if character.GrantInventoryExpansion(def.RewardInventorySlots) && rt.InstantInventoryExpansion {
-			// Port-only: the slots are usable now, not at the next entry.
-			character.PresentInventoryExpansion()
+		// Slots follow the items and gold, as the server's reward-row payout
+		// pays them. The grant grows the bag in force at the turn-in and
+		// the new size is announced, as native applies the expansion on
+		// its completion. A grant past the capacity limit is refused and
+		// the quest still completes: the grant's refusal is ignored by
+		// its caller.
+		if character.GrantInventoryExpansion(def.RewardInventorySlots) {
 			capacity := storageCapacityFrame(character.InventoryCapacity())
 			capacityFrame = &capacity
 		}
@@ -924,7 +934,8 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 	frames = append(inventoryFrames, frames...)
 	frames = append(frames, objectiveFrames...)
 	frames = append(frames, experienceFrames...)
-	// 896360 sends its notice before it completes and pays the quest.
+	// The server's POTION_3 end talk sends its notice before it completes
+	// and pays the quest.
 	if advanced == nil && def.CompleteNoticeSymbol != "" {
 		frames = append([]wire.Frame{questNotification(def.CompleteNoticeSymbol)}, frames...)
 	}

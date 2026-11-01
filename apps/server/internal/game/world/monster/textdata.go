@@ -46,11 +46,11 @@ type MonsterRef struct {
 	RefObjID uint32
 	// TrainingDummy is a port-only GM target, never a native monster or reward source.
 	TrainingDummy bool
-	// TidWord is the packed RefObj TypeID word the client's sub_851420
+	// TidWord is the packed RefObj TypeID word the client's GIDObject_SelectRuntimeClassAndSpawn
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff
 	// (W & 0x7FE) == 0x0C6, W = word[RefObj+0] via
-	// CGlobalDataManager::GetTIDFromObjectID (sub_7efef0). Every row this
+	// CGlobalDataManager::GetTIDFromObjectID (client GlobalDataManager_GetTIDFromObjectID). Every row this
 	// loader classifies as a monster packs to exactly 0x00C6 (bit0 and
 	// bits11-15 are never set by the packer), the canonical value for
 	// create-row/refObjSnapshot emission.
@@ -63,11 +63,10 @@ type MonsterRef struct {
 	// native rate.
 	PharaohGearRate uint8
 	// CostRepair and CostRevive are _RefObjCommon columns 27 and 28, the
-	// reference's +0xA4 and +0xA8: a structure's full-repair price
-	// (CGObjSiegeStruct_ComputeRepairCost 4CFD50; the item repair 496E60
-	// reads the same field) and the base a destroyed one pays first
-	// (634950). CanRevive is column 23, bit 7 of the packed flags at +0x8C
-	// (4CECF0).
+	// reference's +0xA4 and +0xA8: a structure's full-repair price (the
+	// reference server's siege-structure repair cost; its item repair reads
+	// the same field) and the base a destroyed one pays first. CanRevive is
+	// column 23, bit 7 of the packed flags at +0x8C.
 	CostRepair, CostRevive uint32
 	CanRevive              bool
 	// UpgradeGold, UpgradeGuildPoints and BuildMinutes are a structure's
@@ -76,9 +75,10 @@ type MonsterRef struct {
 	// before it may be upgraded again (the fortress structure upgrade).
 	UpgradeGold, UpgradeGuildPoints, BuildMinutes uint32
 	// TypeID4 is characterdata column 12. The client classification gates
-	// ignore it, but the GameServer spawn routine reads the full TypeID word:
-	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
-	// monster (5607B0 -> 561020). NativeTypeWord packs it into bits 11-15.
+	// ignore it, but the reference server's spawn routine reads the full
+	// TypeID word: monster TID4 4 (the MOB_QT_* quest monsters) never
+	// becomes a party monster (the hatch's party-monster type test).
+	// NativeTypeWord packs it into bits 11-15.
 	TypeID4  uint8
 	Codename string
 	// Own characterdata OrgObjCodeName128, used by native default-tactics fallback.
@@ -113,8 +113,9 @@ type MonsterRef struct {
 	// guessing by codename or leaking the player's race across the boundary.
 	Country uint8
 	// The eight RefObjChar combat parameters are columns 77..84 in the
-	// shipped v1.150 characterdata. The v1.188 producer sub_4c3730 writes
-	// the homologous fields to ParamKeeper 5..12 in exactly this order.
+	// shipped v1.150 characterdata. The reference server's monster
+	// parameter initialisation writes the homologous fields to ParamKeeper
+	// 5..12 in exactly this order.
 	// CombatPinned distinguishes a real all-column snapshot from a
 	// synthetic/admin ref that omitted the combat tail.
 	CombatPinned    bool
@@ -127,8 +128,9 @@ type MonsterRef struct {
 	HitRate         float64
 	CriticalRate    float64
 	// ElementResist is characterdata columns 61..66 (RefObjChar +1A4..+1B8:
-	// frozen, frostbite, burn, electric shock, poison, zombie). 4CEFE0 stores
-	// them as parameters 1B, 1C, 1E, 1D, 1F and 20; the abnormal roll reads
+	// frozen, frostbite, burn, electric shock, poison, zombie). The native
+	// parameter seeding stores them as parameters 1B, 1C, 1E, 1D, 1F and
+	// 20; the abnormal roll reads
 	// them in its own order (freeze, frostbite, shock, burn, poison, zombie).
 	ElementResist [6]uint8
 	// Reward/default-action tail, from the same shipped v1.150
@@ -153,7 +155,7 @@ type MonsterRef struct {
 	// v1.188 server data.
 	WalkSpeed float64
 	RunSpeed  float64
-	// ScaleDenom is the third scalar consumed by sub_85fb20 (column 48).
+	// ScaleDenom is the third scalar consumed by client CICharactor_DeserializeSpawnData (column 48).
 	// It varies across the shipped roster and must remain per monster.
 	ScaleDenom float64
 	// BodyRadius is RefObjChar BCRadius (column 50, record+0xEE). The retail
@@ -167,7 +169,7 @@ type MonsterRef struct {
 // SRV seq26's favour): col 8 = char/bionic bit; cols 9/10/11 feed the
 // 0x1C / 0x60 / 0x780 gate bands; col 11 is the monster(1)/NPC(2)
 // discriminator, UNIQUELY forced by the two binary gates (monster
-// @0x851484 wants 0x080, NPC @0x808a9b wants 0x100) crossed with the two
+// client @0x851484 wants 0x080, NPC client @0x808a9b wants 0x100) crossed with the two
 // shipped rows. col 12 (TID4) is NOT consumed by the classification
 // gates.
 const (
@@ -241,9 +243,10 @@ func tidWordFromColumns(charBit, tid1, tid2, tid3 uint16) uint16 {
 ==================
 monsterTidGate
 
-monsterTidGate is the exact sub_851420 CLASS_CICMONSTER selection,
+monsterTidGate is the exact GIDObject_SelectRuntimeClassAndSpawn (client 851420)
+CLASS_CICMONSTER selection,
 binary-proven and arbiter-confirmed (RZ seq42 gate + seq234 re-read):
-four cmp gates @0x851460/0x85146b/0x851475/0x851484 combine to
+four cmp gates (client @0x851460/0x85146b/0x851475/0x851484) combine to
 (W & 0x7FE) == 0x0C6 (bit0 and bits11-15 are don't-care). Over the
 confirmed packing this admits rows with (TID1=1, TID2=2, TID3=1) - the
 admit-set RZ seq234 names as binding for the SRV filter.
@@ -266,10 +269,11 @@ func monsterTidGate(w uint16) bool {
 structureTidGate
 
 The fortress structures' band: TID1=1, TID2=2, TID3=5 packs to 0x02C6, the
-word RefObjTypeFlags_IsATStruct (4F3A50) selects CLASS_CICATStruct by.
-v1.188 keeps them as CGObjChar subclasses beside the monsters, so they
-share the population owner, its targeting and its damage; Structure marks
-the rows whose spawn row, behavior and damage rules differ.
+word the reference type-flags test selects CLASS_CICATStruct by. The
+reference server keeps them as character-object subclasses beside the
+monsters, so they share the population owner, its targeting and its
+damage; Structure marks the rows whose spawn row, behavior and damage
+rules differ.
 ==================
 */
 func structureTidGate(w uint16) bool {
@@ -324,7 +328,7 @@ func parseMonsterRefTables(textdataDir string, tables [][][]string) map[uint32]M
 	refs := make(map[uint32]MonsterRef)
 	rides := loadMonsterRideMetadata(textdataDir)
 	// Every characterdata codename, served or not: the characterInfo default
-	// is the first record naming a known reference (91B7E0).
+	// is the first record naming a known reference (client 91B7E0).
 	known := make(map[string]bool)
 	// textdataname.txt is the shipped symbol table: fields[1] is the
 	// SN_* symbol and fields[8] is English. This is the same column contract
@@ -545,10 +549,10 @@ type characterInfoRides struct {
 ================
 resolve
 
-CharacterInfo_FindByRefThenOriginalThenDefault (9171B0): the reference's
+CharacterInfo_FindByRefThenOriginalThenDefault (client 9171B0): the reference's
 own record, else its original reference's (characterdata column 4, the
 OrgObjCodeName at +0x5C), else the default, the first record in file order
-whose codename names a known reference (91B7E0). The unique encounters'
+whose codename names a known reference (client 91B7E0). The unique encounters'
 _L2/_L3 variants have no record of their own and ride their base's mount.
 The bake's media resolver (buildNpcModelAssets characterInfoResolver)
 follows the same chain and refuses any drift.
@@ -598,9 +602,9 @@ loadMonsterRideMetadata
 
 loadMonsterRideMetadata projects the complete native ride contract from
 skilleffect.txt. The enum values are executable-authored (the static table
-consumed by sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
+consumed by client stdext_hash_map_wstring_uint32_find_value at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
 Unknown tokens are rejected rather than silently inventing a transform.
-Records with no ride are kept: they end the 9171B0 lookup.
+Records with no ride are kept: they end the client 9171B0 lookup.
 ==================
 */
 func loadMonsterRideMetadata(textdataDir string) characterInfoRides {
@@ -652,7 +656,7 @@ Records the ride of one characterInfo row under every name it covers.
 */
 func (r *characterInfoRides) register(codename string, ride monsterRideMetadata) {
 	for _, name := range characterInfoCodenames(codename) {
-		// 91B7E0 overwrites a repeated record; its place in the default
+		// client 91B7E0 overwrites a repeated record; its place in the default
 		// search stays where the name first appeared.
 		if _, known := r.byCodename[name]; !known {
 			r.order = append(r.order, name)

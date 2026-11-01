@@ -10,7 +10,7 @@ CCObjCharacter_SetEquipSlotVisual. The loadout therefore names the model,
 the worn items, the avatar items and the scale; it never invents
 presentation keys. Creation owns which starter items a choice grants, with
 the native Europe weapon/protector rule (CPSCharacterCreateEurope_OnProtectorChanged
-0x730690) and the darkstaff as Europe weapon choice 6.
+client 0x730690) and the darkstaff as Europe weapon choice 6.
 
 ===========================================================================
 */
@@ -53,7 +53,7 @@ type europeWeaponRule struct {
 }
 
 // europeWeaponRules is the Europe creation weapon list in choice order ("" =
-// no weapon) with the protectors each weapon class allows (0x730690): sword,
+// no weapon) with the protectors each weapon class allows (client 0x730690): sword,
 // two-hand sword and axe take heavy or light armor; darkstaff, two-hand staff
 // and harp the robe only; crossbow and dagger light armor only; the one-hand
 // staff light armor or the robe.
@@ -178,8 +178,8 @@ var nativeWeaponAnimationSetByKind = map[string]string{
 
 // nativeWeaponAnimationSetByTid4 is the string-name projection of v1.150
 // ItemTypeWord_ToAnimationSetName: weapon class -> animation set. Class 0x0a
-// (darkstaff) returns the second std::string object at 0xccce10, whose text
-// is "onehand_staff" (InitGlobalAnimationSetNameStrings 0xbbdd61..0xbbdd84).
+// (darkstaff) returns the second std::string object at client 0xccce10, whose text
+// is "onehand_staff" (client InitGlobalAnimationSetNameStrings 0xbbdd61..0xbbdd84).
 var nativeWeaponAnimationSetByTid4 = map[uint16]string{
 	2: "sword", 3: "sword",
 	4: "spear", 5: "spear",

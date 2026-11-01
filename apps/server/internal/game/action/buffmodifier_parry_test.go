@@ -18,7 +18,7 @@ import (
 ================
 TestConcentrationWritesParryFlatAndRate
 
-594AC0 0x595883..0x5958DE: er's flat on channel 0 and rate on channel 1 of
+The reference server's buff modifier pass: er's flat on channel 0 and rate on channel 1 of
 parameter 9, the shape hr has on parameter 11.
 ================
 */

@@ -37,13 +37,13 @@ const (
 	// rather than trigger an approach.
 	//
 	// MEASURED (supersedes the provisional 50u): the retail-family
-	// SR_GameServer.exe pickup executor sub_526090 loads a single global
-	// float32 = 10.0 (.rdata:0x00b45b44 = 0x41200000), feeds it to the reach
-	// checker sub_4a9050, and compares it INCLUSIVELY (distance <= 10.0)
-	// against a LINEAR region-aware distance (post-fsqrt, 1920u/region). The
-	// client ships no player pickup range because the value is
-	// server-authoritative, and there is no too-far refusal in the item
-	// error family - retail always walks you there.
+	// server's pickup executor loads a single global float32 = 10.0
+	// (0x41200000), feeds it to its reach checker, and compares it
+	// INCLUSIVELY (distance <= 10.0) against a LINEAR region-aware
+	// distance (post-fsqrt, 1920u/region). The client ships no player
+	// pickup range because the value is server-authoritative, and there
+	// is no too-far refusal in the item error family - retail always
+	// walks you there.
 	ExecuteRange = 10.0
 )
 
@@ -118,8 +118,9 @@ type Approach struct {
 // PlanApproach decides whether a pickup executes now or has to walk first.
 //
 // Retail does not refuse an out-of-range interact: the server walks the
-// character to the drop and executes on arrival. The client sub_693190
-// one-byte 0x72CD lane is a throttled CANCEL/recovery command, not a pickup
+// character to the drop and executes on arrival. The client's
+// CGInterface_CancelSkillForKeyboardMove (0x693190) one-byte 0x72CD lane is
+// a throttled CANCEL/recovery command, not a pickup
 // heartbeat; completion therefore remains server-owned. A cross-world pair
 // can never be in range.
 /*
@@ -161,8 +162,8 @@ type Pending struct {
 // PendingTracker holds the one approach each character may have in flight.
 //
 // The native target-move latch is a single slot: issuing any new command
-// replaces it (sub_67b0e0), which is why arming an approach overwrites rather
-// than queues.
+// replaces it (client CGInterface_SetTargetMoveActive), which is why
+// arming an approach overwrites rather than queues.
 /*
 ================
 PendingTracker

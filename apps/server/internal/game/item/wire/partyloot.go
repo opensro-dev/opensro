@@ -3,7 +3,7 @@
 
 partyloot.go - the party loot notice (0x317D)
 
-CParty_BroadcastLootNotice (server 5BDC80, v1.188 0x3068) tells every party
+The native party loot notice (v1.188 opcode 0x3068) tells every party
 member what an item-share pickup granted and to whom; the v1.150 client
 (CPSMission_OnItemLootGoldOrItem0x317D, 7511C0) prints it in the system chat.
 
@@ -19,9 +19,10 @@ const OpPartyLootNotice uint16 = 0x317D
 ================
 EncodePartyLootNotice
 
-[u32 recipient gid][u32 item ref] then the amount in the width 7511C0 reads
-for the item's type: a u32 for a gold heap (ETC, group 0x280), a u16 for
-another expendable stack, otherwise a single byte.
+[u32 recipient gid][u32 item ref] then the amount in the width the
+client's CPSMission_OnItemLootGoldOrItem0x317D reads for the item's type:
+a u32 for a gold heap (ETC, group 0x280), a u16 for another expendable
+stack, otherwise a single byte.
 ================
 */
 func EncodePartyLootNotice(recipientGid, refObjID uint32, typeFlags uint16, amount uint32) []byte {

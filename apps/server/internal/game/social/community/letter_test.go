@@ -1,7 +1,7 @@
 package community
 
 // Letter-lane table tests: the packed receive time against a mirror of
-// the client's sub_60c9b0 bit decode, the 0x7261 strict decode, the
+// the client's CIFLetterSlot_SetRecord bit decode, the 0x7261 strict decode, the
 // pinned answer encoders byte for byte, and the three handlers over a
 // fake letter door (refusal arms silent, mutation arms copy-then-swap).
 
@@ -14,7 +14,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// decodeReceiveTime mirrors sub_60c9b0 (CommunityLetterPlane_DecodeReceiveTime):
+// decodeReceiveTime mirrors the client CIFLetterSlot_SetRecord receive
+// time decode:
 // bits 0..5 year, 6..9 month, 10..14 day, 15..19 hour, 20..25 minute.
 func decodeReceiveTime(packed uint32) (year, month, day, hour, minute uint32) {
 	return packed & 0x3f, (packed >> 6) & 0xf, (packed >> 10) & 0x1f, (packed >> 15) & 0x1f, (packed >> 20) & 0x3f

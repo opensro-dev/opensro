@@ -616,10 +616,11 @@ func (m *MoverState) Transition(event MoverEvent, targetGID uint32) error {
 ================
 resetsStuckOnTransition
 
-AI_CTactics_ChangeState (0x0053FF30) zeroes CTactics.+0x148 on every native
-CAIState entry, including self-transitions that re-enter the same state ID.
-Sub-mode transitions inside CAIState_BATTLE or multi-leg continuations inside
-CAIState_HOMING / CAIState_FOLLOW do not call 0x0053FF30 and keep the counter.
+The reference server's tactics state change zeroes the tactics object's
++0x148 on every native AI-state entry, including self-transitions that
+re-enter the same state ID. Sub-mode transitions inside the battle state
+or multi-leg continuations inside the homing/follow states do not run the
+state change and keep the counter.
 ================
 */
 func resetsStuckOnTransition(from MoverState, event MoverEvent) bool {
@@ -684,7 +685,7 @@ func (m *MoverState) clearChaseGuidance() {
 }
 
 // TakeIdleEntry consumes the entry callback once. A movement arrival while
-// already IDLE does not re-enter the state (base 559010).
+// already IDLE does not re-enter the state (the native idle-state base).
 func (m *MoverState) TakeIdleEntry() bool {
 	if m.mode != MoverIdle || !m.idleEntryPending {
 		return false

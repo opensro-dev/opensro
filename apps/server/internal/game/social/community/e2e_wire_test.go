@@ -14,15 +14,18 @@ package community_test
 //	                mode), then the community seeds: 0x3769 [00] and
 //	                0xB3CD [01 00];
 //	0x766F reg   -> the 0xB66F ack {mode 1, result 0, u16 len + name}
-//	                rides the wire (sub_771550 applies the name to the
-//	                blocking panel LIVE) and the store persists it;
+//	                rides the wire (client
+//	                CPSMission_OnAliasActionResponse0xB66F applies the
+//	                name to the blocking panel LIVE) and the store
+//	                persists it;
 //	0x766F dup   -> 0xB66F {1, 1} ("Name already exists."), no change;
 //	0x766F unknown> 0xB66F {1, 2} ("User does not exist."), no change;
 //	0x7164       -> SILENT refusal (live handler; unknown target name);
 //	reboot       -> the store reopens with the blocked name PERSISTED,
 //	                and a fresh EnterWorld's 0x32B3 chunk C carries it
-//	                (the enter-world reflection channel - sub_77ad10
-//	                reads exactly these bytes into the whisper panel);
+//	                (the enter-world reflection channel - client
+//	                CPSMission_ReadBlockedWhispererList reads exactly these
+//	                bytes into the whisper panel);
 //	0x766F cancel-> 0xB66F {2, 0, name}; the store view drops the name;
 //	cancel miss  -> 0xB66F {2, 2} (the v1.188 GameServer remove-miss
 //	                remap, MEDIUM confidence - the evidence note sits on
@@ -253,7 +256,8 @@ func enterWorld(t *testing.T, c *websocket.Conn) []byte {
 // enteredPayloadTail is the frozen 6-byte tail of the 0x32B3 chunk: the
 // u32 0x10001 fortress-war sentinel, the u8 0 event count, the u8 0
 // mission-mode flag. Chunk C (the whisper-block list) sits IMMEDIATELY
-// before it - the position sub_77ad10 reads it at.
+// before it - the position the client CPSMission_ReadBlockedWhispererList
+// reads it at.
 var enteredPayloadTail = []byte{0x01, 0x00, 0x01, 0x00, 0x00, 0x00}
 
 // assertChunkC asserts the whisper-block chunk immediately before the
@@ -308,7 +312,7 @@ func readBlockedWhisperers(t *testing.T, authority *store.Store) []string {
 }
 
 // expectWhisperBlockAck asserts the next frame is 0xB66F with the exact
-// body - the raw-byte contract the client agent pins sub_771550 against.
+// body - the raw-byte contract the client agent pins CPSMission_OnAliasActionResponse0xB66F against.
 func expectWhisperBlockAck(t *testing.T, c *websocket.Conn, want []byte, what string) {
 	t.Helper()
 	got := expectFrame(t, c, community.OpWhisperBlockAck, what)
@@ -347,7 +351,8 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	chunk := enterWorld(t, conn)
 	assertChunkC(t, chunk, nil, "baseline")
 
-	// Register "Berk": 0xB66F {1, 0, name} - sub_771550 applies the name
+	// Register "Berk": 0xB66F {1, 0, name} - client
+	// CPSMission_OnAliasActionResponse0xB66F applies the name
 	// to the blocking panel live.
 	sendFrame(t, conn, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeRegister, "Berk"))
 	expectWhisperBlockAck(t, conn, []byte{0x01, 0x00, 0x04, 0x00, 'B', 'e', 'r', 'k'}, "register ack")
@@ -363,7 +368,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, conn, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeRegister, "Cale"))
 	expectWhisperBlockAck(t, conn, []byte{0x01, 0x02}, "unknown-target ack")
 	// Friend-add refusal arm: "Cale" is not a division character, so the
-	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, 447650's 0x640D).
+	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, the native 0x640D).
 	friendAdd := wire.NewWriter(6).U16(4).Bytes([]byte("Cale")).Payload()
 	sendFrame(t, conn, community.OpFriendAddRequest, friendAdd)
 	if got := expectFrame(t, conn, community.OpFriendInviteAnswer, "friend-add refusal"); !bytes.Equal(got, community.EncodeFriendInviteErrorB164(community.FriendErrUnknownUser)) {
@@ -404,7 +409,7 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	}
 
 	// Cancel MISS: 0xB66F {2, 2} - the v1.188 GameServer remove-miss
-	// remap (sub_435cd0 SQL 1 -> wire 2), MEDIUM confidence; the full
+	// remap (SQL 1 -> wire 2), MEDIUM confidence; the full
 	// evidence note sits on the handler's cancel arm.
 	sendFrame(t, conn2, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeCancel, "Berk"))
 	expectWhisperBlockAck(t, conn2, []byte{0x02, 0x02}, "cancel-miss ack")

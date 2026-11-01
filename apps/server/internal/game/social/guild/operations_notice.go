@@ -34,7 +34,7 @@ type NoticeEditOutcome struct {
 	Refusal      string
 }
 
-// NoticeRefusalPayload is the one refusal writer. Native 5C64AF/5C64DF
+// NoticeRefusalPayload is the one refusal writer. The native guild notice step
 // distinguishes missing guild (0D, silent in the v1.150 dispatcher) from
 // permission failure (1E). Client 75C9A9 supplies category 10, not a wire byte.
 func NoticeRefusalPayload(reason NoticeRefusal) []byte {
@@ -74,7 +74,7 @@ func HandleNoticeEdit(deps Dependencies, divisionID string, actor *enterworld.Ch
 		return refusedNoticeEdit(NoticeMalformed, err.Error())
 	}
 
-	// 516EA0 rejects either encoded field before 5C6480 checks guild permission.
+	// The native notice edit rejects either encoded field before the guild permission check.
 	// DecodeNoticeEditRequest preserves raw ANSI bytes in these strings.
 	if textguard.Rejected([]byte(request.Subject)) || textguard.Rejected([]byte(request.Contents)) {
 		return refusedNoticeEdit(NoticeTextRejected, "notice text rejected")
@@ -85,7 +85,7 @@ func HandleNoticeEdit(deps Dependencies, divisionID string, actor *enterworld.Ch
 		divisionID, actor.ID, "guild-notice-edit",
 		enterworld.GuildAuthorization{RequiredPermission: PermMaskNoticeEdit},
 		func(record enterworld.GuildRecord, members []enterworld.GuildMemberRecord) (enterworld.GuildRecord, []enterworld.GuildMemberRecord, bool) {
-			// 5C64DD authorizes before 5C64ED validates text. Keep both decisions
+			// Natively authorization precedes text validation. Keep both decisions
 			// inside the same authority transaction, so membership cannot race them.
 			switch {
 			case request.Subject == "":

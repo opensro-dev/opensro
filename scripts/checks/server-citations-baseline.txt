@@ -1,0 +1,4 @@
+# Server Go files that still cite the reference server by name or address (#1701, #1883).
+# Format: `<path> <count>`. This ledger may only shrink; run
+# `node scripts/checks/check_server_citations.mjs --update` after rewording a file.
+apps/server/internal/agent/server/client_incident_test.go 2

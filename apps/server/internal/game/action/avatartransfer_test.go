@@ -18,7 +18,7 @@ func TestAvatarTransferRoundtripPreservesBodyAndVisualOrder(t *testing.T) {
 	rt, _ := newTestRuntime(c, items)
 	equip := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 0})
 	// The move, the avatar's reference and visual, then the owner's
-	// refreshed stats (50F1F0): a worn avatar's options count only while it
+	// refreshed stats (as the reference server sends them): a worn avatar's options count only while it
 	// is worn. The owner's browser needs the reference as a viewer's does.
 	if len(equip.Frames) != 4 || equip.Frames[0].Opcode != wire.OpItemMoveResponse ||
 		equip.Frames[1].Opcode != opCommerceItemReferences || equip.Frames[2].Opcode != 0x3314 ||

@@ -32,6 +32,11 @@ const (
 	cosSummonPosture  uint8 = 0x7a
 )
 
+// zombiePotionHPFloor is the v1.150 rule as reported by the owner from the
+// original client: reversed potion damage stops at one HP. The server binary
+// is not available to check it.
+const zombiePotionHPFloor int64 = 1
+
 /*
 ================
 cosSummonerType
@@ -144,7 +149,7 @@ HP/MP recovery, one-unit stack consumption, then the exact 0xB5BD success
 row followed by the normal 0x33A6 vitals refresh.
 
 admittedItemUseFamily owns the closed recovery/summoner/pet-skill dispatch.
-Other sub_6961b0 families remain refused until their effect, prerequisites,
+Other client 6961B0 families remain refused until their effect, prerequisites,
 cooldown and result conversation are implemented together.
 ==================
 */
@@ -168,6 +173,10 @@ func (rt *Runtime) HandleItemUse(
 	// rebinds the resident region, which reads the committed character).
 	var after func()
 	var used *enterworld.ItemRef
+	// A name-change scroll the closure admitted: the rename queues after
+	// this door closes, then the scroll is spent (namechange.go).
+	var queuedName string
+	var queuedNowMs int64
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -205,13 +214,19 @@ func (rt *Runtime) HandleItemUse(
 		family := admittedItemUseFamily(ref)
 		used = ref
 		// Only the resurrection scroll is usable dead; it refuses the living
-		// itself (49FF20).
+		// itself, as natively.
 		if family != itemUseResurrection && !enterworld.CharacterAlive(character) {
 			result = itemUseFailure(wire.ErrCodeItemUseDead)
 			return false
 		}
 		if family == itemUseUnsupported {
 			result.DiagnosticRefusal = "item-use: unsupported reference family " + ref.Codename
+			return false
+		}
+		if family == itemUseNameChange && !rt.NameChangeScroll {
+			// Port-only (#1689): with the flag off the scroll is the
+			// native game - an item no family serves.
+			result.DiagnosticRefusal = "item-use: name change scroll is off (" + EnvNameChangeScroll + ")"
 			return false
 		}
 		if code := itemUseRequirements(character, ref); code != 0 {
@@ -239,7 +254,7 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			// A quest tool may grant its result before it is spent (the
-			// warehouse amulets, 895BC0): find the used row again by its slot.
+			// warehouse amulets): find the used row again by its slot.
 			rowIndex = slices.IndexFunc(character.MissionInventory, func(row enterworld.InventoryRow) bool {
 				return row.Slot == int64(request.Slot) && row.Codename == ref.Codename
 			})
@@ -308,7 +323,7 @@ func (rt *Runtime) HandleItemUse(
 			return true
 		}
 		if family == itemUseStallDecoration {
-			// 49B9F0 case 3 -> 4A3F10: the item's reference id becomes the
+			// Natively item-use case 3: the item's reference id becomes the
 			// character's permanent stall decoration; an open stall keeps the
 			// booth it opened with until it reopens.
 			if len(tail) != 0 {
@@ -335,6 +350,14 @@ func (rt *Runtime) HandleItemUse(
 			return rt.usePremiumTicket(skillItemUse{
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, family == itemUseSkillTimeTicket, &result)
+		}
+		if family == itemUseNameChange {
+			// The queue door takes the store's own lock, so it cannot
+			// run inside this character door: admit here, queue and
+			// spend after the door closes (finishNameChangeUse).
+			queuedName = rt.admitNameChangeUse(divisionID, character, tail, nowMs, &result)
+			queuedNowMs = nowMs
+			return false
 		}
 		if family == itemUseGenderTool {
 			return rt.useGenderTool(skillItemUse{
@@ -421,7 +444,7 @@ func (rt *Runtime) HandleItemUse(
 			rt.petSkillWindows.track(divisionID, character.Name)
 			result = OpResult{Frames: []wire.Frame{
 				{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-				// A fresh use has its whole window left; sub_6E6E00 seeds the
+				// A fresh use has its whole window left; client 6E6E00 seeds the
 				// row's elapsed accumulator to limit minus this value.
 				{Opcode: wire.OpCosStateRefresh, Payload: wire.EncodeCosSummonTimer3691(ref.RefObjID, uint32(seconds), 0)},
 			}}
@@ -443,14 +466,14 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			if character.NativeBodyStatus == 6 || character.NativeBodyStatus == 7 {
-				result = itemUseFailure(cosSummonPosture) // 49C0B6: posture admission precedes actor creation.
+				result = itemUseFailure(cosSummonPosture) // posture admission precedes actor creation.
 				return false
 			}
 			// The refusal sequence mirrors the persistent lane's native
 			// order: posture, teleport, the seated motion busy, battle,
 			// then the casting and motion-change locks.
 			if teleportBlocks(character.NativeTeleportMode) {
-				result = itemUseFailure(0x69) // 49BB2B; v1.150 consumes this byte silently.
+				result = itemUseFailure(0x69) // v1.150 consumes this byte silently.
 				return false
 			}
 			if rt.playerMotionState(divisionID, character, nowMs) == simulation.MotionSitting {
@@ -458,11 +481,11 @@ func (rt *Runtime) HandleItemUse(
 				return false
 			}
 			if inBattleState(character, nowMs) {
-				result = itemUseFailure(cosSummonInBattle) // 49B9F0: riding and transport summons refuse battle.
+				result = itemUseFailure(cosSummonInBattle) // riding and transport summons refuse battle.
 				return false
 			}
 			if rt.PlayerAttackLocked(divisionID, character.Name) || rt.objectActionCommitted(divisionID, character.Name) {
-				result = itemUseFailure(cosSummonBusy) // 49BE65 -> 49BCDB: shared motion-change lock.
+				result = itemUseFailure(cosSummonBusy) // shared motion-change lock.
 				return false
 			}
 			characters, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
@@ -478,7 +501,7 @@ func (rt *Runtime) HandleItemUse(
 				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
 				return false
 			}
-			// 49BF24: a murderer may not summon a riding horse, 0x1876; the
+			// A murderer may not summon a riding horse, 0x1876; the
 			// transport summon skips the check.
 			if cosRef.TidWord>>11 == cosBandRiding && murderer(character) {
 				result = itemUseFailure(errCodeMurdererTransport)
@@ -497,7 +520,7 @@ func (rt *Runtime) HandleItemUse(
 			// #721, the summon side of the stolen-goods rule: a thief (job
 			// state 2) cannot summon a transport (TID 1/2/3/2) in a protected
 			// region (IsBattleField clear), the Thieves' Den included: v1.188
-			// CGItemExpendable_UseItem 49BD8A..49BDCA answers 0x1895, the
+			// item use answers 0x1895, the
 			// client's error 149, whose English text names the Thieves' Den.
 			if cosRef.TidWord>>11 == cosBandTransport && enterworld.DressedJob(character) == domain.JobThief &&
 				townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
@@ -529,19 +552,19 @@ func (rt *Runtime) HandleItemUse(
 				Mounted:          true,
 				StateFlags:       3,
 			}
-			// 4404A1..4404DA: the creation arm keeps the reference capacity
+			// The creation arm keeps the reference capacity
 			// (+0x224) for everything but pets, so a transport carries a
 			// cargo bag of its authored size; a riding horse authors none.
 			if cosRef.InventoryCapacity > 0 {
 				pet.Container = &domain.COSContainer{Capacity: cosRef.InventoryCapacity}
 			}
 			// Validate the complete private record before inventory debit. Native
-			// 4FB2C0 automatically binds both riding and transport vehicles.
+			// summoning automatically binds both riding and transport vehicles.
 			record, recordErr := enterworld.BuildCOSRecord(pet, cosRef, rt.deps.ItemReferences())
 			if recordErr != nil {
 				return false
 			}
-			// 49BE8F: the admitted summon retires the transform before binding.
+			// The admitted summon retires the transform before binding.
 			rt.endTransform(divisionID, character, nowMs)
 			character.ActiveCOS = pet
 			remaining := rt.consumeItemUseRow(character, rowIndex)
@@ -561,7 +584,7 @@ func (rt *Runtime) HandleItemUse(
 				Run:       cosRef.RunSpeed,
 				Scale:     cosRef.Scale,
 				Name:      name,
-				OwnerName: character.Name,
+				OwnerName: enterworld.PartyMemberName(character),
 				OwnerGid:  enterworld.ObjectIDForCharacter(character),
 			})
 			rt.rememberTransportCOS(divisionID, character, live)
@@ -592,9 +615,9 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		if family == itemUseCure {
-			// 49B710 TID3 2: 4EB410 lane 0x100 (universal pill) or 0x40 (other
+			// TID3 2: the reuse lane 0x100 (universal pill) or 0x40 (other
 			// cures) refuses with the reuse delay; the cure result is ignored,
-			// the use always succeeds and 4E0AB0 locks the lane for 20.1 s
+			// the use always succeeds and the reuse lock holds the lane for 20.1 s
 			// (pill) or 1.1 s.
 			lane, lockMs := 1, int64(1100)
 			if ref.TypeIDs[3] == 1 {
@@ -640,9 +663,9 @@ func (rt *Runtime) HandleItemUse(
 		}
 		// The cooldown debit and recovery/consumption share this update door.
 		// Refused requests neither extend a deadline nor emit success frames.
-		// 49B710 TID3 1: the lane check (4EB410) precedes the amount; 49AA70
+		// TID3 1: the lane check precedes the amount; the recovery amount
 		// sizes the potion; both amounts <= 0 is error 2; otherwise the item
-		// is consumed even into a full gauge (4EF450 clamps the recovery).
+		// is consumed even into a full gauge (the recovery is clamped).
 		tid4, _ := potionType(ref.TypeIDs)
 		if character.ItemUseCooldowns[tid4-1] > nowMs {
 			result = itemUseFailure(wire.ErrCodeItemReuseDelay)
@@ -674,11 +697,12 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if credit.HP > 0 {
 			// Mask bit 0x20 deals the whole HP amount through vfunc +308 with
-			// reason 0x20 instead of healing; MP still recovers.
+			// reason 0x20 instead of healing; MP still recovers. The reversed
+			// damage never kills: HP stops at the native floor.
 			if zombie {
-				nextHP = max(currentHP-amount.hp, 0)
+				nextHP = max(currentHP-amount.hp, zombiePotionHPFloor)
 			} else {
-				// 49A5B0 routes potion steps through the same 4A86A0 recovery
+				// Natively potion steps go through the same recovery
 				// reduction as skills. Panic applies after potion sizing.
 				reduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
 				nextHP = combat.RecoverVital(currentHP, maxHP, credit.HP, reduction)
@@ -714,27 +738,11 @@ func (rt *Runtime) HandleItemUse(
 				),
 			},
 		}
-		// A lethal zombie potion dies through the shared death path; every
-		// observer sees the retired effects, the zero baseline and 0x3122.
+		// A changed HP is broadcast; MP rides the actor's vitals frame.
 		var public []wire.Frame
-		if nextHP > 0 && nextHP != currentHP {
+		if nextHP != currentHP {
 			public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 				Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(character), 0, uint32(nextHP))})
-		}
-		if nextHP == 0 {
-			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, deathKiller{}, nowMs)
-			public = append(public, effects...)
-			if owner := rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs); owner != nil {
-				owner.fatal = true
-				public = append(public, rt.playerAbnormalPublication(divisionID, character, owner).public...)
-			} else {
-				life := beginFatalLifePublication(enterworld.ObjectIDForCharacter(character))
-				baseline := life.publishDeathBaseline()
-				dead := life.publishDead()
-				public = append(public, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload}, wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
-			}
-			frames = append(frames, public...)
-			frames = append(frames, progression...)
 		}
 		frames = append(frames, rt.updateQuestInventory(character)...)
 		result = OpResult{Frames: frames, Broadcast: public}
@@ -758,6 +766,9 @@ func (rt *Runtime) HandleItemUse(
 	if committed && used != nil {
 		rt.publishItemUseVisual(character, used, visualGID, &result)
 	}
+	if queuedName != "" {
+		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
+	}
 	return result
 }
 
@@ -765,7 +776,7 @@ func (rt *Runtime) HandleItemUse(
 ================
 publishItemUseVisual
 
-CGObjPC_HandleUseItem (v1.188 510980) ends every successful use the same
+The native item use (v1.188) ends every successful use the same
 way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
 sessions, v1.150's 0x3449 (the client's external item effect, 74F540).
 The gid is the user's, unless the item's handler named another object

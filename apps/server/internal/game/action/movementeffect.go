@@ -33,7 +33,7 @@ const (
 ================
 refreshMovementEffects
 
-CGObjChar_RefreshMovementSpeeds (4AA410) reads the effective keeper pair.
+The native movement speed refresh reads the effective keeper pair.
 Pending-stop rows remain installed until their replacement handoff or drain.
 Abnormal writes apply to the resulting base, including transformed actors.
 ================

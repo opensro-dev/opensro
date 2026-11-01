@@ -38,11 +38,11 @@ const (
 	statusCastStunTag   = 0x7374
 	statusCastPoisonTag = 0x7073
 
-	// statusCastEquipmentRefusal is 58D480's 0x300D, of which the cast
+	// statusCastEquipmentRefusal is the equipment requirement check's 0x300D, of which the cast
 	// result carries the low byte.
 	statusCastEquipmentRefusal = 0x300d
 
-	// statusCastPoisonPulseMs is 590680's poison period when the row
+	// statusCastPoisonPulseMs is the native status roll's poison period when the row
 	// authors no puls.
 	statusCastPoisonPulseMs = 2000
 )
@@ -303,7 +303,7 @@ func TestAxisQuiverStunsAroundThePrimaryWithoutDamage(t *testing.T) {
 		t.Fatalf("Axis Quiver was not prepared: %+v", start)
 	}
 	// Column 19 = 1: the combat intent returns to the basic attack after
-	// the action closes (4AEC9E..4AECB3).
+	// the action closes (reference server).
 	if intents := rt.combatIntentSnapshot(); len(intents) != 1 || !intents[0].ResumeBasic {
 		t.Fatalf("Axis Quiver does not continue the basic attack: %+v", intents)
 	}
@@ -382,7 +382,7 @@ func TestPoisonFieldPoisonsMonstersAroundTheCaster(t *testing.T) {
 		if enterworld.CurrentMP(c) != mp-int64(skill.Consumption.MP) {
 			t.Fatalf("weapon %d: MP %d -> %d, cost %d", kind, mp, enterworld.CurrentMP(c), skill.Consumption.MP)
 		}
-		// Without puls the poison ticks every 2000 ms (590680); the first
+		// Without puls the poison ticks every 2000 ms (reference server); the first
 		// tick is the only damage the cast ever causes.
 		tick := release + statusCastPoisonPulseMs + 1
 		clock.Advance(time.Duration(tick-clock.NowMs()) * time.Millisecond)
@@ -399,7 +399,7 @@ func TestPoisonFieldPoisonsMonstersAroundTheCaster(t *testing.T) {
 ================
 TestPoisonFieldRefusesAnotherWeapon
 
-With neither reqi weapon (a dual axe here) 58D480 refuses the command
+With neither reqi weapon (a dual axe here) the reference server refuses the command
 with 0x300D before anything is prepared or debited.
 ================
 */

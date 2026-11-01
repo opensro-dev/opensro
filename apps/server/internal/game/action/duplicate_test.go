@@ -40,7 +40,7 @@ func castDuplicate(rt *Runtime, c, target *enterworld.Character) OpResult {
 ==================
 TestDuplicateCopiesTheAllysLook
 
-4F0040 / 4F0320: the Rogue takes the ally's model, record byte and worn
+Natively the Rogue takes the ally's model, record byte and worn
 sword; observers get a player skin in 0x323A; the speeds stay the
 Rogue's own; the next skill cast (skc 2) ends it.
 ==================
@@ -110,9 +110,56 @@ func TestSableDuplicateCopiesAnEnemyPlayer(t *testing.T) {
 
 /*
 ==================
+TestDuplicateLookIgnoresTheTargetsBagAndAvatar
+
+The target's copy is the equipment-band one (#1943): with the ally's bag
+stuffed and avatar rows present, the cast still takes exactly the worn
+slots 0..8 of the full record, and the band copy itself is measurably
+cheaper than the full one on the same stuffed holder.
+==================
+*/
+func TestDuplicateLookIgnoresTheTargetsBagAndAvatar(t *testing.T) {
+	rt, _, c, ally := duplicateFixture(t)
+	wantEquipment := c.TransformEquipment
+	for _, row := range ally.MissionInventory {
+		if row.Slot < int64(len(wantEquipment)) {
+			wantEquipment[row.Slot] = row.RefObjID
+		}
+	}
+	for slot := int64(domain.EquipmentSlotEnd); slot <= 44; slot++ {
+		ally.MissionInventory = append(ally.MissionInventory, domain.InventoryRow{
+			Slot: slot, Codename: "ITEM_ETC:modeleffect" + string(rune('a'+slot-domain.EquipmentSlotEnd)),
+			RefObjID: uint32(9000 + slot),
+		})
+	}
+	ally.AvatarInventory = &domain.AvatarInventory{Rows: []domain.InventoryRow{
+		{Slot: 0, Codename: "ITEM_MALL_AVATAR_TEST", RefObjID: 9101, Plus: 4},
+	}}
+
+	view := rt.characterSnapshotEquipment(testDivision, ally)
+	if view == nil {
+		t.Fatal("no equipment-band copy of the ally")
+	}
+	assertNarrowCopy(t, "ally", view)
+	if got := testing.AllocsPerRun(20, func() { rt.characterSnapshotEquipment(testDivision, ally) }); got >=
+		testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, ally) }) {
+		t.Fatal("the equipment-band copy is not cheaper than the full copy on a stuffed holder")
+	}
+
+	result := castDuplicate(rt, c, ally)
+	if result.DiagnosticRefusal != "" || c.TransformMode != 2 {
+		t.Fatalf("duplicate refused on a stuffed target: %+v", result)
+	}
+	if c.TransformEquipment != wantEquipment {
+		t.Fatalf("look %v, want the worn slots of the full record %v", c.TransformEquipment, wantEquipment)
+	}
+}
+
+/*
+==================
 TestDuplicateRefusesSomePlayers
 
-58D1D3: above the level word, a GM, a murderer and a rider are refused.
+Natively a player above the level word, a GM, a murderer and a rider are refused.
 ==================
 */
 func TestDuplicateRefusesSomePlayers(t *testing.T) {

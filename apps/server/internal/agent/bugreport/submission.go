@@ -293,10 +293,13 @@ func readDiagnostics(part *multipart.Part, maxBytes int64) (*Attachment, error) 
 // diagnosticsMembers are the journals a client may send, and nothing else:
 // the client's archive (bug-report.ts) names exactly these. network.json is
 // the transport's frame journal (#729); without it here every report that
-// carried diagnostics was refused as invalid.
+// carried diagnostics was refused as invalid. assets.json is the asset
+// queue's six-minute history (asset-history.ts, #1975); the server must
+// accept it before a client that sends it is live.
 var diagnosticsMembers = map[string]bool{
 	"manifest.json": true, "movement.json": true, "timeline.json": true,
 	"network.json": true, "state.json": true, "environment.json": true,
+	"assets.json": true,
 }
 
 /*

@@ -8,7 +8,7 @@ is a timed self effect; enterworld admits it as SkillTimedEffect.Preemptive
 and acceptTimedSelfEffect installs it with its buff icon. This module
 answers the monster leg's question for one player: which first-attack
 protection does it carry right now (simulation.MonsterMoverOps.
-FirstAttackGuard), and the acquisition scan applies it (5299E0's last
+FirstAttackGuard), and the acquisition scan applies it (the native hostility check's last
 branch, monster.FirstAttackProtected).
 
 Owner's rule: Noise is the Bard's own, lasts its full 15 minutes even when

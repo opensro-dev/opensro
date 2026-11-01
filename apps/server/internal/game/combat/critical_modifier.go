@@ -7,7 +7,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// EffectiveCriticalRate ports 58E823..58E8A5. Truncate the base to a byte
+// EffectiveCriticalRate ports the server's critical-rate modifier. Truncate the base to a byte
 // BEFORE multiplying the percentage. Flat is added AFTER that multiplication.
 // Both additions wrap at eight bits; clamping to 100 changes native outcomes.
 // Keep division and multiplication separate, with 53-bit round-to-nearest

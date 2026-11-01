@@ -3,7 +3,8 @@
 
 skillitemeffect.go - compile complete item-owned stat effect programs
 
-Native 49C2B0 cases 1..3 resolve the item's skill; 59B8D0 turns cbuf+dura
+The server's item use resolves the item's skill in its cases 1..3; its
+timed-job start turns cbuf+dura
 into an owner timed job. Admission follows the complete descriptor program,
 never an item name. Unknown or compound unsupported instructions keep the
 entire item refused rather than consuming it for a partial effect.
@@ -104,7 +105,7 @@ func compileTimedItemEffect(fields []string, row SkillRow) (SkillTimedEffect, bo
 			result.Intellect = SkillStatBoost{Present: true, Value: pair.Flat, CapPercent: pair.Percent}
 			modifiers = true
 		case itemEffectRecovery:
-			// 595A33..595A93: independent percent-sum writes to HP/MP
+			// Independent percent-sum writes to HP/MP
 			// recovery parameters, not flat healing or maximum gauges.
 			result.Recovery = SkillRecoveryRates{Present: true, HP: pair.Flat, MP: pair.Percent}
 			modifiers = true
@@ -114,7 +115,7 @@ func compileTimedItemEffect(fields []string, row SkillRow) (SkillTimedEffect, bo
 		case itemEffectAlchemyLuck, itemEffectAlchemyStone:
 			modifiers = true
 		case tagTimedHaste, tagTimedOverride, tagTimedIndependent:
-			// 59642C chooses the movement lane; 594AC0 installs the other
+			// The server chooses the movement lane; its installer applies the other
 			// modifier blocks in the same cbuf context (fortress commander).
 			if op.Count != 1 || !row.MovementModifier.Present || row.MovementModifier.Percent == 0 {
 				return SkillTimedEffect{}, false

@@ -114,9 +114,9 @@ TestBowEquipClearsDisplacedShieldVisual
 Equipping a bow over a sword and shield: the pair-swap seats the bag's
 arrows in socket 7 and the shield in the arrows' bag slot. The visuals
 must draw the bow (0x3314) and clear socket 7 (0x377C) - ammunition has
-no worn visual (native CGItem_HasEquipmentVisual 490390), so a 0x3314
+no worn visual (natively, no equipment visual), so a 0x3314
 carrying the arrows was ignored by the client and the shield stayed
-drawn (CGObjPC_CollectMoveContributionSlots 4E9C40's unequip arm).
+drawn (the native move's unequip arm).
 ================
 */
 func TestBowEquipClearsDisplacedShieldVisual(t *testing.T) {

@@ -72,7 +72,7 @@ func TestAstralOnAccessoryFollowsTheImmortalCharge(t *testing.T) {
 	}
 	immortal := out.Items[0].MagicOptions
 	// Astral without an Immortal charge is the native refusal, 0x24.
-	if _, err := c.Stone(items(nil, astral), []uint8{13, 14}, true, 0, sequence(t)); !errors.Is(err, Refusal(0x24)) {
+	if _, err := c.Stone(items(nil, astral), []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(err, Refusal(0x24)) {
 		t.Fatalf("astral without immortal: %v, want refusal 0x24", err)
 	}
 	// One Immortal charge admits exactly one Astral charge.
@@ -82,7 +82,7 @@ func TestAstralOnAccessoryFollowsTheImmortalCharge(t *testing.T) {
 	}
 	withAstral := append([]inventory.Item{}, out.Items...)
 	withAstral = append(withAstral, inventory.Item{Slot: 14, RefObjID: astral.ID, Codename: astral.Name, TypeFlags: astral.Flags, Quantity: 1})
-	if _, err := c.Stone(withAstral, []uint8{13, 14}, true, 0, sequence(t)); !errors.Is(err, Refusal(0x24)) {
+	if _, err := c.Stone(withAstral, []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(err, Refusal(0x24)) {
 		t.Fatalf("astral at immortal == astral: %v, want refusal 0x24", err)
 	}
 }

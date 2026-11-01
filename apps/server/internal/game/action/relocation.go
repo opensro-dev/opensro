@@ -3,7 +3,7 @@
 
 relocation.go - moving a character elsewhere, possibly into another world
 
-The server-driven teleport (the PC world teleport, CGObjPC vtable +0x378)
+The server-driven teleport (the reference server's player world teleport)
 that a GM warp and the fortress war's expulsions share: settle the pose at
 the destination, move the world membership, carry the returning pet, then
 rebuild the scene with an ordered re-entry. Anything that fails before the
@@ -99,8 +99,8 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	rt.retireReturnForReentry(division, c)
 	corpses, _ := rt.retireCompanionCorpses(division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
-	if snapshot := rt.characterSnapshot(division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
-		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
+	if _, _, bodyStatus := rt.characterLifeState(division, c); bodyStatus != 0 {
+		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}
 	rt.PushCharacterFrames(division, name, frames)
 	rt.Pending.Clear(grounditem.PendingKey(division, name))

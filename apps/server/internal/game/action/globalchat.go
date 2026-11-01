@@ -5,9 +5,9 @@ globalchat.go - the Global Chatting item: one message to the whole shard
 
 CIFWholeChat (client CIFGlobalChatItem_OnSend 6D1EE0) sends the item's use
 with its message: 0x75BD {u8 slot, u16 type word, u16 count + UTF-16LE
-text} (CGInterface_SendGlobalChatItemUse 693C90). CGItemExpendable_UseItem
-(v1.188 49B9F0) case 4 refuses a chat-restricted player
-(CGObjPC_CheckAndReportSessionRestriction, result 2), otherwise relays the
+text} (CGInterface_SendGlobalChatItemUse 693C90). The reference server's
+item use case 4 refuses a chat-restricted player
+(its session restriction check, result 2), otherwise relays the
 line to the shard manager as a type 6 chat {name, message} and reports
 success, which spends one item. The shard sends it to every player.
 
@@ -23,9 +23,10 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 )
 
-// globalChatRestricted is 49B9F0's result 2 for a restricted player; the
+// globalChatRestricted is the native result 2 for a restricted player; the
 // restriction notice has already told them why.
 const globalChatRestricted uint8 = 2
 
@@ -49,7 +50,7 @@ decodeGlobalChatMessage
 
 The 0x75BD tail: u16 wide-char count + UTF-16LE text, nothing after. The
 client's edit box holds at most 0x64 characters (CIFWholeChat_OnCreate
-6D2080) and never sends an empty line (6D1EE0 answers it locally), so a
+6D2080) and never sends an empty line (client 6D1EE0 answers it locally), so a
 longer, empty or trailing tail can only come from another client.
 ================
 */
@@ -74,7 +75,7 @@ func decodeGlobalChatMessage(tail []byte) (string, bool) {
 ================
 useGlobalChatting
 
-49B9F0 case 4. The author's line follows its own 0xB5BD success; the
+The native item use case 4. The author's line follows its own 0xB5BD success; the
 shard's copies go out once the use has committed. Natively the shard
 manager relays the line asynchronously, so it never precedes the answer.
 The line and the website transcript carry the author's display name
@@ -101,7 +102,26 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}, line}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
 	division, name := use.division, c.Name
+	// Port-only, not native: the staff moderation log (chatlog) keeps
+	// the line, muted ones included and marked. It is a publication like
+	// the shard push and the website line below, so it waits for the
+	// post-commit step: a door that rolls the use back must not keep a
+	// line that was never said, for an item that was never spent.
+	muted := rt.ChatShadowMuted != nil && rt.ChatShadowMuted(c.AccountID)
+	record := func() {
+		if rt.ModerationLog != nil {
+			rt.ModerationLog.Record(chatlog.Entry{
+				AccountID: c.AccountID, Character: c.Name, Channel: "global", Muted: muted, Text: message,
+			})
+		}
+	}
+	if muted {
+		// The item is spent and the author sees the line; nobody else does.
+		*after = record
+		return true
+	}
 	*after = func() {
+		record()
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
 		}

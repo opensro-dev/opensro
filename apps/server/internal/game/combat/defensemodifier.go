@@ -8,8 +8,9 @@ import (
 )
 
 // DefenseModifierInput is an installation-time snapshot, not a live formula.
-// 595209..59533C adds context +34/+38 with uint32 wrap, then optionally caps
-// against the recipient's current Param5/6. Store the resulting writes for
+// The reference server's timed-defense producer adds context +34/+38 with
+// uint32 wrap, then optionally caps against the recipient's current
+// Param5/6. Store the resulting writes for
 // this effect's lifetime: reevaluating the cap after later buffs is incorrect.
 // The caller owns reqi/reqn eligibility and resolves caster dictionary bonuses.
 type DefenseModifierInput struct {

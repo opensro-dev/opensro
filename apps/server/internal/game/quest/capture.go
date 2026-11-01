@@ -33,7 +33,8 @@ const (
 captureRule
 
 Native handlers share a transaction but retain their item, timer and text.
-Ivy's trap comes from quest two; its capture belongs to quest one (8BA700).
+Ivy's trap comes from quest two; its capture belongs to quest one
+(the server's Ivy 1 trap capture).
 ================
 */
 type captureRule struct {
@@ -110,7 +111,7 @@ func questNotification(symbol string) wire.Frame {
 ================
 captureChance
 
-8BA7E1..8BA823 uses rand modulo 101 and strict less-than. Higher levels
+The server's trap capture uses rand modulo 101 and strict less-than. Higher levels
 never improve the base chance; sufficiently low levels cannot succeed.
 ================
 */
@@ -124,7 +125,7 @@ func captureChance(required uint8, level int64, roll uint32) bool {
 CanPlaceTrap
 
 The item lane must have a runnable quest before it consumes a trap. Native
-8B05B0 checks inventory space and an existing capture for the lion family.
+lion-family trap check tests inventory space and an existing capture.
 Inference: apply that admission contract to the shared capture owner; unavailable
 promotion quests never create an object that cannot deliver an outcome.
 ================

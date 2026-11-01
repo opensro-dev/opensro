@@ -61,7 +61,7 @@ func TestGrabPetIgnoresPeriodicDamageAndResourceDebit(t *testing.T) {
 ================
 TestGrassOfLifeHasNoServerBandCheck
 
-CGItemExpendable_UseOnCOS (49D240) case 6 revives any COS summoner whose
+The reference server's COS item use case 6 revives any COS summoner whose
 state bit 0 is clear; the v1.150 client (6961B0) keeps grab pets out with
 UIIT_MSG_COSPETERR_CANT_USE_WRONGOBJECT. The server adds no band check.
 ================

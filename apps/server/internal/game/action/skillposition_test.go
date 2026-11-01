@@ -149,7 +149,7 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				if mode == "clipped" {
 					distance = 50
 				}
-				// 5862E0: tel2 (the Wizard's Teleport) publishes bit 2, an
+				// tel2 (the Wizard's Teleport) publishes bit 2, an
 				// instant landing; tele (Ghost Walk) bit 8, a guided travel.
 				wantFlag := byte(8)
 				if strings.HasPrefix(skill.Codename, "SKILL_EU_WIZARD_") {

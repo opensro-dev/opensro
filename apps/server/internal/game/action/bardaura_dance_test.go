@@ -100,7 +100,7 @@ TestDancingOfHealingRaisesTheHealReceived
 
 A heal on a member of the Dancing of Healing (rhru 18) and of the Dancing
 of Vitality (rhru 38) is raised by that percent: rhru writes parameters
-0xAA/0xAB (594AC0 0x5962C1), the scale every heal applies. The heal of a
+0xAA/0xAB (the reference server's buff modifier pass), the scale every heal applies. The heal of a
 member outside any dance is not.
 ================
 */
@@ -132,9 +132,9 @@ func TestDancingOfHealingRaisesTheHealReceived(t *testing.T) {
 ================
 TestDancingOfManaLowersTheMPCost
 
-dcmp(22) writes -22 to parameter 0x8D (594AC0 0x5963F7), so a member of the
+dcmp(22) writes -22 to parameter 0x8D (the reference server's buff modifier pass), so a member of the
 Dancing of Mana is charged at rate 78 instead of 100: the prepared cost
-scales by the rate before the getv cuts (58312C, 583232).
+scales by the rate before the getv cuts.
 ================
 */
 func TestDancingOfManaLowersTheMPCost(t *testing.T) {
@@ -168,7 +168,7 @@ func TestDancingOfManaLowersTheMPCost(t *testing.T) {
 ================
 TestPlayerMPConsumptionRateStartsAtTheNativeBase
 
-CGObjPC_InitializeParameterGraph writes 100 to parameter 0x8D (4E36AC):
+The reference server's parameter graph setup writes 100 to parameter 0x8D:
 without a dcmp buff a player is charged its whole cost.
 ================
 */

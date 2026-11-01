@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skillcure.go - skill cures (593F50) and party area reach
+skillcure.go - skill cures and party area reach
 
 ===========================================================================
 */
@@ -33,7 +33,7 @@ type cureTarget struct {
 ==================
 resolveSkillCureTargets
 
-The 593F50 action vector, resolved to records. A non-empty vector keeps its
+The native skill effect action vector, resolved to records. A non-empty vector keeps its
 order; a missing id is skipped. An empty vector names the caster only when
 RefSkill+0x98 (column 26 TargetGroup_Self) is set.
 
@@ -67,7 +67,7 @@ func (rt *Runtime) resolveSkillCureTargets(division string, caster, view *enterw
 ==================
 applySkillCure
 
-applySkillCure is the 593F50 cure at release over the targets
+applySkillCure is the native skill cure at release over the targets
 resolveSkillCureTargets prepared before the door. It reads no record
 through the store. Each cured player's private snapshot (0x36C7) goes to
 that player: the caster's own in actor, everyone else's through recipients.
@@ -97,8 +97,8 @@ func (rt *Runtime) applySkillCure(division string, caster *enterworld.Character,
 ==================
 skillCureVector
 
-skillCureVector is the action target list 593F50 walks. efr with select 4
-or 5 (and a shape other than 5 or 6) uses TargetSelection_Party (58BEF0):
+skillCureVector is the action target list the native cure walks. efr with select 4
+or 5 (and a shape other than 5 or 6) uses the native party selection:
 other party members on the same region within the radius. Column-22 rows
 use the explicit target gid. Anything else stays empty.
 ==================
@@ -125,12 +125,12 @@ func (rt *Runtime) skillCureVector(division string, caster *enterworld.Character
 ==================
 partyCureTargets
 
-partyCureTargets is TargetSelection_Party (58BEF0). The efr block's sixth
+partyCureTargets is the native party selection. The efr block's sixth
 argument (+0x14) bit 0 pushes the caster first. Every other party member
 joins when it is alive (vfunc F8 == 1). The resu tag (0x72657375) fills
 RefSkill+0x330; a present block skips that alive check. Shipped rebirth
 group rows set it. Cure rows do not. On the same plane with both
-sector bytes within one of the caster's (430CE0), in the same world, and
+sector bytes within one of the caster's, in the same world, and
 within the efr radius (+8) by 3D distance, inclusive.
 ==================
 */
@@ -147,7 +147,7 @@ func (rt *Runtime) partyCureTargets(division string, caster *enterworld.Characte
 ==================
 partyMembersAround
 
-The member walk of 58BEF0 around any centre: every party member of caster
+The member walk of the native party selection around any centre: every party member of caster
 but the caster itself, alive unless admitDead, whose live position passes
 partyAreaReach from center. Party roster order.
 ==================
@@ -182,7 +182,7 @@ func (rt *Runtime) partyMembersAround(division string, caster *enterworld.Charac
 	return out
 }
 
-// partyAreaReach is 430CE0 followed by the relative 3D length test.
+// partyAreaReach is the same-plane adjacent-sector test followed by the relative 3D length test.
 /*
 ================
 partyAreaReach
@@ -196,7 +196,7 @@ func partyAreaReach(from, to simulation.Spawn, radius uint32) bool {
 ==================
 samePlaneAdjacent
 
-samePlaneAdjacent is Pos_AreSamePlaneAndAdjacentSectors (430CE0); the
+samePlaneAdjacent is the native same-plane adjacent-sector test; the
 world package owns the rule.
 ==================
 */
@@ -204,7 +204,7 @@ func samePlaneAdjacent(from, to simulation.Spawn) bool {
 	return world.SamePlaneAdjacent(from.RegionID, to.RegionID)
 }
 
-// distance3D is Vec3_Length of Pos_GetRelative3DOrIncompatibleSentinel.
+// distance3D is the native length of the relative position.
 /*
 ================
 distance3D

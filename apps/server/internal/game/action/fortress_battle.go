@@ -3,8 +3,8 @@
 
 fortress_battle.go - fatal-hit fortress scores and rank skill transitions
 
-52D460 -> 635290 credits a player-caused death during fortress war.
-61F2D0 records the victim, the killer, then living nearby party members.
+The reference server credits a player-caused death during fortress war.
+It records the victim, the killer, then living nearby party members.
 Calls run after the fatal character transaction, under division authority;
 persistence and each recipient's skill mutation enter their existing doors.
 
@@ -45,7 +45,7 @@ func (rt *Runtime) activeBattleFortress(division string, c *enterworld.Character
 ================
 fortressBattleScore
 
-620110: subtype, fortress ID, kills, deaths. No record means no packet.
+Reference server: subtype, fortress ID, kills, deaths. No record means no packet.
 ================
 */
 func fortressBattleScore(id uint32, row domain.FortressBattleRecord) wire.Frame {
@@ -56,7 +56,7 @@ func fortressBattleScore(id uint32, row domain.FortressBattleRecord) wire.Frame 
 ================
 FortressBattleFrames
 
-4DFFB9 sends the retained score on world entry while the war is active.
+The reference server sends the retained score on world entry while the war is active.
 The existing timed-job owner restores buffs; entry never earns a new rank.
 ================
 */
@@ -81,7 +81,7 @@ recordFortressDeath
 
 The killer gets credit even if it is dead. Only the other party members
 are filtered by living state, matching world and planar distance <=1000.
-No party sharing option or guild filter appears in 61F3C0.
+No party sharing option or guild filter appears in the reference server's credit.
 ================
 */
 func (rt *Runtime) recordFortressDeath(division string, victim, killer *enterworld.Character, now int64) {
@@ -152,7 +152,7 @@ func (rt *Runtime) creditFortressBattle(division string, id uint32, c *enterworl
 ================
 promoteFortressBattle
 
-61F580 retires the previous authored rank skill before installing the next.
+The reference server retires the previous authored rank skill before installing the next.
 All modifiers, persistence and wire tokens belong to the shared effect owner.
 ================
 */
@@ -214,8 +214,8 @@ func (rt *Runtime) retireFortressRankInDoor(division string, c *enterworld.Chara
 ================
 publishFortressRankNotice
 
-61F7D5 tells the promoted player. Commander (rank six) names the player to
-its guild/union in the fortress world (61D140 -> 5F8700).
+The reference server tells the promoted player. Commander (rank six) names the player to
+its guild/union in the fortress world.
 ================
 */
 func (rt *Runtime) publishFortressRankNotice(division string, c *enterworld.Character, rank uint8) {
@@ -248,7 +248,7 @@ func (rt *Runtime) publishFortressRankNotice(division string, c *enterworld.Char
 ================
 retireFortressBattleRank
 
-601170 mode two cancels the record's rank skill for every resident before
+The reference server's war-phase broadcast, mode two, cancels the record's rank skill for every resident before
 checking whether its guild may remain in the world.
 ================
 */
@@ -278,7 +278,7 @@ func (rt *Runtime) retireFortressBattleRank(division string, c *enterworld.Chara
 ================
 prepareDeathKiller
 
-4E65B8..4E65F3 classifies siege death before cape/job/guild relations.
+The reference server classifies siege death before cape/job/guild relations.
 Read fortress state before the character transaction: the fortress store
 also writes through the authority and must never invert those two locks.
 ================

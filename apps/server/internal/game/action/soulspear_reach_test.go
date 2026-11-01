@@ -5,8 +5,8 @@ soulspear_reach_test.go - a chained stage runs without another range test
 
 #bug-reports: Soul Spear Emperor (SKILL_CH_SPEAR_STUN_D) lost its D2 stage
 "about every 10 uses" against a Shauer. Natively the linked row goes from
-action state 3 straight to state 2 (4AECE7), which executes it; only state 1
-measures range and pursues. 58D8F0's target validation (58CC70) asks for a
+action state 3 straight to state 2, which executes it; only state 1
+measures range and pursues. The native target validation asks for a
 live target on the same plane in an adjacent sector, never for reach. So a
 target that stands beyond reach once the root lands still takes D2.
 
@@ -104,7 +104,7 @@ func TestSoulSpearSecondStageBeyondReach(t *testing.T) {
 ================
 TestSoulSpearSecondStageTwoSectorsAway
 
-58CC70 refuses a target outside the same plane and adjacent sectors with
+The native target validation refuses a target outside the same plane and adjacent sectors with
 0x3006, so dropping the range test does not let D2 strike across the world.
 ================
 */

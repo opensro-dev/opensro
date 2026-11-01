@@ -162,7 +162,7 @@ func guildEnterWorldWithWar(t *testing.T, c *websocket.Conn, name string) {
 ================
 TestGuildWarRefusesOnlyInsideAFlagWarWorld
 
-CGuildMgr_ProposeGuildWar (5C6EA1, 5C6EC7) refuses 0x79 when both masters
+The native guild-war proposal refuses 0x79 when both masters
 stand in a timed event world (the flag war). The port has no flag war, so
 production leaves the hook unset and two masters anywhere else, a fortress
 included, may declare.

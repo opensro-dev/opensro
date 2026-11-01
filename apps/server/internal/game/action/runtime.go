@@ -33,12 +33,14 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/skillobject"
+	"opensro.online/server/internal/game/world/townarea"
 )
 
 /*
@@ -57,10 +59,14 @@ barrier.
 type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
+	cosRefusalLog    sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
 	instanceWorlds sync.Map // instanceWorldKey -> trackedInstanceWorld
+	// questGates holds the quest instances' standing exit gates
+	// (questgate.go).
+	questGates questGateBook
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
 	jobWeeks sync.Map
@@ -99,10 +105,14 @@ type Runtime struct {
 	// return scrolls and the reverse return (port-only,
 	// SRO_JOB_GOODS_TELEPORT; false is native, goodsteleport.go).
 	JobGoodsTeleport bool
-	BerserkRoll      combat.Roll32767
-	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
+	// ThiefCartTownAreas, when set, also stops a thief's transport at the
+	// walls of towns that run into battlefield regions (port-only,
+	// SRO_THIEF_CART_TOWN_AREAS; nil is native, jobdress.go).
+	ThiefCartTownAreas *townarea.Areas
+	BerserkRoll        combat.Roll32767
+	// WearRoll is the equipment wear roll's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
-	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the
+	// RevivalRoll is the native teleport lookup's rand() for a fortress revival gate; nil is the
 	// secure roll.
 	RevivalRoll         combat.Roll32767
 	RewardParties       func(division string) []RewardParty
@@ -110,8 +120,11 @@ type Runtime struct {
 	RewardActorPresent  func(division, name string) bool
 	// PetPolicies are the port-only pet rules (companion.PoliciesFromEnv);
 	// the zero value is native.
-	PetPolicies         companion.Policies
-	returnGeneration    atomic.Uint64
+	PetPolicies      companion.Policies
+	returnGeneration atomic.Uint64
+	// surpriseFatalCount counts strikes that killed under a plan that
+	// could not kill: the roster gate's invariant made audible (#2030).
+	surpriseFatalCount  atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
@@ -130,12 +143,22 @@ type Runtime struct {
 	// guild manager. Memory only, as native's pc+0x1D88 record is.
 	storageSessions sync.Map
 	criticals       criticalHistory
-	deps            Dependencies
-	Ground          *grounditem.Registry
-	Pending         *grounditem.PendingTracker
-	Worlds          *simulation.WorldStore
+	// groundDrops is the per-tick ground pass's placed-drop cache
+	// (ground_scope.go).
+	groundDrops groundDropCache
+	// staticRefs is the published static reference set
+	// (ground_references.go).
+	staticRefs staticRefCache
+	deps       Dependencies
+	Ground     *grounditem.Registry
+	Pending    *grounditem.PendingTracker
+	Worlds     *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
-	Steps             simulation.StepTimer
+	Steps simulation.StepTimer
+	// PublicationHold receives publication-gate holds at or above the
+	// slow threshold, labelled by their holder (wired to the transport
+	// metrics, transport.RecordPublicationHold).
+	PublicationHold   func(label string, elapsed time.Duration)
 	SkillObjects      skillobject.Registry
 	CanPlaceQuestTrap func(*enterworld.Character, string) ([]wire.Frame, bool)
 	CaptureQuestTrap  func(*enterworld.Character, string, string, func() bool) ([]wire.Frame, bool)
@@ -147,7 +170,7 @@ type Runtime struct {
 	effects         *statuseffect.Registry
 	periodicEffects linkedpulse.Registry
 
-	// partyAuras are open efr-kind-2 contexts (5830B0). The tick owns joins.
+	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex
 
@@ -167,7 +190,7 @@ type Runtime struct {
 	// playerAbnormals owns each character's abnormal-state block.
 	playerAbnormals playerAbnormalStore
 
-	// cosAbnormals owns each summoned COS block (CGObjChar on the pet).
+	// cosAbnormals owns each summoned COS block (the character object on the pet).
 	cosAbnormals cosAbnormalStore
 
 	// cosDebuffs owns each summoned COS's hostile debuff words
@@ -238,7 +261,7 @@ type Runtime struct {
 	// FortressWarDates reads the previous and current/next war from that lane.
 	FortressWarDates func(nowMs int64) (previous, next time.Time)
 	// FortressList is the lane's subtype-0 fortress list for a guild,
-	// re-sent to the owning guild when its war begins (4E0680).
+	// re-sent to the owning guild when its war begins.
 	FortressList func(guildID int64) []byte
 	// fortressPhases are the fortress worlds' scheduled war phases.
 	fortressPhasesMu sync.Mutex
@@ -277,9 +300,12 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
-	petShields  petShieldStore
-	wolfHowls   wolfHowlStore
-	tailwinds   tailwindStore
+	// cosOwners is the pet gid to owner index (cosownerindex.go):
+	// whose pet a gid is, without walking the division's characters.
+	cosOwners  cosOwnerIndex
+	petShields petShieldStore
+	wolfHowls  wolfHowlStore
+	tailwinds  tailwindStore
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
@@ -303,6 +329,19 @@ type Runtime struct {
 	// operator's beta starter kit, SRO_BETA_STARTER_KIT). Set once at wiring.
 	UnlimitedItems map[string]bool
 
+	// combatCopy, when set, replaces the combat roots' narrow copy
+	// (characterSnapshotCombat); only the combat-copy differential test
+	// sets it, to the full copy. Nil is the narrow copy.
+	combatCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// companionCopy, when set, replaces the pet pass's narrow copy
+	// (characterSnapshotCompanionAdmitted); only the pet-copy
+	// differential test sets it, to the full copy. Nil is the narrow
+	// copy.
+	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// castCopy, when set, replaces the press/release cast copy
+	// (characterSnapshotCast); only the cast-copy differential tests
+	// set it, to the full or the combat copy. Nil is the cast copy.
+	castCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with
@@ -318,8 +357,9 @@ type Runtime struct {
 	// production uses crypto/rand so concurrent rolls share no mutable PRNG.
 	GachaRoll func() (uint32, error)
 
-	// CombatRoll is the v1.188 CFormulae rand() domain. Formula tests inject
-	// exact sequences; production uses an independent cryptographic draw.
+	// CombatRoll is the rand() domain of the reference server's damage
+	// formulas. Formula tests inject exact sequences; production uses an
+	// independent cryptographic draw.
 	CombatRoll combat.Roll32767
 
 	// CompanionRoll supplies the shared native spawn-position sampler without
@@ -335,7 +375,7 @@ type Runtime struct {
 	DropRoll combat.Roll32767
 
 	// CaravanRoll is the caravan owner's rand() domain: spawn timers and
-	// every bandit draw (60BF30), in native order.
+	// every bandit draw, in native order.
 	CaravanRoll combat.Roll32767
 
 	// DropPassRate multiplies every drop a kill makes: its unique prepass,
@@ -399,6 +439,12 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// NameChangeScroll enables the port-only name-change scroll (#1689,
+	// SRO_NAME_CHANGE_SCROLL; namechange.go). The zero value is native:
+	// the donor item keeps its unsupported-use answer and the mall lists
+	// nothing extra.
+	NameChangeScroll bool
+
 	// SealDrops counts sealed drops for the weekly board (sealboard.go;
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.
@@ -431,6 +477,10 @@ type Runtime struct {
 	// counted kill (mostwantednotice.go; port-only, not native). False is
 	// the current rule: nothing until a level.
 	MostWantedStreakNotice bool
+	// MostWantedCOSKills counts a job kill delivered on a companion for
+	// Most Wanted like a player kill (mostwanted.go; port-only, not
+	// native). False is native.
+	MostWantedCOSKills bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
@@ -439,6 +489,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
+	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
+	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
+	RaisedGoldCaps bool
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
@@ -460,6 +514,17 @@ type Runtime struct {
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).
 	SunEventOnly progression.SunEventOnly
+	// Halloween is the rebuilt Halloween Day event (port-only, not
+	// native in this client build; progression/halloween.go). The zero
+	// value is off: no box drops, no So-ok exchange, no cleanup.
+	Halloween progression.HalloweenEvent
+	// halloweenWavesAsked is the last instant advanceHalloweenWaves asked
+	// the timetable about; the tick goroutine alone touches it.
+	halloweenWavesAsked time.Time
+	// HalloweenHelmetSeal seals the event helmets at the transfer doors
+	// (port-only, not native; progression/halloween.go). The zero value
+	// is off: the helmets move like any item.
+	HalloweenHelmetSeal progression.HalloweenHelmetSeal
 	// UniqueRules: the unique reward switches (progression/uniquerules.go; port-only, not native). Zero is native.
 	UniqueRules progression.UniqueRules
 
@@ -495,7 +560,7 @@ type Runtime struct {
 	ForgetQuestItem      func(*enterworld.Character)
 	UseQuestItem         func(*enterworld.Character, string, simulation.Spawn, int64) ([]wire.Frame, bool)
 	// CapturedFollowerDied tells a capture-escort quest its captured monster
-	// died (CGObjCOS_Captured); called inside the owner's character door.
+	// died (a captured COS); called inside the owner's character door.
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
 	AdvanceQuestCalendar        func(nowMs int64)
 	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
@@ -510,6 +575,21 @@ type Runtime struct {
 		monsterCodename string,
 		rarity uint8,
 	) ([]wire.Frame, bool)
+	// UpdateQuestTeleport reports a successful 0x7495 teleport use to
+	// the quest lane (the used-a-teleport event: the use kind and the
+	// gate's gid), raised once the move has landed, before the success
+	// answer; its frames join the traveller's answer. Nil raises
+	// nothing.
+	UpdateQuestTeleport func(
+		character *enterworld.Character,
+		kind uint8,
+		npcGID uint32,
+	) []wire.Frame
+	// NoteQuestKillSite reports where a monster a quest may care about
+	// fell, in the killer's world, before UpdateQuestKill runs: a quest
+	// instance raises its exit gate beside its boss (questgate.go). Nil
+	// reports nothing.
+	NoteQuestKillSite func(character *enterworld.Character, monsterCodename string, fell simulation.Spawn)
 
 	// FortressGuildRole supplies the optional fortress membership role used
 	// by siege-weapon equip requirements. Nil means no member record.
@@ -564,7 +644,7 @@ type Runtime struct {
 
 	// ProposalPending reports an unanswered 0x3393 prompt of any lane for
 	// a character. The native transaction manager holds one per player
-	// (TransactionMgr_InsertUnique 46F420), so a second proposal is dropped.
+	// (it inserts uniquely), so a second proposal is dropped.
 	ProposalPending func(divisionID, characterName string) bool
 
 	// UpdateExperience is the stat authority's door-free updater. The fatal-hit
@@ -600,7 +680,7 @@ type Runtime struct {
 	ApplyDeathPenalty func(character *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool)
 
 	// UpdateJobExperience is progression's door-free job EXP updater
-	// (CGObjPC_AddJobExp 4E2830): a job kill's share (pkreward.go). Nil pays
+	// (the native job EXP grant): a job kill's share (pkreward.go). Nil pays
 	// no job EXP.
 	UpdateJobExperience func(character *enterworld.Character, delta int64) ([]wire.Frame, bool)
 
@@ -645,7 +725,7 @@ type Runtime struct {
 	PushShardPeerFrames func(divisionID, exceptCharacterName string, frames []wire.Frame)
 
 	// ChatRestricted reports whether the character's session holds the GM
-	// chat restriction, sending its notice when it does (4F0A00). Nil means
+	// chat restriction, sending its notice when it does. Nil means
 	// no session can be restricted.
 	ChatRestricted func(divisionID, characterName string) bool
 
@@ -653,13 +733,21 @@ type Runtime struct {
 	// port-only): the Global Chatting line enters it, a GM ban purges the
 	// banned character's lines. Nil keeps both in-game only.
 	PublicChat *chatfeed.Feed
+	// ChatShadowMuted reports a staff shadow-muted account (shadowmute,
+	// port-only, not native): its Global Chatting line reaches only
+	// itself. Nil mutes no one.
+	ChatShadowMuted func(accountID string) bool
+	// ModerationLog keeps the Global Chatting line for the staff
+	// (chatlog, port-only, not native), muted lines included and
+	// marked. Record only queues the line; nil keeps no log.
+	ModerationLog *chatlog.Log
 
 	// HonorPoints returns the character's usable Training Camp honor points
-	// (0x00617360 @ 0x00617629 -> 0x004EA600 -> 0x005E4260, [member+0x34]+0x54). Nil reports 0.
+	// (the reference server's Training Camp member record, [member+0x34]+0x54). Nil reports 0.
 	HonorPoints func(divisionID string, c *enterworld.Character) uint32
 
 	// SpendHonorPoints deducts cost from Training Camp honor points and broadcasts
-	// 0x3AC5 status 5 flag 3 (0x004E9AE0 @ 0x004E9C1A..0x004E9C37 -> 0x005E3760 -> 0x005DE6C0).
+	// 0x3AC5 status 5 flag 3 (as the reference server's shop payment commit does).
 	// Nil refuses honor deductions.
 	SpendHonorPoints func(divisionID string, c *enterworld.Character, cost uint32) bool
 
@@ -722,6 +810,21 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// tickGateCuts counts the TickHooks cut running by a held publication
+	// gate (acquireTickGate). Tick goroutine only.
+	tickGateCuts int
+	// tickGate is the hold on every publication gate, taken once per
+	// TickHook step. The step's buffers live here because it runs dozens
+	// of times a tick (#2143). Tick goroutine only.
+	tickGate struct {
+		ids  []string
+		held []tickGateHold
+	}
+	// basicAttackCursor is the world key of the intent the last
+	// advanceBasicAttackIntents call served last; the next call resumes
+	// past it, so a burst spread over ticks cannot starve the tail of
+	// the intent snapshot (#2143).
+	basicAttackCursor string
 	// actionSessions owns the pending back command and private B2CD count.
 	// Existing continuation and cast owners execute and commit gameplay.
 	groundApproachStops sync.Map // motion revision terminal events; action tick owns retirement
@@ -815,109 +918,4 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 	rt.FlagWarMatchStart = rt.startFlagWarMatch
 
 	return rt
-}
-
-/*
-==================
-PendingPickup
-
-PendingPickup describes an approach still in flight. No frames ride a
-duplicate request; the simulation tick owns arrival and grant completion.
-==================
-*/
-type PendingPickup struct {
-	ItemGid uint32
-	Eta     time.Duration
-}
-
-/*
-==================
-OpResult
-
-OpResult is one applied operation: Frames is the acting session's complete
-synchronous burst and Broadcast is the public peer projection. ActorPrivate
-is the actor-only tail needed when the SAME operation is produced by the
-simulation tick instead of a request handler: the tick publishes Broadcast to
-everyone first, then routes ActorPrivate to the actor in the same turn.
-Frames already includes both portions; request handlers must never send
-ActorPrivate separately. Pending marks an approach when nothing rides the
-wire at all.
-==================
-*/
-type OpResult struct {
-	Recipients   []RecipientFrames
-	Frames       []wire.Frame
-	Broadcast    []wire.Frame
-	ActorPrivate []wire.Frame
-	// Around is published around other objects than the actor, each to
-	// every session observing it (the recipient's own included).
-	Around  []ObservedFrames
-	Pending *PendingPickup
-
-	// DiagnosticRefusal is an internal, non-wire reason for a silent native
-	// refusal. The hub logs it at debug level; protocol behavior stays exact.
-	DiagnosticRefusal string
-}
-
-/*
-================
-ObservedFrames
-
-Public frames for the sessions that observe one object, as native
-CGObj_SendPacketToNearbySessions (484D90) sends around its argument: a
-heal's effect add goes around each recipient, not around the caster.
-================
-*/
-type ObservedFrames struct {
-	SourceGID uint32
-	Frames    []wire.Frame
-}
-
-/*
-================
-observedDivisionFrames
-
-The Around routes of a result as tick batches, one per object.
-================
-*/
-func observedDivisionFrames(division string, around []ObservedFrames) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
-	for _, route := range around {
-		if len(route.Frames) == 0 {
-			continue
-		}
-		batch := simulation.DivisionFrames{DivisionID: division, SourceGID: route.SourceGID}
-		for _, f := range route.Frames {
-			batch.Frames = append(batch.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-		}
-		out = append(out, batch)
-	}
-	return out
-}
-
-/*
-==================
-failureResult
-==================
-*/
-func failureResult(errorCode uint8) OpResult {
-	return OpResult{
-		Frames: []wire.Frame{
-			{
-				Opcode:  wire.OpItemMoveResponse,
-				Payload: wire.EncodeItemMoveError(errorCode),
-			},
-		},
-	}
-}
-
-// ---- 0x72CD pickup ----
-
-/*
-==================
-pickupRefusal
-==================
-*/
-func pickupRefusal(errorCode uint8) OpResult {
-	return OpResult{Frames: wire.PickupRefusalFrames(errorCode)}
 }

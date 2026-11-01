@@ -231,5 +231,5 @@ COMMIT;
 Codes215–219 seed the missing degree tiers. All nine rule caps remain editable
 through `pet_affix_rules`; the roll bias and weights are preserved. Tests
 cover actual maximum rolls at all nine degrees on both slots, alongside the
-other elements. `PET-GEAR-PROCS.md` documents the new paired
+other elements. [Gear spell procs](ATTACK-PET-SYSTEM.md#gear-spell-procs) documents the new paired
 attack/when-struck spell blues and degree-scaled damage.

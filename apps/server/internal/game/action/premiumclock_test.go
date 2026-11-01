@@ -3,8 +3,8 @@
 
 premiumclock_test.go - the premium clock's state writes
 
-CTJ_PremiumKeeper_Tick writes its state every 600 seconds (652EE3 ->
-652F60) and the port commits the clock on the same cadence, on the tick
+The reference server's premium keeper writes its state every 600 seconds
+and the port commits the clock on the same cadence, on the tick
 the allotment runs out, on the day's refill and at the period's end. A
 spent allotment has nothing left to run out: it must not commit the
 unchanged clock on every tick (2026-10-13 prod profile: one full character

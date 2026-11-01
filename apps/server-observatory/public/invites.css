@@ -101,7 +101,16 @@ invites.css - the Invite keys page, in the recovery page's style
 .invites-filter {
 	display: flex;
 	align-items: end;
+	flex-wrap: wrap;
 	gap: 10px;
+}
+.invites-code {
+	font-size: 12px;
+	white-space: nowrap;
+}
+.invites-reveal,
+.invites-copy {
+	margin-left: 6px;
 }
 .invites-table-wrap {
 	overflow-x: auto;

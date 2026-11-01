@@ -4,9 +4,8 @@
 fortress_allies.go - which guilds stand with a fortress's holder
 
 A guild is allied with a fortress when it stands in the union of the
-guild that holds it (CSiegeFortressMgr_IsGuildAlliedWithFortress 61D300
-compares the guild's alliance id with CSiegeFortress_GetAllyKey 61D2E0,
-the holder's). Allies enter the fortress's portals, count and revive as
+guild that holds it (the reference server compares the guild's alliance
+id with the holder's ally key). Allies enter the fortress's portals, count and revive as
 defenders, apply as allies and may not strike the holder's structures.
 
 ===========================================================================

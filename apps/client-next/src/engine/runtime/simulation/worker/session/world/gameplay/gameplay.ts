@@ -98,6 +98,7 @@ import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
+import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -300,6 +301,7 @@ import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
+import { nearestMonster } from "@/engine/foundation/gameplay/select-nearest";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
 import { npcRefusesWalk } from "@/engine/foundation/gameplay/npc-click-refusal";
 import {
@@ -349,6 +351,13 @@ interface WorldReferences {
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
+// How long one reference frame vouches for answers queued behind it: the
+// flat answer deadline, so the wait restarts at each frame (#2148).
+const REFERENCE_ANSWER_HOLD_MS = 10000;
+// How far references can carry one answer in all, from the first frame that
+// held it: the movement receipt's backstop, so an endless stream cannot keep
+// a lost answer open forever.
+const REFERENCE_ANSWER_LIMIT_MS = 90000;
 
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
@@ -460,6 +469,7 @@ export function createGameplay(
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
 	let moonlitThiefSuit = false;
+	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -1081,6 +1091,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// timer's end on the world clock, the flag carrier, and whether the
 	// last 0x7753 toggle was a sign-up (the join answer's text reads it).
 	let flagWarTimerEndsAt = 0, flagWarCarrierGid = 0, flagWarJoinExpected = false;
+	// Port-only (#1689): a name-change scroll use stays in flight until
+	// its 0xB5BD answer arrives; that answer's refusal bytes then read as
+	// the scroll's own lines. The native error mapper keeps no text at
+	// those codes and must stay exact for every other use, so the
+	// translation lives here, keyed on the flight, not in the mapper.
+	let renameUseInFlight = false;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -1638,6 +1654,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
+			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -1911,6 +1928,19 @@ live pose, and the party whose drops the server may share.
 				party
 			)
 				?.gid;
+		},
+		/*
+================
+selectNearestMonster
+
+Auto Select's monster (select-nearest.ts). 695420 case 1005 waits out a
+selection already in flight (CGInterface_GetCombatInteractionMode).
+================
+		*/
+		selectNearestMonster( candidates: readonly EntityState[] ): number | undefined {
+			const pose = movement.state().pose;
+			if ( !pose || !localGid || targeting.state().targetPending ) return undefined;
+			return nearestMonster( candidates, pose )?.gid;
 		},
 		/*
 ================
@@ -3181,14 +3211,19 @@ state here before a command can claim a native wire conversation.
 					skin: command.skin,
 					targetSlot: command.targetSlot,
 					reverseChoice: command.reverseChoice,
-					reverseMapPoint: command.reverseMapPoint
+					reverseMapPoint: command.reverseMapPoint,
+					renameName: command.renameName
 				};
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
 					api.notice( refusal );
 					return null;
 				}
-				return inventory.use( command.slot, now, context, command.message );
+				const sent = inventory.use( command.slot, now, context, command.message );
+				// Port-only (#1689): the scroll's use went out; its answer
+				// is the one 0xB5BD the refusal chain reads as its lines.
+				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
+				return sent;
 			}
 			if ( command.kind === "premium-command" || command.kind === "count-job-use" ) {
 				// The chat command (6AD990) finds its row by item type; the
@@ -3439,6 +3474,22 @@ state here before a command can claim a native wire conversation.
 					null,
 				entity.gid
 			);
+		},
+		/*
+================
+referenceProgress
+
+The scene's reference frames (opcode 14) fill the ordered stream after
+game-ready: over 2 MB, more than 10 s on a slow link. Every answer sent
+after them waits behind them. Core handles these frames apart from the
+gameplay receive path, so they must say here that the link is delivering,
+or a slow link reads as a lost answer and resumes, and the resume sends
+the references again (#2148).
+================
+		*/
+		referenceProgress( now: number ) {
+			movement.noteInboundProgress( now );
+			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
 		},
 		/*
 ================
@@ -4376,7 +4427,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload.length !== 8 ) throw Error( "Invalid COS transfer result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 8 ).getUint32( 2, true ),
 						record = cosRecords.get( gid );
-					if ( !record ) throw Error( "Absent COS transfer owner" );
+					// Native 756CF0 guards both transfer arms with
+					// CCosDataManager_FindCharData(...) != 0: a result for a
+					// COS with no record (a replay ahead of the re-entry
+					// bootstrap that rebuilds it) is silently dropped.
+					if ( !record ) return true;
 					const next = inventory.cosTransferred( record, frame.payload, cosItemCaps );
 					cosRecords.set( gid, next );
 					cosPickup.spaceChanged();
@@ -4735,7 +4790,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
-				const refusal = recallAppointmentNotice( frame.opcode, frame.payload ) ??
+				// Port-only (#1689): while the scroll's use is in flight its
+				// refusal bytes read as the scroll's own lines; any 0xB5BD
+				// answer retires the flight. All other refusals stay on
+				// the native mapper, byte-exact.
+				const renameLine = renameUseInFlight && frame.opcode === 0xb5bd && frame.payload[0] === 2 &&
+						frame.payload[1] !== undefined ?
+					nameChangeFailureText( frame.payload[1]! ) :
+					undefined;
+				if ( frame.opcode === 0xb5bd ) renameUseInFlight = false;
+				const refusal = (renameLine ?
+					{ key: "", value: 0, text: renameLine, nativeType: 5 as const } :
+					undefined) ??
+					recallAppointmentNotice( frame.opcode, frame.payload ) ??
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
@@ -5192,6 +5259,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
@@ -5369,6 +5437,9 @@ dispose
 	// the journal: the receive path has many exits, so the check follows it.
 	const receiveFrame = api.receive;
 	api.receive = ( frame, now, chatSender, stallReceipt ) => {
+		// Any frame at all proves the inbound stream is delivering: a
+		// movement receipt still missing is behind it, not lost (#1978).
+		movement.noteInboundProgress( now );
 		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
 		journalClock = now;
 		journalBagChange( now, frame.opcode, frame.payload );

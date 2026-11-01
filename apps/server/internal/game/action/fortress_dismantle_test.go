@@ -62,7 +62,7 @@ func dismantle(rt *Runtime, c *enterworld.Character, action uint8, target, fortr
 ================
 TestFortressDismissRefusesWithoutASummonedObject
 
-633EC0: no summoned siege object stands in the port yet (#483), so any
+The native dismissal: no summoned siege object stands in the port yet (#483), so any
 target, a structure included, answers 0x282A.
 ================
 */
@@ -78,7 +78,7 @@ func TestFortressDismissRefusesWithoutASummonedObject(t *testing.T) {
 ================
 TestFortressDemolitionVacatesTheZone
 
-634020 in order: not a structure 0x282B, another guild 0x282C, a role
+The native demolition in order: not a structure 0x282B, another guild 0x282C, a role
 that is none of 1, 2, 4 0x282F, another fortress 3, a destroyed structure
 3. A sub-commander's demolition empties zone 85, stores RefObjID 0 for it
 and answers {0x17, 1, 85}; the reinstall after a war and a restart both

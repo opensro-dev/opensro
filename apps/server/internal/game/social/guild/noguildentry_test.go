@@ -3,7 +3,7 @@ package guild_test
 // The Phase A pin: a character's enter-world emits ZERO guild bytes.
 // The v1.150 client renders the retail no-guild UI from an EMPTY guild
 // entry with NO server frame (makeEmptyGuildEntryBlock hasGuildFlag04=0,
-// and the client's guild-block deserializer sub_826610 ALWAYS sets
+// and the client's guild-block deserializer SGuildData_ReadGuildBlock_826610 ALWAYS sets
 // hasGuildFlag04=1 on receipt) - so the correct no-guild posture is the
 // ABSENCE of 0x32C4/0xB663/0xB6B8/0x3B29 from the entered stream, which
 // this test sweeps over the full transport outcome of HandleEnterWorld

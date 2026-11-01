@@ -2,8 +2,8 @@ package enterworld
 
 import "opensro.online/server/internal/game/world/monster"
 
-// 587630 indexes ssou (73736F75) and terminates ordinary parameter walking.
-// 596E50 consumes nine tuples even when a reference is zero. Do not scan
+// The server's parameter index indexes ssou (73736F75) and terminates ordinary parameter walking.
+// Its unique-summon handler consumes nine tuples even when a reference is zero. Do not scan
 // tuple operands as tags or reinterpret the unused trailing words as entries.
 func encodedUniqueSummon(fields []string) monster.SummonSkill {
 	var empty monster.SummonSkill

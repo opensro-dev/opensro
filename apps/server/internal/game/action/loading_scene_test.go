@@ -77,7 +77,7 @@ func TestRequestWaitingOnAResetIsNotAnswered(t *testing.T) {
 	h.enter(t, conn)
 	h.ready(t, conn)
 	session, _ := h.server.Hub.Session(welcome.SessionID)
-	release := h.rt.LockPublication(testDivision)
+	release := h.rt.LockPublication(testDivision, "test")
 	conn.in <- transport.Frame{Opcode: wire.OpItemUseRequest, Payload: h.request}
 	wait.Consistently(t, 50*time.Millisecond, "the request waits on the publication gate", func() bool {
 		return len(conn.out) == 0

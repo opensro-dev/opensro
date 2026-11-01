@@ -1,8 +1,9 @@
 package combat
 
-// DeferredInstructions models the eight captured pointers from native 596960.
-// Inputs are immutable, validated reference instructions. This executor does not
-// admit a skill or claim that its host callbacks have been implemented.
+// DeferredInstructions models the eight captured pointers of the server's
+// deferred-effect descriptor. Inputs are immutable, validated reference
+// instructions. This executor does not admit a skill or claim that its host
+// callbacks have been implemented.
 type DeferredInstructions struct {
 	Parameters [8]*[4]uint32 // ref 338,33C,340,344,348,34C,350,364, in native order
 	StartedAt  uint32
@@ -14,7 +15,8 @@ type DeferredInstructions struct {
 type DeferredVitalLatches struct{ HP, MP bool }
 
 // NewDeferredVitalLatches is called on actor initialization/reset, never on
-// per-effect allocation. Native 4A6E43/6A/70 writes both actor latches to one.
+// per-effect allocation. The native actor initializer writes both latches
+// to one.
 func NewDeferredVitalLatches() DeferredVitalLatches {
 	return DeferredVitalLatches{HP: true, MP: true}
 }
@@ -30,7 +32,7 @@ type DeferredHost interface {
 	ConsumeResources(hp, mp int32)                    // reason 4
 	WriteParameter(id, channel uint32, value float32) // source = this descriptor
 	SendParameterStats()
-	CancelActionsAndRetireSkills() // 4AA340(false): movement/action cancellation and selected-skill retirement
+	CancelActionsAndRetireSkills() // action cancel (false): movement/action cancellation and selected-skill retirement
 	SetMotion(seconds float32)     // native action 13, mode 0
 	DamageEquipment(kind, probability uint32)
 }
@@ -44,8 +46,9 @@ func (d *DeferredInstructions) NeedsQueue() bool {
 	return false
 }
 
-// Advance is the full control flow of 596A40. False requires the owner to
-// remove this descriptor's parameter contributions before releasing it.
+// Advance is the full control flow of the native descriptor tick. False
+// requires the owner to remove this descriptor's parameter contributions
+// before releasing it.
 func (d *DeferredInstructions) Advance(h DeferredHost, l *DeferredVitalLatches) bool {
 	for i := 0; i < 2; i++ {
 		p := d.Parameters[i]
@@ -120,7 +123,7 @@ func (d *DeferredInstructions) Advance(h DeferredHost, l *DeferredVitalLatches) 
 		return false
 	}
 	if p := d.Parameters[6]; p != nil {
-		h.CancelActionsAndRetireSkills() // 4AA340(false): movement/action cancellation and selected-skill retirement
+		h.CancelActionsAndRetireSkills() // action cancel (false): movement/action cancellation and selected-skill retirement
 		h.SetMotion(float32(float64(p[0]) / 1000))
 		return false
 	}

@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/jsonscratch"
 )
 
 // Env configuration (documented in ops/docs/DEPLOYMENT.md).
@@ -172,7 +172,22 @@ type groundState struct {
 // contract); the database is its crash-consistent shadow, advanced one
 // transaction per committed operation.
 type Store struct {
-	mu sync.RWMutex
+	// mu is the authority lock; it records its waits and holds, and
+	// commits their phases (lock_timing.go).
+	mu      timedRWMutex
+	commits commitTiming
+	// checkpoints is the WAL's background checkpointer
+	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
+	// whenever no database was adopted.
+	checkpoints *walCheckpointer
+	// encodeScratch is the commit path's reusable JSON encode buffer
+	// (db_write.go). Every encode through it runs under mu, which is
+	// the scratch's ownership domain; its records are consumed by the
+	// statement that follows each encode.
+	encodeScratch jsonscratch.Scratch
+	// beforeSQLiteCommit, nil in production, runs inside a commit's sqlite
+	// phase: tests make a commit slow to watch what waits on it.
+	beforeSQLiteCommit func()
 
 	dir       string
 	dbPath    string
@@ -208,9 +223,37 @@ type Store struct {
 	camps       map[string]map[int64]domain.TrainingCampRecord
 	campMembers map[string]map[int64][]domain.TrainingCampMemberRecord
 
+	// nameReservations is the held-name plane (the name_reservations
+	// table): division -> lower-cased name -> the reservation row. The
+	// dirty unit is one row, written inside the rename transaction.
+	nameReservations map[string]map[string]NameReservation
+
 	charDivision map[*domain.Character]string
-	changes      changeSet
-	ground       groundState
+	// committedDigests is the last committed record digest per
+	// character (division, id): a dirty character whose encoded bytes
+	// still hash to it is not rewritten (persistence.go). Entries are
+	// staged inside a commit and retained only once its transaction
+	// commits - the ground plane's loadedRecords discipline. A door's
+	// own transaction retains the rows it wrote the same way, through
+	// characterRowTx (db_write.go), so no writer can leave an entry
+	// describing bytes the disk no longer holds.
+	committedDigests map[committedCharacterKey][32]byte
+	// committedRows is the digests' twin: a detached copy of each
+	// character as last committed (domain.CloneCharacter), staged and
+	// retained under exactly the digests' discipline. The commit
+	// compares a dirty character's sections against it and skips the
+	// encode when they all still match (character_sections.go). A
+	// copy exists only beside its digest: both are staged at the same
+	// writes and dropped at the same deletes.
+	committedRows map[committedCharacterKey]*domain.Character
+	// committedMetaDigests is the character digests' discipline for
+	// the meta planes the commit rewrites whole (trade rewards, job
+	// rankings, the version stamps): the last committed digest per
+	// meta key, staged inside a commit and retained only once its
+	// transaction commits (persistence.go).
+	committedMetaDigests map[string][32]byte
+	changes              changeSet
+	ground               groundState
 	// batch is the simulation tick's deferred commit (tickbatch.go).
 	batch tickBatch
 	// ledger attributes every committed gold change (economy_ledger.go).
@@ -267,19 +310,22 @@ func Open(dir string, opts Options) (*Store, error) {
 	}
 
 	s := &Store{
-		dir:          dir,
-		dbPath:       filepath.Join(dir, DBFileName),
-		dbBakPath:    filepath.Join(dir, DBBakFileName),
-		characters:   map[string][]*domain.Character{},
-		deleted:      map[string][]json.RawMessage{},
-		mailboxes:    map[string]map[int64][]domain.LetterRecord{},
-		guilds:       map[string]map[int64]domain.GuildRecord{},
-		guildMembers: map[string]map[int64][]domain.GuildMemberRecord{},
-		camps:        map[string]map[int64]domain.TrainingCampRecord{},
-		campMembers:  map[string]map[int64][]domain.TrainingCampMemberRecord{},
-		meta:         Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
-		charDivision: map[*domain.Character]string{},
-		changes:      newChangeSet(),
+		dir:                  dir,
+		dbPath:               filepath.Join(dir, DBFileName),
+		dbBakPath:            filepath.Join(dir, DBBakFileName),
+		characters:           map[string][]*domain.Character{},
+		deleted:              map[string][]json.RawMessage{},
+		mailboxes:            map[string]map[int64][]domain.LetterRecord{},
+		guilds:               map[string]map[int64]domain.GuildRecord{},
+		guildMembers:         map[string]map[int64][]domain.GuildMemberRecord{},
+		camps:                map[string]map[int64]domain.TrainingCampRecord{},
+		campMembers:          map[string]map[int64][]domain.TrainingCampMemberRecord{},
+		meta:                 Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
+		charDivision:         map[*domain.Character]string{},
+		committedDigests:     map[committedCharacterKey][32]byte{},
+		committedRows:        map[committedCharacterKey]*domain.Character{},
+		committedMetaDigests: map[string][32]byte{},
+		changes:              newChangeSet(),
 		ground: groundState{
 			loadedRecords: map[string][]domain.GroundItemRecord{},
 		},
@@ -469,6 +515,10 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	if s.campMembers == nil {
 		s.campMembers = map[string]map[int64][]domain.TrainingCampMemberRecord{}
 	}
+	s.nameReservations = loaded.nameReservations
+	if s.nameReservations == nil {
+		s.nameReservations = map[string]map[string]NameReservation{}
+	}
 	s.meta = loaded.meta
 	if s.meta.NextCharID == nil {
 		s.meta.NextCharID = map[string]int64{}
@@ -478,6 +528,9 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	}
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
+	s.committedDigests = map[committedCharacterKey][32]byte{}
+	s.committedRows = map[committedCharacterKey]*domain.Character{}
+	s.committedMetaDigests = map[string][32]byte{}
 	s.ledger.seen = map[*domain.Character]int64{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {
@@ -485,4 +538,8 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 			s.seedLedgerLocked(c)
 		}
 	}
+	// The writer handle adopted above never auto-checkpoints
+	// (configureDB); the background checkpointer copies its WAL
+	// instead (#2142 slice 0).
+	s.checkpoints = startWALCheckpointer(s.dbPath)
 }

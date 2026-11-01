@@ -31,16 +31,11 @@ SkillsForPet
 ================
 */
 func SkillsForPet(p *domain.CharacterCOS) []SkillDef {
+	kind := PetKind(p.Codename)
 	if p.Training.TreeVersion < 2 {
-		return PetSkills(PetKind(p.Codename))
+		return PetSkills(kind)
 	}
-	var out []SkillDef
-	for _, s := range D.TreeSkills {
-		if s.Pet == PetKind(p.Codename) {
-			out = append(out, s)
-		}
-	}
-	return out
+	return treeSkillsByKind[kind]
 }
 
 /*

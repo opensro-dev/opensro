@@ -51,7 +51,7 @@ func (rt *Runtime) SpawnQuestMonster(division string, c *enterworld.Character, r
 ================
 useQuestTrap
 
-49C2B0 -> 59B8D0 creates the indirect skill at its owner. The item debit
+Natively the special consumable begins the indirect skill at its owner. The item debit
 follows successful world-object admission inside the existing character door.
 ================
 */
@@ -139,8 +139,14 @@ the EXP, and the client's next level crossing failed its length check.
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
 	var out, results []simulation.DivisionFrames
-	before := rt.advanceSkillObjectCommits(nowMs, &out, &results)
-	after := rt.SkillObjects.Snapshot()
+	before, generation := rt.advanceSkillObjectCommits(nowMs, &out, &results)
+	// A commit pass that wrote nothing leaves the registry exactly as
+	// before names it, so the post-pass copy is paid only on a pass that
+	// created, retired or restamped an object.
+	after := before
+	if rt.SkillObjects.Generation() != generation {
+		after = rt.SkillObjects.Snapshot()
+	}
 	for _, session := range sessions {
 		if session.PublishedObjects == nil {
 			continue
@@ -181,14 +187,16 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 advanceSkillObjectCommits
 
 Runs every live object's pulse under the publication gate and returns the
-objects as they stood before it. A batch sourced by its own object is a
+objects as they stood before it, with the registry generation read just
+before that copy. A batch sourced by its own object is a
 viewer row (results); every other batch is the pulse's routed output, whose
 private tails are sealed before the gate is released.
 ================
 */
-func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) []skillobject.Object {
+func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) ([]skillobject.Object, uint64) {
 	unlock := rt.lockTickPublication()
 	defer unlock()
+	generation := rt.SkillObjects.Generation()
 	before := rt.SkillObjects.Snapshot()
 	var routed []simulation.DivisionFrames
 	for _, object := range before {
@@ -201,14 +209,14 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 		}
 	}
 	*out = append(*out, rt.sealTickPrivate(routed)...)
-	return before
+	return before, generation
 }
 
 /*
 ================
 advanceSkillObject
 
-48D690 checks the monster AI's first opponent (+BC), not its summoner or
+Natively the monster AI's first opponent (+BC) is checked, not its summoner or
 loot owner. A matching trap retires before the quest handler rolls capture.
 ================
 */
@@ -216,12 +224,28 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	unlock := rt.lockDivision(object.Division)
 	defer unlock()
 	c := rt.findCharacter(object.Division, object.OwnerName)
-	snapshot := rt.characterSnapshot(object.Division, c)
 	lease, present := rt.EntryPopulationLease(object.Division, object.OwnerName)
-	ownerPresent := present && lease == object.Population && snapshot != nil && !snapshot.DeletePending &&
-		enterworld.CharacterAlive(snapshot) && snapshot.NativeTeleportMode == 0 &&
-		enterworld.ObjectIDForCharacter(snapshot) == object.OwnerGID &&
-		domain.CharacterWorldInstance(snapshot) == uint32(object.Population.ID)
+	// The presence verdict weighs only record facts the copy carries
+	// verbatim, so the copy is admitted on those facts: an absent
+	// owner retires its object in the registry before any reader
+	// touches the snapshot (#1943). The copy is the combat copy:
+	// every reader below weighs the owner's name, GID, pose, world
+	// instance, guild and combat stats - victim selection, the field
+	// and trap strikes and the trap explosion read nothing from the
+	// bag and resolve none of the owner's companions (the two
+	// downstream re-copies, screamMaskPlayer's attacker view and
+	// returnDamageToPlayer's attacker, read only stats, pose and
+	// GID of theirs).
+	var snapshot *enterworld.Character
+	if present && lease == object.Population {
+		snapshot = rt.characterSnapshotCombatAdmitted(object.Division, c, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live) &&
+				live.NativeTeleportMode == 0 &&
+				enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&
+				domain.CharacterWorldInstance(live) == uint32(object.Population.ID)
+		})
+	}
+	ownerPresent := snapshot != nil
 	if object.Program.Field {
 		rt.advanceSkillField(object, snapshot, ownerPresent, nowMs)
 		return nil
@@ -258,7 +282,7 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 		if !exists || target.CurrentHP == 0 || !known || !skill.CombatTrap.Pinned {
 			return nil
 		}
-		// Only a monster triggers (48D690 reads its AI's first opponent); the
+		// Only a monster triggers (natively its AI's first opponent is read); the
 		// explosion strikes players too (combatTrapVictims).
 		primary := combatTarget{gid: target.Gid, monster: &target, at: rt.monsterSpawn(object.Division, target.Gid, nowMs)}
 		return rt.explodeCombatTrap(object, c, snapshot, skill, primary, lease, nowMs)

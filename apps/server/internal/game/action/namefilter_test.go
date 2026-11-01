@@ -43,7 +43,7 @@ func testNameFilter(t *testing.T) *namefilter.Filter {
 ================
 TestJobAliasPassesTheNameFilter
 
-4184A0: an alias the filter refuses answers the alias-rule error (0x23)
+Natively an alias the filter refuses answers the alias-rule error (0x23)
 in either mode and is never taken.
 ================
 */

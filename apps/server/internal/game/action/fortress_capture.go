@@ -3,9 +3,9 @@
 
 fortress_capture.go - structures falling, and the fortress changing hands
 
-A structure's death is CGObjSiegeStruct_OnKilled (52D2B0): it stays where
+A structure's death natively: it stays where
 it stood with its destroyed state, and the fortress world hears it
-(CGObjSiegeStruct_BroadcastState385F_0B 4CF9A0, 0x3887 subtype 0x0B). The
+(the native structure state broadcast, 0x3887 subtype 0x0B). The
 last guard tower's fall starts the stone's countdown (0x0A); the fort
 stone's fall hands the fortress to the guild that dealt it the most
 damage, reinstalls every structure for that guild, sends everyone else in
@@ -33,7 +33,7 @@ import (
 
 const (
 	// TypeID4 of the CICATStruct band: fort stone 1, guard tower 2 (the
-	// kinds CSiegeFortress_CountStandingGuardTowers 62A6B0 counts).
+	// kinds the native fortress counts as standing towers).
 	structureKindFortStone  uint8 = 1
 	structureKindGuardTower uint8 = 2
 )
@@ -108,7 +108,7 @@ func (rt *Runtime) drainStructureDeaths(nowMs int64) []simulation.DivisionFrames
 ================
 settleStructureDeath
 
-52D2B0, then the fortress's answer to the structure that fell.
+The native structure death, then the fortress's answer to the structure that fell.
 ================
 */
 func (rt *Runtime) settleStructureDeath(death structureDeath, nowMs int64) []simulation.DivisionFrames {
@@ -146,8 +146,8 @@ func (rt *Runtime) settleStructureDeath(death structureDeath, nowMs int64) []sim
 ================
 topStoneGuild
 
-CSiegeFortress_TopStoneDamageGuild (62A5B0): the guild with the greatest
-damage on the stone; ties keep the first in object order, as 62A5B0 keeps
+The native top stone-damage guild: the guild with the greatest
+damage on the stone; ties keep the first in object order, as the native scan keeps
 the first greater value.
 ================
 */
@@ -181,10 +181,10 @@ func (rt *Runtime) topStoneGuild(division string, contributions []simulation.Mon
 ================
 captureFortress
 
-CSiegeFortress_OnFortStoneBroken (61F260) through the temporary owner's
+The native fort-stone break, through the temporary owner's
 result: the guild holds the fortress, its structures stand again for it,
 the shard hears the conquest, and the fortress world keeps only the new
-holder (CGameWorld_Siege_ApplyCapture 601400).
+holder (the native capture).
 ================
 */
 func (rt *Runtime) captureFortress(division string, record fortress.Record, world instance.ID, guild int64, nowMs int64) []simulation.DivisionFrames {
@@ -231,7 +231,7 @@ func (rt *Runtime) conquestFrames(division string, fortressID uint32, guild int6
 ================
 beginFortressWar
 
-CSiegeFortress_BeginWar (61F130) for every fortress: the stone is guarded
+The native war start for every fortress: the stone is guarded
 while its guard towers stand.
 ================
 */
@@ -253,7 +253,7 @@ func (rt *Runtime) beginFortressWar(division string) {
 ================
 finishFortressWar
 
-CSiegeFortress_RestoreOccupation (61F1E0) for every fortress: the holder
+The native occupation restore for every fortress: the holder
 occupies it, its structures are reinstalled, and a change of hands is
 announced. An unoccupied fortress after its war is not announced: the
 v1.150 notice names a guild.
@@ -283,7 +283,7 @@ func (rt *Runtime) finishFortressWar(division string, nowMs int64) []simulation.
 ================
 pushFortressWorld
 
-One 0x3887 frame to every PC in a fortress world (CGameWorld_SendMsgToUser,
+One 0x3887 frame to every PC in a fortress world (the native world send,
 siege vtable +0x64).
 ================
 */

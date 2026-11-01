@@ -12,10 +12,12 @@ effects without acquiring a second character lock.
 
 package progression
 
-// Native server 4E5250 completes the level transition before SP and EXP.
-// Its upward branch at 4E5065 invokes reduced recovery and level presentation.
-// The v1.150 consumers are independent: 777670 presents the level effect,
-// 75BE90 installs maxima, 77A080 installs current gauges, and 779620 walks EXP.
+// The native server completes the level transition before SP and EXP.
+// Its upward branch invokes reduced recovery and level presentation.
+// The v1.150 consumers are independent: CPSMission_OnLevelUpSoundAndDeco0x36B0
+// presents the level effect, CPSMission_OnBaseStats0x343C installs maxima,
+// CPSMission_OnVitalsUpdate0x33A6 installs current gauges, and
+// CPSMission_OnExpGainEventGuide0x30D2 walks EXP.
 // This port sends the completed maxima and recovery inside that transition
 // boundary, before the SP update and EXP tail. Stat points ride only the EXP
 // tail; adding a separate type-3 update would apply that total twice.
@@ -53,8 +55,8 @@ const LevelCap int64 = 90
 const (
 	StatPointsPerLevel int64 = 3
 	autoStatPerLevel   int64 = 1
-	// DeathPenaltyProtectedMaxLevel is the v1.188 GameServer gate at
-	// CGObjPC_ApplyDeathPenalties 0x004e6a31..0x004e6a35: level <= 10
+	// DeathPenaltyProtectedMaxLevel is the v1.188 GameServer death-penalty
+	// gate: level <= 10
 	// returns without touching experience.
 	DeathPenaltyProtectedMaxLevel int64 = 10
 )
@@ -72,8 +74,8 @@ func BaseStatAtLevel(level int64) int64 {
 }
 
 // SkillExpPerSP is the skill-exp accumulator period: natively pinned by
-// the client's own wrap (sub_779620 adds the delta to CICPlayer+0x830
-// and reduces it mod 0x190 = 400, @0x779b02..0x779b29). The server MUST
+// the client's own wrap (CPSMission_OnExpGainEventGuide0x30D2 adds the
+// delta to CICPlayer+0x830 and reduces it mod 0x190 = 400). The server MUST
 // wrap its persisted SkillExp identically or the two accumulators drift
 // apart on the next login snapshot.
 const SkillExpPerSP int64 = 400
@@ -209,9 +211,9 @@ func (rt *Runtime) GrantExperience(character *enterworld.Character, expDelta, sk
 GrantUnscaledExperience
 
 GrantUnscaledExperience applies an unscaled experience grant (such as the
-fixed Academy graduation reward at CTrainingCampMgr_OnGraduateDBSuccess
-0x005DFC30 @ 0x005DFC69: push 0x1E8480, which invokes vtable+0x170
-CGObjPC_ApplyExpDelta 0x004E5250 directly without server rate scaling)
+fixed Academy graduation reward, which the server's graduation handler
+pays as 0x1E8480 through the player's experience-delta routine
+directly, without server rate scaling)
 inside one commit-door closure.
 ==================
 */
@@ -315,7 +317,7 @@ func (rt *Runtime) ApplyDeathPenalty(character *enterworld.Character, penalty pk
 ==================
 deathPenaltyLoss
 
-4E6A3E..4E6B74: loss = trunc(ExpRequired * percent) with the float32
+The server's death-penalty loss: loss = trunc(ExpRequired * percent) with the float32
 percent constant, cap = leveldata column 5 * factor (halved and truncated
 for a thief killer). A cap below one is raised to one, and a loss below
 one logs the native CLAMP error and loses nothing; the result is
@@ -338,7 +340,7 @@ func deathPenaltyLoss(levels enterworld.LevelDataSource, level int64, penalty pk
 	loss := int64(math.Trunc(float64(required) * float64(rule.Percent)))
 	limit := basis * rule.CapFactor
 	if penalty.SpecialWorld {
-		// 4E6E09: signed dword product, multiplied by widened 0.2f, then truncated.
+		// Signed dword product, multiplied by widened 0.2f, then truncated.
 		const siegeCapScale = float64(float32(0.2))
 		limit = int64(math.Trunc(float64(int32(limit)) * siegeCapScale))
 	}
@@ -395,8 +397,8 @@ func (rt *Runtime) applyDeathPenalty(character *enterworld.Character, penalty pk
 ================
 applyJobDeathPenalty
 
-CGObjPC_ApplyJobDeathPenalty (4E6820): the job experience
-Formulae_CalculateDeathExpLoss (410370) gives,
+The server's job death penalty: the job experience
+its death EXP loss formula gives,
 trunc(GoldMin(level) * 10 * 0.125) * 3, then the EXP of leveldata column
 5 of the lower of the two levels times six, less its 0x101 share. No
 level protects a job death.
@@ -436,7 +438,7 @@ func (rt *Runtime) applyJobDeathPenalty(character *enterworld.Character, penalty
 ================
 goldBasisSource
 
-dg.txt column 1 (CRefData_GetDropGoldMinimum), which the job formulas
+dg.txt column 1 - the drop-gold minimum - which the job formulas
 read beside the level curve.
 ================
 */
@@ -656,7 +658,7 @@ func (rt *Runtime) commitExperience(
 	// transaction (quest rewards use this seam).
 	character.Experience = next.Experience
 	character.SkillExp = next.SkillExp
-	// 4E5710 keeps the requested loss, not what the level walk applied:
+	// The server keeps the requested loss, not what the level walk applied:
 	// resurrection returns a percent of what the death took.
 	if expDelta < 0 {
 		character.LastExpLoss = -expDelta
@@ -695,8 +697,8 @@ delta may exceed the level cap and must never be echoed as if it committed.
 type expWalkResult struct {
 	// level / exp are the post-walk character level and WITHIN-LEVEL
 	// experience remainder (the client stores the same remainder - its
-	// walk subtracts each crossed level's requirement, @0x7797d6..
-	// 0x779800).
+	// walk, CPSMission_OnExpGainEventGuide0x30D2, subtracts each crossed
+	// level's requirement).
 	level int64
 	exp   int64
 	// levelsGained counts upward crossings (multi-level single grants
@@ -720,7 +722,7 @@ type expWalkResult struct {
 walkExpCurve
 
 walkExpCurve is the server's copy of the client's own level walk
-(sub_779620 @0x7797d6..0x779800) over the same shipped curve
+(CPSMission_OnExpGainEventGuide0x30D2) over the same shipped curve
 (leveldata column 1 via LevelDataSource.ExpRequired), plus the level
 cap the client-side walk never needed (retail servers simply stopped
 granting at the cap): at the configured cap the experience freezes at

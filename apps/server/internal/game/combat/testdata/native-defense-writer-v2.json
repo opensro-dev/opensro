@@ -1,7 +1,7 @@
 {
   "schema": "sro-native-defense-writer-v2",
   "server_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
-  "candidate_sha256": "03f0bcff0c913f469520ca165f54558f1ff4c76890f2d10a03a5c4b7bb1e3dc7",
+  "candidate_sha256": "facae0cb02209f3c8ab2e13d29419c4c0b2bb7d28c5800d2bfa9868c227fd863",
   "unicorn_version": "2.1.4",
   "interval": [
     "0x5951fc",

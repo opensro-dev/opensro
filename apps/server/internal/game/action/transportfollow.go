@@ -5,8 +5,8 @@ transportfollow.go - a dismounted trade transport follows its trader
 (port-only, not native)
 
 Natively a trade transport the trader steps off stays where it stands and
-holds the trader within 1000 units of it (CCOSManager_ValidateOwnerMovement
-Tethers 4FD1D0 through 4FD720, CGObj_IsVehicleCOS 4827F0; petai.go's
+holds the trader within 1000 units of it (the reference server's owner
+movement tethers, the vehicle COS test; petai.go's
 tether). The owner approved the balance advisor's ask as a server setting
 (2026-10-15): with SRO_TRANSPORT_FOLLOW on, the dismounted transport walks
 after its owner, a trader or a thief alike (the rule keys on the transport,

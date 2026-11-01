@@ -46,7 +46,7 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement, ob
 		}
 	}
 	// Cells name placements by their original ordinal in the nvm entry
-	// list, which CRTNavMeshTerrain_Load (4033E0) keeps whole. A row the
+	// list, which CRTNavMeshTerrain_Load (client 4033E0) keeps whole. A row the
 	// port dropped (malformed) owns no cells; the others keep theirs.
 	sets := make([]terrainCellSet, len(rows))
 	byOrdinal := make(map[int]*terrainCellSet, len(rows))
@@ -147,7 +147,7 @@ terrainVisitKey
 
 The chord fraction at which native CRTNavMeshTerrain_Move (404510) first
 stands in a terrain cell this placement is registered in, and so steps it
-(CRTNavMeshTerrain_StepPlacedObject 403FB0 -> CRTNavMeshObj_EnterFromOutside
+(CRTNavMeshTerrain_StepPlacedObject client 403FB0 -> CRTNavMeshObj_EnterFromOutside
 428300) against the rest of the chord. x0..z1 are the chord in the anchor
 region's frame, the frame the cell rectangles use. +Inf when the chord never
 enters a registered cell; 0 for a placement without registration data (every

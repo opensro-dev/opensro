@@ -98,7 +98,7 @@ func retailBuybackEntries(c *enterworld.Character) []domain.BuybackEntry {
 	return entries
 }
 
-// Native request 693b00: selected NPC u32, ReStoreIndex u8.
+// Client request 693b00: selected NPC u32, ReStoreIndex u8.
 func (rt *Runtime) HandleRetailBuyback(division string, c *enterworld.Character, p []byte) OpResult {
 	if c == nil || len(p) != 5 {
 		return OpResult{}

@@ -6,15 +6,15 @@ skillwall.go - the Chinese Force walls (Crystal Wall, Fire Wall)
 A wall row is exactly onff + pw. pw (+0x2B4) is {mask, pool, defense,
 parry}:
 
-	mask     587A19..587A3A normalizes 1/2/3 to |0x0C and 4/8/12 to |0x03;
+	mask     the server normalizes 1/2/3 to |0x0C and 4/8/12 to |0x03;
 	         bit 4 covers the physical lane, bit 8 the magical lane
-	pool     593684 copies it into the context's remaining counter
+	pool     the server copies it into the context's remaining counter
 	         (+0x5C +8); the absorb record's +1C carries it as the maximum
-	defense  40EBE0/40EEF0 subtract it from the attack point
+	defense  the damage formulas subtract it from the attack point
 	parry    the same formulas divide the attack point by (1 + parry/100)
 
 onff keeps it standing: every onff period the caster pays onff word 1 MP
-or the wall retires (585262), and 5851F7 retires it once the counter is 0.
+or the wall retires, and the server retires it once the counter is 0.
 
 ===========================================================================
 */
@@ -32,8 +32,8 @@ type SkillWall struct {
 // (4 physical, 8 magical).
 func (w SkillWall) Covers(flag uint32) bool { return w.Mask&flag != 0 }
 
-// normalizeLaneMask is the lane-mask rule 587630 applies to pw
-// (587A19..587A3A) and br (587778..587798): 4/8/12 gain both attack kinds
+// normalizeLaneMask is the lane-mask rule the server's parameter index applies to pw
+// and br: 4/8/12 gain both attack kinds
 // (|3), 1/2/3 gain both lanes (|12).
 func normalizeLaneMask(mask uint32) uint32 {
 	switch mask {

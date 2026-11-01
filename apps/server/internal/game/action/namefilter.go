@@ -4,7 +4,7 @@
 namefilter.go - the GameWorld's copy of the native name filter
 
 Player-chosen names (the job alias, and pet names) pass
-CGame_IsValidCharacterName (v1.188 4184A0), whose list is AbuseFilter.txt
+the v1.188 character-name validation, whose list is AbuseFilter.txt
 (game/namefilter). The GameWorld shares its loaded textdata filter with
 character creation before admitting requests.
 

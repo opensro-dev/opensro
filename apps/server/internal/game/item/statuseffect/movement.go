@@ -1,7 +1,8 @@
 package statuseffect
 
-// MovementKind selects the mutually exclusive native descriptor branches at
-// 59642C..59659E (v1.188 research server). Zero preserves plain hste producers.
+// MovementKind selects the mutually exclusive native descriptor branches
+// in the server's buff-modifier application. Zero preserves plain hste
+// producers.
 type MovementKind uint8
 
 const (
@@ -52,21 +53,21 @@ func prepareMovement(rows []Effect, exact int, incoming *Effect) {
 	}
 	switch incoming.MovementKind {
 	case MovementHaste:
-		// 59643A gates installation, but 596497 always assigns the slot.
+		// Installation is gated, but the slot is always assigned.
 		if slot >= 0 {
 			incoming.MovementPercent = 0
 			rows[slot].movementSlot = false
 		}
 		incoming.movementSlot = true
 	case MovementOverride:
-		// 5964B3 removes the slot source. 59652F retains a nonempty slot.
+		// The override removes the slot source but retains a nonempty slot.
 		if slot >= 0 {
 			rows[slot].MovementPercent = 0
 		} else {
 			incoming.movementSlot = true
 		}
 	case MovementIndependent:
-		// 596551..596599 never accesses manager+1F4.
+		// The independent branch never accesses manager+1F4.
 	}
 }
 
@@ -77,8 +78,9 @@ func retireMovement(rows []Effect, index int) {
 	}
 	switch e.MovementKind {
 	case MovementHaste:
-		// 582E38 unconditionally clears the haste slot, even when another
-		// plain application most recently claimed it without installing.
+		// Retirement unconditionally clears the haste slot, even when
+		// another plain application most recently claimed it without
+		// installing.
 		for i := range rows {
 			rows[i].movementSlot = false
 		}
@@ -90,7 +92,8 @@ func retireMovement(rows []Effect, index int) {
 			if i == index {
 				rows[i].movementSlot = false
 			} else if rows[i].MovementKind == MovementHaste && rows[i].movementPhase == movementBound {
-				// 582E4F..582ECC restores only the retained plain hste source.
+				// The retirement range restores only the retained plain
+				// hste source.
 				rows[i].MovementPercent = rows[i].movementAuthoredPercent
 			}
 			break

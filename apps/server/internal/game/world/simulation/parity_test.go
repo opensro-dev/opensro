@@ -23,7 +23,7 @@ import (
 // NOT a native oracle - server.mjs was our own prototype, not a captured retail
 // stream - so where the prototype provably disagrees with the v1.150 client
 // binary, the binary wins and the fixture gets regenerated with the reason
-// recorded. Native 853550/8535A0 require a pi/2 offset between model yaw and
+// recorded. The client's 853550/8535A0 require a pi/2 offset between model yaw and
 // wire bearing. Movement/patrol vectors were corrected on 2026-09-12; the
 // generator documents this intentional difference from the retired prototype.
 const floatTolerance = 1e-9

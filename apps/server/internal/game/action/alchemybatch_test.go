@@ -145,3 +145,49 @@ func TestCompoundClockRetainsNativeElapsedDebtWithoutBurstingOneUpdate(t *testin
 		t.Fatal("overdue callback was discarded", job, due)
 	}
 }
+
+/*
+================
+TestCompoundJobEndsWithItsCharacterWithoutACopy
+
+A waiting job's survival question is life and deletion, read from the
+record's facts under the read door instead of a detached copy
+(#1943): the job survives a not-due pass without paying for a copy,
+and the character's death ends it with the failure frame exactly as
+the copied verdict did.
+================
+*/
+func TestCompoundJobEndsWithItsCharacterWithoutACopy(t *testing.T) {
+	rt, c, _ := compoundBatchRuntime()
+	// A carried bag of production shape, so one detached copy costs
+	// what the live shard pays for it; plain stack rows move no
+	// verdict the job reads.
+	for slot := int64(20); slot < 60; slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", StackCount: 1, MagicOptions: []uint64{1}})
+	}
+	startCompoundBatch(rt, c)
+	key := compoundKey{testDivision, c.Name}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, c) })
+	jobAllocs := testing.AllocsPerRun(20, func() { rt.advanceCompoundJob(key, 100001) })
+	t.Logf("allocs: one character copy %.0f, compound job pass %.0f", copyAllocs, jobAllocs)
+	// The pass's own bookkeeping is a few allocations; a pass that
+	// detaches the record costs a whole copy, so half a copy is the
+	// bound that separates reading the fields from copying them.
+	if jobAllocs*2 >= copyAllocs {
+		t.Fatalf("the compound job pass still copies the character: %.0f allocs; one copy is %.0f",
+			jobAllocs, copyAllocs)
+	}
+	if _, busy := rt.compoundJob(key); !busy {
+		t.Fatal("a waiting job was dropped by a not-due pass")
+	}
+	c.CurrentHP = testInt64(0)
+	frames := rt.advanceCompoundJob(key, 100002)
+	if len(frames) != 1 || frames[0].Opcode != 0x3359 || len(frames[0].Payload) != 2 ||
+		frames[0].Payload[0] != 2 || frames[0].Payload[1] != 6 {
+		t.Fatalf("a dead character's job ended with %+v", frames)
+	}
+	if _, busy := rt.compoundJob(key); busy {
+		t.Fatal("a dead character's job survived")
+	}
+}

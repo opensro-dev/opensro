@@ -17,16 +17,16 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// 51019E/5101D4 load this widened float from the double at B460F0.
+// The reference server loads this widened float from a double constant.
 const presentRebirthRecoveryFraction = float64(float32(0.4))
 
 /*
 ================
 presentRebirthVitals
 
-4DF49F adds one HP through reduced recovery, leaving MP unchanged. The
-51019C/5101D2 getters return float32 keeper values; x87 multiplies those by
-the widened 0.4f constant and truncates before 4A86A0 reduces and adds them.
+The reference server adds one HP through reduced recovery, leaving MP unchanged. The
+native getters return float32 keeper values; x87 multiplies those by
+the widened 0.4f constant and truncates before the reduced recovery reduces and adds them.
 Keep the floating maxima for the multiplication, rather than rounding the
 maximum down before calculating the recovery.
 ================

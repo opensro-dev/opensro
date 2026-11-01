@@ -70,7 +70,7 @@ func (c *Catalog) loadTradeCatalog(dir string) error {
 ================
 RequiredTradeQuest
 
-CGObjNPC_RequiredTradeQuest (4C9110), exact codename comparisons.
+The server's required-trade-quest lookup: exact codename comparisons.
 ================
 */
 func RequiredTradeQuest(npc string) string {

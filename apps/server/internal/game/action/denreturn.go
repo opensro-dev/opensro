@@ -13,7 +13,7 @@ here, is native; the GameWorld's Nomad job turns it on.
 
 Port-only, not native (owner decision 2026-10-14, for the balance advisor):
 with SRO_DEN_NO_TRANSPORT_SUMMON on, no transport can be summoned during
-that countdown. Natively 49B9F0 refuses a transport only in teleport mode
+that countdown. Natively the item use refuses a transport only in teleport mode
 1, so a thief could leave stolen goods on the ground, start the countdown
 and call a transport to load them just before it ended. Off is native.
 
@@ -59,7 +59,7 @@ denTransportRefused
 Whether the port-only rule refuses a transport summon: only a transport,
 only while the character's pending return cast is the Bandit Den scroll's
 (keyed on the scroll, not on its teleport mode). The native modes 1 and 3
-are refused before this (teleportBlocks, 49B9F0).
+are refused before this (teleportBlocks).
 ================
 */
 func (rt *Runtime) denTransportRefused(division string, c *enterworld.Character, transport bool) bool {

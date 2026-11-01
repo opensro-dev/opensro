@@ -52,6 +52,9 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
 		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
 	}
+	// A slow publication-gate hold names its holder there too
+	// (publication_holds), so a waiting step is not mistaken for the stall.
+	game.items.PublicationHold = game.hub.RecordPublicationHold
 	hooks := []simulation.TickHook{
 		game.movement.GroundTickHook(),
 		game.items.TickHook(),
@@ -91,6 +94,8 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
+	// A quest instance's exit gate joins its world's NPC scope pass.
+	ticker.WorldNpcs = game.items.QuestGateNpcs
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames
@@ -156,7 +161,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			// The Bard's Noise: the acquisition scan reads each player's
 			// first-attack protection from the effect owner.
 			FirstAttackGuard: game.items.FirstAttackGuard,
-			// 5464E0: a candidate player's companions are weighed with it.
+			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
 		}
 		log.Infof(

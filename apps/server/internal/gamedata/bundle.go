@@ -51,6 +51,8 @@ var requiredServerFiles = []string{
 	"textdata/magicoption.txt",
 	"textdata/npcpos.txt",
 	"textdata/questdata.txt",
+	// regioninfo.txt: the town walls of SRO_THIEF_CART_TOWN_AREAS (world/townarea).
+	"textdata/regioninfo.txt",
 	"textdata/skilldata.txt",
 	"world-authority/areas/catalog.json",
 	"world-authority/movement/catalog.json",

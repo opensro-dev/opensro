@@ -12,7 +12,7 @@ With SRO_TRADE_JOB_BONUS on, a dressed trader's profitable party sale pays:
 The four percents are live tunables (game/tunables, the trade group); the
 numbers above are their defaults.
 
-"Eligible" is native 5BCFF0's set (alive, same world, within 1000 units),
+"Eligible" is the native nearby job-member set (alive, same world, within 1000 units),
 which the seller, a trader, is always in. Only gold moves; job and
 character EXP stay native. The credit's cost part is never raised: the
 trader's bonus applies to its share of the profit alone. Off, the default

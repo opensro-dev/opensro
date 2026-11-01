@@ -6,8 +6,8 @@ skillassist.go - which skills send the caster's attack pets in
 The v1.150 client orders its attack pets onto its own cast's target
 (CPSMission_OnSkillCastBroadcast0xB245 776830) only for a skill whose
 motion record has byte +0xBD set. CSkillEffectManager_ParseSkillLightRecord
-(91DAE0) fills that byte from skilleffect.txt's skillaniset column 24 at
-91E6E1 (nonzero reads as set). In the shipped data it is set on the basic
+(client 91DAE0) fills that byte from skilleffect.txt's skillaniset column 24 at
+client 91E6E1 (nonzero reads as set). In the shipped data it is set on the basic
 attacks and the attack skills, and clear on buffs, shields and modes.
 
 The browser client learns the flag through the skill catalogue

@@ -84,6 +84,13 @@ export const DROP_PLUS_NOTICE_CHANNEL = 0x81;
 // nothing, so the job alias it names never leads to a character.
 export const BREAK_NOTICE_CHANNEL = 0x82;
 
+// Port-only, not native: the name-change notice channel (server
+// wire.RenameNoticeChannel, #1689). "X is now known as Y" reaches only
+// the renamed character's online friends and guild members, so it shows
+// as channel 7 with no Experimental row: it is the feature's own
+// feedback, not a broadcast a player opts out of.
+export const RENAME_NOTICE_CHANNEL = 0x83;
+
 // The announced item's plus rides its encoded body at a fixed byte (the
 // server's ItemBody.Encode header, ItemBodySize 18). A shorter or absent
 // body names no plus.
@@ -99,7 +106,7 @@ Channel 7 and the two port-only channels laid out like it.
 */
 export function isServerNoticeChannel( channel: number | undefined ): boolean {
 	return channel === 7 || channel === JOB_KILL_NOTICE_CHANNEL || channel === DROP_PLUS_NOTICE_CHANNEL ||
-		channel === BREAK_NOTICE_CHANNEL;
+		channel === BREAK_NOTICE_CHANNEL || channel === RENAME_NOTICE_CHANNEL;
 }
 
 /*
@@ -149,6 +156,25 @@ export function sealNoticeColorArgb(
 ): number | undefined {
 	if ( rarity !== 2 || !itemClass ) return undefined;
 	return [ SEAL_NOTICE_COLOR_STAR, SEAL_NOTICE_COLOR_MOON, SEAL_NOTICE_COLOR_SUN ][(itemClass - 1) % 3];
+}
+
+/*
+================
+sealDropTierFromText
+
+The seal tier a drop line's text names (0 Star, 1 Moon, 2 Sun), or
+undefined when the line announces no seal drop. This is the chat
+colour's text fallback (chat-layout's sealNoticeChatColor) shared with
+the top-centre banner: only drop lines carry a tier, so a plus line's
+parenthesised seal names none.
+================
+*/
+export function sealDropTierFromText( text: string ): 0 | 1 | 2 | undefined {
+	if ( !text.includes( " has dropped " ) ) return undefined;
+	if ( isSunDropNoticeText( text ) ) return 2;
+	if ( text.includes( "(Seal Of Moon)" ) ) return 1;
+	if ( text.includes( "(Seal Of Star)" ) ) return 0;
+	return undefined;
 }
 
 /*

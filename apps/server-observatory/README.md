@@ -21,6 +21,11 @@ npm start         # http://localhost:5190
   services. Search an account to see connected minutes and last login/seen
   dates; no identity filter means no personal time total.
 
+- **Chat log:** `/chat-log.html` searches a shard's moderation chat log by
+  account, character and time, newest first. It needs the same operator token
+  as Session history and is protected by the console edge. Lines age out with
+  `SRO_CHAT_LOG_RETAIN_DAYS` (default 30).
+
 ### Durable history setup
 
 Agent stores `history.sqlite` beside its shard directory state file

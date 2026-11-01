@@ -262,9 +262,9 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 ================
 TestOfferMarkerFollowsTheNativeLevelGap
 
-925D20 / 40FE90: below the quest's level the NPC shows the red scroll;
+The server's level classifier: below the quest's level the NPC shows the red scroll;
 within six levels above it the offer mark; further above, nothing. A
-minimum level (9262A0 flag 1) hides the quest below it.
+minimum level (prerequisite flag 1) hides the quest below it.
 ================
 */
 func TestOfferMarkerFollowsTheNativeLevelGap(t *testing.T) {

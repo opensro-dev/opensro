@@ -3,7 +3,7 @@
 
 loot.go - party-owned rotating pickup recipients
 
-Retail 4D4840 moves the first member entry to the tail and returns its GID.
+Retail moves the first member entry to the tail and returns its GID.
 Pickup eligibility is evaluated by the action owner after this rotation;
 the party half of it (may a member take another member's drop) lives here,
 so the GameWorld wiring and the action tests share one rule.

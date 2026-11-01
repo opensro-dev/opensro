@@ -131,7 +131,7 @@ func TestLayout5AuthorityGainsTheFortressTables(t *testing.T) {
 ================
 TestFortressReturnCooldownSurvivesReopen
 
-The fortress-return cooldown (51A5B0's owner timed job) is part of the
+The fortress-return cooldown (the server's fortress-return timed job) is part of the
 character record.
 ================
 */

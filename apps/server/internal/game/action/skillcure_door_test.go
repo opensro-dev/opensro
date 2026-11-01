@@ -185,7 +185,7 @@ func TestTargetedCureOnAnotherPlayerOutsideTheDoor(t *testing.T) {
 ================
 TestAreaCureResolvesPartyOutsideTheDoor
 
-Innocent B's party selection (58BEF0) reads every member through the store;
+Innocent B's party selection reads every member through the store;
 it must run before the caster's door, the caster first (include-self bit).
 ================
 */

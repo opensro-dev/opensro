@@ -14,6 +14,7 @@ import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/te
 import { destroyNow, type Retire } from "./retirement";
 import { readPortraitPixels, type PortraitPixels } from "./portrait-readback";
 import type { UiTexture } from "@/engine/contracts/texture";
+import type { IconAtlas } from "@/engine/foundation/ui/icon-atlas";
 import {
 	decodeNativeTextureLevel,
 	nativeTextureBlockBytes,
@@ -110,8 +111,13 @@ const TEXEL_EPSILON = 0.01;
 fn areaSample( t: vec2f, d: vec2f, rect: vec4f ) -> vec4f {
 	let size = vec2f( textureDimensions( tex ) );
 	// The quad's own texels: an atlas glyph never averages its neighbour.
-	let lowEdge = rect.xy * size;
-	let highEdge = ( rect.xy + rect.zw ) * size;
+	// A mirrored quad (the tooltip's right edge, uv 1,1,-1,-1) runs its uv
+	// backwards; order the ends, or clamp() collapses to one edge and the
+	// quad samples nothing (#1973).
+	let start = rect.xy * size;
+	let end = ( rect.xy + rect.zw ) * size;
+	let lowEdge = min( start, end );
+	let highEdge = max( start, end );
 	let lo = clamp( t - d * 0.5, lowEdge, highEdge );
 	let hi = clamp( t + d * 0.5, lowEdge, highEdge );
 	let first = floor( lo );
@@ -178,7 +184,8 @@ vs
 	// Pad only a quad whose texels miss whole pixels: at 100% and at whole
 	// enlargements nothing is padded and the default path shades no extra
 	// fragments. viewport.z is pixels per UI unit (0 = unknown: pad).
-	var texels = q.uv.zw * vec2f( textureDimensions( tex ) );
+	// A mirrored quad's uv extent is negative; its texel count is not.
+	var texels = abs( q.uv.zw ) * vec2f( textureDimensions( tex ) );
 	if ( q.effects.x % 2 == 1 ) {
 		texels = texels.yx;
 	}
@@ -355,6 +362,10 @@ fs
 	let values = new Float32Array( 0 ), uploaded = new Float32Array( 0 );
 	const viewportValues = new Float32Array( 4 ), noMask = [ 0, 0, 1, 1 ] as const;
 	let last: UiScene | null = null, draws: readonly UiDraw[] = [], resourceRevision = 0, recordedResources = -1;
+	// Port-only, not native: the icon family's atlas mapping (foundation/ui
+	// /icon-atlas.ts). A quad whose texture it maps draws from the icon's uv
+	// rect inside the sheet; null reads every image as its own texture.
+	let atlas: IconAtlas | null = null;
 	/*
 	================
 	texture
@@ -439,6 +450,23 @@ fs
 	return {
 		ready,
 		texture,
+		/*
+		================
+		atlas
+
+		Install or clear the icon atlas mapping. The packed records hold
+		every quad's written bytes, so a mapping change must rewrite them:
+		the record cache empties and the resource revision advances, exactly
+		as a newly arrived texture does.
+		================
+		*/
+		atlas( mapping: IconAtlas | null ) {
+			if ( atlas === mapping ) return;
+			atlas = mapping;
+			packed.length = 0;
+			bindings.clear();
+			resourceRevision++;
+		},
 		/*
 		================
 		portraitTarget
@@ -553,8 +581,10 @@ fs
 				if ( count === 0 ) continue;
 				// An absent image is not a solid-color primitive. Keep its draw absent until
 				// the texture arrives; resourceRevision rebuilds the command list then.
-				const maskKey = quad.mask?.texture ?? "",
-					slot = textures.get( quad.texture ),
+				const atlasEntry = atlas?.entry( quad.texture ) ?? null,
+					textureId = atlasEntry ? atlasEntry.sheet : quad.texture,
+					maskKey = quad.mask?.texture ?? "",
+					slot = textures.get( textureId ),
 					mask = textures.get( maskKey );
 				if ( !slot || !mask ) {
 					for ( let i = 0; i < count; i++ ) packed[record + i] = undefined;
@@ -562,10 +592,10 @@ fs
 					previous = null;
 					continue;
 				}
-				let textureBindings = bindings.get( quad.texture );
+				let textureBindings = bindings.get( textureId );
 				if ( !textureBindings ) {
 					textureBindings = new Map();
-					bindings.set( quad.texture, textureBindings );
+					bindings.set( textureId, textureBindings );
 				}
 				let maskBindings = textureBindings.get( maskKey );
 				if ( !maskBindings ) {
@@ -604,7 +634,18 @@ fs
 						values.set( glyph.uv, at + 4 );
 					} else {
 						values.set( quad.rect, at );
-						values.set( quad.uv, at + 4 );
+						if ( atlasEntry ) {
+							// The quad's uv is the icon's whole-texture rect;
+							// remap it linearly into the icon's sheet rect.
+							// Mirrored quads' negative extents remap the same
+							// way, and the shader clamps the area sampler to
+							// the rect it reads.
+							const uv = atlasEntry.uv;
+							values[at + 4] = uv[0] + quad.uv[0] * uv[2];
+							values[at + 5] = uv[1] + quad.uv[1] * uv[3];
+							values[at + 6] = quad.uv[2] * uv[2];
+							values[at + 7] = quad.uv[3] * uv[3];
+						} else values.set( quad.uv, at + 4 );
 					}
 					values.set( quad.color, at + 8 );
 					values.set( quad.clip, at + 12 );

@@ -44,6 +44,11 @@ export function createSession(): SessionOwner {
 	let crestPrefix: number | undefined;
 	let restoreAttempted = false, browserBase: string | undefined, logoutPending = false;
 	let resumeCharacter: string | undefined, restoringWorld = false;
+	// The character an entry attempt named, kept past the bounce back to
+	// character select that clears the name from the published state: the
+	// incident filed for that bounce (world_entry_rejected) must still say
+	// who was entering (#1855). Cleared when an entry succeeds, and on reset.
+	let entryCharacter: string | undefined;
 	// A title request answered PROCESS_STARTING is repeated (server-starting.ts):
 	// the command to repeat, when, and since when the server has been starting.
 	let lastTitleCommand: Parameters<SessionOwner["command"]>[0] | undefined;
@@ -146,7 +151,7 @@ stage it happened in. Each code reports once.
 			kind: command.incidentKind,
 			message: command.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
 			phase: state.phase,
-			...(state.character ? { character: state.character } : {})
+			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {})
 		} );
 	}
 	/*
@@ -253,6 +258,7 @@ publishWorld
 			} );
 			return;
 		}
+		if ( value.phase === "world" ) entryCharacter = undefined;
 		publish( {
 			restoringWorld,
 			crestPrefix,
@@ -278,6 +284,7 @@ reset
 	function reset() {
 		cancelTitleRequest();
 		resumeCharacter = undefined;
+		entryCharacter = undefined;
 		restoringWorld = false;
 		scope = "title";
 		world.disconnect( true );
@@ -403,17 +410,27 @@ baseUrl
 				try {
 					if ( command.kind === "enter-world" ) {
 						if ( !identity ) throw new Error( "Authentication required" );
+						entryCharacter = command.character;
 						world.enter( command.character, identity.divisionId, identity.transportUrl );
 						cancelTitleRequest();
 						scope = "world";
-					} else {
-						if ( scope !== "world" ) throw new Error( "No active world session" );
-						if ( command.kind === "disconnect" ) world.disconnect();
-						else if ( command.kind === "restart" || command.kind === "exit" ) {
+					} else if ( command.kind === "disconnect" ) {
+						// Legal at any scope: it also cancels a half-open
+						// entry attempt, and it cannot fail.
+						world.disconnect();
+					} else if ( scope === "world" ) {
+						if ( command.kind === "restart" || command.kind === "exit" ) {
 							world.depart( command.kind === "restart" ? 2 : 1 );
 						} else if ( command.kind === "reconnect" ) world.reconnect();
 						else world.ready( command.travelRevision );
 					}
+					// A restart, exit, reconnect or world-ready that finds no
+					// world session (queued ahead of enter-world, or right
+					// after a failed entry) is dropped, not answered: the
+					// "No active world session" it used to publish replaced
+					// the real entry error (7 entry incidents). A successful
+					// entry is followed by a fresh world-ready on the next
+					// travel revision, so nothing waits on the dropped one.
 					publishWorld();
 				} catch ( error ) {
 					publish( { ...state, error: String( error ) } );
@@ -820,6 +837,7 @@ baseUrl
 									characters
 								} );
 								if ( resume ) {
+									entryCharacter = resume.name;
 									world.enter( resume.name, identity!.divisionId, identity!.transportUrl );
 									cancelTitleRequest();
 									scope = "world";

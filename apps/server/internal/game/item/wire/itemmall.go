@@ -16,7 +16,8 @@ import (
 	"fmt"
 )
 
-// 6BB1E0 emits B06D [2,80] when the native mall cannot fund a purchase.
+// The client's CIFItemMall_BeginWornPurchaseSequence emits B06D [2,80]
+// when the native mall cannot fund a purchase.
 const ErrCodeMallInsufficientCurrency uint8 = 0x80
 
 const (
@@ -29,7 +30,8 @@ const (
 MallPurchase
 
 Client 69825E writes group, shop, tab, slot, quantity, points and package.
-7058E0 resolves the group/shop identity from the authored reference mapping.
+The client's CGInterface_SendItemMallPurchase resolves the group/shop
+identity from the authored reference mapping.
 ================
 */
 type MallPurchase struct {
@@ -86,7 +88,8 @@ func DecodeMallPurchase(payload []byte) (MallPurchase, error) {
 ================
 EncodeMallPurchaseResult
 
-6981AE..698250 writes the native address, destination vector and quantity.
+6981AE..698250 of the client's ItemMoveRequest_Serialize writes the
+native address, destination vector and quantity.
 The quantity tail is present on mall purchases as well as ordinary shop buys.
 ================
 */

@@ -3,9 +3,9 @@
 
 warlock_test.go - Life Drain, Soul Chaos and Blood Increase
 
-Life Drain takes HP from its target and the caster recovers it (40F750);
+Life Drain takes HP from its target and the caster recovers it;
 Soul Chaos strikes the enemies around its owner every two seconds with a
-fixed hit (40F5F0); Blood Increase raises both through BSHP and SAAA.
+fixed hit; Blood Increase raises both through BSHP and SAAA.
 
 ===========================================================================
 */
@@ -172,5 +172,35 @@ func TestSoulChaosPulses(t *testing.T) {
 	}
 	if again := rt.advancePulseAreas(now + 1000); len(again) != 0 {
 		t.Fatal("a second pulse inside the period")
+	}
+}
+
+/*
+================
+TestSoulChaosDeadCasterPulsesNothing
+
+The admission predicate is the pulse lane's only dead-caster gate
+(#2008 review): a dead caster with a due Soul Chaos instance pulses
+nothing and strikes nothing. An always-admit mutation passes the
+whole suite without this pin.
+================
+*/
+func TestSoulChaosDeadCasterPulsesNothing(t *testing.T) {
+	rt, _, c, row, mob := warlockFixture(t, "SKILL_EU_WARLOCK_SOULA_CHAOS_A_01")
+	now := rt.Now().UnixMilli()
+	if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: row.ID,
+		SkillGroup: row.Group, InstanceToken: 9, State: statuseffect.StateActive,
+		StartedAtMs: now - 2000, DurationPresent: true, ExpiresAtMs: now + 14000}) {
+		t.Fatal("Soul Chaos did not install")
+	}
+	rt.trackPulseArea(testDivision, c.Name)
+	c.CurrentHP = testInt64(0)
+	before, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if frames := rt.advancePulseAreas(now); len(frames) != 0 {
+		t.Fatalf("dead caster pulsed: %+v", frames)
+	}
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if after.CurrentHP != before.CurrentHP {
+		t.Fatalf("dead caster struck: HP %d -> %d", before.CurrentHP, after.CurrentHP)
 	}
 }

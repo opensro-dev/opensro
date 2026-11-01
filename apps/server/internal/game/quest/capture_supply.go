@@ -32,20 +32,21 @@ captureSupply
 The Ivy trap is awarded by its material quest and has a different refill
 handler. The other handlers grant their items at quest acceptance. count is
 the grant size; spendAtGrant spends the day only when the grant lands, as
-Cerberus 1's 8B2420 stamps the day after its scissors are given. unlimited
-handlers keep no allowance: Hidden Treasure 5's 8C7260 refills whenever
+Cerberus 1's server talk handler stamps the day after its scissors are
+given. unlimited handlers keep no allowance: Hidden Treasure 5's server
+talk handler refills whenever
 no key is held.
 ================
 */
 type captureSupply struct {
 	quest, item, title, prompt, success, exhausted, full string
-	// held, when set, answers a player who still holds the item (8AB070's
-	// _11) instead of offering nothing.
+	// held, when set, answers a player who still holds the item (the
+	// server Uvetino talk's _11) instead of offering nothing.
 	held                                     string
 	count                                    int
 	afterCompletion, spendAtGrant, unlimited bool
-	// grantOnlyStamps leaves the day unstamped at completion: 8AB070
-	// stamps record +6 only when it grants, unlike Ivy 2's supply.
+	// grantOnlyStamps leaves the day unstamped at completion: the server
+	// Uvetino talk stamps record +6 only when it grants, unlike Ivy 2's supply.
 	grantOnlyStamps bool
 }
 
@@ -75,7 +76,7 @@ var captureSupplies = []captureSupply{
 		full: "SN_TALK_QNO_CA_GORIA_6_09",
 	},
 	{
-		// 8B2420 grants thirty Long Scissors (mission +0x1D) at acceptance
+		// The server's Cerberus talk grants thirty Long Scissors (mission +0x1D) at acceptance
 		// and again once a day: _07 with the _08 row, _09 on the grant, _10
 		// when today's scissors are spent, _14 when the bag is full.
 		quest: cerberusQuest, item: cerberusScissors, count: 30, spendAtGrant: true,
@@ -84,7 +85,7 @@ var captureSupplies = []captureSupply{
 		full: "SN_TALK_QNO_EU_EASTEU_19_14",
 	},
 	{
-		// Uvetino (8AB070): once QNO_EU_EASTEU_3 is done, ten holy water a
+		// Uvetino (the server's EASTEU_3 talk): once QNO_EU_EASTEU_3 is done, ten holy water a
 		// day for the Sunset Witch's stable: _05 with the _09 row, _10 on
 		// the grant, _12 when today's water is given, _11 while some is
 		// still held, _06 when the bag is full.
@@ -94,7 +95,7 @@ var captureSupplies = []captureSupply{
 		full: "SN_TALK_QNO_EU_EASTEU_3_06", held: "SN_TALK_QNO_EU_EASTEU_3_11",
 	},
 	{
-		// 8C7260 grants five Seal Keys (mission +0x1D) at acceptance and,
+		// The server's Hidden Treasure 5 talk grants five Seal Keys (mission +0x1D) at acceptance and,
 		// with none held, again on every visit: _05 with the _06 row, _07 on
 		// the grant, _08 when the bag is full.
 		quest: treasureQuest, item: treasureKey, count: treasureKeyCount, spendAtGrant: true, unlimited: true,
@@ -142,7 +143,8 @@ func captureSupplyCleanup(c *enterworld.Character, def *Definition) []inventory.
 captureSupplyOption
 
 Read-only projection. The allowance is spent when the row is selected, not
-when the NPC's list is rendered (8B843D..8B84C9).
+when the NPC's list is rendered (the server's dialogue builder only lists
+it).
 ================
 */
 func (rt *Runtime) captureSupplyOption(c *enterworld.Character, def *Definition, npc string) (NpcOption, bool) {
@@ -164,7 +166,8 @@ func (rt *Runtime) captureSupplyOption(c *enterworld.Character, def *Definition,
 	} else if activeQuestIndex(c, def.RefID) < 0 {
 		return NpcOption{}, false
 	}
-	// 8B2420 offers no refill once the objective stands complete.
+	// The server's Cerberus talk offers no refill once the objective stands
+	// complete.
 	if def.Objective == ObjectiveCollect && !supply.afterCompletion && heldCollectCount(c, def) >= def.CollectCount {
 		return NpcOption{}, false
 	}
@@ -228,7 +231,7 @@ func (rt *Runtime) PrepareNpcQuest(c *enterworld.Character, code, npc string) (s
 		day = rt.CalendarNow().Day
 		supply, _ := captureSupplyForQuest(def.Codename)
 		if supply.afterCompletion || supply.spendAtGrant {
-			// 8BAF60 (Ivy) and 8B2420 (Cerberus) spend the allowance at the
+			// The server's Ivy and Cerberus talks spend the allowance at the
 			// grant, unlike the direct capture quests that spend it when
 			// opening the prompt.
 			state, exists := c.QuestSupplies[def.RefID]

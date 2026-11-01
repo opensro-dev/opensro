@@ -5,13 +5,11 @@ commerce_guild.go - guild-point currency admission and debit for NPC shops
 
 Guild shop goods (STORE_*_GUILD_TAB1/3) carry both a gold row (payment 1)
 and a guild-point row (payment 8) in refpricepolicyofitem.txt.
-CShopApp_CheckPurchasePayment (0x00617360 @0x00617875..0x006178DF) checks
-that the buyer belongs to a guild and is its master (CGuild_IsMemberMaster
-0x005D0F50, else 0x18C4 -> UIIT_MSG_GUILD_STORE_BUY_LIMIT) and that the
+Natively the purchase payment check makes sure the buyer belongs to a guild
+and is its master (else 0x18C4 -> UIIT_MSG_GUILD_STORE_BUY_LIMIT) and that the
 guild holds at least the quoted GP cost (guild+0x3C, else 0x18C5 ->
-UIIT_MSG_GUILD_LACK_GP). CGObjPC_CommitShopPaymentAuxCurrencies
-(0x004E9AE0 @0x004E9B71..0x004E9BD6) debits the guild's GP via
-CGuildManager_RequestGuildPointDebit (0x005C7AA0) and broadcasts the new
+UIIT_MSG_GUILD_LACK_GP). The payment commit then debits the guild's GP
+through the guild manager and broadcasts the new
 GP total on 0x3E74 subOp 5 (&0x08).
 
 ===========================================================================
@@ -46,10 +44,9 @@ func (rt *Runtime) guildStore() enterworld.GuildStore {
 ================
 guildShopAdmission
 
-Checks whether the buyer is a guild master (CShopApp_CheckPurchasePayment
-0x00617875..0x006178A5) and returns the guild's current GP balance
-(0x006178A7..0x006178C2). Called outside SettleTrade so store.mu is never
-re-entered.
+Checks whether the buyer is a guild master (as the native purchase payment
+check does) and returns the guild's current GP balance. Called outside
+SettleTrade so store.mu is never re-entered.
 ================
 */
 func (rt *Runtime) guildShopAdmission(division string, c *enterworld.Character) (bool, uint64) {
@@ -88,7 +85,7 @@ func (rt *Runtime) guildShopAdmission(division string, c *enterworld.Character) 
 spendGuildPoints
 
 Debits cost guild points from the buyer's guild after SettleTrade commits
-(CGObjPC_CommitShopPaymentAuxCurrencies 0x004E9B71 -> 0x005C7AA0) and
+(as the native payment commit does) and
 broadcasts the updated guild GP (0x3E74 subOp 5 &0x08) to online guild
 members and the buyer.
 ================

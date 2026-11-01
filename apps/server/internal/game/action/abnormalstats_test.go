@@ -18,7 +18,7 @@ import (
 ==================
 TestEveryAbnormalStatusKeepsPlayerStatsBuildable
 
-Every abnormal callback writes into the player keeper (4A4570..4A5620).
+Every abnormal callback writes into the player keeper (reference server).
 A write to a node the keeper lacks fails the whole stats projection, and
 with it every cast, cost and item use of an afflicted player. Frostbite's
 0x17/0x18 writes were such a hole.

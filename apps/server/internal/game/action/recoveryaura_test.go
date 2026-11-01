@@ -94,7 +94,7 @@ func checkRecoveryRecast(t *testing.T, code string) {
 ================
 TestRecoveryDivisionOtherCasterReplacesLinkedSource
 
-59D9CE..59DAB0 follows a recipient's area link back to the original caster
+The native buff replacement follows a recipient's area link back to the original caster
 and stops both instances, even when the new spell comes from somebody else.
 ================
 */

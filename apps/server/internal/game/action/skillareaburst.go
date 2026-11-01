@@ -5,9 +5,9 @@ skillareaburst.go - untargeted caster-centred attacks (Booming Chord/Wave)
 
 The Bard's Booming Chord and Booming Wave strike without a target: the
 hostile monsters and attackable players around the caster are the victims. Selection follows the
-untargeted taunt and status area (efr shape 1 around the caster, 58A088);
+untargeted taunt and status area (efr shape 1 around the caster);
 each victim takes every authored mc impact with the area's reduction per
-victim in selection order, as the cast-owned area does (58E5F0). The rows
+victim in selection order, as the cast-owned area does. The rows
 author zero casting time, so the cast resolves at command time like the
 untargeted taunt: one commit, results on the opening record.
 
@@ -56,7 +56,19 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 	var commit areaCommit
 	var battleFrames []wire.Frame
 	var refusal uint16
-	roster := rt.monsterRewardRoster(division, c, now)
+	// The reward roster serves the fatal settlements alone, and a
+	// burst whose monster victims all survive their plans reaches
+	// none (#2030): door the caster, the player victims and the COS
+	// owners - each mutated by any hit, as areaDoorCharacters keeps
+	// - and build no roster. A monster victim whose plan can kill
+	// keeps the roster-wide door exactly as before.
+	roster := rewardRoster{division: division, characters: areaDoorCharacters(c, &plan)}
+	for _, sequence := range plan.sequences {
+		if areaSequenceCanKill(sequence) {
+			roster = rt.monsterRewardRoster(division, c, now)
+			break
+		}
+	}
 	if !rt.deps.UpdateMany(roster.characters, "player-area-burst", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false
@@ -83,7 +95,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 		return OpResult{DiagnosticRefusal: "area-burst-commit-refused"}
 	}
 	gid := enterworld.ObjectIDForCharacter(snapshot)
-	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, now)
+	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, now, rt.handlerDoors())
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token}
 	open := wire.SkillCastUntargetedFrame(success)
@@ -102,7 +114,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 	private := append(wire.ProgressionPrivateFrames(commit.progression), vitals)
 	private = append(private, wire.ProgressionPrivateFrames(commit.playerActor)...)
 	public = append(public, commit.settlements.public...)
-	// Entering battle (4E27C0) follows the hit's burst.
+	// Entering battle follows the hit's burst.
 	actor = append(actor, battleFrames...)
 	public = append(public, battleFrames...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private,
@@ -114,7 +126,7 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 ================
 casterAreaVictims
 
-efr shape 1 around the caster (58A088): the caster's population's
+efr shape 1 around the caster: the caster's population's
 monsters and the attackable players within the radius plus both body
 radii, in selection order, at most the area's most-targets.
 ================

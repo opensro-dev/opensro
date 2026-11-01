@@ -429,9 +429,10 @@ func (c *followFixtureControl) commandLocked(division, name, command string) (an
 		if f.Phase != fixtureFollowing {
 			return nil, fmt.Errorf("leader-loss requires following")
 		}
-		// Normal visibility publishes leader despawn; children remain live so
-		// their production FOLLOW tick suspends steering (55A98F), while an
-		// accepted navigation command can finish. Removal is not CSNM 12.
+		// Normal visibility publishes leader despawn; children remain live
+		// so their production FOLLOW tick suspends steering (as the
+		// server's follow tick does), while an accepted navigation command
+		// can finish. Removal is not CSNM 12.
 		c.ops.Monsters.DevelopmentRemoveLeader(division, f.Leader)
 		f.Phase = fixtureLeaderLost
 	default:

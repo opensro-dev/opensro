@@ -43,6 +43,52 @@ test("sound census cannot count comments, a catalog or a dead documentation lane
 	);
 });
 
+test("worker-returned arrays, flow-fed ternaries and path plays are producers; dead dictionaries are not", () => {
+	// The producing shapes the runtime lanes actually use: a worker owner
+	// returns its cue array, a packet handler feeds a ternary into play(),
+	// and a world lane plays by file path while nobody names the handle.
+	const input =
+		`function result( flags ) { return [ "SND_ELIXIR_USE", flags & 0x10 ? "SND_ELIXIR_SUCCESS" : "SND_ELIXIR_FAILURE" ]; }
+function durability( value, old ) { const cue = value > old ? (old === 0 ? "SND_REVIVE" : "SND_REPAIR") : null; if ( cue ) play( cue ); }
+const orbs = { arrival: "/assets/audio/sfx/prim/snd/ui/hyanget.wav" };`;
+	const candidates = sourceSoundCandidates( input, "src/engine/runtime/worker-lane.ts" );
+	const byHandle = handle => candidates.filter( c => c.value === handle );
+	assert.deepEqual(
+		byHandle( "SND_ELIXIR_USE" ).map( c => c.returned ),
+		[ true ],
+		"a returned cue array marks its rows"
+	);
+	assert.deepEqual( byHandle( "SND_REPAIR" ).map( c => c.assigned ), [ true ] );
+	assert.deepEqual( byHandle( "SND_REVIVE" ).map( c => c.assigned ), [ true ] );
+	const hyan = candidates.find( c => c.value.endsWith( "/hyanget.wav".toUpperCase() ) );
+	assert.ok( hyan?.wav, "a played path carries its wav mark" );
+	// The classifier takes all three shapes as the row's producer, and the
+	// path play produces the row whose file it plays even unnamed.
+	const uiHandles = new Set( [ "SND_ELIXIR_USE", "SND_REPAIR", "SND_HYAN" ] );
+	const state = { itemCategories: new Set(), uiHandles, animationCues: new Set(), sourceCandidates: candidates };
+	assert.deepEqual(
+		classifySoundRow( { object: "UI", handle: "SND_ELIXIR_USE", publicPath: "/x.wav" }, state ).reasons,
+		[]
+	);
+	assert.deepEqual(
+		classifySoundRow( { object: "UI", handle: "SND_REPAIR", publicPath: "/x.wav" }, state ).reasons,
+		[]
+	);
+	assert.deepEqual(
+		classifySoundRow(
+			{ object: "UI", handle: "SND_HYAN", fileName: "hyanget.wav", publicPath: "/x.wav" },
+			state
+		).reasons,
+		[]
+	);
+	assert.ok(
+		classifySoundRow( { object: "UI", handle: "SND_WARNING", publicPath: "/x.wav" }, state ).reasons.includes(
+			"no-literal-production-producer"
+		),
+		"an unproduced row stays unproduced"
+	);
+});
+
 test("ITEM category and resource gaps remain distinct; a WAV does not establish native reachability", () => {
 	const row = {
 		object: "ITEM",
@@ -134,6 +180,45 @@ test("accepted equipment emits world ITEM audio and detects an injected silent c
 		assert.equal( state.inventory[0].slot, 6, "visual acceptance alone cannot prove audio delivery" );
 		assert.equal( cues.length, silent ? 0 : 1 );
 		game.dispose();
+	}
+});
+
+test("the live census sees the worker lane's real production and keeps the truly silent rows open", async () => {
+	// The regression this pins: the worker owners return their cue arrays
+	// and the packet handlers feed ternaries into play(), so the rows they
+	// produce must not read as unproduced - while the three genuinely
+	// unproduced rows stay open instead of being assumed away.
+	const report = await audit();
+	const silent = new Set(
+		report.rows.filter( row => row.lane === "ui" && row.reasons.includes( "no-literal-production-producer" ) )
+			.map( row => row.key.split( ":" )[1] )
+	);
+	for (
+		const handle of [
+			"SND_BUTTON_CLICK",
+			"SND_WINDOW_OPEN",
+			"SND_WINDOW_CLOSE",
+			"SND_ERROR",
+			"SND_POTION",
+			"SND_REPAIR",
+			"SND_REVIVE",
+			"SND_EQBREAK",
+			"SND_EQDANGER",
+			"SND_ELIXIR_USE",
+			"SND_ELIXIR_SUCCESS",
+			"SND_ELIXIR_FAILURE",
+			"SND_GACHA_MOVE",
+			"SND_GACHA_TURN",
+			"SND_GACHA_WIN",
+			"SND_GACHA_END",
+			"SND_HYAN",
+			"SND_COS_SUMMON"
+		]
+	) {
+		assert.equal( silent.has( handle ), false, handle + " is produced by the runtime" );
+	}
+	for ( const handle of [ "SND_WARNING", "SND_GACHA_CHANGE", "SND_ELIXIR_DESTROY" ] ) {
+		assert.equal( silent.has( handle ), true, handle + " stays honestly open" );
 	}
 });
 

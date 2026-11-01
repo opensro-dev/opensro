@@ -24,7 +24,7 @@ import (
 // never needs a stable id column.
 
 // PackLetterReceiveTime composes the packed receive-time dword the
-// client's sub_60c9b0 decode reads (record +0x3c): bits 0..5 the
+// client's CIFLetterSlot_SetRecord decode reads (record +0x3c): bits 0..5 the
 // two-digit year, 6..9 the month, 10..14 the day, 15..19 the hour,
 // 20..25 the minute. The year field is 6 bits, so years past 2063 alias
 // - exactly what the native field does; the client renders it %0.2d.
@@ -38,8 +38,9 @@ func PackLetterReceiveTime(t time.Time) uint32 {
 }
 
 // letterJobAliasLead is the job-alias lead character the client's own
-// composer blocks before the wire (sub_704730 @0x007047ea vs L"*"): a
-// frame carrying it bypassed the client gate and is refused.
+// composer blocks before the wire (client NetClient_Send7261
+// against L"*"): a frame carrying it bypassed the client gate and
+// is refused.
 const letterJobAliasLead = "*"
 
 // LetterSendOutcome is one handled 0x7261 request. AckPayload is the
@@ -157,7 +158,8 @@ func refusedLetterAnswer(reason string) LetterAnswerOutcome {
 // HandleLetterReadFetch applies one decoded 0x73F2 request: answer the
 // 0xB3F2 result-1 body for the index-th letter and flip the persisted
 // read flag when it was unread - the same 0-check the client's own
-// sub_8277d0 store performs on its side of the flip.
+// CharacterDependentData_StoreLetterBodyAndMarkRead store performs on
+// its side of the flip.
 func HandleLetterReadFetch(deps Dependencies, divisionID string, character *enterworld.Character, payload []byte) LetterAnswerOutcome {
 	if character == nil {
 		return refusedLetterAnswer("characterNotFound")

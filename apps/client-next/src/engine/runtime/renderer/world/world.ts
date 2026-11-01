@@ -603,10 +603,12 @@ export function createWorldRenderer(
 			// The ranges the eye cell selects, the previous cell's (a camera that
 			// steps back reuses them), and the ranges the group's draw holds.
 			candidates?: readonly TerrainRange[];
-			previousCandidates?: { cellX: number; cellZ: number; ranges: readonly TerrainRange[]; };
+			previousCandidates?: { cellX: number; cellZ: number; viewStamp: number; ranges: readonly TerrainRange[]; };
 			chosen?: readonly TerrainRange[];
 			cellX?: number;
 			cellZ?: number;
+			// The view stamp the choice was made for (world.ts's frustum cull).
+			viewStamp?: number;
 		}
 	>();
 	/*
@@ -780,6 +782,10 @@ export function createWorldRenderer(
 	}[] = [];
 	let textureMotions: { group: WorldGroup; motion: ReturnType<typeof createTextureMotion>; draw?: GeometryDraw; }[] =
 		[];
+	// The scene object the material clocks belong to. A device loss
+	// re-commits the identical object (invalidate re-pends it) and keeps
+	// the clocks' phase; any other scene build is a spawn.
+	let clockScene: WorldScene | null = null;
 	// Groups whose material modifier pulses TEXTUREFACTOR (texture-factor-pulse.ts).
 	let texturePulses: {
 		group: WorldGroup;
@@ -789,14 +795,26 @@ export function createWorldRenderer(
 	/*
 	================
 	resetAnimations
+
+	A scene build is a spawn: a native instance's material-modifier state
+	is born with the instance (identity texture matrix, timeline at zero,
+	atlas on its start frame), so a rebuilt scene starts every clock over.
+	Group ids are deterministic, and keying the clocks by id carried the
+	accumulated state across a leave-and-return - the Constantinople
+	fountain came back with the shear of the whole previous visit. Only
+	the identical scene object coming back keeps a clock: a device loss
+	re-pends it (invalidate passes retain), and its re-commit lands here
+	with the same reference. The retain path itself is the within-scene
+	one and rebuilds nothing.
 	================
 	*/
 	function resetAnimations( scene?: WorldScene, retainTextureMotion = false ) {
+		const sameScene = !retainTextureMotion && scene !== undefined && scene === clockScene;
 		if ( !retainTextureMotion ) {
 			const old = new Map( materialTimelines.map( r => [ r.group.id, r ] ) );
 			materialTimelines = scene?.groups.filter( g => g.material.colorTimeline ).map( group => ({
 				group,
-				clock: old.has( group.id ) &&
+				clock: sameScene && old.has( group.id ) &&
 						JSON.stringify( old.get( group.id )!.group.material.colorTimeline ) ===
 							JSON.stringify( group.material.colorTimeline ) ?
 					old.get( group.id )!.clock :
@@ -805,13 +823,14 @@ export function createWorldRenderer(
 			const pulses = new Map( texturePulses.map( r => [ r.group.id, r ] ) );
 			texturePulses = scene?.groups.filter( g => g.material.textureFactorPulse ).map( group => {
 				const kept = pulses.get( group.id );
-				const same = kept && JSON.stringify( kept.group.material.textureFactorPulse ) ===
+				const same = sameScene && kept && JSON.stringify( kept.group.material.textureFactorPulse ) ===
 						JSON.stringify( group.material.textureFactorPulse );
 				return {
 					group,
 					pulse: same ? kept.pulse : createTextureFactorPulse( group.material.textureFactorPulse! )
 				};
 			} ) ?? [];
+			clockScene = scene ?? null;
 		}
 		const previous = new Map( textureMotions.map( row => [ row.group.id, row ] ) );
 		if ( !retainTextureMotion ) {
@@ -821,7 +840,7 @@ export function createWorldRenderer(
 					atlas = group.material.uvAtlas;
 				return {
 					group,
-					motion: old &&
+					motion: sameScene && old &&
 							JSON.stringify( [ old.group.material.uvVelocity, old.group.material.uvAtlas ] ) ===
 								JSON.stringify( [ velocity, atlas ] ) ?
 						old.motion :
@@ -938,6 +957,9 @@ export function createWorldRenderer(
 	const retired: WorldScene[] = [];
 	let lastReflection = false;
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
+	// The terrain stamp: bumped whenever the view changed, so a terrain
+	// group's frustum-culled choice (native A2D1B0) keys on cell AND view.
+	let terrainViewStamp = 0;
 	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
 	/*
@@ -1928,6 +1950,7 @@ export function createWorldRenderer(
 			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
 				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
 				localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
+			if ( viewChanged ) terrainViewStamp++;
 			lastReflection = reflectWater;
 			lastEye = localCamera.eye;
 			const weatherImages = new Map<string, ImageDraw>();
@@ -2031,7 +2054,8 @@ export function createWorldRenderer(
 				// unchanged cell is decided from the table, without the group's objects.
 				if (
 					kind === WALK_TERRAIN && walk.cell[walked * 2] === eyeCellX &&
-					walk.cell[walked * 2 + 1] === eyeCellZ
+					walk.cell[walked * 2 + 1] === eyeCellZ &&
+					walk.terrainView[walked] === terrainViewStamp
 				) {
 					const indices = walk.count[walked]!;
 					if ( indices > 0 ) {
@@ -2046,15 +2070,22 @@ export function createWorldRenderer(
 				if ( kind === WALK_TERRAIN && group.ranges ) {
 					let cache = selections.get( group );
 					if ( !cache ) {
-						cache = { indices: new Uint32Array( group.geometry.indices.length ), seams: new Map() };
+						cache = {
+							indices: new Uint32Array( group.geometry.indices.length ),
+							seams: new Map(),
+							viewStamp: -1
+						};
 						selections.set( group, cache );
 					}
-					// The terrain a group submits depends on the eye cell alone: every range
-					// at the LOD its distance from the eye cell selects. Native culls cells
-					// against the frustum each frame (A2D1B0); the GPU clips the off-screen
-					// ones here instead, at the cost of a few thousand clipped triangles, so
-					// turning the camera changes nothing to choose or upload.
-					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ;
+					// The terrain a group submits depends on the eye cell and the view:
+					// every range at the LOD its distance from the eye cell selects, then
+					// the frustum culls the ranges whose sphere falls outside it - the
+					// main frustum or the water mirror's - as the native client does
+					// each frame (A2D1B0). A view change re-chooses and re-uploads; the
+					// native client re-chose every frame, so this stays the cheaper
+					// side of parity.
+					const cellChanged = cache.cellX !== eyeCellX || cache.cellZ !== eyeCellZ ||
+						cache.viewStamp !== terrainViewStamp;
 					if ( cache.chosen && !cellChanged ) {
 						if ( cache.indexCount ) {
 							visible.push( group );
@@ -2070,19 +2101,47 @@ export function createWorldRenderer(
 						// Retain only two cell-dependent plans; geometry retirement owns both.
 						const previous = cache.previousCandidates;
 						cache.previousCandidates = cache.candidates ?
-							{ cellX: cache.cellX!, cellZ: cache.cellZ!, ranges: cache.candidates } :
+							{
+								cellX: cache.cellX!,
+								cellZ: cache.cellZ!,
+								viewStamp: cache.viewStamp!,
+								ranges: cache.candidates
+							} :
 							undefined;
-						if ( previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ ) {
+						if (
+							previous && previous.cellX === eyeCellX && previous.cellZ === eyeCellZ &&
+							previous.viewStamp === terrainViewStamp
+						) {
 							cache.candidates = previous.ranges;
 						} else {
 							cache.candidates = group.ranges.filter( range => {
 								const dx = range.cell[0] - eyeCellX, dz = range.cell[1] - eyeCellZ;
-								return range.lod === selectTerrainLod( dx * dx + dz * dz );
+								if ( range.lod !== selectTerrainLod( dx * dx + dz * dz ) ) return false;
+								// The "full" detail never re-chooses on a view change
+								// (the recompute condition above), so its kept set must
+								// stay view-independent: every range at LOD 0 stays.
+								if ( current?.terrainDetail === "full" ) return true;
+								return visibleFrustumSphere(
+									frustum,
+									range.center[0],
+									range.center[1],
+									range.center[2],
+									range.radius
+								) ||
+									!!reflectionFrustum &&
+										visibleFrustumSphere(
+											reflectionFrustum,
+											range.center[0],
+											range.center[1],
+											range.center[2],
+											range.radius
+										);
 							} );
 						}
 					}
 					cache.cellX = eyeCellX;
 					cache.cellZ = eyeCellZ;
+					cache.viewStamp = terrainViewStamp;
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-candidates" );
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-indices" );
 					const chosen = cache.candidates, indicesDirty = chosen !== cache.chosen;
@@ -2159,6 +2218,7 @@ export function createWorldRenderer(
 					walk.count[walked] = count;
 					walk.cell[walked * 2] = eyeCellX;
 					walk.cell[walked * 2 + 1] = eyeCellZ;
+					walk.terrainView[walked] = terrainViewStamp;
 					if ( sampleDetails ) probe?.detailBegin?.( "terrain-index-upload" );
 					if ( indicesDirty ) {
 						if ( layers.member( group ) ) layers.select( group, cache.indices, count );

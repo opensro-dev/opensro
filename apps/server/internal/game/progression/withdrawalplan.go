@@ -4,8 +4,8 @@
 withdrawalplan.go - validate restoration against the complete learned graph
 
 The plan is pure: no inventory debit, rank change or refund escapes before
-the caller can commit all of them. Native 59F410/59F610 check every learned
-dependent; 410EA0/410F10 sum the authored costs of the ranks being removed.
+the caller can commit all of them. The native server checks every learned
+dependent and sums the authored costs of the ranks being removed.
 
 ===========================================================================
 */
@@ -182,8 +182,8 @@ func planMasteryWithdrawal(c *enterworld.Character, data enterworld.SkillDataSou
 ================
 priceResuscitation
 
-410C80/410DF0 round each removed rank's gold charge independently. 410EA0
-and 410F10 deduct the integer 20-percent loss after summing all SP, so small
+The server rounds each removed rank's gold charge independently. Its SP sums
+deduct the integer 20-percent loss after summing all SP, so small
 refunds round upward. Keep the double intermediate stored by the native code.
 ================
 */

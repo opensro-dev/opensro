@@ -13,7 +13,8 @@ ledger only shrinks:
   gate until `--update` lowers or removes the entry;
 - a ledger entry whose file no longer exists fails the gate.
 
-check_world_space.mjs (#1279) and check_plane_branches.mjs (#1646) share it.
+check_world_space.mjs (#1279), check_plane_branches.mjs (#1646) and
+check_server_citations.mjs (#1701) share it.
 
 ===========================================================================
 */

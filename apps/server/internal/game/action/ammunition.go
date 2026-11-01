@@ -39,7 +39,7 @@ func ammunitionTid4ForWeapon(weaponKind uint8) (int64, bool) {
 ================
 ammunitionSpent
 
-ammunitionSpent is SkillAction_Projectile's debit (585AF0 / 585FB6): a
+ammunitionSpent is the native projectile action's debit: a
 skill spends its cnsm count once per mc impact; a basic shot spends one.
 planEquippedAmmunition floors the stack at 0, so a last arrow still pays
 for a shot that asks for more.
@@ -103,7 +103,7 @@ func (rt *Runtime) planEquippedAmmunition(character *enterworld.Character, weapo
 ammunitionResult
 
 What a shot leaves in equipment socket 7: the stack count the socket holds
-afterwards, and the bag stack AutoReloadMagazine moved in, if any. With a
+afterwards, and the bag stack the native auto-reload moved in, if any. With a
 reload the move frame carries the count; the 0x3752 frame carries the 0
 that emptied the socket first (see ammunitionFrames).
 ================
@@ -117,7 +117,7 @@ type ammunitionResult struct {
 ================
 ammunitionReload
 
-One AutoReloadMagazine move: a whole bag stack into socket 7.
+One native auto-reload move: a whole bag stack into socket 7.
 ================
 */
 type ammunitionReload struct {
@@ -130,11 +130,10 @@ type ammunitionReload struct {
 applyAmmunitionDebit
 
 The already-validated, non-refusing tail of the attack commit. When the
-equipped stack runs out, CGObjPC_ConsumeAmmo (4EC290) calls
-CGObjPC_AutoReloadMagazine (4EC340): CGStorage_FindItemHasSameTID searches the
-bag from slot 13 for a stack of the same type id and runs an ordinary
-inventory move of the whole stack into socket 7. Without one, socket 7 stays
-empty and later shots are refused (0x300E).
+equipped stack runs out, the reference server reloads the magazine: it
+searches the bag from slot 13 for a stack of the same type id and runs an
+ordinary inventory move of the whole stack into socket 7. Without one, socket
+7 stays empty and later shots are refused (0x300E).
 ================
 */
 func applyAmmunitionDebit(character *enterworld.Character, debit ammunitionDebit) ammunitionResult {
@@ -187,14 +186,13 @@ func reloadMagazine(character *enterworld.Character, typeFlags uint16) *ammuniti
 ammunitionFrames
 
 The actor's frames for a shot's ammunition, in the native order.
-SkillAction_Projectile publishes the socket's new absolute count (packet
-class 0x3201, port 0x3752) and sends it BEFORE CGObjPC_ConsumeAmmo runs -
-at both debit sites (publish 585B6A, send 585BA0, call 585BA3; publish
-58600A, send 58603A, call 586041). ConsumeAmmo's AutoReloadMagazine
-(4EC340) then moves the bag stack into the emptied socket, so the move
-reaches a client whose socket 7 the zero count already cleared (client
-596510 clears the socket on a zero count). The move carries the new
-stack's quantity itself; natively no second count frame follows it.
+The reference server's projectile action publishes the socket's new absolute
+count (packet class 0x3201, port 0x3752) and sends it BEFORE the ammo debit
+runs, at both debit sites. The debit's auto-reload then moves the bag stack
+into the emptied socket, so the move reaches a client whose socket 7 the zero
+count already cleared (client 596510 clears the socket on a zero count). The
+move carries the new stack's quantity itself; natively no second count frame
+follows it.
 ================
 */
 func ammunitionFrames(result ammunitionResult) []wire.Frame {

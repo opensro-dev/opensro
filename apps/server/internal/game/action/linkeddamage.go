@@ -3,15 +3,15 @@
 
 linkeddamage.go - fence and Pain Quota links taking part of a member's hit
 
-CSkillManager_ProcessDamageEffects (5A0B80) runs on the recipient of every
+The reference server's skill manager runs its damage effects on the recipient of every
 hit before the hit lands. The Warrior's Physical and Magical Fence (lkdr,
-the recipient's +2C8 list, 5A0F01) move part of the hit to the Warrior;
-Pain Quota (lkdd, +20C, 5A11BF) keeps part and divides the rest among the
-recipient's party members within quotaMemberRange. Both run before dgmp
-(5A13FE). combat.FenceShare and combat.QuotaShare own the arithmetic.
+the recipient's +2C8 list) move part of the hit to the Warrior;
+Pain Quota (lkdd, +20C) keeps part and divides the rest among the
+recipient's party members within quotaMemberRange. Both run before dgmp.
+combat.FenceShare and combat.QuotaShare own the arithmetic.
 
 The moved shares register on a queued area context the attacker's manager
-drains (tagAreaEffectContext_Register), so each taker receives its share as
+drains (the reference server's area-effect queue), so each taker receives its share as
 the attacker's hit, published as a pulse result like returned damage.
 INFERENCE: a moved share does not run its taker's own links again; the
 queued context is not a hit outcome, as damagereturn.go reasons for dmgr.
@@ -30,7 +30,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// quotaMemberRange is 5A131C's B45C68: the distance within which a party
+// quotaMemberRange is the native constant: the distance within which a party
 // member takes a Pain Quota share.
 const quotaMemberRange = 1000.0
 
@@ -50,7 +50,7 @@ type linkedMove struct {
 ================
 planQuotaMembers
 
-5A1257..5A1337 before the victim's door (the members' positions are read
+Natively before the victim's door (the members' positions are read
 through their own doors): the victim's party members other than the
 victim, alive, within quotaMemberRange of the victim. Empty when the
 victim holds no Pain Quota link.
@@ -72,8 +72,14 @@ func (rt *Runtime) planQuotaMembers(division string, victim *enterworld.Characte
 		if gid == self {
 			continue
 		}
-		member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid))
-		if member == nil || !enterworld.CharacterAlive(member) {
+		// Only the member's life and live pose are weighed, so read
+		// the life fact as a value and seed the pose from the live
+		// record instead of detaching every member (#1943).
+		member := rt.findCharacterByGid(division, gid)
+		if member == nil {
+			continue
+		}
+		if alive, _, _ := rt.characterLifeState(division, member); !alive {
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(division, member.Name), member, now)
@@ -89,7 +95,7 @@ func (rt *Runtime) planQuotaMembers(division string, victim *enterworld.Characte
 ================
 shareLinkedDamageInDoor
 
-5A0F01 then 5A11BF for one impact inside the victim's door: every fence
+The fence step then the Pain Quota step for one impact inside the victim's door: every fence
 link moves its lanes to its source and counts the hit, then the Pain Quota
 link divides what is left among the planned members. Returns the hit the
 victim keeps; the moves are appended to out.
@@ -127,7 +133,7 @@ taker's own links off, and is published as a pulse result with the
 taker's own struck frames.
 ================
 */
-func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64) OpResult {
+func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64, doors characterDoors) OpResult {
 	var result OpResult
 	for _, move := range moves {
 		taker := rt.findCharacterByGid(division, move.gid)
@@ -144,7 +150,7 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 			continue
 		}
 		var struck playerStruck
-		if !rt.deps.Update(taker, "linked-damage-share", func() bool {
+		if !doors.update(taker, "linked-damage-share", func() bool {
 			if taker.DeletePending || !enterworld.CharacterAlive(taker) {
 				return false
 			}

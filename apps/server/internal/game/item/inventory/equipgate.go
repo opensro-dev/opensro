@@ -1,16 +1,17 @@
 package inventory
 
 // The retail clothes-vs-hard body-armor exclusivity - requirement bit 0x80 of
-// sub_789c60 / CSOItem_PassesEquipRequirementMask (wave-9 bug C), mirrored
-// server-side because that is where the equip authority lives (the client
-// pane-drag composer passes mask 0x40 only, exactly like native sub_594980;
-// retail surfaces this refusal on the full-mask use/equip paths and through
-// its own server authority).
+// the client's CSOItem_Query_789C60 (wave-9 bug C), mirrored server-side
+// because that is where the equip authority lives (the client pane-drag
+// composer passes mask 0x40 only, exactly like
+// CIFEquipment_DispatchItemDropAction; retail surfaces this refusal on the
+// full-mask use/equip paths and through its own server authority).
 //
-// Native semantics (asm 0x00789e60..0x00789f7b): equipping CLOTHES (TID3 1|9)
-// refuses while ANY worn record 0..5 holds body armor that is NOT clothes
-// (@0x00789f6f); equipping HARD body armor (TID3 2|3|10|11) refuses while ANY
-// worn record 0..5 holds clothes (@0x00789ecd); an item outside the body-armor
+// Client semantics (CSOItem_Query_789C60, asm 0x00789e60..0x00789f7b):
+// equipping CLOTHES (TID3 1|9) refuses while ANY worn record 0..5 holds
+// body armor that is NOT clothes (client asm @0x00789f6f); equipping HARD
+// body armor (TID3 2|3|10|11) refuses while ANY worn record 0..5 holds
+// clothes (client asm @0x00789ecd); an item outside the body-armor
 // family never scans. Light+heavy mixes are LEGAL - the exclusivity is
 // clothes vs non-clothes, not set identity. Native walks all six sockets
 // unconditionally, so the scan deliberately includes the socket being
@@ -18,9 +19,11 @@ package inventory
 // switching families requires unequipping the old family first, exactly like
 // retail.
 
-// IsFortressWeaponTypeFlags is the native sub_5504c0 predicate: the TID
-// word (3,1,6,16) - the fortress siege hammer/axe family, the ONLY items
-// the fortress-guild equip gate (sub_789c60 bit 0x400) ever tests.
+// IsFortressWeaponTypeFlags is the client's
+// TypeFlags_IsTid_3_1_6_16_5504c0 predicate: the TID word (3,1,6,16) -
+// the fortress siege hammer/axe family, the ONLY items the
+// fortress-guild equip gate (client CSOItem_Query_789C60 bit 0x400)
+// ever tests.
 func IsFortressWeaponTypeFlags(typeFlags uint16) bool {
 	return isEquipmentClassWord(typeFlags) && typeFlagsTid3(typeFlags) == 6 && typeFlagsTid4(typeFlags) == 16
 }
@@ -28,14 +31,14 @@ func IsFortressWeaponTypeFlags(typeFlags uint16) bool {
 // IsBodyArmorFamilyTypeFlags reports whether the TypeID word is in the
 // six-value body-armor family: equipment-class word AND TID3 in
 // {1,2,3,9,10,11} (CH garment/light/heavy + the EU triple).
-// Native sub_593270 (folder ItemTid_IsWeaponTid3Set - a known misnomer).
+// The client's ItemTid_IsBodyArmorTid3 tests the same word.
 func IsBodyArmorFamilyTypeFlags(typeFlags uint16) bool {
 	return isEquipmentClassWord(typeFlags) && isBodyArmorTid3(typeFlagsTid3(typeFlags))
 }
 
 // IsClothesGarmentTypeFlags reports whether the TypeID word is the CH/EU
 // CLOTHES garment class: the same equipment-class masks with TID3 in {1, 9}.
-// Native sub_7895b0 / ItemTid_IsClothesGarmentTid3.
+// client ItemTid_IsClothesGarmentTid3.
 func IsClothesGarmentTypeFlags(typeFlags uint16) bool {
 	if !isEquipmentClassWord(typeFlags) {
 		return false

@@ -32,10 +32,10 @@ func TestBuildLoginStatBlockPlacesStatsOnTheAppliedWords(t *testing.T) {
 		t.Fatalf("block = %d bytes, want 0x%02X", len(payload), wire.BaseStatsSize)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x20:]); got != 77 {
-		t.Fatalf("STR at +0x20 = %d, want 77 (the word sub_8629f0 applies)", got)
+		t.Fatalf("STR at +0x20 = %d, want 77 (the word client 8629F0 applies)", got)
 	}
 	if got := binary.LittleEndian.Uint16(payload[0x22:]); got != 88 {
-		t.Fatalf("INT at +0x22 = %d, want 88 (the word sub_862a00 applies)", got)
+		t.Fatalf("INT at +0x22 = %d, want 88 (the word client 862A00 applies)", got)
 	}
 	if got := binary.LittleEndian.Uint32(payload[0x00:]); got != 10 {
 		t.Fatalf("physical attack minimum at +0x00 = %d, want the derived display field", got)
@@ -95,7 +95,7 @@ func TestBuildLoginStatBlockClampsToTheWord(t *testing.T) {
 TestBuildLoginStatBlockKeepsTheKeeperWords
 
 A keeper projection's STR and INT already carry every effect (params 1 and
-2, CGObjPC_SendParameterStats 4EBE30). The block keeps them instead of
+2, the server's parameter-stats send). The block keeps them instead of
 the stored attributes, so a level-up or equip refresh does not drop a
 buff's STR/INT from the client.
 ================

@@ -43,6 +43,7 @@ import { createRenderer } from "./renderer/renderer";
 import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import { ARROW_TURN_WORDS_PER_MS } from "@/engine/foundation/gameplay/direction-movement";
+import type { FreeCameraKeys } from "@/engine/foundation/rendering/free-camera";
 import { createLocalMover, type LocalMoverFrame, type LocalMoverWorld } from "./movement/local-mover";
 import { poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { approachGoal } from "@/engine/foundation/gameplay/approach-goal";
@@ -138,7 +139,10 @@ export function startRuntime(
 		const audio = own(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
-		const input = createInput( event => arrowInput( event ) );
+		const input = createInput( event => {
+			arrowInput( event );
+			freeCameraKey( event );
+		} );
 		const frameWork = createFrameWork();
 		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
@@ -324,6 +328,7 @@ export function startRuntime(
 				apiBase,
 				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
+				assets: () => assets.snapshot?.(),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
@@ -384,14 +389,20 @@ export function startRuntime(
 				value => platform.saveQuickslotOptions( value ),
 				{
 					bugReport,
+					installIconAtlas: mapping => renderer.setUiAtlas( mapping ),
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
-					setFreeCamera: free => world.setFreeCamera( free ),
+					setFreeCamera: free => {
+						freeCameraOn = free;
+						world.setFreeCamera( free );
+					},
+					setFreeCameraSpeed: speed => world.setFreeCameraSpeed( speed ),
 					setCameraCollision: collision => world.setCameraCollision( collision ),
 					setCameraWaypoints: keyframes => world.setCameraWaypoints( keyframes ),
 					setCameraPlaying: playing => world.setCameraPlaying( playing ),
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
+					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
@@ -422,6 +433,54 @@ export function startRuntime(
 			ArrowRight: "right"
 		};
 		const arrowsHeld = new Set<"up" | "left" | "right">();
+		// The interface's free-camera byte (+0x3CE) as the console last wrote
+		// it, and the keys the free-fly arm reads (free-camera.ts, #1787).
+		let freeCameraOn = false;
+		const freeCameraHeld = new Set<string>();
+		/*
+		================
+		freeCameraKey
+
+		Tracks the held keys by code; a focus release lets every key go.
+		================
+		*/
+		function freeCameraKey( event: RawInput ) {
+			if ( event.kind === "release" ) {
+				freeCameraHeld.clear();
+				return;
+			}
+			if ( event.kind !== "key" ) return;
+			if ( event.down ) freeCameraHeld.add( event.code );
+			else freeCameraHeld.delete( event.code );
+		}
+		/*
+		================
+		freeCameraKeys
+
+		The free-fly arm's keys for this frame (690146 reads them with
+		CCursorManager_IsKeyDown), or null while a text field has focus:
+		native returns before the keys when the chat edit holds focus. The
+		arm only runs while the byte stands, so nothing is read otherwise.
+		================
+		*/
+		function freeCameraKeys(): FreeCameraKeys | null {
+			if ( !freeCameraOn ) return null;
+			const focus = document.activeElement;
+			if ( focus instanceof HTMLInputElement || focus instanceof HTMLTextAreaElement ) return null;
+			const held = ( code: string ) => freeCameraHeld.has( code );
+			return {
+				forward: held( "KeyW" ),
+				back: held( "KeyS" ),
+				strafeRight: held( "KeyD" ),
+				strafeLeft: held( "KeyA" ),
+				turnLeft: held( "ArrowLeft" ),
+				turnRight: held( "ArrowRight" ),
+				pitchUp: held( "ArrowUp" ),
+				pitchDown: held( "ArrowDown" ),
+				rollPositive: held( "KeyQ" ),
+				rollNegative: held( "KeyE" )
+			};
+		}
 		/*
 		================
 		arrowInput
@@ -468,6 +527,10 @@ export function startRuntime(
 				if ( arrowsHeld.has( key ) ) release( key );
 				return;
 			}
+			// Game_OnKeyDown starts no arrow walk or turn while the free-camera
+			// byte stands: the arrows fly the camera instead. A walk already
+			// held still ends on its release.
+			if ( freeCameraOn ) return;
 			const game = presentation.gameplay();
 			if ( arrowsHeld.has( key ) || frontend.snapshot().phase !== "world" || sessionState?.phase !== "world" ) {
 				return;
@@ -1087,6 +1150,7 @@ export function startRuntime(
 						acknowledged: movement.acknowledgedMove
 					} );
 				}
+				world.setFreeCameraKeys( freeCameraKeys() );
 				world.step(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
@@ -1398,7 +1462,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 ================
 startViewerRuntime
 
-Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+Port-only, not native (docs/guides/VIEWER.md): the embeddable 3D viewer page. It
 creates only the owners one drawn model needs (assets, renderer and the
 character presentation, as startRuntime builds them) and drives
 viewer/viewer.ts by animation frames only while it asks for them: an idle

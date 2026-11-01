@@ -27,6 +27,10 @@ its OK (CIFStall_OnTitleDialogResult 5A2890) sends 0x7049 and then the
 greeting edit: the one last typed (CICUser+7E4), else the formatted
 UIIT_STT_STALL_DEFAULT_OWNERMSG.
 
+Port-only, not native: SRO_RAISED_GOLD_CAPS replaces each offer's u32
+price field (in the edit request, the offers, and the sold notice) with a
+u64, so a 10,000,000,000 price fits. Absent, the fields stay native u32.
+
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
@@ -170,6 +174,9 @@ export interface StallContext {
 	readonly localGid: number;
 	readonly refs: ReadonlyMap<number, number>;
 	readonly objRefs?: ReadonlyMap<number, number>;
+	// Port-only, not native: SRO_RAISED_GOLD_CAPS writes the offer price as
+	// u64, so a ten-billion price fits. Absent is the native u32 field.
+	readonly widePrice?: boolean;
 }
 
 /*
@@ -191,7 +198,8 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 	const u8 = () => p[take( 1 )]!,
 		u16 = () => v.getUint16( take( 2 ), true ),
 		u32 = () => v.getUint32( take( 4 ), true ),
-		u64 = () => v.getBigUint64( take( 8 ), true );
+		u64 = () => v.getBigUint64( take( 8 ), true ),
+		u64Price = () => Number( u64() );
 	const wstr = () => {
 		const n = u16(), at = take( n * 2 );
 		return new TextDecoder( "utf-16le" ).decode( p.subarray( at, at + n * 2 ) );
@@ -207,10 +215,10 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 		return decoded.item;
 	};
 	const offers = () => {
-		const out: StallOffer[] = [];
+		const out: StallOffer[] = [], price = ctx.widePrice ? u64Price : u32;
 		for ( let slot = u8(); slot !== OFFERS_END; slot = u8() ) {
-			const body = item(), bagSlot = u8(), quantity = u16(), price = u32();
-			out.push( { slot, item: { ...body, quantity }, bagSlot, quantity, price } );
+			const body = item(), bagSlot = u8(), quantity = u16(), unitPrice = price();
+			out.push( { slot, item: { ...body, quantity }, bagSlot, quantity, price: unitPrice } );
 		}
 		return out;
 	};
@@ -290,7 +298,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			const kind = u8();
 			let next = state, notice: StallOutcome["notice"];
 			if ( kind === EDIT_MODIFY ) {
-				const slot = u8(), quantity = u16(), price = u32(), code = u8();
+				const slot = u8(), quantity = u16(), price = ctx.widePrice ? u64Price() : u32(), code = u8();
 				next = {
 					...state,
 					offers: state.offers.map( row =>
@@ -457,7 +465,8 @@ window), and the state it leaves.
 */
 export function stallRequest(
 	state: StallState,
-	command: StallCommand
+	command: StallCommand,
+	widePrice = false
 ): { readonly frames: readonly WireFrame[]; readonly state: StallState; } {
 	const frames: WireFrame[] = [];
 	let bytes: number[] = [];
@@ -469,6 +478,9 @@ export function stallRequest(
 	const u64 = ( value: bigint ) => {
 		for ( let i = 0n; i < 8n; i++ ) bytes.push( Number( value >> i * 8n & 0xffn ) );
 	};
+	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the offer price
+	// field to u64 so a ten-billion price survives the wire.
+	const price = ( value: number ) => widePrice ? u64( BigInt( value ) ) : u32( value );
 	const wstr = ( value: string ) => {
 		if ( value.length === 0 || value.length > 64 ) throw Error( "Stall text length" );
 		u16( value.length );
@@ -515,7 +527,7 @@ export function stallRequest(
 			u8( command.slot );
 			u8( command.bagSlot );
 			u16( command.quantity );
-			u32( command.price );
+			price( command.price );
 			u32( 0 );
 			u8( 0 );
 			return send( 0x71a8 );
@@ -524,7 +536,7 @@ export function stallRequest(
 			u8( EDIT_MODIFY );
 			u8( command.slot );
 			u16( command.quantity );
-			u32( command.price );
+			price( command.price );
 			u8( 0 );
 			return send( 0x71a8 );
 		case "stall-remove":

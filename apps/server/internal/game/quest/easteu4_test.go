@@ -3,7 +3,7 @@
 
 easteu4_test.go - QNO_EU_EASTEU_4's story page before the offer
 
-8AB930 is the base talk behind one page: the Sunset Witch asks _01 with
+The server's base talk sits behind one page: the Sunset Witch asks _01 with
 the reply _02, then offers the quest with the 0x130 word.
 
 ===========================================================================

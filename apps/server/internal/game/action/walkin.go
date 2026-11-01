@@ -6,28 +6,28 @@ walkin.go - walking into a gate's event zone teleports, as natively
 Some gates are walked into rather than clicked: the Donwhang cave's mouth
 and its way out. The client sends nothing; the server notices the player
 entering the zone (movement.WaterValidator.WalkInZoneAt, the region
-manager's event-zone callback in v1.188: CMap_Load 5304E0 registers
-5301B0 -> 418110 -> the PC's vtable +0x4D4). The PC's handler,
-4EF480 (labelled CGObjPC_HandleNpcTeleportCommand in the database), then
+manager's event-zone callback in v1.188: the map load registers an
+event-zone entry callback that reaches the PC's vtable +0x4D4). The PC's
+handler (mislabelled as an NPC teleport command in the database) then
 runs, in order:
 
  1. only a zone of type TELEPORT moves the PC;
- 2. a PC still in teleport mode and standing (4DDC90, not 4EF380) is told
+ 2. a PC still in teleport mode and standing is told
     its last teleport is still working (v1.150 0x3058 kind 3) and stays.
     Natively a PC a skill is displacing (PC+0xC04, set by
-    SkillAction_ApplyPositionEffect 5862E0, cleared by 593540) skips this
+    the native position effect, cleared at the skill engage) skips this
     notice; the port commits a displacement in one step, never leaving a
     mover mid-push in a zone, so that case is left out;
- 3. a riding PC (PC+0x1D18), or one with an active vehicle (4FD7F0, the
+ 3. a riding PC (PC+0x1D18), or one with an active vehicle (the
     summoned cargo transport the caravan code reads), is told a COS
     cannot enter (0x3058 kind 4) and stays;
  4. the zone's teleport must have exactly one link (a job server,
     +0x42404 == 1, exempts GATE_TEMPLE_THIEF_GATE; the temple is not in
     v1.150, so that case is trimmed);
- 5. the link's conditions (CRefTeleportLink_CheckState 513A70: level,
+ 5. the link's conditions (the native link check: level,
     transport) refuse with the teleport answer's error byte;
- 6. otherwise the PC teleports there (CGObjChar_SetTeleportModeAndSchedule
-    Restore), free of charge and with no NPC in reach.
+ 6. otherwise the PC teleports there (the native teleport mode and
+    restore), free of charge and with no NPC in reach.
 
 v1.188 sends 2 and 3's notice as 0x300C 0x0C03 / 0x0C04; v1.150's event
 notice 0x3058 maps its kind to category 0x11, where 3 is
@@ -81,7 +81,7 @@ loadWalkIns
 
 The walk-in gates: each TELEPORT event zone by codename, with the one link
 of the teleport it names. A TELEPORT zone naming a missing teleport, or one
-with other than one link, is a data error, as 4EF480 minidumps on it.
+with other than one link, is a data error, as the native handler minidumps on it.
 ================
 */
 func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, error) {
@@ -117,7 +117,7 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 		if len(links) != 1 {
 			return nil, fmt.Errorf("event zone %s teleport %s has %d links, want 1", zone, teleport, len(links))
 		}
-		// 4EF480 never charges: the walk-in carries no fee.
+		// The native handler never charges: the walk-in carries no fee.
 		link := links[0]
 		link.fee = 0
 		walkIns[zone] = link
@@ -125,10 +125,10 @@ func loadWalkIns(dir string, catalog *portalCatalog) (map[string]portalLink, err
 	return walkIns, nil
 }
 
-// Floor 6 center -> North wing (BeakYung) portal trigger (SR_GameServer
-// CGameWorld_Chins_Floor6::InitTriggers 0x005ef9b0 -> CAction_OperatePortal
-// 0x005f0d40 / 0x005f0ed9): jinsi_floor6_c01_05.bms carries GATE_JINSI_06x01_06
-// in its event-name table with cell navFlags == 0, and CAction_OperatePortal
+// Floor 6 center -> North wing (BeakYung) portal trigger (the reference
+// server's Floor 6 trigger setup and its portal action):
+// jinsi_floor6_c01_05.bms carries GATE_JINSI_06x01_06
+// in its event-name table with cell navFlags == 0, and the portal action
 // tests an 8m (80 game-unit) radius around (-131, 1890, 2535) in region 0x8002.
 const (
 	tombFloor6RegionID      uint16  = 0x8002
@@ -177,7 +177,7 @@ func walkInNotice(kind uint8) OpResult {
 advanceWalkIns
 
 The tick's walk-in pass: each admitted player whose live position has
-entered a walk-in zone since the last pass runs 4EF480. Entering is the
+entered a walk-in zone since the last pass runs the native handler. Entering is the
 edge: standing on in a zone (or arriving into one) does nothing more,
 as the region manager reports a cell entry, not a stay.
 ================
@@ -282,7 +282,7 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 ================
 enterWalkIn
 
-4EF480 after the TELEPORT test, for a player that just entered the zone
+The native handler after the TELEPORT test, for a player that just entered the zone
 of link's source. Reports whether the player was moved. The caller holds
 the division lock.
 ================

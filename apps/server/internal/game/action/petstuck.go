@@ -3,17 +3,17 @@
 
 petstuck.go - a pet whose moves keep stalling warps back to its owner
 
-Native counts every stopped move of an AI actor (CGObjChar_StopMove 4A9430
-raises AI event 8; CAIState_OnMoveStopped_CountStuck 559010 counts a stop
+Native counts every stopped move of an AI actor (a stopped move
+raises AI event 8; the AI state counts a stop
 within 20 of the move's sequence origin). From the tenth such stop it raises
-the stuck event (CAIState_DispatchExtendedEvent 5597B0, event 0x28), which
-CAIState_OnStuck_RelocateToOwner (5599C0) answers: an attack or pickup pet
-(CGObj_IsAttackOrPickupCOS 4838C0 -> 44B460) or a fellow COS
-(CGObj_IsFellowCOS 483980) is relocated onto its leader (tactics +0x14C,
-541110) and enters state 1; any other actor (a horse, a transport) drops
-its order (53FD40) and enters state 1 where it stands. BATTLE overrides that handler (55A250). Every state change
-clears the count (AI_CTactics_ChangeState 53FF30), and FOLLOW changes state
-whenever the pet reaches its formation (55A960 -> 5599A0), so only a pet
+the stuck event (extended event 0x28), which
+the stuck handler answers: an attack or pickup pet
+or a fellow COS
+is relocated onto its leader (tactics +0x14C)
+and enters state 1; any other actor (a horse, a transport) drops
+its order and enters state 1 where it stands. BATTLE overrides that handler. Every state change
+clears the count, and FOLLOW changes state
+whenever the pet reaches its formation, so only a pet
 that never gets there - walled in - accumulates the ten stops.
 
 The follower counts (simulation.PetFollower); this file answers the event.
@@ -31,16 +31,16 @@ import (
 )
 
 // petStuckTraceSelector is the RefTactics +79 byte BATTLE's override
-// (55A250) reads. INFERENCE: COS tactics rows carry no warp-to-target trace
-// mode, so a pet in BATTLE keeps fighting, as 55A250 does for selector 0.
+// reads. INFERENCE: COS tactics rows carry no warp-to-target trace
+// mode, so a pet in BATTLE keeps fighting, as the native override does for selector 0.
 const petStuckTraceSelector = 0
 
 /*
 ================
 answerPetStuck
 
-The stuck event, if the follower raised one this step, answered as 5599C0
-(or BATTLE's 55A250) answers it.
+The stuck event, if the follower raised one this step, answered as the
+native stuck handler (or BATTLE's override) answers it.
 ================
 */
 func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *enterworld.Character, pet *enterworld.CharacterCOS, tid uint16, nowMs int64) []simulation.Frame {
@@ -51,8 +51,8 @@ func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *
 	case monster.StuckWarpToControllerAndIdle:
 		return rt.relocateStuckPet(key, state, snapshot, pet, nowMs)
 	case monster.StuckDetachAndIdle:
-		// 5599C0's other branch: CAITactics_ReleaseCommand (53FD40) drops the
-		// order and the handler enters state 1 (ChangeState 53FF30), both
+		// The native stuck handler's other branch: the tactics release drops the
+		// order and the handler enters state 1 (a state change), both
 		// clearing the count; the next step issues a fresh order.
 		frames := state.follower.Stop(nowMs)
 		state.follower.ResetStuck()
@@ -65,9 +65,9 @@ func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *
 ================
 relocateStuckPet
 
-5599C0: relocate onto the leader (541110) and enter state 1. Leaving the
+Natively: relocate onto the leader and enter state 1. Leaving the
 pet's state ends a pending pickup and the formation reservation, as any
-state change does. 541110 refuses outdoor -> dungeon; the pet then only
+state change does. The native relocation refuses outdoor -> dungeon; the pet then only
 drops its order.
 ================
 */
@@ -114,7 +114,7 @@ func (rt *Runtime) publishPetRelocation(key petOwnerKey, state *petSession, pet 
 ================
 resetPetStuck
 
-AI_CTactics_ChangeState (53FF30): entering or leaving BATTLE or PICKITEM
+A native state change: entering or leaving BATTLE or PICKITEM
 clears the pet's stuck count.
 ================
 */

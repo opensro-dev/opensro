@@ -4,7 +4,7 @@
 wall_retirement_test.go - a standing Fire Wall releases its movement lock
 
 BR-261007-2003-4B1D showed a caster clicking the ground inside Fire Wall.
-Native 4EF880 -> 4AAB40 refuses those moves while the wall stands. Each
+Natively the motion-change lock refuses those moves while the wall stands. Each
 retirement path must also publish the token teardown that frees the client.
 
 ===========================================================================

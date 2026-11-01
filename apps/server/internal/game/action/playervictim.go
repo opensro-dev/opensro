@@ -3,9 +3,9 @@
 
 playervictim.go - what a landed hit does to a player, whoever struck it
 
-SkillCombat_CalculateHitOutcome resolves each impact against the victim
-(the wall split of 58EC6C, the status rolls of 590680) and
-SkillCombat_ApplyResultRecipients (593800) commits them: the HP debit,
+The reference server's hit outcome resolves each impact against the victim
+(the wall split, the status rolls) and
+its result-recipient pass commits them: the HP debit,
 the damage-to-MP redirect (dgmp), the standing wall's drain, the armour and shield wear of a struck
 victim, then either the death (pkdeath.go) or the battle state, the
 statuses and the skc damage cancellation. A monster's hit and a player's
@@ -76,7 +76,7 @@ type playerStruck struct {
 	fatal, struck bool
 	warCombat     domain.GuildWarCombat
 	killer        *enterworld.Character
-	// mpSpent is what dgmp (5A13FE) took from MP; mp is the MP it left.
+	// mpSpent is what dgmp took from MP; mp is the MP it left.
 	mpSpent, mp      uint32
 	deathEffects     []wire.Frame
 	deathProgression []wire.Frame
@@ -94,9 +94,9 @@ type playerStruck struct {
 ================
 planPlayerStrike
 
-58EC6C and 590680 per impact against a player defender: the hit behind
+The reference server's hit outcome per impact against a player defender: the hit behind
 the victim's standing wall (resolve), then the attacker's status roll
-(roll), which a blocked or ck-killed impact skips (5905FB). False when an
+(roll), which a blocked or ck-killed impact skips. False when an
 impact cannot be resolved, or lands nothing on an unwalled victim; a
 status cast's record is a landed zero-damage hit.
 ================
@@ -149,9 +149,9 @@ func (rt *Runtime) planPlayerStrike(s *playerStrike,
 ================
 strikePlayerInDoor
 
-593800's recipient side inside the victim's door. A record a standing wall
-absorbs whole skips the recipient branch (593AE8); a struck victim's
-landed hits wear its armour and its blocks its shield (593C9F/593CB1).
+The reference server's recipient side inside the victim's door. A record a standing wall
+absorbs whole skips the recipient branch; a struck victim's
+landed hits wear its armour and its blocks its shield.
 ================
 */
 func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
@@ -168,7 +168,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	redirect := rt.effects.DamageToMPPercent(s.division, c.Name)
 	for _, formula := range s.formulas {
 		hit.Magical = hit.Magical || formula.MagicalDamage != 0
-		// 5A0F01 and 5A11BF run before dgmp (5A13FE): fences and Pain Quota
+		// The reference server runs these before dgmp: fences and Pain Quota
 		// take their shares off the hit first.
 		if !s.linkedShare && !formula.Slain {
 			formula = rt.shareLinkedDamageInDoor(s, formula, &out)
@@ -177,7 +177,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		if !formula.Slain && s.killer.monster != nil && rt.petShieldRecipientAllowed(c) {
 			formula.Damage = rt.absorbPetShield(s.division, enterworld.ObjectIDForCharacter(c), formula.Damage, s.now)
 		}
-		// 58F72F runs dgmp per impact after the wall split, whoever struck;
+		// The reference server runs dgmp per impact after the wall split, whoever struck;
 		// a ck kill takes the whole HP and redirects nothing.
 		if redirect != 0 && !formula.Slain {
 			var spent uint32
@@ -191,13 +191,13 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		out.before = append(out.before, uint32(remaining))
 		debit := int64(vitals.HitDebit(uint32(remaining), formula.Damage))
 		if formula.Slain {
-			debit = remaining // 58F778: the ck kill marks the target dead
+			debit = remaining // the ck kill marks the target dead
 		}
 		remaining -= debit
 		out.fatal = remaining == 0
 		out.impacts = append(out.impacts, wire.SkillCastTargetImpact{
 			ResultFlags: formula.ResultFlags,
-			// Native 585664 serializes the full hit independently of HP.
+			// The reference server serializes the full hit independently of HP.
 			Damage:  formula.Damage,
 			Fatal:   out.fatal,
 			Blocked: formula.Blocked,
@@ -222,7 +222,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	if out.struck {
 		var tally wearTally
 		for _, impact := range out.impacts {
-			// 58F784 jumps past the landed count (58F79F): a ck kill wears nothing.
+			// The reference server jumps past the landed count: a ck kill wears nothing.
 			if !impact.Slain {
 				tally.note(impact.Blocked, false)
 			}
@@ -259,7 +259,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		out.battle = rt.enterBattleState(s.division, c, s.now)
 		rt.endJobActivation(s.division, c)
 		out.owner.applyHit(hit, s.records)
-		// 58F72F: a landed hit tests the victim's skc damage masks.
+		// Reference server: a landed hit tests the victim's skc damage masks.
 		rt.cancelEffectsOnDamage(s.division, c, s.skill.Attack.Flags, s.now)
 	}
 	return out
@@ -319,7 +319,7 @@ func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Charac
 		dead := life.publishDead()
 		public = append(public, wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
 	}
-	// Entering battle (4E1DF0, from ProcessNormalHit) follows the hit.
+	// Entering battle (from the normal hit) follows the hit.
 	if struck.struck && !struck.fatal {
 		public = append(public, rt.offensiveResultRecipient(division, victim, now)...)
 	}
@@ -334,7 +334,7 @@ planStrikeDisplacement
 
 The strike's displacement roll on its first impact the victim survives
 (no displacement lands on a corpse, and a blocked or ck-killed impact
-rolls none, 5905FB).
+rolls none).
 ================
 */
 func (rt *Runtime) planStrikeDisplacement(s *playerStrike, actor criticalActor, from, at simulation.Spawn) error {

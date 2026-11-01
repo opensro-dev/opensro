@@ -18,10 +18,11 @@ import (
 ================
 TestGuildLevelUpChargesTheMasterAndTheGuild
 
-Level 2 to 3 costs 50,400 GP and 9,000,000 gold (client 0xBE4C58 /
-0xBE4C6C, v1.188 0xADE910 / 0xADE8EC); the gold shortfall answers before
-the GP (5C6240), a member is not the master, and the result survives a
-reopen.
+Level 2 to 3 costs 50,400 GP and 9,000,000 gold (the client's
+CIFGuildLevelUp_OnCreate price tables; the v1.188 server's level table
+carries the same prices); the gold shortfall answers before the GP
+(the server's level-up check order), a member is not the master, and
+the result survives a reopen.
 ================
 */
 func TestGuildLevelUpChargesTheMasterAndTheGuild(t *testing.T) {
@@ -72,7 +73,7 @@ func TestGuildLevelUpChargesTheMasterAndTheGuild(t *testing.T) {
 ================
 TestGuildRosterStopsAtTheLevelCapacity
 
-A level 1 guild holds 15 members (client 0xBE4490).
+A level 1 guild holds 15 members (the client's guild capacity table).
 ================
 */
 func TestGuildRosterStopsAtTheLevelCapacity(t *testing.T) {

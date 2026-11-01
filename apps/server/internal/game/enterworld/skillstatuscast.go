@@ -6,7 +6,7 @@ skillstatuscast.go - complete damage-free hostile status programs
 The Wizard's Root, Mesh Root and Lightning Shock, the Warrior's Axis
 Quiver, the Rogue's Poison Field and the Chinese Frost Nova carry no att
 block: the cast is one
-successful zero-damage record whose only consequences are the 590680
+successful zero-damage record whose only consequences are the server's
 status roll and the authored aggression. Admission is by executable
 shape, never by skill name.
 
@@ -19,8 +19,8 @@ import "opensro.online/server/internal/game/abnormal"
 
 const (
 	// tagStatusThreat is tant, authored on every damage-free status cast.
-	// 58914D binds +3C8; 590402..590463 applies its percentage, then
-	// 5904CF adds its flat word. It takes precedence over tnt2 (+3CC).
+	// The parameter index binds +3C8; the server applies its percentage, then
+	// adds its flat word. It takes precedence over tnt2 (+3CC).
 	// Shipped status casts author zero percent, leaving only the flat word.
 	tagStatusThreat = 0x74616e74
 
@@ -32,7 +32,7 @@ const (
 
 	// statusCastContinueColumn is ContinueBasicAttack (skilldata column 19).
 	// Axis Quiver authors 1; the combat intent resumes the basic attack
-	// after the skill generically (basicattack.go, 4AED19 accepts exactly 1),
+	// after the skill generically (basicattack.go; the server accepts exactly 1),
 	// so the flag needs nothing from this owner. Any byte is admissible here.
 	statusCastContinueColumn = continueBasicAttackColumn
 )
@@ -41,18 +41,18 @@ const (
 ================
 compileSkillStatusCast
 
-58E5F0 emits a successful zero-damage record for a program without att,
-as it does for taunts. Admit a row when its complete program is status
+The server's hit stage emits a successful zero-damage record for a program
+without att, as it does for taunts. Admit a row when its complete program is status
 blocks plus aggression, caster getv modifiers, reqi equipment pairs and
 an optional primary-centered area. Aggression is tant or tnt2 (Axis
-Quiver); with both, tant wins (5903F6). 58E5F0 admits tnt2 without att and
+Quiver); with both, tant wins. The server admits tnt2 without att and
 emits a successful zero-damage record (compileSkillTaunt). reqi pairs are stored
-on row.Reqi by noteParameterIndex and enforced before dispatch by 58D480
+on row.Reqi by noteParameterIndex and enforced before dispatch
 (action.skillEquipmentRefusal, 0x300D); Poison Field authors two of them,
 so reqi, like getv, may repeat. A targeted row names an enemy (Enemy_M or
 Enemy_P, column 29): Mana Drain and Mana Drought author Enemy_P alone and
-apply Combustion (csmp) to players. Skill_ValidateTargetPermissions
-(58D7A0) judges player targets only, so the server refuses nothing for a
+apply Combustion (csmp) to players. The server's target-permission check
+judges player targets only, so the server refuses nothing for a
 monster. A targeted area selects around its primary (efr shape 2) with
 select 24 or, for Mana Drought, 8 (players). An untargeted row selects
 its hostile victims around the caster (efr shape 1, select 24) and leaves
@@ -67,7 +67,8 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 		return SkillThreat{}, false
 	}
 	// Frost Nova authors no action duration: the release ends the action
-	// at once (the close is queued at release + 0). Nothing in 58E5F0 reads
+	// at once (the close is queued at release + 0). Nothing in the server's
+	// hit stage reads
 	// column 13.
 	// No projectile, no ground target, no secondary-target columns.
 	for _, column := range []int{15, 16, 17, 20, 24, 25, 26, 27, 28, 31, 32, 33, 56} {
@@ -98,7 +99,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 		}
 		switch op.Tag {
 		case tagStatusThreat:
-			// 5903F6: a present tant takes the record's aggression and the
+			// A present tant takes the record's aggression and the
 			// tnt2 block is skipped, in whichever order the row authors them.
 			threat.Present, threat.Flat, threat.Percent = true, op.Arguments[0], op.Arguments[1]
 			statusThreat = true
@@ -106,7 +107,7 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			if !statusThreat {
 				threat.Present, threat.Flat, threat.Percent = true, op.Arguments[0], op.Arguments[1]
 			}
-		case tagReqi: // row.Reqi; 58D480 admits before dispatch
+		case tagReqi: // row.Reqi; admitted before dispatch
 		case tagGetv: // caster getv modifiers (WIMD, WIRU, RPDU, RPTU) read at cast
 			if _, known := SkillParameterFromKey(op.Arguments[0]); !known {
 				return SkillThreat{}, false

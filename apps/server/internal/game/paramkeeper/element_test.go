@@ -98,7 +98,7 @@ func TestPercentProductZeroAccumulatorAndNegativeBase(t *testing.T) {
 	value(t, p, 1.5)
 	p = element(t, 10)
 	apply(t, p, PercentProduct, 1, -100)
-	value(t, p, 10) // Final zero factor is skipped by 4B32C5.
+	value(t, p, 10) // Final zero factor is skipped by the native value read.
 	apply(t, p, PercentProduct, 2, 50)
 	value(t, p, 15) // Reducer restarts when prior aggregate is zero.
 	p.Remove(2)

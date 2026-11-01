@@ -36,9 +36,10 @@ const (
 ================
 reinforcementCoefficient
 
-495D10 spills variance/31 to float32. Keep the interpolation's float32 spill
-before converting the v1.150 fractional reference to a keeper percentage.
-The v1.150 table has no reinforcement-per-plus term.
+The server's reinforcement interpolation spills variance/31 to float32. Keep
+the interpolation's float32 spill before converting the v1.150 fractional
+reference to a keeper percentage. The v1.150 table has no
+reinforcement-per-plus term.
 ================
 */
 func reinforcementCoefficient(source enterworld.ItemStatRange, variance uint8) float32 {
@@ -52,10 +53,11 @@ func reinforcementCoefficient(source enterworld.ItemStatRange, variance uint8) f
 ================
 equipmentReinforcementWrites
 
-497830 replaces weapon parameters 34..37, armor piece parameters 38..49,
-and shield parameters 58..59 through source zero. Port inference: v1.150
-references express both families as fractions, so normalize both to keeper
-percentages, matching the initialized armor graph and weapon insertion units.
+The server's equipment reinforcement install replaces weapon parameters
+34..37, armor piece parameters 38..49, and shield parameters 58..59 through
+source zero. Port inference: v1.150 references express both families as
+fractions, so normalize both to keeper percentages, matching the initialized
+armor graph and weapon insertion units.
 ================
 */
 func equipmentReinforcementWrites(ref *enterworld.ItemRef, bits uint64) []paramkeeper.Write {

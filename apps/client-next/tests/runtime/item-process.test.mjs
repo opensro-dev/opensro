@@ -288,14 +288,16 @@ returns the window to idle, so it closes and rolls again.
 ================
 */
 test("a refused Magic Pang roll presents no result and leaves the window idle", () => {
-	for ( const flag of [ 0, 2, 255 ] ) {
+	// The server's refusal body is [2][u8 code]; these are its native stage
+	// codes, of which the wire carries the low byte.
+	for ( const code of [ 2, 0x1806, 0x1c0f ] ) {
 		const { owner, sounds, frames } = setup();
 		open( owner );
 		owner.process( { kind: "gacha-roll", entry: 1, slot: 14 }, 0 );
 		owner.step( 4000 );
 		assert.equal( owner.state().gacha.phase, "waiting" );
 		const before = owner.state().gacha, items = owner.state().inventory, cues = [ ...sounds ];
-		owner.receive( 0xb053, Uint8Array.of( flag, 7 ) );
+		owner.receive( 0xb053, Uint8Array.of( 2, code & 0xff ) );
 		assert.deepEqual( owner.state().gacha, { ...before, phase: "idle" } );
 		assert.deepEqual( owner.state().inventory, items );
 		assert.deepEqual( sounds, cues );

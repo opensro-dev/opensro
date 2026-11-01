@@ -26,8 +26,8 @@ const mallGroupCode = "GROUP_MALL"
 ================
 MallAddress
 
-Client 7058E0 resolves these indices; server 526610 validates the registered
-shop before dispatching its ordinary package purchase machinery.
+Client 7058E0 resolves these indices; the reference server validates the
+registered shop before dispatching its ordinary package purchase machinery.
 ================
 */
 type MallAddress struct {

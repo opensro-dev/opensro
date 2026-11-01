@@ -322,9 +322,10 @@ func (inv *Inventory) Move(sourceSlot, destSlot uint8) (MoveResult, *Fault) {
 	return out, nil
 }
 
-// TransferLeg names which native sub_756a60 leg an applied type-0x00 transfer
-// took. The values match the reference fixture's log strings so server logs
-// line up across the two implementations.
+// TransferLeg names which leg of the client's CPSMission_MergeOrSwapItems
+// an applied type-0x00 transfer took. The values match the reference
+// fixture's log strings so server logs line up across the two
+// implementations.
 type TransferLeg string
 
 const (
@@ -367,7 +368,7 @@ type TransferResult struct {
 
 // Transfer applies a type-0x00 item operation with the full native routing:
 // the equip gates on both directions, then the merge/split/swap legs of
-// sub_756a60 / CNetProcessInner_TransferSlotStack.
+// the client's CPSMission_MergeOrSwapItems.
 //
 // quantity is the wire quantity field. It only drives the SPLIT leg - the
 // native merge ignores it and combines the full counts - and a whole-stack
@@ -386,9 +387,10 @@ type TransferResult struct {
 //     (EquipSocketForTypeFlags) and the clothes/hard exclusivity
 //     (ClothesHardExclusivityConflict, bug C).
 //   - a source in 0..12 with an OCCUPIED destination is an equip too: the
-//     swap seats the occupant in the vacated socket (sub_756a60's full swap
-//     writes BOTH records), so the occupant faces the same socket-class and
-//     exclusivity gates against the vacated slot. Without this the measured
+//     swap seats the occupant in the vacated socket (the full swap of
+//     client CPSMission_MergeOrSwapItems writes BOTH records), so the
+//     occupant faces the same socket-class and exclusivity gates against
+//     the vacated slot. Without this the measured
 //     back door put a chest piece in the weapon socket.
 //
 // DEVIATION: sourceSlot == destSlot is refused. The native client cannot
@@ -412,7 +414,8 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 
 	// Forward equip gates: the source item is moving INTO a socket. The
 	// requirement checks bracket the exclusivity scan in the native
-	// full-mask order (sub_789c60: level/stats/gender -> 0x080 -> country).
+	// full-mask order (client CSOItem_Query_789C60: level/stats/gender ->
+	// 0x080 -> country).
 	if inv.equipmentSlot(destSlot) {
 		socket, equipable := EquipSocketForTypeFlags(inv.items[sourceIndex].TypeFlags)
 		if !equipable {
@@ -467,10 +470,10 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	}
 
 	bothInBag := inv.bagSlot(sourceSlot) && inv.bagSlot(destSlot)
-	// CGObjPC_DispatchInventorySlotMove (523860 -> 4B2450) moves or swaps a
+	// The server's inventory slot-move dispatch moves or swaps a
 	// summoner item inside the owner's bag even while its companion is
-	// summoned; only cross-container transfers (523F70 at 523FB8..523FEA)
-	// and equipment sockets reject an active summon.
+	// summoned; only cross-container transfers and equipment sockets
+	// reject an active summon.
 	summonerGate := summonerTransferFault
 	if bothInBag && inv.bagStart > 0 {
 		summonerGate = summonerItemFault
@@ -507,12 +510,13 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// after their operator cap returns to one. This does not enable merging.
 	splittable := stackable || (bothInBag && retainedOversizedStack(inv.items[sourceIndex], stackCap))
 	if bothInBag && splittable && destIndex < 0 && quantity != sourceCount {
-		// Per-cause notice bytes (client sub_689420 copy): zero asks for a
-		// positive number (01:29), over-stack says fewer-than-remain
-		// (01:14). Retail UI clamps the divide input to [1, stack-1] before
-		// composing, so both are hostile/malformed-packet guards - the
-		// split keeps the semantically matching notice for each cause
-		// instead of collapsing both onto 0x14.
+		// Per-cause notice bytes (the client's
+		// CGInterface_ShowSystemNotification copy): zero asks for a positive
+		// number (01:29), over-stack says fewer-than-remain (01:14). Retail
+		// UI clamps the divide input to [1, stack-1] before composing, so
+		// both are hostile/malformed-packet guards - the split keeps the
+		// semantically matching notice for each cause instead of collapsing
+		// both onto 0x14.
 		if quantity < 1 {
 			return out, newFault(wire.ErrCodePositiveNumberOnly, "splitQuantityNotPositive")
 		}
@@ -694,9 +698,10 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 		return Item{}, newFault(wire.ErrCodeInvalidRequest, "slotOutOfRange")
 	}
 	// A WORN item cannot be ground-dropped. The retail drop-confirm dialog
-	// (sub_68d430 @0x0068d430) opens only for a bag source and routes an
-	// equipment source to notice 01:6d @0x0068d606 without composing the
-	// type-0x07 packet, so a stock client never reaches here from a socket;
+	// (client CGInterface_RequestItemGroundDrop) opens only for a bag
+	// source and routes an equipment source to notice 01:6d without
+	// composing the type-0x07 packet, so a stock client never reaches
+	// here from a socket;
 	// a modified client can, and it would unequip-by-dropping the worn row.
 	// This gate touches only the type-0x07 drop path (Drop's sole callers):
 	// the equip/unequip plane is type-0x00 (Transfer) and pickup is Grant,
@@ -721,8 +726,8 @@ func (inv *Inventory) Drop(sourceSlot uint8) (Item, *Fault) {
 ================
 DeathDrop
 
-The death penalty's drop (move 0x17, re-typed to 7 by 5264E0 for any
-slot but the weapon): unlike Drop it may take a worn item. The weapon
+The death penalty's drop (move 0x17, re-typed to 7 by the server for
+any slot but the weapon): unlike Drop it may take a worn item. The weapon
 socket refuses (0x1806, "Can't drop equipped weapon forcely by server").
 ================
 */
@@ -742,7 +747,7 @@ func (inv *Inventory) DeathDrop(sourceSlot uint8) (Item, *Fault) {
 	return dropped, nil
 }
 
-// deathDropWeaponSlot is the weapon socket 5264E0 refuses.
+// deathDropWeaponSlot is the weapon socket the death drop refuses.
 const deathDropWeaponSlot = 6
 
 // DropQuantity removes count units from the row at a wire slot. FIXTURE

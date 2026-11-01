@@ -12,8 +12,8 @@ alias window send:
 	0x7620 [u32 npc][u8 mode][ascii alias] alias     -> 0xB620 [1][mode][ascii alias]
 
 and every refusal is [2][code] in notice category 0x18 (the alias reply
-also echoes mode and alias). The rules are v1.188's CGObjPC_HandleJobJoin70E1
-(5120F0), HandleJobLeave70E2 (5122B0) and HandleJobAlias70E3 (512540):
+also echoes mode and alias). The rules are the reference server's job join,
+job leave and job alias handlers:
 
   - join: the NPC keeps that job's guild, level 20, no job yet, gold for
     (level - 20) * 5000, and a thief or hunter who withdrew waits seven days;
@@ -22,13 +22,14 @@ also echoes mode and alias). The rules are v1.188's CGObjPC_HandleJobJoin70E1
   - alias: the NPC keeps the player's guild, no job suit is worn, and the
     name passes the naming rule; mode 0 only asks whether it is free and
     mode 1 takes it. Changing an alias the player already has costs
-    level x 50,000 gold (512540 tests it before its database job: 0x4807
+        level x 50,000 gold (the reference server tests it before its database job: 0x4807
     short), the cost the client's modify window shows (645E90).
 
 INFERENCE: v1.188 tests the join and alias-change fees but the deduction
 happens inside its database jobs; the port charges each with its commit. The alias follows the
-character name shape (sub_4184a0 is the shared name filter) and is unique
-among the division's aliases.
+character name shape (the shared name filter) and is unique
+among the division's aliases, and - a native bug we do not copy
+(owner, 2026-10-28) - never equal to a character name either.
 
 ===========================================================================
 */
@@ -67,14 +68,14 @@ const (
 	jobAliasModeCheck  uint8 = 0
 	jobAliasModeCreate uint8 = 1
 
-	// jobMinLevel and jobFeePerLevel are 5120F0's level 20 and 5000 gold
+	// jobMinLevel and jobFeePerLevel are the reference server's level 20 and 5000 gold
 	// for each level above it.
 	jobMinLevel    = 20
 	jobFeePerLevel = 5000
-	// jobAliasChangePerLevel is 512540's 0xC350: changing an existing alias
+	// jobAliasChangePerLevel is the reference server's 0xC350: changing an existing alias
 	// costs the level times 50,000 gold (the client's 645E90 shows it).
 	jobAliasChangePerLevel = 50000
-	// jobRejoinWaitMs is 5122B0's 0x93A80-second timed job: seven days.
+	// jobRejoinWaitMs is the reference server's 0x93A80-second timed job: seven days.
 	jobRejoinWaitMs = 604800 * 1000
 	// jobStartGrade is the grade a new member starts at (CICUser_ResetSpawn).
 	jobStartGrade = 1
@@ -227,6 +228,19 @@ func (rt *Runtime) jobAliasTaken(division string, c *enterworld.Character, alias
 			return true
 		}
 	}
+	// An alias may not equal a character name either. The reference
+	// server never refuses this (its alias validity is the name filter
+	// alone), which lets a suited player speak under another player's
+	// real name; that impersonation is a native bug we do not copy
+	// (owner, 2026-10-28), so the refusal is unconditional - and it
+	// keeps the alias and name namespaces disjoint for typed-target
+	// routing. Deleted-pending names count: the name is still spoken
+	// for until the deletion matures.
+	for _, other := range rt.deps.CharactersForDivision(division) {
+		if other != nil && other != c && strings.EqualFold(other.Name, alias) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -260,7 +274,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 		!rt.nameAllowed(alias) {
 		return jobAliasRefusal(jobErrAliasRule, mode, alias)
 	}
-	// 512540 tests a change's fee before its database job checks the name.
+	// The reference server tests a change's fee before its database job checks the name.
 	if mode == jobAliasModeCreate && uint64(jobAliasChangeFee(c)) > goldOf(c) {
 		return jobAliasRefusal(jobErrNoGold, mode, alias)
 	}
@@ -301,7 +315,7 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 jobAliasChangeFee
 
 The gold changing an alias costs: nothing for a first alias, else the
-level times 50,000 (512540: a non-empty current alias is a change).
+level times 50,000 (reference server: a non-empty current alias is a change).
 ================
 */
 func jobAliasChangeFee(c *enterworld.Character) int64 {

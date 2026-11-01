@@ -4,7 +4,7 @@
 monsterunique_ticket_test.go - the unique reward switches on real kill plans
 
 Port-only, not native (owner 2026-10-20): SRO_UNIQUE_GAP_EXEMPT admits a
-unique's drops past the 4C1840 level gap, SRO_UNIQUE_POP_TICKET leaves
+unique's drops past the native level gap, SRO_UNIQUE_POP_TICKET leaves
 exactly one Magic Pop ticket per unique kill. Both off is byte-native:
 a level-90 hunter loots nothing from level-20 Tiger Girl, and the Bone
 Lord's native two probability-1.0 cards stay two.
@@ -81,7 +81,7 @@ func countDrops(drops []grounditem.Item, codename string) (items, total int) {
 ================
 TestUniqueGapExemptAdmitsFullKillAndOneTicket
 
-Level 90 against level-20 Tiger Girl: native 4C1840's threshold is -180
+Level 90 against level-20 Tiger Girl: the native admission threshold is -180
 and admits nothing. With both switches on the whole kill is admitted
 (the prepass scrolls land) and the native probability-1.0 card is
 replaced by the one guaranteed ticket. One plan is one kill

@@ -86,3 +86,32 @@ func TestCombatSpacingRefusesAcrossPlanes(t *testing.T) {
 		t.Fatal("the same distance inside one cave was refused")
 	}
 }
+
+/*
+================
+TestCombatSpacingCaveGoalStaysOnItsFloor
+
+A cave floor's locals are its own frame, unbounded by the outdoor 1920
+square (a Jangan cave floor sits near x -13580): the approach goal stays
+on the actor's floor at the straight-line point, never folded into a
+sector the cave does not have.
+================
+*/
+func TestCombatSpacingCaveGoalStaysOnItsFloor(t *testing.T) {
+	spacing := CombatSpacing{
+		ActorBodyRadius:  BodyRadius(4),
+		TargetBodyRadius: BodyRadius(6),
+		ActionReach:      ActionReach(6),
+	}
+	for _, row := range []struct{ x, z float64 }{{-13580, 5536}, {1700, 8008}, {900, 458}} {
+		actor := Spawn{RegionID: 0x8006, X: row.x, Y: 0, Z: row.z}
+		target := Spawn{RegionID: 0x8006, X: row.x + 100, Y: 0, Z: row.z}
+		goal, disposition := spacing.ApproachGoal(actor, target)
+		if disposition != CombatApproachMove {
+			t.Fatalf("(%v, %v): disposition = %v, want move", row.x, row.z, disposition)
+		}
+		if goal.RegionID != actor.RegionID || goal.X != row.x+86 || goal.Z != row.z {
+			t.Fatalf("(%v, %v): goal = %+v, want region %#x at (%v, %v)", row.x, row.z, goal, actor.RegionID, row.x+86, row.z)
+		}
+	}
+}

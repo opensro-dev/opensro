@@ -16,7 +16,7 @@ func DecodeWindows1252(value []byte) string {
 }
 
 // EncodeWindows1252 implements the measured Windows best-fit conversion for
-// the web port's ANSI lane. Native 4B6960 uses WideCharToMultiByte(CP_ACP, 0);
+// the web port's ANSI lane. Native code uses WideCharToMultiByte(CP_ACP, 0);
 // the web client selects code page 1252 explicitly. This is not UTF-8, Latin-1
 // truncation, or a claim that every native regional build uses this code page.
 func EncodeWindows1252(value string) []byte {

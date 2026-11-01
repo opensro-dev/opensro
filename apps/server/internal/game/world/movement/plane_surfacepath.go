@@ -28,7 +28,7 @@ import (
 ================
 outdoorPlane.objectSurfacePath
 
-403D20 chooses the initial surface by nearest |delta Y|. 428930 then
+client 403D20 chooses the initial surface by nearest |delta Y|. 428930 then
 retains connected cells; it does NOT resolve ownership from chord Y at
 each terrain tile. That chord cuts below a stair even with legal endpoints.
 This is a source-owner walk, not the outside-object probe in 428300.

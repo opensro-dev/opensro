@@ -26,8 +26,10 @@ func DecodeCosBehavior(p []byte) (CosBehavior, error) {
 	return q, nil
 }
 
-// 6A2350, 6A1B10, 6A9730, 6A9810. Preserve unexposed bits of cash-pet
-// state instead of accepting client mutations to undocumented flags.
+// Cash-pet state as written by the client's CICCos_ExecuteActionCommand,
+// CosEntryPanel_SendCashPetPickupSetting, CIFPetConfig_OnPickupModeChanged
+// and CIFPetConfig_OnPickupCategoryChanged: preserve unexposed bits
+// instead of accepting client mutations to undocumented flags.
 func (q CosBehavior) ValidTransition(band, previous uint32) bool {
 	return q.Selector == 1 && band == 3 && q.Mode <= 1 ||
 		q.Selector == 2 && band == 4 && (q.Mode^previous) & ^uint32(0xc7) == 0

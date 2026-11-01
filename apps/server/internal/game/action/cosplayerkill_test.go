@@ -18,7 +18,7 @@ import (
 ================
 TestPlayerCOSKillEasesThePenaltyByLevelGap
 
-4EB6B0 with a COS victim: a COS four or more levels above the killer eases
+Natively, with a COS victim, a COS four or more levels above the killer eases
 10, one of the killer's level 5, and a killer without a penalty gains
 nothing.
 ================

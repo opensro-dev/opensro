@@ -99,13 +99,33 @@ var Settings = []Setting{
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
 	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	// Port-only, not native: the degree-11 equipment and skill tiers
+	// (#1745). Consumed at build time, not at runtime: the variant build's
+	// import tools (cap110_item_import.py, cap110_skill_import.py) read
+	// them when the server data is built, and the GameWorld reads neither.
+	// Server only: the catalogue reads the built data, not its inputs.
+	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
+	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	// Port-only, not native: the Qin-Shi tomb upper-floor population
+	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
+	// cap-110 loot catalogue).
+	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off", Catalogue: true},
+	// Port-only, not native: the temple band population and its 22
+	// instanced worlds (#1800 step 3). Needs SRO_CAP110_MONSTERS (the
+	// importer writes cap110-temple.txt only on that pairing, and the
+	// consumer refuses the same pairing at load). "off" is native.
+	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
+	// Port-only, not native: the Halloween Day event (#2124). Off is native.
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off"},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: ""},
+	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
 	// Grab and growth pets at four fifths of their run speed (#320): never
@@ -139,6 +159,8 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED_BOUNTY_TRANSFER", NomadVar: "most_wanted_bounty_transfer", Default: "on"},
 	// Owner, 2026-10-24: the killer's own progress notice per counted kill.
 	{Env: "SRO_MOST_WANTED_STREAK_NOTICE", NomadVar: "most_wanted_streak_notice", Default: "off"},
+	// Owner, 2026-10-28: a companion's job kill counts for its owner.
+	{Env: "SRO_MOST_WANTED_COS_KILLS", NomadVar: "most_wanted_cos_kills", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
@@ -149,6 +171,9 @@ var Settings = []Setting{
 	// the new ticket's end later (#1624, port-only, not native; "off"
 	// refuses a second ticket while one runs).
 	{Env: "SRO_PREMIUM_UPGRADE", NomadVar: "premium_upgrade", Default: "off"},
+	// Owner, 2026-10-27: the name-change scroll (#1689, port-only, not
+	// native; "off" is native: the scroll is neither sold nor usable).
+	{Env: "SRO_NAME_CHANGE_SCROLL", NomadVar: "name_change_scroll", Default: "off"},
 	// Owner, 2026-10-25: count kills and EXP per online hour by level
 	// band for the staff console (#1639, port-only, not native; "off"
 	// counts nothing and the economy route answers 404).
@@ -219,6 +244,10 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_TRADER_PERCENT_CAP", NomadVar: "trade_job_trader_percent_cap", Default: "20"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
+	// Port-only, not native: a 10,000,000,000 stall price and a
+	// 1,000,000,000 warehouse gold deposit replace the native
+	// 1,000,000,000 and 100,000,000 caps. "off" is native.
+	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
@@ -243,6 +272,11 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "off", Catalogue: true, Validation: ValueBetaDropMix},
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
+	// Owner, 2026-10-28 (#1850): Jangan's grocer as "OpenSRO Alchemy -
+	// Jangan", the default list's alchemy goods on three tabs and the
+	// elixirs off the smith. On by default (it extends the extra goods);
+	// off restores the native name and tabs.
+	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
@@ -260,6 +294,16 @@ var Settings = []Setting{
 	// Owner, 2026-10-18: reversed the 2026-10-15 testing switch; the
 	// deployment default stays native ("off", town gates refuse a transport).
 	{Env: "SRO_JOB_GOODS_TELEPORT", NomadVar: "job_goods_teleport", Default: "off"},
+	// Port-only, not native (#1982; owner, 2026-10-28: default ON):
+	// whispering a dressed player's job alias resolves to them, and the
+	// whisper block list also matches a dressed sender's alias. "off"
+	// restores the native name-only whisper resolution. The alias/name
+	// collision refusals are unconditional and not behind this switch.
+	{Env: "SRO_WHISPER_JOB_ALIAS", NomadVar: "whisper_job_alias", Default: "on"},
+	// Owner, 2026-10-28 (#1985): a thief's transport also stops at town
+	// walls that stand in battlefield regions; "off" is the native region
+	// rule alone.
+	{Env: "SRO_THIEF_CART_TOWN_AREAS", NomadVar: "thief_cart_town_areas", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Community vote, 2026-10-24: the monster parts drop again, so the
 	// deployment default is native ("off"); "on" restores the 2026-10-14
@@ -268,7 +312,6 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_INSTANT_INVENTORY_EXPANSION", NomadVar: "instant_inventory_expansion", Default: "on"},
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off", Catalogue: true,
 		Validation: ValueSwitch},

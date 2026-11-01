@@ -27,10 +27,10 @@ compileSkillReplacement
 Builds replacement metadata. Does not admit the skill for execution.
 
 Decode the complete v1.150 program first. Argument words can look like
-opcodes. The v1.188 research server's strides do not describe this client.
+opcodes. The server's strides do not describe this client.
 
-Native references (research server v1.188):
-587630 indexer, 589D20 selector, 59D870 replacement, 59DB10 state conflict.
+Native behaviour, in words: the server's parameter indexer, its selector
+install, its replacement decision and its state-conflict check.
 ================
 */
 func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescriptor, error) {
@@ -83,7 +83,7 @@ func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescripto
 	for _, inst := range p.instructions {
 		switch inst.Tag {
 		case 0x736b63: // skc
-			// event retirement (5A16C0), independent of voluntary nbuf
+			// event retirement, independent of voluntary nbuf
 			d.EventCancelMask = uint8(inst.Arguments[1])
 
 		case 0x6d736368: // msch
@@ -137,7 +137,7 @@ func compileSkillReplacement(fields []string) (statuseffect.ReplacementDescripto
 ================
 replacementExecutionInstruction
 
-The 36 pointer slots tested by 589D20, resolved through 587630.
+The 36 pointer slots tested by the server's selector, resolved through its parameter index.
 Only presence matters. Argument values do not affect this test.
 
 Tests use the original native indexer and selector execution for

@@ -39,7 +39,7 @@ func (rt *Runtime) applyCosContainerMove(c *enterworld.Character, q wire.ItemMov
 		return true
 	})
 	if committed {
-		// 697E80 case 10: unlike player type 0, no submove-count byte.
+		// Client 697E80 case 10: unlike player type 0, no submove-count byte.
 		result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.NewWriter(10).U8(1).U8(0x10).U32(q.CosGID).U8(q.SourceSlot).U8(q.DestSlot).U16(q.Quantity).Payload()}}}
 	}
 	return result

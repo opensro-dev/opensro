@@ -38,6 +38,9 @@ const OFF = Object.freeze( {
 	// Native 1:1 interface size.
 	uiScale: 100,
 	chatTimestamps: false,
+	// On by default (owner 2026-10-28, #1976): event notices get their
+	// own chat tab; an explicit false restores the native four tabs.
+	eventChatTab: true,
 	safeLoadingScreen: false,
 	monsterGuide: false,
 	developerDiagnostics: false,
@@ -89,6 +92,7 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
 	attackPetTraining: false,
+	autoSelect: false,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
@@ -113,14 +117,18 @@ const OFF = Object.freeze( {
 	petFilterOther: true,
 	// On by default (owner 2026-10-22, #1243): a touch tap keeps an item or skill tooltip up.
 	touchInspect: true,
-	// Off by default (#1448): the WebSocket stays the default transport until #1450.
-	webTransport: false,
+	// On by default (#1451 step 3): WebTransport is the
+	// default connect and the WebSocket the fallback; off is one setting.
+	webTransport: true,
 	// Off by default: the M window shows only the five native towns and 28 x 8 overview.
 	expandedWorldMap: false,
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.
-	sunDropMarker: false
+	sunDropMarker: false,
+	// Off by default: port-only portal-out cue on arrival; the native
+	// gate has no traced caller, so silence is the native default.
+	warpArrivalSound: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -312,11 +320,12 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
 		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages; render scale joins Image without
-	// changing the indices used to reopen the existing tabs.
+	// Lighting keeps the direct-light stages, the moving sun among them;
+	// render scale joins Image without changing the indices used to reopen
+	// the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
+		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
@@ -531,7 +540,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	// walks before the server answers, so the row remains the off switch.
 	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
 		predictedRunUp: true,
-		webTransport: false,
+		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -539,6 +548,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -548,7 +558,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), {
 		predictedRunUp: true,
-		webTransport: false,
+		webTransport: true,
 		jobKillNotices: true,
 		dropPlusNotices: true,
 		plusSevenNotices: true,
@@ -556,9 +566,25 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
+});
+
+test("the WebTransport connection defaults on and one setting turns it off", () => {
+	// #1451 step 3: WebTransport is the default connect; the WebSocket
+	// stays the connect-time fallback, and the row remains the switch
+	// back. Like the other default-on rows, only an explicit false
+	// turns it off.
+	assert.equal( experimentalOptions().webTransport, true );
+	assert.equal( experimentalGameplay( experimentalOptions() ).webTransport, true );
+	for ( const value of [ 1, "true", null, {}, "false", 0 ] ) {
+		assert.equal( experimentalOptions( { webTransport: value } ).webTransport, true, JSON.stringify( value ) );
+	}
+	const off = experimentalOptions( { webTransport: false } );
+	assert.equal( off.webTransport, false );
+	assert.equal( experimentalGameplay( off ).webTransport, false );
 });
 
 test("the pickup pet item filter is off by default and only narrows inside itself", () => {
@@ -616,6 +642,37 @@ test("compressed textures are on unless explicitly false, and the stored reader 
 	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
 	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
+});
+
+test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
+	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY, PREVIOUS_EXPERIMENTAL_STORAGE_KEY } =
+		experimentalModule;
+	const storageOf = entries => {
+		const saved = new Map( entries );
+		return { getItem: key => saved.get( key ) ?? null };
+	};
+	// Saved before the flip (platform.ts wrote the whole options object,
+	// so a Confirm under the old default stored webTransport: false):
+	// the flip reaches it, and its other choices carry over.
+	const before = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( before.options.webTransport, true );
+	assert.equal( before.options.chatTimestamps, true );
+	assert.ok( before.raw && typeof before.raw === "object" && !("webTransport" in before.raw) );
+	// Stored under the current key after the flip: an explicit off stays off.
+	const after = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { chatTimestamps: true } ) ],
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false } ) ]
+	] ) );
+	assert.equal( after.options.webTransport, false );
+	// The current key wins even when the previous one is also present.
+	const both = storedExperimentalOptions( storageOf( [
+		[ PREVIOUS_EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: false } ) ],
+		[ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { webTransport: false, chatTimestamps: true } ) ]
+	] ) );
+	assert.equal( both.options.webTransport, false );
+	assert.equal( both.options.chatTimestamps, true );
 });
 
 test("the shared actor room is on unless explicitly false, and reaches the renderer's video options", () => {

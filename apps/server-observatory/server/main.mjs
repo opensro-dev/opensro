@@ -9,6 +9,7 @@ import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
+import { createChatLog } from "./chatlog.mjs";
 import { createHistory } from "./history.mjs";
 import { createEconomy } from "./economy.mjs";
 import { createSettings } from "./settings.mjs";
@@ -38,6 +39,7 @@ const historySources = [ {
 	token: agentToken
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
+const chatLog = createChatLog( shards.map( row => ({ ...row, token }) ) );
 // Each GameWorld's economy aggregates (economy.mjs), read with their own
 // token; absent, the Economy page says it is off.
 const economyToken = config.economyTokenFile ? (await readFile( config.economyTokenFile, "utf8" )).trim() : "";
@@ -51,6 +53,7 @@ const siteAdmin = config.siteAdmin ?? null;
 const siteAdminToken = siteAdmin?.tokenFile ? (await readFile( siteAdmin.tokenFile, "utf8" )).trim() : "";
 const inviteKeys = createInviteKeys( siteAdmin ? siteAdminURL( siteAdmin.url ) : null, siteAdminToken );
 const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
+const INVITE_REVEAL = /^\/api\/invites\/([0-9a-f-]{36})\/reveal$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
 // Fixed paths only; a checkout without built client assets answers 404 and
@@ -80,8 +83,12 @@ for (
 		"history.js",
 		"history-view.js",
 		"history.css",
+		"chat-log.html",
+		"chat-log.js",
+		"chat-log.css",
 		"invites.js",
 		"invite-made.js",
+		"invite-counts.js",
 		"invites.css",
 		"request.js",
 		"economy.html",
@@ -151,12 +158,23 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
-		if ( url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ) {
+		if (
+			url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ||
+			INVITE_REVEAL.test( url.pathname )
+		) {
 			const operator = requestOperator( req, edge );
 			let result;
 			if ( req.method === "GET" && url.pathname === "/api/invites" ) {
 				try {
-					result = await inviteKeys.list( operator, url.searchParams.get( "discordUserId" ) ?? "" );
+					result = await inviteKeys.list( operator, {
+						discordUserId: url.searchParams.get( "discordUserId" ) ?? "",
+						status: url.searchParams.get( "status" ) ?? "",
+						source: url.searchParams.get( "source" ) ?? "",
+						createdFrom: url.searchParams.get( "createdFrom" ) ?? "",
+						createdTo: url.searchParams.get( "createdTo" ) ?? "",
+						expiresFrom: url.searchParams.get( "expiresFrom" ) ?? "",
+						expiresTo: url.searchParams.get( "expiresTo" ) ?? ""
+					} );
 				} catch {
 					result = { status: 502, body: { error: "The website did not answer" } };
 				}
@@ -177,9 +195,12 @@ async function handleRequest( req, res ) {
 					return;
 				}
 				const revoke = url.pathname.match( INVITE_REVOKE );
+				const reveal = url.pathname.match( INVITE_REVEAL );
 				try {
 					result = revoke ?
 						await inviteKeys.revoke( operator, revoke[1] ) :
+						reveal ?
+						await inviteKeys.reveal( operator, reveal[1] ) :
 						await inviteKeys.create( operator, body );
 				} catch {
 					// A key may or may not have been made: list before trying again.
@@ -228,6 +249,13 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/history" ) {
 			const result = await history.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
+		// The moderation log is staff-only: it sits behind the same request
+		// check as every console route and answers GET alone.
+		if ( url.pathname === "/api/chatlog" && req.method === "GET" ) {
+			const result = await chatLog.request( url.searchParams );
 			respondJSON( res, result.status, result.body );
 			return;
 		}

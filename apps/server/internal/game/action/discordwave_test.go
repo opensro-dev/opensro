@@ -6,7 +6,7 @@ discordwave_test.go - the Bard's Discord Wave clears monsters' hostility
 The shipped Discord Wave row is cast through HandleTargetInteract on the
 Bard itself; the monsters chasing the Bard then run the real monster leg.
 Native sends each victim one negative hate event sourced at the cast's
-target (593D62..593E7B) through the ordinary ledger update (5473C0).
+target through the ordinary ledger update.
 
 ===========================================================================
 */
@@ -46,7 +46,7 @@ TestDiscordWaveReleasesUpToFourMonstersAroundItsTarget
 Six monsters chase the Bard: five within 100 of it, one 200 away. The
 first holds more hostility than the cut. Discord Wave on the Bard cuts
 exactly four of the five near ones: the first keeps less hostility, the next
-three are left with none. 5473C0 clamps at zero and, when the primary record
+three are left with none. The ledger update clamps at zero and, when the primary record
 reaches it, refuses the callback, so each keeps the target it chases until
 another opponent's hate takes over. The fifth near one and the far one are
 untouched.

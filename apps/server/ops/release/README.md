@@ -65,7 +65,7 @@ The staging job retains those exact bytes. After approval the receiver:
 
 A release that changes the asset data (a new `ASSET_SCHEMA` in
 `scripts/build/assetSchema.mjs`, or any new pack content) is a data candidate
-(`client_data.py`). Only the machine holding the licensed asset build can
+(`client_data.py`). Only the machine holding the asset build can
 produce it, so the operator stages it with `data_release.py`:
 
 ```sh
@@ -99,7 +99,7 @@ resume; stored payloads unused for 14 days are pruned.
 
 ### Server game data
 
-The GameWorld opens the licensed server game-data archive at the host's
+The GameWorld opens the server game-data archive at the host's
 `game_data` path; a server release carries binaries, not that archive
 (`server_data.py`). When a server change needs newer data (a new catalogue
 version, a new authority file), stage the archive built from the release's
@@ -305,6 +305,29 @@ scheduled jobs can be delayed, so the external check is not a guaranteed paging
 latency. Tests inject failures and notification delivery; they do not stop live
 services or send fake public outages.
 
+The WebTransport leg is checked from outside the game host too (#1984; owner
+decisions 2026-10-28: the runner lives on vps0, probes every 60 seconds, a
+verdict goes stale at 180 seconds, and a stopped runner pages).
+
+- Game host, once, as root in an owner-approved window:
+  `wtprobe_host.py apply --public-key runner.pub`. It creates the push account
+  (its key may only run `wtprobe_verdict.py --receive`), the verdict directory,
+  `/etc/opensro-release/monitor-wtprobe.json` and the 30-second
+  `opensro-monitor-wtprobe.timer`. `check` lists gaps; `remove` undoes it.
+- Runner host: install `opensro-wtprobe-runner.service` and `.timer` with the
+  placeholders filled. Each run executes `sro-wtprobe -health` and pushes one
+  verdict over ssh.
+- Two consecutive failed probe runs page and two passing runs recover;
+  re-reading the same run does not count. A verdict older than 180 seconds, or
+  none at all, pages as a probe-pipeline failure.
+- Both hosts keep their clocks synchronised (NTP): the monitor compares the
+  runner's probe time with its own clock, so a skew over 180 seconds pages as
+  a stale probe.
+- `wtprobe_drill.py --announced` is the announced WebTransport-only break test.
+  It drops inbound UDP 443 in a table of its own (a systemd fallback deletes
+  it after 10 minutes), waits for the page while the fleet monitor stays up,
+  restores, and waits for the recovery.
+
 Browser smoke uses ordinary browser settings and records negotiated worker
 protocols. Choose edge transport settings from measurements on your infrastructure.
 The game transport is a proxied WebSocket.
@@ -350,17 +373,24 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "origin": "https://game.example.com",
   "shard": "global-official",
   "agent_memory_mb": 256,
-  "gameworld_memory_mb": 1024,
+  "gameworld_memory_mb": 3072,
   "stack_sizes": "",
   "public_webhook": "/etc/opensro-release/discord-announcements-webhook",
   "staff_webhook": "/etc/opensro-backup/discord-webhook",
   "maintenance_accounts": ["release-probe"],
   "webtransport_public": "on",
-  "transport_wt_addr": "0.0.0.0:443",
+  "transport_wt_addr": "[::]:18443",
   "transport_cert_file": "/etc/opensro-release/tls/fullchain.pem",
   "transport_key_file": "/etc/opensro-release/tls/privkey.pem"
 }
 ```
+
+`gameworld_memory_mb` is optional and defaults to the GameWorld job's own
+3072. A host may raise it, never lower it: `deploy.py` refuses a smaller
+value before the backup runs, and the staging rehearsal reaches the same
+refusal. After Nomad's health checks pass, and before the release is
+recorded, every enabled shard's registered job must reserve that memory
+and render `GOMEMLIMIT` as three quarters of it in MiB (#2027).
 
 The four `webtransport_public` / `transport_*` keys are the public
 WebTransport posture (#1447, `deploy.py` `webtransport_deployer`). They are
@@ -371,6 +401,25 @@ and `transport_key_file` (the TLS pair), and any of those three without
 A config without the keys deploys as before. The switch reaches `sro-nomad`
 as `SRO_WEBTRANSPORT_PUBLIC`, which the deployer derives from this file
 alone: `shard-settings.json` never names it.
+
+The GameWorld runs as the unprivileged `sro` user and cannot bind UDP 443,
+so `transport_wt_addr` binds `[::]` (dual-stack) on a port of 1024 or
+above and the host redirects public UDP 443, IPv4 and IPv6, to it. The
+redirect delivers to the interface address, so loopback, one address or
+the IPv4-only `0.0.0.0` would drop players silently onto the WebSocket
+fallback; `deploy.py` refuses them. `deploy.py` passes `-transport-wt-public-port 443`, so `sro-nomad`
+still checks the advertised port against what clients dial. The host half
+is one owner-approved step, run as root from the installed controls before
+the first public deploy (`release_controls.py` never runs `install.main`):
+
+```
+python3 quic_host.py apply --port 18443   # sysctls, nftables redirect, boot unit, ufw
+python3 quic_host.py check --port 18443   # exit 0 and "ready" when every piece is live
+python3 quic_host.py remove --port 18443  # undo the redirect, unit and firewall opening
+```
+
+Every deploy (and the staging rehearsal) with `webtransport_public` on runs
+the same check first and refuses, naming the gap, before any token is issued.
 
 `stack_sizes` is a port-only override; missing or empty keeps native item caps.
 For example, `"potion=2000,elixir=50"` raises those groups without lowering any

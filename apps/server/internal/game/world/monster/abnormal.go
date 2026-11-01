@@ -26,7 +26,8 @@ func (i Instance) AbnormalMask() uint32 {
 	return i.Abnormal.Mask
 }
 
-// MovementBlocked is the move-command gate of 4B0EA0: freeze, sleep, root
+// MovementBlocked is the reference server's move-command gate: freeze,
+// sleep, root
 // (mask C1) or stun (4000) refuse every new movement leg.
 /*
 ================
@@ -70,9 +71,9 @@ func (i Instance) effectiveSpeed(param uint16, base float64) float64 {
 	return float64(value)
 }
 
-// WalkSpeed and RunSpeed are parameters 17/18 (4CEFE0 seeds them from the
-// reference, 4C1690 scales them by grade (gradescale.go); frostbite and slow
-// scale them), read by 4AA410.
+// WalkSpeed and RunSpeed are parameters 17/18 (the reference server seeds
+// them from the reference row and scales them by grade (gradescale.go);
+// frostbite and slow scale them), read by the server's speed publication.
 /*
 ================
 WalkSpeed
@@ -95,7 +96,8 @@ func (i Instance) RunSpeed() float64 {
 ================
 ActionSpeed
 
-4CF51D seeds parameter 8C to 100; 4AA530 publishes its effective value.
+The reference server seeds parameter 8C to 100 and publishes its effective
+value.
 The authored reference scalar is not the live keeper after status changes.
 ================
 */

@@ -46,7 +46,7 @@ func TestPassiveDamageWholeProgramAdmission(t *testing.T) {
 		{"negative", func(f []string) []string { f[71] = "-1"; return f }, false},
 		{"overflow", func(f []string) []string { f[71] = "4294967296"; return f }, false},
 		{"truncated", func(f []string) []string { return f[:72] }, false},
-		// A reqi gate is part of a Praise passive; combat evaluates it (59F0E0).
+		// A reqi gate is part of a Praise passive; combat evaluates it.
 		{"reqi gate", func(f []string) []string { copy(f[73:], []string{"1919250793", "6", "8"}); return f }, true},
 		{"duplicate setv", func(f []string) []string { copy(f[73:], []string{"1936028790", "1160926017", "27", "0"}); return f }, true},
 		{"unported tag", func(f []string) []string { copy(f[73:], []string{"1685418593", "1000"}); return f }, false},
@@ -119,7 +119,7 @@ func passiveProgramFields(tail ...string) []string {
 TestSetvlessPassiveProgramsPin
 
 A passive needs no setv to install: reat, real or br alone pins it, br's
-lane mask is normalized like the timed buff's (587630), and a program that
+lane mask is normalized like the timed buff's, and a program that
 holds nothing but its reqi gate still has nothing to install.
 ================
 */

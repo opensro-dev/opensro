@@ -19,7 +19,7 @@ import (
 ================
 TestMasterGrantsUnionChat
 
-5C69F0: the master's grant of the union chat right (4) is stored and
+Reference server: the master's grant of the union chat right (4) is stored and
 batched to every member as 0x3B29 0x16 mask 0x10; a member who is not the
 master is refused 0x1E on 0xB44E.
 ================

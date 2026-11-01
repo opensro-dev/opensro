@@ -14,7 +14,7 @@ import (
 )
 
 // efr kinds fill separate RefSkill slots; only kind 1 (+0x28C) is the action
-// area SkillAction_Instant dispatches, so a kind-2 block never becomes it.
+// area instant-skill dispatches, so a kind-2 block never becomes it.
 func TestEffectAreaIsKindOneSlotOnly(t *testing.T) {
 	parse := func(words ...uint32) []string {
 		fields := make([]string, skilldataColEncodedTail)

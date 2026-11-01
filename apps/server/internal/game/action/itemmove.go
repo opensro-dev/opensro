@@ -212,7 +212,7 @@ func (rt *Runtime) applyInventoryMove(
 		// exact committed occupancy snapshot.
 		character.MissionInventory = nextRows
 
-		// 50F1F0 -> 59F0E0: self buffs whose reqi the new equipment fails end,
+		// After a move, natively self buffs whose reqi the new equipment fails end,
 		// and the stats the move publishes are the ones without them.
 		if equipmentChanged {
 			if ended := rt.retireUnmetEquipmentEffects(divisionID, character); len(ended) != 0 {
@@ -293,6 +293,12 @@ func (rt *Runtime) applyGroundDrop(
 		}
 
 		inv := bagOf(character)
+
+		// Port-only, not native (halloween.go): a sealed event helmet
+		// never leaves for the ground.
+		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
+			return false
+		}
 
 		// The native type-7 wire has no quantity field: the whole row goes.
 		dropped, fault := inv.Drop(sourceSlot)

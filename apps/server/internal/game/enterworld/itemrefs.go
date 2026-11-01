@@ -400,7 +400,7 @@ type itemdataRecordColumn struct {
 // the historical unsuffixed "requiredLevel" for slot 1.
 var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 7 is RefObjCommon CashItem, natively bit 0 of the type word
-	// (808AD0). The port keeps that bit clear (equiproster.go), so the
+	// (client 808AD0). The port keeps that bit clear (equiproster.go), so the
 	// client reads it here: CIFItemSlot_DispatchActivation 567290 refuses a
 	// quick sell when ItemTid_IsMallItem 550130 holds.
 	{7, "cashItem", "int"},
@@ -409,24 +409,24 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 16 is RefObjCommon CanTrade, beside CanSell (17) and CanBorrow
 	// (19): 0 keeps an item off the exchange table (exchange.go).
 	{16, "canTrade", "int"},
-	// 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
+	// Client 808AD0 reads token 17 into RefObjData+A5; 5B6D22 tests this byte
 	// before merchant sale. Shop membership is not a sale permission.
 	{17, "canSell", "int"},
 	// Token 19 (RefObjData+0xA7): bit 0x80 admits the item to the warehouse
 	// (CIFStorage_OnSlotTransfer; 0 refuses with notice 1:0x43).
 	{19, "canBorrow", "int"},
 	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
-	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
+	// CanRepair, read by the server's repair check for NPC and hammer repair.
 	{22, "canRepair", "int"},
 	// Token 23 (server ref +0x8C bit 7): itemdata CanRevive, read by
-	// CGObj_CanRevive 483EB0 before a smith repairs a broken item.
+	// the server's revive check before a smith repairs a broken item.
 	{23, "canRevive", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
 	{26, "price", "int"},
 	// Native RefItemData+0xb4/+0xb8. These are consumed independently by
-	// sub_789630: CostRepair prices missing durability points; CostRevive is
+	// Client 789630: CostRepair prices missing durability points; CostRevive is
 	// the extra charge when current durability is zero.
 	{27, "repairCostB4", "int"},
 	{28, "reviveCostB8", "int"},
@@ -504,27 +504,27 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	{117, "varianceIntMax298", "int"},
 	// Native RefItemData+0x29C/+0x2A4, itemdata's Param1 and Param3. The
 	// record's param block is 20 contiguous ints followed by 20 contiguous
-	// description strings (sub_64DF40 walks them as two separate runs), so the
+	// description strings (the native record walk treats them as two separate runs), so the
 	// params are NOT interleaved with their labels: Param1 is +0x29C, Param2
 	// is +0x2A0 and Param3 is +0x2A4. Itemdata pairs them as (Param, Desc)
 	// columns, which is why Param3 is column 122 rather than 120.
-	// sub_6E6E00 kind 3 reads Param1 as SECONDS and Param2 as a millisecond
+	// Client 6E6E00 kind 3 reads Param1 as SECONDS and Param2 as a millisecond
 	// limit, but the column's unit is per item family - minutes for a COS
 	// summoner (ITEM_COS_P_EXTENSION_1D carries 1440), milliseconds for a
 	// recall scroll (30000 against the 30-second retail return), seconds for
 	// the ITEM_MALL_PET_SKILL_* and GOLD_TIME_SERVICE families that match the
 	// kind-3 contract. Publish both unscaled and let the consumer decide.
 	{118, "itemParam1_29c", "int"},
-	// The resurrection scroll (v1.188 49FF20) reads all three: Param1 a
+	// The resurrection scroll reads all three natively: Param1 a
 	// fixed HP/MP amount, Param2 their percentage, Param3 the EXP refund.
 	{120, "itemParam2_2a0", "int"},
 	{122, "itemParam3_2a4", "int"},
-	// The premium time tickets (49C2B0 cases 3 and 4) read the EXP and
-	// skill-EXP bonus percentages from Param4 and Param5.
+	// The premium time tickets (the native use routine's cases 3 and 4)
+	// read the EXP and skill-EXP bonus percentages from Param4 and Param5.
 	{124, "itemParam4_2a8", "int"},
 	{126, "itemParam5_2ac", "int"},
-	// 80BFAC/80BFBC store the two tokens after the 20 (value,label)
-	// pairs. 8093C0 returns CItemData+8, hence record offsets 51C/51D.
+	// Client 80BFAC/80BFBC store the two tokens after the 20 (value,label)
+	// pairs. Client 8093C0 returns CItemData+8, hence record offsets 51C/51D.
 	{158, "maxMagicOptions51c", "byte"},
 	{159, "avatarAttachment51d", "byte"},
 }
@@ -578,8 +578,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		ref.SummonLevelThresholds = summonLevelThresholds(ref)
 	}
 	// Desc1 (RefItem+0x2A4) names the skill a scroll (TID3 13) or a
-	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30), or a fortress
-	// repair kit (49CC80) casts.
+	// monster mask (TID 3/2/2), or a fortress repair kit, casts.
 	capsule := ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 2 && ref.TypeIDs[2] == 2
 	repair := ref.TypeIDs == [4]int64{3, 3, 1, 10}
 	if (ref.TypeIDs[2] == 13 || capsule || repair) && len(fields) > 119 {
@@ -682,8 +681,8 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 			ref.FortressRoleMask = v
 		}
 	}
-	// 49AC50 / 49B710 read the SERVER record's Param1..Param6 at +2A0 with a
-	// 0x20 stride - the same slots as the potion amounts above, so ParamN is
+	// The server's cure handlers read the record's Param1..Param6 at +2A0
+	// with a 0x20 stride - the same slots as the potion amounts above, so ParamN is
 	// column 118+2(N-1). The shipped labels pin the roles: the universal pill
 	// (ITEM_ETC_CURE_RANDOM_*) carries the curable mask, curable level and
 	// chance in Param1..3; ITEM_ETC_CURE_ALL_* carries freeze, frostbite, burn,
@@ -820,7 +819,7 @@ func buildItemNativeFields(fields []string) NativeFields {
 			}
 		}
 	}
-	// CItemData_ParseTextRow 80BEC4..80BF2E scans all twenty description
+	// The client's CItemData_ParseTextRow 80BEC4..80BF2E scans all twenty description
 	// pairs; the last COOLTIME declaration wins. The UI reads its group
 	// and duration independently of the consumable family.
 	for column := 119; column < len(fields) && column < 159; column += 2 {
@@ -831,7 +830,7 @@ func buildItemNativeFields(fields []string) NativeFields {
 		group, err := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(raw), "0x"), 16, 32)
 		duration, valid := textdataInt(fields[column-1])
 		if err == nil && valid && duration >= 0 && duration <= 0x7fffffff {
-			// 80BF23 stores AL after the base-16 parse. Bound the low byte
+			// Client 80BF23 stores AL after the base-16 parse. Bound the low byte
 			// explicitly instead of relying on a narrowing integer conversion.
 			values["useCooldownGroup524"] = float64(group & itemCooldownGroupMask)
 			values["useCooldownDuration528"] = float64(duration)

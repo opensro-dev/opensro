@@ -19,7 +19,7 @@ func x87(v float64) *big.Float {
 x87Scale
 
 x87Scale is CRT_ftol((1 - percent/100) * value) evaluated at the x87's
-64 significand bits, nearest-even (591A55..591AF4). Float64 alone can move
+64 significand bits, nearest-even, as the server's grade roll does. Float64 alone can move
 an integral result just below a boundary.
 ==================
 */
@@ -32,7 +32,7 @@ func x87Scale(value, percent float64) int32 {
 }
 
 // x87Fraction is CRT_ftol(numerator / 100 * value) at x87 precision, the
-// element-status level of 590768..5907A0.
+// element-status level the roll computes.
 func x87Fraction(numerator, value float64) int32 {
 	ratio := x87(0).Quo(x87(numerator), x87(100))
 	result := x87(0).Mul(ratio, x87(value))

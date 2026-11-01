@@ -72,7 +72,7 @@ of a full turn in radians, passed as a float to the world
 factory like the nest path's heading.
 
 INFERENCE: SpawnHeading is the wire word, which the client decodes as
-degrees * 65535 / 360 (the inverse of its serializer sub_877cc0). The
+degrees * 65535 / 360 (the inverse of its client serializer CNavigationDeadreckon_WriteMovementPayloadToStream). The
 server's own spawn-record writer was not traced, so a native quirk there is
 not ruled out; this takes the nest path's radians -> word conversion so the
 client sees the drawn direction.
@@ -150,7 +150,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		state.instances.set(actor.Gid, actor)
 		state.movers.set(actor.Gid, mover)
 		state.behavior.set(actor.Gid, 0)
-		state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+		state.listRegionGid(spawn.RegionID, actor.Gid)
 		created = append(created, actor.Gid)
 		// The retail spawn arms every spawned monster's timers, a GM's included.
 		armLifetimeLocked(state, actor, request.NowMs)

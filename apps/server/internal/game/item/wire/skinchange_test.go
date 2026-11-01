@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// 86B14F..86B265: a transformed player's spawn row carries flag 1 and the
+// Client 0x0086B14F..0x0086B265: a transformed player's spawn row carries
+// flag 1 and the
 // skin RefObj right after the avatar loop, then the gid block as before.
 // A zero skin keeps the single 0 byte.
 func TestPlayerSpawnRowCarriesTheTransformSkin(t *testing.T) {
@@ -24,23 +25,25 @@ func TestPlayerSpawnRowCarriesTheTransformSkin(t *testing.T) {
 	}
 }
 
-// 7641D0 reads u32 gid then u32 skin.
+// The client's CPSMission_OnCharacterSkinChangeSuccess0x323A reads u32
+// gid then u32 skin.
 func TestSkinChangeBody(t *testing.T) {
 	got := SkinChange{GID: 0x01020304, Skin: TransformSkin{RefObjID: 1933}}.Encode()
 	if !bytes.Equal(got, concat(u32le(0x01020304), u32le(1933))) {
 		t.Fatalf("0x323A body %x", got)
 	}
-	// 4F0320 / 4DD6B0: a player skin adds the record byte and only the
-	// worn slots that hold an item.
+	// The server's duplicate-skin fill: a player skin adds the record byte
+	// and only the worn slots that hold an item.
 	player := SkinChange{GID: 7, Skin: TransformSkin{RefObjID: 1907, Player: true, Shape: 4, Equipment: [9]uint32{0, 3643, 0, 0, 0, 0, 107}}}.Encode()
 	if want := concat(u32le(7), u32le(1907), []byte{4, 2}, u32le(3643), u32le(107)); !bytes.Equal(player, want) {
 		t.Fatalf("player skin %x, want %x", player, want)
 	}
 }
 
-// 78C830 / 492D40: band 0x40 bodies are the RefObjID plus the group's own
-// tail - the mask's monster, a pet summoner's record byte - never the
-// 18-byte equipment body.
+// The client's CSOItem_Deserialize reads them back: band 0x40 bodies are
+// the RefObjID plus the group's
+// own tail - the mask's monster, a pet summoner's record byte - never the
+// 18-byte equipment body the reference server serializes.
 func TestBand40ItemBodies(t *testing.T) {
 	capsule := ItemBody{RefObjID: 10364, TypeFlags: PackTypeFlags(3, 2, 2, 0), TransformRefObjID: 1933}
 	summoner := ItemBody{RefObjID: 2000, TypeFlags: PackTypeFlags(3, 2, 1, 1), Plus: 7, Durability: 9}

@@ -33,10 +33,11 @@ import (
 )
 
 // MasteryLevelCap is the absolute per-mastery ceiling the client's own
-// level-up gate enforces (sub_5841d0: level < 0x78).
+// train-enable gate enforces: CIFSkillBoard_RefreshMasteryHeaderAndTrainButton
+// admits only level < 0x78.
 const MasteryLevelCap int64 = 120
 
-// 59E450 returns 34xx; the v1.150 learning response carries the low byte.
+// The server's skill learning check returns 34xx; the v1.150 learning response carries the low byte.
 const (
 	skillLearnMasteryLevelRefusal uint8 = 0x02
 	skillLearnRaceRefusal         uint8 = 0x05
@@ -48,15 +49,14 @@ const (
 
 // Total-mastery allowance (notice 07:05): the budget the v1.150 client
 // itself DISPLAYS on the skill board but never locally enforces, which is
-// why the gate is server-owned. Client pin (re-verified against
-// temp/dumps/SRO_Client_psuedo.txt for this lane): sub_58c310 @0x0058c310
+// why the gate is server-owned. Client pin: CIFSkillBoard_RefreshTotalMasteryLabel
 // composes a bare u"%d/%d" of (sum of mastery levels)/(cap), selecting the
-// cap on the NATIVE country byte charBody+0x9c read @0x0058c372 - byte 0
-// (Chinese) takes the flat 0x12c @0x0058c3bc, byte 1 (European) doubles the
-// per-character level (x87_r7_1 + x87_r7_1) and clamps at 0xf0
-// @0x0058c388..0x0058c39c. The summed quantity is sub_850790 @0x00850790
+// cap on the NATIVE country byte charBody+0x9c - byte 0 (Chinese) takes
+// the flat 0x12c, byte 1 (European) doubles the per-character level and
+// clamps at 0xf0. The summed quantity is LearnedMasteryMap_SumLevels
 // walking the mastery list accumulating each node's LEVEL byte; the
-// train-enable gate sub_5841d0 never consults it. Era: Legend III, level
+// train-enable gate CIFSkillBoard_RefreshMasteryHeaderAndTrainButton
+// never consults it. Era: Legend III, level
 // cap 90.
 const (
 	// TotalMasteryCapChina is the flat Chinese allowance (0x12c). Flat,
@@ -120,7 +120,8 @@ masteryLevelSum
 
 masteryLevelSum is the gated quantity: the sum of the character's
 trained mastery levels - not SP spent, not a count of masteries. The
-same walk as the client's sub_850790 (each node's level byte, which as
+same walk as the client's LearnedMasteryMap_SumLevels (each node's
+level byte, which as
 a byte can never be negative; a corrupt negative record is ignored
 rather than allowed to widen the budget).
 ==================
@@ -491,15 +492,17 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 	// leveldata column-2 row of the CURRENT level L, and the 0 -> 1
 	// first train is FREE. Three concordant witnesses:
 	//   - the v1.150 client's train-enable gate reads the CURRENT
-	//     level's row for its SP-affordability check (sub_5841d0
-	//     @0x00584389: sub_7e0f20(currentLevel)+0x10 <= heldSP);
+	//     level's row for its SP-affordability check
+	//     (CIFSkillBoard_RefreshMasteryHeaderAndTrainButton:
+	//     CGlobalData_GetLevelDataPayload(currentLevel)+0x10 <= heldSP);
 	//   - the v1.150 mastery tooltip displays the same row as the next
 	//     level's required SP and HARDCODES ZERO for a level-0 row
-	//     (sub_55ab40 @0x0055b21a..b22b: edi_5 = 0 unless level != 0);
-	//   - the cross-version research GameServer accumulates its cost
-	//     over rows [current, current+amount) (loop @0x0059c64c) and
+	//     (CIFSlotWithHelp_Str_PARAM_MASTERY: the displayed cost is 0
+	//     unless level != 0);
+	//   - the cross-version reference server's mastery raise
+	//     accumulates its cost over rows [current, current+amount) and
 	//     its level==0 branch BYPASSES pricing entirely, jumping to the
-	//     success path (@0x0059c62a..0x0059c62c) - corroboration only,
+	//     success path - corroboration only,
 	//     per the cross-version rule; the adopted prices are our own
 	//     shipped leveldata rows, and the display half is v1.150-native.
 	// The client's enable gate and tooltip are the only prices a v1.150
@@ -634,10 +637,10 @@ HandleSkillLearn
 
 HandleSkillLearn learns one skill by skilldata id (0x72CB -> 0xB2CB,
 plus the absolute SP refresh on 0x30B3 type 2 - the ack handler
-sub_75bb20 never touches the client's SP, so without the refresh its
-display goes stale).
+CPSMission_OnSkillLearnResponse0xB2CB never touches the client's SP,
+so without the refresh its display goes stale).
 
-The native 59E450 validator checks row/SP eligibility, masteries, STR/INT,
+The native skill learning check tests row/SP eligibility, masteries, STR/INT,
 country, the exact next rank, three prerequisite groups and finally SP.
 Keep this order: simultaneous failures must return the same refusal byte.
 Chain children remain internal execution records rather than learned entries.
@@ -658,7 +661,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 	}
 	row, known := rt.deps.SkillData().SkillByID(request.SkillID)
 	if !known || row.SPCost == 0 {
-		// 59E47D / 59E4A3: absent and zero-SP rows are not trainable.
+		// Absent and zero-SP rows are not trainable.
 		return skillLearnRefusal(skillLearnUnavailable)
 	}
 
@@ -673,7 +676,8 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 
 	// Gate 7 + the write, inside one door closure: the SP check cannot go
 	// stale between reading and spending. The learned-list write mirrors
-	// the client's own model (sub_8509f0): REPLACE the group's previous
+	// the client's own model (LearnedSkillMap_AddRecordByHost): REPLACE
+	// the group's previous
 	// entry on upgrade, append on a first learn.
 	granted := false
 	refusal := wire.ErrCodeSkillLearnRefused
@@ -704,7 +708,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 			refusal = wire.ErrCodeSkillLearnInt
 			return false
 		}
-		// 59E579..59E591: country 3 is unrestricted; other bytes must match.
+		// Country 3 is unrestricted; other bytes must match.
 		if row.RequiredRace != enterworld.SkillRaceAny && int(row.RequiredRace) != enterworld.NativeCountryByte9C(character) {
 			refusal = skillLearnRaceRefusal
 			return false
@@ -794,12 +798,12 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 passiveChangesStats
 
 A learned passive is a standing skill instance whose keeper writes
-(594AC0) change the derived stats: the setv, hpi/mpi/hr/er, br, reat/real
+(the buff installer) change the derived stats: the setv, hpi/mpi/hr/er, br, reat/real
 and damage blocks (PassiveParameters), the flat critical (PassiveCritical)
 and the defense passives. Learning or replacing one resends the stat block,
 or the client keeps the old maximum MP, HP and rates until something else
 refreshes them. Inferred: native rebuilds the derived parameters on any
-passive learn, as withdrawal (59FA85) does on any removal.
+passive learn, as withdrawal does on any removal.
 ==================
 */
 func passiveChangesStats(row enterworld.SkillRow) bool {

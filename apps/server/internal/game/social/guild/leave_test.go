@@ -54,7 +54,7 @@ func TestHandleLeaveEmitsAckAndSubOp3OracleAndClearsFK(t *testing.T) {
 		t.Errorf("fan-out names = %v, want [Alfa Berk]", outcome.MemberNames)
 	}
 	if outcome.SelectedTargetGid != 0x00C40007 {
-		t.Errorf("decoded gid = %#x, want 0xC40007", outcome.SelectedTargetGid)
+		t.Errorf("decoded gid = %#x, want 0x%X", outcome.SelectedTargetGid, 0x00C40007)
 	}
 	// The atomic door's pair: FK cleared AND member row gone.
 	if berk.GuildID != nil {

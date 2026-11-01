@@ -290,7 +290,8 @@ type ScheduleResponse struct {
 
 // ChatLine is one public chat line. Kind is "chat" (ordinary beta chat,
 // shard-wide), "global" (the Global Chatting item) or "notice" (an
-// operator announcement, Character null). Profile is false when the
+// operator announcement, Character null). Gameplay announcements are
+// not chat: they come from /public/v1/events. Profile is false when the
 // character hid their profile: the site shows the name without a link.
 type ChatLine struct {
 	At        string  `json:"at"`
@@ -305,6 +306,21 @@ type ChatLine struct {
 // union lines never enter it; a banned or muted author's lines are gone.
 type ChatResponse struct {
 	Lines []ChatLine `json:"lines"`
+}
+
+// EventLine is one automated gameplay announcement, as the game's notice
+// bar showed it: a seal drop, an enhancement advance, a job kill or a
+// break.
+type EventLine struct {
+	At   string `json:"at"`
+	Text string `json:"text"`
+}
+
+// EventsResponse is GET /public/v1/events: the latest announcements,
+// oldest first, at most chatfeed.MaxEvents. A separate stream from chat,
+// so a busy drop table never scrolls people's lines off the site.
+type EventsResponse struct {
+	Lines []EventLine `json:"lines"`
 }
 
 // Gear is a ranked player's worn equipment: the plus sum and highest, and

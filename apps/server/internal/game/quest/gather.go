@@ -5,23 +5,24 @@ gather.go - quest tool admission and admitted-character gathering timers
 
 The item owner consumes the tool after admission. This owner retains the
 short online countdown and awards the gathered material through inventory
-authority. Leaving the world cancels the countdown, matching 8C8770.
+authority. Leaving the world cancels the countdown, matching the server's
+capture-timer clear.
 
-Eight quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
-on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19, 8B2AB0) cut a
+Eight quests own tools. Ivy 2's knife cuts a vine after ten seconds
+on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19) cut a
 Golden Apple after ten seconds with no roll, and the Golden Apple lures a
 quest Ladon whose Bloody Orbs are the quest's objective. Rahid 5's Essence
-of Roc Mountain (QNO_RM_OLDWOMAN_5, 8A0AA0) gathers a Pile of Rainbow Grass
+of Roc Mountain (QNO_RM_OLDWOMAN_5) gathers a Pile of Rainbow Grass
 on each of seven peaks in order, the later peaks taking longer and the
 earlier ones failing more often. Hidden Treasure 5's Seal Key
-(QNO_CA_TREASURE_5, 8C7910) calls a Treasure Guardian at the Hungry Blood
+(QNO_CA_TREASURE_5) calls a Treasure Guardian at the Hungry Blood
 Ong habitat, whose King's Treasure Box is the quest's objective. Demetri's
-Shiny Moss (QNO_EU_ADVENTURER_1, 8B6840) lures a Red Spotted Crab by the
+Shiny Moss (QNO_EU_ADVENTURER_1) lures a Red Spotted Crab by the
 Troy wooden horse; its Yellow Eggs are the objective. Irina's amulet
-orders (QNO_WC_WAREHOUSE_W_2 and _3, 895BC0 / 8970F0) turn each hunted
+orders (QNO_WC_WAREHOUSE_W_2 and _3) turn each hunted
 amulet into an authentic or a flawed one on a right-click. The Sunset
-Witch's holy water (QNO_EU_EASTEU_1, 8AA700) purifies her stable for ten
-seconds, and a Stable Filth comes of it about half the time (8AA630).
+Witch's holy water (QNO_EU_EASTEU_1) purifies her stable for ten
+seconds, and a Stable Filth comes of it about half the time.
 
 ===========================================================================
 */
@@ -64,7 +65,7 @@ const (
 	adventurerMoss           = "ITEM_QNO_EU_ADVENTURER_1_01"
 	adventurerCrab           = "MOB_QT_01_CRAB"
 	adventurerRegion         = 0x685a
-	adventurerRadius         = 420 // 8B6840: 0x1A4
+	adventurerRadius         = 420 // the moss handler's 0x1A4
 	adventurerCrabMin        = 20
 	adventurerCrabSpan       = 80
 	stableQuest              = "QNO_EU_EASTEU_1"
@@ -73,8 +74,8 @@ const (
 	stableFilthTarget        = 5
 	stablePurifySeconds      = 10
 	stableRegion             = 0x6a4b
-	stableRadius             = 200 // 8AA700: 0xC8
-	stablePurifyChance       = 50  // 8AA630 fails rand % 101 above 0x32
+	stableRadius             = 200 // the holy-water handler's 0xC8
+	stablePurifyChance       = 50  // the purify timer fails rand % 101 above 0x32
 	amuletFirstQuest         = "QNO_WC_WAREHOUSE_W_2"
 	amuletSecondQuest        = "QNO_WC_WAREHOUSE_W_3"
 	amuletHunted             = "ITEM_QNO_WC_WAREHOUSE_W_2_01"
@@ -89,7 +90,7 @@ const (
 	treasureRadius           = 400
 	treasureGuardianMin      = 20
 	treasureGuardianSpan     = 80
-	treasureGuardianLifeMs   = 300000 // 8C7910: CEVENTHandler_SetTiming 0x493E0
+	treasureGuardianLifeMs   = 300000 // the Seal Key handler's guardian timer, 0x493E0
 	questSecondMs            = 1000
 	OpQuestGatherStart       = 0x36bd
 	OpQuestGatherCancel      = 0x775d
@@ -115,8 +116,8 @@ func ScriptMonsterCodenames() []string {
 gatherRoll
 
 How a countdown's end is rolled: never (Cerberus), failing below 50 of
-rand % 101 (Ivy's 8BB5F0), or failing above the step's chance (Rahid's
-8A0970).
+rand % 101 (Ivy's vine timer), or failing above the step's chance (Rahid's
+peak timer).
 ================
 */
 type gatherRoll uint8
@@ -152,8 +153,8 @@ type gatherJob struct {
 ================
 rahidPeak
 
-One of the seven peaks of 8A0AA0's table: the area, the gathering seconds
-and the chance in rand % 101 that 8A0970 grants the Pile.
+One of the seven peaks of the server's Essence table: the area, the gathering seconds
+and the chance in rand % 101 that the peak timer grants the Pile.
 ================
 */
 type rahidPeak struct {
@@ -178,7 +179,7 @@ questToolCleanup
 
 Materials and tools have different identities. Completion and abandonment
 discard unused knives without touching the traps awarded by the same quest.
-Cerberus 1 registers its Golden Apple as a quest item (8B2130 +0x164), so
+Cerberus 1 registers its Golden Apple as a quest item (its item registration, +0x164), so
 leftover apples go too; its scissors leave with the supply cleanup.
 ================
 */
@@ -331,10 +332,10 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 ================
 beginRahidEssence
 
-8A0AA0 admits the Essence only at the peak of the current step, within its
+The server admits the Essence only at the peak of the current step, within its
 radius and while fewer than seven Piles are held; then it needs an empty
 slot (_16). Anything else is the wrong place (_17). Native also requires
-quest state 7 or 8, set by the first graded Rocky kill (91C4D0): the only
+quest state 7 or 8, set by the first graded Rocky kill (its gather mission): the only
 Essence source, so holding one implies it.
 ================
 */
@@ -359,7 +360,8 @@ func (rt *Runtime) beginRahidEssence(c *enterworld.Character, def *Definition, a
 ================
 beginIvyKnife
 
-8BB6C0 checks the Pond Ruins radius, material cap and empty inventory slot.
+The server's knife handler checks the Pond Ruins radius, material cap and
+empty inventory slot.
 ================
 */
 func (rt *Runtime) beginIvyKnife(c *enterworld.Character, def *Definition, at simulation.Spawn, nowMs int64) ([]wire.Frame, bool) {
@@ -380,10 +382,10 @@ func (rt *Runtime) beginIvyKnife(c *enterworld.Character, def *Definition, at si
 ================
 beginCerberusScissors
 
-8B2AB0 mode 1: the Long Scissors work only within 400 of the lure point,
+The scissors handler, mode 1: the Long Scissors work only within 400 of the lure point,
 while fewer than twenty Golden Apples are held, and with an empty slot
 (_11 "Item use has failed"). The ten-second cut then always yields an
-apple (8B2A10 has no roll, unlike Ivy's 8BB5F0).
+apple (the scissors timer has no roll, unlike Ivy's vine timer).
 ================
 */
 func (rt *Runtime) beginCerberusScissors(c *enterworld.Character, def *Definition, at simulation.Spawn, nowMs int64) ([]wire.Frame, bool) {
@@ -404,7 +406,7 @@ func (rt *Runtime) beginCerberusScissors(c *enterworld.Character, def *Definitio
 ================
 useCerberusApple
 
-8B2AB0 mode 2: a Golden Apple lures a quest Ladon 20-100 from the player
+The same handler, mode 2: a Golden Apple lures a quest Ladon 20-100 from the player
 while fewer than twenty Bloody Orbs are held, inside the same area (_13).
 The native mission-state-8 refusal is the finished objective, which the
 orb cap already refuses. A failed spawn keeps the apple.
@@ -428,7 +430,7 @@ func (rt *Runtime) useCerberusApple(c *enterworld.Character, def *Definition, at
 ================
 useTreasureKey
 
-8C7910: a Seal Key works only while the quest runs unfinished (state 1 or
+The server's Seal Key handler: it works only while the quest runs unfinished (state 1 or
 7; holding the Treasure Box is state 8) and within 400 of the habitat
 point, else _17. It calls the Treasure Guardian 20-100 from that point,
 not from the player as Cerberus's apple does, and removes it after five
@@ -454,7 +456,7 @@ func (rt *Runtime) useTreasureKey(c *enterworld.Character, def *Definition, at s
 ================
 useShinyMoss
 
-8B6840: with the Yellow Eggs gathered (quest state 8) the moss answers _09;
+The moss handler: with the Yellow Eggs gathered (quest state 8) the moss answers _09;
 otherwise it works only within 420 of the Troy wooden horse, else _08. It
 lures MOB_QT_01_CRAB 20-100 from the player, as Cerberus's apple does
 (the spawn ring's centre is the player's position from vtable +0x158),
@@ -479,11 +481,11 @@ func (rt *Runtime) useShinyMoss(c *enterworld.Character, def *Definition, at sim
 ================
 beginHolyWater
 
-8AA700: the holy water works only while the Sunset Witch's quest runs
+The server's holy-water handler: the water works only while the Sunset Witch's quest runs
 (else EASTEU_3's _13, which also answers a purification already under way),
 within 200 of her stable (region 0x6A4B 249, 24, 759; _09), while fewer than
 five Filths are held (_11) and with an empty slot (_10). Then the shared
-ten-second countdown runs; 8AA630 grants a Filth unless rand() % 101 is
+ten-second countdown runs; the purify timer grants a Filth unless rand() % 101 is
 above 50 (_12). The water is spent when the purification starts.
 ================
 */
@@ -513,7 +515,7 @@ func (rt *Runtime) beginHolyWater(c *enterworld.Character, at simulation.Spawn, 
 ================
 useAmulet
 
-895BC0 / 8970F0 (one per order, both on the W_2 items): while the order is
+The server's amulet handlers (one per order, both on the W_2 items): while the order is
 running, a hunted amulet becomes an authentic one or a flawed one on an
 even or odd rand(), until the order's count of authentic ones is held;
 then it is refused and kept. The grant lands before the amulet is spent,
@@ -562,7 +564,7 @@ func (rt *Runtime) useAmulet(c *enterworld.Character) ([]wire.Frame, bool) {
 ================
 adventurerHorse
 
-8B6840 compares against region 0x685A (986, 20, 340), the Troy wooden
+The moss handler compares against region 0x685A (986, 20, 340), the Troy wooden
 horse northeast of Droa Dock.
 ================
 */
@@ -574,7 +576,7 @@ func adventurerHorse() simulation.Spawn {
 ================
 treasureHabitat
 
-8C7910 compares against region 0x666B (1525, 152, 1495), south of
+The Seal Key handler compares against region 0x666B (1525, 152, 1495), south of
 Samarkand.
 ================
 */
@@ -586,7 +588,7 @@ func treasureHabitat() simulation.Spawn {
 ================
 cerberusLurePoint
 
-8B2AB0 compares against region 0x634C (126, -41, 1863).
+The scissors handler compares against region 0x634C (126, -41, 1863).
 ================
 */
 func cerberusLurePoint() simulation.Spawn {
@@ -638,9 +640,9 @@ func (rt *Runtime) ForgetItemUse(c *enterworld.Character) {
 ================
 AdvanceItemUse
 
-Advance once per admitted second (quest event 0x18). Ivy's 8BB5F0 fails
+Advance once per admitted second (quest event 0x18). Ivy's vine timer fails
 rolls below 50, so its success boundary differs from trap capture; Cerberus's
-8B2A10 never rolls; Rahid's 8A0970 fails rolls above the peak's chance and
+scissors timer never rolls; Rahid's peak timer fails rolls above the peak's chance and
 moves to the next peak on success even when the bag refuses the Pile. Bag
 changes during the wait are rechecked.
 ================

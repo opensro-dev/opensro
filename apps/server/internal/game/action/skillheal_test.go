@@ -39,8 +39,8 @@ func faithPassive(up uint32) enterworld.SkillRow {
 TestRecoveryAuraHealReadsFaithLikeACast
 
 Recovery Division is heal(445,0,0,0) with getv HLRU. Its pulse runs the
-cast's code (CastLifecycle_ProcessPersistent -> SkillCombat_EngageSkill ->
-593F50), whose 59425E adds the caster's HLRU to both percent words; the
+cast's code (the persistent cast through the native skill engage and
+effect application), which adds the caster's HLRU to both percent words; the
 aura base then heals that percent of the maximum in place of the flat word.
 A caster who learned Faith (10) therefore restores 10 % of max HP and of
 max MP each pulse.

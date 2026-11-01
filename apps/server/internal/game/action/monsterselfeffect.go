@@ -26,7 +26,7 @@ owned self-cast preparation. The recipient is the caster, not the enemy.
 The buff attaches under its own token, so its expiry (B6A0) never names the
 cast. The cast closes with its own mode-2 B505 when its action ends, as a
 player's timed self effect does (acceptTimedSelfEffect). The client keeps a
-cast until it is cancelled (CIDecoSkill_Update 8DC440 returns 0 only after
+cast until it is cancelled (client CIDecoSkill_Update 8DC440 returns 0 only after
 +D0), so without the close every self-buff stayed in each observer's cast
 table until the monster left view.
 ================
@@ -74,8 +74,8 @@ func (rt *Runtime) retireMonsterSelfEffects(now int64) []simulation.DivisionFram
 		if err != nil {
 			panic(err)
 		}
-		// CSkillManager_PublishRetiredBuffs (59ECD0) sends the retired-buff
-		// packet through CGObj_SendPacketToNearbySessions (484D90). The
+		// The reference server sends the retired-buff
+		// packet through its nearby-session broadcast. The
 		// summon is absent from shownMonsters only on the before-hook that
 		// creates it; RunMonsterLeg admits it before the next hook.
 		frames = append(frames, simulation.DivisionFrames{DivisionID: row.DivisionID, SourceGID: row.GID, Frames: []simulation.Frame{{Opcode: wire.OpEndedEffectInstances, Payload: payload}}})

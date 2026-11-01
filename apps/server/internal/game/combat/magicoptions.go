@@ -15,7 +15,7 @@ import (
 	"opensro.online/server/internal/game/paramkeeper"
 )
 
-// magicOption is one decoded item option (4904B0): the definition tag and
+// magicOption is one decoded item option (the server's option decoder): the definition tag and
 // the high-dword magnitude.
 type magicOption struct {
 	tag   uint32
@@ -64,7 +64,7 @@ func resolveMagicOptions(codename string, encoded []uint64, source enterworld.Ma
 ==================
 applyItemMagicOptions
 
-applyItemMagicOptions is 496A70's stat half: 'hr' and 'er' raise the item's
+applyItemMagicOptions is the item-level option pass's stat half: 'hr' and 'er' raise the item's
 own hit (+1D8) and evasion (+19C) ratings by a percentage, in x87 and
 stored to float32. The durability half ('dura', 'duru', 'nrep') moves the
 item's maximum durability, which the durability owner projects.
@@ -85,14 +85,14 @@ func applyItemMagicOptions(item *Stats, options []magicOption) {
 ==================
 magicOptionWrites
 
-magicOptionWrites is 66B180 -> 498690 for one equipped item: each option's
+magicOptionWrites is the server's per-item option-to-keeper pass for one equipped item: each option's
 keeper writes, keyed by the item as the native source. Tags the v1.150
 magicoption.txt does not ship are the native MiniDump path.
 ==================
 */
 func magicOptionWrites(codename string, options []magicOption, source uint32) ([]paramkeeper.Write, error) {
 	var writes []paramkeeper.Write
-	// 4B3830 reads the item's own current contribution to one parameter;
+	// The server reads the item's own current contribution to one parameter;
 	// the avatar options accumulate onto it.
 	own := map[uint16]float32{}
 	flat := func(param uint16, value float32) {
@@ -116,9 +116,12 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 		case optionTag("mdia"):
 			flat(0xbc, float32(int32(own[0xbc])+int32(o.value)))
 		case optionTag("hp"):
-			flat(3, v)
+			// Accumulates onto the item's own contribution like hpa
+			// below: the keeper replaces per source, so a plain write
+			// after an hpa write would silently drop its magnitude.
+			flat(3, float32(int32(own[3])+int32(o.value)))
 		case optionTag("mp"):
-			flat(4, v)
+			flat(4, float32(int32(own[4])+int32(o.value)))
 		case optionTag("fz"):
 			// Frostbite resistance covers freezing and frostbite.
 			flat(0x1b, v)
@@ -140,9 +143,13 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 		case optionTag("era"):
 			add(9, paramkeeper.PercentSum, v)
 		case optionTag("hpa"):
-			add(0x34, paramkeeper.PercentSum, v)
+			// The avatar HP row is a flat increase: its client text is
+			// "PARAM_HP 150" with no percent sign (the rate rows, hra and
+			// era, carry one), and its rolled range is a fixed 150. It
+			// lands on the max-HP node like the equipment hp option.
+			flat(3, float32(int32(own[3])+int32(o.value)))
 		case optionTag("mpa"):
-			add(0x35, paramkeeper.PercentSum, v)
+			flat(4, float32(int32(own[4])+int32(o.value)))
 		case optionTag("hprg"):
 			add(0x19, paramkeeper.PercentSum, v)
 		case optionTag("mprg"):
@@ -158,7 +165,7 @@ func magicOptionWrites(codename string, options []magicOption, source uint32) ([
 		case optionTag("hr"), optionTag("er"), optionTag("dura"), optionTag("duru"), optionTag("nrep"),
 			optionTag("rein"), optionTag("atha"), optionTag("soli"), optionTag("luck"), optionTag("astr"),
 			optionTag("rep"):
-			// Item-level (496A70) or presentation-only options: no keeper write.
+			// Item-level or presentation-only options: no keeper write.
 		default:
 			return nil, fmt.Errorf("combat: item %q magic option tag %#x has no v1.150 stat semantics", codename, o.tag)
 		}

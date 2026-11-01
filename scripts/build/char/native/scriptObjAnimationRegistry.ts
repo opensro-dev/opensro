@@ -2,11 +2,11 @@
 // native client. Keep behaviour identical to the published assets.
 /**
  * Native v1.150 animation-name registry installed by
- * sub_8719d0 / CICScriptObjManager_RegisterAnimationNameIds.
+ * CICScriptObjManager_RegisterAnimationAliases / CICScriptObjManager_RegisterAnimationNameIds.
  *
  * Raw phonebook in native insertion order. The registrar fold executes these
  * rows, while browser hosts resolve shipped ANI_* tokens through the registrar
- * plus sub_8714c0 lookup pair.
+ * plus CICScriptObjManager_ResolveMotionIdByAlias lookup pair.
  */
 export const SCRIPT_OBJ_ANIMATION_NAME_ID_ROWS = [
   ["ANI_POSE", 0x3c],

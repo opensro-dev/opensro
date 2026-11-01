@@ -13,6 +13,46 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
+// characterDoors is one lane's pair of character commit doors: the
+// immediate doors a packet handler answers through (its answer follows
+// the commit), or the deferred doors only the simulation tick reaches
+// (the commit joins the tick's batch, store tickbatch.go). A function
+// both lanes reach takes the pair from its caller, so the lane - never
+// the call site - chooses the commit timing (#2036). Handler entries
+// pass handlerDoors, tick entries tickDoors.
+/*
+================
+characterDoors
+================
+*/
+type characterDoors struct {
+	update     func(*enterworld.Character, string, func() bool) bool
+	updateMany func([]*enterworld.Character, string, func() bool) bool
+}
+
+/*
+================
+handlerDoors
+
+The packet-handler lane: every answer follows its commit.
+================
+*/
+func (rt *Runtime) handlerDoors() characterDoors {
+	return characterDoors{update: rt.deps.Update, updateMany: rt.deps.UpdateMany}
+}
+
+/*
+================
+tickDoors
+
+The simulation-tick lane: commits join the tick's one batched
+transaction.
+================
+*/
+func (rt *Runtime) tickDoors() characterDoors {
+	return characterDoors{update: rt.deps.UpdateDeferred, updateMany: rt.deps.UpdateManyDeferred}
+}
+
 // Dependencies is the character and itemdata surface consumed by action.
 /*
 ================
@@ -41,6 +81,10 @@ type Dependencies interface {
 	MagicOptionDefinitions() enterworld.MagicOptionSource
 	SetCatalogue() enterworld.SetCatalogueSource
 	GuildAuthority() enterworld.GuildStore
+	// QueueCharacterRename queues a name-change scroll's rename for the
+	// next login (port-only, #1689). It takes the authority store's own
+	// lock, so it is called outside every character commit door.
+	QueueCharacterRename(divisionID string, character *domain.Character, name string, nowMs int64) (enterworld.RenameQueueOutcome, error)
 	ReentryPackets(divisionID, characterName string) ([]enterworld.Packet, bool)
 	PrepareReentry(divisionID string, character *domain.Character) (enterworld.PreparedReentry, bool)
 }

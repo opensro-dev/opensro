@@ -9,6 +9,7 @@ credited monster HP/reward door and publish death, not another cast or animation
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
@@ -38,10 +39,14 @@ func (rt *Runtime) wolfSource(division string, owner *enterworld.Character, gid 
 wolfCompanion
 
 Common eligibility for every wolf bonus; no learned Execute prerequisite.
+The copy stays the full one: eligibility itself resolves the wolf
+through the owner's inventory rows, and companion resolution walks
+bag rows - the narrow equipment copy drops the pet it just admitted
+(#1943; the domain SnapshotEquipment pin).
 ================
 */
 func (rt *Runtime) wolfCompanion(division string, owner *enterworld.Character, gid uint32, now int64) (petCombatStep, bool) {
-	return rt.elementalCompanion(division, owner, gid, "Wolf", now)
+	return rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: "Wolf"}, now)
 }
 
 /*
@@ -57,17 +62,86 @@ func (rt *Runtime) elementalCompanion(division string, owner *enterworld.Charact
 
 /*
 ================
+elementalQuery
+
+Which pet an eligibility walk looks for. passive, when set, admits only
+a pet with that passive slotted: the per-tick passive lanes (Tailwind,
+Guiding Feathers) refuse every other crow before copying its owner.
+================
+*/
+type elementalQuery struct {
+	gid       uint32
+	kind      string
+	allowTown bool
+	passive   string
+}
+
+/*
+================
+hasElementalCandidate
+
+The record half of elementalCompanionMatching's pet filter: plain field
+reads and catalogue lookups, safe inside the read door. Every pet it
+rejects the walk (or, for passive, the caller's own Passive check on
+the selected pet) rejects too, so admission never changes the outcome.
+================
+*/
+func hasElementalCandidate(c *enterworld.Character, q elementalQuery) bool {
+	found := false
+	c.VisitCompanions(func(pet *domain.CharacterCOS) bool {
+		found = pet.BroodStage == 0 && (q.gid == 0 || pet.GID == q.gid) && pet.Summoned && pet.CurrentHP != 0 &&
+			companion.PetKind(pet.Codename) == q.kind && (q.passive == "" || hasPassive(pet, q.passive))
+		return !found
+	})
+	return found
+}
+
+/*
+================
+hasPassive
+
+companion.Passive's verdict without its level: the slotted rows alone
+decide it, so no modifiers are computed.
+================
+*/
+func hasPassive(pet *domain.CharacterCOS, name string) bool {
+	_, _, ok := companion.Passive(pet, name, companion.Modifiers{})
+	return ok
+}
+
+/*
+================
 elementalCompanionEligibility
 
 Only travel support may opt into safe zones; combat callers keep the town gate.
 ================
 */
 func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterworld.Character, gid uint32, kind string, now int64, allowTown bool) (petCombatStep, bool) {
+	return rt.elementalCompanionMatching(division, owner, elementalQuery{gid: gid, kind: kind, allowTown: allowTown}, now)
+}
+
+/*
+================
+elementalCompanionMatching
+
+The one eligibility walk. The owner copy is the full admitted one,
+because the walk itself resolves the pet through the owner's
+inventory rows (#1943).
+================
+*/
+func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld.Character, q elementalQuery, now int64) (petCombatStep, bool) {
 	var step petCombatStep
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
-	snapshot := rt.characterSnapshot(division, owner)
+	gid, kind, allowTown := q.gid, q.kind, q.allowTown
+	// Runs per pet per tick: copy the owner only when a pet could pass the
+	// record filters below (#1943), and then only the pet-owner view
+	// (#2030): the walk and every elemental lane reading step.snapshot
+	// read companions, life, town, world, party and the relation facts.
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(c *enterworld.Character) bool {
+		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
+	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
 		return step, false
 	}

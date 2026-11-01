@@ -13,9 +13,9 @@ package action
 
 import (
 	"opensro.online/server/internal/game/world/monster"
-	"strings"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -24,30 +24,6 @@ import (
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
-
-/*
-================
-pendingSkillFinalize
-
-One delayed control packet retains its actor route independently of damage.
-================
-*/
-type pendingSkillFinalize struct {
-	sourceGID     uint32
-	divisionID    string
-	characterName string
-	dueAtMs       int64
-	frame         wire.Frame
-	// Presentation-only closes retain session ownership without blocking commands.
-	presentationOnly bool
-	// chainBracket marks the mode-2 close of a chain ROOT. The v1.150 client
-	// (85CB60) appends every linked stage's B245 to that root's deco, which
-	// carries the one authored clip for the whole chain; closing it before
-	// the last stage turns the remaining stages into result-only temporaries
-	// (damage with the caster snapped to idle). Stages re-arm it instead of
-	// opening brackets of their own; it never gates the chain's own stages.
-	chainBracket bool
-}
 
 /*
 ==================
@@ -81,7 +57,7 @@ mutation, or B245 bracket exists.
 A fresh press from a seat never gets here: standForSeatedCommand stands
 the player first (seatedcommand.go has the native case). This refusal
 covers the continuations - approach, release and resumed attacks - that
-meet a seat or a transition later. playerCastBlocked adds the frozen, sleeping or stunned caster (58DAEF).
+meet a seat or a transition later. playerCastBlocked adds the frozen, sleeping or stunned caster.
 ==================
 */
 func (rt *Runtime) skillCastPostureBlocked(
@@ -128,6 +104,7 @@ func (rt *Runtime) acceptSkillCast(
 		snapshot,
 		cast,
 		rt.Now().UnixMilli(),
+		rt.handlerDoors(),
 	)
 	return result
 }
@@ -149,17 +126,18 @@ func (rt *Runtime) acceptSkillCastAt(
 	snapshot *enterworld.Character,
 	cast wire.SkillAction,
 	nowMs int64,
+	doors characterDoors,
 ) (OpResult, skillCastDecision) {
-	return rt.acceptSkillStageAt(divisionID, character, snapshot, cast, nowMs, 0)
+	return rt.acceptSkillStageAt(divisionID, character, snapshot, cast, nowMs, 0, doors)
 }
 
 /*
 ================
 linkedStageTargetRefusal
 
-A linked stage (a combo's next row) beyond reach. 4AECE7 returns it to
+A linked stage (a combo's next row) beyond reach. The native cast handler returns it to
 action state 2, which executes without measuring range (only state 1
-pursues), and 58CC70 asks of the target only the same plane and adjacent
+pursues), and natively the target is asked only for the same plane and adjacent
 sectors. Returns 0 to execute, else the refusal code.
 ================
 */
@@ -177,8 +155,8 @@ acceptSkillStageAt
 Enter a fresh stage without a prepared execution-cost snapshot.
 ================
 */
-func (rt *Runtime) acceptSkillStageAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32) (OpResult, skillCastDecision) {
-	return rt.acceptSkillStagePhaseAt(divisionID, character, snapshot, cast, nowMs, rootID, nil)
+func (rt *Runtime) acceptSkillStageAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, doors characterDoors) (OpResult, skillCastDecision) {
+	return rt.acceptSkillStagePhaseAt(divisionID, character, snapshot, cast, nowMs, rootID, nil, doors)
 }
 
 /*
@@ -189,7 +167,7 @@ Share admission, range and preparation before choosing the release producer.
 Persistent attacks install linked pairs; immediate attacks commit their hits.
 ================
 */
-func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, release *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if character == nil || snapshot == nil || rt.Monsters == nil || !cast.HasTarget ||
 		cast.HasGroundTarget || cast.TargetGid == 0 {
 		return OpResult{}, skillCastRefused
@@ -241,7 +219,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	consumeAmmo := (basic && !transformStrike && weaponRequiresAmmunition(loadout.WeaponKind)) || (advanced && skill.Ammunition.Count != 0)
 	if consumeAmmo {
-		// 58E32D refuses any skill whose cnsm requirement is unmet with
+		// The native prerequisite check refuses any skill whose cnsm requirement is unmet with
 		// 0x300E, the basic attack included: SKILL_CH_BOW_BASE and
 		// SKILL_EU_CROSSBOW_BASE carry cnsm 4/1 and 4/2. The client shows
 		// the out-of-ammunition notice for it, as it does for skills.
@@ -260,12 +238,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return rt.acceptPlayerTargetStage(offensiveStage{division: divisionID, character: character, snapshot: snapshot,
 			cast: cast, skill: skill, basic: basic, advanced: advanced, rootID: rootID, release: release,
 			attacker: attacker, loadout: loadout, consumeAmmo: consumeAmmo, actionReach: actionReach,
-			lifecycleMs: actionLifecycleMs, now: nowMs})
+			lifecycleMs: actionLifecycleMs, now: nowMs, doors: doors})
 	}
 	if target.CurrentHP == 0 {
 		return OpResult{}, skillCastRefused
 	}
 	if code := temptationTargetRefusal(skill, target); code != 0 {
+		return offensiveRefusal(code), skillCastRefused
+	}
+	if code := rt.jobMonsterTargetRefusal(snapshot, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
 	if d := skill.TimedEffect.Periodic; d.Pinned {
@@ -282,7 +263,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
-	// 4AECE7 returns the linked row to admission state 2. Each stage
+	// Natively the linked row returns to admission state 2. Each stage
 	// checks and pays its own resources; root ownership only skips the shared cooldown.
 	mask := admitExecution
 	if rootID != 0 {
@@ -317,7 +298,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	)
 	spacing, spacingOK := rt.playerToMonsterCombatSpacing(snapshot, target, actionReach)
 	// The approach radius admits a new cast. An already-owned release uses
-	// the native 585CD1 -> 58D8D0 target validation, not another range test.
+	// the native target validation, not another range test.
 	// Keep this symmetric with monsterAttackStage; fleeing is not cast cancel.
 	if !spacingOK || !worldgeom.SamePlane(playerPose.RegionID, monsterPose.RegionID) {
 		return OpResult{}, skillCastDeferred
@@ -331,12 +312,12 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			return offensiveRefusal(code), skillCastRefused
 		}
 	}
-	// 4ADD44 / 4AEB6E: the attack starting here aims the caster's hawk.
+	// Natively the attack starting here aims the caster's hawk.
 	if release == nil && rootID == 0 {
 		rt.noteHawkOwnerAttack(divisionID, snapshot, target.Gid, nowMs)
 	}
 	if skill.ActionCastingTimeMs != 0 && release == nil {
-		return rt.prepareOffensiveCast(divisionID, character, snapshot, cast, skill, advanced, rootID, nowMs)
+		return rt.prepareOffensiveCast(divisionID, character, snapshot, cast, skill, advanced, rootID, nowMs, doors)
 	}
 
 	primary := combatTarget{gid: target.Gid, monster: &target, at: targetAt}
@@ -356,14 +337,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			skill: skill, target: target.Gid, now: nowMs})
 	}
 	if skill.OffensiveArea.Radius != 0 {
-		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)
+		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release, doors)
 	}
-	// 586E04..586E1B: with no area of its own, an imbue-eligible attack
-	// (att value 5) that passes 589D20 selects its victims with the active
+	// With no area of its own, an imbue-eligible attack
+	// (att value 5) that passes the execution selector selects its victims with the active
 	// imbue's efr (the Lightning Force); the chain's victims are flagged.
 	if skill.Attack.Value5 != 0 && skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector {
 		if imbue, _ := rt.activeWeaponImbue(divisionID, snapshot.Name, nowMs); imbue.Pinned && imbue.Area.Radius != 0 {
-			return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, imbue.Area, true, advanced, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)
+			return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, imbue.Area, true, advanced, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release, doors)
 		}
 	}
 	stealBase, stealOK := int64(0), true
@@ -408,7 +389,22 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	var killDrops []grounditem.Item
-	roster := rt.monsterRewardRoster(divisionID, character, nowMs)
+	// The reward roster serves the settlement alone, and a strike
+	// whose planned damage cannot kill reaches none (#2030): door the
+	// caster alone and build no roster. A plan that can kill keeps
+	// the roster-wide door exactly as before. The sequence refuses
+	// outright when the target's HP moved off the planned value and
+	// applied damage never exceeds planned damage, so a fatal impact
+	// implies a lethal plan; settleStrikeFatal guards the rest.
+	var plannedDamage uint64
+	for _, plan := range damagePlans {
+		plannedDamage += uint64(plan.Damage)
+	}
+	canKill := plannedDamage >= uint64(target.CurrentHP)
+	roster := rewardRoster{division: divisionID, characters: []*enterworld.Character{character}}
+	if canKill {
+		roster = rt.monsterRewardRoster(divisionID, character, nowMs)
+	}
 	var settlement monsterSettlement
 	committed := make([]simulation.MonsterDamageResult, 0, len(formulas))
 	var ammo ammunitionResult
@@ -420,7 +416,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		// Character ammo and monster HP move under the same per-division lock
 		// and the same character authority closure. Validation is read-only;
 		// debit is the non-refusing tail after the HP authority accepts damage.
-		if !rt.deps.UpdateMany(roster.characters, "player-basic-attack", func() bool {
+		if !doors.updateMany(roster.characters, "player-basic-attack", func() bool {
 			var cost skillCharge
 			if advanced {
 				cost, refusal = rt.stagePhaseCost(divisionID, character, skill, nowMs, release, rootID)
@@ -458,14 +454,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				tuning = rt.commitTuningMana(divisionID, character, skill.FixedDamage, committed)
 			}
 			if skill.LifeSteal.Present {
-				// 40F750: the caster recovers the life taken (skilllifesteal.go).
+				// The caster recovers the life taken (skilllifesteal.go).
 				stolen = rt.commitLifeSteal(divisionID, character, committed)
 			}
 			if skill.PositionEffect.Charge {
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
 			}
 			if committed[len(committed)-1].Fatal {
-				settlement = rt.settleMonsterInsideDoor(divisionID, character, roster, committed[len(committed)-1], monsterPose, nowMs)
+				settlement = rt.settleStrikeFatal(divisionID, character, roster, canKill, committed[len(committed)-1], monsterPose, nowMs)
 				killProgressionFrames, killDrops = settlement.actorFrames, settlement.drops
 			}
 			return true
@@ -515,7 +511,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
-		// 5860D2 retains zero-preparation shots too. A fast shot or linked
+		// Natively zero-preparation shots are retained too. A fast shot or linked
 		// stage must not lose its effect actor before the projectile arrives.
 		closeAt = max(closeAt, nowMs+flight+1)
 	}
@@ -568,12 +564,12 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if consumeAmmo {
 		actorFrames = append(actorFrames, ammunitionFrames(ammo)...)
 	}
-	// 593832: the attacker's unblocked attempts wear its weapon.
+	// The attacker's unblocked attempts wear its weapon.
 	var tally wearTally
 	for _, formula := range formulas {
 		tally.note(formula.Blocked, true)
 	}
-	wear := rt.applyEquipmentWear(divisionID, character, tally)
+	wear := rt.applyEquipmentWear(divisionID, character, tally, doors)
 	actorFrames = append(actorFrames, wear.actor...)
 	broadcastFrames = append(broadcastFrames, wear.public...)
 	// The actor sees the same fatal B245/drop prefix first, then the complete
@@ -603,7 +599,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	// Other recipients' public level-up effects also belong in the actor's
 	// projection; its own public subset is already in killProgressionFrames.
 	actorFrames = append(actorFrames, settlement.otherPublic...)
-	// Entering battle (4E27C0) is a consequence of the hit, published after
+	// Entering battle is a consequence of the hit, published after
 	// its burst like the other damage-application state changes.
 	actorFrames = append(actorFrames, battleFrames...)
 	broadcastFrames = append(broadcastFrames, battleFrames...)
@@ -630,15 +626,49 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 
 /*
 ================
+settleStrikeFatal
+
+The fatal impact of a strike, settled inside the strike door: a
+player's skill strike, or a companion's struck for its owner.
+canKill says the plan was lethal and the roster is the full reward
+roster; without it the settlement runs on the caster's narrow roster
+and the kill was impossible by the planned-damage invariant, which
+noteSurpriseFatal makes audible instead of silent (#2030).
+================
+*/
+func (rt *Runtime) settleStrikeFatal(division string, character *enterworld.Character, roster rewardRoster, canKill bool, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+	if !canKill {
+		rt.noteSurpriseFatal(division, impact.Instance.Gid)
+	}
+	return rt.settleMonsterInsideDoor(division, character, roster, impact, pose, now)
+}
+
+/*
+================
+noteSurpriseFatal
+
+A strike killed under a plan that could not kill: the invariant the
+roster gate rests on broke. Count it and log it at Error with the
+division and the monster, because the settlement just ran with the
+narrow roster and underpaid - this is the sign that is not silence.
+================
+*/
+func (rt *Runtime) noteSurpriseFatal(division string, gid uint32) {
+	rt.surpriseFatalCount.Add(1)
+	log.WithFields(log.Fields{"division": division, "gid": gid}).Error("strike killed under a non-lethal plan; reward settled with the narrow roster")
+}
+
+/*
+================
 prepareOffensiveCast
 
 A cast with a preparation time charges and cools at the press, then waits
 for its release (advanceProjectileCasts), whatever its target's kind.
 ================
 */
-func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, advanced bool, rootID uint32, nowMs int64) (OpResult, skillCastDecision) {
+func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, advanced bool, rootID uint32, nowMs int64, doors characterDoors) (OpResult, skillCastDecision) {
 	var refusal uint16
-	if !rt.deps.Update(character, "prepare-offensive-cooldown", func() bool {
+	if !doors.update(character, "prepare-offensive-cooldown", func() bool {
 		if !enterworld.CharacterAlive(character) {
 			return false
 		}
@@ -661,113 +691,11 @@ func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *
 }
 
 /*
-================
-queueSkillFinalize
-
-Retain control order until the simulation clock reaches the due time.
-================
-*/
-func (rt *Runtime) queueSkillFinalize(
-	divisionID string,
-	characterName string,
-	sourceGID uint32,
-	dueAtMs int64,
-	frame wire.Frame,
-) {
-	if sourceGID == 0 {
-		panic("cast control requires a source GID")
-	}
-	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		sourceGID:     sourceGID,
-		divisionID:    divisionID,
-		characterName: characterName,
-		dueAtMs:       dueAtMs,
-		frame:         frame,
-	})
-	rt.pendingSkillFinalizesMu.Unlock()
-}
-
-/*
-==================
-queueSkillCastClose
-
-queueSkillCastClose schedules the mode-2 close for one accepted offensive
-action. A chain root's close is its chain bracket; a server-owned stage
-(rootID != 0) extends that bracket to its own action end and opens none:
-the client never created a cast for the stage token, so a close on it is
-a silent miss while the root would still be cut at its own duration.
-==================
-*/
-func (rt *Runtime) queueSkillCastClose(divisionID, characterName string, sourceGID, token uint32, skill enterworld.SkillRow, rootID uint32, closeAtMs int64) {
-	if rootID != 0 {
-		rt.extendChainBracket(divisionID, characterName, closeAtMs)
-		return
-	}
-	if sourceGID == 0 {
-		panic("cast control requires a source GID")
-	}
-	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		sourceGID:     sourceGID,
-		divisionID:    divisionID,
-		characterName: characterName,
-		dueAtMs:       closeAtMs,
-		frame:         wire.SkillCastFinalizeFrame(token),
-		chainBracket:  skill.ChainNext != 0,
-	})
-	rt.pendingSkillFinalizesMu.Unlock()
-}
-
-/*
-==================
-queueDetachedCastClose
-
-The closing B505 of a released action that no longer owns its caster
-(self effects, planted traps). It routes through the caster's scope but is
-marked as presentation-only, so hasOpenSkillCast stays false. Keep the real
-session owner so disconnect and world re-entry retire the queued packet.
-==================
-*/
-func (rt *Runtime) queueDetachedCastClose(divisionID, characterName string, sourceGID, token uint32, closeAtMs int64) {
-	if sourceGID == 0 {
-		panic("action: detached cast close has no source")
-	}
-	rt.pendingSkillFinalizesMu.Lock()
-	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
-		divisionID: divisionID, characterName: characterName, sourceGID: sourceGID,
-		dueAtMs: closeAtMs, frame: wire.SkillCastFinalizeFrame(token), presentationOnly: true,
-	})
-	rt.pendingSkillFinalizesMu.Unlock()
-}
-
-/*
-==================
-extendChainBracket
-
-extendChainBracket keeps the root deco alive through the stage that was
-just accepted. A bracket already drained stays closed; its stages then
-resolve as native temporary results, exactly as a late linked B245 would.
-==================
-*/
-func (rt *Runtime) extendChainBracket(divisionID, characterName string, closeAtMs int64) {
-	rt.pendingSkillFinalizesMu.Lock()
-	defer rt.pendingSkillFinalizesMu.Unlock()
-	owner := simulation.WorldKey(divisionID, characterName)
-	for i := range rt.pendingSkillFinalizes {
-		pending := &rt.pendingSkillFinalizes[i]
-		if pending.chainBracket && simulation.WorldKey(pending.divisionID, pending.characterName) == owner {
-			pending.dueAtMs = max(pending.dueAtMs, closeAtMs)
-		}
-	}
-}
-
-/*
 ==================
 chainStageBlocked
 
 chainStageBlocked is the gate a server-owned chain stage waits on. Native
-KEEP_UP (4AECB6..4AECC9) holds only while the casting instance at
+KEEP_UP holds only while the casting instance at
 manager+1D8 (char+C08) is set, i.e. a positive-time step has not released.
 Queued closes and zero-time releases are presentation, not this command;
 the chain's own root bracket in particular must stay open meanwhile.
@@ -806,7 +734,7 @@ func (rt *Runtime) castingInstanceOpenLocked(ownerKey string) bool {
 		return true
 	}
 	for _, pending := range rt.pendingProjectileCasts {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) == ownerKey {
+		if pending.ownerKey == ownerKey {
 			return true
 		}
 	}
@@ -829,7 +757,7 @@ func (rt *Runtime) hasOpenSkillCast(divisionID, characterName string) bool {
 		return true
 	}
 	for _, pending := range rt.pendingSkillFinalizes {
-		if !pending.presentationOnly && simulation.WorldKey(pending.divisionID, pending.characterName) == ownerKey {
+		if !pending.presentationOnly && pending.ownerKey == ownerKey {
 			return true
 		}
 	}
@@ -838,146 +766,12 @@ func (rt *Runtime) hasOpenSkillCast(divisionID, characterName string) bool {
 
 /*
 ==================
-clearSkillFinalizes
-
-clearSkillFinalizes retires the server-owned B245 action brackets for one
-disconnected character. A queued B505 belongs to that session lifecycle:
-retaining it can block a quick reconnect and later broadcast a stale close.
-==================
-*/
-func (rt *Runtime) clearSkillFinalizes(divisionID, characterName string) {
-	// Every re-entry path resets the client's action latch. Forget the old
-	// publication here so the first action in the new world must arm it again.
-	rt.actionSessions.Delete(simulation.WorldKey(divisionID, characterName))
-	rt.pendingSkillFinalizesMu.Lock()
-	defer rt.pendingSkillFinalizesMu.Unlock()
-
-	ownerKey := simulation.WorldKey(divisionID, characterName)
-	delete(rt.currentSkillCommands, ownerKey)
-	monsters := rt.pendingMonsterCasts[:0]
-	for _, pending := range rt.pendingMonsterCasts {
-		if !pending.selfEffect && simulation.WorldKey(pending.division, pending.characterName) == ownerKey {
-			rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{sourceGID: pending.instance.Gid, divisionID: pending.division, characterName: monsterCastOwner(pending.instance.Gid), frame: wire.SkillCastFinalizeFrame(pending.token)})
-		} else {
-			monsters = append(monsters, pending)
-		}
-	}
-	rt.pendingMonsterCasts = monsters
-	projectiles := rt.pendingProjectileCasts[:0]
-	for _, pending := range rt.pendingProjectileCasts {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) != ownerKey {
-			projectiles = append(projectiles, pending)
-		}
-	}
-	rt.pendingProjectileCasts = projectiles
-	kept := rt.pendingSkillFinalizes[:0]
-	for _, pending := range rt.pendingSkillFinalizes {
-		if simulation.WorldKey(pending.divisionID, pending.characterName) != ownerKey {
-			kept = append(kept, pending)
-		}
-	}
-	rt.pendingSkillFinalizes = kept
-}
-
-/*
-==================
-openSkillCastOwnerSnapshot
-
-openSkillCastOwnerSnapshot captures action ownership at the start of one
-authoritative simulation-tick transaction. A due finalize may remove the live
-queue entry later in that transaction, but repeat admission must not observe
-that internal mutation until the next tick: clients need the published B505
-release before another B245 can acquire motion-state ownership.
-
-The value reports whether the owner's casting instance is open. Only that
-gates a server-owned chain stage (see chainStageBlocked); every entry gates
-a new command.
-==================
-*/
-func (rt *Runtime) openSkillCastOwnerSnapshot() map[string]bool {
-	rt.pendingSkillFinalizesMu.Lock()
-	defer rt.pendingSkillFinalizesMu.Unlock()
-
-	owners := make(map[string]bool, len(rt.pendingSkillFinalizes))
-	for _, pending := range rt.pendingSkillFinalizes {
-		if !pending.presentationOnly {
-			owners[simulation.WorldKey(pending.divisionID, pending.characterName)] = false
-		}
-	}
-	for owner := range rt.currentSkillCommands {
-		owners[owner] = true
-	}
-	for _, pending := range rt.pendingProjectileCasts {
-		owners[simulation.WorldKey(pending.divisionID, pending.characterName)] = true
-	}
-	return owners
-}
-
-/*
-==================
-drainSkillFinalizes
-
-drainSkillFinalizes emits due controls exactly once, retaining their source
-and queue order. Only adjacent controls with the same route may coalesce.
-A chain bracket is additionally held while its chain command is live: the
-next step becomes due exactly when the previous step's action ends, so a
-deadline alone would close the root deco between two stages.
-==================
-*/
-func (rt *Runtime) drainSkillFinalizes(nowMs int64) []simulation.DivisionFrames {
-	return rt.drainSelectedSkillFinalizes(nowMs, false)
-}
-
-/*
-================
-drainSelectedSkillFinalizes
-
-Monster controls may settle before AI while player controls retain tick order.
-================
-*/
-func (rt *Runtime) drainSelectedSkillFinalizes(nowMs int64, monstersOnly bool) []simulation.DivisionFrames {
-	chains := rt.liveChainOwners()
-	rt.pendingSkillFinalizesMu.Lock()
-	if len(rt.pendingSkillFinalizes) == 0 {
-		rt.pendingSkillFinalizesMu.Unlock()
-		return nil
-	}
-
-	kept := rt.pendingSkillFinalizes[:0]
-	var out []simulation.DivisionFrames
-	for _, pending := range rt.pendingSkillFinalizes {
-		if monstersOnly && !strings.HasPrefix(pending.characterName, "@monster:") {
-			kept = append(kept, pending)
-			continue
-		}
-		_, held := chains[simulation.WorldKey(pending.divisionID, pending.characterName)]
-		if pending.dueAtMs > nowMs || (pending.chainBracket && held) {
-			kept = append(kept, pending)
-			continue
-		}
-		routeIndex := len(out)
-		out = append(out, simulation.DivisionFrames{DivisionID: pending.divisionID, SourceGID: pending.sourceGID})
-		out[routeIndex].Frames = append(out[routeIndex].Frames, simulation.Frame{
-			Opcode:  pending.frame.Opcode,
-			Payload: pending.frame.Payload,
-			Current: pending.frame.Current,
-			Scope:   pending.frame.Scope,
-		})
-	}
-	rt.pendingSkillFinalizes = kept
-	rt.pendingSkillFinalizesMu.Unlock()
-
-	return coalesceDivisionFrames(out)
-}
-
-/*
-==================
 danceSelectorActive
 
-danceSelectorActive is CSkillManager_CheckOwnerCondition 59DDF0: bit 0 of
-skill-manager +0x1D0. 5842AC installs it from an active persistent skill's
-scls word and 582C76 clears it when that skill retires, so it is set exactly
-while such an effect is live.
+danceSelectorActive is the native owner-condition check: bit 0 of
+skill-manager +0x1D0. The persistent cast installs it from an active
+persistent skill's scls word and clears it when that skill retires, so it is
+set exactly while such an effect is live.
 
 Owner's rule: a Dancing needs the dancer inside ANOTHER Bard's music. Only
 an instance handed out by someone else's aura counts (a child, with an

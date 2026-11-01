@@ -11,7 +11,7 @@ agentapi.go - private character selection and control HTTP surface
 // opens a login path or chooses a shard.
 //
 // Response shapes are 1:1 with the client's recovered native folds
-// (sub_72c0e0_CPSCharacterCreate_OnClickOk / sub_735c00 / authClient
+// (sub_72c0e0_CPSCharacterCreate_OnClickOk / CPSCharacterSelect_OnStartClicked / authClient
 // types) - the client is the surviving contract, and its error codes map
 // through the native agent-error table (data_cc9e5c).
 package agentapi
@@ -58,7 +58,7 @@ const (
 	// EnvMarksDir points at the guild-crest art directory GET /marks/
 	// serves .crb blobs from (the native MarkFTP host role: the client
 	// composes "http://" + MarkFTPAddr + MarkFTPPath + filename from its
-	// option parser @0x725669 / data_cec1d4 and downloads crests at
+	// client option parser @0x725669 / data_cec1d4 and downloads crests at
 	// runtime - NO crest art ships in the Media PK2). Unset (the default)
 	// means the endpoint answers 404 for everything: the mechanism is
 	// operable the moment an operator supplies art, and honestly empty
@@ -74,7 +74,7 @@ const (
 )
 
 // Native agent error codes (the client's data_cc9e5c table; see
-// sub_72c0e0's recovered mapping). Only the codes this surface emits.
+// client 72C0E0's recovered mapping). Only the codes this surface emits.
 const (
 	errCodeServerConnect = 0x02 // generic "cannot reach" shape
 
@@ -201,6 +201,8 @@ type API struct {
 	economyPath             string
 	settings                http.Handler
 	settingsPath            string
+	chatLog                 http.Handler
+	chatLogPath             string
 	operator                http.Handler
 	notices                 *noticePublisher
 	observatory             *observatoryReader
@@ -375,6 +377,9 @@ func (api *API) Handler() http.Handler {
 	if api.economy != nil {
 		mux.Handle(api.economyPath, api.economy)
 	}
+	if api.chatLog != nil {
+		mux.Handle(api.chatLogPath, api.chatLog)
+	}
 	if api.settings != nil {
 		mux.Handle(api.settingsPath, api.settings)
 		mux.Handle(api.settingsPath+"/", api.settings)
@@ -486,8 +491,8 @@ func (api *API) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // guildMarkNamePattern pins the ONLY filename shapes the client ever
-// composes for crest art (sub_833d40: "G%u_%u_%u.crb" @0x833e42 for the
-// guild crest, "A%u_%u_%u.crb" @0x833e75 for the alliance crest; %u caps
+// composes for crest art (client 833D40: "G%u_%u_%u.crb" @0x833e42 for the
+// guild crest, "A%u_%u_%u.crb" client @0x833e75 for the alliance crest; %u caps
 // at 10 decimal digits for a u32). Anything else is not a crest request
 // and answers 404 - which also makes path traversal unexpressable.
 var guildMarkNamePattern = regexp.MustCompile(`^[GA][0-9]{1,10}_[0-9]{1,10}_[0-9]{1,10}\.crb$`)
@@ -499,8 +504,8 @@ const maxGuildMarkBytes int64 = 1 << 20
 
 // handleGuildMark serves one guild-crest .crb blob by its native filename
 // from the configured marks directory - a raw passthrough, no
-// transformation (the client's sub_4ba950 loader consumes the bytes and
-// caches them locally as .rd under its 0xcbc340 cache root). The server
+// transformation (the client's CGuildCrestManager_BuildCrestUrl loader consumes the bytes and
+// caches them locally as .rd under the client's 0xcbc340 cache root). The server
 // stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
 // lineage), never images, so art is host-supplied: no directory or no
 // file is an honest 404 and the client draws nothing for that crest.

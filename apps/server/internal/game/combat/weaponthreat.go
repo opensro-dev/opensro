@@ -20,8 +20,9 @@ import (
 ================
 PhysicalAbsorptionRatio
 
-410A00 reads parameter one and the actor's level. Its denominator constant
-is the double representation of float32(6/7), not an exact rational.
+The server's physical absorption formula reads parameter one and the actor's
+level. Its denominator constant is the double representation of
+float32(6/7), not an exact rational.
 ================
 */
 func PhysicalAbsorptionRatio(level uint8, strength float32) float32 {
@@ -40,7 +41,8 @@ func PhysicalAbsorptionRatio(level uint8, strength float32) float32 {
 ================
 TauntAggression
 
-5903EC..590589: tnt2, then pwtt (411000), then keeper BB. The signed weapon
+The hit-outcome routine's taunt step: tnt2, then pwtt (the weapon threat
+formula), then keeper BB. The signed weapon
 conversion and final unsigned low dword are separate native truncations.
 ================
 */

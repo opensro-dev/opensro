@@ -3,7 +3,7 @@
 
 caravan_test.go - the native caravan formulas and registry timer
 
-Each expectation is worked from the native constants (60BC80..60C6C0), not
+Each expectation is worked from the native constants of the server's caravan rules, not
 read back from the implementation.
 
 ===========================================================================

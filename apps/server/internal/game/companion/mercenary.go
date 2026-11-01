@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-mercenary.go - guild-soldier attribute contributions (4D9850)
+mercenary.go - guild-soldier attribute contributions (native soldier install)
 
 The four advertised attributes write native parameter IDs. Defense's 84..87
 writes are retained as authored, independently of AE..B1 absorption; those
@@ -29,7 +29,7 @@ const (
 ================
 mercenaryModifier
 
-4D9850 has no parameter write for attribute bit 16.
+The native soldier install has no parameter write for attribute bit 16.
 ================
 */
 func mercenaryModifier(id uint16, flags uint8) (paramkeeper.Channel, bool) {

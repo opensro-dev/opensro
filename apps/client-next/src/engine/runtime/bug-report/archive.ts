@@ -30,6 +30,10 @@ const MAX_BYTES = 600 * 1024 * 1024;
 const MAX_DIAGNOSTIC_BYTES = 2 * 1024 * 1024;
 // Agent bugreport.maxDiagnosticsUnpacked is part of the upload contract.
 const MAX_DIAGNOSTIC_UNPACKED_BYTES = 8 * 1024 * 1024;
+// assets.json's shared strings: enumerated words (phases, states, decode
+// kinds) and request paths, nothing free-form.
+const SHARED_ASSET_WORD = /^[a-z][a-z0-9-]{0,31}$/;
+const SHARED_ASSET_PATH = /^\/[A-Za-z0-9_\-./%]{1,240}$/;
 const MIN_DIAGNOSTIC_BYTES = 4096;
 const MAX_USER_AGENT_LENGTH = 512;
 const SHARED_GAMEPLAY_FIELDS = [
@@ -352,6 +356,9 @@ state.json        the game's state when the report was sent (large catalogs omit
 environment.json  browser, screen, CPU, memory, network, the WebGPU adapter's features,
                   limits, vendor and architecture, the player's options, and every
                   resource loaded during the last minute (time, size, status).
+assets.json       the asset queue every 5 s for the last six minutes (#1975): free
+                  request slots and each open load's path, state and age, with the
+                  session phase; it says why a loading screen stalled.
 screenshot.jpg    only when no replay was attached.
 `;
 
@@ -424,6 +431,25 @@ export function diagnosticUploadBudget( maxBytes: number, advertised: unknown ):
 	if ( typeof advertised !== "number" || !Number.isFinite( advertised ) || !Number.isFinite( maxBytes ) ) return 0;
 	const bytes = Math.floor( Math.min( advertised, maxBytes, MAX_DIAGNOSTIC_BYTES ) );
 	return bytes >= MIN_DIAGNOSTIC_BYTES ? bytes : 0;
+}
+
+/*
+================
+diagnosticValue
+
+The one JSON replacer for report data, shared with bug-report.ts: Maps and
+Sets as plain data, binary as its size, bigints as decimal text.
+JSON.stringify throws on a bigint, and report documents carry bigint values
+(the codec's session id among them), so every stringify of report data in
+this module goes through it instead of the bare form.
+================
+*/
+export function diagnosticValue( _key: string, item: unknown ): unknown {
+	if ( item instanceof Map ) return Object.fromEntries( item );
+	if ( item instanceof Set ) return [ ...item ];
+	if ( ArrayBuffer.isView( item ) ) return `[${item.constructor.name}: ${item.byteLength} bytes]`;
+	if ( typeof item === "bigint" ) return item.toString();
+	return item;
 }
 
 /*
@@ -522,7 +548,7 @@ async function diagnosticZip( documents: Record<string, unknown> ): Promise<{ bl
 	const files: ZipFile[] = [];
 	let unpackedBytes = 0;
 	for ( const [name, value] of Object.entries( documents ) ) {
-		const data = new TextEncoder().encode( JSON.stringify( value ) + "\n" );
+		const data = new TextEncoder().encode( JSON.stringify( value, diagnosticValue ) + "\n" );
 		unpackedBytes += data.byteLength;
 		let deflated: Uint8Array | undefined;
 		try {
@@ -537,6 +563,52 @@ async function diagnosticZip( documents: Record<string, unknown> ): Promise<{ bl
 	return {
 		blob: new Blob( [ zipStore( files, new Date( 0 ) ) as BlobPart ], { type: "application/zip" } ),
 		unpackedBytes
+	};
+}
+
+/*
+================
+sharedAssets
+
+assets.json rebuilt from typed fields alone (asset-history.ts): times, slot
+counts, ages, enumerated states and request paths. Paths are public asset
+locations (the asset owner already strips credentials and queries); one that
+does not look like one is dropped, as is any free-form error text.
+================
+*/
+function sharedAssets( value: Record<string, unknown> ): Record<string, unknown> {
+	const word = ( text: unknown ) => typeof text === "string" && SHARED_ASSET_WORD.test( text ) ? text : null;
+	const number = ( n: unknown ) => typeof n === "number" && Number.isFinite( n ) ? n : null;
+	const queue = ( raw: unknown ) => {
+		if ( !raw || typeof raw !== "object" ) return null;
+		const q = raw as Record<string, unknown>;
+		const jobs = Array.isArray( q.jobs ) ? q.jobs : [];
+		return {
+			phase: word( q.phase ),
+			failed: typeof q.error === "string",
+			available: number( q.available ),
+			jobs: jobs.filter( ( job ): job is Record<string, unknown> => !!job && typeof job === "object" ).map(
+				job => ({
+					id: number( job.id ),
+					path: typeof job.path === "string" && SHARED_ASSET_PATH.test( job.path ) ? job.path : null,
+					decode: word( job.decode ),
+					ageMs: number( job.ageMs ),
+					state: word( job.state ),
+					result: word( job.result )
+				})
+			),
+			...(typeof q.omittedJobs === "number" ? { omittedJobs: q.omittedJobs } : {})
+		};
+	};
+	const sample = ( raw: unknown ) => {
+		const s = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+		return { t: number( s.t ), phase: word( s.phase ), queue: queue( s.queue ) };
+	};
+	const samples = Array.isArray( value.samples ) ? value.samples : [];
+	return {
+		note: typeof value.note === "string" ? value.note : "",
+		...(value.current ? { current: sample( value.current ) } : {}),
+		samples: samples.map( sample )
 	};
 }
 
@@ -608,35 +680,50 @@ export async function createDiagnosticUpload(
 		// Opcode, direction, size and time only: technical by construction.
 		"network.json": sharedNetwork( read( "network.json" ) ),
 		"state.json": { session: selectedFields( state.session, [ "phase" ] ), entities: state.entities, gameplay },
-		"environment.json": environment
+		"environment.json": environment,
+		"assets.json": sharedAssets( read( "assets.json" ) )
 	};
 	for ( ;; ) {
 		const zip = await diagnosticZip( documents );
 		if ( zip.blob.size <= limit && zip.unpackedBytes <= MAX_DIAGNOSTIC_UNPACKED_BYTES ) return zip.blob;
-		const candidates = [ "timeline.json", "movement.json", "network.json" ].map( name => ({
+		// The trimmable histories: each document's rows, oldest first.
+		const candidates = ([
+			[ "timeline.json", "events" ],
+			[ "movement.json", "events" ],
+			[ "network.json", "events" ],
+			[ "assets.json", "samples" ]
+		] as const).map( ( [name, rows] ) => ({
 			name,
+			rows,
 			document: documents[name] as Record<string, unknown>
-		}) ).filter( entry => Array.isArray( entry.document.events ) && entry.document.events.length > 0 )
+		}) ).filter( entry =>
+			Array.isArray( entry.document[entry.rows] ) && (entry.document[entry.rows] as unknown[]).length > 0
+		)
 			.sort( ( a, b ) =>
-				JSON.stringify( b.document.events ).length - JSON.stringify( a.document.events ).length
+				JSON.stringify( b.document[b.rows], diagnosticValue ).length -
+				JSON.stringify( a.document[a.rows], diagnosticValue ).length
 			);
 		const entry = candidates[0];
 		const key = Object.keys( gameplay ).sort( ( a, b ) =>
-			JSON.stringify( gameplay[b] ).length - JSON.stringify( gameplay[a] ).length
+			JSON.stringify( gameplay[b], diagnosticValue ).length -
+			JSON.stringify( gameplay[a], diagnosticValue ).length
 		)[0];
 		// A large inventory snapshot must not evict a tiny, decisive receipt.
 		if (
-			key && (!entry || JSON.stringify( gameplay[key] ).length >= JSON.stringify( entry.document.events ).length)
+			key &&
+			(!entry ||
+				JSON.stringify( gameplay[key], diagnosticValue ).length >=
+					JSON.stringify( entry.document[entry.rows], diagnosticValue ).length)
 		) {
 			delete gameplay[key];
 			omissions.push( `state.json: omitted gameplay.${key} to fit upload limit` );
 			continue;
 		}
 		if ( entry ) {
-			const rows = entry.document.events as unknown[];
+			const rows = entry.document[entry.rows] as unknown[];
 			const dropped = Math.ceil( rows.length / 2 );
-			entry.document.events = rows.slice( dropped );
-			omissions.push( `${entry.name}: dropped ${dropped} oldest events to fit upload limit` );
+			entry.document[entry.rows] = rows.slice( dropped );
+			omissions.push( `${entry.name}: dropped ${dropped} oldest ${entry.rows} to fit upload limit` );
 			continue;
 		}
 		throw Error( "Technical diagnostics exceed the report attachment budget" );
@@ -723,7 +810,7 @@ export function createReportArchive(): ReportArchive {
 			const { replay, screenshot, diagnostics, ...details } = row;
 			const files = [ {
 				name: "report.json",
-				data: new TextEncoder().encode( JSON.stringify( details, null, "\t" ) + "\n" )
+				data: new TextEncoder().encode( JSON.stringify( details, diagnosticValue, "\t" ) + "\n" )
 			} ];
 			if ( replay ) files.push( { name: "replay.mp4", data: new Uint8Array( await replay.arrayBuffer() ) } );
 			if ( screenshot ) {

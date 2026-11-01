@@ -27,7 +27,7 @@ import { parseAttachPartLink, parseBsk, parseCharacterBsr } from "./formats.mjs"
 import { characterMaterialVariants } from "./materialVariants.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
-import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
+import { qinshiTombBranchFallback } from "../shared/qinshiTomb.mjs";
 import { AMBIENT_MODIFIER_KIND } from "./equipmentParticles.mjs";
 import { publicAssetsRoot } from "../world/paths.mjs";
 
@@ -353,14 +353,31 @@ async function resolveCompoundBranchBsr( branchPath ) {
 	if ( direct !== null ) {
 		return { bsrPath: branchPath, buffer: direct };
 	}
-	if ( qinshiTombEnabled() && /_10(?=(?:_[a-z]+)?\.bsr$)/i.test( branchPath ) ) {
-		const fallbackPath = branchPath.replace( /_10(?=(?:_[a-z]+)?\.bsr$)/i, "_09" );
+	const fallbackPath = qinshiTombBranchFallback( branchPath );
+	if ( fallbackPath !== null ) {
 		const fallback = await loadOptionalDataAsset( fallbackPath );
 		if ( fallback !== null ) {
 			return { bsrPath: fallbackPath, buffer: fallback };
 		}
 	}
 	throw new Error( `Compound branch BSR absent from archive: ${branchPath}` );
+}
+
+/*
+================
+compoundBodyBsr
+
+A compound's body: branch 0, the kind-0 character BSR. A compound row's
+manifest modifiers are this branch's (assembleCompoundCharacter returns its
+BSR), so every reader that refreshes them reads the same branch.
+================
+*/
+export async function compoundBodyBsr( cpdPath ) {
+	const cpd = parseCompound( await loadDataAsset( cpdPath ), cpdPath );
+	if ( cpd.branches.length === 0 ) {
+		throw new Error( `${cpdPath}: compound has no branches` );
+	}
+	return resolveCompoundBranchBsr( cpd.branches[0] );
 }
 
 /*

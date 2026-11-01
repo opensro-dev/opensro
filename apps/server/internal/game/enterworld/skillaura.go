@@ -15,12 +15,12 @@ package enterworld
 ==================
 SkillAura
 
-A persistent area action (CastLifecycle_ProcessPersistent 5830B0): efr kind 2
-at +0x290 (587C1F) and the onff pulse at +0x284 (588C6C).
+A persistent area action: efr kind 2
+at +0x290 and the onff pulse at +0x284.
 
 The caster's own persistent buff is the aura. Party members join and leave
 as child buffs, and receive the row's SkillBuffModifiers. Every PulseMs the
-caster pays PulseMP, cut by BDMD (585262), or the aura retires.
+caster pays PulseMP, cut by BDMD, or the aura retires.
 ==================
 */
 type SkillAura struct {
@@ -30,34 +30,34 @@ type SkillAura struct {
 	MaxTargets uint32 // efr +0x0C; the join walk never reads it
 	PulseMs    uint32 // onff word 0
 	PulseMP    uint32 // onff word 1
-	Eshp       bool   // +0x298: heal the lowest HP ratio each update (5A09F0)
+	Eshp       bool   // +0x298: heal the lowest HP ratio each update
 }
 
 /*
 ==================
 SkillBuffModifiers
 
-The parameter blocks CSkillManager_ApplyBuffModifiersToActor (594AC0) installs
+The parameter blocks the server's buff installer installs
 for any buff. Both words of each block are read unsigned (fild plus the 2^32
 fix-up).
 
-	dru  +0x3E4  595A97  word 0 flat on 0x80 and 0x81, word 1 on 0x82 and 0x83
-	odar +0x270  596004  -word 1 as a percent product, per bit pair:
+	dru  +0x3E4  word 0 flat on 0x80 and 0x81, word 1 on 0x82 and 0x83
+	odar +0x270  -word 1 as a percent product, per bit pair:
 	                     4+1 on 0xAE, 4+2 on 0xAF, 8+1 on 0xB0, 8+2 on 0xB1
 
-The odar parser (588C3B / 588C52) ORs 1|2 into kinds 4, 8 and 0xC and 4|8
+The odar parser ORs 1|2 into kinds 4, 8 and 0xC and 4|8
 into kinds 1, 2 and 3; other kinds keep their own bits.
 
-	ru   +0x250  5958E7  MP recovery rate modifier 0x21
-	hr   +0x24C  595825  hit rate 0xB: word 1 on the percent-sum channel,
-	                     then word 0 flat (595825..595875)
+	ru   +0x250  MP recovery rate modifier 0x21
+	hr   +0x24C  hit rate 0xB: word 1 on the percent-sum channel,
+	                     then word 0 flat
 
-Two more blocks are parameter writes of 594AC0 (action.buffModifierWrites):
+Two more blocks are parameter writes of the buff installer (action.buffModifierWrites):
 
-	rhru         word 0 -> parameter 0xAA, word 1 -> 0xAB, flat (0x5962C1):
+	rhru         word 0 -> parameter 0xAA, word 1 -> 0xAB, flat:
 	             the healing-received scale every heal applies
 	             (Dancing of Healing / Vitality)
-	dcmp         -word -> parameter 0x8D, flat (0x5963F7): the MP
+	dcmp         -word -> parameter 0x8D, flat: the MP
 	             consumption rate player costs are scaled by
 	             (Dancing of Mana)
 
@@ -74,8 +74,8 @@ type SkillBuffModifiers struct {
 	Hr       bool
 	HrFlat   uint32
 	HrRate   uint32
-	// Er is Concentration's parry block (+0x27C): 594AC0 0x595883 adds the
-	// flat to parameter 9 and the percent to its rate (0x5958BC).
+	// Er is Concentration's parry block (+0x27C): the installer adds the
+	// flat to parameter 9 and the percent to its rate.
 	Er          bool
 	ErFlat      uint32
 	ErRate      uint32
@@ -85,7 +85,7 @@ type SkillBuffModifiers struct {
 	DcmpPercent uint32
 }
 
-// Present reports a block 594AC0 would install.
+// Present reports a block the buff installer would install.
 func (m SkillBuffModifiers) Present() bool {
 	return m.Dru || m.Odar || m.Ru || m.Hr || m.Er || m.Rhru || m.Dcmp
 }
@@ -116,7 +116,7 @@ const (
 )
 
 // selectorMusic is scls bit 0, the skill-manager selector a reqc bit 5 row
-// asks for (59DDF0).
+// asks for.
 const selectorMusic = 1
 
 /*

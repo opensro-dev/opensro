@@ -22,9 +22,9 @@ have their own owners and run beside this one.
 ===========================================================================
 */
 
-// CASTER_DISABLED_ABNORMAL is freeze, sleep and stun (g_adwAbnormalStatusBit
-// 0x1, 0x40, 0x4000), the set 58DAEF refuses; ROOT_ABNORMAL is the root bit
-// 58E010 reads (+0xD34 0x80).
+// CASTER_DISABLED_ABNORMAL is freeze, sleep and stun (abnormal bits
+// 0x1, 0x40, 0x4000), the set the native press check refuses;
+// ROOT_ABNORMAL is the root bit 58E010 reads (+0xD34 0x80).
 export const CASTER_DISABLED_ABNORMAL = 0x4041;
 const ROOT_ABNORMAL = 0x80;
 // Body states (state channel 4): berserk and stealth.
@@ -306,7 +306,7 @@ same thing to the caller: do not predict.
 export function pressAdmission( skill: PressSkill, caster: PressCaster ): PressAdmission {
 	const admit = skill.admit;
 	if ( !admit ) return { kind: "unknown", gate: "no admission inputs" };
-	// 58DA3A / 58DAEF: frozen, asleep or stunned, unless nmf.
+	// Frozen, asleep or stunned refuses the press, unless nmf.
 	if ( !admit.nmf && (caster.abnormal & CASTER_DISABLED_ABNORMAL) !== 0 ) return { kind: "refuse", code: DISABLED };
 	if ( admit.serverOnly ) return { kind: "unknown", gate: "server-only state" };
 	// 58DF20: a hide gate without a trap refuses a berserk caster.

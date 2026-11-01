@@ -72,7 +72,7 @@ func TestHandleBreakDissolves(t *testing.T) {
 		t.Errorf("MemberNames = %v, want the pre-dissolve roster [Alfa Berk]", outcome.MemberNames)
 	}
 	if outcome.SelectedTargetGid != 0x00C40001 {
-		t.Errorf("SelectedTargetGid = %#x, want the decoded 0x00C40001", outcome.SelectedTargetGid)
+		t.Errorf("SelectedTargetGid = %#x, want the decoded 0x%08X", outcome.SelectedTargetGid, 0x00C40001)
 	}
 	if _, _, ok := deps.Guilds.Guild(mutatorDivision, guildID); ok {
 		t.Error("guild still stored after the dissolution door")
@@ -295,7 +295,8 @@ func TestHandlePositionGrantRefusals(t *testing.T) {
 		{"non-leader", berk, mutatorPositionGrantPayload(mutatorBerkJID, 2), "cannot grant"},
 		{"role outside domain", alfa, mutatorPositionGrantPayload(mutatorBerkJID, 3), "outside the pinned domain"},
 		{"unknown jid", alfa, mutatorPositionGrantPayload(999999, 2), "no member with jid"},
-		// The commander is the master's alone: never granted (5F4D70 offers
+		// The commander is the master's alone: never granted (client
+		// CIFGuildFortressGrant_OnPositionRadio offers
 		// no 1), never taken from the master (_Guild_Delegate_Master -1002).
 		{"commander", alfa, mutatorPositionGrantPayload(mutatorBerkJID, 1), "belongs to the guild master"},
 		{"the master", alfa, mutatorPositionGrantPayload(guild.GuildJID(alfa.ID), 0), "keeps the commander role"},

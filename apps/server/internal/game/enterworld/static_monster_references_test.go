@@ -57,6 +57,57 @@ func TestPublishedMonstersLeaveTheLogin(t *testing.T) {
 
 /*
 ================
+TestFilteredRefObjSnapshotIsCachedPerReferenceGeneration
+
+With the production constructor's cache holder installed, the
+catalogues behind RefObjSnapshot are rebuilt only for the first entry
+of a BrowserReferences generation (#1820): the snapshot's inputs are
+boot-static, a new reference file is a new generation, and a result
+handed out can never mutate the cached rows.
+================
+*/
+func TestFilteredRefObjSnapshotIsCachedPerReferenceGeneration(t *testing.T) {
+	character := chinaSpearman()
+	deps := testDeps(character)
+	published := RefObjRow{RefObjID: 9001, TidWord: 0xc6, Codename: "MOB_PUBLISHED", Kind: "monster"}
+	own := RefObjRow{RefObjID: 9002, TidWord: 0x2c6, Codename: "STRUCTURE_OWN", Kind: "structure"}
+	calls := 0
+	deps.RefObjSnapshot = func() []RefObjRow {
+		calls++
+		return []RefObjRow{published, own}
+	}
+	deps.refObjCache = &refObjSnapshotCache{}
+
+	first := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	second := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	if calls != 1 {
+		t.Fatalf("snapshot rebuilt %d times for two entries, want 1", calls)
+	}
+	if len(first.RefObjSnapshot) != 2 || len(second.RefObjSnapshot) != 2 {
+		t.Fatalf("detached rows = %v / %v, want both rows", first.RefObjSnapshot, second.RefObjSnapshot)
+	}
+	second.RefObjSnapshot[0].RefObjID = 42
+	third := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	if calls != 1 || len(third.RefObjSnapshot) != 2 || third.RefObjSnapshot[0].RefObjID != published.RefObjID {
+		t.Fatalf("a handed-out result poisoned the cache: calls=%d rows=%v", calls, third.RefObjSnapshot)
+	}
+
+	refs, err := NewBrowserReferences(BrowserReferenceSources{Skills: oneSkillCatalogue{}, Monsters: []RefObjRow{published}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.BrowserReferences = refs
+	login := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	if calls != 2 {
+		t.Fatalf("snapshot rebuilt %d times after a new reference generation, want 2", calls)
+	}
+	if len(login.RefObjSnapshot) != 1 || login.RefObjSnapshot[0].RefObjID != own.RefObjID {
+		t.Fatalf("login rows %+v, want only the unpublished structure", login.RefObjSnapshot)
+	}
+}
+
+/*
+================
 TestEveryCreatableMonsterIsPublished
 
 On the shipped data: script spawns and GM-only rows are published with the

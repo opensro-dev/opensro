@@ -3,7 +3,7 @@
 
 illusion_test.go - the Warlock's Illusion through the timed self owner
 
-msch 3 has no server work (594AA4 skips modes 3 and 4): the cast installs
+msch 3 has no server work (the native buff pass skips modes 3 and 4): the cast installs
 its instance on the caster for the row's duration, the client draws the
 disguise, and skc's event mask 2 ends it on the caster's next cast.
 

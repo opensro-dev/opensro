@@ -108,7 +108,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 	return quotes
 }
 
-// Retail 5B6D22 tests RefObjData+A5, populated from itemdata column 17.
+// The client (5B6D22) tests RefObjData+A5, populated from itemdata column 17.
 // Quote and commit share this O(1) policy: a monster drop need not occur in
 // any shop catalogue. Missing/malformed authority never grants permission.
 /*

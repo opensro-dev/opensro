@@ -81,9 +81,9 @@ func applyFrame(subtype, kind uint8) []byte {
 ================
 TestGuildMasterAppliesForTheFortressWar
 
-633910 -> the 0xA result: the fee leaves the master's gold, the guild is
+The reference server's application -> the 0xA result: the fee leaves the master's gold, the guild is
 registered, the master hears [7][1][fortress][kind] and everyone hears
-0x3887 0x0C. Withdrawing (633C40) removes the registration.
+0x3887 0x0C. Withdrawing removes the registration.
 ================
 */
 func TestGuildMasterAppliesForTheFortressWar(t *testing.T) {
@@ -104,7 +104,7 @@ func TestGuildMasterAppliesForTheFortressWar(t *testing.T) {
 	if record, _ := rt.Fortresses.Get(testDivision, 1); record.Applicants[41] != fortress.RequestAttack || len(record.Applicants) != 1 {
 		t.Fatalf("guild not registered: %+v", record.Applicants)
 	}
-	// 633910 tests the fee before the existing registration.
+	// The reference server tests the fee before the existing registration.
 	gold := int64(6000000)
 	c.Gold = &gold
 	again := rt.HandleFortressInteraction(testDivision, c, applyFrame(fortressApply, 0))
@@ -124,7 +124,7 @@ func TestGuildMasterAppliesForTheFortressWar(t *testing.T) {
 ================
 TestFortressApplicationRefusals
 
-633910's checks, each in its native order.
+The reference server's application checks, each in its native order.
 ================
 */
 func TestFortressApplicationRefusals(t *testing.T) {
@@ -206,7 +206,7 @@ func TestOfficialOpensTheApplicationWindow(t *testing.T) {
 ================
 TestUnionAllyAppliesAsAnAlly
 
-61D300: a guild in the occupier's union must apply as an ally (kind 1),
+Reference server: a guild in the occupier's union must apply as an ally (kind 1),
 which registers it; applying to attack is refused.
 ================
 */

@@ -136,6 +136,38 @@ test("a plain close ends with the same error text and carries the detail", t => 
 	network.dispose();
 });
 
+test("a clean normal close is an expected goodbye, not a lost connection", t => {
+	const { network, socket, failures } = openSession( t );
+	socket.onclose( { code: 1000, reason: "", wasClean: true } );
+	network.drain( () => {} );
+	assert.equal( failures.length, 1 );
+	// The error text the reconnect rule matches stays exactly as it was;
+	// only the category (and with it the incident) changes.
+	assert.equal( failures[0].error, "Transport connection closed" );
+	assert.equal( failures[0].reason.category, "expected", "a clean goodbye files no incident" );
+	assert.equal( failures[0].reason.code, "connection_closed" );
+	assert.equal( failures[0].reason.message, "Your session ended." );
+	assert.match( failures[0].reason.detail, /^WebSocket 1000, clean, / );
+	network.dispose();
+});
+
+test("a clean close with any other code, or an unclean normal close, stays unknown", t => {
+	for ( const close of [ { code: 1001, wasClean: true }, { code: 1000, wasClean: false } ] ) {
+		const { network, socket, failures } = openSession( t );
+		socket.onclose( { code: close.code, reason: "", wasClean: close.wasClean } );
+		network.drain( () => {} );
+		assert.equal( failures.length, 1 );
+		assert.equal(
+			failures[0].reason.category,
+			"unknown",
+			`code ${close.code} clean=${close.wasClean} is not the proven goodbye`
+		);
+		assert.equal( failures[0].reason.code, "connection_closed" );
+		assert.equal( failures[0].reason.message, "Connection lost. The cause is unknown." );
+		network.dispose();
+	}
+});
+
 test("an error event waits for the close, which reports the failure with its code", t => {
 	const { network, socket, failures } = openSession( t );
 	socket.onerror();

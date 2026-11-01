@@ -160,7 +160,7 @@ func TestPetNameNamesTheSummonerItemCopy(t *testing.T) {
 ================
 TestPetNamePassesTheNameFilter
 
-4184A0's name filter: a pet name holding a filtered word answers 0x440E
+The native name filter: a pet name holding a filtered word answers 0x440E
 and names nothing; a clean one still names the pet.
 ================
 */

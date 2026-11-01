@@ -3,7 +3,7 @@
 
 absorption_test.go - native mixed-lane absorption review probe
 
-410BB0 prioritizes current-effect bit 4 in both damage helper calls.
+The server's absorption ratio read prioritizes current-effect bit 4 in both damage helper calls.
 
 ===========================================================================
 */

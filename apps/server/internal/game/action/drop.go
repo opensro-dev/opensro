@@ -156,7 +156,7 @@ func PlanGoldDrop(ref GoldHeapRef, amount uint32, at simulation.Spawn, droppedBy
 	}
 }
 
-// scatterMonsterDrop follows CGItem::vtable+0x4dc (server 0048FDF0):
+// scatterMonsterDrop follows the reference server's monster drop scatter:
 // independent angle, radius and heading draws after admission. The server
 // reference is v1.188; it is mechanism evidence, not a v1.150 pixel proof.
 // Rejected geometry falls back to the live death position, never the move goal.

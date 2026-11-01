@@ -7,11 +7,11 @@ import (
 
 // TestBuildLocalPlayerEntryPayloadGMPrivilegeByte pins the GM privilege
 // leg of the 0x32B3 wire contract the client agent builds against: the
-// byte the local full-character deserialize sub_8675f0 deposits at
+// byte the local full-character deserialize (client 8675F0) deposits at
 // CICPlayer+0x1890 (@0x867a90, right after the u32 +0x1894 zero dword),
-// whose bit 0 sub_862a70 tests. A non-GM emits 0x00 (the frozen
+// whose bit 0 client 862A70 tests. A non-GM emits 0x00 (the frozen
 // emission), a GM emits exactly 0x01 (bit 0 set, bit 1 - the
-// PC-room event sub_862a80 gate - and all others zero), and NO other
+// PC-room event client 862A80 gate - and all others zero), and NO other
 // byte of the payload moves (differential identity, the chunk-C test's
 // posture).
 func TestBuildLocalPlayerEntryPayloadGMPrivilegeByte(t *testing.T) {

@@ -3,8 +3,8 @@
 
 tradegoods.go - stack identity: trade cargo owners and stone assimilation
 
-CGItem_CheckMergeEligibility (490230) compares the recorded owner names of
-trade goods before combining their quantities. A pickup or container move
+The native merge check compares the recorded owner names of trade
+goods before combining their quantities. A pickup or container move
 must not turn another trader's goods into the destination stack's goods.
 
 Magic and attribute stones carry their assimilation value in Plus. Natively
@@ -72,8 +72,10 @@ func stackIdentityMatches(a, b Item) bool {
 ================
 wholeStackIdentityMatches
 
-Native 756A99..756AD5 and 756BF4..756C14 exchange counts even at cap one;
-7895F0 does not compare Plus. Retained stacks after rollback still need
+The client's CPSMission_MergeOrSwapItems exchanges counts even at cap
+one (its arms at client 756A99..756AD5 and 756BF4..756C14); the client's
+CItem_MatchesItem does not compare Plus. Retained stacks after rollback
+still need
 the port-only value guard, or a count exchange changes assimilation stock.
 ================
 */

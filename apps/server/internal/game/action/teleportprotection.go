@@ -16,7 +16,7 @@ town-teleport routine schedules it when its caller asks for the grant,
 which revival and the timed-event return do and the GM move does not.
 Scrolls and gates set the separate teleport-mode state instead, and no
 other arrival path grants body mode 2. The v1.150 client never grants the
-state itself; it shows the server's refusal code 32 notice (68A0A0). The
+state itself; it shows the server's refusal code 32 notice (client 68A0A0). The
 timed-event return's native grace is #1582, not this switch.
 
 The grace starts at the arrival's game-ready, not at the travel commit, a

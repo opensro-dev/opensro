@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-wc_delivery_test.go - the 8E6440 deliveries: Bori's birthday gifts and paddles
+wc_delivery_test.go - the start/end-NPC talk deliveries: Bori's birthday gifts and paddles
 
 QNO_WC_POTION_3 hands over medicine and a letter that stay in the bag
 (+0x111 cleared) and sends _16 once it completes; QNO_WC_POTION_4 takes them
@@ -107,9 +107,9 @@ func TestBirthdayGiftsStayForTheSecondDelivery(t *testing.T) {
 ================
 TestSecondGiftNeedsBothFirstGifts
 
-9262A0's held-item condition (flag 4, vector +0x28) offers POTION_4 only
+The prerequisite check's held-item condition (flag 4, vector +0x28) offers POTION_4 only
 while the medicine and the letter are both in the bag; with one of them
-it is neither offered nor accepted. 897680's minidump for a missing gift
+it is neither offered nor accepted. POTION_4's talk handler's minidump for a missing gift
 is therefore unreachable through an offer.
 ================
 */

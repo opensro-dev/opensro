@@ -67,7 +67,7 @@ TestVersion2CatalogRejections
 
 Each table row has exactly its width, sums to at most 1, every item sits
 below its table's width, and every rolled class reaches an item at or below
-it, as selectEquipment's walk down from an empty class (724120) does.
+it, as selectEquipment's walk down from an empty class does.
 ================
 */
 func TestVersion2CatalogRejections(t *testing.T) {

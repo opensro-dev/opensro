@@ -148,6 +148,7 @@ function fieldOfViewWorldFixture( t ) {
 		setUi: unexpectedCameraWork,
 		setDamageText: unexpectedCameraWork,
 		setUiTexture: unexpectedCameraWork,
+		setUiAtlas: unexpectedCameraWork,
 		retainCharacterModels: unexpectedCameraWork,
 		setCharacterAssembly: unexpectedCameraWork,
 		characterStats: unexpectedCameraWork,

@@ -29,11 +29,17 @@ import time
 from urllib.parse import urlsplit
 
 from bundle import FILES, MAX_ARCHIVE_BYTES, release_files, unpack
+from module_inputs import copy_inputs, restore_inputs, snapshot_inputs
 from release_state import admit, begin, complete, identity, read_state, store_upgrade_required, write_state
 from retention import preserve
+from gameworld_memory import gameworld_memory_mb, verify_memory_limit
+import quic_host
 import server_data
 
 CONFIG = Path("/etc/opensro-release/config.json")
+# The GameWorld's Nomad task user (raw_exec): the deployer passes it as
+# -task-user, and the TLS pair must be readable by it.
+TASK_USER = "sro"
 # Every deployer command runs with only this environment (plus its own).
 CLEAN_ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 # validate -assume-stopped opens each line naming a credential variable that
@@ -69,7 +75,7 @@ SHARD_SETTINGS = Path(__file__).with_name("shard-settings.json")
 SHARD_SETTING_NAME = re.compile(r"SRO_[A-Z0-9_]+")
 # The SRO_ variables deployer derives itself; a shard setting never names one.
 DEPLOYMENT_VARIABLES = frozenset({"SRO_SERVER_GAME_DATA_ROOT", "SRO_STACK_SIZES", "SRO_BUG_REPORT_DISCORD_WEBHOOK",
-	"SRO_WEBTRANSPORT_PUBLIC"})
+	"SRO_WEBTRANSPORT_PUBLIC", "SRO_STAFF_DISCORD_WEBHOOK"})
 AUTHORITY_DB = "state.db"
 
 
@@ -128,6 +134,26 @@ def bug_report_environment(config):
 
 
 # ================
+# staff_environment
+#
+# The staff channel the GameWorld pages for ops-only alerts (the served
+# WebTransport pair, #1447): the same root-only file deploy.py already
+# announces staff events through. No key, or a missing or empty file,
+# names no webhook, and sro-nomad keeps the one already stored; sro-nomad
+# warns about, and ignores, a value that is not a Discord webhook, so this
+# can never refuse a release. The value is passed on, never logged.
+# ================
+def staff_environment(config):
+	if not config.get("staff_webhook"):
+		return {}
+	try:
+		value = Path(config["staff_webhook"]).read_text().strip()
+	except FileNotFoundError:
+		return {}
+	return {"SRO_STAFF_DISCORD_WEBHOOK": value} if value else {}
+
+
+# ================
 # shard_settings
 #
 # This deployment's own shard settings (#606). The public job file and the
@@ -150,6 +176,13 @@ def shard_settings(path=None):
 	return settings
 
 
+# The WebTransport posture's sro-nomad flags, in webtransport_deployer's
+# order. A release built before them refuses them all, so a deployment
+# that stages such a binary must not pass them (without_undefined_wt_arguments).
+WT_ARGUMENT_FLAGS = ("-transport-wt-addr", "-transport-cert-file", "-transport-key-file",
+	"-transport-wt-public-port")
+
+
 # ================
 # webtransport_deployer
 #
@@ -161,6 +194,12 @@ def shard_settings(path=None):
 # before the deployer runs; sro-nomad refuses it again on its side, and
 # the GameWorld again at boot. The posture keys without the switch are a
 # half-posture and deploy nothing either.
+#
+# The GameWorld runs unprivileged (Nomad raw_exec as the sro user), and the
+# host only lets root bind ports below 1024, so a public bind on UDP 443
+# would fail and the GameWorld would refuse to start. The bind port must be
+# 1024 or above and the host redirects public UDP 443 to it (quic_host.py);
+# sro-nomad is told the public port, so the advertised 443 still checks.
 # ================
 def webtransport_deployer(config):
 	public = config.get("webtransport_public", "")
@@ -173,12 +212,109 @@ def webtransport_deployer(config):
 				raise ValueError(key + " requires webtransport_public on; a half-posture deploys nothing")
 		return ({"SRO_WEBTRANSPORT_PUBLIC": public} if public else {}), []
 	arguments = []
-	for key, flag in zip(keys, ("-transport-wt-addr", "-transport-cert-file", "-transport-key-file")):
+	for key, flag in zip(keys, WT_ARGUMENT_FLAGS):
 		value = config.get(key, "")
 		if not isinstance(value, str) or not value.strip():
 			raise ValueError("webtransport_public is on but " + key + " is not configured")
 		arguments += [flag, value.strip()]
+	quic_host.require_bind(*wt_bind(config["transport_wt_addr"]))
+	arguments += [WT_ARGUMENT_FLAGS[3], str(quic_host.PUBLIC_PORT)]
 	return {"SRO_WEBTRANSPORT_PUBLIC": "on"}, arguments
+
+
+# ================
+# require_quic_host
+#
+# A public WebTransport deploy goes ahead only when the host already
+# carries the redirect, firewall opening and buffers for its bind port
+# (quic_host.problems); otherwise the listener would bind and no player
+# would reach it. Checked before any token is issued.
+# ================
+def require_quic_host(config, wt_environment):
+	if wt_environment.get("SRO_WEBTRANSPORT_PUBLIC") != "on":
+		return
+	gaps = quic_host.problems(wt_bind(config["transport_wt_addr"])[1])
+	if gaps:
+		raise RuntimeError("public WebTransport host is not ready: " + "; ".join(gaps))
+
+
+# ================
+# require_pair_readable
+#
+# The deploy runs as root, so sro-nomad's own load of the TLS pair proves
+# only that root can read it. The GameWorld runs as TASK_USER, and a key
+# root can read but it cannot (a synced Let's Encrypt key left 0600 root)
+# would pass every deploy check and fail its boot. Each file is read as
+# that user before any token is issued. (At boot the GameWorld then serves
+# WebSocket without WebTransport rather than failing, #1447; this keeps the
+# release from shipping into that state.)
+# ================
+def require_pair_readable(config, wt_environment, run_as=subprocess.run):
+	if wt_environment.get("SRO_WEBTRANSPORT_PUBLIC") != "on":
+		return
+	for key in ("transport_cert_file", "transport_key_file"):
+		path = config[key].strip()
+		if run_as(["runuser", "-u", TASK_USER, "--", "test", "-r", path], check=False).returncode != 0:
+			raise RuntimeError(key + " " + path + " is not readable by " + TASK_USER +
+				", the GameWorld's user; it would boot without WebTransport (grant it, e.g. root:" + TASK_USER + " 0640)")
+
+
+# ================
+# wt_bind
+#
+# The host and port of a host:port WebTransport bind ("[::]:18443"); a
+# value without a host or a numeric port is refused.
+# ================
+def wt_bind(address):
+	host, separator, port = address.strip().rpartition(":")
+	if not separator or not host or not port.isdigit() or not 0 < int(port) < 65536:
+		raise ValueError("transport_wt_addr must be host:port, not " + repr(address))
+	return host, int(port)
+
+
+# ================
+# executable_flags
+#
+# The flags the staged sro-nomad defines, from its own usage: the binary
+# answers -h by printing its flag set and exiting nonzero (Go's flag
+# package), so the refusal carries the list. Every subcommand shares the
+# one flag set (sro-nomad parseOptions).
+# ================
+def executable_flags(executable):
+	try:
+		run([executable, "validate", "-h"], env=CLEAN_ENV, capture=True)
+	except subprocess.CalledProcessError as error:
+		text = (error.stderr or "") + (error.stdout or "")
+		return set(re.findall(r"(?m)^\s+-([a-z][a-z0-9-]*)", text))
+	raise RuntimeError(executable + " answered -h without a flag list")
+
+
+# ================
+# without_undefined_wt_arguments
+#
+# The deployment's arguments minus the WebTransport posture. deploy()
+# stages the release being deployed into the module before it runs
+# anything (copy_inputs), so on a revert that binary is the retained
+# release's, built before the posture flags existed: passing them stops
+# the revert with "flag provided but not defined". The posture is
+# all-or-nothing (webtransport_deployer refuses a half-posture: "a
+# half-posture deploys nothing"), so if the staged sro-nomad lacks ANY
+# posture flag, every posture flag is dropped with its value, and the
+# rest of the arguments stand. The SRO_WEBTRANSPORT_PUBLIC environment
+# stays: a binary that does not read it ignores it. A binary that will
+# not report its flags refuses the deployment rather than guessing its
+# arguments.
+# ================
+def without_undefined_wt_arguments(executable, arguments):
+	if not any(argument in WT_ARGUMENT_FLAGS for argument in arguments):
+		return arguments
+	defined = executable_flags(executable)
+	if not defined:
+		raise RuntimeError(executable + " did not report its flags; refusing to guess its WebTransport arguments")
+	if all(flag[1:] in defined for flag in WT_ARGUMENT_FLAGS):
+		return arguments
+	return [argument for index, argument in enumerate(arguments)
+		if argument not in WT_ARGUMENT_FLAGS and (index == 0 or arguments[index - 1] not in WT_ARGUMENT_FLAGS)]
 
 
 # ================
@@ -188,26 +324,6 @@ def webtransport_deployer(config):
 # ================
 def run(arguments, *, cwd=None, env=None, capture=False):
 	return subprocess.run(arguments, cwd=cwd, env=env, check=True, capture_output=capture, text=True)
-
-
-# ================
-# copy_inputs
-#
-# Task binaries already live in Nomad's immutable release tree. Replacing
-# deployer inputs therefore does not modify a running executable. A file the
-# deployed release does not carry (a revert to a release built before it was
-# added) is removed, so the module holds exactly that release's inputs.
-# ================
-def copy_inputs(source, module, names):
-	for name in names:
-		target = module / name
-		target.parent.mkdir(parents=True, exist_ok=True)
-		temporary = target.with_name(target.name + ".incoming")
-		shutil.copyfile(source / name, temporary)
-		temporary.chmod(0o755 if FILES[name].startswith("bin/") else 0o644)
-		os.replace(temporary, target)
-	for name in set(FILES) - set(names):
-		(module / name).unlink(missing_ok=True)
 
 
 # ================
@@ -550,21 +666,23 @@ def check_nomad_version(config):
 # ================
 def deployer(config, stack_sizes):
 	settings = shard_settings()
+	wt_environment, wt_arguments = webtransport_deployer(config)
+	require_quic_host(config, wt_environment)
+	require_pair_readable(config, wt_environment)
 	management = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646",
 		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
 	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
 		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
 	token = json.loads(issued.stdout)
-	wt_environment, wt_arguments = webtransport_deployer(config)
 	environment = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
 		SRO_STACK_SIZES=stack_sizes,
-		**bug_report_environment(config), **wt_environment)
+		**bug_report_environment(config), **staff_environment(config), **wt_environment)
 	# The shard's own settings last; shard_settings refuses every name
 	# the deployment derives, so none of them can be overridden here.
 	environment.update(settings)
-	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
-		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"]),
+	arguments = ["-namespace", "sro", "-task-user", TASK_USER, "-allowed-origins", config["origin"],
+		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(gameworld_memory_mb(config)),
 		*wt_arguments]
 	return management, token, environment, arguments
 
@@ -618,6 +736,7 @@ def rehearse(config, staging, manifest):
 		copy_inputs(staging, copy, names)
 		run([str(copy / "sro-provision-identity"), "-state-dir", str(copy / ".state/cluster")], cwd=copy, env=CLEAN_ENV)
 		management, token, environment, arguments = deployer(config, stack_sizes)
+		arguments = without_undefined_wt_arguments(str(copy / "sro-nomad"), arguments)
 		try:
 			output = run([str(copy / "sro-nomad"), "validate", "-assume-stopped", *arguments],
 				cwd=copy, env=environment, capture=True).stdout
@@ -646,6 +765,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	stack_sizes = config.get("stack_sizes", "")
 	if not isinstance(stack_sizes, str):
 		raise ValueError("stack_sizes must be a string")
+	memory = gameworld_memory_mb(config)
 	module = Path(config["module"])
 	names = release_files(manifest["files"])
 	if upgrade and "sro-authority-upgrade" not in names:
@@ -660,8 +780,21 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	run(["/usr/local/sbin/opensro-backup", "run"], env=CLEAN_ENV)
 	management, token, environment, arguments = deployer(config, stack_sizes)
 	executable = str(module / "sro-nomad")
+	# A refusal before the fleet is touched must leave the module as it was.
+	# On 2026-10-27 a revert copied the retained release's inputs, its
+	# sro-nomad then refused, and the module kept those bytes under the live
+	# release's release.json: retain_server refused the next publish.
+	# touched turns true at the first step that changes what Nomad runs
+	# (stop, store upgrade or restore, game data install, deploy); from then
+	# the inputs stay, since they are what the submitted jobs were built from.
+	previous = snapshot_inputs(module)
+	touched = False
 	try:
 		copy_inputs(staging, module, names)
+		# The staged binary is the verdict on which arguments it takes: a
+		# revert stages the retained release's sro-nomad (copy_inputs),
+		# which may predate the posture flags the deployer built.
+		arguments = without_undefined_wt_arguments(executable, arguments)
 		run([str(module / "sro-provision-identity"), "-state-dir", str(module / ".state/cluster")], cwd=module, env=CLEAN_ENV)
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")
@@ -701,8 +834,10 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			# plain validate must now pass.
 			if restore:
 				verify_restore(module, restore)
+			touched = True
 			run([executable, "stop", *arguments], cwd=module, env=environment)
 			materialize(config, module, executable, arguments, environment)
+		touched = True
 		if upgrade:
 			upgrade_authorities(module, executable, arguments, environment, on_upgrade)
 		if restore:
@@ -712,6 +847,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			materialize(config, module, executable, arguments, environment)
 		run([executable, "deploy", *arguments], cwd=module, env=environment)
 		run([executable, "status", "-namespace", "sro"], cwd=module, env=environment)
+		verify_memory_limit(enabled_shards(module), environment, memory, run)
 		write_state(module / "release.json", manifest)
 		if config.pop("bootstrap_notice", False):
 			temporary = CONFIG.with_suffix(".incoming")
@@ -721,7 +857,17 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 		# The independent monitor announces recovery after the journal commits.
 		# Discord availability cannot turn a healthy rollout into a failed one.
 		print("Server release " + manifest["commit"] + " passed Nomad deployment health checks.", flush=True)
+	except BaseException:
+		if not touched:
+			try:
+				restore_inputs(module, previous)
+			except Exception as error:
+				# Never hide the refusal; an operator restores from the
+				# retained release (retention.py) if this ever fails.
+				print("Deployment inputs could not be restored: " + type(error).__name__, file=sys.stderr, flush=True)
+		raise
 	finally:
+		shutil.rmtree(previous[0], ignore_errors=True)
 		revoke(management, token)
 
 

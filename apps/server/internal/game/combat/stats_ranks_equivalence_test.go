@@ -68,23 +68,23 @@ func oldLearnedPassives(c *domain.Character, skills enterworld.SkillDataSource, 
 		delete(current, row.Group)
 		selected := row
 		source++ // distinct from parameter and equipment projection identities
-		// 59F0E0: a passive whose reqi the equipment fails contributes
+		// The passive toggle: a passive whose reqi the equipment fails contributes
 		// nothing - its setv entries, keeper writes and resistances alike.
 		eligible := !selected.Reqi.Present || ReqiRefusal(c, items, selected.Reqi) == 0
 		if p := selected.PassiveParameters; p.Pinned && !selected.ChainSub && eligible {
-			// 5A02E0 assigns the setv entry; it does not sum values. Highest
+			// The server assigns the setv entry; it does not sum values. Highest
 			// learned group rank is selected above.
 			for slot := enterworld.SkillParameter(0); slot < enterworld.SkillParameterCount; slot++ {
 				if p.Mask.Has(slot) {
 					power[slot] = p.Values[slot]
 				}
 			}
-			// 595542..59568F: reat raises flat status reduction 0x91+i.
+			// The buff installer's reat block raises flat status reduction 0x91+i.
 			for _, w := range StatusReductionWrites(p.Reat) {
 				w.Source = source
 				writes = append(writes, w)
 			}
-			// 594AC0 at 0x595DFD..0x595EFA: br raises the flat block rate of
+			// The buff installer's br block raises the flat block rate of
 			// each lane its mask selects. BlockChance reads those lanes with no
 			// shield test of its own, so the reqi walk is the only gate.
 			if p.Br.Mask != 0 {
@@ -93,7 +93,7 @@ func oldLearnedPassives(c *domain.Character, skills enterworld.SkillDataSource, 
 					writes = append(writes, w)
 				}
 			}
-			// 594AC0: hr, er, hpi and mpi put word 1 on the percent channel
+			// The buff installer: hr, er, hpi and mpi put word 1 on the percent channel
 			// and word 0 on the flat channel of parameters 11, 9, 3 and 4.
 			for _, fr := range [...]struct {
 				rate  enterworld.SkillFlatRate
@@ -111,7 +111,7 @@ func oldLearnedPassives(c *domain.Character, skills enterworld.SkillDataSource, 
 			if m := selected.BuffModifiers; p.IncomingReduction && m.Odar {
 				writes = append(writes, IncomingReductionWrites(m.OdarBits, m.OdarWord, source)...)
 			}
-			// 595A97: dru word 0 on 0x80/0x81, word 1 on 0x82/0x83.
+			// The installer's dru block: word 0 on 0x80/0x81, word 1 on 0x82/0x83.
 			if p.Dru != [2]uint32{} {
 				for i, params := range [2][2]uint16{{0x80, 0x81}, {0x82, 0x83}} {
 					for _, param := range params {

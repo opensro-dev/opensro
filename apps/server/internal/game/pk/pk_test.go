@@ -21,7 +21,7 @@ var testNow = time.Date(2026, 10, 5, 12, 0, 0, 0, time.Local)
 ================
 TestRecordClamps
 
-4EB140 caps the daily delta at 15 before the sum; all three fields clamp.
+The daily counter caps its delta at 15 before the sum; all three fields clamp.
 ================
 */
 func TestRecordClamps(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRecordClamps(t *testing.T) {
 ================
 TestMurderBookkeeping
 
-4E2013..4E2081: total 1 -> penalty (2/2)*1200; a victim 12 levels below
+The murder bookkeeping: total 1 -> penalty (2/2)*1200; a victim 12 levels below
 weighs 12/5*2+1 = 5 on the daily count.
 ================
 */
@@ -136,7 +136,7 @@ func TestKeeperRepairAndDailyReset(t *testing.T) {
 ================
 TestDeathLossRates
 
-4E6980's table, the level-10 protection and the guild-war exemption.
+The death penalty's table, the level-10 protection and the guild-war exemption.
 ================
 */
 func TestDeathLossRates(t *testing.T) {
@@ -205,7 +205,7 @@ func TestDropChance(t *testing.T) {
 ================
 TestSelectDropSlot
 
-4BB460: a murderer's equipped roll, the weapon reroll, the ammunition
+The inventory slot pick: a murderer's equipped roll, the weapon reroll, the ammunition
 reroll, and the bag fallback by occupied position.
 ================
 */
@@ -235,5 +235,23 @@ func TestSelectDropSlot(t *testing.T) {
 	}
 	if slot, ok, _ := SelectDropSlot(slots, 0, sequence(2)); !ok || slot != 30 {
 		t.Fatalf("third bag item -> %d %v", slot, ok)
+	}
+}
+
+/*
+================
+TestDrainAmount
+
+2% of the maximum through the native single-precision rate, truncated, with
+no floor.
+================
+*/
+func TestDrainAmount(t *testing.T) {
+	for _, tc := range []struct{ maximum, want int64 }{
+		{1000, 19}, {1001, 20}, {100, 1}, {101, 2}, {51, 1}, {50, 0}, {1, 0}, {0, 0}, {-5, 0},
+	} {
+		if got := DrainAmount(tc.maximum); got != tc.want {
+			t.Fatalf("DrainAmount(%d) = %d, want %d", tc.maximum, got, tc.want)
+		}
 	}
 }

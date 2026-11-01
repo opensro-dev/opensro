@@ -49,7 +49,7 @@ type Effect struct {
 Step
 
 A native update may pulse and then expire the same pair. Keeping both flags
-preserves that order on late frames (5830B0: pulse precedes duration test).
+preserves that order on late frames (native: pulse precedes duration test).
 ================
 */
 type Step struct {
@@ -74,7 +74,7 @@ type Registry struct {
 ================
 Duration
 
-5833EB..583450 divides the caster's unsigned DTDR value by 100 before
+The native duration divides the caster's unsigned DTDR value by 100 before
 multiplying the base duration, then truncates the x87 result to an integer.
 ================
 */
@@ -87,7 +87,7 @@ func Duration(base, percent uint32) uint32 {
 ================
 refusal
 
-59DC80's lks2 branch counts different skill IDs only against the same target.
+The native lks2 branch counts different skill IDs only against the same target.
 Other targets never consume this link's capacity. Same-ID recasts are refused.
 ================
 */
@@ -156,7 +156,7 @@ func (r *Registry) Install(next Effect) uint16 {
 ================
 Frame
 
-5848BF uses elapsed >= puls and resets the clock to now. 5851E7 expires only
+The native pulse uses elapsed >= puls and resets the clock to now. Expiry comes only
 when elapsed > dura. Return every pair so the action owner can check actor
 lifetimes even on frames where no damage pulse is due.
 ================

@@ -66,7 +66,7 @@ func TestPlayerStatsBuildsBaseGraphAndWeaponVariance(t *testing.T) {
 	if !loadout.HasWeapon || loadout.WeaponKind != 2 || loadout.ActionRange != 6 {
 		t.Fatalf("loadout = %+v, want TID4 2 at range 6", loadout)
 	}
-	// Native 4E3200 factor constants are float32. Each dependent and final
+	// The server's stat factor constants are float32. Each dependent and final
 	// parameter stores float32, including the equipment addition.
 	if stats.Level != 1 || stats.MaxLevel != 1 ||
 		stats.PhysicalDefense != float64(float32(20*0.19)) ||

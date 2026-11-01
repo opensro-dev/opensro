@@ -69,7 +69,7 @@ func (door storeGuildDoor) UpdateMercenaryOwner(division string, c *domain.Chara
 ================
 PurchaseMercenaryAttribute
 
-5C7900 checks guild, level, master, gold and GP in that order, before testing
+The server's mercenary attribute purchase checks guild, level, master, gold and GP in that order, before testing
 the current flags. One store commit owns the guild flag and both debits.
 The returned byte is the native guild notice reason (zero means committed).
 ================
@@ -116,7 +116,7 @@ func (door storeGuildDoor) PurchaseMercenaryAttribute(division string, actorID i
 	s.guilds[division][id] = guild
 	s.changes.guilds[guildKey{division: division, guildID: id}] = true
 	s.changes.characters[actor] = true
-	// 5C99A0 refreshes only the requester; 4FDC70 skips dead/unspawned actors.
+	// The server refreshes only the requester and skips dead/unspawned actors.
 	for _, pet := range actor.Mercenaries {
 		if pet != nil && pet.Summoned && pet.CurrentHP > 0 {
 			pet.MercenaryAttributes = guild.Byte10

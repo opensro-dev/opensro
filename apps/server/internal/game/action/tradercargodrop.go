@@ -6,8 +6,8 @@ leaves it
 
 Port-only, not native (owner decision 2026-10-14, the balance advisor's
 option 3). Natively only the transport's own death drops its goods
-(4D1FD0, cosdeath.go). A rider's death releases the ridden vehicle with
-its record and its cargo (529B10, coscancel.go), and a logout takes a
+(cosdeath.go). A rider's death releases the ridden vehicle with
+its record and its cargo (coscancel.go), and a logout takes a
 summoned transport and its goods offline with the trader. Either way a
 trader cornered by thieves or hunters can make the goods vanish.
 
@@ -98,7 +98,7 @@ func (rt *Runtime) dropRiddenCargoInDoor(division string, c *enterworld.Characte
 	if !rt.TraderCargoDrop || !rt.loadedTransport(c.ActiveCOS) {
 		return nil
 	}
-	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now)
+	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now, "rider-death", "")
 }
 
 /*
@@ -157,7 +157,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 	if allowed, known := world.RegionPlayerCombat(at.RegionID); known && !allowed {
 		return nil
 	}
-	public := rt.scatterTransportCargo(division, c, pet, now)
+	public := rt.scatterTransportCargo(division, c, pet, now, "disconnect", "")
 	gid := pet.GID
 	if pet.Mounted {
 		public = append(public, wire.Frame{Opcode: wire.OpCosRideState,
@@ -168,7 +168,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 	pet.StateFlags &^= cosStateSummoned
 	public = append(public, rt.retireCosRuntime(division, c, gid)...)
 	public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
-	// The kind-1 release of a vehicle's death (52A000 -> 4FA8B0) deletes
+	// The kind-1 release of a vehicle's death deletes
 	// the record.
 	c.ActiveCOS = nil
 	return public

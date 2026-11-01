@@ -14,7 +14,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 )
 
-// Probability is the per-actor, per-skill accumulator in v1.188 599CC0.
+// Probability is the per-actor, per-skill accumulator of the v1.188 server's critical roll.
 // Copy it when planning; publish the next value only after a successful roll.
 // It belongs to the actor lifetime, not a cast, target, or persisted character.
 /*
@@ -27,7 +27,7 @@ type Probability struct {
 	Threshold   int32
 }
 
-// CriticalOutcome follows 58E800..58E848, 5A1A20 and 599CC0. Native converts
+// CriticalOutcome follows the server's hit outcome and critical roll. Native converts
 // Param12 to a byte. The inclusive rand()%101 comparison and accumulating
 // threshold are intentional: independent percentage rolls are not equivalent.
 /*
@@ -70,7 +70,7 @@ func CriticalOutcome(rate float64, previous Probability, roll Roll32767) (bool, 
 
 // ResolveOutcome keeps outcome selection upstream of both damage lanes. A
 // critical doubles physical damage before level/balance/minimum-floor logic
-// (40E67C..40E696); 40E830 has no corresponding magical critical multiplier.
+// (the physical lane formula); the magical lane formula has no corresponding magical critical multiplier.
 /*
 ================
 ResolveOutcome

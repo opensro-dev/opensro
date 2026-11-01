@@ -6,13 +6,13 @@ joboutcome.go - the thief and hunter weekly outcome, and previous job info
 	0x77BE [u32 npc][u8 mode] -> 0xB7BE [1][mode][u32 reward] | [2][code][mode]
 	0x75EE [u32 npc]          -> 0xB5EE [2][code]
 
-v1.188 CGObjPC_HandleJobOutcome70E5 (512E70): the NPC in range (code 3); a
+The reference server's job outcome handler: the NPC in range (code 3); a
 thief or hunter (0x28) at their own guild's NPC (function option 0x15 or
 0x16, 0x0F). Mode 0 tells the reward the weekly close credited; mode 1
 refuses an empty one (0x2A), otherwise pays it as gold, clears it and
 echoes it. Any other mode is 0x0F.
 
-CGObjPC_HandleJobPrevInfo70E6 (513190) reads _OldTrijob through
+The reference server's previous-job-info handler reads _OldTrijob through
 _GetOldTrijobData: the job levels and experience a character had under the
 job system before the tri-job update, kept once for migrated characters.
 No port character predates it, so every answer is the procedure's Ret -1:
@@ -40,7 +40,7 @@ const (
 
 	jobOutcomeQuery   uint8 = 0
 	jobOutcomeCollect uint8 = 1
-	// jobErrNoOutcome is 512E70's 0x482A low byte.
+	// jobErrNoOutcome is the native 0x482A low byte.
 	jobErrNoOutcome uint8 = 0x2a
 	// jobErrNoPrevInfo is _GetOldTrijobData's Ret -1 (0x4829).
 	jobErrNoPrevInfo uint8 = 0x29

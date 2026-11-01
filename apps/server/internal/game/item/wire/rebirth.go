@@ -7,7 +7,8 @@ const (
 	RebirthAtPresentPoint   uint8 = 2
 )
 
-// DecodeLocalRebirthRequest pins sub_6971f0's 0x32DC body: exactly one
+// DecodeLocalRebirthRequest pins the 0x32DC body composed inside the
+// client's CGInterface_OnMsgBoxResult (client 6971F0): exactly one
 // choice byte. The level gate for choice 2 is authority policy, not wire
 // decoding, and therefore lives in action.
 func DecodeLocalRebirthRequest(payload []byte) (uint8, error) {

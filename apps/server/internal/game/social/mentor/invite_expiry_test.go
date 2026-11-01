@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// 46F1E0 expires a proposal after 30 s, not at 30 s; an expired one
+// Natively a proposal expires after 30 s, not at 30 s; an expired one
 // neither blocks new proposals nor answers.
 func TestInvitationAnswerWindow(t *testing.T) {
 	now := time.UnixMilli(1_000_000)

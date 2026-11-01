@@ -72,7 +72,7 @@ func setForgeRole(t *testing.T, s *Store, leader, member *domain.Character, role
 ================
 TestFortressItemForgeStartChargesAndOrders
 
-Refusals in 632660's order after the period and fortress: the holder's
+Refusals in the server's forge request order after the period and fortress: the holder's
 member needs the staff role, then gold, then guild points; a second order
 for the same staff is busy. The payment and the order commit together.
 ================

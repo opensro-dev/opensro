@@ -14,9 +14,10 @@ import "testing"
 ================
 TestShippedTacticsUseOnlyFixedAggression
 
-53F4D0 copies AggressType to +0x168 and, for type 2, replaces it with
-rand()%100 >= AggressData; acquisition then runs for 0 and 3 only (5478F0,
-547AD0). The population evidence carries type 0 as Aggressive, which holds
+The reference server's tactics reset copies AggressType to +0x168 and, for
+type 2, replaces it with rand()%100 >= AggressData; acquisition then runs
+for 0 and 3 only (its two target-acquisition queries). The population
+evidence carries type 0 as Aggressive, which holds
 while every shipped row is type 0 or 1. A row of type 2 or 3 needs the
 per-activation roll first.
 ================
@@ -39,8 +40,8 @@ func TestShippedTacticsUseOnlyFixedAggression(t *testing.T) {
 ================
 TestFixedQueryRowsAreTheThreeUniques
 
-The IDs 53FC00 compares belong to Tiger Girl, Uruchi and Isyutaru in the
-shipped rows, and none of them carries a redirect flag.
+The IDs the native strategy table compares belong to Tiger Girl, Uruchi
+and Isyutaru in the shipped rows, and none of them carries a redirect flag.
 ================
 */
 func TestFixedQueryRowsAreTheThreeUniques(t *testing.T) {

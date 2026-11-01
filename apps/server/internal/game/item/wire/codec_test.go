@@ -114,8 +114,9 @@ func TestReaderRejectsNegativeByteLength(t *testing.T) {
 
 // The two heading encodings on this wave differ, and mixing them is the
 // easiest way to put an entity at the wrong yaw. 0x35C7 divides a byte by
-// 255.0 (sub_7780f0 @0x00778150); 0x30E3 divides a word by 65535.0
-// (sub_775cb0 @0x00775d25).
+// 255.0 (client CPSMission_OnPickupAnim_0x35C7 at 0x00778150); 0x30E3
+// divides a word by 65535.0
+// (client CPSMission_OnEntitySpeedMode0x30E3 at 0x00775d25).
 func TestHeadingDivisorsDifferBetweenByteAndWordEncodings(t *testing.T) {
 	// A half turn under each encoding.
 	if got, want := HeadingByteRadians(128), math.Pi; math.Abs(got-want) > 0.02 {

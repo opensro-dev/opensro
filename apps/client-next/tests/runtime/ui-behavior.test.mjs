@@ -32,6 +32,7 @@ const { SYSTEM_MENU_HEIGHT } = await load( "src/engine/foundation/ui/system-menu
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
+const { emptyStall } = await load( "src/engine/foundation/gameplay/stall.ts" );
 /*
 ================
 assetFixture
@@ -313,6 +314,85 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 
 /*
 ================
+iconAtlasDemand
+
+The icon family's atlas manifest (foundation/ui/icon-atlas.ts): its bytes
+turn icon demand into sheet demand - one request, one residency entry,
+one publish for the whole family - and the renderer hears the mapping. A
+sheet that fails turns the atlas off and the icons fall back to their own
+paths, exactly as without a manifest.
+================
+*/
+test("an installed atlas serves the icon family from its sheet", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png", b = "/assets/images/Media_extracted/icon/b.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	let installed = 0;
+	const wrapped = { ...f.assets };
+	f.resources.dispose();
+	const resources = createUiAssets(
+		wrapped,
+		( ...args ) => f.published.push( args ),
+		"https://fixture.invalid/",
+		undefined,
+		mapping => {
+			installed++;
+			f.installed = mapping;
+		}
+	);
+	f.resources = resources;
+	resources.step( [ a, b ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	assert.deepEqual( f.requests.slice( 1 ), [ "https://fixture.invalid" + a, "https://fixture.invalid" + b ] );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ], [b]: [ 0, 40, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	resources.step( [ a, b ], 1 );
+	assert.equal( installed, 1, "the mapping reaches the renderer once" );
+	assert.deepEqual( f.cancelled.sort(), [ 2, 3 ], "the per-icon requests cancel" );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet, "one sheet request for both icons" );
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 4, { kind: "image", image } );
+	resources.step( [ a, b ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ], "the sheet publishes once under its own path" );
+	assert.equal( resources.size( a ), undefined, "an icon holds no residency of its own" );
+	assert.equal( resources.size( sheet )[0], 2048 );
+	for ( let now = 3; now < 60_000; now += 1000 ) resources.step( [ a, b ], now );
+	assert.equal( f.requests.length, 4, "the family never re-requests" );
+	f.resources.dispose();
+});
+
+test("a failed sheet turns the atlas off and the icons take their own paths", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ a ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ a ], 1 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet );
+	f.results.set( 3, { kind: "error", error: "HTTP 503", absent: false } );
+	f.resources.step( [ a ], 2 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + a, "the icon falls back to its own path" );
+	assert.equal( f.resources.error(), null, "a failed sheet is not an interface failure" );
+	const image = { width: 32, height: 32 };
+	f.results.set( 4, { kind: "image", image } );
+	f.resources.step( [ a ], 3 );
+	assert.deepEqual( f.published, [ [ a, image ] ] );
+	f.resources.dispose();
+});
+
+/*
+================
 absentIconFallback
 
 CIFSlotWithHelp (55B450) loads icon\icon_default.ddj when the requested icon
@@ -321,29 +401,96 @@ without the blocking retry. Any other absent image settles blank, and a
 transient fault on an icon still retries.
 ================
 */
+test("an absent icon's fallback fetches the default itself, not its atlas sheet", () => {
+	// The review's trace: with the atlas installed and icon_default mapped
+	// (it is a published icon), the fallback's request used target() - which
+	// names the whole sheet for a mapped icon - so the sheet was published
+	// under the absent icon's path and drew 2048 px squashed into its quad.
+	// The fallback must fetch the default's own file.
+	const f = assetFixture();
+	const icon = "/assets/images/Media_extracted/icon/item/etc/absent_recipe.png";
+	const fallback = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	f.resources.step( [ icon ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [fallback]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	// The icon has no manifest entry, so its own path is still the request;
+	// it arrives absent and joins the fallback set.
+	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.resources.step( [ icon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + fallback,
+		"the fallback fetches the default's own file, never the sheet"
+	);
+	assert.equal( f.requests.some( r => r === "https://fixture.invalid" + sheet ), false );
+	const image = { width: 32, height: 32 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ icon ], 2 );
+	assert.deepEqual( f.published, [ [ icon, image ] ], "the default publishes under the icon's own path" );
+	assert.deepEqual( f.resources.size( icon ), [ 32, 32 ], "the default's own size, never the sheet's" );
+	f.resources.dispose();
+});
+
+test("a direct demand for the default icon still takes its atlas sheet", () => {
+	const f = assetFixture();
+	const defaultIcon = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [defaultIcon]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ defaultIcon ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ defaultIcon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + sheet,
+		"the default icon itself is served from the sheet when demanded directly"
+	);
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ defaultIcon ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ] );
+	f.resources.dispose();
+});
+
 test("an absent slot icon draws icon_default and an absent image settles blank", () => {
 	const f = assetFixture();
 	const icon = "/assets/images/Media_extracted/icon/item/etc/archemy_reinforce_recipe_a.png";
 	const art = "/assets/images/Media_extracted/interface/missing.png";
 	const paths = [ icon, art ];
 	f.resources.step( paths, 0 );
+	// The first icon demand asks for the atlas manifest first (the icon
+	// family's port-only sheet); an absent manifest fails it silently and
+	// every icon keeps its own path.
 	f.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.results.set( 3, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.resources.step( paths, 1 );
 	assert.equal( f.resources.error(), null, "absence never blocks the interface" );
 	assert.deepEqual( f.resources.stats().failed, [] );
 	assert.equal( f.requests.at( -1 ), "https://fixture.invalid/assets/images/Media_extracted/icon/icon_default.png" );
-	assert.equal( f.requests.length, 3, "the blank image is never requested again" );
+	assert.equal( f.requests.length, 4, "the blank image is never requested again" );
 	const image = { width: 32, height: 32 };
-	f.results.set( 3, { kind: "image", image } );
+	f.results.set( 4, { kind: "image", image } );
 	f.resources.step( paths, 2 );
 	assert.deepEqual( f.published, [ [ icon, image ] ], "the default is published under the icon's own path" );
 	for ( let now = 3; now < 60_000; now += 1000 ) f.resources.step( paths, now );
-	assert.equal( f.requests.length, 3 );
+	assert.equal( f.requests.length, 4 );
 	f.resources.dispose();
 	const g = assetFixture();
 	g.resources.step( [ icon ], 0 );
-	g.results.set( 1, { kind: "error", error: "HTTP 503" } );
+	g.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	g.results.set( 2, { kind: "error", error: "HTTP 503" } );
 	g.resources.step( [ icon ], 1 );
 	assert.match( g.resources.error(), /503/, "a transient fault keeps the retry" );
 	g.resources.step( [ icon ], 1001 );
@@ -569,6 +716,88 @@ test("the Item Mall notice opens once per session at world entry, as 683B40", ()
 	} finally {
 		g.dispose();
 	}
+});
+
+/*
+================
+memoryStorage
+
+A Storage stand-in shared by several UIs, as one browser's localStorage.
+================
+*/
+function memoryStorage() {
+	const values = new Map();
+	return {
+		values,
+		getItem: ( /** @type {string} */ key ) => values.get( key ) ?? null,
+		setItem: ( /** @type {string} */ key, /** @type {string} */ value ) => void values.set( key, value )
+	};
+}
+
+/*
+================
+mallNoticeSession
+
+One login on a fresh UI: whether the notice showed at world entry, and,
+when asked, its Close pressed. The account is typed as on the login form.
+================
+*/
+function mallNoticeSession(
+	/** @type {{ storage: ReturnType<typeof memoryStorage>; revision: string; account: string; character?: string; close?: boolean; }} */ run
+) {
+	const f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, () => {}, () => {}, {
+		mallNoticeStorage: run.storage,
+		clientRevision: run.revision
+	} );
+	try {
+		f.state.session = { ...f.state.session, character: run.character ?? "Player" };
+		if ( run.account ) f.ui.event( { kind: "edit", id: "account", value: run.account } );
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		const shown = !!last?.controls.some( control => control.id === "mall-notice-close" );
+		if ( shown && run.close ) {
+			f.ui.event( { kind: "activate", id: "mall-notice-close" } );
+			for ( let i = 0; i < 4; i++ ) last = f.ui.step( f.state, 2200 + i * 50 ) ?? last;
+			assert.equal( !!last?.controls.some( control => control.id === "mall-notice-close" ), false );
+		}
+		return shown;
+	} finally {
+		f.dispose();
+	}
+}
+
+test("a closed Item Mall notice stays closed for that account until the next release (owner deviation)", () => {
+	const storage = memoryStorage();
+	assert.equal( mallNoticeSession( { storage, revision: "aaaaaaa", account: "Alice", close: true } ), true );
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "alice", character: "Other" } ),
+		false,
+		"the account that closed it, in any case, does not see it again"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "", character: "player" } ),
+		false,
+		"a restored session matches the character that closed it"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "aaaaaaa", account: "bob", character: "Bobby" } ),
+		true,
+		"another account still sees it"
+	);
+	assert.equal(
+		mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice", character: "Other" } ),
+		true,
+		"a new release brings it back"
+	);
+	assert.equal( mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice", close: true } ), true );
+	assert.equal( mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice" } ), false );
+	storage.values.set( "sro:v1150:mall-notice-closed:1", "{not json" );
+	assert.equal(
+		mallNoticeSession( { storage, revision: "bbbbbbb", account: "alice" } ),
+		true,
+		"an unreadable record shows the notice, as native"
+	);
 });
 
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
@@ -2975,10 +3204,72 @@ test("Character and Party use native main-popup art and share drag placement wit
 		f.ui.event( { kind: "activate", id: "party-settings" } );
 		for ( let i = 28; i < 35; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
 		assert.ok( result.controls.some( c => c.id === "party-settings-ok" ) );
-		f.ui.event( { kind: "activate", id: "party-setting:1:1" } );
+		f.ui.event( { kind: "activate", id: "party-setting:1:0" } );
 		f.ui.event( { kind: "activate", id: "party-settings-cancel" } );
 		f.ui.step( f.state, 3600 );
 		assert.ok( !f.scenes.at( -1 ).quads.some( q => q.texture.endsWith( "/messagebox/msgbox_blackbox_03.png" ) ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("party properties puts Auto Share above Distribution and OK keeps the chosen bits", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	// A target so the Party window's invite button sends the formation bits.
+	f.state.gameplay.target = 2;
+	const step = ( from, to ) => {
+		let result;
+		for ( let i = from; i < to; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		return result;
+	};
+	const control = ( result, id ) => {
+		const found = result.controls.find( c => c.id === id );
+		assert.ok( found, "the dialog publishes " + id );
+		return found;
+	};
+	const openSettings = from => {
+		f.ui.event( { kind: "activate", id: "party-settings" } );
+		return step( from, from + 7 );
+	};
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Party" } );
+		step( 1, 8 );
+
+		let dialog = openSettings( 8 );
+		const expShare = control( dialog, "party-setting:1:0" ),
+			expSelf = control( dialog, "party-setting:1:1" ),
+			itemShare = control( dialog, "party-setting:2:0" ),
+			itemSelf = control( dialog, "party-setting:2:1" );
+		assert.equal( expShare.label, "Exp Auto Share", "row 0 is the EXP share option" );
+		assert.equal( expSelf.label, "Exp Distribution", "row 1 is the EXP self option" );
+		assert.equal( itemShare.label, "Item Auto Share", "row 0 is the item share option" );
+		assert.equal( itemSelf.label, "Item Distribution", "row 1 is the item self option" );
+		assert.ok( expShare.rect[1] < expSelf.rect[1], "the share radio is the top row" );
+		assert.ok( itemShare.rect[1] < itemSelf.rect[1], "the share radio is the top row" );
+		// Default formation is invitation only, so Distribution is the chosen row.
+		assert.equal( expShare.selected, false );
+		assert.equal( expSelf.selected, true );
+
+		// The top row selects the share bit; OK carries 1, 2 and the invitation bit.
+		f.ui.event( { kind: "activate", id: "party-setting:1:0" } );
+		f.ui.event( { kind: "activate", id: "party-setting:2:0" } );
+		dialog = step( 15, 17 );
+		assert.equal( control( dialog, "party-setting:1:0" ).selected, true );
+		assert.equal( control( dialog, "party-setting:1:1" ).selected, false );
+		f.ui.event( { kind: "activate", id: "party-settings-ok" } );
+		step( 17, 20 );
+		f.ui.event( { kind: "activate", id: "party-invite" } );
+		assert.equal( sent.pop().options, 7, "top rows set EXP and item share over the invitation bit" );
+
+		// The bottom row clears it again.
+		dialog = openSettings( 20 );
+		f.ui.event( { kind: "activate", id: "party-setting:1:1" } );
+		f.ui.event( { kind: "activate", id: "party-setting:2:1" } );
+		f.ui.event( { kind: "activate", id: "party-settings-ok" } );
+		step( 27, 30 );
+		f.ui.event( { kind: "activate", id: "party-invite" } );
+		assert.equal( sent.pop().options, 4, "bottom rows leave only the invitation bit" );
 	} finally {
 		f.dispose();
 	}
@@ -3467,6 +3758,41 @@ test("party matching native form, local filters and owner approval are actionabl
 			kind: "gameplay",
 			command: { kind: "party-match-answer", a: 7, b: 42, answer: 2 }
 		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the record form opens on its purpose's default title and a purpose change follows it", () => {
+	const f = uiFixture();
+	try {
+		f.state.gameplay.partyMatching = {
+			page: 0,
+			pages: 1,
+			rows: [],
+			own: null,
+			request: null,
+			pending: null,
+			result: null,
+			auto: []
+		};
+		f.state.gameplay.social = { localName: "Player", self: 1, leader: 0, options: 3, members: [] };
+		f.state.gameplay.progression = { level: 10, masteries: [] };
+		for ( let t = 0; t < 1600; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "key", code: "KeyE" } );
+		f.ui.step( f.state, 1700 );
+		f.ui.event( { kind: "activate", id: "party-match:18" } );
+		let scene = f.ui.step( f.state, 1800 );
+		const title = () => scene.controls.find( c => c.id === "party-form-title" ).value;
+		// No job suit: purpose 0 (hunting), filled by 63BE00 when the form opens.
+		assert.equal( title(), "For open hunting on the Silk Road!" );
+		f.ui.event( { kind: "activate", id: "party-form-purpose:1" } );
+		scene = f.ui.step( f.state, 1900 );
+		assert.equal( title(), "When will the quests end on the Silk Road?", "the default follows the purpose" );
+		f.ui.event( { kind: "edit", id: "party-form-title", value: "Mine", start: 4, end: 4, composing: false } );
+		f.ui.event( { kind: "activate", id: "party-form-purpose:0" } );
+		scene = f.ui.step( f.state, 2000 );
+		assert.equal( title(), "Mine", "a typed title is never replaced" );
 	} finally {
 		f.dispose();
 	}
@@ -5500,6 +5826,74 @@ test("academy master can submit the shared notice editor without guild membershi
 	}
 });
 
+test("the Bandit Den gate's return point row sends 0x7495 type 1 and nothing else", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		// Capability 0x100 alone, as the server grants the den gate (row 0x10).
+		f.state.gameplay = {
+			...f.state.gameplay,
+			pose: { ...f.state.gameplay.pose, regionId: 24758 },
+			target: 17,
+			targetCapabilities: 0x100,
+			npcConversation: { phase: "menu", gid: 17 }
+		};
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 17,
+			refObjId: 2197,
+			kind: "teleport",
+			name: "Bandit Den"
+		} );
+		let output, now = 0;
+		const draw = () => {
+			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
+		};
+		draw();
+		const ids = defined( output ).controls.map( c => c.id );
+		assert.ok( ids.includes( "npc-return-point" ) );
+		assert.ok( !ids.includes( "npc-portal-open" ) && !ids.includes( "npc-recall-designate" ) );
+		f.ui.event( { kind: "activate", id: "npc-return-point" } );
+		draw();
+		assert.deepEqual( sent.splice( 0 ), [ { kind: "travel-gate", gid: 17, type: 1, target: 0 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a quest exit gate draws its rows and a row click sends 0x7495 type 3", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		// The gate's grant: capability 0x8000000 with one return row.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			target: 285000,
+			targetCapabilities: 0x8000000,
+			targetGateRows: [ { kind: 0 } ],
+			npcConversation: { phase: "menu", gid: 285000 }
+		};
+		f.state.entities.push( {
+			...f.state.entities[0],
+			gid: 285000,
+			refObjId: 19076,
+			kind: "teleport",
+			name: "Exit"
+		} );
+		let output, now = 0;
+		const draw = () => {
+			for ( let i = 0; i < 40; i++ ) output = f.ui.step( { ...f.state }, now++ ) ?? output;
+		};
+		draw();
+		const ids = defined( output ).controls.map( c => c.id );
+		assert.ok( ids.includes( "npc-gate-row:0" ) );
+		assert.ok( !ids.includes( "npc-portal-open" ) );
+		f.ui.event( { kind: "activate", id: "npc-gate-row:0" } );
+		draw();
+		assert.deepEqual( sent.splice( 0 ), [ { kind: "travel-instance", gid: 285000, target: 0 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("recall menu has independent capability, modal cancel and stale-target protection", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -5808,6 +6202,55 @@ test("chat rows and world whisper selection prepare the same draft without sendi
 		f.ui.event( { kind: "whisper-target", gid: 1 } );
 		f.ui.event( { kind: "whisper-target", gid: 999 } );
 		assert.equal( sent.length, 0, "prefill never sends a chat packet" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a skill tab switch returns to the mastery last selected on that tab", () => {
+	const f = uiFixture( () => {} );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			progression: {
+				level: 10,
+				skillPoints: 10,
+				masteries: [ 257, 258, 259, 273, 274 ].map( id => ({ id, level: 1 }) )
+			}
+		};
+		for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyS" } );
+		f.ui.step( f.state, 1300 );
+		// step answers null when nothing changed, so keep the last scene.
+		let scene;
+		const selected = time => {
+			scene = f.ui.step( f.state, time ) ?? scene;
+			return scene?.controls.find( c => c.id.startsWith( "skill-mastery:" ) && c.selected )?.id;
+		};
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		f.ui.event( { kind: "activate", id: "skill-mastery:258" } );
+		assert.equal( selected( 1400 ), "skill-mastery:258" );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		assert.equal( selected( 1500 ), "skill-mastery:273", "an unvisited tab opens on its first mastery" );
+		f.ui.event( { kind: "activate", id: "skill-mastery:274" } );
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		assert.equal( selected( 1600 ), "skill-mastery:258", "the weapon tab returns to its own last mastery" );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		assert.equal( selected( 1700 ), "skill-mastery:274", "the force tab returns to its own last mastery" );
+		// The memory belongs to the session, as the native window does:
+		// leaving the world resets the panel and forgets every tab's mastery.
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		f.ui.event( { kind: "activate", id: "skill-mastery:258" } );
+		const world = f.state.session;
+		f.state.session = { phase: "signed-out", revision: (world?.revision ?? 0) + 1 };
+		f.ui.step( f.state, 1800 );
+		f.state.session = { ...world, revision: (world?.revision ?? 0) + 2 };
+		for ( let time = 1900; time < 2400; time += 100 ) f.ui.step( f.state, time );
+		f.ui.event( { kind: "key", code: "KeyS" } );
+		selected( 2500 );
+		f.ui.event( { kind: "activate", id: "skill-tab:1" } );
+		f.ui.event( { kind: "activate", id: "skill-tab:0" } );
+		assert.equal( selected( 2600 ), "skill-mastery:257", "a reset panel opens each tab on its first mastery" );
 	} finally {
 		f.dispose();
 	}
@@ -6197,6 +6640,101 @@ test("store window shows Repair and Repair All buttons only when targetCapabilit
 		game.targetCapabilities = 3;
 		scene = f.ui.step( f.state, now += 100 ) ?? scene;
 		assert.equal( f.ui.cursor(), null, "switching to a non-repair store disarms the repair cursor" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("showing a stall switches the main popup to Inventory once", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const control = id => scene.controls.find( row => row.id === id );
+		const inventory = () => !!control( "close-window:Inventory" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		draw();
+		assert.equal( inventory(), false, "a closed stall leaves the popup alone" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.equal( inventory(), true, "5A0DC0 shows the inventory beside the stall" );
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		assert.ok( control( "close-window:Character" ), "the player can switch to another tab" );
+		draw();
+		assert.equal( inventory(), false, "later frames do not force the tab back" );
+		// Closing and showing the stall again is a new edge.
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "visitor", owner: 2, open: true }
+		};
+		draw();
+		assert.equal( inventory(), true, "a visitor's stall show opens the inventory too" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a stall beside a separate window keeps that window open", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const open = name => !!scene.controls.find( row => row.id === "close-window:" + name );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		// 69C7C0 looks at the main popup: another tab of it gives way to
+		// Inventory, while a separate window stays open when the stall appears
+		// (the port keeps its one panel slot on that window instead of drawing
+		// the popup beside it).
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.ok( open( "Inventory" ), "the stall selects Inventory over another main popup tab" );
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		for ( const window of [ "Guild", "Option" ] ) {
+			draw();
+			f.ui.event( { kind: "activate", id: "open-window:" + window } );
+			draw();
+			assert.ok( open( window ), `${window} did not open` );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase: "owner", owner: 1 }
+			};
+			draw();
+			assert.ok( open( window ), `the stall closed ${window}` );
+			assert.equal( open( "Inventory" ), false, `the stall forced Inventory over ${window}` );
+			// Closing the stall again arms the next rising edge.
+			f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+			draw();
+			f.ui.event( { kind: "activate", id: "close-window:" + window } );
+		}
 	} finally {
 		f.dispose();
 	}

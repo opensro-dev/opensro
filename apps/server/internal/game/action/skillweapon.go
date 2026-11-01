@@ -3,7 +3,7 @@
 
 skillweapon.go - which weapon a skill admits
 
-The weapon half of TargetValidation's equipment check (58D480): a racial
+The weapon half of the native equipment requirement check: a racial
 base attack is recognized from the seed catalog, a skill without reqi
 compares its two authored weapon kinds against the equipped loadout, and
 the bow and crossbow are the weapons that spend ammunition.
@@ -40,7 +40,7 @@ func isPinnedBaseAttack(character *enterworld.Character, codename string) bool {
 ==================
 skillWeaponAdmitted
 
-skillWeaponAdmitted is the weapon half of 58D480: a skill with reqi pairs
+skillWeaponAdmitted is the weapon half of the native equipment check: a skill with reqi pairs
 is judged by reqiRefusal alone and never reads its weapon kinds
 (RefSkill+0xC7/+0xC8); only a skill without reqi compares them.
 ==================

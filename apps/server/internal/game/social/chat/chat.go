@@ -107,7 +107,7 @@ senderDisplayName
 
 The name a composed chat line carries for its author: the job alias
 while the author is dressed in a job suit, the character name otherwise
-(native CGObjPC_GetNickName 4DDC50 - the same identity the party roster
+(natively the player's nickname - the same identity the party roster
 writes via enterworld.PartyMemberName). Presence, party, stall and
 guild routing keep keying on the character name; only the payload's
 author field changes.
@@ -131,7 +131,8 @@ func senderDisplayName(sender *enterworld.Character) string {
 //   - a chat rate gate (the dump's vt+0x638): the transport already
 //     rate-limits inbound frames per session (hub ratelimit) and the
 //     retail client gates its own 0x7367 sends (CanSendOpcode,
-//     sub_71fba0 direct-imported in the sub_6aebd0 fold), so a third
+//     NetClient_CanSendOpcode direct-imported in the
+//     CIFChatViewer_HandleChatInputKey fold), so a third
 //     cap is speculative; ChatErr 0x0D is never composed.
 //   - an abuse/ban-word filter: retail's is config-loaded; no config
 //     exists here.
@@ -183,7 +184,7 @@ func HandleChat(deps Dependencies, views Views, divisionID string, sender *enter
 	}
 }
 
-// handleAllChat is the shared All/GM arm (the v1.188 sub_4b1750 shape:
+// handleAllChat is the shared All/GM arm (the v1.188 chat handler's shape:
 // requested types 1 and 3 land in one arm). The BROADCAST type byte is
 // server-forced: 3 for a privileged speaker (vt+0x53c()==1 in the dump;
 // our GMPrivilege flag - the same bit the client reads into
@@ -214,7 +215,7 @@ func handleAllChat(request Request, sender *enterworld.Character, global bool) O
 // division character, consult the TARGET's blocked-whisperer list, and
 // deliver the 0x3667 type-2 line - or don't.
 //
-// THE PRIVACY RULE (v1.188 sub_4b1750, deliberate): a blocked whisper
+// THE PRIVACY RULE (v1.188 chat handler, deliberate): a blocked whisper
 // acks SUCCESS to the sender and delivers NOTHING - the sender cannot
 // distinguish blocked from delivered. There is no GM bypass.
 //
@@ -226,6 +227,16 @@ func handleAllChat(request Request, sender *enterworld.Character, global bool) O
 // deviation from native's case-sensitive CompareStringA the register
 // path already made; a sensitive compare here would let the identical
 // character through on a casing technicality.
+//
+// Port-only, not native (SRO_WHISPER_JOB_ALIAS, default on - owner,
+// 2026-10-28; "off" restores the native name-only behaviour; see
+// whisperalias.go): with the switch on, a typed target that matches no
+// character name also tries the dressed-alias resolution, the self arm
+// covers the sender's own dressed alias, and the block match accepts
+// the sender's dressed alias beside the character name. Nothing the
+// sender receives ever names the resolved character: the ack bodies
+// carry no name (the client renders the typed string) and the refusal
+// log below prints only what the sender typed.
 /*
 ================
 handleWhisper
@@ -238,13 +249,20 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 			Ack:     EncodeChatAckError(ChatErrCantFindTarget, request.ChatType, request.Second),
 		}
 	}
-	if strings.EqualFold(request.TargetName, sender.Name) {
+	if strings.EqualFold(request.TargetName, sender.Name) || selfByDressedAlias(sender, request.TargetName) {
 		// Self-whisper: success with NO delivery (the dump's self arm).
 		// The ack presents the "To [name]" line locally; a delivered
 		// copy would be dropped by the client's own-name compare anyway.
 		return Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	}
 	target := findCharacterByName(deps, divisionID, request.TargetName)
+	if target == nil && WhisperJobAliasEnabled() {
+		// Port-only: the typed string is nobody's name; it may still be
+		// the job alias of a player wearing the suit right now. A typed
+		// string that IS a character name never reaches this arm, so a
+		// name can never be shadowed by an alias.
+		target = findCharacterByDressedAlias(deps, divisionID, request.TargetName)
+	}
 	target = characterSnapshot(deps, divisionID, target)
 	if target == nil || target.DeletePending ||
 		presence == nil || !presence.OnlineByName(divisionID, target.Name) {
@@ -257,8 +275,10 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 			Ack:     EncodeChatAckError(ChatErrCantFindTarget, request.ChatType, request.Second),
 		}
 	}
+	dressedAlias := senderDressedAlias(sender)
 	for _, blockedName := range target.BlockedWhisperers {
-		if strings.EqualFold(blockedName, sender.Name) {
+		if strings.EqualFold(blockedName, sender.Name) ||
+			(dressedAlias != "" && strings.EqualFold(blockedName, dressedAlias)) {
 			return Outcome{
 				Refusal: fmt.Sprintf("whisper from %s to %s suppressed by the target's block list", sender.Name, target.Name),
 				Ack:     EncodeChatAckSuccess(request.ChatType, request.Second),
@@ -310,7 +330,7 @@ func handlePartyChat(parties PartyView, divisionID string, sender *enterworld.Ch
 handleStallChat
 
 Stall chat (type 9) reaches everyone at the sender's stall
-(CFleaMarket_BroadcastChat 473BF0: [9][name][message]); a player at no
+(the native stall chat broadcast: [9][name][message]); a player at no
 stall acks ChatErrNoStall. Native sends the author its own line too and
 the client drops it by name (753760); the author is left out here, as in
 the party arm.
@@ -382,7 +402,7 @@ func handleGuildChat(deps Dependencies, divisionID string, sender *enterworld.Ch
 ================
 handleUnionChat
 
-Union chat (type 0x0B, CGObjPC_OnChatRequest 4B1750 case 0xA): a
+Union chat (type 0x0B, the native chat request's case 0xA): a
 guildless sender acks ChatErrNoGuild (0x0B), a guild outside a union
 ChatErrNoUnion (0x0C), a member without the union chat right 0x0E
 (UIIT_MSG_GUILD_UNION_CHAT_LIMIT); otherwise the line reaches the
@@ -428,6 +448,66 @@ findCharacterByName
 func findCharacterByName(deps Dependencies, divisionID, name string) *enterworld.Character {
 	for _, candidate := range deps.CharactersForDivision(divisionID) {
 		if candidate != nil && strings.EqualFold(candidate.Name, name) {
+			return candidate
+		}
+	}
+	return nil
+}
+
+/*
+================
+senderDressedAlias
+
+The alias the sender currently speaks under: their job alias while the
+suit is on, "" otherwise - and always "" while the port-only alias rules
+are off, so every caller stays native by construction.
+================
+*/
+func senderDressedAlias(sender *enterworld.Character) string {
+	if !WhisperJobAliasEnabled() || sender == nil || sender.Job.Alias == "" {
+		return ""
+	}
+	if enterworld.DressedJob(sender) == 0 {
+		return ""
+	}
+	return sender.Job.Alias
+}
+
+/*
+================
+selfByDressedAlias
+
+Port-only (SRO_WHISPER_JOB_ALIAS): the typed target is the sender's own
+dressed alias - the self-whisper arm, answered with the success ack and
+no delivery exactly as if the sender had typed their character name.
+With the switch off this is never true (senderDressedAlias is "").
+================
+*/
+func selfByDressedAlias(sender *enterworld.Character, typed string) bool {
+	alias := senderDressedAlias(sender)
+	return alias != "" && strings.EqualFold(typed, alias)
+}
+
+/*
+================
+findCharacterByDressedAlias
+
+Port-only (SRO_WHISPER_JOB_ALIAS): resolve a typed whisper target that
+matched no character name to the division character whose job alias it
+is AND who is wearing the suit right now. The dress verdict reads a
+snapshot, never the live record. An alias whose owner is undressed (or
+has none) resolves to nobody: the sender cannot tell "suit off" from
+"logged off" from "never existed", and all three answer
+ChatErrCantFindTarget.
+================
+*/
+func findCharacterByDressedAlias(deps Dependencies, divisionID, name string) *enterworld.Character {
+	for _, candidate := range deps.CharactersForDivision(divisionID) {
+		if candidate == nil || candidate.Job.Alias == "" || !strings.EqualFold(candidate.Job.Alias, name) {
+			continue
+		}
+		if snapshot := characterSnapshot(deps, divisionID, candidate); snapshot != nil &&
+			enterworld.DressedJob(snapshot) != 0 {
 			return candidate
 		}
 	}

@@ -49,8 +49,8 @@ const engagedSkillModifierSource uint32 = 0x7fffff00
 ==================
 playerAttackStats
 
-playerCombatStats while skill is engaged. SkillCombat_EngageSkill (593540)
-installs the engaged skill's own modifier block through 594AC0, so an
+playerCombatStats while skill is engaged. The reference server's skill engage
+installs the engaged skill's own modifier block, so an
 attack that authors hr (the bow's Arrow Rain lines) rolls its hits with
 that hit rate. A timed row's block belongs to its effect instead, and ru
 is the reach rule's (skillActionReach), so only an attack's hr is added.
@@ -148,7 +148,7 @@ clampStoredGaugeToKeeper
 
 clampStoredGaugeToKeeper writes a stored current down when the keeper
 maximum dropped (unequip, buff end, Panic, level down). Nil stays nil:
-absent means full, and full follows the new maximum. 4E3294 params 3/4.
+absent means full, and full follows the new maximum. Reference server params 3/4.
 ==================
 */
 func (rt *Runtime) clampStoredGaugeToKeeper(division string, c *enterworld.Character) (hp bool, mp bool) {

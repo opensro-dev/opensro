@@ -5,7 +5,7 @@ skill-tooltip-catalog.ts - the published skilldata rows as tooltip views
 
 Decodes skillData.json (buildSkillDataAsset.mjs) into the per-skill view the
 skill pane and buff help read: the projected skilldata columns plus the
-native parameter blocks that sub_84b2f0 installs into CSkillData.
+native parameter blocks that CSkillData_IndexParameterTags installs into CSkillData.
 
 The catalogue holds 27,835 rows and is decoded on the main thread when the
 HUD admits it, so the decode is straight-line: each row is scanned once,
@@ -47,14 +47,14 @@ const MAX_SKILL_ROWS = 65536;
 const MAX_SKILL_ROW_LENGTH = 16384;
 // A decimal string of at most this many digits is always a safe integer.
 const SAFE_DECIMAL_DIGITS = 15;
-// CSkillData offsets the decoder projects (sub_84b2f0 destinations).
+// CSkillData offsets the decoder projects (CSkillData_IndexParameterTags destinations).
 const SET_VALUE_FIRST_OFFSET = 0x15c;
 const SET_VALUE_LAST_OFFSET = 0x16c;
 const REQUIREMENT_FIRST_OFFSET = 0x174;
 const EFFECT_RANGE_FIRST_OFFSET = 0x60;
 const MAX_SET_VALUES = 5;
 const MAX_REQUIREMENTS = 5;
-// sub_84b2f0's `msch` block: the reference appearance type and cap.
+// CSkillData_IndexParameterTags's `msch` block: the reference appearance type and cap.
 const APPEARANCE_REFERENCE_OFFSET = 0x268;
 
 /*
@@ -195,7 +195,7 @@ function SkillPane_ParamTag( value: string ): number {
 ================
 SkillPane_ParamSpecs
 
-Native sub_84b2f0's authored-tag frontier. Keeping arity and destination
+Native CSkillData_IndexParameterTags's authored-tag frontier. Keeping arity and destination
 together is important: walking with indexOf made a numeric value which
 happened to equal a tag steal ownership from its real enclosing block.
 Runtime-only entries are retained so the cursor still advances exactly.
@@ -218,13 +218,13 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	}
 	spec( "att", 5, 0x004 );
 	spec( "pdmg", 1, 0x008 );
-	// sub_84b2f0 @0x84c5d4 installs one value at +0x0c; the complete
-	// sub_7f9bd0 direct-tooltip body has no corresponding read.
+	// CSkillData_IndexParameterTags @0x84c5d4 installs one value at +0x0c; the complete
+	// CSkillParameters_AppendLocalizedTooltip direct-tooltip body has no corresponding read.
 	spec( "pdm2", 1, 0x00c, "runtime" );
 	spec( "ko", 2, 0x010 );
 	spec( "da", 1, 0x014 );
 	spec( "cr", 2, 0x018 );
-	// `gdr` is parsed to CSkillData+0x20 but sub_7f9bd0 has no read/string
+	// `gdr` is parsed to CSkillData+0x20 but CSkillParameters_AppendLocalizedTooltip has no read/string
 	// branch for that pointer; the authored long description owns its UI.
 	spec( "ck", 1, 0x01c );
 	spec( "gdr", 1, 0x020, "runtime" );
@@ -286,7 +286,7 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "pmdp", 4, 0x114 );
 	spec( "pmdg", 4, 0x118 );
 	spec( "pao", 1, 0x124 );
-	// sub_84b2f0 @0x84b906: cbuf consumes only its tag and stores the next
+	// CSkillData_IndexParameterTags @0x84b906: cbuf consumes only its tag and stores the next
 	// stream pointer at +0x12c, parallel to nbuf/bbuf.
 	spec( "cbuf", 0, 0x12c, "marker" );
 	spec( "nbuf", 0, 0x130, "marker" );
@@ -311,7 +311,7 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "dru", 2, 0x1a4 );
 	spec( "dru2", 2, 0x1a8 );
 	spec( "stri", 2, 0x1ac );
-	// sub_84b2f0 @0x84bbec consumes tag + two values for +0x1b4. The direct
+	// CSkillData_IndexParameterTags @0x84bbec consumes tag + two values for +0x1b4. The direct
 	// tooltip formatter does not read it; growth-potion prose is authored.
 	spec( "spda", 2, 0x1b0 );
 	spec( "expi", 2, 0x1b4, "runtime" );
@@ -325,7 +325,7 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "rcur", 1, 0x1d4, "runtime" );
 	spec( "dmgr", 4, 0x1d8 );
 	spec( "dgmp", 1, 0x1dc );
-	// +0x1e0 is gameplay-only: the complete sub_7f9bd0 body has no read of
+	// +0x1e0 is gameplay-only: the complete CSkillParameters_AppendLocalizedTooltip body has no read of
 	// this pointer (TC crown-buff text comes from its authored description).
 	spec( "hwir", 1, 0x1e0, "runtime" );
 	spec( "abnb", 1, 0x1e4 );
@@ -357,8 +357,8 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "tcmd", 2, 0x24c );
 	spec( "skc", 3, 0x254, "runtime" );
 	spec( "pchr", 1, 0x25c );
-	// sub_84b2f0 @0x84c75e consumes tag + four values and stores +0x260;
-	// sub_7f9bd0 never reads it, so it remains an explicit runtime family.
+	// CSkillData_IndexParameterTags @0x84c75e consumes tag + four values and stores +0x260;
+	// CSkillParameters_AppendLocalizedTooltip never reads it, so it remains an explicit runtime family.
 	spec( "qest", 4, 0x260, "runtime" );
 	spec( "msch", 2, 0x268 );
 	spec( "mcap", 2, 0x26c );
@@ -379,11 +379,11 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "hntp", 0, 0x250, "marker" );
 	spec( "trap", 0, 0x264, "marker" );
 	spec( "efta", 0, 0x274, "marker" );
-	// Pointer markers: sub_84b2f0 consumes tag only, then stores the following
+	// Pointer markers: CSkillData_IndexParameterTags consumes tag only, then stores the following
 	// stream address (+0x48 @0x84b39d for `ao`, +0xa8 @0x84c844 for `rpkt`).
 	spec( "ao", 0, 0x048, "marker" );
 	spec( "rpkt", 0, 0x0a8, "marker" );
-	// sub_84b2f0 @0x84c9a8: `ssou` breaks the parameter loop immediately;
+	// CSkillData_IndexParameterTags @0x84c9a8: `ssou` breaks the parameter loop immediately;
 	// following dwords are not tags and must never be independently decoded.
 	spec( "ssou", 0, null, "terminal" );
 	spec( "getv", 1, null, "get-value" );
@@ -395,7 +395,7 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 ================
 SkillPane_DecodeNativeParamBlocks
 
-Walks the 49-dword parameter tail of one scanned row the way sub_84b2f0's
+Walks the 49-dword parameter tail of one scanned row the way CSkillData_IndexParameterTags's
 cursor does: a zero dword is skipped, an unrecognised token (or a block
 that would run past the tail) advances one dword, `ssou` ends the walk.
 ================
@@ -486,7 +486,7 @@ SkillPane_DecodeSkillRow
 
 One projected skilldata row (buildSkillDataAsset.mjs column order) -> the
 pane view. The icon column is icon-root relative and the native parse
-lowercases it (sub_811890 flag 1 @0x7f97e2), so the decode roots and
+lowercases it (RefData_AssignResourceStringA flag 1 @0x7f97e2), so the decode roots and
 lowercases it the same way.
 ================
 */
@@ -504,7 +504,7 @@ function SkillPane_DecodeSkillRow(
 	const multiBlock = SkillPane_ReadNativeBlock( nativeParamBlocks, 0x05c );
 	const downAttackBlock = SkillPane_ReadNativeBlock( nativeParamBlocks, 0x014 );
 	const criticalBlock = SkillPane_ReadNativeBlock( nativeParamBlocks, 0x018 );
-	// sub_7f9bd0 reads tnt2/+0x198. `tant` decodes to the distinct runtime
+	// CSkillParameters_AppendLocalizedTooltip reads tnt2/+0x198. `tant` decodes to the distinct runtime
 	// slot +0x194 and must never manufacture a visible taunt row.
 	const tauntBlock = SkillPane_ReadNativeBlock( nativeParamBlocks, 0x198 );
 	const knockoutBlock = SkillPane_ReadNativeBlock( nativeParamBlocks, 0x010 );
@@ -560,7 +560,7 @@ function SkillPane_DecodeSkillRow(
 		directTooltipParams: {
 			nativeParamBlocks,
 			durationMs: durationBlock ? durationBlock[0]! >>> 0 : null,
-			// sub_84b2f0's `mc` block is kind 2; the V1.150 server-side table
+			// CSkillData_IndexParameterTags's `mc` block is kind 2; the V1.150 server-side table
 			// scan independently pins the same [tag, 2, count] shape.
 			multiCount: multiBlock?.[0] === 2 && (multiBlock[1] ?? 0) > 0 ? multiBlock[1]! >>> 0 : null,
 			downAttackRatio: downAttackBlock ? downAttackBlock[0]! | 0 : null,

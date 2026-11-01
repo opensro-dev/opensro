@@ -3,9 +3,9 @@
 
 petstuck_test.go - tests for petstuck.go: which COS the stuck rule warps
 
-The native stuck rule (559010 -> 5599C0) relocates an attack, pickup or
+The native stuck rule relocates an attack, pickup or
 fellow COS onto its owner after ten stalled stops, in FOLLOW and in PICKITEM
-alike; BATTLE keeps fighting (55A250), and a pet that keeps reaching its
+alike; BATTLE keeps fighting, and a pet that keeps reaching its
 formation never accumulates the count.
 
 ===========================================================================
@@ -27,7 +27,7 @@ import (
 )
 
 // stuckOwnerAt is an owner one sector from the stranded pet's region
-// 0x62a8, inside 430CE0's adjacency, so only the stuck rule can warp.
+// 0x62a8, inside the native sector adjacency, so only the stuck rule can warp.
 var stuckOwnerAt = simulation.Spawn{RegionID: 0x62a9, X: 300, Z: 500}
 
 /*
@@ -57,7 +57,7 @@ func tickUntilWarp(rt *Runtime, key petOwnerKey, state *petSession, owner simula
 ================
 TestWalledInPickupPetWarpsWhileFollowing
 
-A pickup pet (band 4, 44B460) follows through the same FOLLOW state and
+A pickup pet (band 4) follows through the same FOLLOW state and
 warps on its tenth stalled stop.
 ================
 */
@@ -72,7 +72,7 @@ func TestWalledInPickupPetWarpsWhileFollowing(t *testing.T) {
 ================
 TestWalledInPickupPetWarpsWhileCollecting
 
-PICKITEM uses the base stuck handler too (5599C0): a pickup pet walled away
+PICKITEM uses the base stuck handler too: a pickup pet walled away
 from its item warps to its owner, and leaving PICKITEM answers the pending
 pickup with a failure, as any state change does.
 ================
@@ -101,8 +101,8 @@ func TestWalledInPickupPetWarpsWhileCollecting(t *testing.T) {
 ================
 stallFollower
 
-Drive a follower through n refused steps (each a stalled stop, 4A9430 event
-8 counted by 559010) toward a far goal, starting at nowMs.
+Drive a follower through n refused steps (each a stalled stop, event
+8 counted as stuck) toward a far goal, starting at nowMs.
 ================
 */
 func stallFollower(f *simulation.PetFollower, n int, nowMs int64) {
@@ -119,8 +119,8 @@ func stallFollower(f *simulation.PetFollower, n int, nowMs int64) {
 ================
 TestStuckGateByCOSKind
 
-5599C0's gate (CGObj_IsAttackOrPickupCOS 4838C0 -> 44B460, CGObj_IsFellowCOS
-483980): attack (3), pickup (4) and fellow (5) COS are relocated onto their
+The stuck handler's gate (the attack-or-pickup and fellow COS tests
+): attack (3), pickup (4) and fellow (5) COS are relocated onto their
 owner; a captured COS (6) only drops its order and stays. Outside BATTLE.
 ================
 */
@@ -146,7 +146,7 @@ func TestStuckGateByCOSKind(t *testing.T) {
 TestStuckNeedsTenStalledStopsAndClearsOnStateChange
 
 Nine stalled stops raise nothing; the count survives until a state change
-(53FF30, here entering BATTLE through resetPetStuck) and then starts over.
+(here entering BATTLE through resetPetStuck) and then starts over.
 ================
 */
 func TestStuckNeedsTenStalledStopsAndClearsOnStateChange(t *testing.T) {
@@ -172,7 +172,7 @@ func TestStuckNeedsTenStalledStopsAndClearsOnStateChange(t *testing.T) {
 TestHorsesAndTransportsNeverStuckWarp
 
 A ride horse (band 1) and a trade transport (band 2) run no follower AI
-unmounted in the port, and 5599C0's gate excludes them: they never warp.
+unmounted in the port, and the stuck handler's gate excludes them: they never warp.
 ================
 */
 func TestHorsesAndTransportsNeverStuckWarp(t *testing.T) {
@@ -197,7 +197,7 @@ func TestHorsesAndTransportsNeverStuckWarp(t *testing.T) {
 ================
 TestPetInBattleKeepsFighting
 
-BATTLE overrides the stuck handler (55A250): with no warp-to-target trace
+BATTLE overrides the stuck handler: with no warp-to-target trace
 mode the pet stays in BATTLE where it is.
 ================
 */
@@ -219,8 +219,8 @@ TestPetFollowingFreelyNeverStuckWarps
 
 The soak: an owner walking an open field in short and long legs, the pet
 following through 1000 ticks with nothing in its way. Every time it reaches
-its formation FOLLOW changes state and clears the count (55A960 ->
-5599A0), so its short catch-up moves never add up to a warp.
+its formation FOLLOW changes state and clears the count (the FOLLOW
+tick enters a new state), so its short catch-up moves never add up to a warp.
 ================
 */
 func TestPetFollowingFreelyNeverStuckWarps(t *testing.T) {
@@ -351,8 +351,8 @@ func TestPetsInFormationWithAStillOwnerNeverStuckWarp(t *testing.T) {
 TestPetsFollowingShortHopsAndACirclingOwnerNeverStuckWarp
 
 Stop-start hops under 20 make every catch-up move end within 20 of where it
-began - each such stop counts (559010) - but every arrival in formation
-changes state and clears the count (55A960 -> 5599A0). An owner circling
+began - each such stop counts - but every arrival in formation
+changes state and clears the count. An owner circling
 the pets keeps moving their slots; the slots stay reachable, so neither pet
 warps.
 ================

@@ -16,11 +16,11 @@ import (
 //   - a VACATED socket pushes the 0x377C clear with RefObjID 0, which takes
 //     the non-avatar arm.
 //   - a socket that ends up holding AMMUNITION also pushes the 0x377C
-//     clear: ammo has no worn visual (native CGItem_HasEquipmentVisual
-//     490390 is false for it and the client maps it to no equipment slot),
+//     clear: ammo has no worn visual (the native equipment visual test
+//     is false for it and the client maps it to no equipment slot),
 //     so the equip arm never fires for it, and the clear is what detaches
 //     a shield the pair-swap displaced from socket 7 (the unequip arm of
-//     CGObjPC_CollectMoveContributionSlots 4E9C40 for the item leaving
+//     the native move contribution slots for the item leaving
 //     the socket). Without it the shield stayed drawn over the bow.
 //
 // Handlers must run this for EVERY transfer that touched a socket < 13; a

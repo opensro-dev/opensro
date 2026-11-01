@@ -44,7 +44,7 @@ replacesOwnAura
 
 Whether c already plays an aura of skill's Bard family, which rule 1 makes
 this cast replace. Such a cast is not put to the native source admission
-(58E2F4): the playing aura's own states would refuse its replacement, and
+here: the playing aura's own states would refuse its replacement, and
 the owner's rule decides it instead (replaceOwnAura).
 ==================
 */

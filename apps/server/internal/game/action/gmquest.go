@@ -4,7 +4,7 @@
 gmquest.go - the GM's quest tools: /INITQ, /REMOVEQ, /COMPQ and /RESETQ
 
 Subcommands 0x1B, 0x1E, 0x1D and 0x1C of the GM command (client 509CF0,
-50CA69..50CBE6). The quest runtime owns the journal and its history
+client 50CA69..50CBE6). The quest runtime owns the journal and its history
 (quest/gm.go); this file finds the GM, hands the runtime the character and
 delivers the frames it returns. The gmcommand dispatcher has already decoded
 the codename and has answered nothing yet.

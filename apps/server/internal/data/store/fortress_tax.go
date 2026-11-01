@@ -22,9 +22,9 @@ import (
 ================
 CollectFortressTax
 
-62F7C0 admits the current holder's master; 62347E credits the query amount.
+The server's tax request admits the current holder's master; its completion credits the query amount.
 The recovered _SiegeFortressTaxCollect refuses over-treasury requests;
-626180 maps its failure to code 2. Refuse signed balance overflow as the
+The server maps its failure to code 2. Refuse signed balance overflow as the
 SQL BIGINT addition would, without consuming any treasury.
 ================
 */
@@ -71,15 +71,15 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = upsertCharacterTx(tx, division, &next); err != nil {
+	if err = tx.upsertCharacter(division, &next); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, "fortress-tax", division, actor, gold)
+	settle, err := s.ledgerOwnTxLocked(tx.Tx, "fortress-tax", division, actor, gold)
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}

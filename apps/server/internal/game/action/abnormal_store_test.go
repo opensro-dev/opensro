@@ -196,7 +196,7 @@ func testAbnormalStoreTicks(t *testing.T) {
 			frames := d.rt.advancePlayerAbnormals(now)
 			wantHP := int64(abnormalStoreHP - abnormalStoreDamage)
 			if sourceState == "self" {
-				// 52A288 rejects a live source that is the victim itself.
+				// The reference server's hit path rejects a live source that is the victim itself.
 				wantHP = abnormalStoreHP
 			}
 			if got := enterworld.CurrentHP(d.character); got != wantHP || (len(frames) == 0) != (sourceState == "self") {

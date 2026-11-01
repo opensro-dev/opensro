@@ -519,7 +519,8 @@ TestRahid6KillCrediting
 Tahomet falls: the room hears the surrender; every resident doing the
 quest trades all bundles for the necklace (and hears the obtained
 line), the bundle-less one hears the bundle-lost line, the finished
-helper is untouched. The meeting returns everyone and closes.
+helper is untouched. A minute later the meeting returns everyone and
+closes.
 ================
 */
 func TestRahid6KillCrediting(t *testing.T) {
@@ -565,6 +566,13 @@ func TestRahid6KillCrediting(t *testing.T) {
 			t.Fatalf("%s never heard the surrender", name)
 		}
 	}
+	// The grace minute: still open, then everyone home.
+	w.update()
+	if len(w.returned) != 0 || len(w.closed) != 0 {
+		t.Fatalf("returned %v closed %v before the grace ran out", w.returned, w.closed)
+	}
+	*w.nowMs += rahid6KillGraceMs
+	w.update()
 	if len(w.returned) != 3 || len(w.closed) != 1 {
 		t.Fatalf("returned %v closed %v, want everyone home and one close", w.returned, w.closed)
 	}
@@ -605,5 +613,90 @@ func TestRahid6ActivatedExpelsTheUninvited(t *testing.T) {
 	}
 	if *leader.Experience <= expBefore {
 		t.Fatalf("experience %d -> %d, want the reward paid", expBefore, *leader.Experience)
+	}
+}
+
+/*
+================
+TestRahid6ExitGateRisesBesideTheBoss
+
+The reference kill handler raises the exit gate beside Tahomet (#1878):
+the site its owner reports for the fall in this layer is where the gate
+rises, once, on the kill; a site in another world or of another monster
+is ignored. The room stays for the sixty-second grace, then the layer's
+end returns it and takes the gate down.
+================
+*/
+func TestRahid6ExitGateRisesBesideTheBoss(t *testing.T) {
+	licensed.RequireGameData(t)
+	w := newRahid6World(t)
+	type raised struct {
+		world instance.ID
+		fell  simulation.Spawn
+	}
+	var gates []raised
+	var removed []instance.ID
+	w.rt.SpawnExitGate = func(world instance.ID, fell simulation.Spawn) bool {
+		gates = append(gates, raised{world, fell})
+		return true
+	}
+	w.rt.RemoveExitGates = func(world instance.ID) { removed = append(removed, world) }
+	leader := rahid6Accept(t, w, "GateLeader")
+	w.openLayer(leader, rahid6Accept(t, w, "GateMember"))
+	w.update()
+
+	site := simulation.Spawn{RegionID: 25000, X: 120, Y: 4, Z: -30}
+	wrong := uint32(instance.Pack(instance.DefinitionID(2), 1))
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &wrong, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, rahid6TahometCodename, simulation.Spawn{RegionID: 1})
+	packed := uint32(w.lease.ID)
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, "MOB_QT_01_SOMETHING_ELSE", simulation.Spawn{RegionID: 2})
+	w.rt.NoteKillSite(leader, rahid6TahometCodename, site)
+	w.rt.KillUpdater()(leader, rahid6TahometCodename, 0)
+	w.rt.NoteKillSite(leader, rahid6TahometCodename, simulation.Spawn{RegionID: 3})
+	w.update()
+	if len(gates) != 1 || gates[0].world != w.lease.ID || gates[0].fell != site {
+		t.Fatalf("gates raised = %+v, want one beside %+v in %v", gates, site, w.lease.ID)
+	}
+	*w.nowMs += rahid6KillGraceMs - 1
+	w.update()
+	if len(gates) != 1 || len(w.closed) != 0 || len(removed) != 0 {
+		t.Fatalf("before the grace ran out: gates %+v closed %v removed %v", gates, w.closed, removed)
+	}
+	*w.nowMs++
+	w.update()
+	if len(w.closed) != 1 || len(removed) != 1 || removed[0] != w.lease.ID {
+		t.Fatalf("closed %v gates removed %+v, want the layer's", w.closed, removed)
+	}
+}
+
+/*
+================
+TestRahid6LastLeaveTakesTheGateDown
+
+The room may leave through the gate before the grace runs out: the
+last resident's leave closes the layer, and the gate goes with it.
+================
+*/
+func TestRahid6LastLeaveTakesTheGateDown(t *testing.T) {
+	licensed.RequireGameData(t)
+	w := newRahid6World(t)
+	var removed []instance.ID
+	w.rt.SpawnExitGate = func(instance.ID, simulation.Spawn) bool { return true }
+	w.rt.RemoveExitGates = func(world instance.ID) { removed = append(removed, world) }
+	leader := rahid6Accept(t, w, "GateLeader")
+	w.openLayer(leader, rahid6Accept(t, w, "GateMember"))
+	w.update()
+	packed := uint32(w.lease.ID)
+	leader.World = &enterworld.CharacterWorld{PackedInstance: &packed, InstanceReturn: &domain.InstanceReturnAnchor{}}
+	w.rt.NoteKillSite(leader, rahid6TahometCodename, simulation.Spawn{RegionID: 25000})
+	w.rt.KillUpdater()(leader, rahid6TahometCodename, 0)
+	w.update()
+	for _, name := range []string{"GateLeader", "GateMember"} {
+		w.rt.DispatchInstanceEvent(InstanceEvent{Kind: InstanceEventLeave, Division: rahid6TestDivision, Definition: rahid6Definition, World: w.lease.ID, Name: name})
+	}
+	if len(removed) != 1 || removed[0] != w.lease.ID || len(w.closed) != 1 {
+		t.Fatalf("gates removed %+v closed %v, want the layer's on the last leave", removed, w.closed)
 	}
 }

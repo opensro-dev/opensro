@@ -519,7 +519,7 @@ func TestFriendLaneEndToEndOverWire(t *testing.T) {
 		t.Fatalf("B's stored edges after delete = %+v, want empty", got)
 	}
 
-	// A stray delete of the now-unlisted jid: 5D77D0's code 3.
+	// A stray delete of the now-unlisted jid: the native friend delete's code 3.
 	sendFrame(t, connA2, community.OpFriendDeleteRequest, friendDeleteFrame(2))
 	expectFrameBody(t, connA2, community.OpFriendDeleteAnswer, community.EncodeFriendDeleteErrorB5DB(3), "A's stray delete answer")
 

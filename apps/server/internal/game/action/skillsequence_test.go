@@ -53,7 +53,7 @@ func TestComboCommitsSeparateTimedStagesWithOneRootCost(t *testing.T) {
 	if len(ids) != 3 || ids[0] != 7 || ids[1] != 8 || ids[2] != 2 {
 		t.Fatalf("continuations %v", ids)
 	}
-	// Native step waits (4AEC2D): the root's 428 ms fits the 500 ms latency
+	// Native step waits: the root's 428 ms fits the 500 ms latency
 	// budget, so stage 7 follows at once; stage 7 waits 612-72 ms; the basic
 	// attack waits stage 8's 993 ms plus the 72 ms the chain borrowed.
 	if ticks[0] != 1 || ticks[1] != 7 || ticks[2] != 18 {

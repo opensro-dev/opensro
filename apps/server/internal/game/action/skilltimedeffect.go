@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-skilltimedeffect.go - timed self effects (5830B0 mode zero)
+skilltimedeffect.go - timed self effects (persistent cast, mode zero)
 
 ===========================================================================
 */
@@ -21,8 +21,8 @@ import (
 ==================
 acceptTimedSelfEffect
 
-5830B0 mode zero releases the cast and creates independent recipient
-instances. 59BB80 releases the root without adding a second cancel packet;
+The persistent cast's mode zero releases the cast and creates independent recipient
+instances. The skill queue releases the root without adding a second cancel packet;
 the recipient's later retirement is B6A0, using its own identity.
 
 Hiding and detection programs (concealment.go) take the same path. Their
@@ -52,7 +52,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 				return false
 			}
-			// 58E2F4 validates replacement before the cast becomes current.
+			// The reference server validates replacement before the cast becomes current.
 			// Its stop request survives a later cancellation of this cast.
 			if !rt.requestSelfEffectReplacement(division, c, skill) {
 				refusal = 0x300c
@@ -76,7 +76,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	var token uint32
 	if pending != nil {
 		token = pending.token
-		// Native 5835EF clears the current preparation before target/effect
+		// The reference server clears the current preparation before target/effect
 		// validation. Its own packed states must not reject its recipient.
 		rt.clearCurrentSkillCommand(division, c.Name)
 	} else {
@@ -122,7 +122,7 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			return false
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, pending != nil)
-		// Native 4E6330 clamps stored HP before serializing changed vitals.
+		// The reference server clamps stored HP before serializing changed vitals.
 		// Keeping only a projected clamp would restore the lost HP on expiry.
 		rt.clampStoredGaugeToKeeper(division, c)
 		return true

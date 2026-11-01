@@ -33,6 +33,48 @@ export function siteAdminURL( value ) {
 	return url;
 }
 
+const STATUS_FILTERS = [ "unused", "partial", "used", "revoked", "expired" ];
+const DATE_FILTERS = [ "createdFrom", "createdTo", "expiresFrom", "expiresTo" ];
+
+/*
+================
+inviteListQuery
+
+The list's filters as the query string the site understands, validated
+here so a malformed filter is refused before anything is called. Dates
+travel as the instants the page computed. Returns { text } with the
+leading "?", or { error } in plain words.
+================
+*/
+export function inviteListQuery( filters ) {
+	const params = new URLSearchParams();
+	const member = String( filters.discordUserId ?? "" ).trim();
+	if ( member ) {
+		if ( !DISCORD_SNOWFLAKE.test( member ) ) return { error: "A Discord user ID is 15 to 22 digits" };
+		params.set( "discordUserId", member );
+	}
+	const status = String( filters.status ?? "" ).trim();
+	if ( status ) {
+		if ( !STATUS_FILTERS.includes( status ) ) {
+			return { error: `Status must be one of ${STATUS_FILTERS.join( ", " )}` };
+		}
+		params.set( "status", status );
+	}
+	const source = String( filters.source ?? "" ).trim();
+	if ( source ) {
+		if ( source.length > 200 ) return { error: "Source is too long" };
+		params.set( "source", source );
+	}
+	for ( const name of DATE_FILTERS ) {
+		const value = String( filters[name] ?? "" ).trim();
+		if ( !value ) continue;
+		if ( Number.isNaN( Date.parse( value ) ) ) return { error: `${name} is not a date` };
+		params.set( name, value );
+	}
+	const text = params.toString();
+	return { text: text ? "?" + text : "" };
+}
+
 /*
 ================
 createInviteKeys
@@ -81,14 +123,14 @@ export function createInviteKeys( base, token, fetcher = fetch ) {
 	}
 
 	return {
-		list( operator, discordUserId ) {
-			if ( discordUserId && !DISCORD_SNOWFLAKE.test( discordUserId ) ) {
-				return { status: 400, body: { error: "A Discord user ID is 15 to 22 digits" } };
-			}
-			return call(
-				"/internal/admin/invites" + (discordUserId ? "?discordUserId=" + discordUserId : ""),
-				operator
-			);
+		list( operator, filters = {} ) {
+			const query = inviteListQuery( filters );
+			if ( query.error ) return { status: 400, body: { error: query.error } };
+			return call( "/internal/admin/invites" + query.text, operator );
+		},
+		reveal( operator, id ) {
+			if ( !KEY_ID.test( id ) ) return { status: 400, body: { error: "Unknown key" } };
+			return call( `/internal/admin/invites/${id}/reveal`, operator, {} );
 		},
 		create( operator, request ) {
 			if ( request.discordUserId && !DISCORD_SNOWFLAKE.test( String( request.discordUserId ) ) ) {

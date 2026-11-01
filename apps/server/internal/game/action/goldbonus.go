@@ -22,7 +22,7 @@ import (
 ================
 applyMonsterGoldBonus
 
-4C40EA..4C41AD divides B6 by 100, spills the fraction, and multiplies gold
+The reference server divides B6 by 100, spills the fraction, and multiplies gold
 stock by 1+bonus before publishing. Item stacks and drop probability are
 unchanged. The prepared slice belongs exclusively to this kill transaction.
 ================

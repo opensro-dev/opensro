@@ -21,8 +21,9 @@ func (c *Character) TransitionBodyStatus(t BodyStatusTransition) bool {
 	return changed
 }
 
-// GMToggleBodyStatus follows server 520DE0. Values are named only at this
-// producer: /INVISIBLE requests 4 and /INVINCIBLE requests 3.
+// GMToggleBodyStatus follows the server's GM body-status toggle. Values are
+// named only at this producer: /INVISIBLE requests 4 and /INVINCIBLE
+// requests 3.
 func GMToggleBodyStatus(current, requested uint8) (uint8, bool) {
 	if requested != 3 && requested != 4 {
 		return current, false
@@ -37,7 +38,7 @@ func GMToggleBodyStatus(current, requested uint8) (uint8, bool) {
 	return requested, true
 }
 
-// InitialCOSBodyStatus follows the owned-actor admission at server 4D19D0:
+// InitialCOSBodyStatus follows the server's owned-actor admission:
 // only owner states 3 and 4 are inherited by the new actor.
 func InitialCOSBodyStatus(owner uint8) uint8 {
 	if owner == 3 || owner == 4 {

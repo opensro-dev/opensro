@@ -3,8 +3,8 @@
 
 ammunition_reload_test.go - spending the last arrow reloads from the bag
 
-SkillAction_Projectile sends the socket's new count (0 when the stack ran
-out) before CGObjPC_ConsumeAmmo, whose AutoReloadMagazine (4EC340) then
+The reference server's projectile action sends the socket's new count (0 when
+the stack ran out) before it consumes the ammunition, whose auto-reload then
 moves the lowest same-type bag stack into the emptied socket 7.
 
 ===========================================================================

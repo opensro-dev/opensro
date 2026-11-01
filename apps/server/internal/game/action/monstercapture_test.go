@@ -81,7 +81,7 @@ func castCapture(rt *Runtime, c *enterworld.Character, gid uint32) OpResult {
 ==================
 TestMonsterMaskDropsTheEssenceAtTheRogue
 
-593F63 -> 4AA680: absorbing a level-20 corpse costs 52 MP, starts the
+Natively absorbing a level-20 corpse costs 52 MP, starts the
 cooldown and puts one Essence holding that monster on the ground, owned
 by the Rogue.
 ==================
@@ -115,7 +115,7 @@ func TestMonsterMaskDropsTheEssenceAtTheRogue(t *testing.T) {
 ==================
 TestMonsterMaskRefusesTheWrongCorpse
 
-58D2F4: a living target, a hunter (TID4 3) and a
+The native target validation: a living target, a hunter (TID4 3) and a
 monster above the cap are all refused, and nothing drops.
 ==================
 */
@@ -143,7 +143,7 @@ func TestMonsterMaskRefusesTheWrongCorpse(t *testing.T) {
 	}
 }
 
-// 58D2F4's grade test: a champion corpse (grade 1) answers 0x3033, and the
+// The native grade test: a champion corpse (grade 1) answers 0x3033, and the
 // grade bits are the low nibble only.
 func TestMonsterMaskRefusesAnyGradeButNormal(t *testing.T) {
 	capture := enterworld.SkillMonsterCapture{Pinned: true, MaxLevel: 20, ItemRefObjID: 10364}

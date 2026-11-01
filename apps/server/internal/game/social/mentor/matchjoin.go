@@ -28,9 +28,10 @@ package mentor
 //
 // DECISION (listing-kind mapping): the joiner commits as a kind-2
 // STUDENT. The mentor-match register form's kind combo (Student /
-// AssistantGuardian / ALL, window OnCreate @0x6730bf..0x673141) is not
+// AssistantGuardian / ALL, the matching window's OnCreate) is not
 // pinned to a member-kind byte in either dump, and the join button's
-// own gate (sub_671a50 @0x671aa7: level < 0x3c) admits both bands - the
+// own gate (the client's student-band gate: level < 0x3c) admits
+// both bands - the
 // student band is the only one with a pinned level ceiling
 // (StudentMaxLevel), so it is the honest commit until the kind byte's
 // semantics are pinned.
@@ -48,7 +49,8 @@ MatchJoinPrecheck
 MatchJoinPrecheck answers a request-time refusal reason ("" = ok) for
 a proposed mentor-match join, mirroring the 0x76B1 invite gates
 (handleInvite): the master must be recognizable (level >= 0x3c - the
-sub_81e9f0 kind-0 gate - and the kind-0 master of a camp opened at the
+TrainingCampMember_ClassifyGrade kind-0 gate - and the kind-0
+master of a camp opened at the
 NPC, with student headroom), the joiner campless, not delete-pending and
 inside the student band. Everything re-validates at commit time under
 the store doors.

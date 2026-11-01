@@ -4,12 +4,12 @@
 huntingpoint.go - a marked player's position follows its hunter (hntp)
 
 The Rogue's Tag Point and Hunting Point install an lnks pair carrying
-hntp. SkillCombat_EngageSkill (593757) then attaches the recipient's
-action records to a task of the source (CActionTargetContext_SetCoordinates
-4F9A90), so the source keeps receiving the recipient's 0x30E3 moves after
+hntp. The reference server's skill engage then attaches the recipient's
+action records to a task of the source, so the source keeps receiving the
+recipient's 0x30E3 moves after
 it has left sight. The v1.150 client registers the subject from the
-private 0xB5ED (CSkillRunTimeManager_RegisterTrackedEntity 84F130), moves
-its marker on each 0x30E3 for that GID (84F360) and draws it on the world
+private 0xB5ED (client CSkillRunTimeManager_RegisterTrackedEntity 84F130), moves
+its marker on each 0x30E3 for that GID (client 84F360) and draws it on the world
 map (CIFWorldMap_DrawHuntingPointMarkers 57B550).
 
 A recipient the source can see already reaches it through the ordinary
@@ -89,7 +89,10 @@ func (rt *Runtime) huntingReport(division, sourceName, targetName string, target
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	source := rt.findCharacter(division, sourceName)
-	target := rt.characterSnapshot(division, rt.findCharacter(division, targetName))
+	// The mark's identity facts (the object id from the character id)
+	// never change after creation, so the live record answers them;
+	// no copy of the marked player is detached per report (#1943).
+	target := rt.findCharacter(division, targetName)
 	if source == nil || target == nil || enterworld.ObjectIDForCharacter(target) != targetGID {
 		return simulation.DivisionFrames{}, false
 	}

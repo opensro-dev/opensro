@@ -24,7 +24,7 @@ func TestNativeBagToEquipmentZeroQuantity(t *testing.T) {
 	}
 	rt, _ := newTestRuntime(character, testItems())
 
-	// sub_594980 -> sub_699250 -> sub_697e80 emits this exact body. The
+	// Client 594980 -> 699250 -> 697E80 emits this exact body. The
 	// movement-record ctor leaves quantity at zero on the bag->equipment row;
 	// the nearby `push 1` arms CGInterface's pending-state timer.
 	result := rt.HandleItemMove(testDivision, character, []byte{

@@ -458,6 +458,7 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 				return hub.CharacterRestricted(shard, author, transport.CommandRestrictionChat)
 			})
 		},
+		Events: func() []chatfeed.Line { return gameplay.chatFeed.Events(shard) },
 	}
 	// The weekly seal board (#1641): a nil counter leaves the route
 	// unserved (404), which is SRO_SEAL_BOARD off.

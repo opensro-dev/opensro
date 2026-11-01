@@ -31,7 +31,7 @@ const resuscitationPotionLimit = 30
 ================
 ResuscitationAvailable
 
-88B2A0 registers five potion merchants; 88B760 requires level 20 for the
+The server registers five potion merchants and requires level 20 for the
 dialog, without requiring an active collection quest or a potion in advance.
 ================
 */
@@ -46,7 +46,7 @@ func ResuscitationAvailable(c *enterworld.Character, npc string) bool {
 ================
 resuscitationMerchant
 
-88B2A0 registers the same collection and withdrawal services in all towns.
+The server registers the same collection and withdrawal services in all towns.
 ================
 */
 func resuscitationMerchant(npc string) bool {
@@ -80,7 +80,7 @@ func questNpcMatches(def *Definition, expected, actual string) bool {
 ================
 resuscitationExchangeCount
 
-88C980 exchanges every complete group of hearts, capped by the thirty
+The server exchanges every complete group of hearts, capped by the thirty
 potions already held. Count inventory under the character transaction;
 the journal's ten-heart progress bar is deliberately saturated.
 ================

@@ -6,7 +6,7 @@ import (
 )
 
 // PartyApplicant is derived from the current authoritative character snapshot.
-// Native 5A1890 selects trained masteries; 5BF62E/5BF64A publish them and
+// Natively the server selects trained masteries and publishes them and the
 // active job class. The latter is not job membership (client CICUser+782).
 type PartyApplicant struct {
 	Primary, Secondary uint32
@@ -19,7 +19,8 @@ func partyApplicant(character *domain.Character) PartyApplicant {
 	return out
 }
 
-// 868D00/5931B0/5931F0: only the equipped 3.1.7.{1,2,3} job suit
+// ItemRecord_GetJobSuitClass (over ItemTID_IsTraderSuit and
+// ItemTID_IsThiefSuit): only the equipped 3.1.7.{1,2,3} job suit
 // determines trader/thief/hunter class; everything else is ordinary (4).
 func activePartyJob(character *domain.Character) uint8 {
 	for _, row := range character.MissionInventory {
@@ -37,8 +38,9 @@ func activePartyJob(character *domain.Character) uint8 {
 	return 4
 }
 
-// 63C010, GameServer 5BF240 and ShardManager 44F7F0: the same
-// job/purpose matrix gates registration, modification and join admission.
+// The client form (CIFPartyMatchRegister_Initialize) validates against
+// the same job/purpose matrix; the server gates registration,
+// modification and join admission on it.
 // Native automatic search remains an unrestricted local purpose filter.
 func partyPurposeAllowed(job, purpose uint8) bool {
 	if purpose > 3 {

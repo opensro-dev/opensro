@@ -77,7 +77,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		return nil
 	}
 	fortresses := loadSiegeFortressIDs(textdataDir)
-	storeGroupsByNpc := loadNpcStoreGroupIndex(textdataDir, refs)
+	storeGroupsByNpc, maxStoreTabID, maxStoreGroupID := loadNpcStoreGroupIndex(textdataDir, refs)
 	fixtureByCode := make(map[string]NpcDef)
 	for _, row := range DefaultNpcRoster() {
 		fixtureByCode[row.Codename] = row
@@ -116,19 +116,31 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		row := newWorldNpc(ref, domain.NPCGIDBase+uint32(index)+1, Spawn{RegionID: region, X: x, Y: y, Z: z}, lookups)
 		roster = append(roster, row)
 	}
+	// Port-only, not native (#1850): Jangan's grocer under her alchemy
+	// shop name, her alchemy tab replaced by its three tabs. Off (or the
+	// extra goods not in force) leaves the roster exactly as authored.
+	if janganAlchemyShopActive() {
+		for i := range roster {
+			if roster[i].Codename == janganGrocerCodename {
+				applyJanganAlchemyShop(&roster[i], maxStoreTabID, maxStoreGroupID)
+			}
+		}
+	}
 	return appendMagicPopMachines(roster, refs, lookups)
 }
 
 // loadNpcStoreGroupIndex projects the exact native lookup chain used by
-// sub_7d3b70 -> sub_5d5be0:
+// client CGlobalDataManager_FindShopGroupByNpcRefId -> CIFNPCTalk_AppendStoreTabRows:
 //
 //	NPC codename -> refshopgroup group -> store -> tab group -> tab rows.
 //
 // The menu row's storeGroupId0c is characterRefId24 (the NPC RefObjID), not
 // refshopgroup column 2. The retail server reads the same field as
-// [record+0x24], and sub_7d3b70 proves that field is the lookup's character
-// RefObjID.
-func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map[string][]NpcTalkStoreGroup {
+// [record+0x24], and client CGlobalDataManager_FindShopGroupByNpcRefId proves that field is the lookup's character
+// RefObjID. The largest authored tab and tab-group ids come back with the
+// index: the Jangan alchemy shop (npcjanganshop.go) numbers its
+// synthesized tabs and group above them.
+func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) (map[string][]NpcTalkStoreGroup, int32, int32) {
 	groupCodesByNpc := make(map[string][]string)
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "refshopgroup.txt")) {
 		if len(cols) >= 5 && strings.TrimSpace(cols[0]) == "1" {
@@ -152,7 +164,7 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map
 	}
 	tabsByGroup := make(map[string][]NpcTalkStoreTab)
 	groupMeta := make(map[string]NpcTalkStoreTab)
-	// 5D5BE0 creates one conversation row per refshoptabgroup, not per
+	// client 5D5BE0 creates one conversation row per refshoptabgroup, not per
 	// refshoptab. Preserve that parent identity through the browser adapter.
 	for _, cols := range readNpcTabbed(filepath.Join(textdataDir, "refshoptabgroup.txt")) {
 		if len(cols) >= 5 && strings.TrimSpace(cols[0]) == "1" {
@@ -196,7 +208,20 @@ func loadNpcStoreGroupIndex(textdataDir string, refs map[uint32]npcWorldRef) map
 			}}
 		}
 	}
-	return result
+	var maxTabID, maxGroupID int32
+	for _, meta := range groupMeta {
+		if meta.GroupID > maxGroupID {
+			maxGroupID = meta.GroupID
+		}
+	}
+	for _, tabs := range tabsByGroup {
+		for _, tab := range tabs {
+			if tab.TabID > maxTabID {
+				maxTabID = tab.TabID
+			}
+		}
+	}
+	return result, maxTabID, maxGroupID
 }
 
 func cloneNpcStoreGroups(groups []NpcTalkStoreGroup) []NpcTalkStoreGroup {
@@ -253,7 +278,7 @@ func loadNpcWorldRefs(textdataDir string) map[uint32]npcWorldRef {
 			if charBit != 0 {
 				word |= 2
 			}
-			// Exact CICNPC branch of sub_851420: TID1=1,TID2=2,TID3=2.
+			// Exact CICNPC branch of GIDObject_SelectRuntimeClassAndSpawn: TID1=1,TID2=2,TID3=2.
 			if word&0x7fe != 0x0146 {
 				continue
 			}
@@ -354,7 +379,7 @@ func readNpcTabbed(path string) [][]string {
 	return rows
 }
 
-// 8762E0/852F80: fixed city structures have independent identities and box
+// client 8762E0/852F80: fixed city structures have independent identities and box
 // picking; their visible architecture is already in the map. Never fabricate
 // a character model or use teleportdata's arrival point as the source position.
 func AppendTeleportGates(dir string, roster []NpcDef) ([]NpcDef, error) {

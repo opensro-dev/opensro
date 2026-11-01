@@ -1,6 +1,7 @@
 /*
 ===========================================================================
-tradeowner_test.go - CSOItem 78C966 quantity and original trader string
+tradeowner_test.go - the client's CSOItem_Deserialize trader-string tail
+(client 0x78C966): quantity and original trader string
 ===========================================================================
 */
 package wire

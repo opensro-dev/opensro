@@ -11,7 +11,7 @@ import { writeJson } from "./io.mjs";
 import { publicRoot } from "./paths.mjs";
 import { buildWorldRegionResources } from "./buildWorldRegionResources.mjs";
 
-// CPSCharacterSelect (sub_73bf00 .. sub_73a220) is a CPSOuterInterface subclass
+// CPSCharacterSelect (CPSCharacterSelect_OnCreate .. CPSCharacterSelect_Update) is a CPSOuterInterface subclass
 // just like CPSTitle, but it streams its OWN dedicated stage region (0x6951, the
 // European wharf) instead of reusing the title's Constantinople city (0x694e).
 //
@@ -50,7 +50,7 @@ function buildCharacterSelectWorldManifest(bundle, regionBundlePublicPath, world
   // bundle.source.sectorId is the "0x6951" hex string; its digits name the navmesh.
   const sectorIdHexDigits = bundle.source.sectorId.replace(/^0x/i, "");
 
-  // The keyframes are LOCAL to the 0x6951 region: sub_4e1d10 (non sector-adjusted
+  // The keyframes are LOCAL to the 0x6951 region: CCameraPath_Evaluate (non sector-adjusted
   // AddKey) inserts them verbatim, so sectorX/sectorY point at the stage region
   // and position stays in that region's local frame.
   const toKey = (key, timeSeconds) => ({
@@ -67,7 +67,7 @@ function buildCharacterSelectWorldManifest(bundle, regionBundlePublicPath, world
     toKey(key, index * CHARACTER_SELECT_CAMERA_KEY_INTERVAL_SECONDS)
   );
 
-  // CREATE sub-mode fly (sub_739890): 4 keys at t = i * (5/3), controller targetTime 5.0s.
+  // CREATE sub-mode fly (CPSCharacterSelect_EnterCreateView): 4 keys at t = i * (5/3), controller targetTime 5.0s.
   const createCamera = CHARACTER_SELECT_CREATE_CAMERA_KEYFRAMES.map((key, index) =>
     toKey(key, index * CHARACTER_SELECT_CREATE_CAMERA_KEY_INTERVAL_SECONDS)
   );

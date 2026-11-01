@@ -13,7 +13,7 @@ experience), kind 1 its contribution rank (CIFJobContributionRank: value
 is the weekly contribution). A refusal is [2][code][job][kind] in notice
 category 0x18 (CPSMission_OnJobRankListResponse0xB37E 763F00).
 
-v1.188 CGObjPC_HandleJobRanking70E4 (512C20) checks the NPC is in range
+The reference server's job ranking handler checks the NPC is in range
 (code 3), the job is 1-3 (0x28) and the kind 0 or 1 (0x0F), then sends the
 list the shard database's weekly _UpdateTriangleJobWeekly built: last
 week's TOP 50 (domain.CloseJobWeek, kept in the authority's metadata).
@@ -39,7 +39,7 @@ const (
 	opJobRankRequest  uint16 = 0x737E
 	opJobRankResponse uint16 = 0xB37E
 
-	// jobRankErrKind is 512C20's 0x480F low byte.
+	// jobRankErrKind is the native 0x480F low byte.
 	jobRankErrKind uint8 = 0x0f
 	// jobWeekEpochShift moves 1970-01-01 (a Thursday) to the Monday that
 	// starts its week.

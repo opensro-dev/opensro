@@ -30,7 +30,7 @@ func pickTradeGoods(t *testing.T, rt *Runtime, c *domain.Character, owner string
 	heap := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: 2151, Codename: "ITEM_ETC_TRADE_WC_01",
 		TypeFlags: wire.PackTypeFlags(3, 3, 8, 1), StackCount: 5, TradeOwner: owner,
 		Position: grounditem.Point{RegionID: spawn.RegionID, X: float32(spawn.X), Z: float32(spawn.Z)}})
-	return rt.grantPickup(testDivision, simulation.WorldKey(testDivision, c.Name), c, c.Snapshot(), heap), heap
+	return rt.grantPickup(testDivision, simulation.WorldKey(testDivision, c.Name), c, c.Snapshot(), heap, rt.handlerDoors()), heap
 }
 
 /*

@@ -21,6 +21,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { dataExtractedRoot, rebuildRoot as repositoryRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { qinshiTombEnabled } from "../shared/qinshiTomb.mjs";
 import { TITLE_CROWD_ROSTER } from "./resolveCharRoster.mjs";
 
 const textdataDir = retailTextdataRoot;
@@ -65,13 +66,13 @@ resolveNpcModel follows the guarded base chain and the clone's manifest
 entry reuses the base GLB.
 ================
 */
-function loadServerRoster( subcommand, expectedFormat, label ) {
+function loadServerRoster( subcommand, expectedFormat, label, env = process.env ) {
 	const serverRoot = path.resolve(
 		process.env.SRO_SERVER_SOURCE_ROOT ?? path.join( repositoryRoot, "apps", "server" )
 	);
 	const result = spawnSync( "go", [ "run", "./cmd/tools/sro-evidence", subcommand, "-textdata-dir", textdataDir ], {
 		cwd: serverRoot,
-		env: process.env,
+		env,
 		encoding: "utf8",
 		maxBuffer: ROSTER_EXPORT_MAX_BYTES
 	} );
@@ -118,10 +119,21 @@ function loadServerRoster( subcommand, expectedFormat, label ) {
 /*
 ================
 loadCreatableMobRoster
+
+The export is a Go child that reads only its env (monster.
+QinShiTombFromEnv), so the bake's effective tomb posture
+(shared/qinshiTomb.mjs: the build env, else the shard's deployed
+posture) is materialized into the child's env here. Without this the
+posture stops at the JS seams: with SRO_QINSHI_TOMB unset the export
+omits the 78 tomb monsters, the modelled roster plans none of them,
+and a default data build ships a client that cannot draw them (#2024).
 ================
 */
 export function loadCreatableMobRoster() {
-	return loadServerRoster( "creatable-monsters", "sro-creatable-monster-roster", "creatable monster" );
+	return loadServerRoster( "creatable-monsters", "sro-creatable-monster-roster", "creatable monster", {
+		...process.env,
+		SRO_QINSHI_TOMB: qinshiTombEnabled() ? "on" : "off"
+	} );
 }
 
 /*

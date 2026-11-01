@@ -15,10 +15,12 @@ package match_test
 //	stale entry join      -> 0xB5BF {01 00} refused (pinned detail arm);
 //	join                  -> the OWNER gets the 0x75BF notify byte-exact
 //	                         (requestId/entryId echo pair, purpose, the
-//	                         joiner's sub_75db30 masked member record);
+//	                         joiner's CPartyMemberInfo_ReadMasked member
+//	                         record);
 //	displacement          -> a second joiner displaces the first, who is
 //	                         acked {01 02} no-reply (the owner pane holds
-//	                         exactly one request - sub_63cbc0 overwrites);
+//	                         exactly one request - the client pane
+//	                         overwrites);
 //	owner refuse (ans 0)  -> joiner {01 00};
 //	owner no-reply (ans 2)-> joiner {01 02};
 //	owner disconnect      -> the parked joiner is acked {01 02} and the
@@ -206,7 +208,8 @@ func startJoinServer(t *testing.T, dir string, seeds []*enterworld.Character) jo
 	return joinServer{srv: srv, authority: authority, deps: deps, runtime: runtime, partyRt: partyRt, mentorRt: mentorRt}
 }
 
-// joinAnswer renders the sub_6fe370 / sub_6fe690 owner-answer body.
+// joinAnswer renders the NetClient_Send30FA / NetClient_Send35D5
+// owner-answer body.
 /*
 ================
 joinAnswer
@@ -237,7 +240,7 @@ func chinaRow(gid uint32, name string, level uint8) party.MemberRow {
 		PosY:          20,
 		PosZ:          458,
 		War:           domain.DefaultWorldInstance,
-		// Live rows always carry the mastery pair (0x5A1890); the e2e
+		// Live rows always carry the mastery pair (reference server); the e2e
 		// seeds train none, so the pair is (0, 0).
 		Masteries: true,
 	}
@@ -329,7 +332,7 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	// ---- Jack joins: Mira gets the 0x75BF notify byte-exact ----
 	sendFrame(t, jack, match.OpPartyJoinRequest, u32le(1))
 	jackMember := chinaRow(gidJack, e2eJackName, 20)
-	// The seed trains 273/12, 257/20, 258/12: top two by level (0x5A1890).
+	// The seed trains 273/12, 257/20, 258/12: top two by level (reference server).
 	jackMember.PrimaryMastery, jackMember.SecondaryMastery = 257, 258
 	jackRow := party.EncodeMaskedMemberRow(jackMember)
 	expectExactFrame(t, mira, match.OpPartyJoinRequest,
@@ -349,7 +352,8 @@ func TestMatchJoinHandshakeEndToEndOverWire(t *testing.T) {
 	sendFrame(t, mira, match.OpPartyJoinAnswer, joinAnswer(2, 1, 0))
 	expectExactFrame(t, kate, match.OpPartyJoinAck, []byte{1, 0}, "kate refused by the owner")
 
-	// ---- Mira answers NO-REPLY (answer 2, the sub_63c340 arm) ----
+	// ---- Mira answers NO-REPLY (answer 2, the client
+	// CIFPartyMatchReqJoin_OnTimeout arm) ----
 	sendFrame(t, jack, match.OpPartyJoinRequest, u32le(1))
 	expectExactFrame(t, mira, match.OpPartyJoinRequest,
 		match.EncodePartyJoinNotify75BF(3, 1, match.PartyApplicant{Primary: 257, Secondary: 258, JobClass: 4}, jackRow),

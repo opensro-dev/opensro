@@ -14,8 +14,8 @@ type hiveCap struct {
 	Key       string
 	Limit     int
 	// Order is the member's rank in native hive order (ascending dwNestID,
-	// GameServer 55E7C0/55E6EB). Overwrite hives fill and pick alternate
-	// locations in this order.
+	// the reference server's hive ordering). Overwrite hives fill and pick
+	// alternate locations in this order.
 	Order   int
 	Density HiveDensityPolicy
 }

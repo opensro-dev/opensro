@@ -609,7 +609,12 @@ func (rt *Runtime) petTrainedCommit(step petCombatStep, owner *enterworld.Charac
 		live.Training.PassiveReadyAtMs[ts.passive-companion.ActiveRowCount] = ts.passiveMs
 	}
 	var frames []wire.Frame
+	// The heal caps at the pet's effective max, gear included: clamping
+	// to the bare reference cut a geared pet's HP on every leech (#1896).
 	maxHP := uint64(max(1, step.ref.MaxHP))
+	if effective := rt.petEffectiveMaxHP(live); effective != 0 {
+		maxHP = uint64(max(1, effective))
+	}
 	heal := uint64(float64(damage)*ts.mods.LeechPct/100) + uint64(float64(maxHP)*ts.petHeal/100)
 	if heal > 0 && live.CurrentHP > 0 && live.BroodStage == 0 {
 		live.CurrentHP = uint32(min(maxHP, uint64(live.CurrentHP)+heal))

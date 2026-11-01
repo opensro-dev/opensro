@@ -36,7 +36,8 @@ func TestDecodeObjectSelectRequestRejectsWrongLengths(t *testing.T) {
 // for the frame the live NPC_EU_SMITH click elicits: gid 200001 (the
 // traced roster gid), capability flags 0x23, npcExtra 0. The bytes are
 // pasted, byte-identical to the client composer devComposeSyntheticB45A for
-// the same inputs - the frame the folded sub_764c60 CHARACTER arm reads.
+// the same inputs - the frame the folded client's
+// CPSMission_OnNpcSelectResponse0xB45A CHARACTER arm reads.
 func TestEncodeNpcObjectSelectResultPinsTheSmithGrantBytes(t *testing.T) {
 	want := []byte{
 		0x01,                   // result 1

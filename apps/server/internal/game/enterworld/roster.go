@@ -38,7 +38,7 @@ type RosterModel struct {
 	RefObjID   uint32  `json:"refObjId"`
 	BodyRadius float64 `json:"bodyRadius"`
 	// Knockdown is RefObjChar column 87, the displacement flags (bit 0 a
-	// knockdown, 58E520; bit 1 a knockback, 58FF7A); KORecoverMs column 88.
+	// knockdown, bit 1 a knockback); KORecoverMs column 88.
 	Knockdown   uint32 `json:"knockdown"`
 	KORecoverMs uint32 `json:"koRecoverMs"`
 }

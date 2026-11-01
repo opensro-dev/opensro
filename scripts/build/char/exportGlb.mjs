@@ -516,8 +516,8 @@ export function avatarToGlb( avatar ) {
 		const pbr = {
 			// CRITICAL BRIGHTNESS PARITY: preserve native CPrimMtrl diffuse
 			// losslessly for BOTH primitive and CRT/skinned consumers. Native
-			// CRTModMtrl_SetDiffuseAndAmbient (sub_a8fc50) seeds +0x1f4/+0x204
-			// from the current material RGB; sub_a91970 later uploads those tints.
+			// CRTModMtrl_SetDiffuseAndAmbient (CCompoundObj_vf48) seeds +0x1f4/+0x204
+			// from the current material RGB; RenderState_ApplyTintedMaterialColor later uploads those tints.
 			// Do not replace this factor with white or delete the sro* extras below.
 			// This is also a carrier for gamma-space diffuse bytes, not permission
 			// to use glTF/PBR color management: native-preview loaders must keep

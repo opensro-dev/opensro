@@ -60,6 +60,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 			"server-roster-policy",
 			"server-enterworld",
 			"server-action-data",
+			"server-pet-design",
 			"rebuild-assets",
 			"build-scripts",
 			"build-entry",

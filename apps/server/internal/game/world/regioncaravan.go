@@ -3,8 +3,9 @@
 
 regioncaravan.go - which bandit families ambush a caravan in a region
 
-Caravan_GetContinentZone (60BDD0) maps the region's _RefRegion ContinentName
-to a bandit zone: the Chinese continents are 0, the western ones 1, and any
+The reference server's caravan continent-zone mapping maps the region's
+_RefRegion ContinentName to a bandit zone: the Chinese continents are 0,
+the western ones 1, and any
 other continent 2 (after a minidump), where no bandit is filed. The ranges
 are generated from the same backup as the combat permissions.
 

@@ -533,7 +533,7 @@ One worn row as the profile shows it: the socket, the reference, and what
 the item tooltip prints from the item itself. Durability goes out only for
 an item whose reference has some: native counts an item as razed only when
 its reference carries durability and the instance reads 0 (the equip gate
-at 0x00789cc7, action/requirements.go), so a quiver of arrows at 0 is not
+at client 0x00789cc7, action/requirements.go), so a quiver of arrows at 0 is not
 broken.
 ================
 */

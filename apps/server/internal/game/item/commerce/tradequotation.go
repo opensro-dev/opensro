@@ -3,8 +3,9 @@
 
 tradequotation.go - the native trade goods quotation arithmetic
 
-ShopEntry_Refresh_4C8810 determines a foreign trader's unit price. The thief
-path at 4C8D65 values a quantity with signed 32-bit multiplication first.
+The server's shop-entry refresh determines a foreign trader's unit
+price. Its thief path values a quantity with signed 32-bit multiplication
+first.
 These functions own arithmetic only: admission, owner identity, stock
 commit, tax and rewards belong to the transaction owner.
 
@@ -45,8 +46,9 @@ type TradeQuotation struct {
 ================
 TradeQuotationPrice
 
-4C8810 with x87 precision 53. Explicit float32 stores match FSTP at 4C883D,
-4C8845, 4C88D1 and 4C8915. FISTP truncates rate*100 before dividing by 100;
+The reference server's quotation price, with x87 precision 53. Explicit
+float32 stores match the native FSTP stores through the computation. FISTP
+truncates rate*100 before dividing by 100;
 the decompiler's apparent x/x expression loses that live FPU-stack value.
 The returned word preserves native ADD overflow. Invalid authority is an
 error rather than entering the native minidump paths.
@@ -85,8 +87,9 @@ func TradeQuotationPrice(basePrice uint32, q TradeQuotation) (uint32, error) {
 ================
 ThiefGoodsValue
 
-4C81D0 performs IMUL followed by CDQ before 4C8D78 multiplies by 0.75.
-Do not widen before multiplication or round each unit before multiplying.
+The reference server's thief-goods value performs IMUL followed by CDQ
+before multiplying by 0.75. Do not widen before multiplication or round
+each unit before multiplying.
 The sale owner clamps nonpositive credit and profit after this calculation.
 ================
 */

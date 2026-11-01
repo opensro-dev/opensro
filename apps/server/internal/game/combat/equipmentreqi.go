@@ -3,10 +3,10 @@
 
 equipmentreqi.go - equipment requirements (reqi / reqn)
 
-Skill_ValidateEquipmentRequirements (58D480) for skills that carry reqi
+The server's skill equipment-requirement check, for skills that carry reqi
 pairs. Skills without pairs compare weapon kinds instead; see
 action.skillEquipmentRefusal. The same walk decides whether a passive with
-reqi contributes (59F0E0 toggles its modifiers).
+reqi contributes (the passive toggle switches its modifiers on and off).
 
 ===========================================================================
 */
@@ -18,15 +18,15 @@ import (
 	"opensro.online/server/internal/game/item/durability"
 )
 
-// reqiCheck is the case the byte table at 58D78C picks for a pair's kind.
+// reqiCheck is the case the server's byte table picks for a pair's kind.
 type reqiCheck uint8
 
 const (
-	reqiArmour       reqiCheck = iota // 58D571
-	reqiSecondary                     // 58D542
-	reqiPrimary                       // 58D513
-	reqiAvatarSocket                  // 58D611
-	reqiNothing                       // falls through to 58D638
+	reqiArmour       reqiCheck = iota // armour slot or armour set
+	reqiSecondary                     // secondary slot (shield line)
+	reqiPrimary                       // primary weapon slot
+	reqiAvatarSocket                  // avatar socket 4
+	reqiNothing                       // no test; falls through to the reqn count
 )
 
 // The secondary slot and the type a shield carries there (TID1 3 item,
@@ -38,7 +38,7 @@ const (
 	reqiShieldTID3 = 4
 )
 
-// reqiArmourSlots is data_C63F44: armour index 1..6 to equipment slot.
+// reqiArmourSlots is the server's armour-index table: index 1..6 to slot.
 var reqiArmourSlots = [7]int64{-1, 0, 2, 1, 4, 3, 5}
 
 /*
@@ -62,13 +62,13 @@ func ReqiRefusal(c *enterworld.Character, items enterworld.ItemRefSource, req en
 
 	i := 0
 	for ; i < req.Count; i++ {
-		// 58D4E3: without reqn a match ends the walk
+		// without reqn a match ends the walk
 		if matched {
 			break
 		}
 		matched, code = eq.testPair(req.Pairs[i], code)
 
-		// 58D638: under reqn every pair must match, and matches are counted
+		// under reqn every pair must match, and matches are counted
 		if req.All {
 			if !matched {
 				return reqiFailure(code)
@@ -78,8 +78,8 @@ func ReqiRefusal(c *enterworld.Character, items enterworld.ItemRefSource, req en
 		}
 	}
 
-	// 58D671 runs only when the walk stopped early. A full five-pair walk
-	// jumps straight to 58D681, so under reqn five matched pairs still fail.
+	// The early-stop count test runs only when the walk stopped early. A full
+	// five-pair walk skips it, so under reqn five matched pairs still fail.
 	stoppedEarly := i < len(req.Pairs)
 	if stoppedEarly && count != 0 && count == i {
 		return code
@@ -90,7 +90,7 @@ func ReqiRefusal(c *enterworld.Character, items enterworld.ItemRefSource, req en
 	return reqiFailure(code)
 }
 
-// reqiFailure is 58D689: the recorded code, else 0x300D.
+// reqiFailure is the walk's failure exit: the recorded code, else 0x300D.
 func reqiFailure(code uint16) uint16 {
 	if code != 0 {
 		return code
@@ -98,7 +98,7 @@ func reqiFailure(code uint16) uint16 {
 	return 0x300d
 }
 
-// reqiCaseOf is the byte table at 58D78C, indexed by kind - 1.
+// reqiCaseOf is the server's case byte table, indexed by kind - 1.
 func reqiCaseOf(kind uint32) reqiCheck {
 	table := [14]reqiCheck{
 		reqiArmour, reqiArmour, reqiArmour, reqiSecondary, reqiNothing,
@@ -145,14 +145,14 @@ func (e ReqiEquipment) testPair(pair enterworld.SkillReqiPair, code uint16) (boo
 	case reqiPrimary:
 		return e.testWeapon(6, pair.Value, code)
 	case reqiAvatarSocket:
-		// CGObjChar_GetAvatarStorageItem(4): the v1.150 client has avatar
+		// The server reads avatar socket 4, but the v1.150 client has avatar
 		// sockets 0..3 only, so socket 4 is always empty.
 		return false, code
 	}
 	return false, code
 }
 
-// testArmourSlot is 58D578: armour index value must hold TID4 == value.
+// testArmourSlot is the armour-slot case: index value must hold TID4 == value.
 func (e ReqiEquipment) testArmourSlot(value uint32, code uint16) (bool, uint16) {
 	if uint32(e.armourTID(value)>>11) == value && e.armourUsable(value) {
 		return true, 0
@@ -164,7 +164,7 @@ func (e ReqiEquipment) testArmourSlot(value uint32, code uint16) (bool, uint16) 
 ==================
 testArmourSet
 
-58D5B5: armour index 1..6 in order must carry TID3 == kind. The first
+The armour-set case: armour index 1..6 in order must carry TID3 == kind. The first
 mismatch stops the walk but keeps a match made before it, so in practice
 only the head slot has to carry the family. A broken piece records 0x300F.
 ==================
@@ -183,8 +183,8 @@ func (e ReqiEquipment) testArmourSet(kind uint32, code uint16) (bool, uint16) {
 	return matched, code
 }
 
-// testWeapon is 58D513 / 58D542: the slot's TID4 must equal value, and a
-// matching but broken weapon records 0x300F.
+// testWeapon is the primary and secondary slot case: the slot's TID4 must
+// equal value, and a matching but broken weapon records 0x300F.
 func (e ReqiEquipment) testWeapon(slot int64, value uint32, code uint16) (bool, uint16) {
 	if uint32(e.WeaponTID(slot)>>11) != value {
 		return false, code
@@ -199,8 +199,8 @@ func (e ReqiEquipment) testWeapon(slot int64, value uint32, code uint16) (bool, 
 ==================
 testShield
 
-Kind 4 tests the secondary slot. Native 58D542 compares only the TID4 of
-whatever 4EAD80 returns from slot 7, and ammunition sits there too: a
+Kind 4 tests the secondary slot. The native case compares only the TID4 of
+whatever the equipped-item read returns from slot 7, and ammunition sits there too: a
 Chinese arrow stack (3.3.4.1) passes a Chinese shield's 4,1 and a European
 bolt stack (3.3.4.2) a European shield's 4,2. Every shipped kind-4 pair is a
 shield line (SKILL_CH_*_SHIELD*, SKILL_CH_SWORD_PASSIVE_A's shield block,
@@ -234,7 +234,7 @@ func (e ReqiEquipment) Item(slot int64) (ref *enterworld.ItemRef, broken, ok boo
 	return nil, false, false
 }
 
-// weaponTID is 4EAD40 / 4EAD80: the packed TID, or 0 when empty or broken.
+// weaponTID is the server's equipped-item TID read: the packed TID, or 0 when empty or broken.
 func (e ReqiEquipment) WeaponTID(slot int64) uint16 {
 	ref, broken, ok := e.Item(slot)
 	if !ok || broken {
@@ -243,7 +243,7 @@ func (e ReqiEquipment) WeaponTID(slot int64) uint16 {
 	return ref.TypeFlags()
 }
 
-// armourTID is CGObjChar_GetEquippedArmourTID 4EADC0 for index 1..6.
+// armourTID is the server's equipped-armour TID read for index 1..6.
 func (e ReqiEquipment) armourTID(index uint32) uint16 {
 	if index < 1 || index > 6 {
 		return 0
@@ -251,14 +251,14 @@ func (e ReqiEquipment) armourTID(index uint32) uint16 {
 	return e.WeaponTID(reqiArmourSlots[index])
 }
 
-// slotUsable is CGObjPC +0x5D0 / +0x63C (4EC5A0 / 4EC5D0): an empty slot
+// slotUsable is the player's slot usability test (+0x5D0 / +0x63C): an empty slot
 // passes, an equipped item must not be broken.
 func (e ReqiEquipment) SlotUsable(slot int64) bool {
 	_, broken, ok := e.Item(slot)
 	return !ok || !broken
 }
 
-// armourUsable is CGObjPC +0x640 (4EC600); an index past 6 fails.
+// armourUsable is the armour usability test (+0x640); an index past 6 fails.
 func (e ReqiEquipment) armourUsable(index uint32) bool {
 	if index < 1 || index > 6 {
 		return false

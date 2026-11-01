@@ -250,7 +250,8 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	// Admit facing/action ownership BEFORE the callback can commit damage.
 	// Reserve the selected strategy interval, including its native jitter,
-	// in that same value (547342 uses strategy +48, not raw skill cooldown).
+	// in that same value (the native battle action reads strategy +48, not
+	// raw skill cooldown).
 	// Retaliation must retain it if post-cast bookkeeping is superseded.
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
 	if !ops.Monsters.CommitMover(divisionID, instance.Gid, mover) {

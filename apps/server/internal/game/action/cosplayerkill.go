@@ -3,10 +3,10 @@
 
 cosplayerkill.go - what a player earns for killing a COS
 
-CGObjMob_CreditKillerOnDeath (4C42F0) runs for every character death,
+The reference server's killer credit runs for every character death,
 a COS's included. Its only credit to a player killer is the murder-penalty
-relief of CGObjPC_ReducePKPenaltyOnMonsterKill (4EB6B0), by the gap between
-the victim's level (CGObjChar_GetLevel 4A6870, the same slot on every COS
+relief of the reference server's monster-kill PK relief, by the gap between
+the victim's level (the character level getter, the same slot on every COS
 class) and the killer's. Everything else a transport's death does, the
 cargo scatter and the release, is killer-independent and settles in the
 COS's own death (cosdeath.go). The player strike on a COS calls this once,
@@ -26,7 +26,7 @@ import (
 ================
 Runtime.creditPlayerCOSKill
 
-4C42F0 -> 4EB6B0 for a player who killed a COS of level cosLevel: a killer
+The reference server's killer credit for a player who killed a COS of level cosLevel: a killer
 with a murder penalty eases it by the level gap, as for a monster kill
 (reward_group.go). Returns the killer's private frames and the public PVP
 state frame when the state changed.
