@@ -335,6 +335,29 @@ test("Gori's talk row appears only with his capability, and the machine's does n
 	assert.equal( window.GACHA_OPERATOR_FUNCTION, 0x20000 );
 });
 
+test("the withdrawal row appears only with the herbalist's capability", () => {
+	const layout = decodeAuthoredLayout(
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/if_npctalk.json", "utf8" ) )
+	);
+	const state = /** @type {any} */ ({ phase: "menu", gid: 7 });
+	const rows = input =>
+		npcTalkLayout( {
+			state,
+			layout,
+			origin: [ 100, 200 ],
+			copy: key => key,
+			measure: () => 8,
+			draw: () => [],
+			size: () => [ 16, 16 ],
+			hover: null,
+			pressed: null,
+			top: 0,
+			...input
+		} ).controls.map( control => control.id );
+	assert.equal( rows( { canWithdrawSkill: true } ).includes( "npc-withdraw" ), true );
+	assert.equal( rows( {} ).includes( "npc-withdraw" ), false );
+});
+
 test("the no-voucher answer belongs to one operator and clears", () => {
 	const hud = createGachaHud();
 	assert.equal( hud.noVoucherFor(), 0 );

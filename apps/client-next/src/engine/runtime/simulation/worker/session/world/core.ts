@@ -21,6 +21,7 @@ import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
+	capturedMonsterCos,
 	cosInteraction,
 	hoverAttack,
 	petCosAttack,
@@ -115,6 +116,18 @@ when the local player is mounted, as a monster attack is), or nothing.
 		const target = entities.read( gid ), context = nameContext(), local = entities.read( gameplay.localIdentity() );
 		if ( !target || !context || !local ) return undefined;
 		if ( !cosInteraction( target, context, alt, { entity: entities.read, rider: entities.rider } ) ) {
+			// 693E50: of this function's silent refusals, a band-6 capture
+			// monster is the one native answers - with a chat system line
+			// (ChatSystemMessage channel 0), not a centre notice. The local
+			// player's own COS never reaches the print: 6935F0 leaves it
+			// alone first, which is cosInteraction's first refusal above.
+			if ( capturedMonsterCos( target ) && target.ownerGid !== local.gid ) {
+				gameplay.notice( {
+					key: "UIIT_MSG_QUEST_ERR_CAPTUREMONSTER_ATTACK",
+					value: 0,
+					nativeType: 0
+				} );
+			}
 			return undefined;
 		}
 		return { kind: local.mountedOn ? "cos-attack" : "attack", gid };

@@ -27,6 +27,7 @@ const (
 	// teleport row reader grants for teleportdata CanGotoResurrectPos: row
 	// 0x10, "Teleport to return point", whose click sends 0x7495 type 1.
 	NpcTalkFlagResurrectPoint uint32 = 0x100   // option 9, row 0x10
+	NpcTalkFlagWithdrawSkill  uint32 = 0x200   // option 0xA, row 0x16
 	NpcTalkFlagStable         uint32 = 0x400   // option 0xB, no row
 	NpcTalkFlagSpecialTrade   uint32 = 0x800   // option 0xC, the shop row sends 0x800
 	NpcTalkFlagThiefBuy       uint32 = 0x1000  // option 0xD, no row
@@ -80,7 +81,7 @@ const (
 	// stable, thief buy, general) carry nothing to refuse. Still closed:
 	// gate pulleys, whose u16 tail the select answer does not write.
 	NpcTalkImplementedFlags uint32 = NpcTalkFlagShop | NpcTalkFlagTalk | NpcTalkFlagStorage |
-		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagResurrectPoint | NpcTalkFlagStable |
+		NpcTalkFlagRepair | NpcTalkFlagRecallPoint | NpcTalkFlagTeleport | NpcTalkFlagResurrectPoint | NpcTalkFlagWithdrawSkill | NpcTalkFlagStable |
 		NpcTalkFlagSpecialTrade | NpcTalkFlagThiefBuy | NpcTalkFlagGeneral | NpcTalkFlagGachaMachine | NpcTalkFlagGachaOperator |
 		NpcTalkFlagJobTrader | NpcTalkFlagJobThief | NpcTalkFlagJobHunter | NpcTalkFlagReverseReturn |
 		NpcTalkFlagGuild | NpcTalkFlagMagicOption | NpcTalkFlagFortressOfficial |
@@ -94,6 +95,14 @@ const (
 // INFERENCE: the v1.150 media ships no gacha binding table; the one machine
 // the client knows (row 0x27, SN_TALK_CH_GACHA_MACHINE_2) is the binding.
 var npcGachaMachines = map[string]bool{"NPC_CH_GACHA_MACHINE": true}
+
+// npcPotionMerchants are the five herbalists carrying the withdrawal
+// service (option 0xA, row 0x16): the same five towns the quest owner
+// serves through OpenResuscitation. Exact names, as there.
+var npcPotionMerchants = map[string]bool{
+	"NPC_CH_POTION": true, "NPC_WC_POTION": true, "NPC_KT_POTION": true,
+	"NPC_EU_POTION": true, "NPC_CA_POTION": true,
+}
 
 // npcTownSpecialTraders are v1.150's first specialty traders: npcpos spawns
 // them in Jangan, Donwhang and Hotan and refshopgroup binds each to its
@@ -126,6 +135,9 @@ func ResolveNpcServices(npc NpcDef) NpcServices {
 	}
 	if npcGachaMachines[npc.Codename] {
 		services = services.With(NpcServiceGachaMachine)
+	}
+	if npcPotionMerchants[npc.Codename] {
+		services = services.With(NpcServiceWithdrawSkill)
 	}
 	if npcTownSpecialTraders[npc.Codename] {
 		services = services.With(NpcServiceSpecialTrade)

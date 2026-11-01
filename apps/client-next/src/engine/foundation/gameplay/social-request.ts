@@ -41,6 +41,10 @@ export type SocialCommand =
 		accept: boolean;
 	}
 	| {
+		kind: "instance-consent";
+		accept: boolean;
+	}
+	| {
 		kind: "guild-create";
 		gid: number;
 		name: string;
@@ -210,6 +214,18 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			}
 			// Box kind 4 answers through CGInterface_OnMsgBoxResult case 1 as
 			// {1, button}: button 1 is yes (526020), 2 is no (52C800).
+			u8( 1 );
+			u8( c.accept ? 1 : 2 );
+			opcode = 0x3393;
+			break;
+		case "instance-consent":
+			if ( !state.instance ) {
+				throw Error( "Instance invitation is no longer available" );
+			}
+			// The instance box (simple_msgbox_type 4) forwards its confirm to
+			// the same case-1 answer as the resurrection box: {1, button},
+			// button 1 is yes, 2 is no. Confirming while dead never reaches
+			// here - the gameplay lane swallows it (0x52EDD0).
 			u8( 1 );
 			u8( c.accept ? 1 : 2 );
 			opcode = 0x3393;

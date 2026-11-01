@@ -458,6 +458,7 @@ export type GameplayCommand =
 	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
+	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
