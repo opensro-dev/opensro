@@ -10469,9 +10469,9 @@ export function createUi(
 			================
 			*/
 			function drawTransientBanners( top?: number ) {
-				// Port-only (#1976): only a seal drop's notice pads its
-				// plate and recolours it (noticeBannerRow); every other
-				// notice on this row keeps the native plate untouched.
+				// Port-only (#1976): only a seal drop's notice takes its
+				// tier's weight (noticeBannerRow); every other notice on
+				// this row keeps the native plate untouched.
 				const noticeRow = noticeBannerRow( notificationBanner );
 				const rows = [
 					{
@@ -10481,20 +10481,16 @@ export function createUi(
 						y: 130,
 						color: [ 0, 52, 92 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						padX: 0,
-						padY: 0,
-						plateAlpha: undefined as number | undefined
+						frame: {}
 					},
 					{
 						value: notificationBanner.value( hudCopy ),
 						alpha: notificationBanner.alpha(),
-						paths: notificationBannerPaths,
+						paths: noticeRow.paths,
 						y: 100,
 						color: noticeRow.color,
 						textRgb: noticeRow.textRgb,
-						padX: noticeRow.padX,
-						padY: noticeRow.padY,
-						plateAlpha: noticeRow.plateAlpha
+						frame: noticeRow.frame
 					},
 					{
 						value: questBanner.value(),
@@ -10503,9 +10499,7 @@ export function createUi(
 						y: 160,
 						color: [ 0, 91, 66 ] as const,
 						textRgb: undefined as readonly [number, number, number] | undefined,
-						padX: 0,
-						padY: 0,
-						plateAlpha: undefined as number | undefined
+						frame: {}
 					}
 				];
 				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
@@ -10533,9 +10527,7 @@ export function createUi(
 							resources.size,
 							y,
 							row.color,
-							row.padX,
-							row.padY,
-							row.plateAlpha
+							row.frame
 						)
 					);
 					const textRgb = row.textRgb ?? ([ 1, 1, 1 ] as const);
