@@ -434,6 +434,14 @@ Close
 func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The background checkpointer stops first (#2142 slice 0): its
+	// last cycle must not race the TRUNCATE below, and it closes its
+	// own handle between cycles, so this wait is the only join. It
+	// takes no store door, so holding mu here cannot deadlock it.
+	if s.checkpoints != nil {
+		s.checkpoints.stop()
+		s.checkpoints = nil
+	}
 	if s.db != nil {
 		// A graceful stop never drops a tick: rows a deferred door left
 		// (tickbatch.go) are written before the final checkpoint.

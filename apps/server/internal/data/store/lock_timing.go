@@ -15,12 +15,14 @@ long writers wait and hold, and where a commit's hold goes:
 	             checkpoint runs inside it, the checkpoint and its sync
 	total        the whole commit attempt
 
-SQLite runs its automatic checkpoint inside the commit call, so the sync
-is not separable from the WAL append without taking over checkpointing;
-a commit whose sqlite phase is far above its peers is a checkpointing
-one. Metrics only: nothing here changes what the store does. Recording is
-atomic adds (platform/latency); the longest commit's label and phases are
-kept only when it sets a new maximum.
+Since #2142 slice 0 the sqlite phase is the WAL append and its fsync
+alone: the automatic checkpoint no longer runs inside the commit call
+(wal_checkpoint.go owns it), so a commit whose sqlite phase is far
+above its peers is an fsync the disk made every door wait for. A
+commit over slowCommitLogThreshold also names its door in the log
+(recordSlowCommit). Metrics otherwise change nothing the store does:
+recording is atomic adds (platform/latency), and the longest commit's
+label and phases are kept only when it sets a new maximum.
 
 ===========================================================================
 */
@@ -32,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/platform/latency"
 )
 
@@ -124,6 +127,14 @@ const (
 
 var commitPhaseNames = [commitPhases]string{"encode", "statements", "sqlite", "total"}
 
+// slowCommitLogThreshold is the commit total that names its door in
+// the log (#2142 item 3); slowCommitLogInterval rate-limits the line
+// while slow commits keep coming.
+const (
+	slowCommitLogThreshold = 100 * time.Millisecond
+	slowCommitLogInterval  = time.Second
+)
+
 /*
 ================
 commitTiming
@@ -143,6 +154,9 @@ type commitTiming struct {
 	// rewrites whole (trade rewards, job rankings, version stamps).
 	metaWritten atomic.Int64
 	metaSkipped atomic.Int64
+	// lastSlowLogUnixNs rate-limits the slow-commit line
+	// (recordSlowCommit).
+	lastSlowLogUnixNs atomic.Int64
 }
 
 /*
@@ -174,6 +188,32 @@ func (t *commitTiming) record(label string, d commitPhaseDurations, rows commitR
 			t.longest.Store(longest)
 		}
 	}
+	t.recordSlowCommit(label, d)
+}
+
+/*
+================
+commitTiming.recordSlowCommit
+
+The named line for a commit over slowCommitLogThreshold (#2142 item
+3): the 1,126 ms commit this replaces was a number without a door.
+At most one line per slowCommitLogInterval while slow commits keep
+coming - the histograms above carry the full record.
+================
+*/
+func (t *commitTiming) recordSlowCommit(label string, d commitPhaseDurations) {
+	if d[commitPhaseTotal] <= slowCommitLogThreshold {
+		return
+	}
+	now := time.Now()
+	last := t.lastSlowLogUnixNs.Load()
+	if now.UnixNano()-last < int64(slowCommitLogInterval) ||
+		!t.lastSlowLogUnixNs.CompareAndSwap(last, now.UnixNano()) {
+		return
+	}
+	ms := func(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
+	log.Warnf("store: slow commit %q: total %.1f ms (encode %.1f, statements %.1f, sqlite %.1f)",
+		label, ms(d[commitPhaseTotal]), ms(d[commitPhaseEncode]), ms(d[commitPhaseStatements]), ms(d[commitPhaseSQLite]))
 }
 
 /*
@@ -214,6 +254,18 @@ type LockTiming struct {
 	// planes (persistence.go).
 	MetaRowsWritten int64 `json:"meta_rows_written"`
 	MetaRowsSkipped int64 `json:"meta_rows_skipped"`
+	// WALBytes / WALBytesMax: the WAL file's size now and its peak
+	// since Open, from the background checkpointer (wal_checkpoint.go);
+	// zero until its first cycle runs.
+	WALBytes    int64 `json:"wal_bytes"`
+	WALBytesMax int64 `json:"wal_bytes_max"`
+	// CheckpointCycles ran, CheckpointBusyCycles ended still busy
+	// behind a reader, and CheckpointBusyStreak is the current run of
+	// those - a growing streak with a growing WALBytes is a starved
+	// checkpoint.
+	CheckpointCycles     int64 `json:"checkpoint_cycles"`
+	CheckpointBusyCycles int64 `json:"checkpoint_busy_cycles"`
+	CheckpointBusyStreak int64 `json:"checkpoint_busy_streak"`
 }
 
 /*
@@ -239,6 +291,13 @@ func (s *Store) LockTiming() LockTiming {
 	}
 	for i, name := range commitPhaseNames {
 		out.CommitMs[name] = s.commits.phases[i].Snapshot()
+	}
+	if c := s.checkpoints; c != nil {
+		out.WALBytes = c.walBytes.Load()
+		out.WALBytesMax = c.walBytesMax.Load()
+		out.CheckpointCycles = c.cycles.Load()
+		out.CheckpointBusyCycles = c.busyCycles.Load()
+		out.CheckpointBusyStreak = c.busyStreak.Load()
 	}
 	return out
 }

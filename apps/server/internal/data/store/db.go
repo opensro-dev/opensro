@@ -31,7 +31,8 @@ import (
 // Durability posture: synchronous=NORMAL under WAL makes every commit
 // durable against process death (process killers, crashes, supervisor
 // restarts); power-loss durability is bounded
-// by WAL checkpoints (boot, clean shutdown, SQLite's auto-checkpoint).
+// by WAL checkpoints (the background checkpoint in wal_checkpoint.go,
+// boot, clean shutdown).
 // SRO_AUTHORITY_SYNC_FULL=1 opts into synchronous=FULL for full
 // power-loss durability at ~1 fsync per commit.
 //
@@ -192,7 +193,14 @@ configureDB
 ================
 */
 func configureDB(db *sql.DB) error {
-	pragmas := []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=" + sqliteSynchronous()}
+	pragmas := []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=" + sqliteSynchronous(),
+		// #2142 slice 0: the checkpoint leaves the commit. The writer
+		// never auto-checkpoints inside a transaction; wal_checkpoint.go
+		// copies the frames on its own handle between commits, and the
+		// size limit bounds the WAL a finished checkpoint leaves behind
+		// for reuse.
+		"PRAGMA wal_autocheckpoint=0",
+		fmt.Sprintf("PRAGMA journal_size_limit=%d", walJournalSizeLimitBytes)}
 	if !flushToMedia() {
 		// Without media flushes the journal switch must not run under the
 		// connection's default FULL level, which syncs the rollback journal.
