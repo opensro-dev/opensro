@@ -69,6 +69,18 @@ func TestCombatTargetExistsMatchesResolveVerdict(t *testing.T) {
 	check("summoned COS", rt, attacker, cos.GID, now, true)
 	cos.CurrentHP = 0
 	check("dead COS", rt, attacker, cos.GID, now, false)
+	cos.CurrentHP = 100
+	// The owner arm's own gates, one state at a time: a pet still out
+	// does not save a target whose owner is leaving, and the owner's
+	// life is not judged at all.
+	victim.DeletePending = true
+	check("COS of deletion-pending owner", rt, attacker, cos.GID, now, false)
+	victim.DeletePending = false
+	*victim.CurrentHP = 0
+	check("COS of dead owner", rt, attacker, cos.GID, now, true)
+	*victim.CurrentHP = 100
+	cos.Summoned = false
+	check("dismissed COS", rt, attacker, cos.GID, now, false)
 }
 
 /*
