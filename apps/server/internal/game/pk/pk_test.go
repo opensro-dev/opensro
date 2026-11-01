@@ -242,8 +242,8 @@ func TestSelectDropSlot(t *testing.T) {
 ================
 TestDrainAmount
 
-5% of the maximum, truncated, with the one-HP floor that keeps a small
-maximum draining.
+2% of the maximum through the native single-precision rate, truncated, with
+no floor.
 ================
 */
 func TestDrainAmount(t *testing.T) {
