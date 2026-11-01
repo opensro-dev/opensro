@@ -1,6 +1,7 @@
 # Persistence
 
-- **review** A new saved character field gets its own store schema step: a version bump and an offline upgrade.
+- **gate** A new saved field on a stored record gets its own store schema step: a version bump and an offline upgrade.
+  `TestRecordFieldsBelongToTheCurrentSchema` fails without one.
 - **review** Never take a store door inside another door. Nested locks deadlock.
 - **review** Measure before fixing an audit finding. A path that "may write" is not proof that it writes.
 - **review** A change that skips writing a section must keep the dirty marks complete: check every direct writer, or
