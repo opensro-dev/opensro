@@ -18,7 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -50,7 +50,7 @@ the Yellow Eggs gathered, the moss answers _09.
 ================
 */
 func TestShinyMossLuresACrabAtTheHorse(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := adventurerFixture(t)
 	var lured []simulation.QuestMonsterSpawn
 	spawned := true
@@ -96,7 +96,7 @@ banner; Demetri pays and takes the eggs and every leftover moss.
 ================
 */
 func TestYellowEggsAlonePayDemetri(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := adventurerFixture(t)
 	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
 		t.Fatal("Demetri paid without the eggs")

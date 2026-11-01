@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"os"
 	"reflect"
 	"testing"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestQuestMonsterDropsRequireAcceptedQuestTargetAndPickup(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	calls := 0
@@ -67,7 +67,7 @@ func TestQuestMonsterDropsRequireAcceptedQuestTargetAndPickup(t *testing.T) {
 }
 
 func TestCursedHeartDropsContinuePastExchangeCountButStopAtNativeCap(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {
@@ -176,7 +176,7 @@ func TestQuestDropMatchesExecutedNativeMachineCases(t *testing.T) {
 }
 
 func TestQuestDropSpeciesRatesAndSecondRngFailure(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, "QNO_CH_CHEF_1"); err != nil {

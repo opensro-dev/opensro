@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const (
@@ -54,7 +54,7 @@ TestTerrainVisitPrefilterMatchesThePlainScan
 ================
 */
 func TestTerrainVisitPrefilterMatchesThePlainScan(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	random := rand.New(rand.NewSource(1))
 	// Jangan's potion building and the rebirth building: town placements
@@ -109,7 +109,7 @@ One chord past every placement of a town sector, prefiltered.
 ================
 */
 func BenchmarkTerrainVisitKeyPublished(b *testing.B) {
-	licensed.RequireGameData(b)
+	clientdata.RequireGameData(b)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(b))
 	set := v.objectNavSetForOffset(v.surfaceForRegion(25000), 0, 0)
 	from := simulation.Spawn{X: 100, Z: 100}
@@ -129,7 +129,7 @@ The same chords through the plain scan, the cost before the prefilter.
 ================
 */
 func BenchmarkTerrainVisitKeyPublishedPlain(b *testing.B) {
-	licensed.RequireGameData(b)
+	clientdata.RequireGameData(b)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(b))
 	set := v.objectNavSetForOffset(v.surfaceForRegion(25000), 0, 0)
 	from := simulation.Spawn{X: 100, Z: 100}

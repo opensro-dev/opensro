@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +21,7 @@ import (
 )
 
 func TestTimedQuestProductionStoreAndCharacterPulse(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
@@ -152,7 +152,7 @@ func TestTimedQuestProductionStoreAndCharacterPulse(t *testing.T) {
 }
 
 func TestTimedCollectionCleanupAndStaleReward(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, cancel := range []bool{false, true} {
 		t.Run(fmt.Sprint(cancel), func(t *testing.T) {
 			rt := testRuntime(t)

@@ -106,8 +106,8 @@ import (
 	wiretest "opensro.online/server/internal/game/internal"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/entryauth"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/transport"
 )
 
@@ -140,7 +140,7 @@ here would exercise a different server than the one deployed.
 */
 func shippedTextdataDir(t *testing.T) string {
 	t.Helper()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "leveldata.txt")); err != nil {
 		t.Skipf("shipped textdata not present in this checkout: %v", err)
 	}

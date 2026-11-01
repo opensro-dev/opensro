@@ -3,8 +3,8 @@ package enterworld
 import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"strconv"
 	"testing"
 )
@@ -42,7 +42,7 @@ func TestSummonTupleParserConsumesAllNineAndRejectsMalformedBody(t *testing.T) {
 }
 
 func TestShippedUniqueSummonReferenceClosure(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	if len(refs) == 0 {

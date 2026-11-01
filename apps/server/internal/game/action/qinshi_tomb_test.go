@@ -27,8 +27,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -64,8 +64,8 @@ TestQinShiTombPortalsAndWalkIns
 ================
 */
 func TestQinShiTombPortalsAndWalkIns(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")
 	baseCatalog, err := loadPortalCatalog(dir)
@@ -224,7 +224,7 @@ off catalog plus the tomb's rows, so flag-off cannot drift (GH #1013).
 ================
 */
 func TestQinShiOffCatalogIsByteIdentical(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")
@@ -293,7 +293,7 @@ keeps its level-70..999 gate (GH #1013).
 ================
 */
 func TestQinShiTombClosedLinkGraph(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(monster.EnvQinShiTomb, "on")
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
@@ -361,7 +361,7 @@ not this one's.
 ================
 */
 func TestQinShiTombEveryFloorReachable(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(monster.EnvQinShiTomb, "on")
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
@@ -443,7 +443,7 @@ level-70 player arrives on Floor 1 (region 0x8007) with nothing charged.
 ================
 */
 func TestWalkingIntoTheTombDoorLevels(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(monster.EnvQinShiTomb, "on")
 	rt, c, _, _ := returnFixture(t, 30000)
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {

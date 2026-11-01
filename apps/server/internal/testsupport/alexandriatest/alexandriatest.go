@@ -1,11 +1,11 @@
 /*
 ===========================================================================
 
-alexandriatest.go - a licensed textdata copy with an Alexandria-style overlay
+alexandriatest.go - a retail textdata copy with an Alexandria-style overlay
 
 build_alexandria_variant.py only appends rows to the native tables: NPC
 placements in its own regions, teleport gates, their buildings and links to
-native gates. Variant reproduces that shape over the licensed retail
+native gates. Variant reproduces that shape over the retail
 textdata, with one row of each kind, and writes the server overlay
 (alexandria-overlay.json), so a loader can be compared against the native
 tables with SRO_ALEXANDRIA off and on.
@@ -24,7 +24,7 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -47,7 +47,7 @@ The variant directory and what was appended to it.
 */
 type Fixture struct {
 	Dir string
-	// NativeDir is the untouched licensed textdata.
+	// NativeDir is the untouched retail textdata.
 	NativeDir string
 	// LinkedTeleport is the native gate both added links join.
 	LinkedTeleport string
@@ -57,15 +57,15 @@ type Fixture struct {
 ================
 Variant
 
-Copies the licensed textdata into a temporary directory, appends one
+Copies the retail textdata into a temporary directory, appends one
 Alexandria row of each kind and writes the overlay; npcRefID is the native
 NPC placed a second time, inside Region. Skips without game data.
 ================
 */
 func Variant(t testing.TB, npcRefID string) Fixture {
 	t.Helper()
-	licensed.RequireGameData(t)
-	native := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	native := clientdata.RetailTextdataDir(t)
 	dir := t.TempDir()
 	entries, err := os.ReadDir(native)
 	if err != nil {

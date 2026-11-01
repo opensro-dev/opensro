@@ -28,8 +28,8 @@ import (
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const goria7TestDivision = "goria7-test"
@@ -52,7 +52,7 @@ type goria7World struct {
 
 func newGoria7World(t *testing.T) *goria7World {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)

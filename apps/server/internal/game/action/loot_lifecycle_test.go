@@ -10,8 +10,8 @@ package action
 
 import (
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"slices"
 	"strconv"
@@ -92,7 +92,7 @@ TestPublishedLootPickupAndActivation
 ================
 */
 func TestPublishedLootPickupAndActivation(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	magic := enterworld.NewTextdataMagicOptions(textdata)

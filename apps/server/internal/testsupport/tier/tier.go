@@ -13,7 +13,7 @@ and cost most of the suite's time, so they form the long tier:
   - `pnpm task check:server:long` and every release freeze run them all.
 
 Neither tier depends on a hosted CI: both run on our own machines, and the
-licensed game data most sweeps read exists only there.
+game data most sweeps read exists only there.
 
 A behaviour test that is merely slow is fixed, never moved here.
 

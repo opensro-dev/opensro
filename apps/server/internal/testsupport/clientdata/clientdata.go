@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-licensed.go - gate tests that need data derived from a licensed client
+clientdata.go - gate tests that need data derived from a game client
 
 Many tests check the port against the real game data: the verified server
 projection (apps/server/.generated/game-data), the raw client extraction
@@ -18,7 +18,7 @@ is silently skipped where it matters.
 
 Go's test cache validates only files inside the module. The projection is
 inside it; the extraction and the published assets are not, so the gate
-names their identity in SRO_LICENSED_DATA_IDENTITY and RequireGameData reads
+names their identity in SRO_GAME_DATA_IDENTITY and RequireGameData reads
 it: a cached result is then reused only for the data it was produced from.
 
 This package depends only on config within the module, so game-data tests
@@ -26,7 +26,7 @@ can use it without a dependency cycle.
 
 ===========================================================================
 */
-package licensed
+package clientdata
 
 import (
 	"errors"
@@ -43,10 +43,10 @@ import (
 // RequireEnv makes missing game data a test failure instead of a skip.
 const RequireEnv = "SRO_REQUIRE_GAME_DATA"
 
-// IdentityEnv carries the identity of the licensed data outside the module
-// (check_go_server.mjs sets it). Reading it makes it part of every licensed
+// IdentityEnv carries the identity of the game data outside the module
+// (check_go_server.mjs sets it). Reading it makes it part of every game-data
 // test's cache key.
-const IdentityEnv = "SRO_LICENSED_DATA_IDENTITY"
+const IdentityEnv = "SRO_GAME_DATA_IDENTITY"
 
 /*
 ==================
@@ -84,18 +84,18 @@ What RequireGameData does with one check. Only absent data may skip, and
 only while SRO_REQUIRE_GAME_DATA is off. A resolver error is never absent
 data: a worktree holding its own generated tree, an unreadable worktree
 link or a relative override names a broken setup, and skipping on it let a
-plain `go test ./...` in such a worktree pass with every licensed test
+plain `go test ./...` in such a worktree pass with every game-data test
 skipped.
 ==================
 */
 func gameDataVerdict(missing []string, err error, require bool) (int, string) {
 	if err != nil {
-		return gameDataFail, "licensed game data cannot be located: " + err.Error()
+		return gameDataFail, "game data cannot be located: " + err.Error()
 	}
 	if len(missing) == 0 {
 		return gameDataReady, ""
 	}
-	reason := "licensed game data is not available"
+	reason := "game data is not available"
 	for _, path := range missing {
 		reason += "\n\tmissing " + path
 	}
@@ -117,7 +117,7 @@ var (
 checkedGameData
 
 missingGameData once per process, and the one read of IdentityEnv that puts
-the licensed data's identity into the test cache key. Helpers call
+the game data's identity into the test cache key. Helpers call
 RequireGameData inside per-row loops; checking the disk each time logged
 ~750k file operations for Go's test cache to re-validate on every run.
 ==================
@@ -202,7 +202,7 @@ func missingGameData() ([]string, error) {
 ================
 missingPaths
 
-Only absence may skip licensed tests. Preserve inspection errors so the
+Only absence may skip game-data tests. Preserve inspection errors so the
 gate inherited from PR349 fails them regardless of RequireEnv.
 ================
 */
@@ -212,7 +212,7 @@ func missingPaths(required []string, stat func(string) (os.FileInfo, error)) ([]
 		if _, statErr := stat(path); errors.Is(statErr, os.ErrNotExist) {
 			missing = append(missing, filepath.Clean(path))
 		} else if statErr != nil {
-			return nil, fmt.Errorf("inspect licensed data %s: %w", path, statErr)
+			return nil, fmt.Errorf("inspect game data %s: %w", path, statErr)
 		}
 	}
 	return missing, nil

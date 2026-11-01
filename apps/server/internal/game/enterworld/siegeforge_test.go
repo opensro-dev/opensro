@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,7 +25,7 @@ staff member's vector.
 ================
 */
 func TestSiegeItemForgeProjectionMatchesTheTable(t *testing.T) {
-	rows := ReadTextdataFile(filepath.Join(licensed.RetailTextdataDir(t), "siegefortressitemforge.txt"))
+	rows := ReadTextdataFile(filepath.Join(clientdata.RetailTextdataDir(t), "siegefortressitemforge.txt"))
 	if len(rows) == 0 {
 		t.Skip("shipped siegefortressitemforge.txt unavailable")
 	}

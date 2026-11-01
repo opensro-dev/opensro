@@ -1,17 +1,17 @@
 /*
 ===========================================================================
 
-licensed_test.go - the licensed gate finds the game root like the build
+clientdata_test.go - the game-data gate finds the game root like the build
 
 The asset build (scripts/build/world/paths.mjs) and the Python tools
 (scripts/sro_paths.py) look for extracted/ in SRO_GAME_ROOT or beside the
 main checkout. The gate must look in the same place, or a checkout the
-build accepts skips its licensed tests. Only absent data may skip: a
+build accepts skips its game-data tests. Only absent data may skip: a
 setup the resolvers refuse fails the test.
 
 ===========================================================================
 */
-package licensed
+package clientdata
 
 import (
 	"errors"

@@ -171,7 +171,7 @@ is mechanical (reverse it and reproduce the old hash) before re-freezing.
 - Generated output belongs in `.generated/` or `.state/`, not in the source
   tree.
 - One owner says where `.generated/` is: `scripts/lib/generatedRoot.mjs`
-  (Python: `scripts/sro_paths.py`; Go tests: `licensed.ClientPublicRoot`).
+  (Python: `scripts/sro_paths.py`; Go tests: `clientdata.ClientPublicRoot`).
   Never build a `.generated/...` path yourself; `check:generated-root`
   refuses it.
 
@@ -210,7 +210,7 @@ package store, never through a link:
 - Only the resolvers read `SRO_GENERATED_ROOT`, `SRO_SERVER_GAME_DATA_ROOT`
   and `SRO_GAME_ROOT` (`scripts/lib/generatedRoot.mjs`,
   `scripts/build/world/paths.mjs`, `scripts/sro_paths.py`,
-  `internal/testsupport/licensed`, `internal/gamedata`); every other tool asks
+  `internal/testsupport/clientdata`, `internal/gamedata`); every other tool asks
   them. `check:generated-root` refuses a direct read, as it refuses a
   hand-built `.generated` path, and code that assumes the tree sits inside
   the checkout (a relative path or containment check against the checkout)

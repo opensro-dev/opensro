@@ -22,7 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -392,7 +392,7 @@ TestRootedCasterRefusesTeleport
 ================
 */
 func TestRootedCasterRefusesTeleport(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {
 		t.Skip("shipped skilldata unavailable")
 	}

@@ -25,7 +25,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const clipCoordEps = 1e-9
@@ -453,7 +453,7 @@ movement mutex in production, so this bounds the added per-move cost.
 ================
 */
 func BenchmarkClipMovementPathWarm(b *testing.B) {
-	root, err := licensed.ClientPublicRoot()
+	root, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -480,7 +480,7 @@ on the real Constantinople harbor bridge.
 ================
 */
 func BenchmarkClipMovementPathWarmBridge(b *testing.B) {
-	root, err := licensed.ClientPublicRoot()
+	root, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		b.Fatal(err)
 	}

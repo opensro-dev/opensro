@@ -4,13 +4,13 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestUniqueRetainedSkillSurvivesDamageAndHealthBandChange(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	refs := monster.LoadMonsterRefs(dir)
 	rt := NewRuntime(&enterworld.Deps{Skills: enterworld.NewTextdataSkills(dir)}, nil)

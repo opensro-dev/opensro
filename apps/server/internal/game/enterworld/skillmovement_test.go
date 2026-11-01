@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/statuseffect"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -85,8 +85,8 @@ TestShippedDirectMovementAdmissionAndEnvelopeBoundaries
 ================
 */
 func TestShippedDirectMovementAdmissionAndEnvelopeBoundaries(t *testing.T) {
-	licensed.RequireGameData(t)
-	source := NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	source := NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}
