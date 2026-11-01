@@ -176,6 +176,10 @@ type Store struct {
 	// commits their phases (lock_timing.go).
 	mu      timedRWMutex
 	commits commitTiming
+	// checkpoints is the WAL's background checkpointer
+	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
+	// whenever no database was adopted.
+	checkpoints *walCheckpointer
 	// encodeScratch is the commit path's reusable JSON encode buffer
 	// (db_write.go). Every encode through it runs under mu, which is
 	// the scratch's ownership domain; its records are consumed by the
@@ -534,4 +538,8 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 			s.seedLedgerLocked(c)
 		}
 	}
+	// The writer handle adopted above never auto-checkpoints
+	// (configureDB); the background checkpointer copies its WAL
+	// instead (#2142 slice 0).
+	s.checkpoints = startWALCheckpointer(s.dbPath)
 }
