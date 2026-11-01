@@ -252,12 +252,20 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 	state.nextMs += naturalRecoveryIntervalMs
 	rt.recoveryMu.Unlock()
 	c := state.character
-	if rt.hasOpenSkillCast(key.division, c.Name) {
-		return nil
-	}
+	casting := rt.hasOpenSkillCast(key.division, c.Name)
 	var frames []simulation.DivisionFrames
+	var drain *drainPulse
 	committed := rt.deps.UpdateDeferred(c, "natural-recovery", func() bool {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
+			return false
+		}
+		// The drain takes the pulse whole: it comes before every recovery
+		// gate, and a drained murderer does not regenerate (murdererdrain.go).
+		if rt.murdererDrainApplies(key.division, c) {
+			drain = &drainPulse{}
+			return rt.drainMurdererInDoor(key.division, c, nowMs, drain)
+		}
+		if casting {
 			return false
 		}
 		world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
@@ -301,6 +309,9 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 	})
 	if !committed {
 		return nil
+	}
+	if drain != nil {
+		return rt.publishDrainPulse(key, c, nowMs, drain)
 	}
 	return frames
 }

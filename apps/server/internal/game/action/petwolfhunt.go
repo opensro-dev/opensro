@@ -119,6 +119,11 @@ func (rt *Runtime) wolfBonusHit(step petCombatStep, mob monster.Instance, damage
 	if damage == 0 || mob.CurrentHP == 0 {
 		return
 	}
+	// The population selectors that feed this sink skip the owner's attack
+	// validation; a bandit of the owner's own side takes no bonus (#2080).
+	if rt.jobMonsterTargetRefusal(step.snapshot, mob) != 0 {
+		return
+	}
 	hit, committed := rt.commitCompanionCreditedMonsterHit(step.key.division, step.state.character, step.snapshot, enterworld.SkillRow{}, mob, combat.Result{Damage: damage}, reason, step.nowMs)
 	if !committed {
 		return

@@ -41,13 +41,49 @@ export function sourceSoundCandidates( source, file ) {
 	const tree = ts.createSourceFile( file, source, ts.ScriptTarget.Latest, true ), out = [];
 	function visit( n ) {
 		if ( ts.isStringLiteralLike( n ) && (/^(SND_|VOC_)/i.test( n.text ) || /\.(wav|mp3|ogg)$/i.test( n.text )) ) {
-			let owner = n.parent;
-			while ( owner && !ts.isCallExpression( owner ) && !ts.isSourceFile( owner ) ) owner = owner.parent;
+			// The producing shapes the runtime actually uses: a call argument
+			// (play('SND_X')), a value returned to the caller (the worker
+			// owners return their cue arrays), or a played file path. A bare
+			// literal in a dead dictionary is none of these and stays a
+			// non-producer.
+			// The call search never stops early: an object literal passed to a
+			// call (the publish of a cue handle) is a call-position producer
+			// however deep it sits. The return search only climbs the pure
+			// wrapping shapes, so a dead dictionary entry stays a non-producer.
+			const wrapping = [
+				ts.isArrayLiteralExpression,
+				ts.isConditionalExpression,
+				ts.isParenthesizedExpression,
+				ts.isAsExpression,
+				ts.isVariableDeclaration,
+				ts.isVariableStatement,
+				ts.isExpressionStatement,
+				ts.isBlock,
+				ts.isIfStatement
+			];
+			let owner = n.parent, call = null, returned = false, assigned = false;
+			for ( let at = owner; at && !ts.isSourceFile( at ); at = at.parent ) {
+				if ( ts.isCallExpression( at ) ) {
+					call = at.expression.getText( tree );
+					break;
+				}
+			}
+			for ( let at = owner; at && !ts.isSourceFile( at ); at = at.parent ) {
+				if ( ts.isReturnStatement( at ) ) {
+					returned = true;
+					break;
+				}
+				if ( ts.isVariableDeclaration( at ) ) assigned = true;
+				if ( !wrapping.some( is => is( at ) ) ) break;
+			}
 			out.push( {
 				value: norm( n.text ),
 				file,
 				line: tree.getLineAndCharacterOfPosition( n.getStart() ).line + 1,
-				call: owner && ts.isCallExpression( owner ) ? owner.expression.getText( tree ) : null
+				call,
+				returned,
+				assigned,
+				wav: /\.(wav|mp3|ogg)$/i.test( n.text )
 			} );
 		}
 		ts.forEachChild( n, visit );
@@ -100,17 +136,23 @@ the reasons it is not yet proven reachable.
 export function classifySoundRow( row, { itemCategories, uiHandles, animationCues, sourceCandidates } ) {
 	const object = norm( row.object ), handle = norm( row.handle ), reasons = [];
 	let lane = "unclassified";
+	const fileName = norm( row.fileName ?? "" );
+	const produced = sourceCandidates.some( c =>
+		c.file.includes( "/runtime/" ) &&
+		(((c.call || c.returned || c.assigned) && c.value === handle) ||
+			(c.wav && fileName && c.value.endsWith( "/" + fileName )))
+	);
 	if ( object === "UI" ) {
 		lane = "ui";
 		if ( !uiHandles.has( handle ) ) reasons.push( "missing-production-catalog" );
-		if ( !sourceCandidates.some( c => c.call && c.value === handle && c.file.includes( "/runtime/" ) ) ) {
+		if ( !produced ) {
 			reasons.push( "no-literal-production-producer" );
 		}
 	} else if ( object === "ITEM" && [ "SND_EQUIP", "SND_DROPITEM" ].includes( handle ) ) {
 		lane = "item-category";
 		if ( !itemCategories.has( row.event1 ) ) reasons.push( "unreachable-by-native-tid-selector" );
 	} else if ( animationCues.has( handle ) ) lane = "animation-candidate";
-	else if ( sourceCandidates.some( c => c.call && c.value === handle && c.file.includes( "/runtime/" ) ) ) {
+	else if ( produced ) {
 		lane = "literal-candidate";
 	} else reasons.push( "no-discovered-animation-or-literal-producer" );
 	if ( !row.publicPath ) reasons.push( row.folder === "-" ? "native-placeholder" : "unresolved-asset" );

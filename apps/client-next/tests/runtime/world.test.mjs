@@ -734,10 +734,23 @@ test("a resumed session keeps the party, so the next member delta applies after 
 	drain();
 	world.step( 5 );
 	// Loading completes: travelReady retires the login's reset latch.
+	// The Experimental warp-arrival row is on for this arrival (below, the
+	// resumed arrival runs with it off, the native silence).
+	world.experimental( { warpArrivalSound: true } );
 	world.ready();
 	first.receive( 0xb0d5, party.seed );
 	first.receive( 0x35d6, party.roster );
 	world.step( 6 );
+	// travelReady publishes the arrival's own cue: the table's portal-out
+	// row (SND_WARP, gatein.wav) rides the first batch after the ready.
+	const arrival = world.take();
+	if ( !arrival ) throw Error( "No batch after the ready" );
+	assert.ok(
+		arrival.events.some( e => e.kind === "ui-sound" && e.handle === "SND_WARP" ),
+		"The world's ready plays the portal-out cue"
+	);
+	world.ack( arrival.sequence );
+	presentation.apply( arrival );
 	drain();
 	assert.equal( defined( presentation.gameplay() ).social.members.length, 2 );
 	world.disconnect();
@@ -756,9 +769,21 @@ test("a resumed session keeps the party, so the next member delta applies after 
 	world.step( 10 );
 	drain();
 	world.step( 11 );
+	// The resumed arrival runs with the warp-arrival row off (its default):
+	// no portal-out cue rides the batch - the native arrival is silent.
+	world.experimental( { warpArrivalSound: false } );
 	world.ready();
 	second.receive( 0x3e58, party.delta( 21 ) );
 	world.step( 12 );
+	const resumedArrival = world.take();
+	if ( resumedArrival ) {
+		assert.ok(
+			!resumedArrival.events.some( e => e.kind === "ui-sound" && e.handle === "SND_WARP" ),
+			"With the row off, the arrival plays no portal-out cue"
+		);
+		world.ack( resumedArrival.sequence );
+		presentation.apply( resumedArrival );
+	}
 	drain();
 	assert.equal( world.status().phase, "world" );
 	assert.equal( world.status().error, undefined );
@@ -2714,7 +2739,9 @@ test("a move unanswered on a live link times out as the movement lane's loss", a
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
-	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound 0 ms ago/ );
+	// The inbound age reads the real event clock (#1474), so a loaded machine
+	// sees a few milliseconds between the last frame and the step.
+	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound \d{1,2} ms ago/ );
 });
 
 /*
@@ -2876,6 +2903,7 @@ async function lostAnswerWorld( t ) {
 	t.after( () => world.dispose() );
 	const entry = {
 		...bootstrap,
+		simulationProtocolVersion: 1,
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
 		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
@@ -3121,4 +3149,103 @@ test("an input refused before the world is ready still advances the published in
 	world.step( 6 );
 	drain();
 	assert.equal( defined( presentation.gameplay() ).movementInputSeq, 3 );
+});
+
+/*
+================
+A scene's reference frames fill the ordered stream ahead of every answer
+
+Prod (#2148): 42 of 44 movement timeouts with a live link had taken up to
+2.4 MB of opcode 14 in their last 10 s and no game frame. The frames proved
+the link was delivering, yet nothing behind them could arrive, so an answer
+outlived its flat deadline and the session resumed into the same references.
+================
+*/
+test("an answer queued behind scene references is not lost while they arrive", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 9000; at <= 25000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	// When they stop, the answer has its flat wait and no more.
+	world.step( 34999 );
+	assert.equal( world.status().phase, "world" );
+	world.step( 35001 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+});
+
+test("a movement receipt queued behind scene references is not lost while they arrive", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 100 } }, 4 );
+	world.step( 5 );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 5000; at <= 25000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	world.step( 35100 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+});
+
+/*
+================
+a movement receipt behind scene references still trips the backstop
+
+References hold the silence leg open, but the receipt's ninety-second hard
+backstop is measured from the send (#1978): past it the answer can only be
+missing, however live the reference stream looks.
+================
+*/
+test("a movement receipt behind scene references still trips the ninety-second backstop", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "move", destination: { ...bootstrap.localPlayerEntry.startProfile, x: 100 } }, 4 );
+	world.step( 5 );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	for ( let at = 5000; at <= 89000; at += 4000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `references still arriving at ${at}` );
+	}
+	assert.equal( incidents.length, 0 );
+	sockets[0].receive( 14, references );
+	world.step( 93000 );
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+});
+
+/*
+================
+an answer behind endless scene references still has a limit
+
+Each frame restarts the answer's flat wait, so without a limit a stream that
+never stops would hold a lost answer open forever. Movement has its ninety
+second backstop; the answers take the same bound from the first frame.
+================
+*/
+test("an answer behind endless scene references still reaches its limit", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } );
+	const references = Buffer.from( JSON.stringify( { version: 1, items: [] } ) );
+	let at = 9000;
+	while ( at < 90000 ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		assert.equal( world.status().phase, "world", `inside the limit at ${at}` );
+		at += 4000;
+	}
+	while ( at < 120000 && world.status().phase === "world" ) {
+		sockets[0].receive( 14, references );
+		world.step( at );
+		at += 4000;
+	}
+	assert.equal( world.status().phase, "reconnecting" );
+	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
 });

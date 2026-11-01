@@ -59,6 +59,7 @@ barrier.
 type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
+	cosRefusalLog    sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
@@ -119,8 +120,11 @@ type Runtime struct {
 	RewardActorPresent  func(division, name string) bool
 	// PetPolicies are the port-only pet rules (companion.PoliciesFromEnv);
 	// the zero value is native.
-	PetPolicies         companion.Policies
-	returnGeneration    atomic.Uint64
+	PetPolicies      companion.Policies
+	returnGeneration atomic.Uint64
+	// surpriseFatalCount counts strikes that killed under a plan that
+	// could not kill: the roster gate's invariant made audible (#2030).
+	surpriseFatalCount  atomic.Uint64
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
@@ -296,9 +300,12 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
-	petShields  petShieldStore
-	wolfHowls   wolfHowlStore
-	tailwinds   tailwindStore
+	// cosOwners is the pet gid to owner index (cosownerindex.go):
+	// whose pet a gid is, without walking the division's characters.
+	cosOwners  cosOwnerIndex
+	petShields petShieldStore
+	wolfHowls  wolfHowlStore
+	tailwinds  tailwindStore
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
@@ -331,6 +338,10 @@ type Runtime struct {
 	// differential test sets it, to the full copy. Nil is the narrow
 	// copy.
 	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// castCopy, when set, replaces the press/release cast copy
+	// (characterSnapshotCast); only the cast-copy differential tests
+	// set it, to the full or the combat copy. Nil is the cast copy.
+	castCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
 	// MoveCOSPublished orders native mounted movement acknowledgement with
@@ -478,6 +489,10 @@ type Runtime struct {
 	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
 	// (tradetiers.go; port-only, not native). False is native.
 	TradeTiers bool
+	// RaisedGoldCaps admits a 10,000,000,000 stall price and a 1,000,000,000
+	// warehouse gold deposit (goldcaps.go; port-only, not native). False is
+	// native: 1,000,000,000 and 100,000,000, with the native u32 offer wire.
+	RaisedGoldCaps bool
 	// TeleportGrace makes a teleport arrival untouchable for the revival's
 	// grace (teleportprotection.go; port-only, not native). False is native.
 	TeleportGrace bool
@@ -499,6 +514,14 @@ type Runtime struct {
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).
 	SunEventOnly progression.SunEventOnly
+	// Halloween is the rebuilt Halloween Day event (port-only, not
+	// native in this client build; progression/halloween.go). The zero
+	// value is off: no box drops, no So-ok exchange, no cleanup.
+	Halloween progression.HalloweenEvent
+	// HalloweenHelmetSeal seals the event helmets at the transfer doors
+	// (port-only, not native; progression/halloween.go). The zero value
+	// is off: the helmets move like any item.
+	HalloweenHelmetSeal progression.HalloweenHelmetSeal
 	// UniqueRules: the unique reward switches (progression/uniquerules.go; port-only, not native). Zero is native.
 	UniqueRules progression.UniqueRules
 
@@ -784,6 +807,21 @@ type Runtime struct {
 	// the simulation tick.
 	basicAttackIntentsMu sync.Mutex
 	basicAttackIntents   map[string]basicAttackIntent
+	// tickGateCuts counts the TickHooks cut running by a held publication
+	// gate (acquireTickGate). Tick goroutine only.
+	tickGateCuts int
+	// tickGate is the hold on every publication gate, taken once per
+	// TickHook step. The step's buffers live here because it runs dozens
+	// of times a tick (#2143). Tick goroutine only.
+	tickGate struct {
+		ids  []string
+		held []tickGateHold
+	}
+	// basicAttackCursor is the world key of the intent the last
+	// advanceBasicAttackIntents call served last; the next call resumes
+	// past it, so a burst spread over ticks cannot starve the tail of
+	// the intent snapshot (#2143).
+	basicAttackCursor string
 	// actionSessions owns the pending back command and private B2CD count.
 	// Existing continuation and cast owners execute and commit gameplay.
 	groundApproachStops sync.Map // motion revision terminal events; action tick owns retirement
@@ -877,109 +915,4 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 	rt.FlagWarMatchStart = rt.startFlagWarMatch
 
 	return rt
-}
-
-/*
-==================
-PendingPickup
-
-PendingPickup describes an approach still in flight. No frames ride a
-duplicate request; the simulation tick owns arrival and grant completion.
-==================
-*/
-type PendingPickup struct {
-	ItemGid uint32
-	Eta     time.Duration
-}
-
-/*
-==================
-OpResult
-
-OpResult is one applied operation: Frames is the acting session's complete
-synchronous burst and Broadcast is the public peer projection. ActorPrivate
-is the actor-only tail needed when the SAME operation is produced by the
-simulation tick instead of a request handler: the tick publishes Broadcast to
-everyone first, then routes ActorPrivate to the actor in the same turn.
-Frames already includes both portions; request handlers must never send
-ActorPrivate separately. Pending marks an approach when nothing rides the
-wire at all.
-==================
-*/
-type OpResult struct {
-	Recipients   []RecipientFrames
-	Frames       []wire.Frame
-	Broadcast    []wire.Frame
-	ActorPrivate []wire.Frame
-	// Around is published around other objects than the actor, each to
-	// every session observing it (the recipient's own included).
-	Around  []ObservedFrames
-	Pending *PendingPickup
-
-	// DiagnosticRefusal is an internal, non-wire reason for a silent native
-	// refusal. The hub logs it at debug level; protocol behavior stays exact.
-	DiagnosticRefusal string
-}
-
-/*
-================
-ObservedFrames
-
-Public frames for the sessions that observe one object, as native
-the reference server's nearby-session send sends around its argument: a
-heal's effect add goes around each recipient, not around the caster.
-================
-*/
-type ObservedFrames struct {
-	SourceGID uint32
-	Frames    []wire.Frame
-}
-
-/*
-================
-observedDivisionFrames
-
-The Around routes of a result as tick batches, one per object.
-================
-*/
-func observedDivisionFrames(division string, around []ObservedFrames) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
-	for _, route := range around {
-		if len(route.Frames) == 0 {
-			continue
-		}
-		batch := simulation.DivisionFrames{DivisionID: division, SourceGID: route.SourceGID}
-		for _, f := range route.Frames {
-			batch.Frames = append(batch.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
-		}
-		out = append(out, batch)
-	}
-	return out
-}
-
-/*
-==================
-failureResult
-==================
-*/
-func failureResult(errorCode uint8) OpResult {
-	return OpResult{
-		Frames: []wire.Frame{
-			{
-				Opcode:  wire.OpItemMoveResponse,
-				Payload: wire.EncodeItemMoveError(errorCode),
-			},
-		},
-	}
-}
-
-// ---- 0x72CD pickup ----
-
-/*
-==================
-pickupRefusal
-==================
-*/
-func pickupRefusal(errorCode uint8) OpResult {
-	return OpResult{Frames: wire.PickupRefusalFrames(errorCode)}
 }

@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
@@ -136,6 +137,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
+				Native: "There is no temple instance.",
+				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
+				Why:    "Instanced group hunting for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
@@ -228,6 +233,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
+				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
+				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
+				Native: "The event helmets trade like any other item.",
+				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
+				Why:    "A helmet the event paid was never meant to reach a market."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -252,6 +265,11 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
+				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
+				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
+					groupedGold(int64(action.RaisedStallPriceLimit)), groupedGold(int64(action.RaisedStorageGoldDepositLimit))),
+				Why: "Large trades and shared warehouse funds needed more room than the original's caps allowed; the original caps return with one setting."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
 				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",

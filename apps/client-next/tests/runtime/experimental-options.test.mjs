@@ -126,7 +126,10 @@ const OFF = Object.freeze( {
 	// Off by default (#840): the maps mark the tracked quest's targets only.
 	questTrackerMarkers: false,
 	// Off by default (#1640): only the native plate and no ground ring.
-	sunDropMarker: false
+	sunDropMarker: false,
+	// Off by default: port-only portal-out cue on arrival; the native
+	// gate has no traced caller, so silence is the native default.
+	warpArrivalSound: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -319,12 +322,12 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
 		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages; MSAA rides there as a render
-	// stage; render scale joins Image without changing the indices used to
-	// reopen the existing tabs.
+	// Lighting keeps the direct-light stages, the moving sun among them;
+	// MSAA rides there as a render stage; render scale joins Image without
+	// changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting", "msaa", "enchantSparks", "dungeonCharacterPvs" ]
+		[ "sunShadow", "dynamicSun", "perPixelLighting", "msaa", "enchantSparks", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
@@ -547,6 +550,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
@@ -564,6 +568,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
+		warpArrivalSound: false,
 		petPickupKinds: undefined
 	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );

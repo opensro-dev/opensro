@@ -26,7 +26,9 @@ func TestResidentMonsterRoundTripAndIsolation(t *testing.T) {
 		copy := original
 		copy.Gid++
 		s.set(copy.Gid, copy)
-		if s.hot[copy.Gid].ref != s.hot[original.Gid].ref || s.hot[copy.Gid].nest != s.hot[original.Gid].nest {
+		copyRow, copyHot := s.hotRow(copy.Gid)
+		originalRow, originalHot := s.hotRow(original.Gid)
+		if !copyHot || !originalHot || copyRow.ref != originalRow.ref || copyRow.nest != originalRow.nest {
 			t.Fatal("static definitions not shared")
 		}
 		copy.Ref.MaxHP++
@@ -40,6 +42,40 @@ func TestResidentMonsterRoundTripAndIsolation(t *testing.T) {
 			t.Fatal("deleted actor survived")
 		}
 	}
+}
+
+/*
+================
+TestLeaderFactsMatchLookup
+
+The FOLLOW transaction's field-level leader facts must answer exactly
+what the full lookup answers, in either residency tier: a divergence
+would move a commit's fresh compare with no behaviour test watching.
+The leader's radius is grade-scaled on purpose.
+================
+*/
+func TestLeaderFactsMatchLookup(t *testing.T) {
+	s := newMonsterStorage(nil)
+	leader := monster.Instance{Gid: 7, CurrentHP: 42}
+	leader.Ref.BodyRadius = 10
+	leader.Ref.MonsterType = 4 // giant (4): BodyRadius scales by GradeScale
+	s.set(leader.Gid, leader)
+	check := func(gid uint32) {
+		hp, radius, exists := s.leaderFacts(gid)
+		want, wantExists := s.lookup(gid)
+		if exists != wantExists || hp != want.CurrentHP || radius != want.BodyRadius() {
+			t.Fatalf("gid %d: facts (%d, %v, %v), lookup (%d, %v, %v)",
+				gid, hp, radius, exists, want.CurrentHP, want.BodyRadius(), wantExists)
+		}
+	}
+	check(leader.Gid)
+	check(404)
+	s.archive = &monsterArchive{}
+	s.freeze(leader.Gid)
+	if _, cold := s.cold[leader.Gid]; !cold {
+		t.Fatal("leader did not freeze")
+	}
+	check(leader.Gid)
 }
 
 func fillResidentTestValue(v reflect.Value, r *rand.Rand) {
@@ -65,5 +101,109 @@ func fillResidentTestValue(v reflect.Value, r *rand.Rand) {
 		v.SetUint(r.Uint64())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		v.SetInt(r.Int63())
+	}
+}
+
+/*
+================
+TestRemoveHotKeepsTheMovedRowReachable
+
+Swap-removal moves the last row into the hole, so the moved row's slot
+entry must follow it. Removing the last row itself moves nothing.
+================
+*/
+func TestRemoveHotKeepsTheMovedRowReachable(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 4; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid * 10})
+	}
+	storage.remove(2)
+	storage.remove(3)
+	if _, ok := storage.hotRow(2); ok {
+		t.Fatal("a removed row is still reachable")
+	}
+	for _, gid := range []uint32{1, 4} {
+		row, ok := storage.hotRow(gid)
+		if !ok || row.currentHP != gid*10 {
+			t.Fatalf("gid %d after removal: found %v, hp %d", gid, ok, row.currentHP)
+		}
+	}
+	if len(storage.hot) != 2 || len(storage.byGID) != 2 {
+		t.Fatalf("hot %d rows, %d slots, want 2 of each", len(storage.hot), len(storage.byGID))
+	}
+}
+
+/*
+================
+TestShrinkHotExcessRebuildsBothHalves
+
+The rebuild runs only after a large contraction, and the rows and slot
+map must still agree after it. Below the threshold it copies nothing.
+================
+*/
+func TestShrinkHotExcessRebuildsBothHalves(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 8192; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid})
+	}
+	peak := 0
+	storage.shrinkHotExcess(&peak, true)
+	if peak != 8192 || cap(storage.hot) < 8192 {
+		t.Fatalf("a full storage shrank: peak %d, capacity %d", peak, cap(storage.hot))
+	}
+	for gid := uint32(11); gid <= 8192; gid++ {
+		storage.remove(gid)
+	}
+	storage.shrinkHotExcess(&peak, false)
+	if cap(storage.hot) < 8192 {
+		t.Fatal("a shrink ran without being allowed")
+	}
+	storage.shrinkHotExcess(&peak, true)
+	if cap(storage.hot) != 10 || peak != 10 {
+		t.Fatalf("no shrink: capacity %d, peak %d", cap(storage.hot), peak)
+	}
+	for gid := uint32(1); gid <= 10; gid++ {
+		if row, ok := storage.hotRow(gid); !ok || row.currentHP != gid {
+			t.Fatalf("gid %d lost in the rebuild", gid)
+		}
+	}
+}
+
+/*
+================
+TestLookupAtRejectsARecycledSlot
+
+A carried slot names whatever row sits in it now: once removal swaps
+another actor into the hole, the carried read must miss so dispatch
+falls back to the gid resolve, never read the new occupant.
+================
+*/
+func TestLookupAtRejectsARecycledSlot(t *testing.T) {
+	storage := newMonsterStorage(nil)
+	for gid := uint32(1); gid <= 3; gid++ {
+		storage.set(gid, monster.Instance{Gid: gid, CurrentHP: gid * 10})
+	}
+	slot, ok := storage.hotSlotOf(1)
+	if !ok {
+		t.Fatal("gid 1 has no slot")
+	}
+	if got, ok := storage.lookupAt(slot, 1); !ok || got.Gid != 1 || got.CurrentHP != 10 {
+		t.Fatalf("carried read before removal: %+v, %v", got, ok)
+	}
+	storage.remove(1)
+	if _, ok := storage.lookupAt(slot, 1); ok {
+		t.Fatal("a slot recycled onto gid 3 answered for the removed gid 1")
+	}
+	if got, ok := storage.lookupAt(slot, 3); !ok || got.Gid != 3 || got.CurrentHP != 30 {
+		t.Fatalf("the slot's new occupant does not read through it: %+v, %v", got, ok)
+	}
+	if _, ok := storage.lookupAt(uint32(len(storage.hot)), 3); ok {
+		t.Fatal("an out-of-range slot answered")
+	}
+	if _, ok := storage.lookupAt(behaviorNoMonsterSlot, 3); ok {
+		t.Fatal("the no-slot sentinel answered")
+	}
+	if got, ok := storage.lookup(3); !ok || got.Gid != 3 {
+		t.Fatalf("the gid fallback lost gid 3: %+v, %v", got, ok)
 	}
 }

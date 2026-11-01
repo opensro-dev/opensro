@@ -447,3 +447,119 @@ func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
 		t.Fatal("reboot changed appointed destination")
 	}
 }
+
+/*
+================
+TestFreshCharacterAppointedRebirthUsesRaceTownGate
+
+A character that has never appointed a town returns to its race main-town
+gate: the Jangan gate for a Chinese character and the Constantinople gate
+for a European one, not the starter position it entered the world at.
+================
+*/
+func TestFreshCharacterAppointedRebirthUsesRaceTownGate(t *testing.T) {
+	licensed.RequireGameData(t)
+	cases := []struct {
+		name  string
+		model string
+		ref   uint32
+	}{
+		{"chinese", "CHAR_CH_MAN_ADVENTURER", janganTownGateRef},
+		{"european", "CHAR_EU_MAN_ADVENTURER", constantinopleTownGateRef},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := rebirthTestCharacter(20, 100)
+			c.ModelCodename = tc.model
+			rt, _ := newTestRuntime(c, testItems())
+			if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+				t.Fatal(err)
+			}
+			id, ok := rt.portals.sources[tc.ref]
+			if !ok {
+				t.Fatalf("catalogue lacks gate ref %d", tc.ref)
+			}
+			destination := rt.portals.destinations[id]
+			point := rt.appointedRebirth(testDivision, c)
+			if point.spawn != destination.spawn || point.world != portalWorld(destination) {
+				t.Fatalf("fresh %s return point = %+v, want gate %d recall %+v", tc.name, point, tc.ref, destination.spawn)
+			}
+			if point.spawn == defaultRebirthPoint(c) {
+				t.Fatalf("fresh %s return point is still the starter position", tc.name)
+			}
+		})
+	}
+}
+
+/*
+================
+TestFreshCharacterTownReviveLandsAtJanganGate
+
+Death's town revival reads the same appointed point: a fresh Chinese
+character revives at the Jangan gate recall spawn.
+================
+*/
+func TestFreshCharacterTownReviveLandsAtJanganGate(t *testing.T) {
+	licensed.RequireGameData(t)
+	c := rebirthTestCharacter(20, 0)
+	rt, _ := newTestRuntime(c, testItems())
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	id, ok := rt.portals.sources[janganTownGateRef]
+	if !ok {
+		t.Fatalf("catalogue lacks gate ref %d", janganTownGateRef)
+	}
+	want := rt.portals.destinations[id].spawn
+	result := rt.HandleLocalRebirth(testDivision, c, []byte{1})
+	if len(result.Frames) == 0 || result.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("town rebirth did not re-enter: %+v", result)
+	}
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != want {
+		t.Fatalf("town rebirth landed at %+v, want the Jangan gate recall spawn %+v", got, want)
+	}
+}
+
+/*
+================
+TestAppointedRebirthKeepsTheAppointedTown
+
+The race gate is only the default: a Chinese character appointed at the
+Constantinople gate still returns there.
+================
+*/
+func TestAppointedRebirthKeepsTheAppointedTown(t *testing.T) {
+	licensed.RequireGameData(t)
+	c := rebirthTestCharacter(20, 100)
+	rt, _ := newTestRuntime(c, testItems())
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	id, ok := rt.portals.sources[constantinopleTownGateRef]
+	if !ok {
+		t.Fatalf("catalogue lacks gate ref %d", constantinopleTownGateRef)
+	}
+	destination := rt.portals.destinations[id]
+	c.World.RebirthGateRefID = constantinopleTownGateRef
+	c.World.RebirthPoint = worldSpawnFromMission(destination.spawn)
+	point := rt.appointedRebirth(testDivision, c)
+	if point.spawn != destination.spawn || point.world != portalWorld(destination) {
+		t.Fatalf("appointed return point = %+v, want Constantinople %+v", point, destination.spawn)
+	}
+}
+
+/*
+================
+TestFreshCharacterRebirthFallsBackToStartProfileWithoutGate
+
+Only a catalogue without the race gate falls back to the starter position.
+================
+*/
+func TestFreshCharacterRebirthFallsBackToStartProfileWithoutGate(t *testing.T) {
+	c := rebirthTestCharacter(20, 100)
+	rt, _ := newTestRuntime(c, testItems())
+	rt.portals = &portalCatalog{sources: map[uint32]uint32{}, destinations: map[uint32]portalDestination{}}
+	if point := rt.appointedRebirth(testDivision, c); point.spawn != simulation.ChinaStartProfile() {
+		t.Fatalf("catalogue without the Jangan gate resolved %+v, want the starter position", point)
+	}
+}

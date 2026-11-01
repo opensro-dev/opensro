@@ -20,6 +20,7 @@ package transport
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"opensro.online/server/internal/platform/latency"
@@ -110,6 +111,10 @@ type SlowHookStats struct {
 	LastTick  uint64    `json:"last_tick"`
 }
 
+// maxUnhandledOpcodes bounds the per-opcode unhandled counters: the live
+// shard shows a handful of opcodes, and a hostile client could send them all.
+const maxUnhandledOpcodes = 256
+
 /*
 ================
 timingStats
@@ -121,13 +126,17 @@ are rare and take the mutex.
 */
 type timingStats struct {
 	handlers sync.Map // uint16 -> *liveHistogram
-	phases   [4]liveHistogram
-	commitMs liveHistogram
-	mu       sync.Mutex
-	commit   TickCommitStats
-	slow     map[string]*SlowHookStats
-	slowDiv  map[string]*SlowHookStats
-	pubHolds map[string]*SlowHookStats
+	// unhandled counts frames per opcode nothing handles (#2147). A client
+	// picks the opcode, so maxUnhandledOpcodes bounds the distinct keys.
+	unhandled      sync.Map // uint16 -> *atomic.Uint64
+	unhandledKinds atomic.Int32
+	phases         [4]liveHistogram
+	commitMs       liveHistogram
+	mu             sync.Mutex
+	commit         TickCommitStats
+	slow           map[string]*SlowHookStats
+	slowDiv        map[string]*SlowHookStats
+	pubHolds       map[string]*SlowHookStats
 }
 
 /*
@@ -141,6 +150,31 @@ func (t *timingStats) recordHandler(opcode uint16, elapsed time.Duration) {
 		h, _ = t.handlers.LoadOrStore(opcode, &liveHistogram{})
 	}
 	h.(*liveHistogram).Add(elapsed)
+}
+
+/*
+================
+timingStats.recordUnhandled
+
+Count one frame no handler took. The opcode is the sender's choice, so
+only the first maxUnhandledOpcodes distinct values get a counter; the
+total in unhandled_opcode_frames still counts the rest.
+================
+*/
+func (t *timingStats) recordUnhandled(opcode uint16) {
+	if count, ok := t.unhandled.Load(opcode); ok {
+		count.(*atomic.Uint64).Add(1)
+		return
+	}
+	if t.unhandledKinds.Add(1) > maxUnhandledOpcodes {
+		t.unhandledKinds.Add(-1)
+		return
+	}
+	count, loaded := t.unhandled.LoadOrStore(opcode, &atomic.Uint64{})
+	if loaded {
+		t.unhandledKinds.Add(-1)
+	}
+	count.(*atomic.Uint64).Add(1)
 }
 
 /*
@@ -293,6 +327,11 @@ func (t *timingStats) snapshotInto(m *Metrics) {
 	m.HandlerMs = make(map[string]Histogram)
 	t.handlers.Range(func(key, value any) bool {
 		m.HandlerMs[fmt.Sprintf("0x%04X", key.(uint16))] = value.(*liveHistogram).Snapshot()
+		return true
+	})
+	m.UnhandledOpcodes = make(map[string]uint64)
+	t.unhandled.Range(func(key, value any) bool {
+		m.UnhandledOpcodes[fmt.Sprintf("0x%04X", key.(uint16))] = value.(*atomic.Uint64).Load()
 		return true
 	})
 	m.TickPhaseMs = map[string]Histogram{

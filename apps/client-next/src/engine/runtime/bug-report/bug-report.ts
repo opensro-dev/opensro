@@ -37,7 +37,7 @@ import {
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
 import { createRecording } from "./recording";
-import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget } from "./archive";
+import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, diagnosticValue } from "./archive";
 import { fitTrack } from "./transcode";
 import { createJournal, JOURNAL_WINDOW_MS, refusalReason } from "./journal";
 import { createAssetHistory } from "./asset-history";
@@ -877,15 +877,9 @@ function reportId() {
 ================
 json
 
-JSON for the .zip: Maps and Sets as plain data, binary as its size.
+JSON for the .zip, through archive's shared replacer (diagnosticValue).
 ================
 */
 function json( value: unknown ): string {
-	return JSON.stringify( value, ( _key, item: unknown ) => {
-		if ( item instanceof Map ) return Object.fromEntries( item );
-		if ( item instanceof Set ) return [ ...item ];
-		if ( ArrayBuffer.isView( item ) ) return `[${item.constructor.name}: ${item.byteLength} bytes]`;
-		if ( typeof item === "bigint" ) return item.toString();
-		return item;
-	}, "\t" ) ?? "null";
+	return JSON.stringify( value, diagnosticValue, "\t" ) ?? "null";
 }

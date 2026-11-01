@@ -414,14 +414,23 @@ baseUrl
 						world.enter( command.character, identity.divisionId, identity.transportUrl );
 						cancelTitleRequest();
 						scope = "world";
-					} else {
-						if ( scope !== "world" ) throw new Error( "No active world session" );
-						if ( command.kind === "disconnect" ) world.disconnect();
-						else if ( command.kind === "restart" || command.kind === "exit" ) {
+					} else if ( command.kind === "disconnect" ) {
+						// Legal at any scope: it also cancels a half-open
+						// entry attempt, and it cannot fail.
+						world.disconnect();
+					} else if ( scope === "world" ) {
+						if ( command.kind === "restart" || command.kind === "exit" ) {
 							world.depart( command.kind === "restart" ? 2 : 1 );
 						} else if ( command.kind === "reconnect" ) world.reconnect();
 						else world.ready( command.travelRevision );
 					}
+					// A restart, exit, reconnect or world-ready that finds no
+					// world session (queued ahead of enter-world, or right
+					// after a failed entry) is dropped, not answered: the
+					// "No active world session" it used to publish replaced
+					// the real entry error (7 entry incidents). A successful
+					// entry is followed by a fresh world-ready on the next
+					// travel revision, so nothing waits on the dropped one.
 					publishWorld();
 				} catch ( error ) {
 					publish( { ...state, error: String( error ) } );

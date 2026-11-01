@@ -69,6 +69,10 @@ interface Link {
 const STREAM_ACK_INTERVAL_MS = 1000;
 // A server close reason is free text; the report keeps a short, plain copy.
 const CLOSE_REASON_LENGTH = 64;
+// The WebSocket normal-closure code: with a clean close it is the one
+// goodbye the browser proves (GH #2148) - the peer closed politely and
+// said so, as opposed to a drop the client only notices by silence.
+const WS_NORMAL_CLOSE_CODE = 1000;
 
 /*
 ================
@@ -465,10 +469,17 @@ export function createNetwork(
 				} );
 				return;
 			}
+			// A clean normal close is a goodbye, not a loss: the session
+			// ends as expected (no incident), and the player is told the
+			// session ended rather than that the cause is unknown. Every
+			// other close keeps the one code; the detail line names its
+			// cause (silence, never opened, offline) from the journal
+			// facts above (GH #2148).
+			const goodbye = event.wasClean && event.code === WS_NORMAL_CLOSE_CODE;
 			end( "Transport connection closed", {
-				category: "unknown",
+				category: goodbye ? "expected" : "unknown",
 				code: "connection_closed",
-				message: "Connection lost. The cause is unknown.",
+				message: goodbye ? "Your session ended." : "Connection lost. The cause is unknown.",
 				detail
 			} );
 		};

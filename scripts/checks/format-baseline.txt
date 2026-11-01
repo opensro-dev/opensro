@@ -146,7 +146,6 @@ apps/client-next/src/engine/foundation/ui/resource-error.ts
 apps/client-next/src/engine/foundation/ui/retained-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
-apps/client-next/src/engine/foundation/ui/sound-catalog.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
 apps/client-next/src/engine/foundation/ui/vertical-spin.ts
@@ -349,7 +348,6 @@ scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
 scripts/build/data/buildGInterfaceSectionsAsset.mjs
-scripts/build/data/buildQuestDataAsset.mjs
 scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/server/serverGameDataArchive.mjs

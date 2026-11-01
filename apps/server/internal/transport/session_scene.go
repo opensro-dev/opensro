@@ -12,6 +12,7 @@ package transport
 
 import (
 	"slices"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -125,6 +126,8 @@ func (s *Session) BeginSceneAdmission() {
 	s.mu.Lock()
 	s.sceneRevision++
 	s.sceneLoading = true
+	s.sceneLoadingSince = time.Now()
+	s.sceneBootstrapEnqueued = false
 	s.clearObservedLocked()
 	revision := s.sceneRevision
 	s.mu.Unlock()
@@ -262,6 +265,23 @@ SendSceneUnreliableKeyed
 */
 func (s *Session) SendSceneUnreliableKeyed(revision uint64, opcode uint16, key uint64, payload []byte) error {
 	return s.sendSceneUnreliableKeyed(opcode, key, payload, &revision)
+}
+
+/*
+================
+MarkSceneBootstrapEnqueued
+
+The enter lane calls this after it publishes a refusal answer for the
+current scene (the success path rides the reset batch, which marks
+itself in sendSceneObjectBatch). The keepalive watchdog measures the
+admission against this mark: a scene still unmarked at the entry bound
+has no answer on the wire at all, which is the wedged-entry signature.
+================
+*/
+func (s *Session) MarkSceneBootstrapEnqueued() {
+	s.mu.Lock()
+	s.sceneBootstrapEnqueued = true
+	s.mu.Unlock()
 }
 
 // Initial admission still owns WorldBound hooks; scene-ready only releases
@@ -424,6 +444,9 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		clear(s.lossy)
 		s.lossyKeys = nil
 		s.lossyBytes = 0
+		// The reset batch is this scene's bootstrap: its enqueue below
+		// is the moment the scene has an answer on the wire.
+		s.sceneBootstrapEnqueued = true
 	}
 	for _, frame := range frames {
 		s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})

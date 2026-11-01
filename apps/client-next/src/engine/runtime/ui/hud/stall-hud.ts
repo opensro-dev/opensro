@@ -67,11 +67,36 @@ export const STALL_PROMPT_SIZE = {
 	greeting: [ 420, 144 ],
 	price: [ 308, 148 ]
 } as const;
-// 5A1A40: the price edit takes ten digits, the quantity five.
-const PRICE_DIGITS = 10;
+// 5A1A40: the quantity edit takes five digits.
 const QUANTITY_DIGITS = 5;
-// 5A1D85 -> 5203B0: the native price editor's upper bound.
-const MAX_PRICE = 1000000000;
+// 5A1D85 -> 5203B0: the native price editor's upper bound (ten digits).
+export const STALL_PRICE_LIMIT = 1000000000;
+// Port-only, not native: SRO_RAISED_GOLD_CAPS raises the bound to ten
+// billion, which needs an eleventh digit.
+export const STALL_PRICE_LIMIT_RAISED = 10000000000;
+
+/*
+================
+stallPriceLimit
+
+The price editor's upper bound for the shard's raised-gold-caps rule.
+================
+*/
+export function stallPriceLimit( raisedGoldCaps: boolean ): number {
+	return raisedGoldCaps ? STALL_PRICE_LIMIT_RAISED : STALL_PRICE_LIMIT;
+}
+
+/*
+================
+stallPriceDigits
+
+The price editor's digit width for a cap: ten natively, eleven with the
+raised cap. Both the prompt draft and the published edit control use it.
+================
+*/
+export function stallPriceDigits( limit: number ): number {
+	return String( limit ).length;
+}
 
 export type StallPrompt =
 	| { readonly kind: "title"; readonly text: string; }
@@ -240,10 +265,15 @@ export function stallPromptCommand(
 /*
 ================
 createStallHud
+
+The price editor's cap follows the shard's raised-gold-caps rule; the UI
+sets it again when the world-entry flag arrives.
 ================
 */
-export function createStallHud() {
+export function createStallHud( raisedGoldCaps = false ) {
+	let maxPrice = stallPriceLimit( raisedGoldCaps );
 	let prompt: StallPrompt | null = null;
+	let windowOpen = false;
 	let network = EMPTY_NETWORK;
 	let searchedAt = -Infinity;
 	let chat = "";
@@ -381,11 +411,36 @@ export function createStallHud() {
 		},
 		/*
 		================
+		windowOpened
+
+		CIFStall::ShowWindow (5A0DC0) opens the inventory beside the stall
+		window on every show, owner and visitor alike; true on the frame the
+		window first appears so a later tab switch is not undone.
+		================
+		*/
+		windowOpened( phase: StallState["phase"] | undefined ): boolean {
+			const now = phase === "owner" || phase === "visitor",
+				rising = now && !windowOpen;
+			windowOpen = now;
+			return rising;
+		},
+		/*
+		================
 		prompt
 		================
 		*/
 		prompt(): StallPrompt | null {
 			return prompt;
+		},
+		/*
+		================
+		setRaisedGoldCaps
+
+		The world-entry rule raises or restores the price editor's cap.
+		================
+		*/
+		setRaisedGoldCaps( on: boolean ) {
+			maxPrice = stallPriceLimit( on );
 		},
 		/*
 		================
@@ -400,10 +455,10 @@ export function createStallHud() {
 		type
 
 		Text is clipped to the field; the quantity is clamped to the carried
-		stack and the price to a u32.
+		stack and the price to the shard's price cap.
 		================
 		*/
-		type( field: StallPromptField, raw: string ) {
+		type( field: StallPromptField, raw: string, limit = maxPrice ) {
 			if ( !prompt ) return;
 			if ( field === "text" && (prompt.kind === "title" || prompt.kind === "greeting") ) {
 				prompt = {
@@ -414,8 +469,8 @@ export function createStallHud() {
 				const digits = raw.replace( /[^0-9]/g, "" ).slice( 0, QUANTITY_DIGITS );
 				prompt = { ...prompt, quantity: digits ? String( Math.min( prompt.carried, Number( digits ) ) ) : "" };
 			} else if ( field === "price" && prompt.kind === "price" ) {
-				const digits = raw.replace( /[^0-9]/g, "" ).slice( 0, PRICE_DIGITS );
-				prompt = { ...prompt, price: digits ? String( Math.min( MAX_PRICE, Number( digits ) ) ) : "" };
+				const digits = raw.replace( /[^0-9]/g, "" ).slice( 0, stallPriceDigits( limit ) );
+				prompt = { ...prompt, price: digits ? String( Math.min( limit, Number( digits ) ) ) : "" };
 			}
 		},
 		/*

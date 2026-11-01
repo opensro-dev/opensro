@@ -76,7 +76,9 @@ applyAbnormalModifiers
 
 The abnormal block's writes (source 5, or 0 for frostbite's 8C base
 replacement), applied after every other owner as the callbacks write into
-the live keeper.
+the live keeper. The one caller's graph is its own fresh clone,
+dropped on any error below, so the writes land in place instead of
+copying the whole keeper state per modifier (#2030).
 ==================
 */
 func applyAbnormalModifiers(graph *paramkeeper.Graph, block *abnormal.Block) error {
@@ -87,7 +89,7 @@ func applyAbnormalModifiers(graph *paramkeeper.Graph, block *abnormal.Block) err
 		if !m.Used {
 			continue
 		}
-		if _, err := graph.Apply(m.Param, paramkeeper.Channel(m.Channel), m.Source, m.Value); err != nil {
+		if _, err := graph.ApplyInPlace(m.Param, paramkeeper.Channel(m.Channel), m.Source, m.Value); err != nil {
 			return fmt.Errorf("combat: abnormal write to parameter %d: %w", m.Param, err)
 		}
 	}

@@ -82,14 +82,80 @@ func missionSpawnFromWorld(spawn *enterworld.WorldSpawn, fallback simulation.Spa
 
 /*
 ================
+europeanModel
+
+Whether the character's model is a European race model. The client's
+model codenames split the two races by the CHAR_EU prefix.
+================
+*/
+func europeanModel(character *enterworld.Character) bool {
+	return character != nil && strings.HasPrefix(character.ModelCodename, "CHAR_EU")
+}
+
+/*
+================
 defaultRebirthPoint
+
+The starter position a character entered the world at. It is only the
+fallback when the catalogue lacks the race town gate; it is never the
+return point of a character that can reach that gate.
 ================
 */
 func defaultRebirthPoint(character *enterworld.Character) simulation.Spawn {
-	if character != nil && strings.HasPrefix(character.ModelCodename, "CHAR_EU") {
+	if europeanModel(character) {
 		return simulation.EuropeStartProfile()
 	}
 	return simulation.ChinaStartProfile()
+}
+
+// The race main-town gates a character returns to before it appoints one.
+// teleportbuilding rows STORE_CH_GATE (RefObj 2094) and STORE_EU_GATE
+// (RefObj 19074) name the teleportdata rows GATE_CH (id 1, Jangan, region
+// 25000) and GATE_EU (id 25, Constantinople, region 26959), both
+// recall-eligible. The spawns themselves come from the loaded catalogue.
+const (
+	janganTownGateRef         uint32 = 2094
+	constantinopleTownGateRef uint32 = 19074
+)
+
+/*
+================
+raceTownGateRef
+
+The gate of the character's race main town: the European Constantinople
+gate for a CHAR_EU model and the Chinese Jangan gate otherwise, the same
+race split defaultRebirthPoint uses.
+================
+*/
+func raceTownGateRef(character *enterworld.Character) uint32 {
+	if europeanModel(character) {
+		return constantinopleTownGateRef
+	}
+	return janganTownGateRef
+}
+
+/*
+================
+recallDestination
+
+The town recall spawn of the teleport whose source object is ref, and the
+world it lies in: the same eligibility appointedRebirth applies to an
+appointed gate (the recall column set, a real field region).
+================
+*/
+func (rt *Runtime) recallDestination(ref uint32) (travelPoint, bool) {
+	if rt.portals == nil || ref == 0 {
+		return travelPoint{}, false
+	}
+	id, ok := rt.portals.sources[ref]
+	if !ok {
+		return travelPoint{}, false
+	}
+	destination := rt.portals.destinations[id]
+	if !destination.recall || destination.spawn.RegionID == 0 || destination.spawn.RegionID&0x8000 != 0 {
+		return travelPoint{}, false
+	}
+	return travelPoint{spawn: destination.spawn, world: portalWorld(destination)}, true
 }
 
 /*
@@ -111,9 +177,11 @@ appointedRebirth
 
 The appointed town and the world it lies in. The native town-recall position
 reads the appointed teleport's spawn coordinates,
-which also yields the teleport's GenWorldID. The stored fallback is a field
-position. During a fortress war a PC inside a fortress world revives where
-that world says instead (siege vtable +0x90, fortress_revival.go).
+which also yields the teleport's GenWorldID. Before the first appointment
+that point is the race main-town gate (Jangan or Constantinople), never the
+starter position; the stored fallback is a field position. During a
+fortress war a PC inside a fortress world revives where that world says
+instead (siege vtable +0x90, fortress_revival.go).
 ================
 */
 func (rt *Runtime) appointedRebirth(division string, character *enterworld.Character) travelPoint {
@@ -126,12 +194,16 @@ func (rt *Runtime) appointedRebirth(division string, character *enterworld.Chara
 		return point
 	}
 	world := character.World
-	if rt.portals != nil && world.RebirthGateRefID != 0 {
-		if id, ok := rt.portals.sources[world.RebirthGateRefID]; ok {
-			d := rt.portals.destinations[id]
-			if d.recall && d.spawn.RegionID != 0 && d.spawn.RegionID&0x8000 == 0 {
-				return travelPoint{spawn: d.spawn, world: portalWorld(d)}
-			}
+	if point, ok := rt.recallDestination(world.RebirthGateRefID); ok {
+		return point
+	}
+	// A character that has never appointed a town is registered at its
+	// race's main-town gate; only a catalogue without that gate falls back
+	// to the starter position. INFERENCE: the server binary is not on this
+	// machine; the owner reports this from the original game.
+	if world.RebirthGateRefID == 0 && world.RebirthPoint == nil {
+		if point, ok := rt.recallDestination(raceTownGateRef(character)); ok {
+			return point
 		}
 	}
 	return travelPoint{spawn: missionSpawnFromWorld(world.RebirthPoint, fallback), world: field}

@@ -102,6 +102,11 @@ type NestRow struct {
 	// InitialDir is Tab_RefNest.wInitialDir: the authored heading word used
 	// for uniques and non-monster classes.
 	InitialDir uint16
+	// SpawnType is the database nest's spawn kind, carried only by the
+	// temple population (the outdoor families refuse any nonzero kind at
+	// import). Preserved as a fact on the nest; what the second kind
+	// changes at spawn time is pinned by #1800 step 3 slice 4.
+	SpawnType int
 }
 
 /*

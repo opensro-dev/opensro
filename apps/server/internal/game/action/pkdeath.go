@@ -13,9 +13,9 @@ commits inside the fatal-HP character transaction.
 The kill's other side - the killer's PvP EXP and murder bookkeeping
 (the native PvP kill rewards) - belongs to the player hit path.
 
-INFERENCE: a death with no killer object (a lethal zombie potion, or a
-status the victim inflicted on itself) costs nothing, as the native death finds no
-killer to classify; the port keeps no "last attacker" beyond the hit.
+INFERENCE: a death with no killer object (a status the victim inflicted on
+itself) costs nothing, as the native death finds no killer to classify; the
+port keeps no "last attacker" beyond the hit.
 
 ===========================================================================
 */
@@ -47,6 +47,9 @@ type deathKiller struct {
 	player       *enterworld.Character
 	siege        bool
 	strikerLevel int64
+	// murdererDrain marks the murderer status drain (murdererdrain.go). No
+	// world object dealt the damage, but the death settles as a monster kill.
+	murdererDrain bool
 }
 
 /*
@@ -60,6 +63,11 @@ classified by playerKillKind.
 ================
 */
 func (rt *Runtime) deathKind(division string, victim *enterworld.Character, killer deathKiller) pk.DeathKind {
+	if killer.murdererDrain {
+		// The native drain's hit source is a town guard NPC, so the death
+		// settles as a monster's blow: its relief, loss row and drop roll.
+		return pk.DeathMonster
+	}
 	if killer.siege {
 		return pk.DeathSpecialWorld
 	}

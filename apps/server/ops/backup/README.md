@@ -8,7 +8,7 @@ come from GitHub.
 
 | Where | What | How often |
 | --- | --- | --- |
-| Google Drive (`gdrive:opensro-backups`) | restic repository: encrypted, deduplicated, incremental | nightly, 20:30 UTC |
+| Google Drive (`gdrive:opensro-backups`) | restic repository: encrypted, deduplicated, incremental | nightly, 05:00 UTC |
 | An operator's PC | a copy of that repository, add-only | whenever `pull-backups.ps1` runs |
 
 Retention is 7 daily, 4 weekly and 6 monthly snapshots.

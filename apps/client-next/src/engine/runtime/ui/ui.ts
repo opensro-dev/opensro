@@ -87,6 +87,7 @@ import {
 	storageSlotControlId
 } from "@/engine/foundation/ui/storage-panel";
 import {
+	storageGoldDepositLimit,
 	STORAGE_GOLD_DEPOSIT,
 	STORAGE_GOLD_WITHDRAW,
 	STORAGE_MOVE_DEPOSIT,
@@ -334,6 +335,8 @@ import { createExchangeHud } from "./hud/exchange-hud";
 import {
 	createStallHud,
 	stallNetworkOrder,
+	stallPriceDigits,
+	stallPriceLimit,
 	stallPromptCommand,
 	stallPromptLive,
 	STALL_CELL_INSET,
@@ -491,6 +494,8 @@ import {
 	partyActiveJob,
 	partyPurposeAllowed,
 	partyDefaultPurpose,
+	partyFormTitle,
+	PARTY_TITLE_MAX_LENGTH,
 	type PartyListing
 } from "@/engine/foundation/gameplay/party-matching";
 import { NATIVE_LEVEL_CAP } from "@/engine/foundation/gameplay/level-cap";
@@ -849,6 +854,9 @@ const FRAME = ROOT + "interface/frame/mframe_wnd_";
 const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const PARTY_MATCH_VISIBLE_ROWS = 12;
+// The properties dialog (ifsetpartymode) lists Auto Share above Distribution
+// in both radio groups: row 0 sets the share bit, row 1 clears it.
+const PARTY_SETTING_ROW_SHARE = 0;
 // 63D500 tints all eight slot children (ids 10-17, the MARK icon included)
 // 0xFF87E9FF for the own listing. Port-only, not native: members get the tint
 // on their leader's listing too.
@@ -1023,6 +1031,9 @@ export interface UiExtensions {
 	// and the build's stamped revision are used.
 	mallNoticeStorage?: Pick<Storage, "getItem" | "setItem"> | null;
 	clientRevision?: string;
+	// Port-only, not native: the icon atlas installs through the renderer's
+	// quad packer (foundation/ui/icon-atlas.ts).
+	installIconAtlas?: ( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ) => void;
 }
 
 /*
@@ -1487,7 +1498,8 @@ export function createUi(
 		serverOffset = 0,
 		hover: string | null = null,
 		pressed: string | null = null;
-	const text = createUiText( assets, base ), resources = createUiAssets( assets, texture, base );
+	const text = createUiText( assets, base ),
+		resources = createUiAssets( assets, texture, base, undefined, extensions.installIconAtlas );
 	let diagnosticError: string | null = null;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;
@@ -3152,6 +3164,10 @@ export function createUi(
 	/*
 	================
 	openStallPrompt
+
+	CIFStall_OpenTextInput (5A1A40) builds the price box (528670 mode 10) and
+	focuses the price edit (5A1D9B -> A01100), not the quantity, so a fresh
+	offer's price is typed at once.
 	================
 	*/
 	function openStallPrompt( prompt: StallPrompt ) {
@@ -4350,9 +4366,10 @@ export function createUi(
 			partyOptions = partyDraft;
 			partySettings = false;
 		} else if ( id.startsWith( "party-setting:" ) ) {
-			const [bit, value] = id.slice( 14 ).split( ":" ).map( Number );
-			if ( bit === 1 || bit === 2 ) partyDraft = (partyDraft & ~bit) | (value ? bit : 0);
-			else if ( bit === 4 ) partyDraft ^= 4;
+			const [bit, row] = id.slice( 14 ).split( ":" ).map( Number );
+			if ( bit === 1 || bit === 2 ) {
+				partyDraft = (partyDraft & ~bit) | (row === PARTY_SETTING_ROW_SHARE ? bit : 0);
+			} else if ( bit === 4 ) partyDraft ^= 4;
 		} else if ( id.startsWith( "party-option:" ) ) partyOptions ^= Number( id.slice( 13 ) );
 		else if ( id.startsWith( "social-member:" ) ) {
 			socialMember = Number( id.slice( 14 ) );
@@ -4633,6 +4650,9 @@ export function createUi(
 					max: String( view.gameplay?.levelCap ?? NATIVE_LEVEL_CAP ),
 					title: ""
 				};
+			// 63BE00 runs once the job-based purpose is selected (63C20B /
+			// 63C2D8): the box opens on the purpose's default title.
+			partyForm.title = partyFormTitle( partyForm.title, partyForm.purpose, hud.data()?.strings ?? {} );
 		} else if ( id === "party-match:20" ) partyDialog = "delete";
 		else if ( id === "party-match:17" ) partyDialog = "auto";
 		else if ( id === "party-auto-stop" ) sendGameplay( { kind: "party-match-auto-stop" } );
@@ -4648,6 +4668,9 @@ export function createUi(
 			const purpose = Number( id.slice( 19 ) );
 			if ( partyPurposeAllowed( partyActiveJob( view.gameplay?.inventory ?? [] ), purpose ) ) {
 				partyForm.purpose = purpose;
+				// 63BE00 is also the radio's handler (data 0xBB6DE8): a default
+				// title follows the new purpose, a typed one stays.
+				partyForm.title = partyFormTitle( partyForm.title, purpose, hud.data()?.strings ?? {} );
 			}
 		} else if ( id === "party-form-confirm" ) {
 			if ( partyDialog === "delete" ) {
@@ -5510,12 +5533,15 @@ export function createUi(
 			}
 		} else if ( id === "drop-gold" && view.gameplay && (goldDialog === "deposit" || goldDialog === "withdraw") ) {
 			// 59A430 caps warehouse deposits at min(carriedGold, 100_000_000);
+			// SRO_RAISED_GOLD_CAPS raises the deposit cap to 1,000,000,000.
 			// 59C510 closes the modal without sending when amount <= 0, as the
 			// exchange branch above does: an unsendable amount used to leave
 			// the dialog sitting open with no answer (BR-261022-2026-ED06).
 			const amount = Number( goldAmount ),
 				balance = goldDialog === "withdraw" ? view.gameplay.storage?.gold : view.gameplay.progression?.gold,
-				cap = goldDialog === "deposit" ? 100000000 : 0xffffffff;
+				cap = goldDialog === "deposit" ?
+					Number( storageGoldDepositLimit( view.gameplay.raisedGoldCaps === true ) ) :
+					0xffffffff;
 			if ( !/^\d+$/.test( goldAmount ) || amount === 0 ) {
 				goldDialog = false;
 				focus = null;
@@ -8624,7 +8650,7 @@ export function createUi(
 					}
 				} else if ( event.id.startsWith( "party-form-" ) ) {
 					const key = event.id.slice( 11 );
-					if ( key === "title" ) partyForm.title = event.value.slice( 0, 50 );
+					if ( key === "title" ) partyForm.title = event.value.slice( 0, PARTY_TITLE_MAX_LENGTH );
 					else if ( key === "min" || key === "max" ) {
 						partyForm[key] = event.value.replace( /[^0-9]/g, "" ).slice( 0, 3 );
 					}
@@ -8687,14 +8713,16 @@ export function createUi(
 				} else if ( event.id === "gold-amount" ) {
 					// A withdrawal draws on the warehouse, so its draft clamps to the
 					// room's gold; the drop, exchange and deposit spend the bag's
-					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal), and
-					// 59A430 caps a warehouse deposit at 100,000,000 (0x5f5e100).
+					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal),
+					// and 59A430 caps a warehouse deposit at 100,000,000
+					// (0x5f5e100). SRO_RAISED_GOLD_CAPS raises that cap.
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
 						carried = BigInt( view?.gameplay?.progression?.gold ?? 0 ),
+						depositCap = storageGoldDepositLimit( view?.gameplay?.raisedGoldCaps === true ),
 						limit = goldDialog === "withdraw" ?
 							BigInt( view?.gameplay?.storage?.gold ?? 0 ) :
-							goldDialog === "deposit" && carried > 100000000n ?
-							100000000n :
+							goldDialog === "deposit" && carried > depositCap ?
+							depositCap :
 							carried;
 					goldAmount = raw ? String( BigInt( raw ) > limit ? limit : BigInt( raw ) ) : "";
 					confirmDrop = "";
@@ -9246,7 +9274,22 @@ export function createUi(
 			// The stall prompts follow the stall: naming opens the title entry
 			// with the default title (5A1DF0 mode 1); a stall that moved on
 			// closes its prompt.
+			stallHud.setRaisedGoldCaps( next.gameplay?.raisedGoldCaps === true );
 			const stallState = next.gameplay?.stall, stallPrompt = stallHud.prompt();
+			// CIFStall::ShowWindow 5A0DC0 -> CGInterface 69C7C0 shows the main popup
+			// and selects the inventory tab (589960 tab 0x46) whenever the stall
+			// window appears. 69C7C0 touches only the main popup, so a separate
+			// window outside it (Guild, Option, the map...) is not closed by the
+			// native client. Port inference: one exclusive panel slot cannot draw
+			// the main popup beside such a window, so the window is kept as it
+			// stands. Edge-triggered so the player may still switch tabs.
+			if (
+				stallHud.windowOpened( stallState?.phase ) && panel !== "Inventory" &&
+				(panel === "" || MAIN_POPUP_PANELS.includes( panel ))
+			) {
+				setPanel( "Inventory" );
+				dirty = true;
+			}
 			const stallChat = stallHud.observeChat( stallState, next.gameplay?.chat?.lines ?? [] );
 			if ( stallChat.cleared || stallChat.appended ) {
 				stallChatScroll.reset();
@@ -10774,7 +10817,14 @@ export function createUi(
 				}
 				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
 				if ( focus === id && caretVisible ) {
-					rect( [ ink[0] + offset + caret - scroll, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
+					// A right-aligned empty edit puts the caret on the clip's right
+					// edge, which the clip excludes; keep the native-looking caret
+					// one pixel inside so 5A1A40's focused price edit stays visible.
+					const caretX = Math.min(
+						ink[0] + ink[2] - EDIT_CARET_WIDTH,
+						Math.max( ink[0], ink[0] + offset + caret - scroll )
+					);
+					rect( [ caretX, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
 						0,
 						0,
 						1,
@@ -14559,7 +14609,10 @@ export function createUi(
 								const bit = node.id === 13 ? 1 : node.id === 14 ? 2 : 4;
 								for ( let row = 0; row < (bit === 4 ? 1 : 2); row++ ) {
 									const r: UiRect = [ sx + node.rect[0], sy + node.rect[1] + row * 22, 16, 16 ],
-										on = bit === 4 ? !!(partyDraft & 4) : Number( !!(partyDraft & bit) ) === row,
+										shared = !!(partyDraft & bit),
+										on = bit === 4 ?
+											shared :
+											shared === (row === PARTY_SETTING_ROW_SHARE),
 										path = ROOT + "interface/ifcommon/com_radiobutton_" + (on ? "on" : "off") +
 											".png";
 									image( r, path );
@@ -14567,7 +14620,7 @@ export function createUi(
 										hudCopy( "UIIT_STT_PARTY_INVITATION_ANYONE" ) :
 										hudCopy(
 											"UIIT_STT_PARTY_" + (bit === 1 ? "EXP" : "ITEM") + "_" +
-												(row ? "SHARE" : "SELF")
+												(row === PARTY_SETTING_ROW_SHARE ? "SHARE" : "SELF")
 										);
 									controls.push( {
 										id: "party-setting:" + bit + ":" + row,
@@ -18830,6 +18883,10 @@ export function createUi(
 						paths.push( background );
 						const backgroundSize = resources.size( background );
 						if ( backgroundSize ) image( [ ox, oy, backgroundSize[0], backgroundSize[1] ], background );
+						// CIFStallSlot (5A2FED..5A3052) is the whole cell: 0x5A14C0
+						// accepts a drop anywhere on its ifstallslot.txt window and
+						// 5A11C0 reads the index from it, not only the 32x32 icon.
+						const cellRect: UiRect = backgroundSize ? [ ox, oy, backgroundSize[0], backgroundSize[1] ] : r;
 						nativePage( cell, ox, oy, [ 2, 3, 4, 5 ] );
 						const icon = offer ? iconPath( offer.item.icon ) : null;
 						if ( offer && icon ) {
@@ -18851,11 +18908,13 @@ export function createUi(
 						controls.push( {
 							id: "stall-slot:" + slot,
 							label: offer?.item.name ?? "Stall slot " + slot,
-							rect: r,
+							rect: cellRect,
 							kind: "button",
 							disabled: !offer && !(owner && !state.open),
 							draggable: owner && !state.open && !!offer
 						} );
+						// GDR_STALLSLOT_MODIFY is added after the slot, so it stays
+						// topmost over the cell's top-right corner.
 						if ( offer ) {
 							authoredButton(
 								part( 5 ),
@@ -22137,7 +22196,14 @@ export function createUi(
 							authoredLabeledButton( node, px, py, id, caption );
 						} else if ( node.type === "CIFEdit" ) {
 							const key = node.id === 49 ? "title" : node.id === 42 ? "min" : "max";
-							partyEdit( node, px, py, "party-form-" + key, partyForm[key], key === "title" ? 50 : 3 );
+							partyEdit(
+								node,
+								px,
+								py,
+								"party-form-" + key,
+								partyForm[key],
+								key === "title" ? PARTY_TITLE_MAX_LENGTH : 3
+							);
 						} else if ( automatic && node.type === "CIFRadioButton" ) {
 							const key = node.id === 35 ?
 									"purpose" :
@@ -24519,7 +24585,15 @@ export function createUi(
 					authoredImage( at( 3 ), x, y );
 					if ( icon ) image( authoredRect( at( 12 ), x, y ), icon );
 					partyEdit( at( 3 ), x, y, STALL_PROMPT_QUANTITY, stallBox.quantity, 5, true );
-					partyEdit( at( 11 ), x, y, STALL_PROMPT_PRICE, stallBox.price, 10, true );
+					partyEdit(
+						at( 11 ),
+						x,
+						y,
+						STALL_PROMPT_PRICE,
+						stallBox.price,
+						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
+						true
+					);
 					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}

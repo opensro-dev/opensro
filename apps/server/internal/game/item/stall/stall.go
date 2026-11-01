@@ -56,7 +56,7 @@ type Slot struct {
 	BagSlot  uint8
 	RefObjID uint32
 	Quantity uint16
-	Price    uint32
+	Price    uint64
 	Category uint32
 	// Body is the item's encoded body when listed, at a count of one: an
 	// item rewritten in place (plus, options) no longer matches it.

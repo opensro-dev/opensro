@@ -53,8 +53,10 @@ test("a .texture path loads as its native texture, a .png path as an image", () 
 	const tile = "/assets/images/Media_extracted/minimap/1x1.texture",
 		icon = "/assets/images/Media_extracted/icon/a.png";
 	loader.step( [ tile, icon ], 0 );
-	assert.deepEqual( requests.map( r => r.decode ), [ undefined, "png" ] );
-	results.set( 1, { kind: "bytes", buffer: ntx1( 256, 256 ) } );
+	// The icon atlas manifest is requested before either path (#2070); the
+	// tile follows as container bytes, the icon as a PNG decode.
+	assert.deepEqual( requests.map( r => r.decode ), [ undefined, undefined, "png" ] );
+	results.set( 2, { kind: "bytes", buffer: ntx1( 256, 256 ) } );
 	loader.step( [ tile, icon ], 1 );
 	const [id, native] = published.at( -1 );
 	assert.equal( id, tile );

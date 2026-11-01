@@ -228,6 +228,50 @@ func packetBytes(p Packet) []byte {
 	return out
 }
 
+// defaultSlowEnterThreshold is the handler duration that earns the
+// "bootstrap: slow enter world" phase log when deps.SlowEnterThreshold
+// is unset. Completed entries in production finish in well under a
+// second; five seconds sits far above the worst legitimate build and
+// far below the client's own admission patience, so a firing line
+// always names a real wait.
+const defaultSlowEnterThreshold = 5 * time.Second
+
+// defaultGateWaitBound is the publication-gate wait that abandons an
+// entry when deps.GateWaitBound is unset. A legitimate gate hold is
+// another entry's build and publish, sub-second even in the slowest
+// measured entries; ten seconds is the client's own admission
+// patience, so a wait past it is a wedge, not slowness, and the entry
+// is worth more as a log line than as a silently parked handler.
+const defaultGateWaitBound = 10 * time.Second
+
+/*
+================
+acquireEnterGate
+
+Take the division publication gate for one entry, giving up when the
+session closes or the bound passes. The gate is taken before scene
+admission, so a handler parked on it is invisible to both the
+bootstrap watchdog and the slow-entry log; abandoning the entry
+unanswered leaves the wait in the log instead, and the client
+retries. The deferred taker still releases the gate when it frees,
+so an abandoned wait never wedges the queue behind it.
+================
+*/
+func acquireEnterGate(lock func(string, string) func(), division string, done <-chan struct{}, bound time.Duration) (func(), bool) {
+	acquired := make(chan func(), 1)
+	go func() { acquired <- lock(division, "enterWorld") }()
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	select {
+	case unlock := <-acquired:
+		return unlock, true
+	case <-done:
+	case <-timer.C:
+	}
+	go func() { (<-acquired)() }()
+	return nil, false
+}
+
 // RegisterEnterWorld registers the OpEnterWorld (0x0006) handler: decode,
 // bootstrap, answer OpEnterWorldResult (0x0007), bind the session identity,
 // then push the bootstrap packets as native frames in order. All frames ride
@@ -243,14 +287,44 @@ RegisterEnterWorld
 func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 	hub.Handle(transport.OpEnterWorld, func(s *transport.Session, _ uint16, payload []byte) {
 		admission := *deps
+		enteredAt := time.Now()
+		slowThreshold := deps.SlowEnterThreshold
+		if slowThreshold <= 0 {
+			slowThreshold = defaultSlowEnterThreshold
+		}
+		gateBound := deps.GateWaitBound
+		if gateBound <= 0 {
+			gateBound = defaultGateWaitBound
+		}
+		var requestName string
+		var gateWait time.Duration
 		// Acquire before invalidating the old scene. A committed pickup must
 		// publish before this replacement snapshot, including entry refills.
 		if deps.LockPublication != nil {
 			if request, err := transport.DecodeEnterWorld(payload); err == nil {
+				requestName = request.CharName
 				division := resolveBootstrapDivision(deps, request.Division)
 				admission.ResolveDivisionID = func(string) string { return division }
 				if division != "" {
-					unlock := deps.LockPublication(division, "enterWorld")
+					unlock, ok := acquireEnterGate(deps.LockPublication, division, s.Done(), gateBound)
+					gateWait = time.Since(enteredAt)
+					if !ok {
+						// The client leaving needs no name; a live
+						// session abandoned at the gate is the wedge
+						// this bound exists to expose.
+						select {
+						case <-s.Done():
+						default:
+							log.WithFields(log.Fields{
+								"session":   s.DiagnosticSessionID(),
+								"character": requestName,
+								"division":  division,
+								"waited_ms": gateWait.Milliseconds(),
+								"bound_ms":  gateBound.Milliseconds(),
+							}).Warn("bootstrap: enter world abandoned at the publication gate")
+						}
+						return
+					}
 					defer unlock()
 				}
 			}
@@ -320,6 +394,24 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			}).Warn("bootstrap: atomic admission delivery failed")
 		} else {
 			published = outcome.OK
+			// The scene has its answer on the wire (bootstrap or
+			// refusal): the transport's unenqueued-window watchdog
+			// stands down for this admission.
+			s.MarkSceneBootstrapEnqueued()
+		}
+		// A slow entry names its phases while the trail is warm: the
+		// gate wait, the build and the publish all hide behind the same
+		// silent loading screen from the player's side, and completed
+		// entries are otherwise invisible beyond a histogram bucket.
+		if elapsed := time.Since(enteredAt); elapsed >= slowThreshold {
+			log.WithFields(log.Fields{
+				"session":   s.DiagnosticSessionID(),
+				"character": requestName,
+				"division":  outcome.DivisionID,
+				"gate_ms":   gateWait.Milliseconds(),
+				"total_ms":  elapsed.Milliseconds(),
+				"ok":        outcome.OK,
+			}).Warn("bootstrap: slow enter world")
 		}
 	})
 }
@@ -384,6 +476,13 @@ func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 
 // OpcodeGameReady is the C->S game-ready trigger (agentGameReadyOpcode).
 const OpcodeGameReady uint16 = 0x3012
+
+// OpcodeResetClientAck is the client's empty answer to OpcodeResetClient
+// (0x3369): the native handler sub_74b880 sends 0x36DD first, then applies
+// the reset. Native capture shows no server response and no state riding
+// on it - a bare acknowledgement the native server ignores
+// (research/docs/reverse-engineering/gateway/GatewayProtocol.md).
+const OpcodeResetClientAck uint16 = 0x36DD
 
 // ConsentAnswerLength is the body of the native client's only 0x3012
 // send: the confirm-box answer {u32, u32, u8} (NetClient 701A50 from
@@ -467,6 +566,23 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 	})
 }
 
+/*
+================
+RegisterResetClientAck
+
+Takes the 0x36DD reset acknowledgement and drops it, the native server's
+own posture. Registering the deliberate ignore matters: an unregistered
+ack lands in the unhandled-opcode counter once per scene reset (#2147),
+once per world entry and teleport, which is exactly the noise that hid
+opcodes nobody had explained yet.
+================
+*/
+func RegisterResetClientAck(hub *transport.Hub) {
+	hub.Handle(OpcodeResetClientAck, func(s *transport.Session, _ uint16, _ []byte) {
+		log.Debugf("bootstrap: reset-client ack from session %d ignored", s.ID)
+	})
+}
+
 // Register wires every bootstrap-lane handler onto the hub.
 /*
 ================
@@ -476,6 +592,7 @@ Register
 func Register(hub *transport.Hub, deps *Deps) {
 	RegisterEnterWorld(hub, deps)
 	RegisterGameReady(hub, deps)
+	RegisterResetClientAck(hub)
 	RegisterQuickSlotBindings(hub, deps)
 	RegisterEventGuideAck(hub, deps)
 	RegisterStallNetworkLeave(hub, deps)

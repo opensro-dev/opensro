@@ -202,6 +202,12 @@ func newGameplayPlane(
 	if items.SunEventOnly.Enabled() {
 		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
 	}
+	// SRO_HALLOWEEN_EVENT (port-only, not native in this client build):
+	// the Halloween Day event's switch and UTC window (wiring_halloween.go).
+	items.Halloween = halloweenEventFromEnv()
+	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
+	// helmets stay sealed at the transfer doors after the event.
+	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -511,70 +517,6 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 
 /*
 ================
-connectInvitationLanes
-
-Shares the single outstanding-consent rule across party, guild, mentor,
-and resurrection invitations without moving their state ownership.
-================
-*/
-func connectInvitationLanes(
-	parties *party.Runtime,
-	guildInvites *guild.InviteRuntime,
-	unions *guild.UnionRuntime,
-	mentorInvites *mentor.InviteRuntime,
-	items *action.Runtime,
-) {
-	resurrections := items.ResurrectionConsent()
-	exchanges := items.ExchangeConsent()
-	instanceInvites := items.InstanceInviteConsent()
-	parties.AddConsentArm(exchanges)
-	parties.AddConsentArm(guildInvites)
-	parties.AddConsentArm(unions)
-	parties.AddConsentArm(mentorInvites)
-	parties.AddConsentArm(resurrections)
-	parties.AddConsentArm(instanceInvites)
-
-	// A player holds one unanswered proposal at a time, whatever its
-	// lane (the server's unique transaction insert): every lane refuses to
-	// propose while another's proposal waits.
-	partyPending := parties.Registry().HasPendingInviteFor
-	guildInvites.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	unions.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	mentorInvites.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	items.ProposalPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	parties.PartyChanged = items.NotePartyChanged
-}
-
-/*
-================
 register
 
 Installs validated cross-owner callbacks before registering transport
@@ -654,6 +596,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()
 	if game.items.TraderCargoDrop {
 		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
+	}
+	// Port-only, not native: ten-billion stall prices and billion-gold warehouse deposits.
+	game.items.RaisedGoldCaps = action.RaisedGoldCapsFromEnv()
+	game.deps.RaisedGoldCaps = game.items.RaisedGoldCaps
+	if game.items.RaisedGoldCaps {
+		log.Infof("trade: stall prices to %d and warehouse deposits to %d ON (%s)",
+			action.RaisedStallPriceLimit, action.RaisedStorageGoldDepositLimit, action.EnvRaisedGoldCaps)
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers
@@ -843,6 +792,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}

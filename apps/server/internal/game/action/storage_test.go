@@ -162,6 +162,52 @@ func TestStorageRefusesUnstorableItemsAndOverdrafts(t *testing.T) {
 
 /*
 ================
+TestStorageGoldDepositCaps
+
+Off, one deposit moves at most the native 100,000,000. On, a
+1,000,000,000 deposit is accepted and one above the raised cap is
+refused. The guild warehouse shares storageMutation, so it shares this.
+================
+*/
+func TestStorageGoldDepositCaps(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		on       bool
+		amount   uint32
+		accepted bool
+	}{
+		{"off native ceiling", false, 100_000_000, true},
+		{"off above native", false, 100_000_001, false},
+		{"on one billion", true, 1_000_000_000, true},
+		{"on above raised", true, 1_000_000_001, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, c, authority := storageFixture(t)
+			rt.RaisedGoldCaps = tc.on
+			setGold(c, 2_000_000_000)
+			// The test's encoder applies the native client's 100,000,000
+			// clamp, so the payload is written by hand: the server must
+			// refuse a larger amount on its own.
+			r := rt.HandleItemMove(testDivision, c, []byte{
+				wire.MoveTypeStorageGoldDeposit,
+				byte(tc.amount), byte(tc.amount >> 8), byte(tc.amount >> 16), byte(tc.amount >> 24),
+			})
+			accepted := r.Frames[0].Payload[0] == 1
+			if accepted != tc.accepted {
+				t.Fatalf("deposit %d answered % X, want accepted=%v", tc.amount, r.Frames[0].Payload, tc.accepted)
+			}
+			if tc.accepted && authority.room.Gold != int64(tc.amount) {
+				t.Fatalf("room gold %d, want %d", authority.room.Gold, tc.amount)
+			}
+			if !tc.accepted && authority.room.Gold != 0 {
+				t.Fatalf("refused deposit changed the room to %d", authority.room.Gold)
+			}
+		})
+	}
+}
+
+/*
+================
 TestStorageFollowsTheNpcRangeAndFunctionState
 
 The room list takes the hit-range gate and answers too far; moves need

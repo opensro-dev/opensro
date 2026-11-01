@@ -70,11 +70,14 @@ func TestCorePackageBoundaries(t *testing.T) {
 	// identity table the monster catalog maps tomb rows through, and the
 	// world catalogue derives its registered definitions from.
 	checkPackageImports(t, root, modulePath, "internal/game/world/pharaohtomb", nil, false)
+	// The temple band worlds (port-only): the same leaf shape again.
+	checkPackageImports(t, root, modulePath, "internal/game/world/temple", nil, false)
 	checkPackageImports(t, root, modulePath, "internal/game/world/monster", map[string]bool{
 		modulePath + "/internal/domain":                 true,
 		modulePath + "/internal/game/world":             true,
 		modulePath + "/internal/game/world/alexandria":  true,
 		modulePath + "/internal/game/world/pharaohtomb": true,
+		modulePath + "/internal/game/world/temple":      true,
 		modulePath + "/internal/data/texttable":         true,
 		modulePath + "/internal/game/abnormal":          true,
 		modulePath + "/internal/game/paramkeeper":       true,

@@ -20,13 +20,13 @@ const monsterTestDivision = "DIV_A"
 // departure).
 const monsterTestRegion = 0x60a8
 
-func monsterInstanceByRef(t *testing.T, registry *MonsterState, refObjID uint32) monster.Instance {
+func monsterInstanceByRef(t testing.TB, registry *MonsterState, refObjID uint32) monster.Instance {
 	t.Helper()
 	return monsterInstanceByRefIn(t, registry, refObjID, monsterTestRegion)
 }
 
 // monsterInstanceByRefIn is monsterInstanceByRef for a population in region.
-func monsterInstanceByRefIn(t *testing.T, registry *MonsterState, refObjID uint32, region uint16) monster.Instance {
+func monsterInstanceByRefIn(t testing.TB, registry *MonsterState, refObjID uint32, region uint16) monster.Instance {
 	t.Helper()
 	registry.StartDivision(monsterTestDivision)
 	registry.AdvancePopulation(registry.CurrentTimeMillis())
@@ -39,14 +39,14 @@ func monsterInstanceByRefIn(t *testing.T, registry *MonsterState, refObjID uint3
 	return monster.Instance{}
 }
 
-func monsterLegFixture(t *testing.T, tactics monster.Tactics) (*MonsterMoverOps, monster.Instance) {
+func monsterLegFixture(t testing.TB, tactics monster.Tactics) (*MonsterMoverOps, monster.Instance) {
 	t.Helper()
 	return monsterLegFixtureIn(t, tactics, monsterTestRegion)
 }
 
 // monsterLegFixtureIn is monsterLegFixture with its nests in region (a
 // cave region puts the actor on the cave plane).
-func monsterLegFixtureIn(t *testing.T, tactics monster.Tactics, region uint16) (*MonsterMoverOps, monster.Instance) {
+func monsterLegFixtureIn(t testing.TB, tactics monster.Tactics, region uint16) (*MonsterMoverOps, monster.Instance) {
 	t.Helper()
 	template := monster.Template{
 		Refs: map[uint32]monster.MonsterRef{

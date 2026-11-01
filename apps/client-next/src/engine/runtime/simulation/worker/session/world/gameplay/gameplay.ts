@@ -350,6 +350,13 @@ interface WorldReferences {
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
+// How long one reference frame vouches for answers queued behind it: the
+// flat answer deadline, so the wait restarts at each frame (#2148).
+const REFERENCE_ANSWER_HOLD_MS = 10000;
+// How far references can carry one answer in all, from the first frame that
+// held it: the movement receipt's backstop, so an endless stream cannot keep
+// a lost answer open forever.
+const REFERENCE_ANSWER_LIMIT_MS = 90000;
 
 // PICKUP_EXECUTE_RANGE lives in approach-goal.ts, its one owner.
 // The payload of a journal row no frame carried (a world entry, the tick).
@@ -461,6 +468,7 @@ export function createGameplay(
 	let jobSuitHidesArmor = false;
 	// The server's port-only Moonlit Ash thief suit rule (moonlitThiefSuit).
 	let moonlitThiefSuit = false;
+	let raisedGoldCaps = false; // Port-only SRO_RAISED_GOLD_CAPS: the raised stall and warehouse caps.
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -1645,6 +1653,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			moonlitThiefSuit = (value as { moonlitThiefSuit?: unknown; } | null)?.moonlitThiefSuit === true;
+			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -3454,6 +3463,22 @@ state here before a command can claim a native wire conversation.
 		},
 		/*
 ================
+referenceProgress
+
+The scene's reference frames (opcode 14) fill the ordered stream after
+game-ready: over 2 MB, more than 10 s on a slow link. Every answer sent
+after them waits behind them. Core handles these frames apart from the
+gameplay receive path, so they must say here that the link is delivering,
+or a slow link reads as a lost answer and resumes, and the resume sends
+the references again (#2148).
+================
+		*/
+		referenceProgress( now: number ) {
+			movement.noteInboundProgress( now );
+			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
+		},
+		/*
+================
 references
 ================
 		*/
@@ -5220,6 +5245,7 @@ The published plane when something changed since the last take, else null.
 				...(tradeTiers ? { tradeTiers } : {}),
 				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(moonlitThiefSuit ? { moonlitThiefSuit } : {}),
+				...(raisedGoldCaps ? { raisedGoldCaps } : {}),
 				...(homingProjectiles ? { homingProjectiles } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
