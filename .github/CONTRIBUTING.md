@@ -93,6 +93,8 @@ Also:
   data, native capture, or inference (stated in a code comment). A claim
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
+  The `native-claims` check fails a change whose new source comments cite a
+  client address while this table has no rows.
 - **Say whether an open browser tab still copes.** A release that keeps the
   browser protocol leaves every open tab running the old client. The release
   tool refuses such a release while a commit since the live client changes
