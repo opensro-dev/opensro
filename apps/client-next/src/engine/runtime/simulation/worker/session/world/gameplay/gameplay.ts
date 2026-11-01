@@ -4482,20 +4482,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					const next = frame.payload[1] === 0x15 ?
 						cosGrantResult( record, frame.payload, cosItemRefs ) :
 						cosRemovalResult( record, frame.payload );
-					// A grant (0x15, source 3) prints the pet bag's item line
-					// for a new row only: a merge into an existing stack
-					// stays silent, as a player-bag grant does (#2258). The
-					// removal (0x16) never prints.
-					if ( frame.payload[1] === 0x15 && frame.payload[6] !== 254 ) {
-						const slot = frame.payload[6]!,
-							before = record.inventory?.find( row => row.slot === slot ),
-							after = next.inventory?.find( row => row.slot === slot ),
-							notice = before ? null : pickupNotice(
-								undefined,
-								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name }
-							);
-						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					}
+					// Both print nothing: 756CF0's pet branch (window 0x7A) prints for
+					// source 0 only, and a grant is source 3 (#2258).
 					cosRecords.set( gid, next );
 					cosPickup.spaceChanged( gid );
 					dirty = true;

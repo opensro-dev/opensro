@@ -88,10 +88,9 @@ test("a pet's ground pickup prints the bag's item line, and its gold prints none
 	assert.equal( owner.take()?.notices?.at( -1 )?.sequence ?? merged?.sequence, merged?.sequence );
 });
 test("a server grant fills the pet bag and a removal takes from it (#2258)", () => {
-	// 756CF0's pet branch (window 0x7A, source 3): a grant (0x15) prints the
-	// pet bag's item line for a new row only; a merge into an existing stack
-	// stays silent, as a player-bag grant does. The removal (0x16) never
-	// prints. Nothing here settles a client request: both are server-initiated.
+	// 756CF0's pet branch (window 0x7A) prints for source 0 only, so neither
+	// a grant (0x15, source 3) nor a removal (0x16) prints. Nothing here
+	// settles a client request: both are server-initiated.
 	const { owner, initial } = fixture();
 	assert.deepEqual( initial.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 30 ], [ 1, 40 ] ] );
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 3, ...u32( 8 ), 5, 0 ] ) }, 1 );
@@ -100,11 +99,8 @@ test("a server grant fills the pet bag and a removal takes from it (#2258)", () 
 		3,
 		5
 	] ] );
-	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
-		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
-		5
-	] );
-	const granted = s.notices?.at( -1 )?.sequence;
+	const granted = initial.notices?.at( -1 )?.sequence;
+	assert.equal( s.notices?.at( -1 )?.sequence, granted );
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 0, ...u32( 8 ), 45, 0 ] ) }, 2 );
 	s = owner.take();
 	assert.deepEqual( s.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 45 ], [ 1, 40 ], [
