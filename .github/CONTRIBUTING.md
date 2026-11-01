@@ -95,7 +95,8 @@ Also:
   corrects the old text.
 - **A player note belongs in a commit message.** Patch notes read the
   `Player-note:` trailer of the merged commit, so a note left only in the pull
-  request's text never reaches players.
+  request's text never reaches players. `Player-note-retract: #<pr>` withdraws
+  every note of that pull request, so restate the ones that stay.
 - **Say whether an open browser tab still copes.** A release that keeps the
   browser protocol leaves every open tab running the old client. A commit
   that changes what a tab receives or decodes carries the trailer
