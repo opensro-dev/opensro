@@ -518,6 +518,9 @@ type Runtime struct {
 	// native in this client build; progression/halloween.go). The zero
 	// value is off: no box drops, no So-ok exchange, no cleanup.
 	Halloween progression.HalloweenEvent
+	// halloweenWavesAsked is the last instant advanceHalloweenWaves asked
+	// the timetable about; the tick goroutine alone touches it.
+	halloweenWavesAsked time.Time
 	// HalloweenHelmetSeal seals the event helmets at the transfer doors
 	// (port-only, not native; progression/halloween.go). The zero value
 	// is off: the helmets move like any item.
