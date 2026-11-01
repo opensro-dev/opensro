@@ -20,9 +20,7 @@ const { createGameplay } = await import(
 const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
 const {
 	createNoticeBanner,
-	notificationBannerPaths,
-	SUN_DROP_BANNER_COLOR,
-	SUN_DROP_BANNER_TEXT_RGB
+	notificationBannerPaths
 } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
 const { chatLineText, chatLineColor } = await import( "../../src/engine/foundation/ui/chat-presentation.ts" );
 test("server refusal reaches the independent native red notice and pink chat log", () => {
@@ -314,9 +312,9 @@ test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while
 	const banner = createNoticeBanner( "notificationBanner" );
 	banner.step( [ { ...sunNotice, sequence: 1 } ], 100, true );
 	assert.equal( banner.sunDrop(), true );
-	assert.deepEqual( SUN_DROP_BANNER_COLOR, [ 180, 120, 16 ] );
-	assert.deepEqual( SUN_DROP_BANNER_TEXT_RGB, [ 1, 215 / 255, 80 / 255 ] );
+	assert.equal( banner.sealTier(), 2 );
 	const starNotice = defined( serverNotification( 0x3667, frame( 0x81, starText ) ) );
-	banner.step( [ { ...starNotice, sequence: 2 } ], 200, true );
+	banner.step( [], 8000, true );
+	banner.step( [ { ...starNotice, sequence: 2 } ], 8100, true );
 	assert.equal( banner.sunDrop(), false );
 });
