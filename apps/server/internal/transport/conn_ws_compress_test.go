@@ -107,7 +107,6 @@ func parseWireMessages(t *testing.T, raw []byte) []wireMessage {
 		if len(raw) < 2 {
 			t.Fatalf("truncated frame header: %d bytes left", len(raw))
 		}
-		fin := raw[0]&0x80 != 0
 		rsv1 := raw[0]&0x40 != 0
 		opcode := raw[0] & 0x0f
 		if raw[1]&0x80 != 0 {
@@ -141,9 +140,6 @@ func parseWireMessages(t *testing.T, raw []byte) []wireMessage {
 		}
 		messages[len(messages)-1].wireBytes += pos
 		raw = raw[pos:]
-		if !fin {
-			continue
-		}
 	}
 	return messages
 }
