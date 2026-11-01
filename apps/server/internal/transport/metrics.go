@@ -32,6 +32,7 @@ type hubMetrics struct {
 	helloAdmissionRefused  atomic.Uint64
 	detaches               atomic.Uint64
 	detachesIdle           atomic.Uint64
+	detachesRingPark       atomic.Uint64
 	detachesOther          atomic.Uint64
 
 	sessOpened            atomic.Uint64
@@ -104,6 +105,7 @@ type Metrics struct {
 	HelloAdmissionRefused     uint64  `json:"hello_admission_refused"`
 	Detaches                  uint64  `json:"detaches"`
 	DetachesIdle              uint64  `json:"detaches_idle"`
+	DetachesRingPark          uint64  `json:"detaches_ring_park"`
 	DetachesOther             uint64  `json:"detaches_other"`
 
 	// Session lifecycle since boot. The closed breakdown is deliberately
@@ -297,6 +299,7 @@ func (h *Hub) Metrics() Metrics {
 		HelloAdmissionRefused:     h.metrics.helloAdmissionRefused.Load(),
 		Detaches:                  h.metrics.detaches.Load(),
 		DetachesIdle:              h.metrics.detachesIdle.Load(),
+		DetachesRingPark:          h.metrics.detachesRingPark.Load(),
 		DetachesOther:             h.metrics.detachesOther.Load(),
 
 		SessionsOpened:             h.metrics.sessOpened.Load(),

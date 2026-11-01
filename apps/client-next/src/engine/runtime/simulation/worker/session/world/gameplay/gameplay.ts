@@ -4576,11 +4576,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
-				// 756CF0 compares the bag slot before and after a 0xB06D pickup;
-				// the pet-bag pickup into the player bag (0x1C) and the grant
-				// (0x0E) are compared the same way for their gain lines.
-				const pickupSlot = frame.opcode === 0xb06d && frame.payload[0] === 1 &&
-						(frame.payload[1] === 6 || frame.payload[1] === 0x1c || frame.payload[1] === 14) &&
+				// 756CF0 compares the bag slot before and after a 0xB06D pickup
+				// (types 6 and 0x1C) or server grant (type 0xE).
+				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;
+				const pickupSlot = (pickupGrant || frame.opcode === 0xb06d && frame.payload[0] === 1 &&
+							(frame.payload[1] === 6 || frame.payload[1] === 0x1c)) &&
 						frame.payload.length > 3 && frame.payload[2] !== 254 ?
 					frame.payload[2] :
 					undefined;
@@ -4703,12 +4703,12 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( item && pickupSlot !== undefined ) {
 					// Source-window line rules: a pickup (types 6/0x1C, source
 					// 0) names the gain even on a merge; a grant (type 0x0E,
-					// source 3) prints only for a new row, and a merge into an
-					// existing stack stays silent (#2256, #2257).
-					const after = inventory.state().inventory.find( i => i.slot === pickupSlot );
-					const notice = frame.payload[1] === 14 ?
-						(pickupBefore ? null : pickupNotice( undefined, after )) :
-						pickupNotice( pickupBefore, after );
+					// source 3) stays silent on a merge (#2256, #2257).
+					const notice = pickupNotice(
+						pickupBefore,
+						inventory.state().inventory.find( i => i.slot === pickupSlot ),
+						pickupGrant
+					);
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 				}
 				// A gain into the gold slot (0xFE) prints the whole heap: pickup
@@ -5482,6 +5482,11 @@ dispose
 		// Any frame at all proves the inbound stream is delivering: a
 		// movement receipt still missing is behind it, not lost (#1978).
 		movement.noteInboundProgress( now );
+		// The item and target lanes hold their open answers the same way:
+		// ordered behind this stream, an answer is lost only when the
+		// stream itself falls silent (#2148).
+		inventory.noteInboundProgress( now );
+		targeting.noteInboundProgress( now );
 		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
 		journalClock = now;
 		journalBagChange( now, frame.opcode, frame.payload );

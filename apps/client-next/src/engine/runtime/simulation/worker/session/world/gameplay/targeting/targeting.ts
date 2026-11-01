@@ -16,7 +16,15 @@ import { TARGET_RELEASE_TIMEOUT, type WireFrame } from "@/engine/contracts/netwo
 Pending
 ================
 */
-type Pending = { kind: "select" | "release"; gid: number; deadline: number; family?: string; fortress?: boolean; };
+type Pending = {
+	kind: "select" | "release";
+	gid: number;
+	deadline: number;
+	// The latest deadline an inbound hold may reach, fixed by the first hold.
+	answerLimit?: number;
+	family?: string;
+	fortress?: boolean;
+};
 /*
 ================
 SelectionOptions
@@ -27,6 +35,10 @@ still retains the target. Reopening requires a fresh authoritative grant.
 */
 type SelectionOptions = { fortress?: boolean; reopen?: boolean; };
 const REPLY_TIMEOUT_MS = 10_000;
+// While the inbound stream still delivers, an untagged answer is in
+// transit behind it, not lost: holds reach at most this far past the
+// first frame seen (#2148; the movement receipt rule of #1978).
+const REPLY_LIMIT_MS = 90_000;
 // GATE_ROWS_FLAG is the teleport-gate service (0x1C) bit whose rows follow
 // the grant.
 const GATE_ROWS_FLAG = 0x8000000;
@@ -179,6 +191,22 @@ the other lanes' (#1472).
 		*/
 		waitingSince(): number | undefined {
 			return pending ? pending.deadline - REPLY_TIMEOUT_MS : undefined;
+		},
+		/*
+================
+noteInboundProgress
+
+Every frame (gameplay's receive wrapper) proves the inbound stream is
+delivering, so the pending answer waits a full reply window past it
+instead of expiring behind a burst it is ordered behind. The first
+frame fixes the hard limit the holds cannot pass.
+================
+		*/
+		noteInboundProgress( now: number ) {
+			if ( !pending ) return;
+			const answerLimit = pending.answerLimit ?? now + REPLY_LIMIT_MS;
+			const deadline = Math.max( pending.deadline, Math.min( now + REPLY_TIMEOUT_MS, answerLimit ) );
+			pending = { ...pending, deadline, answerLimit };
 		},
 		step( now: number ) {
 			if ( !pending || now < pending.deadline ) return false;

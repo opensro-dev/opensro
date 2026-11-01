@@ -101,6 +101,12 @@ const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 // retires it on the pet's next tick, then the answer crosses the network. The
 // shared 10 s wait left one second for both, and a long walk ended sessions.
 const COS_PICKUP_ANSWER_MS = 15000;
+// An open answer is ordered behind the inbound stream: while frames still
+// arrive it is in transit, not lost. A full answer window past the last
+// frame - or this hard limit from the first frame seen - ends the wait
+// (#2148; the movement receipt rule of #1978 on the item lane).
+const INBOUND_HOLD_MS = 10000;
+const INBOUND_LIMIT_MS = 90000;
 /*
 ================
 createInventory
@@ -133,8 +139,8 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
-			// The latest deadline references may reach, fixed by the first hold.
-			referenceLimit?: number;
+			// The latest deadline an inbound hold may reach, fixed by the first hold.
+			answerLimit?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -432,6 +438,24 @@ timeoutMessage
 	function timeoutMessage(): string {
 		const request = timedOutRequest ? " (" + timedOutRequest + ")" : "";
 		return "Inventory transaction timed out" + request + "; reconnect to resynchronize";
+	}
+	/*
+================
+holdAnswer
+
+An open answer waits behind the inbound stream (the reference frames, or
+any frame at all): its deadline reaches until, never past the limit the
+first hold fixed - a stream that never ends must not keep an answer open
+forever. The mall's open request rides the same stream and holds with it.
+================
+	*/
+	function holdAnswer( until: number, limit: number ) {
+		if ( pending ) {
+			const answerLimit = pending.answerLimit ?? limit;
+			const deadline = Math.max( pending.deadline, Math.min( until, answerLimit ) );
+			pending = { ...pending, deadline, answerLimit };
+		}
+		mall.holdUntil( until, limit );
 	}
 	/*
 ================
@@ -1554,12 +1578,20 @@ not keep an answer open forever.
 ================
 		*/
 		holdForReferences( until: number, limit: number ) {
-			if ( pending ) {
-				const referenceLimit = pending.referenceLimit ?? limit;
-				const deadline = Math.max( pending.deadline, Math.min( until, referenceLimit ) );
-				pending = { ...pending, deadline, referenceLimit };
-			}
-			mall.holdUntil( until, limit );
+			holdAnswer( until, limit );
+		},
+		/*
+================
+noteInboundProgress
+
+Every frame, whichever owner answers it (gameplay's receive wrapper),
+proves the inbound stream is delivering: an answer still missing is
+ordered behind what has not been consumed yet, not lost. The wait ends a
+full window after the stream falls silent, or at the hard limit.
+================
+		*/
+		noteInboundProgress( now: number ) {
+			holdAnswer( now + INBOUND_HOLD_MS, now + INBOUND_LIMIT_MS );
 		},
 		/*
 ================
