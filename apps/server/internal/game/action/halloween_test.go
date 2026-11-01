@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -247,6 +248,63 @@ func TestHalloweenEventIsInvisibleWhileOffOrAway(t *testing.T) {
 	}
 	if rt.RemoveExpiredHalloweenBoxes(c) {
 		t.Fatal("cleanup reported a second removal")
+	}
+}
+
+/*
+================
+TestHalloweenCleanupSweepsEveryContainer
+
+A box parked in a companion's bag is a remaining box too: the active
+companion, a mercenary and the bags riding inside bag and avatar summon
+rows all give theirs up, and every other row stays.
+================
+*/
+func TestHalloweenCleanupSweepsEveryContainer(t *testing.T) {
+	bag := func() *domain.COSContainer {
+		return &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{
+			{Slot: 0, RefObjID: 3862, Codename: progression.HalloweenBoxCodename, StackCount: 3},
+			{Slot: 1, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 2},
+		}}
+	}
+	sites := []struct {
+		name  string
+		place func(c *enterworld.Character, box *domain.COSContainer)
+	}{
+		{"active companion", func(c *enterworld.Character, box *domain.COSContainer) {
+			c.ActiveCOS = &enterworld.CharacterCOS{Container: box}
+		}},
+		{"mercenary", func(c *enterworld.Character, box *domain.COSContainer) {
+			c.Mercenaries = []*enterworld.CharacterCOS{nil, {}, {Container: box}}
+		}},
+		{"bag summon row", func(c *enterworld.Character, box *domain.COSContainer) {
+			c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+				Slot: 22, Summon: &enterworld.CharacterCOS{Container: box},
+			})
+		}},
+		{"avatar summon row", func(c *enterworld.Character, box *domain.COSContainer) {
+			c.AvatarInventory = &domain.AvatarInventory{Rows: []enterworld.InventoryRow{
+				{Slot: 0, Summon: &enterworld.CharacterCOS{Container: box}},
+			}}
+		}},
+	}
+	for _, site := range sites {
+		t.Run(site.name, func(t *testing.T) {
+			c := &enterworld.Character{Name: "Hunter"}
+			box := bag()
+			site.place(c, box)
+			rt, clock := halloweenRuntime(t, c, halloweenTestWindow)
+			clock.now = time.Date(1970, 1, 4, 0, 0, 0, 0, time.UTC)
+			if !rt.RemoveExpiredHalloweenBoxes(c) {
+				t.Fatal("no removal reported for a parked box")
+			}
+			if len(box.Rows) != 1 || box.Rows[0].Codename != "ITEM_ETC_HP_POTION_01" {
+				t.Fatal("container after cleanup", box.Rows)
+			}
+			if rt.RemoveExpiredHalloweenBoxes(c) {
+				t.Fatal("cleanup reported a second removal")
+			}
+		})
 	}
 }
 

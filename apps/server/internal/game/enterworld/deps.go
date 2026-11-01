@@ -137,8 +137,8 @@ type Deps struct {
 	// EntryBetaSilk grants the beta's starter silk once per account
 	// (SRO_BETA_SILK, port-only, action/betasilk.go); nil in native mode.
 	EntryBetaSilk func(character *Character)
-	// RemoveExpiredEventBoxes retires a finished event's boxes from the
-	// bag (port-only, action/halloween.go); false leaves every row
+	// RemoveExpiredEventBoxes retires a finished event's boxes from every
+	// container (port-only, action/halloween.go); false leaves every row
 	// untouched, so the entry door writes only for a character that
 	// actually held a box past the window's end.
 	RemoveExpiredEventBoxes      func(character *Character) bool

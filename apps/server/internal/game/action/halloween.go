@@ -329,31 +329,74 @@ func (rt *Runtime) countHalloweenBoxes(winner *enterworld.Character, drops []gro
 Runtime.RemoveExpiredHalloweenBoxes
 
 The entry cleanup the enterworld door calls once a configured window
-has ended: every remaining box row leaves the bag. True only when a row
-actually left, so the door writes nothing for anyone else.
+has ended: every remaining box row leaves every container the character
+record carries, the bag, the avatar rows, the active companion, each
+mercenary, and the bags that ride inside summon rows (a dismissed pet's
+bag). True only when a row actually left, so the door writes nothing for
+anyone else.
 ================
 */
 func (rt *Runtime) RemoveExpiredHalloweenBoxes(character *enterworld.Character) bool {
 	if character == nil || !rt.Halloween.CleanupDueAt(rt.Now()) {
 		return false
 	}
-	kept := character.MissionInventory[:0]
+	removed := removeHalloweenBoxRows(&character.MissionInventory)
+	if character.AvatarInventory != nil && removeHalloweenBoxRows(&character.AvatarInventory.Rows) {
+		removed = true
+	}
+	if removeHalloweenBoxesFromCOS(character.ActiveCOS) {
+		removed = true
+	}
+	for _, mercenary := range character.Mercenaries {
+		if removeHalloweenBoxesFromCOS(mercenary) {
+			removed = true
+		}
+	}
+	return removed
+}
+
+/*
+================
+removeHalloweenBoxesFromCOS
+
+Sweeps one companion's bag. A nil companion or bagless one has nothing
+to give up.
+================
+*/
+func removeHalloweenBoxesFromCOS(pet *enterworld.CharacterCOS) bool {
+	if pet == nil || pet.Container == nil {
+		return false
+	}
+	return removeHalloweenBoxRows(&pet.Container.Rows)
+}
+
+/*
+================
+removeHalloweenBoxRows
+
+Filters box rows out of one row list in place and follows each kept
+summon row into the bag it carries.
+================
+*/
+func removeHalloweenBoxRows(rows *[]enterworld.InventoryRow) bool {
+	source := *rows
+	kept := source[:0]
 	removed := false
-	for _, row := range character.MissionInventory {
+	for _, row := range source {
 		if row.Codename == progression.HalloweenBoxCodename {
 			removed = true
 			continue
 		}
+		if removeHalloweenBoxesFromCOS(row.Summon) {
+			removed = true
+		}
 		kept = append(kept, row)
-	}
-	if !removed {
-		return false
 	}
 	// Rows past the kept prefix still alias the old tail; clear them so
 	// no stale box row survives in the backing array.
-	for i := len(kept); i < len(character.MissionInventory); i++ {
-		character.MissionInventory[i] = enterworld.InventoryRow{}
+	for i := len(kept); i < len(source); i++ {
+		source[i] = enterworld.InventoryRow{}
 	}
-	character.MissionInventory = kept
-	return true
+	*rows = kept
+	return removed
 }
