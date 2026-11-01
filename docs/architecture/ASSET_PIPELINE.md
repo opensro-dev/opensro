@@ -1,6 +1,6 @@
 # Asset pipeline
 
-Turns a licensed, extracted Silkroad Online v1.150 client into the data the
+Turns an extracted Silkroad Online v1.150 client into the data the
 browser client and server load. Nothing it produces is committed.
 
 ## Inputs and outputs

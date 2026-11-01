@@ -1,6 +1,6 @@
 # Release checklist
 
-Source control carries source only. A licensed release assembly additionally
+Source control carries source only. A release assembly additionally
 carries the locally generated compact client packs and the server archive, so
 a shipped tree needs no parent checkout or original installation at runtime.
 
@@ -8,7 +8,7 @@ Before tagging a release:
 
 1. `pnpm install --frozen-lockfile`
 2. `pnpm check source` (includes the Go server gates).
-3. On a licensed client extraction: `pnpm assets build`,
+3. On a client extraction: `pnpm assets build`,
    `pnpm task build server-game-data`, then the full `pnpm check`. For a
    data release, build the packs against the live layout so unchanged packs
    keep the bytes and URLs players have cached (assetPackLayout.mjs):
