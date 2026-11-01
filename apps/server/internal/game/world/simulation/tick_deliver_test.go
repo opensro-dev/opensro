@@ -29,7 +29,7 @@ func TestHookDeliverRunsInItsBatchOrder(t *testing.T) {
 			{DivisionID: "d", Deliver: func() { order = append(order, "second") }},
 		}
 	}
-	ticker, _ := timedTicker(&fakeTickClock{now: time.UnixMilli(1000)}, hook)
+	ticker, _ := timedTicker(&fakeTickClock{now: time.UnixMilli(1000)}, NamedTickHook{Hook: hook})
 	ticker.RunTick(0)
 	if !slices.Equal(order, []string{"first", "second"}) {
 		t.Fatalf("delivery order = %v", order)

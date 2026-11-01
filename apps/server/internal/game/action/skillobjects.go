@@ -135,6 +135,8 @@ seals their private tails to the recipients captured at commit time. The
 tick's own session list holds only world-ready sessions; without the seal
 a planter whose client is loading lost its 0x30D2 while the server kept
 the EXP, and the client's next level crossing failed its length check.
+The wait for that gate is the tick gate's bounded one (#2294): a pass
+cut by a held gate commits nothing and reruns whole on the next tick.
 ================
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
@@ -194,8 +196,18 @@ private tails are sealed before the gate is released.
 ================
 */
 func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) ([]skillobject.Object, uint64) {
-	unlock := rt.lockTickPublication()
-	defer unlock()
+	if !rt.acquireTickGate() {
+		// The gate is held (an entry bootstrap marshalling its snapshot,
+		// say): the pass waits only within the tick gate's bound (#2294).
+		// Nothing is lost - every due time below is absolute, so fields,
+		// trap pulses, scans and retirements read the same state on the
+		// next served pass; and committing nothing is exactly what the
+		// gate orders against the holder's snapshot. The registry's own
+		// lock makes the before copy safe without the gate.
+		generation := rt.SkillObjects.Generation()
+		return rt.SkillObjects.Snapshot(), generation
+	}
+	defer rt.releaseTickGate()
 	generation := rt.SkillObjects.Generation()
 	before := rt.SkillObjects.Snapshot()
 	var routed []simulation.DivisionFrames

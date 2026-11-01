@@ -167,16 +167,21 @@ func (c *tickClock) enterHooks(now time.Time) {
 tickClock.timeHook
 
 Runs one hook and keeps it when it was slow, including when it panics: the
-record is deferred inside the caller's recover boundary.
+record is deferred inside the caller's recover boundary. The recorded
+name is the hook's registered one (NamedTickHook); an unnamed hook
+keeps the runtime name it had before hooks carried names.
 ================
 */
-func (c *tickClock) timeHook(hook TickHook, now func() time.Time, run func()) {
+func (c *tickClock) timeHook(hook NamedTickHook, now func() time.Time, run func()) {
 	started := now()
 	defer func() {
 		if elapsed := now().Sub(started); elapsed >= SlowHookThreshold {
-			name := "unknown"
-			if fn := runtime.FuncForPC(reflect.ValueOf(hook).Pointer()); fn != nil {
-				name = fn.Name()
+			name := hook.Name
+			if name == "" {
+				name = "unknown"
+				if fn := runtime.FuncForPC(reflect.ValueOf(hook.Hook).Pointer()); fn != nil {
+					name = fn.Name()
+				}
 			}
 			c.slow = append(c.slow, SlowHookTiming{Name: name, Elapsed: elapsed})
 		}

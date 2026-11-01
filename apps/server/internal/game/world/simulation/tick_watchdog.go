@@ -37,7 +37,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"runtime/metrics"
 	"strconv"
@@ -110,7 +109,7 @@ stall logs once however long it lasts.
 type tickWatch struct {
 	startNs  atomic.Int64
 	phase    atomic.Int32
-	hook     atomic.Uintptr
+	hookName atomic.Value // string; "" while no hook runs
 	reported atomic.Int64
 	// endNs is when the last tick finished; zero until the first one has.
 	endNs atomic.Int64
@@ -216,7 +215,7 @@ tickWatch.begin
 ================
 */
 func (w *tickWatch) begin(now time.Time) {
-	w.hook.Store(0)
+	w.hookName.Store("")
 	w.phase.Store(tickPhaseBeforeHooks)
 	w.startNs.Store(now.UnixNano())
 }
@@ -230,20 +229,21 @@ func (w *tickWatch) end(now time.Time) {
 	w.endNs.Store(now.UnixNano())
 	w.startNs.Store(0)
 	w.phase.Store(tickPhaseIdle)
-	w.hook.Store(0)
+	w.hookName.Store("")
 }
 
 /*
 ================
 tickWatch.enterHook
 
-The hook's code pointer names it later; closures resolve to their
-enclosing constructor (for example action.(*Runtime).TickHook.func1).
+The hook's registered name names it later (NamedTickHook): a closure's
+runtime name is its enclosing constructor's, which named nothing in a
+stall report (#2294).
 ================
 */
-func (w *tickWatch) enterHook(hook TickHook) {
+func (w *tickWatch) enterHook(name string) {
 	w.steps.Add(1)
-	w.hook.Store(reflect.ValueOf(hook).Pointer())
+	w.hookName.Store(name)
 }
 
 /*
@@ -252,7 +252,7 @@ tickWatch.leaveHook
 ================
 */
 func (w *tickWatch) leaveHook() {
-	w.hook.Store(0)
+	w.hookName.Store("")
 	w.steps.Add(1)
 }
 
@@ -306,10 +306,8 @@ func (w *tickWatch) stalled(start int64, now time.Time) (time.Duration, string, 
 		name = tickPhaseNames[phase]
 	}
 	hook := "none"
-	if pc := w.hook.Load(); pc != 0 {
-		if fn := runtime.FuncForPC(pc); fn != nil {
-			hook = fn.Name()
-		}
+	if name, ok := w.hookName.Load().(string); ok && name != "" {
+		hook = name
 	}
 	return time.Duration(now.UnixNano() - start), name, hook
 }
