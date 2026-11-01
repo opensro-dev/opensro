@@ -198,17 +198,23 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		throw Error( "Invalid server notification length" );
 	}
 	const text = new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 3, 3 + 2 * n ) );
-	const notice: SystemNotice = { key: "", text, value: 0, notificationBanner: true, bannerOnly: true };
-	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, jobKill: true };
-	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, itemBreak: true };
+	const notice: SystemNotice = { key: "", text, value: 0, bannerOnly: true };
+	if ( p[0] === JOB_KILL_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, jobKill: true };
+	if ( p[0] === BREAK_NOTICE_CHANNEL ) return { ...notice, notificationBanner: true, itemBreak: true };
 	if ( p[0] === DROP_PLUS_NOTICE_CHANNEL ) {
-		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) return { ...notice, plusSeven: true };
+		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) {
+			return { ...notice, notificationBanner: true, plusSeven: true };
+		}
 		// Port-only, not native: Seal of Sun drop announcements highlight in
 		// gold on the top banner and chat log; Star/Moon and plus notices stay unchanged.
 		const sun = isSunDropNoticeText( text ) ? ({ sunDrop: true } as const) : {};
-		return { ...notice, dropPlus: true, ...sun };
+		// Port-only, not native (owner decision 2026-11-01): a Seal of Star
+		// drop is too common for the top-centre banner, so its line keeps
+		// only the Event chat tab; Moon and Sun drops keep the banner.
+		const banner = sealDropTierFromText( text ) === 0 ? {} : { notificationBanner: true as const };
+		return { ...notice, ...banner, dropPlus: true, ...sun };
 	}
-	return notice;
+	return { ...notice, notificationBanner: true };
 }
 
 /*
