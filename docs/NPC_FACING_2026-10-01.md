@@ -1,4 +1,4 @@
-# NPC facing recovery â€” 2026-10-01
+# NPC facing recovery — 2026-10-01
 
 ## Status and defect
 
@@ -70,8 +70,8 @@ v1.150 server capture.
 | Guide Lipria | 27471 | 24575 | Matching placement | 19476 | 106137824 / 495400416 |
 | Guide Riise | 26959 | 21845 | Inferred relocation | 20882 | 107538720 / 495482464 |
 | Specialty Trader Tina | 26959 | 16383 | Matching placement | 20986 | 107540128 / 495483872 |
-| Event So-Ok | 26959 | 24757 | Inferred relocation | 21006 | â€” / 495484448 |
-| Event So-Ok | 26265 | 16201 | Inferred relocation | 21022 | â€” / 495484640 |
+| Event So-Ok | 26959 | 24757 | Inferred relocation | 21006 | — / 495484448 |
+| Event So-Ok | 26265 | 16201 | Inferred relocation | 21022 | — / 495484640 |
 
 ## Decisions for the five moved placements
 
@@ -80,20 +80,20 @@ is evidence of a moved station, not evidence that its facing changed. Apply
 these decisions only to the listed v1.150 key; no nearest-neighbour fallback
 runs in the game.
 
-- **Guide Riise â€” 21845 (120 degrees).** ISRO-R active/archive agree on the
+- **Guide Riise — 21845 (120 degrees).** ISRO-R active/archive agree on the
   same guide in region 26959 at X -6, Z +22 relative to v1.150, with unchanged
   elevation and zero spawn radius. Retain that recorded station direction.
-- **Windy Phantom Thief â€” 8191.** vSRO and both ISRO-R tables agree on this
+- **Windy Phantom Thief — 8191.** vSRO and both ISRO-R tables agree on this
   heading at X +8.46, Z -4.23, unchanged elevation and zero spawn radius.
   Preserve the consistently recorded facing at the older location.
-- **Grocery Trader Saha â€” 10922.** The later station differs only by X +9;
+- **Grocery Trader Saha — 10922.** The later station differs only by X +9;
   vSRO and both ISRO-R tables agree on the direction. Preserve it without
   shifting the v1.150 NPC.
-- **Constantinople So-Ok â€” 24757.** vSRO and the ISRO-R archive agree at
+- **Constantinople So-Ok — 24757.** vSRO and the ISRO-R archive agree at
   X +11, Z +25 with the same elevation. The archived codename/region match
   supplies the older event-NPC station direction. Active nest IDs must not
   substitute for a matching codename/region.
-- **Samarkand So-Ok â€” 16201.** The ISRO-R archive preserves the exact Y and Z
+- **Samarkand So-Ok — 16201.** The ISRO-R archive preserves the exact Y and Z
   of v1.150 with X +21. The vSRO candidate instead differs in both X and Z
   (about -19.65 and -41.76) and has heading zero. Both candidates have radius
   90, so neither proves a fixed original orientation. Use the archived row
