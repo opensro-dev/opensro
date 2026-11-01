@@ -28,3 +28,17 @@ git checkout 2371a6a -- <path>
 | `docs/SMALL_BUG_PASS_2026-09-29.md` | Discord audit and small UI/text repairs |
 | `docs/TRACE_BUG_BATCH_2026-09-29.md` | Trace and shared native geometry, 2026-09-29 |
 | `docs/WIZARD_SKILL_REVIEW_2026-10-02.md` | Wizard skill PR integration — 2026-10-02 |
+
+Retired later; restore these from `8a456bb` the same way.
+
+| Path | Report |
+| --- | --- |
+| `docs/sox-visual-parity.md` | SOX presentation: BUG-057 |
+| `docs/native-third-party-review.md` | Third-party native review, captured revisions |
+| `docs/COMPANION_PROTOCOL_RELEASE.md` | Companion protocol and authority release order |
+| `docs/CAP110_UPSTREAM_HANDOFF.md` | Cap-110 upstream review handoff |
+| `docs/CAP110_SKILL_ASSET_AUDIT.md` | Mastery 101-110 skill asset audit |
+| `docs/releases/2026-10-13-f7.md` | F7 changes merged without a player note |
+| `docs/GRAPHICS_UPGRADE_2026-10-05.md` | Folded into `docs/EXPERIMENTAL_GRAPHICS.md` |
+| `docs/GRAPHICS_UPGRADE_2026-10-06.md` | Folded into `docs/EXPERIMENTAL_GRAPHICS.md` |
+| `docs/GRAPHICS_UPGRADE_2026-10-08.md` | Folded into `docs/EXPERIMENTAL_GRAPHICS.md` |
