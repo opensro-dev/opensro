@@ -345,6 +345,19 @@ func TestScopeLegSkipsTheUnchangedLeg(t *testing.T) {
 	if frames := leg(t0 + 2750); len(frames) != 0 {
 		t.Fatalf("settled leg emitted %d scope deltas, want 0", len(frames))
 	}
+
+	// The viewer crosses into a block of its own while the division stands
+	// still: the stamp alone would call this leg unchanged, so the block
+	// match is what runs it in full and moves the shown set.
+	stamp := ops.scopeMemo["viewer"].stamp
+	viewers["viewer"] = worldgeom.RegionXZ{RegionID: regionA, X: 1800, Z: 100}
+	frames = leg(t0 + 3000)
+	if len(frames) == 0 {
+		t.Fatal("block-crossing leg emitted no scope deltas")
+	}
+	if ops.scopeMemo["viewer"].stamp != stamp {
+		t.Fatal("the division moved, so this leg proved nothing about the viewer's block")
+	}
 }
 
 /*
