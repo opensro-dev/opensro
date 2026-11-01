@@ -182,7 +182,12 @@ func TestRingParkAckingPeerIsNotCut(t *testing.T) {
 		sent += perCycle
 		acked += perCycle
 		sendStreamAck(fc, acked)
-		time.Sleep(100 * time.Millisecond)
+		// Real time passes across the park bound while the acks advance.
+		wait.Consistently(t, 100*time.Millisecond, "peer stays attached", func() bool {
+			sess.mu.Lock()
+			defer sess.mu.Unlock()
+			return sess.attached
+		})
 	}
 
 	sess.mu.Lock()
