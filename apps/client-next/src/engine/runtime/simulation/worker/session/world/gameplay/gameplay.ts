@@ -5440,6 +5440,11 @@ dispose
 		// Any frame at all proves the inbound stream is delivering: a
 		// movement receipt still missing is behind it, not lost (#1978).
 		movement.noteInboundProgress( now );
+		// The item and target lanes hold their open answers the same way:
+		// ordered behind this stream, an answer is lost only when the
+		// stream itself falls silent (#2148).
+		inventory.noteInboundProgress( now );
+		targeting.noteInboundProgress( now );
 		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
 		journalClock = now;
 		journalBagChange( now, frame.opcode, frame.payload );
