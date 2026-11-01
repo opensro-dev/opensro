@@ -154,6 +154,58 @@ test("camera zoom cannot relocate precipitation or change snow variant probabili
 	assert.equal( defined( rare ).m.positions[1], 110.5 );
 	assert.equal( defined( common ).m.positions[1], 108.5 );
 });
+test("a landed rain drop's splash keeps its six hoisted corners and uniform fade", () => {
+	// The splash path writes its six vertices and alphas directly (the
+	// hoisted corner block): one flat quad pair around the landing point,
+	// every y at ground + .5, and one alpha shared by the six, set by the
+	// same age-over-300 scale the corners use.
+	const images = new Map(
+		[ "rain1", "rain2" ].map( n => [ "/assets/images/Map_extracted/weather/" + n + ".png", n ] )
+	);
+	let mesh;
+	const gpu = {
+		upload( m, image ) {
+			if ( image === "rain2" ) mesh = m;
+			return {};
+		},
+		release() {},
+		updatePositions() {}
+	};
+	const weather = createWeather( { range: ( a, b ) => Math.trunc( (a + b) / 2 ) } );
+	weather.set( { mode: 2, amount: 10 } );
+	for ( let t = 0; t <= 14; t += .25 ) {
+		weather.update(
+			{ ...camera, eye: [ 0, 100, 0 ] },
+			t,
+			0,
+			true,
+			() => 20,
+			[ 10, 100, 30 ]
+		);
+		weather.prepare( gpu, images, { ...camera, eye: [ 0, 100, 0 ] }, matrix );
+		if ( mesh && mesh.positions[6] - mesh.positions[0] > 0 ) break;
+		mesh = undefined;
+	}
+	if ( !mesh ) throw Error( "No splash batch was drawn" );
+	const at = mesh.positions;
+	assert.equal( at[1], 20.5 );
+	for ( let j = 0; j < 6; j++ ) assert.equal( at[j * 3 + 1], 20.5, "Every splash corner sits at the ground" );
+	const scale = (at[6] - at[0]) / 2;
+	assert.ok( scale > 0, "The splash has opened" );
+	// Corner order: (-s,+s) (+s,+s) (+s,-s) (-s,+s) (+s,-s) (-s,-s) around x/z.
+	assert.equal( at[3] - at[0], scale * 2 );
+	assert.equal( at[8] - at[2], -scale * 2 );
+	assert.equal( at[9], at[0] );
+	assert.equal( at[11], at[2] );
+	assert.equal( at[12], at[6] );
+	assert.equal( at[14], at[8] );
+	assert.equal( at[15], at[0] );
+	assert.equal( at[17], at[8] );
+	const alpha = mesh.colors[3];
+	for ( let j = 0; j < 6; j++ ) assert.equal( mesh.colors[j * 4 + 3], alpha );
+	assert.ok( Math.abs( alpha - (255 - Math.trunc( scale * 63 )) / 255 ) < 1e-6 );
+});
+
 test("late texture arrival cannot consume a different shared random stream or freeze snow drift", () => {
 	function run( late ) {
 		let calls = 0, mesh;

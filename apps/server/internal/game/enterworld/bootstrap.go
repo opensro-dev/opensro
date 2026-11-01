@@ -294,6 +294,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
+		RaisedGoldCaps:       deps.RaisedGoldCaps,
 		UiTuning:             UiTuningFrom(tunables.Current()),
 	}
 }

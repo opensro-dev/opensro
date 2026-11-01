@@ -1089,6 +1089,13 @@ export function createCharacterPresentation(
 		damageText: () =>
 			presentationEvents.state.damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
 		error: () => output.failure ?? resources.error() ?? effects.error(),
+		failure: () =>
+			resources.failure() ??
+				(effects.error() ?
+					{ path: null, message: effects.error() as string } :
+					output.failure ?
+					{ path: null, message: output.failure } :
+					null),
 		/*
 		================
 		simulationOrigin

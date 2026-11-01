@@ -32,6 +32,11 @@ const (
 	cosSummonPosture  uint8 = 0x7a
 )
 
+// zombiePotionHPFloor is the v1.150 rule as reported by the owner from the
+// original client: reversed potion damage stops at one HP. The server binary
+// is not available to check it.
+const zombiePotionHPFloor int64 = 1
+
 /*
 ================
 cosSummonerType
@@ -692,9 +697,10 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if credit.HP > 0 {
 			// Mask bit 0x20 deals the whole HP amount through vfunc +308 with
-			// reason 0x20 instead of healing; MP still recovers.
+			// reason 0x20 instead of healing; MP still recovers. The reversed
+			// damage never kills: HP stops at the native floor.
 			if zombie {
-				nextHP = max(currentHP-amount.hp, 0)
+				nextHP = max(currentHP-amount.hp, zombiePotionHPFloor)
 			} else {
 				// Natively potion steps go through the same recovery
 				// reduction as skills. Panic applies after potion sizing.
@@ -732,27 +738,11 @@ func (rt *Runtime) HandleItemUse(
 				),
 			},
 		}
-		// A lethal zombie potion dies through the shared death path; every
-		// observer sees the retired effects, the zero baseline and 0x3122.
+		// A changed HP is broadcast; MP rides the actor's vitals frame.
 		var public []wire.Frame
-		if nextHP > 0 && nextHP != currentHP {
+		if nextHP != currentHP {
 			public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 				Payload: simulation.HPRefreshPayload(enterworld.ObjectIDForCharacter(character), 0, uint32(nextHP))})
-		}
-		if nextHP == 0 {
-			effects, progression := rt.settlePlayerDeathInDoor(divisionID, character, deathKiller{}, nowMs)
-			public = append(public, effects...)
-			if owner := rt.clearPlayerAbnormalInDoor(divisionID, character, nowMs); owner != nil {
-				owner.fatal = true
-				public = append(public, rt.playerAbnormalPublication(divisionID, character, owner).public...)
-			} else {
-				life := beginFatalLifePublication(enterworld.ObjectIDForCharacter(character))
-				baseline := life.publishDeathBaseline()
-				dead := life.publishDead()
-				public = append(public, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload}, wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
-			}
-			frames = append(frames, public...)
-			frames = append(frames, progression...)
 		}
 		frames = append(frames, rt.updateQuestInventory(character)...)
 		result = OpResult{Frames: frames, Broadcast: public}

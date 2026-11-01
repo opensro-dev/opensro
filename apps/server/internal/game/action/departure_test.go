@@ -244,3 +244,42 @@ func TestDepartureFollowsTheNativeBattleRules(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestDepartureRefusesAFreeBattleCapeInBattle
+
+The native logout request reads the cape group in the same in-battle arm as
+the job suit: a worn cape refuses during battle and logs out once it ends.
+================
+*/
+func TestDepartureRefusesAFreeBattleCapeInBattle(t *testing.T) {
+	const now = 1000
+	for _, tc := range []struct {
+		name        string
+		battleUntil int64
+		want        []byte
+	}{
+		{"in battle", now + 5000, []byte{2, departureRefusedInBattle}},
+		{"out of battle", 0, []byte{1, 5, 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := testCharacter()
+			items := testItems()
+			cape := &enterworld.ItemRef{Codename: "TEST_PVP_CAPE", RefObjID: 63000, TypeIDs: [4]int64{3, 1, 7, 5},
+				NativeFields: enterworld.NewNativeFields(map[string]float64{freeBattleGroupField: 1})}
+			items[cape.Codename] = cape
+			c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: domain.JobSuitSlot, RefObjID: cape.RefObjID,
+				Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1})
+			c.BattleUntilMs = tc.battleUntil
+			rt, _ := newTestRuntime(c, items)
+			rt.Now = func() time.Time { return time.UnixMilli(now) }
+			srv := wireStartServer(t, rt)
+			client := wireConnect(t, srv, testDivision, c.Name)
+			session, _ := srv.Hub.Session(client.sessionID)
+			session.TryMarkWorldReady()
+			client.send(t, 0x70b7, []byte{1})
+			client.expectFrame(t, 0xb0b7, tc.want)
+		})
+	}
+}

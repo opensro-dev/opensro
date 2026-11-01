@@ -134,6 +134,8 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
+			// The latest deadline references may reach, fixed by the first hold.
+			referenceLimit?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -143,6 +145,9 @@ export function createInventory(
 	// The street stall the player keeps or stands at, and the stall network
 	// window (stall.ts); a purchase lands on this owner's slots.
 	let stall: StallState = emptyStall();
+	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the stall offer
+	// price field to u64 (stall.ts); the world entry publishes it.
+	let raisedGoldCaps = false;
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
@@ -697,6 +702,7 @@ bootstrap
 		*/
 		bootstrap( value: unknown ) {
 			bindingMoves = [];
+			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
@@ -827,7 +833,7 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs } );
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, widePrice: raisedGoldCaps } );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {
@@ -878,7 +884,7 @@ stallCommand
 ================
 		*/
 		stallCommand( command: StallCommand ) {
-			const request = stallRequest( stall, command );
+			const request = stallRequest( stall, command, raisedGoldCaps );
 			stall = request.state;
 			for ( const frame of request.frames ) send( frame );
 			return request.frames.at( -1 ) ?? null;
@@ -1537,6 +1543,24 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 		*/
 		holdForDress( until: number ) {
 			if ( pending?.opcode === 0xb06d ) pending = { ...pending, deadline: Math.max( pending.deadline, until ) };
+		},
+		/*
+================
+holdForReferences
+
+Every open answer waits behind the reference frames (gameplay
+referenceProgress), so none can have been lost before until. The first hold
+fixes limit, and later frames cannot move it: a stream that never ends must
+not keep an answer open forever.
+================
+		*/
+		holdForReferences( until: number, limit: number ) {
+			if ( pending ) {
+				const referenceLimit = pending.referenceLimit ?? limit;
+				const deadline = Math.max( pending.deadline, Math.min( until, referenceLimit ) );
+				pending = { ...pending, deadline, referenceLimit };
+			}
+			mall.holdUntil( until, limit );
 		},
 		/*
 ================

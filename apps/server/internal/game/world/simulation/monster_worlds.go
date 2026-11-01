@@ -10,6 +10,7 @@ World leases isolate actors; interest queries use current movement geometry.
 package simulation
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -413,53 +414,119 @@ func (s *MonsterState) PopulationInterestInstances(division string, lease instan
 
 /*
 ================
-populationInterestGIDs
+interestMemoStamp
 
-The spawn index owns nest/lifecycle queries. Visibility instead queries the
-mover's live region bounds: a pursuing actor can leave its spawn region ring.
-Filter exact live blocks before any archived actor read (the retail
-server's neighbour-block resolution).
-Caller holds MonsterState.mu.
-
-A mover whose segment spans regions is listed in each; the index marks
-those, and only they go through a seen set, made on the first one. A mover
-in one region is visited once without it. Static entries are unchanged.
+What a memoized viewer answer depends on.
 ================
 */
-func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
-	var out []uint32
+type interestMemoStamp struct {
+	blocks    uint64
+	instances uint64
+	statics   interestStaticsStamp
+}
+
+/*
+================
+interestStaticsStamp
+
+movers is compared too: a population can be handed a fresh storage whose
+counters restart.
+================
+*/
+type interestStaticsStamp struct {
+	movers   *moverStorage
+	roster   uint64
+	byRegion uint64
+}
+
+/*
+================
+interestStaticsNow
+================
+*/
+func (state *divisionMonsterState) interestStaticsNow() interestStaticsStamp {
+	stamp := interestStaticsStamp{movers: state.movers, byRegion: state.byRegionGeneration}
 	if state.movers != nil {
-		var seen map[uint32]struct{}
-		for region := range moverCandidateRegions(viewer).regions() {
-			for gid, spans := range state.movers.spatial[region] {
-				if gid == 0 {
-					continue
-				}
-				if spans {
-					if _, duplicate := seen[gid]; duplicate {
-						continue
-					}
-					if seen == nil {
-						seen = make(map[uint32]struct{})
-					}
-					seen[gid] = struct{}{}
-				}
-				if !state.instances.contains(gid) {
-					continue
-				}
-				pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
-				if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
-					out = append(out, gid)
+		stamp.roster = state.movers.blocks.rosterGeneration
+	}
+	return stamp
+}
+
+/*
+================
+regionStatics
+
+The entries of byRegion[region] that have no mover. Most generated actors
+have a mover once their population is active, so this keeps a scan from
+probing each of them per viewer. A duplicate listing stays duplicated,
+as byRegion lists it.
+================
+*/
+func (state *divisionMonsterState) regionStatics(region uint16) []uint32 {
+	now := state.interestStaticsNow()
+	if state.interestStatics == nil || state.interestStaticsStamp != now {
+		state.interestStatics = make(map[uint16][]uint32, len(state.byRegion))
+		state.interestStaticsStamp = now
+		for key, gids := range state.byRegion {
+			for _, gid := range gids {
+				if !state.movers.has(gid) {
+					state.interestStatics[key] = append(state.interestStatics[key], gid)
 				}
 			}
 		}
 	}
-	// Static entries without a mover still use their immutable spawn position.
+	return state.interestStatics[region]
+}
+
+/*
+================
+populationInterestGIDs
+
+The spawn index owns nest/lifecycle queries. Visibility instead asks the
+mover block index: a pursuing actor can leave its spawn region ring.
+Filter exact live blocks before any archived actor read (the retail
+server's neighbour-block resolution).
+Caller holds MonsterState.mu.
+
+Static entries still use their immutable spawn position.
+================
+*/
+func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
+	if state.movers == nil {
+		return appendInterestStatics(state, viewer, nil)
+	}
+	block := worldgeom.InterestBlockAt(viewer)
+	state.movers.reconcileBlocks(nowMs)
+	stamp := interestMemoStamp{state.movers.blocks.generation, state.instances.viewGeneration, state.interestStaticsNow()}
+	if state.interestMemo == nil || state.interestMemoStamp != stamp {
+		state.interestMemo = make(map[worldgeom.InterestBlock][]uint32)
+		state.interestMemoStamp = stamp
+	}
+	if gids, ok := state.interestMemo[block]; ok {
+		return slices.Clone(gids)
+	}
+	members := state.movers.blockMembers(block, nil)
+	out := members[:0]
+	for _, gid := range members {
+		if state.instances.contains(gid) {
+			out = append(out, gid)
+		}
+	}
+	out = appendInterestStatics(state, viewer, out)
+	state.interestMemo[block] = out
+	return slices.Clone(out)
+}
+
+/*
+================
+appendInterestStatics
+
+Add the viewer's visible static entries and sort the result by gid.
+================
+*/
+func appendInterestStatics(state *divisionMonsterState, viewer worldgeom.RegionXZ, out []uint32) []uint32 {
 	for _, region := range RegionScopeRing(viewer.RegionID) {
-		for _, gid := range state.byRegion[region] {
-			if state.movers.has(gid) {
-				continue
-			}
+		for _, gid := range state.regionStatics(region) {
 			actor := state.instances.get(gid)
 			position := worldgeom.RegionXZ{RegionID: actor.Spawn.RegionID, X: actor.Spawn.X, Z: actor.Spawn.Z}
 			if worldgeom.InterestVisible(viewer, position) {

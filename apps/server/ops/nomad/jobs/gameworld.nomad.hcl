@@ -223,6 +223,13 @@ variable "cap110_qinshi" {
   default = "off"
 }
 
+# Port-only, not native: the temple band instances (#1800 step 3). It
+# needs cap110_monsters on as well; GameWorld refuses to start otherwise.
+variable "cap110_temple" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the name-change scroll (#1689) - the Item Mall
 # lists it for 500 silk and a use queues a rename for the next login.
 # "off" is native: names never change.
@@ -670,6 +677,15 @@ variable "trade_job_hunter_percent_per_trader" {
 variable "trade_job_hunter_percent_cap" {
   type    = string
   default = "60"
+}
+
+# raised_gold_caps raises the stall price cap to ten billion and the
+# warehouse gold deposit cap to one billion (port-only, not native).
+# Anything but "on" keeps the native caps (one billion and one hundred
+# million) and the native u32 stall-offer wire.
+variable "raised_gold_caps" {
+  type    = string
+  default = "off"
 }
 
 # reverse_return_map adds map destinations to the reverse return scroll
@@ -1236,6 +1252,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_CAP110_QINSHI                  = var.cap110_qinshi
+        SRO_CAP110_TEMPLE                  = var.cap110_temple
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
         SRO_BETA_SILK                           = var.beta_silk
@@ -1296,6 +1313,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_JOB_TRADER_PERCENT_CAP        = var.trade_job_trader_percent_cap
         SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER = var.trade_job_hunter_percent_per_trader
         SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
+        SRO_RAISED_GOLD_CAPS                    = var.raised_gold_caps
         SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
         SRO_GM_SETSPEED                         = var.gm_setspeed
         SRO_GM_TRAINING_DUMMY                   = var.gm_training_dummy

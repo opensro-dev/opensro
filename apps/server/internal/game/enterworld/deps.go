@@ -88,6 +88,19 @@ type Deps struct {
 	// (SRO_LEVEL_CAP, progression's vocabulary) so the client's level
 	// windows follow it; zero is the native cap and publishes nothing.
 	LevelCap int64
+	// SlowEnterThreshold is the enter-handler duration that earns the
+	// "bootstrap: slow enter world" phase log (register.go): an entry
+	// past it names the gate wait against the total. Zero means the
+	// production default; tests set it so a held gate trips the line
+	// without waiting out that bound.
+	SlowEnterThreshold time.Duration
+	// GateWaitBound caps how long the enter handler waits for the
+	// publication gate before abandoning the entry unanswered
+	// (register.go): the gate is taken before scene admission, so a
+	// parked wait is invisible to both the bootstrap watchdog and the
+	// slow-entry log. Zero means the production default; tests set it
+	// so a held gate trips the abandonment without waiting it out.
+	GateWaitBound time.Duration
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -103,6 +116,10 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	// RaisedGoldCaps publishes the port-only SRO_RAISED_GOLD_CAPS rule
+	// (action/goldcaps.go): the client's stall price editor and warehouse
+	// deposit dialog raise their native caps; false is native.
+	RaisedGoldCaps bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

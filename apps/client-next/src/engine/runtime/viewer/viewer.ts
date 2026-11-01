@@ -120,6 +120,7 @@ export interface ViewerCharacters {
 	glowing( gid: number ): boolean;
 	linkedRide( entity: EntityState ): number | null | undefined;
 	error(): string | null | undefined;
+	failure?(): { path: string | null; message: string; } | null;
 }
 
 /*
@@ -296,7 +297,9 @@ owners. A look whose body or items the catalogue lacks fails
 */
 export function createViewer( host: ViewerHost ) {
 	// settle is the one way out of the still promise: a PNG or a reason.
-	let settle: ( outcome: { png: string; } | { reason: ViewerReason; stage: ViewerStage; } ) => void = () => {};
+	let settle: (
+		outcome: { png: string; } | { reason: ViewerReason; stage: ViewerStage; detail?: string; }
+	) => void = () => {};
 	/*
 	================
 	armStill
@@ -309,7 +312,10 @@ export function createViewer( host: ViewerHost ) {
 			settle = outcome =>
 				"png" in outcome ?
 					resolve( outcome.png ) :
-					reject( Error( outcome.reason, { cause: { stage: outcome.stage } } ) );
+					reject( Error(
+						outcome.detail ? `${outcome.reason}: ${outcome.detail}` : outcome.reason,
+						{ cause: { stage: outcome.stage } }
+					) );
 		} );
 		// An unawaited rejection is still reported through the message.
 		still.catch( () => {} );
@@ -350,8 +356,13 @@ export function createViewer( host: ViewerHost ) {
 		if ( finished ) return;
 		finished = true;
 		const at = stage();
+		// An asset failure names its source: the batch reading this
+		// rejection cannot tell one monster's model from another's by
+		// "asset-load" alone.
+		const failure = reason === "asset-load" ? host.characters.failure?.() ?? null : null;
+		const detail = failure ? (failure.path ? `${failure.path}: ${failure.message}` : failure.message) : undefined;
 		post( { type: "viewer-error", reason, stage: at } );
-		settle( { reason, stage: at } );
+		settle( { reason, stage: at, detail } );
 	};
 	/*
 	================
@@ -524,7 +535,7 @@ export function createViewer( host: ViewerHost ) {
 			elapsed += last < 0 ? 0 : Math.min( Math.max( now - last, 0 ), MAX_FRAME_STEP_MS );
 			last = now;
 			if ( !finished && elapsed > VIEWER_TIMEOUT_MS ) {
-				fail( "timeout" );
+				fail( host.characters.error() ? "asset-load" : "timeout" );
 				return stopped();
 			}
 			// A still keeps the loop until it is settled; the interactive view
@@ -549,7 +560,11 @@ export function createViewer( host: ViewerHost ) {
 				entities = [ entity ];
 				dressed = true;
 			}
-			if ( host.characters.error() ) {
+			// A still gets the whole timeout window even with a latched
+			// failure: the first failure is sticky across a batch and may
+			// belong to an earlier monster, while per-path loads keep
+			// retrying behind it. Interactive views fail immediately.
+			if ( host.characters.error() && !request?.still ) {
 				fail( "asset-load" );
 				return stopped();
 			}

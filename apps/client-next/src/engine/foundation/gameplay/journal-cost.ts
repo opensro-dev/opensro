@@ -62,7 +62,9 @@ function jsonChars( value: unknown, depth: number, shared?: WeakSet<object> ): n
 		case "boolean":
 			return value ? 4 : 5;
 		case "bigint":
-			throw TypeError( "Do not know how to serialize a BigInt" );
+			// Stall rows carry u64 price and serial. An estimator must not
+			// refuse what the journal carries: count the decimal digits.
+			return value.toString().length;
 		case "undefined":
 		case "function":
 		case "symbol":

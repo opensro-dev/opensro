@@ -37,6 +37,11 @@ var (
 	// errHandlerPanic closes a session whose game handler panicked; a
 	// sentinel so the close-reason metrics can classify it.
 	errHandlerPanic = errors.New("transport: handler panic")
+	// errSceneBootstrapStuck closes a session whose scene admission
+	// never enqueued its bootstrap (or refusal) within the entry bound:
+	// the entry lane is wedged, and retrying on a fresh session is the
+	// only way forward for the player.
+	errSceneBootstrapStuck = errors.New("transport: scene bootstrap not enqueued within the entry bound")
 )
 
 // Session is one logical client, surviving transport reconnects. Game
@@ -62,15 +67,23 @@ type Session struct {
 	// replace the reader while an old handler still owns a committed result.
 	dispatchMu sync.Mutex
 
-	mu              sync.Mutex
-	cond            *sync.Cond
-	conn            Conn // nil while detached
-	gen             int  // bumped on every attach; loops check it before acting
-	attached        bool
-	closed          bool
-	sceneRevision   uint64
-	sceneLoading    bool
-	observedObjects map[uint32]struct{}
+	mu            sync.Mutex
+	cond          *sync.Cond
+	conn          Conn // nil while detached
+	gen           int  // bumped on every attach; loops check it before acting
+	attached      bool
+	closed        bool
+	sceneRevision uint64
+	sceneLoading  bool
+	// sceneLoadingSince stamps the current admission's start; the
+	// keepalive watchdog measures the unenqueued window against it.
+	sceneLoadingSince time.Time
+	// sceneBootstrapEnqueued records that the current scene's bootstrap
+	// (or its refusal answer) reached the outbound queue. Reset by every
+	// BeginSceneAdmission; set by the reset-batch enqueue and by the
+	// enter lane's explicit mark after a published refusal.
+	sceneBootstrapEnqueued bool
+	observedObjects        map[uint32]struct{}
 	// publishedSorted is observedObjects in ascending order, rebuilt into a
 	// fresh array on the first PublishedObjects read after any change marks
 	// it stale. Readers share it, so it is never written once built.
@@ -638,6 +651,26 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 	s.mu.Unlock()
 }
 
+/*
+================
+writableLocked
+
+Whether the writer has a frame it may dequeue now. The ordered head
+waits while the ring gate holds (ringGateLocked, #2146); a pending
+lossy frame is never ringed and always writable, so movement keeps
+flowing past a gated ordered head. Caller holds s.mu.
+================
+*/
+func (s *Session) writableLocked() bool {
+	if len(s.lossyKeys) > 0 {
+		return true
+	}
+	if len(s.queue) == 0 {
+		return false
+	}
+	return !s.ringGateLocked()
+}
+
 // writeLoop is the session's single writer for its whole life. It drains
 // the ordered queue first, then the lossy coalesce slots, whenever a
 // connection is attached; re-queues an ordered frame at the front when a
@@ -651,7 +684,7 @@ writeLoop
 func (s *Session) writeLoop() {
 	for {
 		s.mu.Lock()
-		for !s.closed && (!s.attached || (len(s.queue) == 0 && len(s.lossyKeys) == 0)) {
+		for !s.closed && (!s.attached || !s.writableLocked()) {
 			s.cond.Wait()
 		}
 		if s.closed {
@@ -659,7 +692,7 @@ func (s *Session) writeLoop() {
 			return
 		}
 		var f Frame
-		ordered := len(s.queue) > 0
+		ordered := len(s.queue) > 0 && (len(s.lossyKeys) == 0 || !s.ringGateLocked())
 		if ordered {
 			f = s.queue[0]
 			s.queue[0] = Frame{} // release payload references in the consumed backing array

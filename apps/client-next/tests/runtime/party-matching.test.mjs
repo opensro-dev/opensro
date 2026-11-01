@@ -24,7 +24,10 @@ const {
 	partyAutoCandidates,
 	partyActiveJob,
 	partyPurposeAllowed,
-	partyDefaultPurpose
+	partyDefaultPurpose,
+	partyDefaultTitleKey,
+	partyFormTitle,
+	PARTY_TITLE_MAX_LENGTH
 } = await import( sourceFileUrl( source ).href );
 test("party list atomically replaces populated and empty pages with native string encodings", () => {
 	const name = Buffer.from( "Owner" ), title = Buffer.from( "Hunting", "utf16le" ), header = Buffer.alloc( 10 );
@@ -261,6 +264,48 @@ test("registration eligibility covers every job/purpose byte and valid defaults"
 	}
 	for ( const purpose of [ -1, 0.5, NaN, Infinity ] ) assert.equal( partyPurposeAllowed( 4, purpose ), false );
 	for ( let job = 1; job <= 4; job++ ) assert.ok( partyPurposeAllowed( job, partyDefaultPurpose( job ) ) );
+});
+
+// The English defaults the shipped catalogue holds (textuisystem.en.json).
+const recordDefaults = {
+	UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1: "For open hunting on the Silk Road!",
+	UIIT_MSG_PARTYMATCH_RECORD_DEFAULT2: "Until the day the Silk Road is all covered with money!",
+	UIIT_MSG_PARTYMATCH_RECORD_DEFAULT3: "When will the quests end on the Silk Road?",
+	UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4: "No need blood or tears for thieves! Robbery is the only way to go!"
+};
+const recordCut = value => value.slice( 0, PARTY_TITLE_MAX_LENGTH );
+test("the record form title defaults follow the selected purpose", () => {
+	// 63BE00 indexes Hunting, Quest, Trader, Thief: the catalogue numbers skip
+	// in that order (DEFAULT2 is the trader's, DEFAULT3 the quest's).
+	const keys = [
+		"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1",
+		"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT3",
+		"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT2",
+		"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4"
+	];
+	keys.forEach( ( key, purpose ) => {
+		assert.equal( partyDefaultTitleKey( purpose ), key, String( purpose ) );
+		assert.equal(
+			partyFormTitle( "", purpose, recordDefaults ),
+			recordCut( recordDefaults[key] ),
+			String( purpose )
+		);
+	} );
+	// The box holds 50 characters, so a longer localised default is cut, and
+	// the cut text still counts as a default when the purpose changes.
+	assert.equal( recordCut( recordDefaults.UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4 ).length, PARTY_TITLE_MAX_LENGTH );
+	assert.equal(
+		partyFormTitle( recordCut( recordDefaults.UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4 ), 0, recordDefaults ),
+		recordCut( recordDefaults.UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1 )
+	);
+	assert.equal(
+		partyFormTitle( recordDefaults.UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1, 3, recordDefaults ),
+		recordCut( recordDefaults.UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4 )
+	);
+	// A title the player typed is never replaced.
+	assert.equal( partyFormTitle( "My party", 2, recordDefaults ), "My party" );
+	// A purpose byte the radio never produces keeps the jobless default.
+	assert.equal( partyDefaultTitleKey( 4 ), keys[0] );
 });
 
 test("a new listing shows at once and survives pages that do not contain it", () => {

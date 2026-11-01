@@ -12,8 +12,11 @@ outlives its leg. No wall-clock thresholds are asserted.
 package simulation
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -78,6 +81,85 @@ func TestMonsterLegStatsWanderLeg(t *testing.T) {
 	if st.advance > st.batch {
 		t.Fatalf("advance %v exceeds the batch loop %v that contains it", st.advance, st.batch)
 	}
+}
+
+/*
+================
+TestMonsterLegStatsQueueAndLaneWalls
+
+The batch phase's two non-step walls ride the same record as the
+step wall: the queue build (behaviorBatchesForDivision) and the
+action lane's wall outside the step, with dispatch wired the way
+production wires it (RunAction around the step). The dormancy world
+wakes forty actors and a ten second jump makes them all due in one
+leg. Consistent with this file's doctrine, no absolute durations are
+asserted; the pins are the partition below and the slow-leg line's
+tail (TestLegSlowLineNamesQueueAndLane).
+================
+*/
+func TestMonsterLegStatsQueueAndLaneWalls(t *testing.T) {
+	const actors = 40
+	s, d := dormancyPhaseWorld(t, actors)
+	ops := &MonsterMoverOps{
+		Monsters:   s,
+		TacticsFor: fixedTactics(passiveTactics()),
+		Rand:       func() float64 { return 0.5 },
+		PlanPath: func(from, goal monster.Pose) *monster.NavigationPath {
+			return nil // geometry-free fixture: an unavailable region
+		},
+		RunAction: func(_ string, act func(MonsterAttackOperation)) { act(nil) },
+	}
+	ops.divisionID = "sleep"
+	session := SessionSnapshot{DivisionID: "sleep", Population: d.lease}
+	session.World.Spawn.RegionID = 0x6061
+	sessions := []SessionSnapshot{session}
+	push := &fakePusher{}
+
+	ops.RunMonsterLeg(200000, sessions, push)
+	ops.RunMonsterLeg(210000, sessions, push)
+
+	st := ops.lastLeg
+	if st == nil {
+		t.Fatal("leg left no attribution record")
+	}
+	if st.actors != actors {
+		t.Fatalf("actors = %d, want all %d woken actors due in one leg", st.actors, actors)
+	}
+	// The split must partition the batch loop: no wall counted twice,
+	// none outside it. No absolute durations are asserted (this file's
+	// doctrine): the values are the slow-leg line's, judged on live legs.
+	if st.queue > st.batch || st.lane > st.batch {
+		t.Fatalf("batch split queue=%v lane=%v exceeds the batch loop %v", st.queue, st.lane, st.batch)
+	}
+	if st.queue+st.lane+st.advance > st.batch+time.Millisecond {
+		t.Fatalf("batch split %v+%v+%v exceeds the batch loop %v", st.queue, st.lane, st.advance, st.batch)
+	}
+}
+
+/*
+================
+TestLegSlowLineNamesQueueAndLane
+
+The slow-leg line carries the batch split at its tail: queue and lane
+next to the phase walls the line already had. Dropping either field
+from the format loses it here; the values themselves are the leg
+record's, formatted as given.
+================
+*/
+func TestLegSlowLineNamesQueueAndLane(t *testing.T) {
+	hook := logtest.NewGlobal()
+	st := &legStats{queue: 3 * time.Millisecond, lane: 2 * time.Millisecond}
+	st.logSlow("sleep")
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "" {
+			continue
+		}
+		msg := entry.Message
+		if strings.Contains(msg, "queue=3ms") && strings.Contains(msg, "lane=2ms") {
+			return
+		}
+	}
+	t.Fatal("slow-leg line does not name the queue and lane walls")
 }
 
 func TestPrepareDormancyReturnsWokenSet(t *testing.T) {

@@ -13,9 +13,9 @@ commits inside the fatal-HP character transaction.
 The kill's other side - the killer's PvP EXP and murder bookkeeping
 (the native PvP kill rewards) - belongs to the player hit path.
 
-INFERENCE: a death with no killer object (a lethal zombie potion, or a
-status the victim inflicted on itself) costs nothing, as the native death finds no
-killer to classify; the port keeps no "last attacker" beyond the hit.
+INFERENCE: a death with no killer object (a status the victim inflicted on
+itself) costs nothing, as the native death finds no killer to classify; the
+port keeps no "last attacker" beyond the hit.
 
 ===========================================================================
 */

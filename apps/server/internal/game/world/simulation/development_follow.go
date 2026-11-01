@@ -51,7 +51,7 @@ func (s *MonsterState) DevelopmentCreateLeader(division string, refID uint32, po
 	state.instances.set(instance.Gid, instance)
 	state.movers.set(instance.Gid, mover)
 	state.behavior.set(instance.Gid, 0)
-	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], instance.Gid)
+	state.listRegionGid(spawn.RegionID, instance.Gid)
 	return instance, nil
 }
 
@@ -149,7 +149,7 @@ func (s *MonsterState) DevelopmentFollowSnapshot(division string, leader uint32,
 	var out []DevelopmentActorSnapshot
 	// Unique leaders and summoned children cannot enter dormant storage.
 	// Do not deserialize the entire sleeping world for each fixture observation.
-	for gid, resident := range state.instances.hot {
+	for gid, resident := range state.instances.hotRows() {
 		if gid != leader && resident.summonerGID != leader {
 			continue
 		}
@@ -177,19 +177,25 @@ func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.division(division)
-	for gid, resident := range state.instances.hot {
+	// Collect first: remove swaps the last hot row into the hole, so
+	// the walk itself must not remove (see monsterHotSlot).
+	var family []uint32
+	for gid, resident := range state.instances.hotRows() {
 		if gid == leader || resident.summonerGID == leader {
-			instance := state.instances.hotValue(gid, resident)
-			state.instances.remove(gid)
-			delete(state.contributions, gid)
-			state.releaseApproachActor(gid)
-			state.movers.remove(gid)
-			state.behavior.remove(gid)
-			delete(state.aiTimers, gid)
-			delete(state.storedAITimers, gid)
-			delete(state.pendingSummons, gid)
-			removeRegionGid(state.byRegion, instance.Spawn.RegionID, gid)
+			family = append(family, gid)
 		}
+	}
+	for _, gid := range family {
+		instance := state.instances.get(gid)
+		state.instances.remove(gid)
+		delete(state.contributions, gid)
+		state.releaseApproachActor(gid)
+		state.movers.remove(gid)
+		state.behavior.remove(gid)
+		delete(state.aiTimers, gid)
+		delete(state.storedAITimers, gid)
+		delete(state.pendingSummons, gid)
+		state.removeRegionGid(instance.Spawn.RegionID, gid)
 	}
 }
 
@@ -211,6 +217,6 @@ func (s *MonsterState) DevelopmentRemoveLeader(division string, leader uint32) {
 		delete(state.aiTimers, leader)
 		delete(state.storedAITimers, leader)
 		delete(state.pendingSummons, leader)
-		removeRegionGid(state.byRegion, instance.Spawn.RegionID, leader)
+		state.removeRegionGid(instance.Spawn.RegionID, leader)
 	}
 }
