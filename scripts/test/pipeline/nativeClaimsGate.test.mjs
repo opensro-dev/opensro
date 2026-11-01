@@ -78,4 +78,14 @@ test("the table's header, rule and quoted rows are not claims", () => {
 	assert.equal( claimRowCount( FILLED_TABLE ), 1 );
 	assert.equal( claimRowCount( `<!--\n${FILLED_TABLE}-->` ), 0 );
 	assert.equal( claimRowCount( "" ), 0 );
+	assert.equal(
+		claimRowCount( `<!-- open
+${FILLED_TABLE}` ),
+		0
+	);
+	assert.equal(
+		claimRowCount( `<!-- a -->
+${FILLED_TABLE}` ),
+		1
+	);
 });

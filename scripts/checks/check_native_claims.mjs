@@ -123,6 +123,28 @@ export function citedAddresses( text ) {
 
 /*
 ================
+withoutHtmlComments
+
+The text outside HTML comments. An unclosed comment hides the rest, as it
+does when GitHub renders the body. A scan, not a replace, so text that a
+removal joins up cannot form a new comment.
+================
+*/
+function withoutHtmlComments( text ) {
+	let visible = "", at = 0;
+	while ( at < text.length ) {
+		const open = text.indexOf( "<!--", at );
+		if ( open < 0 ) return visible + text.slice( at );
+		visible += text.slice( at, open );
+		const close = text.indexOf( "-->", open + 4 );
+		if ( close < 0 ) return visible;
+		at = close + 3;
+	}
+	return visible;
+}
+
+/*
+================
 claimRowCount
 
 The filled rows of the body's native-claims table. A template's empty header
@@ -130,7 +152,7 @@ counts as none, and so does a table quoted inside an HTML comment.
 ================
 */
 export function claimRowCount( body ) {
-	const visible = body.replace( /<!--[\s\S]*?-->/g, "" ), heading = CLAIMS_HEADING.exec( visible );
+	const visible = withoutHtmlComments( body ), heading = CLAIMS_HEADING.exec( visible );
 	if ( !heading ) return 0;
 	const rest = visible.slice( heading.index + heading[0].length ), end = rest.search( /^##\s/m );
 	const rows = (end < 0 ? rest : rest.slice( 0, end )).split( /\r?\n/ ).filter( row => row.trim().startsWith( "|" ) );
