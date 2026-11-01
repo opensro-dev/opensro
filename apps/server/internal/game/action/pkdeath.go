@@ -47,6 +47,9 @@ type deathKiller struct {
 	player       *enterworld.Character
 	siege        bool
 	strikerLevel int64
+	// murdererDrain marks the murderer status drain (murdererdrain.go). No
+	// world object dealt the damage, but the death settles as a monster kill.
+	murdererDrain bool
 }
 
 /*
@@ -60,6 +63,11 @@ classified by playerKillKind.
 ================
 */
 func (rt *Runtime) deathKind(division string, victim *enterworld.Character, killer deathKiller) pk.DeathKind {
+	if killer.murdererDrain {
+		// The native drain's hit source is a town guard NPC, so the death
+		// settles as a monster's blow: its relief, loss row and drop roll.
+		return pk.DeathMonster
+	}
 	if killer.siege {
 		return pk.DeathSpecialWorld
 	}
