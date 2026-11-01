@@ -2325,12 +2325,21 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "npc-talk" || command.kind === "npc-choice" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
-				if (
-					!localGid || target.targetPending || conversation.phase === "closed" ||
-					conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 2)
-				) throw Error( "Select an available talking NPC" );
-				if ( command.kind === "npc-talk" ) npcConversation.talk( now );
-				else npcConversation.choose( command.choice, now );
+				try {
+					if (
+						!localGid || target.targetPending || conversation.phase === "closed" ||
+						conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 2)
+					) throw Error( "Select an available talking NPC" );
+					if ( command.kind === "npc-talk" ) npcConversation.talk( now );
+					else npcConversation.choose( command.choice, now );
+				} catch ( error ) {
+					// A click that fails before sending leaves no frame
+					// behind: name it in the log (the session's error
+					// publish still runs on the rethrow) rather than
+					// letting it vanish (#2293).
+					console.warn( `[SRO npc] ${command.kind} refused before sending: ${String( error )}` );
+					throw error;
+				}
 				return null;
 			}
 

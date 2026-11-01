@@ -119,6 +119,45 @@ export function closeDetail( facts: CloseFacts ): string {
 
 /*
 ================
+isOutOfMemoryFailure
+
+Engines refuse an allocation in two shapes: a RangeError naming memory
+("Array buffer allocation failed"), or a bare thrown string. The incident
+in #2299 read "out of memory" with no error-class prefix, so it was the
+string, and the test reads the stringified value to catch both. The
+refusal is not the applying packet's fault: the heap was already at its
+limit when an ordinary packet applied, so it classifies apart from
+packet_application_failed and tells the player the one remedy.
+================
+*/
+export function isOutOfMemoryFailure( error: unknown ): boolean {
+	return /^(RangeError: )?(out of memory|array buffer allocation failed)/i.test( String( error ) );
+}
+
+/*
+================
+outOfMemoryFailure
+
+The failure an out-of-memory refusal reports, or null when the error is
+not one. Every catch that can meet the refusal - packet application, the
+receive path, a world step - asks here, so the code that routes the
+incident to "runtime" and the reload remedy (the only fix a player has)
+live once. The refusal says nothing about the work in flight, so no
+catch may let it wear that work's classification.
+================
+*/
+export function outOfMemoryFailure( error: unknown ): NetworkFailure | null {
+	if ( !isOutOfMemoryFailure( error ) ) return null;
+	return {
+		category: "software",
+		code: "out_of_memory",
+		message: "The game ran out of memory. Please reload the page to keep playing.",
+		stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+	};
+}
+
+/*
+================
 createNetwork
 ================
 */
@@ -391,7 +430,10 @@ export function createNetwork(
 			inbox.push( frame );
 			bytes += data.byteLength;
 		} catch ( error ) {
-			fail( String( error ) );
+			// A decode-side failure with no frame to blame keeps the
+			// transport default, unless the engine refused an allocation
+			// on the way in - that is memory, not protocol.
+			fail( String( error ), undefined, outOfMemoryFailure( error ) ?? undefined );
 		}
 	}
 	/*
@@ -923,14 +965,18 @@ export function createNetwork(
 				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
 				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
-				fail( `Packet application failed: ${String( error )}`, current, {
-					category: "software",
-					code: unsupported ? "unsupported_feature" : "packet_application_failed",
-					message: unsupported ?
-						"An unsupported game operation interrupted your session." :
-						"A game error interrupted your session.",
-					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
-				} );
+				fail(
+					`Packet application failed: ${String( error )}`,
+					current,
+					outOfMemoryFailure( error ) ?? {
+						category: "software",
+						code: unsupported ? "unsupported_feature" : "packet_application_failed",
+						message: unsupported ?
+							"An unsupported game operation interrupted your session." :
+							"A game error interrupted your session.",
+						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+					}
+				);
 				return;
 			}
 			// Outside the consume try: a full outbound buffer is a transport

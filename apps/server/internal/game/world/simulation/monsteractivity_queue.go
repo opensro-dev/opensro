@@ -480,6 +480,11 @@ is gone; the mover is then meaningless.
 type behaviorActorSnapshot struct {
 	instance monster.Instance
 	mover    monster.MoverState
+	// moverGen is the mover row's commit generation read with the
+	// mover (zero when no row exists yet and the mover was
+	// synthesized): the base generation the step's commits guard on
+	// (#2137 slice 1, CommitMoverGen).
+	moverGen uint64
 	ok       bool
 }
 
@@ -489,8 +494,8 @@ MonsterState.behaviorActorLive
 
 The dispatch's existence probe: whether the population still holds
 the actor, without building its instance value. The leg's dispatch
-decides only this; the actor itself is read inside the action lane
-(behaviorActorMover), under the lane's division lock (#2047 review).
+decides only this; the actor itself comes from the batch's leg-start
+snapshot (monsterlegsnapshot.go).
 ================
 */
 func (s *MonsterState) behaviorActorLive(key populationKey, gid uint32) bool {
@@ -510,11 +515,9 @@ locked pass: the step otherwise re-pays the lock, a population scan
 (#2029). The mover half is MonsterState.Mover's value for this
 population - the stored row, or the synthesized spawn mover when no
 row exists yet - so the step continues with exactly what its own read
-would have returned. Called from inside the action lane (or the
-adjacent direct dispatch), never ahead of its lock: a mover set by a
-slower lane while the leg waits for the lock must be the value the
-step starts from, or the step's whole-value commits overwrite it
-(#2047 review).
+would have returned. The leg no longer calls this: it reads
+legSnapshot, whose commit generation drops a commit planned from a
+value a slower lane has since replaced (#2047 review, #2137 slice 1).
 ================
 */
 func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRef) behaviorActorSnapshot {
@@ -524,6 +527,20 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if state == nil {
 		return behaviorActorSnapshot{}
 	}
+	return s.behaviorActorMoverLocked(state, ref)
+}
+
+/*
+================
+MonsterState.behaviorActorMoverLocked
+
+behaviorActorMover's read with the population resolved and s.mu
+held: the leg snapshot (monsterlegsnapshot.go) reads a whole batch
+through this one helper under its single locked pass, so a snapshot
+actor and a dispatch-read actor are the same values by construction.
+================
+*/
+func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref behaviorActorRef) behaviorActorSnapshot {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
 	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
@@ -539,17 +556,18 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if !ok {
 		mover, ok = state.movers.lookup(ref.gid)
 	}
+	gen := state.movers.generation(ref.gid)
 	if ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
 	}
 	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
 }
 
 /*

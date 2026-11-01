@@ -207,6 +207,10 @@ type Runtime struct {
 	NpcDialogs *NpcDialogStore
 	NpcQuests  NpcQuestHooks
 
+	// npcDialogRefusals counts refused 0x3773 choices per reason class
+	// (npcdialog.go, #2293); a class's first refusal also logs at info.
+	npcDialogRefusals npcDialogRefusalCounts
+
 	// GMQuests are the quest runtime's GM tools (gmquest.go), injected by the
 	// composition root like NpcQuests.
 	GMQuests GMQuestHooks

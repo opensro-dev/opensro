@@ -43,6 +43,7 @@ const CODE_LABELS = {
 	socket_closed: "the connection dropped",
 	world_entered: "entered the world",
 	packet_application_failed: "a server message could not be applied",
+	out_of_memory: "the browser ran out of memory",
 	device_lost: "the graphics device was lost",
 	server_shutdown: "the server restarted",
 	replaced: "signed in somewhere else",
