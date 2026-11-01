@@ -6,7 +6,7 @@ Run commands from the server module root:
 go run ./cmd/operations/sro-nomad status
 ```
 
-New operators should follow [Getting started](../../../docs/GETTING_STARTED.md). This file is a
+New operators should follow [Getting started](../../../docs/guides/GETTING_STARTED.md). This file is a
 command catalog, not a second setup procedure.
 
 Commands are grouped by ownership while each executable remains an independent
@@ -32,7 +32,10 @@ policy emerges. `sro-evidence` stays separate and read-only by design.
   - `validate`: parse and plan jobs and validate Variable inputs without
     mutation;
   - `deploy`: reconcile Agent and enabled GameWorld jobs;
+  - `publish-client`: publish a built client;
   - `status`: report configured and running jobs;
+  - `notice`: send a player notice;
+  - `maintenance-list`: list maintenance entries;
   - `stop`: gracefully drain and deregister the managed fleet;
   - `rotate-session-key`: perform acknowledged online Agent signing-key
     rotation.
@@ -54,7 +57,7 @@ go build -o agent.exe ./cmd/services/sro-agent
 ```
 
 Do not run those binaries directly during normal operation.
-[Getting started](../../../docs/GETTING_STARTED.md) owns the source-checkout build/bootstrap/start
+[Getting started](../../../docs/guides/GETTING_STARTED.md) owns the source-checkout build/bootstrap/start
 sequence. [DEPLOYMENT.md](../ops/docs/DEPLOYMENT.md) owns runtime security and
 state contracts. [The Nomad guide](../ops/nomad/README.md) owns production
 fleet operations.
@@ -83,9 +86,10 @@ fleet operations.
 
 - `moveclip-oracle` runs the server movement clip implementation over shared
   differential-oracle chords;
+- `navsweep` finds traps, pockets and one-way edges around a point;
 - `performance-ring` measures worst-case scoped monster population;
 - `spawnable-npcs` emits the data-authored, evidence-filtered NPC asset roster;
-- `spawnable-monsters` emits the evidence-filtered monster asset roster;
+- `creatable-monsters` emits every monster reference the server can create;
 - `fortress-structures` emits every fortress structure reference with hit points.
 
 Run a utility from the module root:

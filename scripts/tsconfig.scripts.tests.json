@@ -1,0 +1,100 @@
+{
+	// Typecheck gate for scripts/test/ (`pnpm check:scripts-tests`) — the third
+	// program alongside tsconfig.scripts.json (non-strict core) and
+	// tsconfig.scripts.strict.json (strict ratchet). It exists because the test
+	// tree is where scripts/ meets the typed world: these .mjs suites import
+	// cross-package TypeScript from apps/client, packages/wip-bridge,
+	// packages/runtime and reconstruct/wip/browser-1to1, and none of that import
+	// closure was type-checked from the scripts side before this program.
+	//
+	// Same "files" allowlist discipline as the sibling programs, same reasons
+	// (see tsconfig.scripts.json): glob scope silently explodes the program, and
+	// the allowlist IS the ratchet — each listed file is a zero-error
+	// commitment, and tsc still follows each file's own import closure.
+	// idStyleChecker.test.mjs is deliberately NOT listed: it is already checked
+	// by BOTH sibling programs and double-listing it here would triple-check it.
+	//
+	// Option shape: the .ts trees this program pulls in pass their own gates
+	// under tsconfig.base.json (apps/, packages/) and
+	// reconstruct/wip/browser-1to1/tsconfig.check.json, so the module options
+	// mirror those trees — Bundler resolution, allowImportingTsExtensions,
+	// resolveJsonModule, isolatedModules, jsx react-jsx, and the client's
+	// @wip/* + @sro/wip-bridge/* path aliases. target ES2022 keeps
+	// useDefineForClassFields at its base-config value (true) by default.
+	//
+	// strictNullChecks is ON while strict stays OFF. This is deliberate and
+	// load-bearing: the cross-package trees are written against strict
+	// narrowing semantics. Without strictNullChecks, 15 spurious errors appear
+	// INSIDE other-owned files — e.g. CStringCheck.ts's `if ( !parsed.ok )`
+	// discriminant narrowing fails (a `true`-typed discriminant may be
+	// undefined in the non-strict model, so the `ok: true` member cannot be
+	// excluded by falsiness) and six reconstruct TS2352 conversions lose their
+	// overlap proofs. strictNullChecks matches the owning trees' assumptions
+	// and only makes the scripts-side checking stricter, never weaker. Full
+	// strict stays off for the same reason as the entry gate: the test fixtures
+	// carry noImplicitAny debt that would start this gate red.
+	//
+	// BUILD-CLOSURE NULL DEBT: PAID (2026-07-29). Eight test files were
+	// originally excluded because their import closures pull scripts/build/
+	// modules that carried ~45 strictNullChecks-only annotation errors (mostly
+	// `[]` literals inferred never[] and uninitialized-let unions). Those
+	// eight build files (assetPacks, char/exportGlb, shared/cifResources,
+	// jsonAssetCompression, shared/audioResources, rebuildLock,
+	// shared/resourceIo, world/buildOutdoorWorldRegionResources) were
+	// annotated to strictNullChecks-clean (pure JSDoc plus one documented
+	// inert cast) and six of the tests are back on the allowlist. New
+	// null-debt introduced in that closure surfaces HERE first: this is the
+	// only program that checks those files with strictNullChecks on.
+	//
+	// The last two residual exclusions (outdoorWorldRegionResources,
+	// worldFormats) were resolved 2026-07-29 with truthful-in-context JSDoc
+	// casts at the reading test sites: the modules' inferred unions are honest
+	// (readEdgeBlock carries assocRegions only for global edges; the builder's
+	// objects union carries resourceIndexPublicPath XOR resources; the outdoor
+	// group loader returns undefined only when the index file is absent), and
+	// each cast asserts the arm the test provably constructed. Every test/
+	// file except idStyleChecker.test.mjs is now listed.
+	//
+	// DOM libs for the same reason as the siblings: the closure reaches browser
+	// code (Window ambient at scripts/types/browserGlobals.d.ts included).
+	// Wall-clock note: the three tests that import wip-bridge mission runtime
+	// pull ~2,400 reconstruct .ts files into the program; ~20s cold is the
+	// accepted cost of actually checking that seam.
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": true,
+		"noEmit": true,
+		"strict": false,
+		"strictNullChecks": true,
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"jsx": "react-jsx",
+		"types": ["node"],
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"paths": {
+			"@wip/*": ["../reconstruct/wip/browser-1to1/*"],
+			"@sro/wip-bridge/*": ["../packages/wip-bridge/src/*"]
+		}
+	},
+	"files": [
+		// ambient types: window debug hooks used by browser-context code
+		// test/ (see banner for the idStyleChecker.test.mjs note)
+		"test/assets/assetPackGroupParity.test.mjs",
+		"test/assets/assetPackIntegrity.test.mjs",
+		"test/assets/generatedAssetMembership.test.mjs",
+		"test/assets/jsonAssetCompression.test.mjs",
+		"test/mission/missionMinimapBuild.test.mjs",
+		"test/helpers/outdoorRegionPayloadCheck.mjs",
+		"test/world/outdoorWorldRegionResources.test.mjs",
+		"test/assets/pythonRun.test.mjs",
+		"test/assets/rebuildLockInterop.test.mjs",
+		"test/world/worldFormats.test.mjs"
+	]
+}

@@ -14,7 +14,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const waveTestRegion = 0x655e
@@ -117,9 +117,52 @@ func TestWaveWarnsThenLandsHuntableMonstersOnce(t *testing.T) {
 	if len(rt.announcer.queued) != 2 {
 		t.Fatalf("notices = %d, want the warning and the landing", len(rt.announcer.queued))
 	}
-	rt.Monsters.ExpireMonsterLifetimes(clock.Add(progression.HalloweenWaveLifetime).UnixMilli())
+	rt.Monsters.ExpireMonsterLifetimes(clock.Add(progression.HalloweenWaveSpan()).UnixMilli())
 	if left := len(detachedActors(rt)); left != 0 {
 		t.Fatalf("%d wave monsters outlived the wave", left)
+	}
+}
+
+/*
+================
+TestWaveLeavesInStepsNotAllAtOnce
+
+The #2124 fix's contract: at the bare lifetime exactly one monster per
+field is due, then one more per despawn step, and the field is empty
+when its last step lands. One synchronized expiry of all 140 wave
+monsters cost the crowded-field run an 11-tick burst (worst tick 6.2 s).
+================
+*/
+func TestWaveLeavesInStepsNotAllAtOnce(t *testing.T) {
+	rt, clock := waveTestRuntime(t, true)
+	rt.advanceHalloweenWaves()
+	*clock = time.Date(2026, 11, 3, 6, 55, 0, 0, time.UTC)
+	rt.advanceHalloweenWaves()
+	*clock = clock.Add(5*time.Minute + time.Second)
+	rt.advanceHalloweenWaves()
+	landed := *clock
+	perField := progression.HalloweenWaveGourdsPerField + progression.HalloweenWaveRingPerField
+	want := 2 * perField
+	if got := len(detachedActors(rt)); got != want {
+		t.Fatalf("actors = %d, want %d", got, want)
+	}
+	expire := func(at time.Time) int {
+		rt.Monsters.ExpireMonsterLifetimes(at.UnixMilli())
+		return len(detachedActors(rt))
+	}
+	step := progression.HalloweenWaveDespawnStep
+	base := landed.Add(progression.HalloweenWaveLifetime)
+	if got := expire(base.Add(-time.Second)); got != want {
+		t.Fatalf("before the lifetime: %d left, want %d", got, want)
+	}
+	if got := expire(base); got != want-2 {
+		t.Fatalf("at the lifetime: %d left, want %d (one per field)", got, want-2)
+	}
+	if got := expire(base.Add(step)); got != want-4 {
+		t.Fatalf("one step later: %d left, want %d", got, want-4)
+	}
+	if got := expire(base.Add(time.Duration(perField-1) * step)); got != 0 {
+		t.Fatalf("after the drain: %d left, want 0", got)
 	}
 }
 
@@ -131,8 +174,8 @@ The timetable names fields by codename; a typo would silently skip a field.
 ================
 */
 func TestEveryWaveFieldHasOpenWorldGroundInShippedData(t *testing.T) {
-	licensed.RequireGameData(t)
-	state := simulation.NewMonsterState(monster.LoadTemplate(licensed.RetailTextdataDir(t)))
+	clientdata.RequireGameData(t)
+	state := simulation.NewMonsterState(monster.LoadTemplate(clientdata.RetailTextdataDir(t)))
 	if _, found := state.ReferenceByCodename(halloweenGourdCodename); !found {
 		t.Fatal("the Gourd is not in shipped data")
 	}

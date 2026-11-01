@@ -8,8 +8,10 @@ Area rules live next to the code:
 - [`apps/client-next/AGENTS.md`](apps/client-next/AGENTS.md) - browser client
 - [`scripts/AGENTS.md`](scripts/AGENTS.md) - asset pipeline, checks, task runner
 
+Topic guides for contributors' agents live in [`docs/agents/`](docs/agents/README.md).
+
 Several agents working at once also follow
-[`docs/AGENT-COORDINATION.md`](docs/AGENT-COORDINATION.md): the shared log,
+[`docs/agents/AGENT-COORDINATION.md`](docs/agents/AGENT-COORDINATION.md): the shared log,
 reviews, merges and evidence for performance claims.
 
 When a rule here conflicts with habit or with a gate's letter, the rule wins.
@@ -36,12 +38,12 @@ client features as a row in the Experimental window
 (`apps/client-next/src/engine/foundation/ui/experimental-options.ts`), server
 rules behind an `SRO_<FEATURE>` environment flag whose off value is native
 (as `SRO_BETA_GROWTH`), with the code marked "port-only, not native". Test
-both settings. [CONTRIBUTING.md](CONTRIBUTING.md) has the contributor version.
+both settings. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the contributor version.
 
 ## Reverse engineering without Binary Ninja
 
-For native investigations, read [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md)
-and [docs/RESEARCH_PROGRESS.md](docs/RESEARCH_PROGRESS.md). Binary Ninja is optional.
+For native investigations, read [docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md)
+and [docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
 When the task requires RE, agents should set up the documented isolated Python
 environment and install its pinned packages, subject to the session's network
 and execution permissions. Do not install globally or download retail binaries.
@@ -169,7 +171,7 @@ is mechanical (reverse it and reproduce the old hash) before re-freezing.
 - Generated output belongs in `.generated/` or `.state/`, not in the source
   tree.
 - One owner says where `.generated/` is: `scripts/lib/generatedRoot.mjs`
-  (Python: `scripts/sro_paths.py`; Go tests: `licensed.ClientPublicRoot`).
+  (Python: `scripts/sro_paths.py`; Go tests: `clientdata.ClientPublicRoot`).
   Never build a `.generated/...` path yourself; `check:generated-root`
   refuses it.
 
@@ -208,7 +210,7 @@ package store, never through a link:
 - Only the resolvers read `SRO_GENERATED_ROOT`, `SRO_SERVER_GAME_DATA_ROOT`
   and `SRO_GAME_ROOT` (`scripts/lib/generatedRoot.mjs`,
   `scripts/build/world/paths.mjs`, `scripts/sro_paths.py`,
-  `internal/testsupport/licensed`, `internal/gamedata`); every other tool asks
+  `internal/testsupport/clientdata`, `internal/gamedata`); every other tool asks
   them. `check:generated-root` refuses a direct read, as it refuses a
   hand-built `.generated` path, and code that assumes the tree sits inside
   the checkout (a relative path or containment check against the checkout)
@@ -265,7 +267,7 @@ Reporting rules:
 - Check native claims against the disassembly, not against a function name in
   a Binary Ninja database. Names there have been wrong.
 - A PR that relies on native behaviour lists each claim in the native-claims
-  table ([CONTRIBUTING.md](CONTRIBUTING.md) section 6): claim, evidence, how
+  table ([CONTRIBUTING.md](.github/CONTRIBUTING.md) section 6): claim, evidence, how
   it was checked, status.
 - Another agent may be working in the tree at the same time. Before rewriting
   a shared file (task definitions, CI, manifests), check whether it changed in

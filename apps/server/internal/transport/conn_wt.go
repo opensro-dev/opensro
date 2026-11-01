@@ -151,11 +151,14 @@ func (w *wtConn) ReadFrame(ctx context.Context) (Frame, error) {
 	}
 }
 
-// wtWriteTimeout bounds one stream write, the WebSocket bound
-// (wsWriteTimeout) applied to WebTransport: WriteFrame had no deadline
-// at all, so a session's write loop could park forever on a peer that
-// stopped reading - and a resume's WELCOME queues behind that loop
-// (#1453). An expired write errors and follows the normal write-error
+// wtWriteTimeout bounds one stall in a stream write, the WebSocket
+// bound (wsWriteTimeout) applied to WebTransport: WriteFrame had no
+// deadline at all, so a session's write loop could park forever on a
+// peer that stopped reading - and a resume's WELCOME queues behind
+// that loop (#1453). WriteFrame re-arms the deadline as the record
+// progresses (writeAllWithinStall), so the bound kills a peer that
+// stopped reading, never a large record whose peer is still reading
+// (#2311). An expired write errors and follows the normal write-error
 // path the WebSocket shape already takes: the write loop detaches, the
 // frame keeps its stream position, and a resume re-sends it only if
 // the client's position says it never arrived (stream_ring.go).
@@ -169,8 +172,13 @@ func (w *wtConn) WriteFrame(f Frame) error {
 	case <-w.readDone:
 		return w.getReadErr()
 	}
-	_ = w.str.SetWriteDeadline(time.Now().Add(wtWriteTimeout))
-	return WriteStreamFrame(w.str, f)
+	buf, err := EncodeStreamFrame(f)
+	if err != nil {
+		return err
+	}
+	return writeAllWithinStall(w.str, buf, func() {
+		_ = w.str.SetWriteDeadline(time.Now().Add(wtWriteTimeout))
+	})
 }
 
 func (w *wtConn) SupportsUnreliable() bool { return true }

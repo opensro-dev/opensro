@@ -19,6 +19,7 @@ async function load( file ) {
 }
 const { createNpcConversation } = await load( "runtime/simulation/worker/session/world/gameplay/npc/npc.ts" );
 const { decodeNpcDialogue } = await load( "foundation/gameplay/npc-dialogue.ts" );
+const { serverNotification } = await load( "foundation/gameplay/system-notices.ts" );
 const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 function packet( kind, prompt, options = [] ) {
 	const string = s => {
@@ -41,7 +42,36 @@ test("NPC wire grammar, exact choices and malformed admission are atomic", () =>
 	assert.deepEqual( decodeNpcDialogue( frame.payload ).options.map( x => x.choice ), [ 5, 7, 8 ] );
 	assert.deepEqual( decodeNpcDialogue( packet( 3, "PROMPT" ).payload ).options.map( x => x.choice ), [ 2, 3 ] );
 	assert.deepEqual( decodeNpcDialogue( packet( 1, "PROMPT" ).payload ).options.map( x => x.choice ), [ 1 ] );
-	assert.throws( () => decodeNpcDialogue( packet( 5, "PROMPT" ).payload ), /Unsupported/ );
+	assert.throws( () => decodeNpcDialogue( packet( 6, "PROMPT" ).payload ), /Unsupported/ );
+	// Kind 5: the kind-4 rows, then a wide item codename and a u32 count
+	// that format into the prompt as %s and %d (763C10 / 5D60C0).
+	const narrow = s => {
+		const p = Buffer.from( s ), n = Buffer.alloc( 2 );
+		n.writeUInt16LE( p.length );
+		return Buffer.concat( [ n, p ] );
+	};
+	const wide = s => {
+		const n = Buffer.alloc( 2 );
+		n.writeUInt16LE( s.length );
+		return Buffer.concat( [ n, Buffer.from( s, "utf16le" ) ] );
+	};
+	const count60 = Buffer.alloc( 4 );
+	count60.writeUInt32LE( 60 );
+	const kind5Payload = Buffer.concat( [
+		Buffer.from( [ 5 ] ),
+		narrow( "GIVE %s FOR %d" ),
+		Buffer.from( [ 1 ] ),
+		narrow( "SN_TALK_COMMON_EXIT" ),
+		wide( "ITEM_ETC_BOX" ),
+		count60
+	] );
+	const decoded5 = decodeNpcDialogue( kind5Payload );
+	assert.equal( decoded5.kind, 5 );
+	assert.equal( decoded5.prompt, "GIVE %s FOR %d" );
+	assert.deepEqual( decoded5.options.map( x => x.choice ), [ 5 ] );
+	assert.deepEqual( decoded5.item, { codename: "ITEM_ETC_BOX", count: 60 } );
+	assert.throws( () => decodeNpcDialogue( Buffer.concat( [ kind5Payload, Buffer.of( 0 ) ] ) ), /trailing/ );
+	assert.throws( () => decodeNpcDialogue( kind5Payload.subarray( 0, kind5Payload.length - 1 ) ), /Truncated/ );
 	const owner = createNpcConversation( () => {} );
 	owner.select( 7 );
 	owner.talk( 0 );
@@ -222,5 +252,82 @@ test("recall appointment uses granted capability and publishes only authoritativ
 		game.command( { kind: "recall-appoint", gid: 7 }, 6 );
 		assert.equal( frames.length, 0 );
 		game.dispose();
+	}
+});
+
+test("So-ok helmet and gift clicks at 0, 1, 59 and 60 boxes show the price or the result", () => {
+	// The exact frames the server emits for one So-ok row click: a kind-4
+	// closing answer (prompt line, one Exit row) and, except for the gift
+	// click on an empty bag, a channel-7 top banner. Short of 60 boxes the
+	// banner names the price and the holding; at the price it names what
+	// was spent; every gift click answers with its line. Nothing is silent.
+	const narrow = s => {
+		const p = Buffer.from( s ), n = Buffer.alloc( 2 );
+		n.writeUInt16LE( p.length );
+		return Buffer.concat( [ n, p ] );
+	};
+	const answer = symbol =>
+		Buffer.concat( [
+			Buffer.from( [ 4 ] ),
+			narrow( symbol ),
+			Buffer.from( [ 1 ] ),
+			narrow( "SN_TALK_COMMON_EXIT" )
+		] );
+	const banner = text =>
+		Buffer.concat( [
+			Buffer.from( [ 7, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" )
+		] );
+	const NO_BOX = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_E";
+	const GRANTED = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_C";
+	const cases = [
+		{
+			boxes: 0,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 0.",
+			gift: NO_BOX,
+			giftBanner: ""
+		},
+		{
+			boxes: 1,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 1.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 1 gift(s) received."
+		},
+		{
+			boxes: 59,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 59.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 59 gift(s) received."
+		},
+		{
+			boxes: 60,
+			helmet: GRANTED,
+			helmetBanner: "Exchanged 60 Jewel Boxes for a helmet.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 60 gift(s) received."
+		}
+	];
+	const assertAnswer = ( symbol, bannerText ) => {
+		const owner = createNpcConversation( () => {} );
+		owner.select( 7 );
+		owner.talk( 0 );
+		const payload = answer( symbol );
+		owner.receive( { opcode: 0x3773, payload } );
+		assert.equal( owner.state().phase, "ready" );
+		const dialogue = decodeNpcDialogue( payload );
+		assert.equal( dialogue.prompt, symbol );
+		assert.deepEqual( dialogue.options.map( x => x.choice ), [ 5 ] );
+		if ( bannerText ) {
+			const notice = serverNotification( 0x3667, banner( bannerText ) );
+			assert.equal( notice?.text, bannerText );
+			assert.equal( notice?.notificationBanner, true );
+		}
+	};
+	for ( const row of cases ) {
+		assertAnswer( row.helmet, row.helmetBanner );
+		assertAnswer( row.gift, row.giftBanner );
 	}
 });

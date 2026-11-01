@@ -1845,6 +1845,16 @@ export function createEntities(
 		},
 		/*
 		================
+		monsters
+
+		The monsters in the table now (861580's CICMonster list).
+		================
+		*/
+		monsters(): EntityState[] {
+			return [ ...entities.values() ].filter( entity => entity.kind === "monster" );
+		},
+		/*
+		================
 		npcs
 
 		The NPCs and guards in the table now (the non-user list StartGroundMove

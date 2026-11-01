@@ -3,7 +3,7 @@
 
 assets.mjs - asset pipeline tasks
 
-`pnpm assets <verb> [<family>]`: prepare and check a licensed client
+`pnpm assets <verb> [<family>]`: prepare and check a client
 (prepare, doctor), build (build, build full, build world-outdoor), publish
 and refresh pack families, and the maintenance tools. A
 first build is `assets prepare`, `assets doctor`, then `assets build full`.
@@ -28,7 +28,7 @@ function familyTask( kind, family, args, description ) {
 		description,
 		kind: "assets",
 		ci: false,
-		requires: [ "licensed-client-extraction", "generated-assets" ],
+		requires: [ "client-extraction", "generated-assets" ],
 		timeoutClass: "long",
 		command: "node",
 		args
@@ -108,10 +108,10 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:prepare",
-		description: "Extract your licensed v1.150 client (PK2 archives and music) into extracted/",
+		description: "Extract your v1.150 client (PK2 archives and music) into extracted/",
 		kind: "assets",
 		ci: false,
-		requires: [ "licensed-client" ],
+		requires: [ "client-install" ],
 		timeoutClass: "long",
 		command: "python",
 		args: [ "-B", "scripts/prepare_client_resources.py" ]
@@ -128,10 +128,10 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:build",
-		description: "Build the browser projection of licensed SRO resources",
+		description: "Build the browser projection of SRO resources",
 		kind: "assets",
 		ci: true,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/build_sro_resources.mjs" ]
@@ -141,7 +141,7 @@ export const ASSET_TASKS = [
 		description: "Refresh native font asset packs",
 		kind: "assets",
 		ci: false,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/refresh_native_font_asset_packs.mjs" ]
@@ -161,7 +161,7 @@ export const ASSET_TASKS = [
 		description: "Build outdoor world resources",
 		kind: "assets",
 		ci: false,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/build_outdoor_world_resources.mjs" ]
@@ -171,7 +171,7 @@ export const ASSET_TASKS = [
 		description: "Build the complete browser resource projection, including every outdoor region",
 		kind: "assets",
 		ci: true,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		tasks: [ "assets:build:world-outdoor", "assets:build" ]
 	} ),
@@ -207,7 +207,7 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:ledger",
-		description: "Report packed assets no build owner claims (read-only; see docs/ASSET_DELIVERY.md)",
+		description: "Report packed assets no build owner claims (read-only; see docs/architecture/ASSET_DELIVERY.md)",
 		kind: "assets",
 		ci: false,
 		requires: [ "generated-assets" ],

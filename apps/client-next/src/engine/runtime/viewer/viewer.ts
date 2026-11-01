@@ -3,7 +3,7 @@
 
 viewer.ts - the 3D viewer: one model drawn alone, with no session
 
-Port-only, not native (docs/VIEWER.md). runtime.ts startViewerRuntime
+Port-only, not native (docs/guides/VIEWER.md). runtime.ts startViewerRuntime
 creates the owners (assets, renderer, character presentation) and calls
 frame() once per animation frame; this module decides what each frame
 shows and reports the outcome. The model is one entity fed through the
@@ -87,7 +87,7 @@ const WHITE: readonly [number, number, number, number] = [ 1, 1, 1, 1 ];
 // exceeds that 0.6 diffuse scale. An invented brighter key (1.15) doubled
 // through the equipment env-map stage (AEE6D0, MODULATE2X) and turned pale
 // armour white. Only the direction is the viewer's (port-only,
-// docs/VIEWER.md): from in front of the model and above, since the retail
+// docs/guides/VIEWER.md): from in front of the model and above, since the retail
 // sun would light it from the side. Models face -z (MODEL_FRONT).
 const VIEWER_LIGHT: ViewerLight = {
 	diffuse: [ 0.285, 0.285, 0.285 ],

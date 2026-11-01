@@ -19,7 +19,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -66,7 +66,7 @@ none refuses it.
 ================
 */
 func TestTradeSpecialNeedsADressedTrader(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_TRADE_CH_SPECIAL2_1")
 	level := int64(40)
@@ -98,7 +98,7 @@ acceptance line _07. The box handed to Ahjin, he pays the camels.
 ================
 */
 func TestTradeSpecialNamesWhatIsLeft(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_TRADE_CH_SPECIAL2_1")
 	level, gold := int64(40), int64(0)
@@ -159,7 +159,7 @@ The other order: the box delivered first, Seopok answers _04.
 ================
 */
 func TestTradeSpecialNamesTheHuntWhenTheBoxIsDelivered(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_TRADE_CH_SPECIAL2_1")
 	level := int64(40)

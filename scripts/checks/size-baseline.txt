@@ -1,6 +1,7 @@
 # Files over 1000 lines once formatted to dprint.json, each as `path # reason`: debt waiting for a split,
 # or an exemption whose reason says why no responsibility boundary exists. This ledger may only shrink:
 # split a file (or let it fall under the limit), then delete its line. See scripts/checks/check_source_file_size.mjs.
+apps/client-next/src/engine/contracts/gameplay.ts # one command and event contract the UI and worker share; a split would divide the union
 apps/client-next/src/engine/foundation/navigation/clipper.ts # one movement-clipper owner: installed region grids, object placements, the event registry and every clip query read the same install-sequence state, and the worker and main-thread instances must answer identically, so the algorithm stays in one file
 apps/client-next/src/engine/foundation/ui/pet-design-data.ts # generated from the server's petdesign.json by pet_design_export.py (check:pet-design); skill, gear and affix IDs form one matched client/server design contract
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts # not yet analysed; split on its responsibility boundaries when formatted

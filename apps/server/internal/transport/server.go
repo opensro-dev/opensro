@@ -170,8 +170,9 @@ func NewServerFromViper() (*Server, error) {
 func NewServer(cfg Config) (*Server, error) {
 	cfg.applyDefaults()
 	if cfg.HelloTimeout <= 0 || cfg.GracePeriod <= 0 ||
-		cfg.KeepaliveInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 {
-		return nil, fmt.Errorf("transport: handshake, grace, keepalive, idle and entry bootstrap durations must be positive")
+		cfg.KeepaliveInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 ||
+		cfg.RingParkBound <= 0 {
+		return nil, fmt.Errorf("transport: handshake, grace, keepalive, idle, entry bootstrap and ring park durations must be positive")
 	}
 	if cfg.OutboundQueue <= 0 || cfg.OutboundQueueBytes <= 0 {
 		return nil, fmt.Errorf("transport: outbound queue frame and byte limits must be positive")
@@ -257,10 +258,15 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// The TCP side: WebSocket alternate plus the cert-hash and health
 	// endpoints. Plain HTTP in dev; production puts real TLS in front.
+	// EnableCompression only negotiates permessage-deflate when the
+	// peer offers it; which messages actually deflate is decided per
+	// message in wsConn.WriteFrame (wsCompressMinBytes, #2311). A
+	// peer that never offers it is served exactly as before.
 	upgrader := websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-		CheckOrigin:     checkOrigin,
+		ReadBufferSize:    4096,
+		WriteBufferSize:   4096,
+		CheckOrigin:       checkOrigin,
+		EnableCompression: true,
 	}
 	tcpMux := http.NewServeMux()
 	tcpMux.HandleFunc("/transport/references/", func(w http.ResponseWriter, r *http.Request) {

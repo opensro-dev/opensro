@@ -48,7 +48,9 @@ test("a .texture path loads as its native texture, a .png path as an image", () 
 	const loader = createUiAssets(
 		assets,
 		( id, image ) => published.push( [ id, image ] ),
-		"https://fixture.invalid/"
+		"https://fixture.invalid/",
+		undefined,
+		() => {}
 	);
 	const tile = "/assets/images/Media_extracted/minimap/1x1.texture",
 		icon = "/assets/images/Media_extracted/icon/a.png";

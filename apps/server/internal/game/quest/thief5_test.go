@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,7 +25,7 @@ TestThiefReplyClosesTheOtherFollowUp
 ================
 */
 func TestThiefReplyClosesTheOtherFollowUp(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for reply, kept := range []string{"QNO_CA_THIEF_6_1", "QNO_CA_THIEF_6_2"} {
 		closed := map[string]string{"QNO_CA_THIEF_6_1": "QNO_CA_THIEF_6_2", "QNO_CA_THIEF_6_2": "QNO_CA_THIEF_6_1"}[kept]
 		t.Run(kept, func(t *testing.T) {

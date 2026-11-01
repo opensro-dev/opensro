@@ -22,7 +22,7 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -267,8 +267,8 @@ the other fortresses' zones are not served in v1.150.
 ================
 */
 func TestGatePulleysLoadFromCharacterData(t *testing.T) {
-	licensed.RequireGameData(t)
-	pulleys, err := loadGatePulleys(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	pulleys, err := loadGatePulleys(clientdata.RetailTextdataDir(t))
 	if err != nil {
 		t.Fatal(err)
 	}

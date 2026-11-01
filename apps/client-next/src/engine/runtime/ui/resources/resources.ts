@@ -49,8 +49,10 @@ export function createUiAssets(
 	},
 	// Port-only, not native: told when the icon atlas manifest installs (or
 	// fails to). The renderer's quad packer remaps the icons it maps into
-	// their sheet; without a manifest nothing changes.
-	installAtlas: ( mapping: IconAtlas | null ) => void = () => {}
+	// their sheet; without a manifest nothing changes. An owner with no quad
+	// packer passes nothing: it asks for no manifest and loads the per-icon
+	// files, because a sheet it could not remap would leave every icon unset.
+	installAtlas?: ( mapping: IconAtlas | null ) => void
 ) {
 	const pending = new Map<string, number>();
 	const loaded = new Map<string, readonly [number, number]>();
@@ -193,7 +195,7 @@ export function createUiAssets(
 						// target, and the packer's records with it.
 						effective = new Set( [ ...wanted ].map( target ) );
 						atlasChanged = true;
-						installAtlas( mapping );
+						installAtlas?.( mapping );
 					} else atlasFailed = true;
 					changed = true;
 				}
@@ -264,7 +266,7 @@ export function createUiAssets(
 					atlas = null;
 					atlasFailed = true;
 					effective = new Set( [ ...wanted ].map( target ) );
-					installAtlas( null );
+					installAtlas?.( null );
 					clearFailure( path, "released" );
 					changed = true;
 				} else if ( result.kind === "error" && result.absent ) {
@@ -283,7 +285,7 @@ export function createUiAssets(
 					changed = true;
 				}
 			}
-			if ( !atlas && !atlasFailed && atlasRequest < 0 && assets.available() > 0 ) {
+			if ( installAtlas && !atlas && !atlasFailed && atlasRequest < 0 && assets.available() > 0 ) {
 				for ( const path of wanted ) {
 					if ( !path.startsWith( ICON_ROOT ) ) continue;
 					try {

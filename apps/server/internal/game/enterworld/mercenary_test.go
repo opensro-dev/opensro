@@ -11,18 +11,18 @@ import (
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
 ================
-TestLicensedMercenaryFamilies
+TestNativeMercenaryFamilies
 ================
 */
-func TestLicensedMercenaryFamilies(t *testing.T) {
+func TestNativeMercenaryFamilies(t *testing.T) {
 	tier.Long(t, "every licensed mercenary family resolves")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	skills := NewTextdataSkills(dir)

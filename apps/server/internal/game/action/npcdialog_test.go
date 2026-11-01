@@ -23,7 +23,7 @@ func TestUnfinishedQuestDialogueCannotMutateQuest(t *testing.T) {
 		return nil, nil
 	}
 	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
-	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol("ONGOING")) {
+	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer("ONGOING")) {
 		t.Fatalf("%v %q", frames, refusal)
 	}
 	if _, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{2}); refusal == "" {
@@ -61,7 +61,7 @@ func TestSideTalkRecordsItsLineThroughFinish(t *testing.T) {
 		if refused {
 			want = "BASE"
 		}
-		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol(want)) {
+		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer(want)) {
 			t.Fatalf("refused=%v: %v %q", refused, frames, refusal)
 		}
 		if len(heard) != 1 || heard[0] != "side-talk:QUEST~1@"+npc.Codename {
@@ -88,7 +88,7 @@ func TestQuestAcceptanceAndDenialUseAuthoredResponses(t *testing.T) {
 		if choice == 2 {
 			want, count = "ACCEPT", 1
 		}
-		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol(want)) || calls != count {
+		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer(want)) || calls != count {
 			t.Fatalf("choice %d: %v %q calls %d", choice, frames, refusal, calls)
 		}
 		if _, exists := rt.NpcDialogs.Get(testDivision, c.Name); exists {
@@ -124,7 +124,7 @@ func TestNpcEligibilityRefusalConfirmClosesAndReselectionRefreshesOffers(t *test
 	}
 	eligible = false
 	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{2})
-	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol("NPC_BS")) {
+	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer("NPC_BS")) {
 		t.Fatalf("refusal left client waiting: %v %q", frames, refusal)
 	}
 	if _, exists := rt.NpcDialogs.Get(testDivision, c.Name); exists {
@@ -176,7 +176,7 @@ func TestNpcRewardRefusalUsesAuthoredTextAndReopenCanRetry(t *testing.T) {
 		return nil, fullQuestBag{}
 	}
 	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{2})
-	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol(fullQuestBag{}.DialogueSymbol())) {
+	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer(fullQuestBag{}.DialogueSymbol())) {
 		t.Fatalf("inventory refusal disappeared: %v %q", frames, refusal)
 	}
 	if calls != 1 {
@@ -224,7 +224,7 @@ func TestNpcDialogQuestSessionIsSelectionBound(t *testing.T) {
 		t.Fatalf("option = frames %#v refusal %q accepted %q, want confirm only", frames, refusal, accepted)
 	}
 	frames, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{2})
-	if refusal != "" || accepted != "Q_TEST" || len(frames) != 2 || frames[0].Opcode != 0x31ED || frames[1].Payload[0] != 1 {
+	if refusal != "" || accepted != "Q_TEST" || len(frames) != 2 || frames[0].Opcode != 0x31ED || frames[1].Payload[0] != 4 {
 		t.Fatalf("confirm = frames %#v refusal %q accepted %q", frames, refusal, accepted)
 	}
 
@@ -273,7 +273,7 @@ func TestQuestOfferPagesTurnBeforeTheQuestion(t *testing.T) {
 		t.Fatalf("last page did not open the offer: %v %q", frames, refusal)
 	}
 	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{2})
-	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogSymbol("ACCEPT")) {
+	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogAnswer("ACCEPT")) {
 		t.Fatalf("offer after pages did not accept: %v %q %d", frames, refusal, accepted)
 	}
 }
@@ -304,7 +304,7 @@ func TestQuestOfferAcceptRowAcceptsWithoutAQuestion(t *testing.T) {
 		t.Fatal("a confirm yes answered the accept row")
 	}
 	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogFirstRow})
-	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogSymbol("ACCEPT")) {
+	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogAnswer("ACCEPT")) {
 		t.Fatalf("the accept row did not accept: %v %q %d", frames, refusal, accepted)
 	}
 	if _, open := rt.NpcDialogs.Get(testDivision, c.Name); open {
@@ -346,7 +346,7 @@ func TestQuestOfferPageRefusalRow(t *testing.T) {
 		if refuseError != nil {
 			answer = "BASE"
 		}
-		if refusal != "" || refused != "QUEST" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol(answer)) {
+		if refusal != "" || refused != "QUEST" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer(answer)) {
 			t.Fatalf("refusal row (owner error %v) = %v %q refused %q, want %s", refuseError, frames, refusal, refused, answer)
 		}
 		if _, live := rt.NpcDialogs.Get(testDivision, c.Name); live {

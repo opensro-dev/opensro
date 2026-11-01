@@ -16,7 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -41,7 +41,7 @@ func gmAbandonFrames(result OpResult, refID uint32) int {
 }
 
 func TestGMRemoveQuestDropsTheActiveRecordAndKeepsHistory(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, gmTutorialQuest); err != nil {
@@ -68,7 +68,7 @@ func TestGMRemoveQuestDropsTheActiveRecordAndKeepsHistory(t *testing.T) {
 }
 
 func TestGMRemoveQuestAllowsWhatTheGiveUpWindowRefuses(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, gmTutorialQuest); err != nil {
@@ -84,7 +84,7 @@ func TestGMRemoveQuestAllowsWhatTheGiveUpWindowRefuses(t *testing.T) {
 }
 
 func TestGMInitQuestForgetsEverythingThatRemembersTheQuest(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	c.CompletedQuestIds = []uint32{gmTutorialRefID, 77}
@@ -113,7 +113,7 @@ func TestGMInitQuestForgetsEverythingThatRemembersTheQuest(t *testing.T) {
 }
 
 func TestGMInitQuestAbandonsAnActiveQuestAndIsIdempotent(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, gmTutorialQuest); err != nil {
@@ -133,7 +133,7 @@ func TestGMInitQuestAbandonsAnActiveQuestAndIsIdempotent(t *testing.T) {
 }
 
 func TestGMResetQuestsClearsTheJournalAndEveryHistory(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	level := int64(3)
@@ -164,7 +164,7 @@ func TestGMResetQuestsClearsTheJournalAndEveryHistory(t *testing.T) {
 }
 
 func TestGMResetQuestsDropsARecordNoDefinitionOwns(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	const orphan = 987654
@@ -177,7 +177,7 @@ func TestGMResetQuestsDropsARecordNoDefinitionOwns(t *testing.T) {
 }
 
 func TestGMCompleteQuestPaysTheRewardWithoutTheObjective(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	level := int64(3)
@@ -212,7 +212,7 @@ func TestGMCompleteQuestPaysTheRewardWithoutTheObjective(t *testing.T) {
 }
 
 func TestGMCompleteQuestWalksEveryStageOfAStagedQuest(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, gmTutorialQuest); err != nil {
@@ -232,7 +232,7 @@ func TestGMCompleteQuestWalksEveryStageOfAStagedQuest(t *testing.T) {
 }
 
 func TestGMCompleteQuestTakesTheShortObjectiveItemsThatAreHeld(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	const code = "QNO_CH_SPECIAL_1"
@@ -263,7 +263,7 @@ func TestGMCompleteQuestTakesTheShortObjectiveItemsThatAreHeld(t *testing.T) {
 }
 
 func TestGMCompleteQuestStillRefusesTheResuscitationExchangeWithoutHearts(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	c.MissionInventory = potionInventory(4)
@@ -276,7 +276,7 @@ func TestGMCompleteQuestStillRefusesTheResuscitationExchangeWithoutHearts(t *tes
 }
 
 func TestGMCompleteQuestCompletesWhenTheExperienceIsCapped(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	rt.ApplyExperience = func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) {
 		return nil, false

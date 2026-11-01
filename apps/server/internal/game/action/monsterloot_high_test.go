@@ -20,8 +20,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -136,7 +136,7 @@ TestFullEquipmentCatalogMatchesShippedMedia
 ================
 */
 func TestFullEquipmentCatalogMatchesShippedMedia(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	raw, err := os.ReadFile(filepath.Join("..", "item", "loot", ".generated", "equipment.json"))
 	if err != nil {

@@ -21,13 +21,13 @@ patch notes (an already published release's notes never change).
 
 <!--
 Does an open browser tab on the live client still cope with this change?
-A protocol-keeping release refuses a commit that changes what a tab
+In a protocol-keeping release, a commit that changes what a tab
 receives or decodes (server encoders and frames, the session worker, the
 foundation/gameplay decoders, other server changes under internal/game,
-internal/transport or internal/agent) unless its squash commit carries
-"Old-tab: safe - <reason>". Put that trailer in a commit message of this
+internal/transport or internal/agent) carries
+"Old-tab: safe - <reason>" on its squash commit. Put that trailer in a commit message of this
 branch and repeat it here, write "Protocol bump" when old tabs cannot cope,
-or "Not affected". See CONTRIBUTING.md section 6.
+or "Not affected". See .github/CONTRIBUTING.md section 6.
 -->
 
 ## Native claims

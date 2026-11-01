@@ -113,7 +113,7 @@ function main( pipelineName = "full" ) {
 	const jobs = resolveJobLimit();
 	// The full pipeline builds and checks against the licensed game data, so
 	// a test that needs it must fail - not skip - when it is missing
-	// (apps/server/internal/testsupport/licensed).
+	// (apps/server/internal/testsupport/clientdata).
 	if ( pipelineName === "full" ) process.env.SRO_REQUIRE_GAME_DATA = "1";
 	const definitions = getPipeline( pipelineName );
 	if ( !definitions ) {

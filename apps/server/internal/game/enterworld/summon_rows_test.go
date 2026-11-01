@@ -17,8 +17,8 @@ package enterworld
 import (
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -27,7 +27,7 @@ TestShippedSummonRowsAreAllReadable
 ================
 */
 func TestShippedSummonRowsAreAllReadable(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	if refused := items.RefusedSummonRows(); len(refused) != 0 {
 		t.Fatalf("summon items reach characterdata rows that failed validation: %v", refused)

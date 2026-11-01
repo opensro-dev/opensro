@@ -37,9 +37,9 @@ function fixture() {
 
 test("an unappliable success result resyncs instead of evaporating", () => {
 	const owner = fixture();
-	// Type 0x1C is a success result no arm applies; whatever it granted,
+	// Type 0x02 is a success result no arm applies; whatever it granted,
 	// this client cannot account for it.
-	assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, 0x1c, 20, 0 ) ), true );
+	assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, 2, 20, 0 ) ), true );
 	// Sends now refuse with the resync instruction instead of quietly
 	// drifting away from the server's bag.
 	assert.throws( () => owner.move( 13, 14, 1, 0 ), /reconnect to resynchronize/ );
@@ -102,3 +102,37 @@ test("a late warehouse gold answer with no pending stays unclaimed", () => {
 	// No resync was declared: a send fails only the ordinary way.
 	assert.throws( () => owner.move( 13, 14, 1, 0 ), /Inventory command unavailable/ );
 });
+
+test("the pet-bag pickup and the quest gold grant apply without resync", () => {
+	const owner = createInventory( () => {} );
+	owner.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refItemSnapshot: [ { refObjId: 5, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 5, slot: 20, body: itemBody( 5, 10 ) } ]
+	} );
+	// The pet-bag pickup into the player bag (type 0x1C) applies.
+	assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, 0x1c, 20, ...itemBody( 5, 30 ) ) ), true );
+	assert.equal( owner.state().inventory.find( row => row.slot === 20 )?.quantity, 30 );
+	// A quest gold heap at slot 254 is an amount, not a bag row (#2256).
+	const bag = owner.state().inventory;
+	assert.equal( owner.receive( 0xb06d, Uint8Array.of( 1, 14, 254, 200, 3, 0, 0 ) ), true );
+	assert.deepEqual( owner.state().inventory, bag );
+	assert.throws( () => owner.receive( 0xb06d, Uint8Array.of( 1, 14, 254, 200, 3 ) ), /quest gold grant/ );
+	// Nothing declared a desync: a send fails only the ordinary way.
+	assert.throws( () => owner.move( 13, 14, 1, 0 ), /Inventory command unavailable/ );
+});
+
+/*
+================
+itemBody
+
+A stacked item body: reference, then the u16 quantity.
+================
+*/
+function itemBody( ref, quantity ) {
+	const p = Buffer.alloc( 6 );
+	p.writeUInt32LE( ref );
+	p.writeUInt16LE( quantity, 4 );
+	return [ ...p ];
+}

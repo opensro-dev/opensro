@@ -34,6 +34,11 @@ var (
 	errOutboundBurstTooLarge = errors.New("transport: outbound burst exceeds bounded queue capacity")
 	// errIdle detaches a connection that stopped answering keepalives.
 	errIdle = errors.New("transport: idle timeout")
+	// errRingParkBound detaches a session whose writer stayed parked on
+	// a full resume ring with no stream-ack progress past the park
+	// bound: the burst can neither advance nor be re-sent on this
+	// attachment, so the grace window and a resume take over (#2146).
+	errRingParkBound = errors.New("transport: writer parked on a full resume ring past its bound")
 	// errHandlerPanic closes a session whose game handler panicked; a
 	// sentinel so the close-reason metrics can classify it.
 	errHandlerPanic = errors.New("transport: handler panic")
@@ -90,10 +95,18 @@ type Session struct {
 	publishedSorted []uint32
 	publishedStale  bool
 
-	queue       []Frame
-	queueBytes  int
-	drainClose  bool         // close the session once the queue flushes
-	closeReason *CloseReason // retained even when teardown is triggered by a drain timeout
+	queue      []Frame
+	queueBytes int
+	// resendFrames and resendBytes are the block resumeFromLocked last
+	// prepended to the queue: retained ring frames being re-sent, not
+	// producer output. Send's bound subtracts them while they drain
+	// (writeLoop decrements per counted ordered dequeue), so a resume
+	// the ring covers is never refused - or closed on - for queue
+	// depth the producer did not create (#2146).
+	resendFrames int
+	resendBytes  int
+	drainClose   bool         // close the session once the queue flushes
+	closeReason  *CloseReason // retained even when teardown is triggered by a drain timeout
 
 	// The lossy lane: loss-tolerant frames coalesced per (opcode, key) so a
 	// WebSocket client under backlog gets the LATEST position instead of a
@@ -111,6 +124,12 @@ type Session struct {
 	ring      []ringFrame
 	ringBytes int
 	ringFloor uint32
+	// lastStreamAck is when the client's applied position last
+	// advanced (ackLocked) on this attachment; attach restamps it.
+	// The keepalive watchdog reads it beside ringGateLocked: a full
+	// ring with no ack progress for RingParkBound is a wedged
+	// applier, not a slow one (#2146).
+	lastStreamAck time.Time
 
 	resumeToken [ResumeTokenLen]byte
 	// admissionCommit consumes the HELLO ticket this attachment was
@@ -309,8 +328,12 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 		return ErrSessionClosed
 	}
 	frameBytes := 2 + len(owned)
-	if len(s.queue) >= s.hub.cfg.OutboundQueue ||
-		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
+	// The bound measures producer output only: a re-sent block the
+	// resume ring is still draining (resendFrames) is retained state
+	// the producer did not create, and closing here would kill the
+	// resumed session the ring just served (#2146).
+	if len(s.queue)-s.resendFrames >= s.hub.cfg.OutboundQueue ||
+		s.queueBytes-s.resendBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
@@ -463,6 +486,9 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.transport = conn.Kind()
 	s.fallback = ""
 	s.lastRecv = time.Now()
+	// The new attachment starts with a clean ack clock: it gets the
+	// full park bound to acknowledge what the ring re-sends.
+	s.lastStreamAck = time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
 	s.pushFront(Frame{Opcode: OpWelcome, Payload: EncodeWelcome(Welcome{
@@ -521,6 +547,8 @@ func (s *Session) detachGen(gen int, cause error) {
 	s.hub.metrics.detaches.Add(1)
 	if errors.Is(cause, errIdle) {
 		s.hub.metrics.detachesIdle.Add(1)
+	} else if errors.Is(cause, errRingParkBound) {
+		s.hub.metrics.detachesRingPark.Add(1)
 	} else {
 		s.hub.metrics.detachesOther.Add(1)
 	}
@@ -698,6 +726,13 @@ func (s *Session) writeLoop() {
 			s.queue[0] = Frame{} // release payload references in the consumed backing array
 			s.queue = s.queue[1:]
 			s.queueBytes -= f.EncodedLen()
+			if s.resendFrames > 0 && CountsOnStream(f.Opcode) {
+				// The re-sent block leaves first and only it is
+				// counted: transport frames ahead of it (WELCOME)
+				// and the lossy lane never held a ring slot.
+				s.resendFrames--
+				s.resendBytes -= f.EncodedLen()
+			}
 		} else {
 			slot := s.lossyKeys[0]
 			s.lossyKeys = s.lossyKeys[1:]

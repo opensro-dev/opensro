@@ -8,8 +8,10 @@ one silent past the idle timeout (into the resume grace window), and pings
 on a short cadence while a scene is loading, because a healthy world entry
 sends nothing while the server builds it (#1417). It also closes a scene
 admission whose bootstrap never reached the queue within the entry bound
-(the wedged-entry watchdog). Moved verbatim out of session.go, which owns
-attachment, queues and IO.
+(the wedged-entry watchdog), and detaches a session whose writer stayed
+parked on a full resume ring past the park bound into the same grace
+window (#2146). Moved verbatim out of session.go, which owns attachment,
+queues and IO.
 
 ===========================================================================
 */
@@ -90,6 +92,14 @@ func (s *Session) keepaliveLoop() {
 				!s.sceneLoadingSince.IsZero() && now.Sub(s.sceneLoadingSince) > s.hub.cfg.EntryBootstrapBound
 			loadingAge := now.Sub(s.sceneLoadingSince)
 			revision := s.sceneRevision
+			// A writer parked on a full resume ring holds a burst
+			// that can neither advance nor be re-sent on this
+			// attachment. Once no ack has advanced for the park
+			// bound the applier is wedged, not slow: detach so the
+			// grace window and a resume take over (#2146).
+			ringParked := !s.lastStreamAck.IsZero() &&
+				now.Sub(s.lastStreamAck) > s.hub.cfg.RingParkBound && s.ringGateLocked()
+			parkAge := now.Sub(s.lastStreamAck)
 			s.mu.Unlock()
 			if bootstrapStuck {
 				log.WithFields(log.Fields{
@@ -99,6 +109,15 @@ func (s *Session) keepaliveLoop() {
 					"bound_ms": s.hub.cfg.EntryBootstrapBound.Milliseconds(),
 				}).Warn("transport: scene bootstrap not enqueued within the entry bound; closing session")
 				s.hub.closeSession(s, errSceneBootstrapStuck)
+				continue
+			}
+			if ringParked {
+				log.WithFields(log.Fields{
+					"session":  s.ID,
+					"age_ms":   parkAge.Milliseconds(),
+					"bound_ms": s.hub.cfg.RingParkBound.Milliseconds(),
+				}).Warn("transport: writer parked on a full resume ring past its bound; detaching for resume")
+				s.detachGen(gen, errRingParkBound)
 				continue
 			}
 			if gen != lastGen {

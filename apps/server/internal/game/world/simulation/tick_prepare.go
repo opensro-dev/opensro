@@ -112,9 +112,11 @@ func (t *Ticker) placeInKeptOrder(sessions []SessionSnapshot) bool {
 		}
 		copy(sessions, t.orderValues)
 	}
-	for _, pos := range t.orderScratch {
-		t.orderUsed[pos] = false
-	}
+	// Clear the marks, not the scratch slots: after a shrink the
+	// slots past the break hold positions from the larger kept
+	// order, outside this slice. Every mark set above is inside
+	// it, so clearing the slice clears exactly them.
+	clear(t.orderUsed)
 	return placed
 }
 

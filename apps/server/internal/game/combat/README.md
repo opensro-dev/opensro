@@ -80,7 +80,7 @@ in the implementation rather than presented as a captured v1.150 server result.
   critical-result assertions with HP debit checked separately.
 - `item/wire/actionresultfixture_test.go`: generates the shared nonfatal and
   overkill packets from the simulation owner.
-- Browser `combat-overkill.test.mjs`: consumes those packets through decoding,
+- Client runtime `combat-overkill.test.mjs`: consumes those packets through decoding,
   HP and animation-feedback owners and checks that feedback is not duplicated.
 - `equipmentreinforcement_test.go`: all weapon subclasses through 16, Chinese
   and European armor parts, both shield subtypes, independent variance lanes,

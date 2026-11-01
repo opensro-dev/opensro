@@ -3,7 +3,7 @@
 
 server_data.py - the server game-data archive the GameWorld opens here
 
-A server release carries binaries, not the licensed game data: the GameWorld
+A server release carries binaries, not the game data: the GameWorld
 opens the archive at config["game_data"]. Until 2026-10-05 nothing replaced
 that archive after the first deploy, and a release that needed newer data
 crash-looped after the fleet had stopped (catalogue v2 against v3 code).

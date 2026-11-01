@@ -40,9 +40,10 @@ import (
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
-	monster.EnvTrainingDummy:        "GM-only training targets",
-	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:            "GM-only training targets",
+	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -444,7 +445,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
+				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above: a Star's stays in the Event chat lines, while a Moon's and a Sun's also show in the top-centre banner; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvSealBoard, On: action.SealBoardFromEnv(),

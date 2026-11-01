@@ -1,0 +1,18 @@
+# Python dependencies for the build pipeline and the reverse-engineering tools.
+# Install with:  py -3 -m pip install -r scripts/requirements.txt
+# Building assets needs only scripts/requirements-build.txt.
+#
+# The asset build's own modules are in scripts/requirements-build.txt (included below).
+# pydantic - strict, versioned contracts for durable reverse-engineering artifacts.
+# libclang - C++ AST gate for evidence-backed inheritance, members, and layouts.
+# hypothesis - generative invariant tests for PE/RTTI/planner policy.
+# lief      - independent PE reader used to cross-check handwritten mapping code.
+# iced-x86  - independent x86 decoder used to validate exact intervals and calls.
+# cosmic-ray - focused mutation testing of evidence-policy modules.
+-r requirements-build.txt
+pydantic==2.13.5
+libclang==18.1.1
+hypothesis==6.165.10
+lief==0.17.6
+iced-x86==1.21.0
+cosmic-ray==8.4.3

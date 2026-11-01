@@ -14,7 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -23,8 +23,8 @@ TestDamagePassiveAllRanksLearnAndStoreRestore
 ================
 */
 func TestDamagePassiveAllRanksLearnAndStoreRestore(t *testing.T) {
-	licensed.RequireGameData(t)
-	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	source := enterworld.NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-clientInputs.mjs - the licensed client inputs the asset build reads
+clientInputs.mjs - the client inputs the asset build reads
 
 One definition of what a prepared game root holds, shared by the build's
 preflight (build_sro_resources.mjs) and `pnpm assets doctor`. The folders
@@ -28,7 +28,7 @@ export const EXTRACTED_FOLDERS = [
 	"Music_mp3"
 ];
 export const PREPARATION_MANIFEST = path.join( extractedRoot, ".opensro-preparation.json" );
-// The Python modules of requirements-build.txt: import name, pip name, and
+// The Python modules of scripts/requirements-build.txt: import name, pip name, and
 // whether the resource build itself imports it (Crypto serves only prepare).
 export const PYTHON_BUILD_MODULES = [
 	{ module: "PIL", pip: "Pillow", build: true },
@@ -38,9 +38,9 @@ export const PYTHON_BUILD_MODULES = [
 ];
 // Windows uses the py launcher; elsewhere a venv selected through SRO_PYTHON.
 export const PYTHON_INSTALL_HINT = process.platform === "win32" ?
-	"py -3 -m pip install -r requirements-build.txt" :
-	"python3 -m venv .venv && .venv/bin/pip install -r requirements-build.txt && export SRO_PYTHON=$PWD/.venv/bin/python";
-const PREPARE_HINT = "run `pnpm assets prepare` (see docs/GETTING_STARTED.md)";
+	"py -3 -m pip install -r scripts/requirements-build.txt" :
+	"python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements-build.txt && export SRO_PYTHON=$PWD/.venv/bin/python";
+const PREPARE_HINT = "run `pnpm assets prepare` (see docs/guides/GETTING_STARTED.md)";
 
 /*
 ================

@@ -2,8 +2,8 @@ package quest
 
 import (
 	"fmt"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"path/filepath"
 	"testing"
 
@@ -28,7 +28,7 @@ func TestQuestCalendarHourBranches(t *testing.T) {
 }
 
 func TestQuestCalendarProductionQuotaAndCancellation(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)

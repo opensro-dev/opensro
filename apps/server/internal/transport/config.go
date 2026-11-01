@@ -78,6 +78,13 @@ type Config struct {
 	// under a second; this bound only fires when the entry lane is
 	// wedged, so a slow real entry can never hit it.
 	EntryBootstrapBound time.Duration
+	// RingParkBound caps how long the session writer may stay parked on
+	// a full resume ring (stream_ring.go) with no stream-ack progress
+	// before the session detaches into its resume grace window. A
+	// client that is applying frames acks within a frame or two, so
+	// the bound only fires when the applier is wedged; an unbounded
+	// park would hold the burst, and the session, forever (#2146).
+	RingParkBound time.Duration
 	// OutboundQueue and OutboundQueueBytes bound pending reliable and
 	// coalesced frames per session. Keeping both limits prevents tiny-frame
 	// floods and a few catalogue-sized frames from consuming unbounded memory.
@@ -159,6 +166,7 @@ func DefaultConfig() Config {
 		KeepaliveInterval:     20 * time.Second,
 		IdleTimeout:           60 * time.Second,
 		EntryBootstrapBound:   30 * time.Second,
+		RingParkBound:         30 * time.Second,
 		OutboundQueue:         8192,
 		OutboundQueueBytes:    32 << 20,
 		RateLimitPerSec:       25,
@@ -194,6 +202,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.EntryBootstrapBound == 0 {
 		c.EntryBootstrapBound = d.EntryBootstrapBound
+	}
+	if c.RingParkBound == 0 {
+		c.RingParkBound = d.RingParkBound
 	}
 	if c.OutboundQueue == 0 {
 		c.OutboundQueue = d.OutboundQueue

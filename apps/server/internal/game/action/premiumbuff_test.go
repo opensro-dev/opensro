@@ -18,8 +18,8 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -31,7 +31,7 @@ keeper's STR and INT (23, not the stored 20).
 ================
 */
 func TestPremiumTicketBuffReachesStatsAndTheStatBlock(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	pack, ok := items.ItemRefByCodename("ITEM_MALL_PREMIUM_GLOBAL_GOLDTIME")

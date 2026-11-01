@@ -31,8 +31,8 @@ import (
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const rahid6TestDivision = "rahid6-test"
@@ -193,7 +193,7 @@ Rahid 5 the offer refuses.
 ================
 */
 func TestRahid6SpecLoadsAndOfferRequiresRahid5(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	def := w.def
 	if def.Objective != ObjectiveCollect || def.CollectItemCodename != rahid6NecklaceCodename || def.CollectCount != 1 ||
@@ -224,7 +224,7 @@ not left active without its fiction item.
 ================
 */
 func TestRahid6AcceptanceRefusedOnFullBag(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	w.rt.PlanInventory = func(*enterworld.Character, []inventory.ItemAmount, []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error) {
 		return nil, nil, errors.New("bag full")
@@ -249,7 +249,7 @@ for the rest of the day.
 ================
 */
 func TestRahid6TravelGatesInNativeOrder(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	code := rahid6TravelPrefix + rahid6QuestCodename
@@ -329,7 +329,7 @@ answers after the meeting ends.
 ================
 */
 func TestRahid6SummonStampsTheDayWhenTheDoorRefuses(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	member := rahid6Accept(t, w, "RahidMember")
@@ -371,7 +371,7 @@ leader already holding the objective is handed nothing.
 ================
 */
 func TestRahid6TravelRegrantsALostBundle(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	leader.MissionInventory = nil
@@ -413,7 +413,7 @@ everyone and closes the layer.
 ================
 */
 func TestRahid6Timeline(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	member := rahid6Accept(t, w, "RahidMember")
@@ -483,7 +483,7 @@ evacuated the party without it.)
 ================
 */
 func TestRahid6TimelineEndsInsideItsOwnDeadline(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	member := rahid6Accept(t, w, "RahidMember")
@@ -524,7 +524,7 @@ closes.
 ================
 */
 func TestRahid6KillCrediting(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	holdItems(t, w.rt, leader, rahid6BundleCodename, 1) // two bundles held
@@ -588,7 +588,7 @@ alone. Completion at Shiphr then takes the necklace and pays.
 ================
 */
 func TestRahid6ActivatedExpelsTheUninvited(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	leader := rahid6Accept(t, w, "RahidLeader")
 	guest := rahid6Character(w, "RahidGuest", false)
@@ -628,7 +628,7 @@ end returns it and takes the gate down.
 ================
 */
 func TestRahid6ExitGateRisesBesideTheBoss(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	type raised struct {
 		world instance.ID
@@ -680,7 +680,7 @@ last resident's leave closes the layer, and the gate goes with it.
 ================
 */
 func TestRahid6LastLeaveTakesTheGateDown(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	w := newRahid6World(t)
 	var removed []instance.ID
 	w.rt.SpawnExitGate = func(instance.ID, simulation.Spawn) bool { return true }

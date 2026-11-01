@@ -57,6 +57,12 @@ const (
 	// {u16 len + ANSI sender name, sized wide text} (the narrow-name
 	// slot and the type-4 arm).
 	OpChatBroadcast uint16 = 0x3667
+
+	// chatTypeNotice is the 0x3667 server notice channel.
+	chatTypeNotice uint8 = 7
+
+	// MaxChatNoticeUnits is the client's limit on a server notice.
+	MaxChatNoticeUnits = 100
 	// OpChatHistory is a browser extension, not a retail opcode: the beta
 	// public transcript replayed at world admission, one frame of
 	// {u8 version=2, u8 count, count x (u64 sentAt Unix ms, u16 length,
@@ -231,6 +237,25 @@ func EncodeChatAckSuccess(chatType, second uint8) []byte {
 // the low byte fits the client's single-byte read.
 func EncodeChatAckError(errCode, chatType, second uint8) []byte {
 	return []byte{ChatAckResultError, errCode, chatType, second}
+}
+
+/*
+================
+EncodeChatNotice
+
+The 0x3667 channel 7 body: {u8 7, u16 wcharCount + UTF-16LE text}. The
+client shows it in the top banner and caps it at MaxChatNoticeUnits.
+================
+*/
+func EncodeChatNotice(message string) []byte {
+	units := utf16.Encode([]rune(message))
+	if len(units) > MaxChatNoticeUnits {
+		units = units[:MaxChatNoticeUnits]
+	}
+	writer := wire.NewWriter(3 + len(units)*2)
+	writer.U8(chatTypeNotice)
+	writeSizedWideString(writer, units)
+	return writer.Payload()
 }
 
 // EncodeChatBroadcastGid renders the 0x3667 gid-authored body for types

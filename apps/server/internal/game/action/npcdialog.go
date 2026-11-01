@@ -232,8 +232,9 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 	if !ok {
 		// Informational Confirm terminates the interaction: later server
 		// quest talk does the same; v1.150 client 761820 closes on B4B3 [1].
-		// Re-sending the base prompt creates an endless Confirm loop.
-		if choice == 1 {
+		// Re-sending the base prompt creates an endless Confirm loop. The
+		// Exit row of a closing answer (EncodeNpcDialogAnswer) ends it too.
+		if choice == 1 || choice == npcDialogFirstRow {
 			if selected, bound := rt.Selected.Get(divisionID, character.Name); bound {
 				if _, live := rt.npcForCurrentViewer(divisionID, character, selected); live {
 					outcome := rt.HandleTargetRelease(divisionID, character, wire.NewWriter(4).U32(selected).Payload())
@@ -266,7 +267,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			frames, serviceError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
 			rt.NpcDialogs.Clear(divisionID, character.Name)
 			if serviceError != nil {
-				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, ""
 			}
 			return frames, ""
 		}
@@ -280,13 +281,13 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			frames, heardError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
 			if heardError != nil {
 				log.Debugf("npcdialog: side talk %s refused: %v", conversation.Pending.Codename, heardError)
-				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, ""
 			}
-			return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.Pending.PromptSymbol)}), ""
+			return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.Pending.PromptSymbol)}), ""
 		}
 		if conversation.Pending.Informational {
 			rt.NpcDialogs.Clear(divisionID, character.Name)
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.Pending.PromptSymbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.Pending.PromptSymbol)}}, ""
 		}
 		conversation.Options = nil
 		if len(conversation.Pending.Pages) > 0 {
@@ -320,7 +321,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			if symbol == "" {
 				symbol = conversation.DefaultSymbol
 			}
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}, ""
 		}
 		if rt.NpcQuests.Accept == nil {
 			return nil, "quest acceptance owner is unavailable"
@@ -329,13 +330,13 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 		frames, acceptError := rt.NpcQuests.Accept(character, branch.Codename)
 		if acceptError != nil {
 			log.Debugf("npcdialog: quest branch %s refused: %v", branch.Codename, acceptError)
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, ""
 		}
 		symbol := branch.AcceptResponseSymbol
 		if symbol == "" {
 			symbol = conversation.DefaultSymbol
 		}
-		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}), ""
+		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}), ""
 	case npcDialogAcceptRow:
 		// The offer's only row is its acceptance: answer it as confirm's yes.
 		if choice != npcDialogFirstRow {
@@ -350,7 +351,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			if symbol == "" {
 				symbol = conversation.DefaultSymbol
 			}
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}, ""
 		}
 		if choice != npcDialogConfirmYes {
 			return nil, fmt.Sprintf("confirm choice %d is neither yes(2) nor no(3)", choice)
@@ -374,21 +375,21 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			}
 			if errors.As(err, &localized) && localized.DialogueSymbol() != "" {
 				rt.NpcDialogs.Clear(divisionID, character.Name)
-				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(localized.DialogueSymbol())}}, ""
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(localized.DialogueSymbol())}}, ""
 			}
 			// Eligibility may change after the offer (level, inventory or quest
 			// state). End this confirmation and answer with the authored base
 			// prompt; never keep a stale Yes action or silently strand a request.
 			log.Debugf("npcdialog: quest %s refused: %v", conversation.Pending.Codename, err)
 			rt.NpcDialogs.Clear(divisionID, character.Name)
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, ""
 		}
 		rt.NpcDialogs.Clear(divisionID, character.Name)
 		symbol := conversation.Pending.AcceptResponseSymbol
 		if symbol == "" {
 			symbol = conversation.DefaultSymbol
 		}
-		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}), ""
+		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}), ""
 	default:
 		return nil, "unknown NPC dialog stage"
 	}
@@ -416,7 +417,7 @@ func (rt *Runtime) openNpcDialogConfirm(divisionID string, character *enterworld
 			if errors.As(err, &localized) && localized.DialogueSymbol() != "" {
 				symbol = localized.DialogueSymbol()
 			}
-			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}, ""
 		}
 		conversation.Pending.Codename = prepared
 	}
@@ -452,14 +453,14 @@ NPC answers its base prompt instead and nothing is ended.
 func (rt *Runtime) refuseNpcQuest(divisionID string, character *enterworld.Character, conversation npcDialogSession, page NpcDialogPage) []wire.Frame {
 	rt.NpcDialogs.Clear(divisionID, character.Name)
 	if rt.NpcQuests.Refuse == nil {
-		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}
 	}
 	frames, err := rt.NpcQuests.Refuse(character, conversation.Pending.Codename)
 	if err != nil {
 		log.Debugf("npcdialog: quest refusal %s refused: %v", conversation.Pending.Codename, err)
-		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}
 	}
-	return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(page.RefuseResponseSymbol)})
+	return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(page.RefuseResponseSymbol)})
 }
 
 /*

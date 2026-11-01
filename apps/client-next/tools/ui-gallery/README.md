@@ -12,7 +12,7 @@ nothing a window sends is answered as a success.
 
 ## Run it
 
-Prepare the game assets as in `docs/GETTING_STARTED.md`, then from the
+Prepare the game assets as in `docs/guides/GETTING_STARTED.md`, then from the
 repository root:
 
 ```

@@ -13,7 +13,7 @@ Names are CP949 bytes. Only ASCII letters are case-folded, the convention of
 every JMX reader here: Python's str.lower() on the raw bytes would also fold
 0xC0-0xDE lead bytes and corrupt Korean names.
 
-Requires pycryptodome (requirements.txt).
+Requires pycryptodome (scripts/requirements.txt).
 
 ===========================================================================
 """
