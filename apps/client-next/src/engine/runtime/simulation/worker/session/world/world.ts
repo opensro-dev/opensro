@@ -170,6 +170,8 @@ onNetworkFailure
 				"unsupported" :
 				reason?.code === "reference_loading_failed" ?
 				"asset" :
+				reason?.code === "out_of_memory" ?
+				"runtime" :
 				frame ?
 				"packet" :
 				reason?.category === "software" ?

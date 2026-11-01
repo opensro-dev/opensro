@@ -119,6 +119,23 @@ export function closeDetail( facts: CloseFacts ): string {
 
 /*
 ================
+isOutOfMemoryFailure
+
+Engines refuse an allocation in two shapes: a RangeError naming memory
+("Array buffer allocation failed"), or a bare thrown string. The incident
+in #2299 read "out of memory" with no error-class prefix, so it was the
+string, and the test reads the stringified value to catch both. The
+refusal is not the applying packet's fault: the heap was already at its
+limit when an ordinary packet applied, so it classifies apart from
+packet_application_failed and tells the player the one remedy.
+================
+*/
+export function isOutOfMemoryFailure( error: unknown ): boolean {
+	return /^(RangeError: )?(out of memory|array buffer allocation failed)/i.test( String( error ) );
+}
+
+/*
+================
 createNetwork
 ================
 */
@@ -923,10 +940,17 @@ export function createNetwork(
 				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
 				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
+				const outOfMemory = isOutOfMemoryFailure( error );
 				fail( `Packet application failed: ${String( error )}`, current, {
 					category: "software",
-					code: unsupported ? "unsupported_feature" : "packet_application_failed",
-					message: unsupported ?
+					code: outOfMemory ?
+						"out_of_memory" :
+						unsupported ?
+						"unsupported_feature" :
+						"packet_application_failed",
+					message: outOfMemory ?
+						"The game ran out of memory. Please reload the page to keep playing." :
+						unsupported ?
 						"An unsupported game operation interrupted your session." :
 						"A game error interrupted your session.",
 					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
