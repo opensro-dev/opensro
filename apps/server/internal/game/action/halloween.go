@@ -178,19 +178,19 @@ func (rt *Runtime) planHalloweenGifts(character *enterworld.Character, wanted ui
 		next := addHalloweenGrant(grant, gift.Codename, gift.Count)
 		if gifts == 0 {
 			if _, _, planErr := rt.PlanQuestInventory(character, nil, next); planErr != nil {
-				return halloweenTalkBagFull, nil, nil, 0, nil
+				break
 			}
 		}
 		consume := []inventory.ItemAmount{{Codename: progression.HalloweenBoxCodename, Count: (gifts + 1) * progression.HalloweenBoxesPerGift}}
 		planned, plannedFrames, planErr := rt.PlanQuestInventory(character, consume, next)
 		if planErr != nil {
-			if gifts == 0 {
-				return halloweenTalkBagFull, nil, nil, 0, nil
-			}
 			break
 		}
 		rows, frames, grant = planned, plannedFrames, next
 		gifts++
+	}
+	if gifts == 0 {
+		return halloweenTalkBagFull, nil, nil, 0, nil
 	}
 	return halloweenTalkGranted, rows, frames, gifts, nil
 }
