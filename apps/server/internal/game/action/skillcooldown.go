@@ -72,10 +72,21 @@ No live record fields are read outside the character snapshot boundary.
 Every session's entry snapshot reads it every tick, so it evaluates the one
 unlinked parameter (combat.PlayerUnlinkedParameter) from the owners
 playerCombatStats reads, instead of the whole projection.
+
+The copy is the cast copy, not the full record (#2140): at a settled
+45-row inventory the full copy was most of this call. Every reader of
+the copy is cleared for the dropped plain bag rows - the projection
+reads the level, max level and base stats, statModifierWrites reads
+the name (its effect writes), the wanted streak and the job-suit slot,
+and, under the attack-pet expansion, the owner's life, town and
+free-battle state, worn suit and companions. The cast copy keeps all
+of that: every non-inventory child, the equipment and avatar rows and
+every companion-carrying bag row. TestEntryActionSpeedCastCopyMatchesFullCopy
+pins this root against the full copy.
 ================
 */
 func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
-	character := rt.characterSnapshot(division, rt.findCharacter(division, name))
+	character := rt.characterSnapshotCast(division, rt.findCharacter(division, name))
 	if character == nil {
 		return 100
 	}
