@@ -17,10 +17,10 @@ import (
 
 /*
 ================
-TestMaintenanceListShowsEveryShardChecked
+TestMaintenanceListShowsEveryEnabledShardChecked
 ================
 */
-func TestMaintenanceListShowsEveryShardChecked(t *testing.T) {
+func TestMaintenanceListShowsEveryEnabledShardChecked(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "maintenance-servers.json")
 	catalog := filepath.Join("..", "..", "..", "config", "shards.json")
 	if err := runMaintenanceList([]string{"-catalog", catalog, "-out", out}); err != nil {
@@ -40,7 +40,7 @@ func TestMaintenanceListShowsEveryShardChecked(t *testing.T) {
 	if err := json.Unmarshal(data, &rows); err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 2 || rows[0].ID != "global-official" || rows[0].TransportURL != "/shards/global-official" {
+	if len(rows) != 1 || rows[0].ID != "global-official" || rows[0].TransportURL != "/shards/global-official" {
 		t.Fatalf("rows = %+v", rows)
 	}
 	for _, row := range rows {
