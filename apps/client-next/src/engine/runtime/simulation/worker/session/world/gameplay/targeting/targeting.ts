@@ -30,6 +30,8 @@ const REPLY_TIMEOUT_MS = 10_000;
 // GATE_ROWS_FLAG is the teleport-gate service (0x1C) bit whose rows follow
 // the grant.
 const GATE_ROWS_FLAG = 0x8000000;
+// A teleport gate's grant: result byte, gid, capability word.
+const TELEPORT_GRANT_BYTES = 9;
 
 /*
 ================
@@ -229,10 +231,14 @@ receive
 				return true;
 			}
 			if ( p[0] !== 1 ) throw new Error( "Unsupported target result" );
-			const gate = pending?.family === "teleport";
+			// Native 764C60 picks the shape from the entity's class when the
+			// reply arrives, never from the click. The port's click-time family
+			// can disagree during the entry burst, and 9 bytes is only ever a
+			// teleport gate, so the length settles it (#2149).
+			const gate = pending?.family === "teleport" || p.length === TELEPORT_GRANT_BYTES;
 			// A teleport gate's word may carry 0x8000000, a quest exit gate's
 			// rows after the base (CIFNPCTalk_AppendTeleportRows 5D32C0).
-			const base = gate ? (pending!.fortress ? 11 : 9) : 0;
+			const base = gate ? (pending?.fortress ? 11 : TELEPORT_GRANT_BYTES) : 0;
 			const rows = gate && p.length > base && p.length >= 9 &&
 					(new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 5, true ) & GATE_ROWS_FLAG) !== 0 ?
 				decodeGateRows( p, base ) :

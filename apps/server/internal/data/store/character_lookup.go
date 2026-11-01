@@ -9,6 +9,11 @@ import (
 type characterLookupIndex struct {
 	names map[string]*domain.Character
 	ids   map[int64]*domain.Character
+	// list is the division's roster as a slice copy taken at rebuild
+	// time: the same records CharactersForDivision used to copy per
+	// call, now published once per roster change and shared by every
+	// reader until the next rebuild replaces it.
+	list []*domain.Character
 }
 
 // Match strings.EqualFold, including Unicode simple-fold cycles. First source
@@ -60,7 +65,11 @@ writing. First row wins, as the former linear lookup did.
 */
 func (s *Store) rebuildCharacterLookupLocked(division string) {
 	index := &characterLookupIndex{names: make(map[string]*domain.Character), ids: make(map[int64]*domain.Character)}
-	for _, c := range s.characters[division] {
+	roster := s.characters[division]
+	list := make([]*domain.Character, len(roster))
+	copy(list, roster)
+	index.list = list
+	for _, c := range roster {
 		if c == nil {
 			continue
 		}

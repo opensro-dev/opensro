@@ -163,3 +163,24 @@ test("the talk menu offers sign-up or cancel only for the registration NPC's mod
 	// The row rides after the service menu, ahead of TalkEnd.
 	assert.ok( joined.indexOf( "npc-flagwar" ) < joined.indexOf( "npc-talkend" ) );
 });
+
+test("a 9-byte grant is a teleport gate even when the click guessed otherwise", () => {
+	const targeting = createTargeting( () => {} );
+	targeting.select( 778, 0, "npc" );
+	const grant = new Uint8Array( 9 );
+	grant[0] = 1;
+	const view = new DataView( grant.buffer, grant.byteOffset, grant.byteLength );
+	view.setUint32( 1, 778, true );
+	view.setUint32( 5, 4, true );
+	assert.equal( targeting.receive( 0xb45a, grant ), true );
+	assert.equal( targeting.state().target, 778 );
+	assert.equal( targeting.state().targetCapabilities, 4 );
+});
+
+test("a grant that matches no shape still refuses", () => {
+	const targeting = createTargeting( () => {} );
+	targeting.select( 779, 0, "npc" );
+	const grant = new Uint8Array( 7 );
+	grant[0] = 1;
+	assert.throws( () => targeting.receive( 0xb45a, grant ), /Unsupported target grant/ );
+});

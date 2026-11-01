@@ -115,7 +115,7 @@ func TestSelfEffectAndConsumedConditionCannotBeArchived(t *testing.T) {
 	for _, row := range []monster.Instance{{Gid: 1, ConditionalUsed: 1}, {Gid: 2, SelfEffects: monster.SelfEffects{{Token: 1}}}} {
 		storage.set(row.Gid, row)
 		storage.freeze(row.Gid)
-		if _, ok := storage.hot[row.Gid]; !ok {
+		if _, ok := storage.hotRow(row.Gid); !ok {
 			t.Fatal("mutable lifetime lost to archive")
 		}
 		storage.remove(row.Gid)

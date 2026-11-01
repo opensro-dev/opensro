@@ -651,6 +651,26 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 	s.mu.Unlock()
 }
 
+/*
+================
+writableLocked
+
+Whether the writer has a frame it may dequeue now. The ordered head
+waits while the ring gate holds (ringGateLocked, #2146); a pending
+lossy frame is never ringed and always writable, so movement keeps
+flowing past a gated ordered head. Caller holds s.mu.
+================
+*/
+func (s *Session) writableLocked() bool {
+	if len(s.lossyKeys) > 0 {
+		return true
+	}
+	if len(s.queue) == 0 {
+		return false
+	}
+	return !s.ringGateLocked()
+}
+
 // writeLoop is the session's single writer for its whole life. It drains
 // the ordered queue first, then the lossy coalesce slots, whenever a
 // connection is attached; re-queues an ordered frame at the front when a
@@ -664,7 +684,7 @@ writeLoop
 func (s *Session) writeLoop() {
 	for {
 		s.mu.Lock()
-		for !s.closed && (!s.attached || (len(s.queue) == 0 && len(s.lossyKeys) == 0)) {
+		for !s.closed && (!s.attached || !s.writableLocked()) {
 			s.cond.Wait()
 		}
 		if s.closed {
@@ -672,7 +692,7 @@ func (s *Session) writeLoop() {
 			return
 		}
 		var f Frame
-		ordered := len(s.queue) > 0
+		ordered := len(s.queue) > 0 && (len(s.lossyKeys) == 0 || !s.ringGateLocked())
 		if ordered {
 			f = s.queue[0]
 			s.queue[0] = Frame{} // release payload references in the consumed backing array

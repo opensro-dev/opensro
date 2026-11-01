@@ -259,3 +259,135 @@ func TestPetBurstKillCreditsNoQuest(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCreditedHitBuildsTheRewardRosterOnlyForAKill
+
+The roster serves a kill alone (#2030): a surviving credited hit must
+not build it, a killing one must. Presence queries witness the build -
+the roster asks once per eligible character it materializes.
+================
+*/
+func TestCreditedHitBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	rt, clock, c, mob := newCombatTestRuntime(t, 10000)
+	presence := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		presence++
+		return true
+	}
+	row := rt.deps.SkillData().(staticSkillSource)[2]
+	snapshot := rt.characterSnapshot(testDivision, c)
+	hit, ok := rt.commitCreditedMonsterHit(testDivision, c, snapshot, row, mob, combat.Result{Damage: 50, ResultFlags: 1}, "test-hit", clock.NowMs())
+	if !ok || len(hit.impacts) == 0 || hit.impacts[0].Fatal {
+		t.Fatalf("the surviving hit did not commit plainly: %+v", hit)
+	}
+	if presence != 0 {
+		t.Fatalf("a surviving hit built the reward roster (%d presence queries)", presence)
+	}
+
+	rt2, clock2, c2, doomed := newCombatTestRuntime(t, 1)
+	presence2 := 0
+	rt2.RewardActorPresent = func(division, name string) bool {
+		presence2++
+		return true
+	}
+	row2 := rt2.deps.SkillData().(staticSkillSource)[2]
+	snapshot2 := rt2.characterSnapshot(testDivision, c2)
+	hit2, ok := rt2.commitCreditedMonsterHit(testDivision, c2, snapshot2, row2, doomed, combat.Result{Damage: 50, ResultFlags: 1}, "test-kill", clock2.NowMs())
+	if !ok || len(hit2.impacts) == 0 || !hit2.impacts[0].Fatal {
+		t.Fatalf("the killing hit did not commit: %+v", hit2)
+	}
+	if presence2 == 0 {
+		t.Fatal("the killing hit never built the reward roster")
+	}
+}
+
+/*
+================
+TestRewardRosterResolvesPosesWhenTheyAreRead
+
+#2030: the roster build resolves no positions; a pose read sees the
+actor where it stands at the read, not where it stood at the build.
+================
+*/
+func TestRewardRosterResolvesPosesWhenTheyAreRead(t *testing.T) {
+	rt, _, actor, _ := newCombatTestRuntime(t, 100)
+	roster := rt.monsterRewardRoster(testDivision, actor, 1000)
+	a, ok := roster.actors[enterworld.ObjectIDForCharacter(actor)]
+	if !ok {
+		t.Fatal("the actor is missing from its own roster")
+	}
+	before := rt.rewardActorPose(testDivision, a, 1000)
+	rt.Worlds.Update(simulation.WorldKey(testDivision, actor.Name),
+		func() simulation.WorldState { panic("the actor world must exist") },
+		func(w *simulation.WorldState) { w.Spawn.X = before.X + 5000 })
+	after := rt.rewardActorPose(testDivision, a, 1000)
+	if after.X != before.X+5000 {
+		t.Fatalf("the pose was frozen at roster build: before %+v, after %+v", before, after)
+	}
+}
+
+/*
+================
+TestSkillStrikeBuildsTheRewardRosterOnlyForAKill
+
+#2030 strike gate: a skill strike whose planned damage cannot kill
+doors the caster alone and builds no reward roster; a killing strike
+keeps the roster-wide door. Presence queries witness the build, as
+in the credited lane's pin.
+================
+*/
+func TestSkillStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	rt, _, actor, target := newCombatTestRuntime(t, 10000)
+	presence := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		presence++
+		return true
+	}
+	rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+	if presence != 0 {
+		t.Fatalf("a strike that cannot kill built the reward roster (%d presence queries)", presence)
+	}
+	if got := rt.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a plain strike counted %d surprise fatals", got)
+	}
+
+	rt2, _, actor2, doomed := newCombatTestRuntime(t, 1)
+	presence2 := 0
+	rt2.RewardActorPresent = func(division, name string) bool {
+		presence2++
+		return true
+	}
+	rt2.HandleTargetInteract(testDivision, actor2, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: doomed.Gid}.Encode())
+	if presence2 == 0 {
+		t.Fatal("a killing strike never built the reward roster")
+	}
+	if got := rt2.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a killing strike counted %d surprise fatals", got)
+	}
+}
+
+/*
+================
+TestSkillStrikeSurpriseFatalIsCounted
+
+A fatal impact settled without a lethal plan means the planned-damage
+invariant broke: the settlement still runs, and the break is counted
+(and logged at Error by noteSurpriseFatal) instead of silent. A
+lethal plan counts nothing.
+================
+*/
+func TestSkillStrikeSurpriseFatalIsCounted(t *testing.T) {
+	rt, _, actor, mob := newCombatTestRuntime(t, 100)
+	impact := simulation.MonsterDamageResult{Instance: mob, Fatal: true}
+	roster := rewardRoster{division: testDivision, characters: []*enterworld.Character{actor}}
+	rt.settleStrikeFatal(testDivision, actor, roster, false, impact, monster.Pose{}, 1000)
+	if got := rt.surpriseFatalCount.Load(); got != 1 {
+		t.Fatalf("surprise fatal count = %d, want 1", got)
+	}
+	rt.settleStrikeFatal(testDivision, actor, roster, true, impact, monster.Pose{}, 1000)
+	if got := rt.surpriseFatalCount.Load(); got != 1 {
+		t.Fatalf("a lethal-plan kill counted as a surprise: %d", got)
+	}
+}

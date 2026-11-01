@@ -270,3 +270,138 @@ func TestAreaVictimDropsFollowTheirOwnDeath(t *testing.T) {
 		t.Fatalf("published %d victim drops, want 3", drops)
 	}
 }
+
+/*
+================
+TestAreaStrikeBuildsTheRewardRosterOnlyForAKill
+
+#2030 strike gate, area site: an area whose monster victims all
+survive their plans doors the caster, the player victims and the COS
+owners and builds no reward roster; a victim whose plan can kill
+keeps the roster-wide door.
+
+The witness is the roster build's own product: the character list
+the area strike hands its door. Two bystanders stand in the division
+outside the cast; only a division-wide roster build can put them on
+that list - the narrow door holds the caster, the player victims
+and the COS owners alone. The older witnesses could pass for the
+wrong reason: the party callback is also read by the share lanes
+(partyShareRoster), and presence is swept by victim selection
+itself (areaPlayerCandidates), so neither one isolates the build.
+================
+*/
+func TestAreaStrikeBuildsTheRewardRosterOnlyForAKill(t *testing.T) {
+	doorNames := func(rt *Runtime) *[]string {
+		names := &[]string{}
+		rt.deps.(*enterworld.Deps).UpdateCharacters = func(characters []*enterworld.Character, label string, update func() bool) bool {
+			if label == "player-area-attack" {
+				for _, character := range characters {
+					*names = append(*names, character.Name)
+				}
+			}
+			return update()
+		}
+		return names
+	}
+	addBystanders := func(rt *Runtime, c *enterworld.Character) (string, string) {
+		bystanderA := *c
+		bystanderA.ID, bystanderA.Name = 4, "area-bystander-a"
+		bystanderB := *c
+		bystanderB.ID, bystanderB.Name = 5, "area-bystander-b"
+		door := rt.deps.(*enterworld.Deps).Characters.(*storeDoor)
+		door.inner = enterworld.StaticCharacterSource{testDivision: {c, &bystanderA, &bystanderB}}
+		return bystanderA.Name, bystanderB.Name
+	}
+
+	rt, targets := areaFixture(t, 100000)
+	c := rt.findCharacter(testDivision, "asd2")
+	skill := shippedOffense(t, "SKILL_CH_LIGHTNING_CHUNDUNG_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.Intellect = testInt64(200)
+	c.CurrentMP = testInt64(1000)
+	nameA, nameB := addBystanders(rt, c)
+	doored := doorNames(rt)
+	request := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets[0].Gid}.Encode()
+	if result := rt.HandleTargetInteract(testDivision, c, request); len(result.Frames) == 0 {
+		t.Fatal("area refused")
+	}
+	for _, name := range *doored {
+		if name == nameA || name == nameB {
+			t.Fatalf("an area that cannot kill built the reward roster (door held %v)", *doored)
+		}
+	}
+	if got := rt.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a plain area counted %d surprise fatals", got)
+	}
+
+	rt2, targets2 := areaFixture(t, 1)
+	c2 := rt2.findCharacter(testDivision, "asd2")
+	rt2.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c2.Skills = append(c2.Skills, skill.ID)
+	c2.Intellect = testInt64(200)
+	c2.CurrentMP = testInt64(1000)
+	kills := 0
+	rt2.UpdateQuestKill = func(*enterworld.Character, string, uint8) ([]wire.Frame, bool) { kills++; return nil, true }
+	nameA2, nameB2 := addBystanders(rt2, c2)
+	doored2 := doorNames(rt2)
+	request2 := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets2[0].Gid}.Encode()
+	if result := rt2.HandleTargetInteract(testDivision, c2, request2); len(result.Frames) == 0 {
+		t.Fatal("killing area refused")
+	}
+	held := map[string]bool{}
+	for _, name := range *doored2 {
+		held[name] = true
+	}
+	if !held[nameA2] || !held[nameB2] {
+		t.Fatalf("a killing area never built the reward roster (door held %v)", *doored2)
+	}
+	if kills != 3 {
+		t.Fatalf("kill credits %d, want 3", kills)
+	}
+	if got := rt2.surpriseFatalCount.Load(); got != 0 {
+		t.Fatalf("a killing area counted %d surprise fatals", got)
+	}
+}
+
+/*
+================
+TestAreaSurpriseFatalIsCounted
+
+A fatal area victim its plan could not kill breaks the invariant the
+area roster gate rests on: the settlement still runs, and the break
+is counted (and logged at Error by noteSurpriseFatal) instead of
+silent. A lethal plan counts nothing.
+================
+*/
+func TestAreaSurpriseFatalIsCounted(t *testing.T) {
+	rt, targets := areaFixture(t, 100)
+	c := rt.findCharacter(testDivision, "asd2")
+	mob := targets[0]
+	committed := [][]simulation.MonsterDamageResult{{{Instance: mob, Fatal: true}}}
+	roster := rewardRoster{division: testDivision, characters: []*enterworld.Character{c}}
+	plan := areaStrikePlan{
+		victims:   []areaVictimPlan{{sequence: 0, player: -1, cos: -1}},
+		sequences: [][]simulation.MonsterDamagePlan{{{GID: mob.Gid, ExpectedHP: 1000, Damage: 10}}},
+	}
+	rt.settleAreaFatalities(testDivision, c, roster, committed, &plan, 1000)
+	if got := rt.surpriseFatalCount.Load(); got != 1 {
+		t.Fatalf("surprise fatal count = %d, want 1", got)
+	}
+	lethal := areaStrikePlan{
+		victims:   []areaVictimPlan{{sequence: 0, player: -1, cos: -1}},
+		sequences: [][]simulation.MonsterDamagePlan{{{GID: mob.Gid, ExpectedHP: 5, Damage: 10}}},
+	}
+	rt.settleAreaFatalities(testDivision, c, roster, committed, &lethal, 1000)
+	if got := rt.surpriseFatalCount.Load(); got != 1 {
+		t.Fatalf("a lethal-plan kill counted as a surprise: %d", got)
+	}
+	exact := areaStrikePlan{
+		victims:   []areaVictimPlan{{sequence: 0, player: -1, cos: -1}},
+		sequences: [][]simulation.MonsterDamagePlan{{{GID: mob.Gid, ExpectedHP: 10, Damage: 10}}},
+	}
+	rt.settleAreaFatalities(testDivision, c, roster, committed, &exact, 1000)
+	if got := rt.surpriseFatalCount.Load(); got != 1 {
+		t.Fatalf("an exactly-lethal kill counted as a surprise: %d", got)
+	}
+}

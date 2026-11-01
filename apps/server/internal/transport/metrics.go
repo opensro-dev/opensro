@@ -152,9 +152,12 @@ type Metrics struct {
 	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
 	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
-	HandlerMs   map[string]Histogram     `json:"handler_ms"`
-	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
-	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
+	HandlerMs map[string]Histogram `json:"handler_ms"`
+	// UnhandledOpcodes splits unhandled_opcode_frames by opcode, up to
+	// maxUnhandledOpcodes distinct values (timing.go, #2147).
+	UnhandledOpcodes map[string]uint64        `json:"unhandled_opcodes"`
+	TickPhaseMs      map[string]Histogram     `json:"tick_phase_ms"`
+	SlowHooks        map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
 	// PublicationHolds is each labelled publication-gate holder's slow

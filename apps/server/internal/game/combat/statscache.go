@@ -9,7 +9,9 @@ snapshot whose stat inputs did not move since the last call (live
 profile, #1943: 0.43 GB/min cumulative). The result is a pure function
 of the snapshot's stat content, the four reference sources, the effect
 writes and the abnormal block, so one character's answer is computed
-once and shared until any of that content moves.
+once and shared until any of that content moves. Each character keeps
+a few call shapes (statsVariantsPerCharacter): the plain read and the
+effect-lane reads of the same tick must not evict each other.
 
 The cache is keyed on CONTENT, like rankcache.go and
 projectioncache.go: any writer of the character, the effects or the
@@ -42,6 +44,13 @@ import (
 // statsCacheMax bounds the memo; the least recently used entry leaves
 // first. Production peaks at a few dozen characters.
 const statsCacheMax = 2048
+
+// statsVariantsPerCharacter bounds one character's retained call
+// shapes. A character in a fight is read plain by its own attacks and
+// with effect writes and an abnormal block by the effect and recovery
+// lanes in the same tick (#2030); one slot per character thrashed on
+// that alternation and rebuilt the projection on every read.
+const statsVariantsPerCharacter = 4
 
 /*
 ================
@@ -172,11 +181,11 @@ statsCache
 */
 type statsCache struct {
 	mu      sync.Mutex
-	entries map[int64]*statsEntry
+	entries map[int64][]*statsEntry
 	order   *list.List
 }
 
-var playerStatsMemo = statsCache{entries: make(map[int64]*statsEntry), order: list.New()}
+var playerStatsMemo = statsCache{entries: make(map[int64][]*statsEntry), order: list.New()}
 
 /*
 ================
@@ -198,19 +207,43 @@ func (cache *statsCache) lookup(
 	}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	entry, ok := cache.entries[character.ID]
-	if !ok || entry.core != core ||
-		!slices.Equal(entry.skills, character.Skills) ||
-		!slices.Equal(entry.masteries, character.Masteries) ||
-		!statsEquipmentEqual(entry.equipment, character.MissionInventory) ||
-		!statsAvatarEqual(entry.avatar, character.AvatarInventory) ||
-		!slices.Equal(entry.modifiers, modifiers) ||
-		entry.hasBlock != (block != nil) ||
-		(block != nil && entry.block != block.Modifiers) {
-		return Stats{}, Loadout{}, nil, false
+	variants := cache.entries[character.ID]
+	for i, entry := range variants {
+		if !entry.matches(character, core, modifiers, block) {
+			continue
+		}
+		if i > 0 {
+			copy(variants[1:i+1], variants[:i])
+			variants[0] = entry
+		}
+		cache.order.MoveToFront(entry.at)
+		return entry.stats, entry.loadout, entry.err, true
 	}
-	cache.order.MoveToFront(entry.at)
-	return entry.stats, entry.loadout, entry.err, true
+	return Stats{}, Loadout{}, nil, false
+}
+
+/*
+================
+statsEntry.matches
+
+Whether this entry was computed from exactly this call: the scalar
+core plus every content band, compared in place.
+================
+*/
+func (entry *statsEntry) matches(
+	character *domain.Character,
+	core statsCore,
+	modifiers []paramkeeper.Write,
+	block *abnormal.Block,
+) bool {
+	return entry.core == core &&
+		slices.Equal(entry.skills, character.Skills) &&
+		slices.Equal(entry.masteries, character.Masteries) &&
+		statsEquipmentEqual(entry.equipment, character.MissionInventory) &&
+		statsAvatarEqual(entry.avatar, character.AvatarInventory) &&
+		slices.Equal(entry.modifiers, modifiers) &&
+		entry.hasBlock == (block != nil) &&
+		(block == nil || entry.block == block.Modifiers)
 }
 
 /*
@@ -252,20 +285,56 @@ func (cache *statsCache) insert(
 	}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if old, ok := cache.entries[character.ID]; ok {
+	variants := cache.entries[character.ID]
+	for i, old := range variants {
+		if !old.matches(character, core, modifiers, block) {
+			continue
+		}
 		at := old.at
 		*old = *entry
 		old.at = at
+		if i > 0 {
+			copy(variants[1:i+1], variants[:i])
+			variants[0] = old
+		}
 		cache.order.MoveToFront(old.at)
 		return
 	}
 	entry.at = cache.order.PushFront(entry)
-	cache.entries[character.ID] = entry
-	for cache.order.Len() > statsCacheMax {
-		oldest := cache.order.Back()
-		cache.order.Remove(oldest)
-		delete(cache.entries, oldest.Value.(*statsEntry).id)
+	variants = append([]*statsEntry{entry}, variants...)
+	for len(variants) > statsVariantsPerCharacter {
+		cache.order.Remove(variants[len(variants)-1].at)
+		variants = variants[:len(variants)-1]
 	}
+	cache.entries[character.ID] = variants
+	for cache.order.Len() > statsCacheMax {
+		oldest := cache.order.Back().Value.(*statsEntry)
+		cache.removeEntry(oldest)
+	}
+}
+
+/*
+================
+statsCache.removeEntry
+
+Drop one entry from the recency list and its character's variants.
+The caller holds the lock and keeps its own slice bookkeeping.
+================
+*/
+func (cache *statsCache) removeEntry(entry *statsEntry) {
+	cache.order.Remove(entry.at)
+	variants := cache.entries[entry.id]
+	for i, other := range variants {
+		if other == entry {
+			variants = append(variants[:i], variants[i+1:]...)
+			break
+		}
+	}
+	if len(variants) == 0 {
+		delete(cache.entries, entry.id)
+		return
+	}
+	cache.entries[entry.id] = variants
 }
 
 /*
@@ -384,8 +453,8 @@ early.
 func ForgetPlayerStatsMemo(id int64) {
 	playerStatsMemo.mu.Lock()
 	defer playerStatsMemo.mu.Unlock()
-	if entry, ok := playerStatsMemo.entries[id]; ok {
+	for _, entry := range playerStatsMemo.entries[id] {
 		playerStatsMemo.order.Remove(entry.at)
-		delete(playerStatsMemo.entries, id)
 	}
+	delete(playerStatsMemo.entries, id)
 }

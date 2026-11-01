@@ -70,6 +70,9 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 
 	const capeTeams = new Map<number, number>();
 	let nameTimer: number | undefined, nameClock = 0;
+	// Port-only, not native: the Experimental portal-arrival cue's switch
+	// (experimental-options.ts); off is the native silent arrival.
+	let warpArrivalSound = false;
 	/*
 ================
 nameContext
@@ -301,6 +304,7 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 	function receive( frame: WireFrame, now: number ) {
 		nameClock = now;
 		if ( frame.opcode === 14 ) {
+			gameplay.referenceProgress( now );
 			const refs = commerceReferences( frame.payload );
 			gameplay.references( refs );
 			entities.references( refs );
@@ -496,6 +500,7 @@ the entry continues it like the one after a world transfer.
 		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
 			gameplay.experimental( value );
 			entities.sunDropMarker( value.sunDropMarker === true );
+			warpArrivalSound = value.warpArrivalSound === true;
 		},
 		/*
 ================
@@ -628,6 +633,18 @@ Retail 0x72902a restores destination mode after the loading UI retires.
 			awaitingTravelBootstrap = false;
 			pendingTravel = null;
 			loadingMode = 2;
+			// Port-only, not native: SND_WARP is the table's portal-out row
+			// (포탈 나올 때 - the sound of coming out of the portal), but no
+			// traced native caller reaches it: the gate at 0x68eafd in
+			// 0x68e530 never takes the traced path to the row, so the native
+			// arrival is silent. The Experimental warp-arrival row opts
+			// into the cue here; off (the default) keeps that silence. The
+			// cue rides the same ui-sound channel the packet handlers use;
+			// the bootstrap's own packets refresh nameClock right before
+			// this fires, so the cue reads fresh.
+			if ( warpArrivalSound ) {
+				entities.publish( { kind: "ui-sound", handle: "SND_WARP", at: nameClock } );
+			}
 			gameplay.enterMusic();
 			gameplay.worldReady();
 		},

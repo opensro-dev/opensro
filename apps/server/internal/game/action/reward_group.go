@@ -50,7 +50,6 @@ rewardActor
 type rewardActor struct {
 	world     uint32
 	character *enterworld.Character
-	pose      simulation.Spawn
 	party     *RewardParty
 }
 
@@ -106,11 +105,26 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 				continue
 			}
 			gid := enterworld.ObjectIDForCharacter(c)
-			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, pose: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), party: memberParty[gid]}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: memberParty[gid]}
 			r.characters = append(r.characters, c)
 		}
 	})
 	return r
+}
+
+/*
+================
+rewardActorPose
+
+The actor's live position at the moment a settlement or share decision
+reads it. The roster build used to resolve every division member's spawn
+(a world-key build and a mover lookup each) although only the winner and
+its party are ever range-checked (#2030); resolving at the read keeps the
+value at kill-decision time, which is what the range rules judge.
+================
+*/
+func (rt *Runtime) rewardActorPose(division string, a rewardActor, now int64) simulation.Spawn {
+	return rt.liveSpawn(simulation.WorldKey(division, a.character.Name), a.character, now)
 }
 
 /*
@@ -400,7 +414,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	origin := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	originWorld := uint32(impact.Population.ID)
 	if a, ok := roster.actors[winner]; ok {
-		origin = a.pose
+		origin = rt.rewardActorPose(division, a, now)
 		originWorld = a.world
 	}
 	var count uint16
@@ -420,7 +434,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = []float32{factor}
 		} else {
 			for _, gid := range g.party.Members {
-				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, a.pose) {
+				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, rt.rewardActorPose(division, a, now)) {
 					members = append(members, a)
 				}
 			}

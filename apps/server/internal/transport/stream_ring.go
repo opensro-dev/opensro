@@ -17,6 +17,18 @@ A resume whose position the ring can no longer cover (an overflow, or a
 client that presents no position) is refused, and the hub issues a fresh
 session: a lost ordered frame must never pass silently.
 
+The bound is enforced by pacing, not by dropping (#2146). While the
+session is attached the writer waits for ack space when the ring is
+full instead of numbering a frame whose arrival pushes the oldest
+unacknowledged frame out: a drop moves ringFloor past the position the
+client has applied, and from that moment every resume the session ever
+makes is refused, although nothing is wrong with the link. Live, the
+writer outran apply-then-ack during entry bursts and crowd churn until
+91% of resumes presented positions the ring no longer covered. A client
+that never acknowledges now degrades into the outbound queue's own
+bound (the slow-consumer close) rather than a silently unresumable
+session.
+
 Positions are compared plainly, never wrap-aware (#1515 review): a session
 would need four billion counted frames to reach the 2^32 wrap, so a
 wrapped position can never meet itself. Revisit here only if per-session
@@ -33,8 +45,9 @@ var errResumeGap = errors.New("transport: resume position not covered")
 
 const (
 	// streamRingMaxFrames and streamRingMaxBytes bound the unacknowledged
-	// window. The client acknowledges about once a second, so a live link
-	// never comes close; a detached session keeps at most this much.
+	// window, and so the most a resume ever re-sends. The writer waits at
+	// this bound (ringGateLocked); it is a flow-control threshold, not
+	// the size of a window a live link may outgrow.
 	streamRingMaxFrames = 8192
 	streamRingMaxBytes  = 4 << 20
 )
@@ -90,7 +103,10 @@ func (s *Session) noteWrittenLocked(f Frame, ordered bool) uint32 {
 	s.ringBytes += f.EncodedLen()
 	for len(s.ring) > streamRingMaxFrames || s.ringBytes > streamRingMaxBytes {
 		// The oldest unacknowledged frame falls out: a resume that still
-		// needs it is refused instead of silently skipping it.
+		// needs it is refused instead of silently skipping it. The
+		// writer's gate (ringGateLocked) keeps a live session from ever
+		// reaching this; what reaches it is a numbering caller that
+		// bypassed the writer, and the refusal stays honest there.
 		s.ringFloor = s.ring[0].pos
 		s.ringBytes -= s.ring[0].f.EncodedLen()
 		s.ring[0] = ringFrame{}
@@ -126,7 +142,9 @@ func (s *Session) unnoteLocked(pos uint32, ordered bool) {
 ================
 ackLocked
 
-Drops the ring frames the client has applied. Caller holds s.mu.
+Drops the ring frames the client has applied. Freed room wakes the
+writer when the ring gate held it (ringGateLocked, #2146). Caller
+holds s.mu.
 ================
 */
 func (s *Session) ackLocked(pos uint32) {
@@ -140,6 +158,41 @@ func (s *Session) ackLocked(pos uint32) {
 		n++
 	}
 	s.ring = s.ring[n:]
+	if n > 0 {
+		s.cond.Broadcast()
+	}
+}
+
+/*
+================
+ringGateLocked
+
+Whether the writer must wait for ack space before numbering the
+ordered frame at the head of the queue: it advances the stream, and
+the ring cannot take it without passing its frame or byte bound. A
+waited frame stays queued; a dropped one (the pre-#2146 behaviour)
+would advance ringFloor past the client's applied position and make
+the session unresumable for the rest of its life. Frames in the
+transport range are never gated - they take no position and no ring
+slot. Caller holds s.mu.
+================
+*/
+func (s *Session) ringGateLocked() bool {
+	if len(s.queue) == 0 || len(s.ring) == 0 {
+		// An empty ring always takes the frame: a single frame larger
+		// than the whole byte bound (the multi-megabyte EnterWorld
+		// result) could otherwise wait forever for room that can never
+		// exist. It is written and the trim in noteWrittenLocked drops
+		// it from the ring at once, as before; its delivery matters,
+		// and a client that applied it resumes past its position.
+		return false
+	}
+	head := s.queue[0]
+	if !CountsOnStream(head.Opcode) {
+		return false
+	}
+	return len(s.ring) >= streamRingMaxFrames ||
+		s.ringBytes+head.EncodedLen() > streamRingMaxBytes
 }
 
 /*

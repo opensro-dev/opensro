@@ -9,8 +9,6 @@ monsteractivity_benchmark_test.go - simulation monster activity benchmark test o
 package simulation
 
 import (
-	"container/heap"
-	"sort"
 	"testing"
 	"time"
 
@@ -34,43 +32,25 @@ func queueBenchmarkState(count int) (*MonsterState, *divisionMonsterState) {
 	return s, d
 }
 
-// Keeps the pre-optimization batch algorithm as a benchmark-only control.
 /*
 ================
 BenchmarkBehaviorBatch
+
+One batch build over 5000 actors, all due every tick: the queue drain
+plus the per-actor reschedule, which is the tick's scheduling cost.
+The pre-wheel control arm drove the old heap by hand and is gone with
+it; the before/after for this arm is the same benchmark on the base
+tree.
 ================
 */
 func BenchmarkBehaviorBatch(b *testing.B) {
-	for _, legacy := range []bool{true, false} {
-		name := "identities"
-		if legacy {
-			name = "legacy-snapshots"
+	s, _ := queueBenchmarkState(5000)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for tick := 0; tick < b.N; tick++ {
+		if got := s.behaviorBatches(int64(tick)); len(got) != 1 || len(got[0].actors) != 5000 {
+			b.Fatal("lost actors")
 		}
-		b.Run(name, func(b *testing.B) {
-			s, d := queueBenchmarkState(5000)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for tick := 0; tick < b.N; tick++ {
-				if !legacy {
-					if got := s.behaviorBatches(int64(tick)); len(got) != 1 || len(got[0].actors) != 5000 {
-						b.Fatal("lost actors")
-					}
-					continue
-				}
-				var actors []monster.Instance
-				for d.behavior.Len() > 0 && d.behavior.entries[0].at <= int64(tick) {
-					e := heap.Pop(&d.behavior).(*behaviorEntry)
-					i := finishSummonAction(d.instances.get(e.gid), int64(tick))
-					d.instances.set(e.gid, i)
-					actors = append(actors, i)
-					s.scheduleBehavior(d, e.gid, int64(tick))
-				}
-				sort.Slice(actors, func(i, j int) bool { return actors[i].Gid < actors[j].Gid })
-				if len(actors) != 5000 {
-					b.Fatal("lost actors")
-				}
-			}
-		})
 	}
 }
 
@@ -82,8 +62,8 @@ TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity
 func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) {
 	s, d := queueBenchmarkState(3)
 	batch := s.behaviorBatches(0)[0]
-	for i, gid := range batch.actors {
-		if gid != uint32(i+1) {
+	for i, ref := range batch.actors {
+		if ref.gid != uint32(i+1) {
 			t.Fatal("non-deterministic dispatch order")
 		}
 	}
@@ -121,7 +101,7 @@ func TestBehaviorActorMoverMatchesDispatchReads(t *testing.T) {
 	s.clock = func() time.Time { return time.UnixMilli(5000) }
 	batch := s.behaviorBatches(0)[0]
 
-	snap := s.behaviorActorMover(batch.key, 1)
+	snap := s.behaviorActorMover(batch.key, batch.actors[0])
 	actor, actorOK := s.behaviorActor(batch.key, 1)
 	mover, moverOK := s.Mover("benchmark", 1)
 	if !snap.ok || !actorOK || !moverOK {
@@ -132,18 +112,72 @@ func TestBehaviorActorMoverMatchesDispatchReads(t *testing.T) {
 	}
 
 	d.movers.remove(3)
-	snap = s.behaviorActorMover(batch.key, 3)
+	snap = s.behaviorActorMover(batch.key, batch.actors[2])
 	mover, moverOK = s.Mover("benchmark", 3)
 	if !snap.ok || !moverOK || snap.mover != mover {
 		t.Fatal("synthesized spawn mover differs from Mover's")
 	}
 
 	d.instances.remove(2)
-	if snap := s.behaviorActorMover(batch.key, 2); snap.ok {
+	if snap := s.behaviorActorMover(batch.key, batch.actors[1]); snap.ok {
 		t.Fatal("retired actor resolved")
 	}
-	if snap := s.behaviorActorMover(populationKey{division: "nowhere"}, 1); snap.ok {
+	if snap := s.behaviorActorMover(populationKey{division: "nowhere"}, batch.actors[0]); snap.ok {
 		t.Fatal("unknown population resolved")
+	}
+}
+
+/*
+================
+TestBehaviorActorMoverRecycledSlotFallsBack
+
+A slot carried in the batch names whatever row sits in it at read
+time: remove swaps the last row into the hole, so after a despawn
+the carried slot can hold another actor. The read must fall back to
+the gid resolve and return this actor's current row, never the
+stranger's (#2135 item 2).
+================
+*/
+func TestBehaviorActorMoverRecycledSlotFallsBack(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	s.clock = func() time.Time { return time.UnixMilli(5000) }
+	batch := s.behaviorBatches(0)[0]
+	ref := batch.actors[0]
+	if ref.gid != 1 || ref.slot == behaviorNoMoverSlot {
+		t.Fatal("batch carried no slot for a resident mover")
+	}
+	// Despawn 1's mover: 3's row swaps into the slot the ref carries.
+	d.movers.remove(1)
+	// Respawn 1 behind a marker row of its own.
+	d.movers.set(1, monster.MoverState{Pose: monster.Pose{RegionID: 0x62a8}})
+	snap := s.behaviorActorMover(batch.key, ref)
+	want, ok := s.Mover("benchmark", 1)
+	if !snap.ok || !ok || snap.mover != want || snap.mover.Pose.RegionID != 0x62a8 {
+		t.Fatalf("carried slot read the wrong row: %+v", snap.mover)
+	}
+}
+
+/*
+================
+BenchmarkBehaviorActorMover
+
+The leg's per-actor dispatch read over one built batch: the instance
+plus the mover, read through the slot the batch carried (#2135 item
+2). On the pre-carry tree the same loop resolved every mover by gid
+through the map.
+================
+*/
+func BenchmarkBehaviorActorMover(b *testing.B) {
+	s, _ := queueBenchmarkState(5000)
+	batch := s.behaviorBatches(0)[0]
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, ref := range batch.actors {
+			if snap := s.behaviorActorMover(batch.key, ref); !snap.ok {
+				b.Fatal("dispatch read lost an actor")
+			}
+		}
 	}
 }
 
@@ -214,5 +248,39 @@ func BenchmarkMoverStorageSetSameRegion(b *testing.B) {
 				before = after
 			}
 		})
+	}
+}
+
+/*
+================
+TestBehaviorActorMoverFallsBackOnARecycledSlot
+
+A batch built before a removal carries slots the removal may have
+recycled: gid 3 moves into gid 1's hole, so its own carried slot runs
+off the end and gid 1's now names gid 3. The survivor must still
+resolve through the gid fallback, with its own row, and the removed
+actor must not resolve as the slot's new occupant.
+================
+*/
+func TestBehaviorActorMoverFallsBackOnARecycledSlot(t *testing.T) {
+	s, d := queueBenchmarkState(3)
+	s.clock = func() time.Time { return time.UnixMilli(5000) }
+	batch := s.behaviorBatches(0)[0]
+	refs := make(map[uint32]behaviorActorRef, len(batch.actors))
+	for _, ref := range batch.actors {
+		refs[ref.gid] = ref
+	}
+	d.instances.remove(1)
+
+	survivor := refs[3]
+	if _, carried := d.instances.lookupAt(survivor.monsterSlot, survivor.gid); carried {
+		t.Fatal("the survivor's carried slot still resolves, so the fallback is not under test")
+	}
+	snap := s.behaviorActorMover(batch.key, survivor)
+	if !snap.ok || snap.instance.Gid != 3 {
+		t.Fatalf("the survivor did not fall back to its gid: %+v", snap.instance.Gid)
+	}
+	if snap := s.behaviorActorMover(batch.key, refs[1]); snap.ok {
+		t.Fatalf("the removed actor resolved as gid %d", snap.instance.Gid)
 	}
 }

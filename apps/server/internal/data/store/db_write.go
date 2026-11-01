@@ -55,6 +55,10 @@ type characterRowTx struct {
 	store   *Store
 	written map[committedCharacterKey][32]byte
 	deleted map[committedCharacterKey]bool
+	// copies stages the committed copies (character_sections.go) for
+	// the rows this transaction writes, retained at Commit under the
+	// written digests' discipline.
+	copies map[committedCharacterKey]*domain.Character
 }
 
 /*
@@ -71,7 +75,8 @@ func (s *Store) beginCharacterTxLocked() (*characterRowTx, error) {
 		return nil, err
 	}
 	return &characterRowTx{Tx: tx, store: s,
-		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{}}, nil
+		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{},
+		copies: map[committedCharacterKey]*domain.Character{}}, nil
 }
 
 /*
@@ -83,6 +88,18 @@ its digest for Commit to retain.
 ================
 */
 func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) error {
+	// The section skip (#2141), as in the commit path: a row whose
+	// sections all equal its committed copy already holds these
+	// bytes on disk. The digest is re-recorded so Commit retains it
+	// beside the (unchanged) copy, exactly as a write would.
+	key := committedCharacterKey{division: division, id: c.ID}
+	if digest, digested := w.store.committedDigests[key]; digested {
+		if committed, copied := w.store.committedRows[key]; copied && len(characterSectionsChanged(c, committed)) == 0 {
+			w.written[key] = digest
+			delete(w.deleted, key)
+			return nil
+		}
+	}
 	record, err := encodeCharacter(division, c)
 	if err != nil {
 		return err
@@ -104,6 +121,7 @@ func (w *characterRowTx) writeCharacterRecord(division string, c *domain.Charact
 	}
 	key := committedCharacterKey{division: division, id: c.ID}
 	w.written[key] = sha256.Sum256(record)
+	w.copies[key] = domain.CloneCharacter(c)
 	delete(w.deleted, key)
 	return nil
 }
@@ -124,6 +142,7 @@ func (w *characterRowTx) deleteCharacter(division string, id int64) error {
 	key := committedCharacterKey{division: division, id: id}
 	w.deleted[key] = true
 	delete(w.written, key)
+	delete(w.copies, key)
 	return nil
 }
 
@@ -143,9 +162,13 @@ func (w *characterRowTx) Commit() error {
 	}
 	for key := range w.deleted {
 		delete(w.store.committedDigests, key)
+		delete(w.store.committedRows, key)
 	}
 	for key, digest := range w.written {
 		w.store.committedDigests[key] = digest
+	}
+	for key, row := range w.copies {
+		w.store.committedRows[key] = row
 	}
 	return nil
 }
@@ -158,6 +181,7 @@ characterRowTx::Rollback
 func (w *characterRowTx) Rollback() error {
 	w.written = map[committedCharacterKey][32]byte{}
 	w.deleted = map[committedCharacterKey]bool{}
+	w.copies = map[committedCharacterKey]*domain.Character{}
 	return w.Tx.Rollback()
 }
 

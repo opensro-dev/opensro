@@ -32,6 +32,7 @@ const { SYSTEM_MENU_HEIGHT } = await load( "src/engine/foundation/ui/system-menu
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
+const { emptyStall } = await load( "src/engine/foundation/gameplay/stall.ts" );
 /*
 ================
 assetFixture
@@ -313,6 +314,85 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 
 /*
 ================
+iconAtlasDemand
+
+The icon family's atlas manifest (foundation/ui/icon-atlas.ts): its bytes
+turn icon demand into sheet demand - one request, one residency entry,
+one publish for the whole family - and the renderer hears the mapping. A
+sheet that fails turns the atlas off and the icons fall back to their own
+paths, exactly as without a manifest.
+================
+*/
+test("an installed atlas serves the icon family from its sheet", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png", b = "/assets/images/Media_extracted/icon/b.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	let installed = 0;
+	const wrapped = { ...f.assets };
+	f.resources.dispose();
+	const resources = createUiAssets(
+		wrapped,
+		( ...args ) => f.published.push( args ),
+		"https://fixture.invalid/",
+		undefined,
+		mapping => {
+			installed++;
+			f.installed = mapping;
+		}
+	);
+	f.resources = resources;
+	resources.step( [ a, b ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	assert.deepEqual( f.requests.slice( 1 ), [ "https://fixture.invalid" + a, "https://fixture.invalid" + b ] );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ], [b]: [ 0, 40, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	resources.step( [ a, b ], 1 );
+	assert.equal( installed, 1, "the mapping reaches the renderer once" );
+	assert.deepEqual( f.cancelled.sort(), [ 2, 3 ], "the per-icon requests cancel" );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet, "one sheet request for both icons" );
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 4, { kind: "image", image } );
+	resources.step( [ a, b ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ], "the sheet publishes once under its own path" );
+	assert.equal( resources.size( a ), undefined, "an icon holds no residency of its own" );
+	assert.equal( resources.size( sheet )[0], 2048 );
+	for ( let now = 3; now < 60_000; now += 1000 ) resources.step( [ a, b ], now );
+	assert.equal( f.requests.length, 4, "the family never re-requests" );
+	f.resources.dispose();
+});
+
+test("a failed sheet turns the atlas off and the icons take their own paths", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ a ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ a ], 1 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet );
+	f.results.set( 3, { kind: "error", error: "HTTP 503", absent: false } );
+	f.resources.step( [ a ], 2 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + a, "the icon falls back to its own path" );
+	assert.equal( f.resources.error(), null, "a failed sheet is not an interface failure" );
+	const image = { width: 32, height: 32 };
+	f.results.set( 4, { kind: "image", image } );
+	f.resources.step( [ a ], 3 );
+	assert.deepEqual( f.published, [ [ a, image ] ] );
+	f.resources.dispose();
+});
+
+/*
+================
 absentIconFallback
 
 CIFSlotWithHelp (55B450) loads icon\icon_default.ddj when the requested icon
@@ -321,29 +401,96 @@ without the blocking retry. Any other absent image settles blank, and a
 transient fault on an icon still retries.
 ================
 */
+test("an absent icon's fallback fetches the default itself, not its atlas sheet", () => {
+	// The review's trace: with the atlas installed and icon_default mapped
+	// (it is a published icon), the fallback's request used target() - which
+	// names the whole sheet for a mapped icon - so the sheet was published
+	// under the absent icon's path and drew 2048 px squashed into its quad.
+	// The fallback must fetch the default's own file.
+	const f = assetFixture();
+	const icon = "/assets/images/Media_extracted/icon/item/etc/absent_recipe.png";
+	const fallback = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	f.resources.step( [ icon ], 0 );
+	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [fallback]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	// The icon has no manifest entry, so its own path is still the request;
+	// it arrives absent and joins the fallback set.
+	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.resources.step( [ icon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + fallback,
+		"the fallback fetches the default's own file, never the sheet"
+	);
+	assert.equal( f.requests.some( r => r === "https://fixture.invalid" + sheet ), false );
+	const image = { width: 32, height: 32 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ icon ], 2 );
+	assert.deepEqual( f.published, [ [ icon, image ] ], "the default publishes under the icon's own path" );
+	assert.deepEqual( f.resources.size( icon ), [ 32, 32 ], "the default's own size, never the sheet's" );
+	f.resources.dispose();
+});
+
+test("a direct demand for the default icon still takes its atlas sheet", () => {
+	const f = assetFixture();
+	const defaultIcon = "/assets/images/Media_extracted/icon/icon_default.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [defaultIcon]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ defaultIcon ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ defaultIcon ], 1 );
+	assert.equal(
+		f.requests.at( -1 ),
+		"https://fixture.invalid" + sheet,
+		"the default icon itself is served from the sheet when demanded directly"
+	);
+	const image = { width: 2048, height: 2047 };
+	f.results.set( 3, { kind: "image", image } );
+	f.resources.step( [ defaultIcon ], 2 );
+	assert.deepEqual( f.published, [ [ sheet, image ] ] );
+	f.resources.dispose();
+});
+
 test("an absent slot icon draws icon_default and an absent image settles blank", () => {
 	const f = assetFixture();
 	const icon = "/assets/images/Media_extracted/icon/item/etc/archemy_reinforce_recipe_a.png";
 	const art = "/assets/images/Media_extracted/interface/missing.png";
 	const paths = [ icon, art ];
 	f.resources.step( paths, 0 );
+	// The first icon demand asks for the atlas manifest first (the icon
+	// family's port-only sheet); an absent manifest fails it silently and
+	// every icon keeps its own path.
 	f.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	f.results.set( 3, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.resources.step( paths, 1 );
 	assert.equal( f.resources.error(), null, "absence never blocks the interface" );
 	assert.deepEqual( f.resources.stats().failed, [] );
 	assert.equal( f.requests.at( -1 ), "https://fixture.invalid/assets/images/Media_extracted/icon/icon_default.png" );
-	assert.equal( f.requests.length, 3, "the blank image is never requested again" );
+	assert.equal( f.requests.length, 4, "the blank image is never requested again" );
 	const image = { width: 32, height: 32 };
-	f.results.set( 3, { kind: "image", image } );
+	f.results.set( 4, { kind: "image", image } );
 	f.resources.step( paths, 2 );
 	assert.deepEqual( f.published, [ [ icon, image ] ], "the default is published under the icon's own path" );
 	for ( let now = 3; now < 60_000; now += 1000 ) f.resources.step( paths, now );
-	assert.equal( f.requests.length, 3 );
+	assert.equal( f.requests.length, 4 );
 	f.resources.dispose();
 	const g = assetFixture();
 	g.resources.step( [ icon ], 0 );
-	g.results.set( 1, { kind: "error", error: "HTTP 503" } );
+	g.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
+	g.results.set( 2, { kind: "error", error: "HTTP 503" } );
 	g.resources.step( [ icon ], 1 );
 	assert.match( g.resources.error(), /503/, "a transient fault keeps the retry" );
 	g.resources.step( [ icon ], 1001 );
@@ -6493,6 +6640,101 @@ test("store window shows Repair and Repair All buttons only when targetCapabilit
 		game.targetCapabilities = 3;
 		scene = f.ui.step( f.state, now += 100 ) ?? scene;
 		assert.equal( f.ui.cursor(), null, "switching to a non-repair store disarms the repair cursor" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("showing a stall switches the main popup to Inventory once", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const control = id => scene.controls.find( row => row.id === id );
+		const inventory = () => !!control( "close-window:Inventory" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		draw();
+		assert.equal( inventory(), false, "a closed stall leaves the popup alone" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.equal( inventory(), true, "5A0DC0 shows the inventory beside the stall" );
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		assert.ok( control( "close-window:Character" ), "the player can switch to another tab" );
+		draw();
+		assert.equal( inventory(), false, "later frames do not force the tab back" );
+		// Closing and showing the stall again is a new edge.
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "visitor", owner: 2, open: true }
+		};
+		draw();
+		assert.equal( inventory(), true, "a visitor's stall show opens the inventory too" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a stall beside a separate window keeps that window open", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const open = name => !!scene.controls.find( row => row.id === "close-window:" + name );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		// 69C7C0 looks at the main popup: another tab of it gives way to
+		// Inventory, while a separate window stays open when the stall appears
+		// (the port keeps its one panel slot on that window instead of drawing
+		// the popup beside it).
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.ok( open( "Inventory" ), "the stall selects Inventory over another main popup tab" );
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		for ( const window of [ "Guild", "Option" ] ) {
+			draw();
+			f.ui.event( { kind: "activate", id: "open-window:" + window } );
+			draw();
+			assert.ok( open( window ), `${window} did not open` );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase: "owner", owner: 1 }
+			};
+			draw();
+			assert.ok( open( window ), `the stall closed ${window}` );
+			assert.equal( open( "Inventory" ), false, `the stall forced Inventory over ${window}` );
+			// Closing the stall again arms the next rising edge.
+			f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+			draw();
+			f.ui.event( { kind: "activate", id: "close-window:" + window } );
+		}
 	} finally {
 		f.dispose();
 	}

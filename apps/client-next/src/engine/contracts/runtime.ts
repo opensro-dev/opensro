@@ -314,6 +314,9 @@ export interface Renderer extends Disposable {
 	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
 	setDamageText( rows: readonly import("./damage-text").DamageText[] ): void;
 	setUiTexture( id: string, image: UiTexture | null ): void;
+	// Port-only, not native: the icon atlas mapping (foundation/ui
+	// /icon-atlas.ts) the interface's image owner installed.
+	setUiAtlas( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
 	characterStats( details?: boolean, posed?: boolean ): CharacterStatistics;

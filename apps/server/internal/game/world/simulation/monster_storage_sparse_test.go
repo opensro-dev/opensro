@@ -63,7 +63,7 @@ The join before the mask: probe every sparse map for a resident actor.
 ================
 */
 func unmaskedLookup(s *monsterStorage, gid uint32) (monster.Instance, bool) {
-	if r, ok := s.hot[gid]; ok {
+	if r, ok := s.hotRow(gid); ok {
 		row := r.value(gid)
 		row.LinkedEffects = s.linkedEffects[gid]
 		row.Abnormal = s.abnormal[gid]

@@ -1,6 +1,9 @@
 package paramkeeper
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func testGraph(t *testing.T) *Graph {
 	t.Helper()
@@ -193,5 +196,83 @@ func TestApplyBatchInPlaceMatchesApplyBatch(t *testing.T) {
 	}
 	if err := inPlace.ApplyBatchInPlace(bad); err == nil {
 		t.Fatal("invalid in-place batch accepted")
+	}
+}
+
+/*
+================
+TestApplyInPlaceMatchesApply
+
+The in-place single write is the abnormal-modifier path on the
+projection build's own clone: the same writes in the same order
+must land on the same values with the same changed answers, and a
+refused write must refuse with the same error (its graph is then
+dropped, so only the atomic side's rollback is read afterwards).
+================
+*/
+func TestApplyInPlaceMatchesApply(t *testing.T) {
+	atomic, inPlace := testGraph(t), testGraph(t)
+	steps := []struct {
+		id      uint16
+		channel Channel
+		source  uint32
+		value   float32
+	}{
+		{1, Flat, 0, 30},
+		{50, Flat, 0, 19},
+		{50, Flat, 7, -1},
+		{5, PercentSum, 90, 25},
+		{1, Flat, 11, 100},
+		{21, FactorProduct, 92, 2},
+	}
+	for _, step := range steps {
+		wantChanged, wantErr := atomic.Apply(step.id, step.channel, step.source, step.value)
+		gotChanged, gotErr := inPlace.ApplyInPlace(step.id, step.channel, step.source, step.value)
+		if wantChanged != gotChanged || (wantErr == nil) != (gotErr == nil) {
+			t.Fatalf("write %+v: atomic (%v, %v), in-place (%v, %v)", step, wantChanged, wantErr, gotChanged, gotErr)
+		}
+		for _, id := range []uint16{1, 5, 21, 50} {
+			want, err := atomic.Value(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := inPlace.Value(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("param %d after %+v: in-place %v, atomic %v", id, step, got, want)
+			}
+		}
+		if atomic.dirty != inPlace.dirty {
+			t.Fatalf("dirty after %+v: in-place %v, atomic %v", step, inPlace.dirty, atomic.dirty)
+		}
+	}
+	for _, step := range []struct {
+		id      uint16
+		channel Channel
+		source  uint32
+		value   float32
+	}{
+		{1, Channel(9), 0, 10},
+		{1, Flat, 0, float32(math.NaN())},
+	} {
+		wantChanged, wantErr := atomic.Apply(step.id, step.channel, step.source, step.value)
+		gotChanged, gotErr := inPlace.ApplyInPlace(step.id, step.channel, step.source, step.value)
+		if wantErr == nil || gotErr == nil || wantErr.Error() != gotErr.Error() || wantChanged || gotChanged {
+			t.Fatalf("refused write %+v: atomic (%v, %v), in-place (%v, %v)", step, wantChanged, wantErr, gotChanged, gotErr)
+		}
+	}
+	if _, err := atomic.Apply(5, Flat, 1001, 10); err == nil {
+		t.Fatal("atomic accepted a reserved source")
+	}
+	if _, err := inPlace.ApplyInPlace(5, Flat, 1001, 10); err == nil {
+		t.Fatal("in-place accepted a reserved source")
+	}
+	if _, err := atomic.Apply(511, Flat, 0, 10); err == nil {
+		t.Fatal("atomic accepted an undefined parameter")
+	}
+	if _, err := inPlace.ApplyInPlace(511, Flat, 0, 10); err == nil {
+		t.Fatal("in-place accepted an undefined parameter")
 	}
 }

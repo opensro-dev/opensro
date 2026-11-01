@@ -129,6 +129,64 @@ func assertStatsFresh(
 
 /*
 ================
+TestPlayerStatsMemoKeepsAlternatingShapes
+
+#2030: a character in a fight is read plain by its own attacks and
+with effect writes or an abnormal block by the effect and recovery
+lanes in the same tick. Every shape's memoised answer must equal the
+fresh rebuild, and alternating shapes must stay memoised - the
+allocation count is the witness: a rebuild costs the whole keeper
+projection, a retained shape costs the comparison walk.
+================
+*/
+func TestPlayerStatsMemoKeepsAlternatingShapes(t *testing.T) {
+	c, catalogs := statsMemoFixture()
+	defer ForgetPlayerStatsMemo(c.ID)
+	writes := []paramkeeper.Write{{Parameter: 5, Channel: paramkeeper.Flat, Source: 0x80000001, Value: 25}}
+	block := &abnormal.Block{}
+	block.Modifiers[0] = abnormal.Modifier{Used: true, Param: 0x8c, Channel: 3, Source: 5, Value: 125}
+	shapes := []struct {
+		name      string
+		modifiers []paramkeeper.Write
+		block     *abnormal.Block
+	}{
+		{"plain", nil, nil},
+		{"effect writes", writes, nil},
+		{"abnormal block", nil, block},
+		{"writes and block", writes, block},
+	}
+	alternate := func() {
+		for _, shape := range shapes {
+			if _, _, err := PlayerStatsWithModifiers(c, catalogs, shape.modifiers, shape.block); err != nil {
+				t.Fatalf("alternating %s: %v", shape.name, err)
+			}
+		}
+	}
+	for range 3 {
+		for _, shape := range shapes {
+			assertStatsFresh(t, shape.name, c, catalogs, shape.modifiers, shape.block)
+		}
+	}
+	retained := testing.AllocsPerRun(20, alternate)
+	plus := c.MissionInventory[1].Plus
+	mutating := func() {
+		for range shapes {
+			plus++
+			c.MissionInventory[1].Plus = plus
+			if _, _, err := PlayerStatsWithModifiers(c, catalogs, nil, nil); err != nil {
+				t.Fatalf("mutating control: %v", err)
+			}
+		}
+	}
+	rebuilt := testing.AllocsPerRun(20, mutating)
+	t.Logf("alternating shapes: %.0f allocs per pass, rebuilding control: %.0f", retained, rebuilt)
+	if retained*2 >= rebuilt {
+		t.Fatalf("alternating shapes rebuilt the projection: %.0f allocs against a %.0f rebuilding control", retained, rebuilt)
+	}
+}
+
+/*
+================
 TestPlayerStatsMemoFollowsEveryContentWriter
 
 Each way the inputs move - gear plus, a broken piece, a mastery, a
