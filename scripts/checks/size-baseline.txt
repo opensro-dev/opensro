@@ -27,6 +27,7 @@ apps/client-next/tests/runtime/gameplay.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every window; split per window
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
+apps/client-next/tests/runtime/session.test.mjs # test file; split by feature
 apps/server/internal/game/quest/runtime.go # one quest-runtime owner: definition lookup, acceptance, NPC option projection and the reward transaction share the character door and the active-quest list; the per-programme composition rows (acceptance grants, grant-day stamps, offer and re-grant hooks) join their programmes here, with no responsibility boundary inside the transaction owner
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
 

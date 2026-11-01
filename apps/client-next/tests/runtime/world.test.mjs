@@ -894,6 +894,177 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	world.dispose();
 });
 
+test("a maintenance refusal is definitive and explains itself", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			throw new Error( "MAINTENANCE" );
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal(
+		world.status().error,
+		"The server is under maintenance. Please try again later."
+	);
+	// Well past the retry backoff and the whole resume grace the refusal
+	// still stands: no transport ever opened, no mint was ever retried.
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.deepEqual( mints, [ "transport" ] );
+	assert.equal( sockets.length, 0 );
+});
+
+test("a coded entry refusal is generic and is not retried", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			throw new Error( "SHARD_OFFLINE" );
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	// The Agent answered with a refusal code that names nothing the
+	// player can act on: the text stays the generic admission failure.
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal( world.status().error, "Admission request failed" );
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.deepEqual( mints, [ "transport" ] );
+	assert.equal( sockets.length, 0 );
+});
+
+test("a maintenance refusal of a resume mint ends the session with its text", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	let inWorld = false;
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			if ( inWorld ) throw new Error( "MAINTENANCE" );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	assert.equal( world.status().phase, "world" );
+	inWorld = true;
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
+	world.step( 6 );
+	assert.equal( world.status().phase, "reconnecting" );
+	world.step( 256 );
+	await settle();
+	world.step( 257 );
+	// The Agent answered the resume mint with the maintenance refusal:
+	// definitive, with the maintenance text, deep inside the resume
+	// grace where an answerless failure would still be retrying.
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal(
+		world.status().error,
+		"The server is under maintenance. Please try again later."
+	);
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport" ] );
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport" ] );
+	assert.equal( sockets.length, 1 );
+});
+
+// INTERNAL is a passing server failure, so it retries like no answer at all.
+for ( const failed of [ "Admission rejected", "INTERNAL" ] ) {
+	test(`a resume mint failing with ${failed} keeps the resume retry`, async t => {
+		const sockets = socketHarness( t ), mints = [];
+		let inWorld = false, failOnce = true;
+		const world = createWorldSession(
+			async kind => {
+				mints.push( kind );
+				if ( inWorld && failOnce && kind === "transport" ) {
+					failOnce = false;
+					throw new Error( failed );
+				}
+				return "ticket";
+			},
+			undefined,
+			ignoreIncident
+		);
+		t.after( () => world.dispose() );
+		world.enter( "fixture", "shard", "http://localhost:9000" );
+		await settle();
+		world.step( 1 );
+		const first = sockets[0];
+		first.onopen();
+		first.receive( 2, welcome() );
+		world.step( 2 );
+		await settle();
+		world.step( 3 );
+		first.receive( 7, entered() );
+		for ( const row of rows ) first.receive( row.opcode, row.payload );
+		world.step( 4 );
+		flush( world );
+		world.step( 5 );
+		assert.equal( world.status().phase, "world" );
+		inWorld = true;
+		first.onclose( { code: 1006, reason: "", wasClean: false } );
+		world.step( 6 );
+		assert.equal( world.status().phase, "reconnecting" );
+		// The first resume mint gets no usable answer: the session stays in
+		// the retry instead of ending, exactly as before coded refusals
+		// became definitive.
+		world.step( 256 );
+		await settle();
+		world.step( 257 );
+		assert.equal( world.status().phase, "reconnecting" );
+		assert.equal( world.status().error, "Admission request failed" );
+		// The next attempt mints again and the session resumes.
+		world.step( 757 );
+		await settle();
+		world.step( 758 );
+		assert.equal( sockets.length, 2 );
+		const second = sockets[1];
+		second.onopen();
+		second.receive( 2, welcome( true ) );
+		world.step( 759 );
+		await settle();
+		world.step( 760 );
+		second.receive( 7, entered() );
+		for ( const row of rows ) second.receive( row.opcode, row.payload );
+		world.step( 761 );
+		flush( world );
+		world.step( 762 );
+		assert.equal( world.status().phase, "world" );
+		assert.deepEqual( mints, [ "transport", "enterworld", "transport", "transport", "enterworld" ] );
+	});
+}
+
 test("a fresh entry retries a stalled admission and enters", async t => {
 	const sockets = socketHarness( t ), mints = [];
 	const world = createWorldSession(
