@@ -332,7 +332,7 @@ function formatEnvironmentFailure( task, context, failures ) {
 		lines.push(
 			"A Python 3 interpreter is present but a required module is not importable from it - " +
 				"do NOT reinstall Python; install the build dependencies instead:",
-			"  py -3 -m pip install -r rebuild/requirements.txt"
+			"  py -3 -m pip install -r scripts/requirements.txt"
 		);
 	} else {
 		lines.push(

@@ -42,20 +42,20 @@
 	},
 	"files": [
 		// ambient types: window debug hooks used by evaluate bodies
-		"scripts/task.mjs",
-		"scripts/tasks/runner.mjs",
-		"scripts/tasks/processCommand.mjs",
-		"scripts/test/runSuite.mjs",
+		"task.mjs",
+		"tasks/runner.mjs",
+		"tasks/processCommand.mjs",
+		"test/runSuite.mjs",
 		// checks/
-		"scripts/checks/check_asset_pack_integrity.mjs",
-		"scripts/checks/check_formatting.mjs",
-		"scripts/checks/check_source_encoding.mjs",
-		"scripts/checks/check_shared_fixtures.mjs",
-		"scripts/checks/run_if_changed.mjs",
-		"scripts/checks/check_precompressed_freshness.mjs",
-		"scripts/checks/check_source_file_size.mjs",
-		"scripts/checks/check_world_space.mjs",
-		"scripts/checks/lib/methodBlock.mjs",
+		"checks/check_asset_pack_integrity.mjs",
+		"checks/check_formatting.mjs",
+		"checks/check_source_encoding.mjs",
+		"checks/check_shared_fixtures.mjs",
+		"checks/run_if_changed.mjs",
+		"checks/check_precompressed_freshness.mjs",
+		"checks/check_source_file_size.mjs",
+		"checks/check_world_space.mjs",
+		"checks/lib/methodBlock.mjs",
 		// probes/
 		// debug/
 		// dev/
