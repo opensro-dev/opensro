@@ -1,0 +1,76 @@
+/*
+===========================================================================
+
+chat-log.css - the Chat log page, on the Jangan theme's tokens
+
+Below 640px the filters stack and the table scrolls inside its own panel,
+so the page itself never scrolls sideways.
+
+===========================================================================
+*/
+
+.chat-log {
+	padding-bottom: 32px;
+}
+
+.chat-filters {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+	gap: 12px;
+	align-items: end;
+	padding: 14px;
+}
+
+.chat-filters label {
+	display: grid;
+	gap: 4px;
+	font-size: 13px;
+}
+
+.chat-filters input,
+.chat-filters select {
+	min-width: 0;
+}
+
+.chat-status {
+	margin: 12px 0;
+	font-size: 13px;
+}
+
+.chat-table-wrap {
+	overflow-x: auto;
+}
+
+.chat-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.chat-table th,
+.chat-table td {
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--gold-soft);
+	text-align: left;
+	vertical-align: top;
+}
+
+.chat-table td:first-child {
+	white-space: nowrap;
+}
+
+.chat-account {
+	font-family: monospace;
+}
+
+.chat-text {
+	min-width: 240px;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+	.chat-filters {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
