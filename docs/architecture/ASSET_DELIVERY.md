@@ -1,6 +1,6 @@
 # Asset delivery
 
-How game data travels from the licensed client on a developer's disk to a
+How game data travels from the client on the operator's disk to a
 player's browser, what each byte costs on the way, how the build keeps old
 output from shipping, and how a data release is staged.
 [ASSET_PIPELINE.md](ASSET_PIPELINE.md) covers the build commands;
@@ -35,7 +35,7 @@ pack format, the asset worker or the release tools.
 
 | Stage | Location | Owner |
 | --- | --- | --- |
-| Licensed client | `<game root>/*.pk2`, `SRO_Client.exe` | the player's own install, never committed |
+| Client | `<game root>/*.pk2`, `SRO_Client.exe` | the player's own install, never committed |
 | Extraction | `<game root>/extracted/` | `pnpm assets prepare` (`scripts/prepare_client_resources.py`) |
 | Converted sources | `.generated/intermediate/` | image conversion, native texture mips |
 | Public tree | `.generated/client-public/assets/` | the build steps (`scripts/build/`) |
@@ -463,7 +463,7 @@ which is what the store uses.
 ## Releasing data
 
 A release that changes any public file is a **data release**: only the
-machine with the licensed build can produce it. The steps, from a worktree
+machine with the build can produce it. The steps, from a worktree
 at the commit being released:
 
 1. Fetch the live manifest:

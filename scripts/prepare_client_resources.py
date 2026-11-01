@@ -1,7 +1,7 @@
 """
 ===========================================================================
 
-prepare_client_resources.py - extract a licensed v1.150 client for the build
+prepare_client_resources.py - extract a v1.150 client for the build
 
 The asset build reads an extracted client, not the archives. This tool makes
 that extraction on the operator's own machine from their own client, so no
@@ -205,7 +205,7 @@ def prepare_music(archive_path, output, previous, ffmpeg):
 
 
 def main():
-	parser = argparse.ArgumentParser(description="Extract a licensed v1.150 client for the asset build.")
+	parser = argparse.ArgumentParser(description="Extract a v1.150 client for the asset build.")
 	names = [name for name, _ in RESOURCE_ARCHIVES] + [MUSIC_ARCHIVE]
 	parser.add_argument("--only", help="comma-separated subset of " + ",".join(names))
 	args = parser.parse_args()

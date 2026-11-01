@@ -46,8 +46,8 @@ Expand-Archive $Zip -DestinationPath $Dir -Force
 
 ## 2. Game data
 
-Retail game media is not in this repository. You need your own licensed
-Silkroad Online v1.150 (Legend III) client. The tools below extract and
+Retail game media is not in this repository. You need a Silkroad Online
+v1.150 (Legend III) client that you have the right to use. The tools below extract and
 convert it on your machine; nothing is uploaded. On Windows the asset build
 reproduces the original lens mips (32-bit D3DX) and font atlas (GDI) byte for
 byte; on macOS portable generators produce equivalent output.
@@ -198,7 +198,7 @@ export SRO_PYTHON="$PWD/.venv/bin/python"   # used by every asset build step
 ```
 
 There is no `py` launcher outside Windows: build steps run `SRO_PYTHON`, then
-`python3`, then `python`. A licensed client shipped as a `.rar` extracts with
+`python3`, then `python`. A client shipped as a `.rar` extracts with
 `unar`.
 
 **Assets.** No DirectX runtime is needed. `scripts/build/native_texture_mips.py`

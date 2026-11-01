@@ -97,7 +97,7 @@ Transfer applies after native damage links, shields and mana redirection. One
 strongest eligible bear applies; bonds do not stack. Allies share a transfer
 limit of 20% of bear maximum HP each second, and transfer leaves at least one HP.
 Transferred costs do not charge hit counters, damage links or retribution.
-Gold recovery pulses and licensed cleric healing/rebirth sounds mark confirmed
+Gold recovery pulses and native cleric healing/rebirth sounds mark confirmed
 events without changing the bear’s pose. Balance remains subject to testing.
 
 Bear **Crushing Paw** now retaliates after every ten landed physical or spell

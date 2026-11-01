@@ -65,7 +65,7 @@ The staging job retains those exact bytes. After approval the receiver:
 
 A release that changes the asset data (a new `ASSET_SCHEMA` in
 `scripts/build/assetSchema.mjs`, or any new pack content) is a data candidate
-(`client_data.py`). Only the machine holding the licensed asset build can
+(`client_data.py`). Only the machine holding the asset build can
 produce it, so the operator stages it with `data_release.py`:
 
 ```sh
@@ -99,7 +99,7 @@ resume; stored payloads unused for 14 days are pruned.
 
 ### Server game data
 
-The GameWorld opens the licensed server game-data archive at the host's
+The GameWorld opens the server game-data archive at the host's
 `game_data` path; a server release carries binaries, not that archive
 (`server_data.py`). When a server change needs newer data (a new catalogue
 version, a new authority file), stage the archive built from the release's

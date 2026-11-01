@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-clientInputs.mjs - the licensed client inputs the asset build reads
+clientInputs.mjs - the client inputs the asset build reads
 
 One definition of what a prepared game root holds, shared by the build's
 preflight (build_sro_resources.mjs) and `pnpm assets doctor`. The folders

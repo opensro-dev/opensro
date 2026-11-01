@@ -3,7 +3,7 @@
 
 assets.mjs - asset pipeline tasks
 
-`pnpm assets <verb> [<family>]`: prepare and check a licensed client
+`pnpm assets <verb> [<family>]`: prepare and check a client
 (prepare, doctor), build (build, build full, build world-outdoor), publish
 and refresh pack families, and the maintenance tools. A
 first build is `assets prepare`, `assets doctor`, then `assets build full`.
@@ -108,7 +108,7 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:prepare",
-		description: "Extract your licensed v1.150 client (PK2 archives and music) into extracted/",
+		description: "Extract your v1.150 client (PK2 archives and music) into extracted/",
 		kind: "assets",
 		ci: false,
 		requires: [ "client-install" ],
@@ -128,7 +128,7 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:build",
-		description: "Build the browser projection of licensed SRO resources",
+		description: "Build the browser projection of SRO resources",
 		kind: "assets",
 		ci: true,
 		requires: [ "client-extraction" ],
