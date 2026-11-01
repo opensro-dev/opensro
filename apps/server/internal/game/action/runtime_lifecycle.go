@@ -182,7 +182,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// Port-only (killstats.go): online-time accrual and the rollup
 		// flush; a no-op while SRO_KILL_STATS is off.
 		step("advanceKillStats", func() { rt.advanceKillStats(nowMs) })
-		step("advancePKRecords", func() { out = append(out, rt.advancePKRecords()...) })
+		step("advancePKRecords", rt.advancePKRecords)
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
 		// Pending pickups take the gate themselves (publishPendingPickup).
 		if !cut {

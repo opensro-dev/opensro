@@ -3,20 +3,20 @@
 
 murdererdrain.go - the murderer status HP drain
 
-A living murderer (a positive PK penalty: murderer(c)) loses
-pk.MurdererDrainPercent of its maximum HP every pk.MurdererDrainPeriodMs.
-The PK record's sweep (pkrecord.go) drives it: the same tick that runs the
-penalty keeper asks whether the drain is due, so the rule adds no goroutine
-and no package state.
+A murderer's natural recovery pulse takes HP instead of giving it. Outside
+a safe region, a living character with a positive PK penalty (murderer(c))
+loses pk.DrainAmount of its maximum HP on the pulse and does not regenerate;
+inside one, the pulse recovers as usual. The rule therefore has no clock of
+its own: recoverResident owns the period and the residency, so an offline
+record cannot be drained.
 
-INFERENCE: the original server binary is not on this machine; the owner
-played the original and gives 5% per 10 s as the estimate, so the period is
-an owner estimate rather than a read constant (pk/drain.go).
+Motion, posture and an open cast gate only the recovery half of a pulse, so
+none of them stops a drain.
 
-The drain can kill. A lethal pulse settles through the shared fatal
-transition (settlePlayerDeathInDoor) with no killer object and a
-pk.DeathPlayer classification, so the existing murderer relief (-200 penalty,
--1 daily) and drop roll run unchanged.
+INFERENCE: the safe-region test is the _RefRegion no-battlefield reading the
+town rules use (rt.inTown). The v1.150 vitals causes carry no bit for the
+drain (simulation/gameready.go), so a surviving pulse is a plain vitals
+refresh.
 
 ===========================================================================
 */
@@ -32,136 +32,99 @@ import (
 
 /*
 ================
-murdererDrainDue
+murdererDrainApplies
 
-The per-player drain clock. Its first sight of a murderer starts a full
-period; the caller consumes a due period even when the pulse is skipped, so
-a corpse waits a full period after its rebirth instead of draining at once.
+Whether this pulse is a drain. Decided inside the character's door, after
+the caller has refused a corpse.
 ================
 */
-func (rt *Runtime) murdererDrainDue(key petOwnerKey, nowMs int64) bool {
-	if rt.murdererDrains == nil {
-		rt.murdererDrains = make(map[petOwnerKey]int64)
-	}
-	next, tracked := rt.murdererDrains[key]
-	if !tracked {
-		rt.murdererDrains[key] = nowMs + pk.MurdererDrainPeriodMs
-		return false
-	}
-	return nowMs >= next
+func (rt *Runtime) murdererDrainApplies(division string, c *enterworld.Character) bool {
+	return murderer(c) && !rt.inTown(division, c)
 }
 
 /*
 ================
-playerOnline
+drainPulse
 
-The drain is HP pressure on a body in the world, so it must not run for an
-offline record the PK keeper still decays (an offline murderer would be
-bled to death and drop without ever playing). A recovery session exists
-exactly while the player is a world resident (naturalrecovery.go).
+What one committed drain pulse publishes. fatal asks the caller to rebind
+the resident's region once the door has closed.
 ================
 */
-func (rt *Runtime) playerOnline(key petOwnerKey) bool {
-	return rt.residentOnline(key.division, key.name)
+type drainPulse struct {
+	actor, public []wire.Frame
+	fatal         bool
 }
 
 /*
 ================
-forgetMurdererDrain
+drainMurdererInDoor
 
-Only the tick's sweep calls this; a record that stops being a murderer,
-dies, or leaves the world starts a fresh period when murderer status and
-life return.
-================
-*/
-func (rt *Runtime) forgetMurdererDrain(key petOwnerKey) {
-	delete(rt.murdererDrains, key)
-}
-
-/*
-================
-drainMurderer
-
-One due pulse for one murderer. The due-ness check and the deadline move
-happen before the division lock: the deadline map is touched only by the
-serial tick sweep, so a not-due owner costs no lock. The division door then
-keeps the HP debit, the possible death and the frames that describe them
-one transaction. A late tick drops the pulses it missed rather than
-replaying them, so a stalled server cannot kill in a burst.
+Applies one drain pulse inside the character's door and reports whether the
+record changed. A maximum HP too small to lose a whole point changes nothing,
+but the pulse still replaced recovery.
 
 A surviving pulse publishes a plain vitals refresh (source zero) to the
-victim and an HP refresh to observers - the pair every HP-over-time change
-sends, with no cause bit because v1.150 authors none for this rule
-(simulation/gameready.go). A lethal pulse stays silent here: the shared
-fatal transition publishes the one 0-HP baseline and the dead state for
-everyone (beginFatalLifePublication, as other killer-less deaths use it).
+victim and an HP refresh to observers, the pair every HP-over-time change
+sends. A lethal pulse stays silent here: the shared fatal transition publishes
+the one 0-HP baseline and the dead state for everyone.
 ================
 */
-func (rt *Runtime) drainMurderer(key petOwnerKey, nowMs int64) []simulation.DivisionFrames {
-	if !rt.murdererDrainDue(key, nowMs) {
-		return nil
+func (rt *Runtime) drainMurdererInDoor(division string, c *enterworld.Character, nowMs int64, pulse *drainPulse) bool {
+	stats, _, err := rt.playerCombatStats(division, c)
+	if err != nil {
+		return false
 	}
-	rt.murdererDrains[key] = nowMs + pk.MurdererDrainPeriodMs
-	unlock := rt.lockDivision(key.division)
-	defer unlock()
-	c := rt.findCharacter(key.division, key.name)
-	if c == nil {
-		return nil
+	maxHP, _, currentHP, currentMP := keeperVitalsFrom(c, stats, nil)
+	nextHP := max(currentHP-pk.DrainAmount(maxHP), 0)
+	if nextHP == currentHP {
+		return false
 	}
-	var actor, public []wire.Frame
-	fatal := false
-	committed := rt.deps.UpdateDeferred(c, "murderer-drain", func() bool {
-		// The sweep forgets a corpse's clock, so a revival arms a fresh
-		// period; the check still guards a death between the read and here.
-		if c.DeletePending || !enterworld.CharacterAlive(c) || !murderer(c) {
-			return false
-		}
-		stats, _, err := rt.playerCombatStats(key.division, c)
-		if err != nil {
-			return false
-		}
-		maxHP, _, currentHP, currentMP := keeperVitalsFrom(c, stats, nil)
-		nextHP := max(currentHP-pk.DrainAmount(maxHP), 0)
-		if nextHP == currentHP {
-			return false
-		}
-		c.CurrentHP = &nextHP
-		gid := enterworld.ObjectIDForCharacter(c)
-		if nextHP == 0 {
-			fatal = true
-			effects, progression := rt.settlePlayerDeathInDoor(key.division, c, deathKiller{murdererDrain: true}, nowMs)
-			public = append(public, effects...)
-			actor = append(actor, progression...)
-			if owner := rt.clearPlayerAbnormalInDoor(key.division, c, nowMs); owner != nil {
-				owner.fatal = true
-				public = append(public, rt.playerAbnormalPublication(key.division, c, owner).public...)
-			} else {
-				life := beginFatalLifePublication(gid)
-				baseline := life.publishDeathBaseline()
-				dead := life.publishDead()
-				public = append(public, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload},
-					wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
-			}
-			return true
-		}
-		actor = append(actor, wire.Frame{Opcode: simulation.OpVitalsUpdate,
-			Payload: simulation.VitalsRefreshPayload(gid, simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(currentMP)})})
-		public = append(public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+	c.CurrentHP = &nextHP
+	gid := enterworld.ObjectIDForCharacter(c)
+	if nextHP != 0 {
+		vitals := simulation.Vitals{CurrentHP: uint32(nextHP), CurrentMP: uint32(currentMP)}
+		pulse.actor = append(pulse.actor, wire.Frame{Opcode: simulation.OpVitalsUpdate,
+			Payload: simulation.VitalsRefreshPayload(gid, vitals)})
+		pulse.public = append(pulse.public, wire.Frame{Opcode: simulation.OpVitalsUpdate,
 			Payload: simulation.HPRefreshPayload(gid, 0, uint32(nextHP))})
 		return true
-	})
-	if !committed {
-		return nil
 	}
-	if fatal {
+	pulse.fatal = true
+	effects, progression := rt.settlePlayerDeathInDoor(division, c, deathKiller{murdererDrain: true}, nowMs)
+	pulse.public = append(pulse.public, effects...)
+	pulse.actor = append(pulse.actor, progression...)
+	if owner := rt.clearPlayerAbnormalInDoor(division, c, nowMs); owner != nil {
+		owner.fatal = true
+		pulse.public = append(pulse.public, rt.playerAbnormalPublication(division, c, owner).public...)
+		return true
+	}
+	life := beginFatalLifePublication(gid)
+	baseline := life.publishDeathBaseline()
+	dead := life.publishDead()
+	pulse.public = append(pulse.public, wire.Frame{Opcode: baseline.opcode, Payload: baseline.payload},
+		wire.Frame{Opcode: dead.opcode, Payload: dead.payload})
+	return true
+}
+
+/*
+================
+publishDrainPulse
+
+Routes a committed pulse after the door has closed.
+================
+*/
+func (rt *Runtime) publishDrainPulse(key recoveryKey, c *enterworld.Character, nowMs int64, pulse *drainPulse) []simulation.DivisionFrames {
+	if pulse.fatal {
 		rt.bindResidentRegion(simulation.WorldKey(key.division, c.Name), nowMs)
 	}
 	var out []simulation.DivisionFrames
-	if len(public) != 0 {
-		out = append(out, simulation.DivisionFrames{DivisionID: key.division, SourceGID: enterworld.ObjectIDForCharacter(c), Frames: simFrames(public)})
+	if len(pulse.public) != 0 {
+		out = append(out, simulation.DivisionFrames{DivisionID: key.division,
+			SourceGID: enterworld.ObjectIDForCharacter(c), Frames: simFrames(pulse.public)})
 	}
-	if len(actor) != 0 {
-		out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: c.ID, Frames: simFrames(actor)})
+	if len(pulse.actor) != 0 {
+		out = append(out, simulation.DivisionFrames{DivisionID: key.division,
+			OnlyCharacterID: c.ID, Frames: simFrames(pulse.actor)})
 	}
 	return out
 }

@@ -1,15 +1,13 @@
 /*
 ===========================================================================
 
-murdererdrain_test.go - the murderer status HP drain on the PK sweep
+murdererdrain_test.go - the murderer status HP drain on the recovery pulse
 
-The drain is a clock, so the tests drive the injected clock through the PK
-sweep the real tick runs (advancePKRecords): a murderer loses 5% of its
-maximum HP on the tenth second and not before, a non-murderer or an offline
-record loses nothing, a lethal pulse settles as a murderer death with the
-existing penalty relief and drop roll and publishes one 0-HP baseline, a
-revival restarts the full period, and the drain stops once the penalty is
-gone.
+The drain is the natural recovery pulse's murderer branch, so the tests
+drive advanceNaturalRecovery: 2% of the maximum on the pulse, truncated,
+outside a safe region, replacing recovery; motion and an open cast do not
+stop it; a town, an offline record, a corpse and a clean record lose
+nothing; a lethal pulse settles through the shared fatal transition.
 
 ===========================================================================
 */
@@ -19,7 +17,6 @@ package action
 import (
 	"encoding/binary"
 	"testing"
-	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -30,21 +27,8 @@ import (
 
 const (
 	murdererDrainTestPenalty = 5000
-	murdererDrainTestPeriod  = 10 * time.Second
+	drainTestFirstPulseMs    = 4000
 )
-
-/*
-================
-admitDrainTestPlayer
-
-The drain runs only for a world resident: bind the recovery session the
-real world bind stores (naturalrecovery.go). The drain's tests call the PK
-sweep directly, so the session's own recovery pulse never runs here.
-================
-*/
-func admitDrainTestPlayer(rt *Runtime, c *enterworld.Character) {
-	rt.BindRecoverySession(testDivision, c, 1)
-}
 
 /*
 ================
@@ -62,41 +46,57 @@ func vitalsHPRefresh(frame simulation.Frame) (uint32, bool) {
 
 /*
 ================
-TestMurdererDrainsFivePercentOnTheTenthSecond
+drainTestMurderer
 
-5% of the maximum, truncated, every 10 s: the frame before the period is
-silent and the frame on it publishes the loss to the victim and observers.
+A wounded murderer outside a town: wounded so that a recovery pulse would
+show as a gain, and with a resident session bound.
 ================
 */
-func TestMurdererDrainsFivePercentOnTheTenthSecond(t *testing.T) {
+func drainTestMurderer(t *testing.T) (*Runtime, *enterworld.Character, int64, int64) {
+	t.Helper()
 	c := testCharacter()
 	maximum := enterworld.DerivedMaxHP(c)
-	hp := maximum
+	hp := maximum / 2
 	c.CurrentHP = &hp
 	c.PK = &domain.PKRecord{Penalty: murdererDrainTestPenalty}
 	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
-	admitDrainTestPlayer(rt, c)
+	rt.BindRecoverySession(testDivision, c, 1)
+	_, field := regionsByCombat(t)
+	drainTestWorld(rt, c, func(state *simulation.WorldState) { state.Spawn.RegionID = field })
+	return rt, c, maximum, clock.NowMs()
+}
 
-	// The first sweep only arms the clock.
-	rt.advancePKRecords()
-	if got := enterworld.CurrentHP(c); got != maximum {
-		t.Fatalf("HP %d on the arming sweep, want %d", got, maximum)
-	}
+/*
+================
+drainTestWorld
 
-	clock.Advance(murdererDrainTestPeriod - time.Millisecond)
-	if frames := rt.advancePKRecords(); len(frames) != 0 {
-		t.Fatalf("drained before the period: %+v", frames)
-	}
-	if got := enterworld.CurrentHP(c); got != maximum {
-		t.Fatalf("HP %d one millisecond early, want %d", got, maximum)
-	}
+Edits the character's live world state.
+================
+*/
+func drainTestWorld(rt *Runtime, c *enterworld.Character, edit func(state *simulation.WorldState)) {
+	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState {
+		return simulation.SeedWorldState(c)
+	}, edit)
+}
 
-	clock.Advance(time.Millisecond)
-	frames := rt.advancePKRecords()
-	want := maximum - maximum/20
-	if got := enterworld.CurrentHP(c); got != want {
-		t.Fatalf("HP %d on the period, want %d (5%% of %d)", got, want, maximum)
+/*
+================
+TestMurdererDrainsOnTheRecoveryPulse
+
+The pulse before the period is silent; the pulse on it takes the truncated
+2% and gives nothing back, publishing to the victim and observers.
+================
+*/
+func TestMurdererDrainsOnTheRecoveryPulse(t *testing.T) {
+	rt, c, maximum, start := drainTestMurderer(t)
+	hp := enterworld.CurrentHP(c)
+	if frames := rt.advanceNaturalRecovery(start + drainTestFirstPulseMs - 1); len(frames) != 0 {
+		t.Fatalf("drained before the pulse: %+v", frames)
+	}
+	frames := rt.advanceNaturalRecovery(start + drainTestFirstPulseMs)
+	want := hp - pk.DrainAmount(maximum)
+	if got := enterworld.CurrentHP(c); got != want || want == hp {
+		t.Fatalf("HP %d on the pulse, want %d from %d", got, want, hp)
 	}
 	if len(frames) != 2 {
 		t.Fatalf("drain published %+v, want the victim refresh and the observer refresh", frames)
@@ -129,95 +129,65 @@ func TestMurdererDrainsFivePercentOnTheTenthSecond(t *testing.T) {
 
 /*
 ================
-TestNonMurdererLosesNothing
+TestMurdererDrainIgnoresTheRecoveryGates
 
-An armed penalty keeper runs a record clock, but only a positive penalty
-is murderer status: nothing is drained.
+Motion and posture gate recovery, not the drain, which comes first on the
+pulse.
 ================
 */
-func TestNonMurdererLosesNothing(t *testing.T) {
-	c := testCharacter()
-	hp := enterworld.DerivedMaxHP(c)
-	c.CurrentHP = &hp
-	c.PK = &domain.PKRecord{TotalCount: 3, TotalDecayAt: time.UnixMilli(1_000_000).Add(time.Hour).Unix()}
-	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
-	admitDrainTestPlayer(rt, c)
-
-	rt.advancePKRecords()
-	clock.Advance(time.Minute)
-	if frames := rt.advancePKRecords(); len(frames) != 0 {
-		t.Fatalf("a non-murderer was drained: %+v", frames)
-	}
-	if got := enterworld.CurrentHP(c); got != hp {
-		t.Fatalf("non-murderer HP %d, want %d", got, hp)
+func TestMurdererDrainIgnoresTheRecoveryGates(t *testing.T) {
+	rt, c, maximum, start := drainTestMurderer(t)
+	hp := enterworld.CurrentHP(c)
+	now := start + drainTestFirstPulseMs
+	drainTestWorld(rt, c, func(state *simulation.WorldState) { state.PostureTransitionUntilMs = now + 1 })
+	rt.advanceNaturalRecovery(now)
+	if got, want := enterworld.CurrentHP(c), hp-pk.DrainAmount(maximum); got != want {
+		t.Fatalf("HP %d under a posture transition, want %d", got, want)
 	}
 }
 
 /*
 ================
-TestOfflineMurdererLosesNothing
+TestMurdererRecoversInASafeRegion
 
-The PK keeper decays an offline record's counters, but the drain is HP
-pressure on a body in the world: an unadmitted murderer is not drained.
+A town is the one place a murderer's pulse is still recovery.
 ================
 */
-func TestOfflineMurdererLosesNothing(t *testing.T) {
-	c := testCharacter()
-	hp := enterworld.DerivedMaxHP(c)
-	c.CurrentHP = &hp
-	c.PK = &domain.PKRecord{Penalty: murdererDrainTestPenalty}
-	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
+func TestMurdererRecoversInASafeRegion(t *testing.T) {
+	town, _ := regionsByCombat(t)
+	rt, c, _, start := drainTestMurderer(t)
+	drainTestWorld(rt, c, func(state *simulation.WorldState) { state.Spawn.RegionID = town })
+	hp := enterworld.CurrentHP(c)
+	rt.advanceNaturalRecovery(start + drainTestFirstPulseMs)
+	if got := enterworld.CurrentHP(c); got <= hp {
+		t.Fatalf("HP %d in a town, want a gain from %d", got, hp)
+	}
+}
 
-	rt.advancePKRecords()
-	clock.Advance(time.Minute)
-	if frames := rt.advancePKRecords(); len(frames) != 0 {
+/*
+================
+TestRecoveryStaysForCleanAndOfflineRecords
+
+A record with PK history but no penalty recovers as anyone does, and an
+unbound murderer has no pulse at all.
+================
+*/
+func TestRecoveryStaysForCleanAndOfflineRecords(t *testing.T) {
+	rt, c, _, start := drainTestMurderer(t)
+	c.PK = &domain.PKRecord{TotalCount: 3}
+	hp := enterworld.CurrentHP(c)
+	rt.advanceNaturalRecovery(start + drainTestFirstPulseMs)
+	if got := enterworld.CurrentHP(c); got <= hp {
+		t.Fatalf("clean record HP %d, want a gain from %d", got, hp)
+	}
+
+	offline := testCharacter()
+	full := enterworld.DerivedMaxHP(offline)
+	offline.CurrentHP = &full
+	offline.PK = &domain.PKRecord{Penalty: murdererDrainTestPenalty}
+	rt, clock := newTestRuntime(offline, testItems())
+	if frames := rt.advanceNaturalRecovery(clock.NowMs() + drainTestFirstPulseMs); len(frames) != 0 {
 		t.Fatalf("an offline murderer was drained: %+v", frames)
-	}
-	if got := enterworld.CurrentHP(c); got != hp {
-		t.Fatalf("offline murderer HP %d, want %d", got, hp)
-	}
-}
-
-/*
-================
-TestMurdererDrainStopsWhenPenaltyReachesZero
-
-The drain stops with murderer status, and the clock is forgotten so a
-returning penalty starts a fresh period.
-================
-*/
-func TestMurdererDrainStopsWhenPenaltyReachesZero(t *testing.T) {
-	c := testCharacter()
-	maximum := enterworld.DerivedMaxHP(c)
-	hp := maximum
-	c.CurrentHP = &hp
-	c.PK = &domain.PKRecord{Penalty: 200}
-	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
-	admitDrainTestPlayer(rt, c)
-
-	rt.advancePKRecords()
-	clock.Advance(murdererDrainTestPeriod)
-	rt.advancePKRecords()
-	if got := enterworld.CurrentHP(c); got != maximum-maximum/20 {
-		t.Fatalf("HP %d after one drain, want %d", got, maximum-maximum/20)
-	}
-
-	pk.AddPenalty(c, -200, rt.Now())
-	if c.PK.Penalty != 0 || murderer(c) {
-		t.Fatalf("record %+v, want the penalty gone", c.PK)
-	}
-	clock.Advance(murdererDrainTestPeriod)
-	if frames := rt.advancePKRecords(); len(frames) != 0 {
-		t.Fatalf("drained after the penalty reached zero: %+v", frames)
-	}
-	if got := enterworld.CurrentHP(c); got != maximum-maximum/20 {
-		t.Fatalf("HP %d after the drain stopped, want %d", got, maximum-maximum/20)
-	}
-	if _, tracked := rt.murdererDrains[petOwnerKey{division: testDivision, name: c.Name}]; tracked {
-		t.Fatal("the drain clock survived murderer status")
 	}
 }
 
@@ -234,7 +204,9 @@ potion goes.
 */
 func TestMurdererDrainDeathIsAMurdererDeath(t *testing.T) {
 	rt, clock, c, _ := newCombatTestRuntime(t, 100)
-	admitDrainTestPlayer(rt, c)
+	rt.BindRecoverySession(testDivision, c, 1)
+	_, field := regionsByCombat(t)
+	drainTestWorld(rt, c, func(state *simulation.WorldState) { state.Spawn.RegionID = field })
 	c.Level = testInt64(11)
 	c.MaxLevel = testInt64(11)
 	hp := int64(1)
@@ -245,16 +217,13 @@ func TestMurdererDrainDeathIsAMurdererDeath(t *testing.T) {
 	rt.deps.ItemReferences().(staticItemSource)[potion.Codename] = potion
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 13, RefObjID: potion.RefObjID,
 		Codename: potion.Codename, TypeFlags: potion.TypeFlags(), VarianceBits: "0", StackCount: 5})
-	rt.pkOwners.track(testDivision, c.Name)
 	var loss pk.LossRule
 	rt.ApplyDeathPenalty = func(_ *enterworld.Character, penalty pk.DeathPenalty) ([]wire.Frame, bool) {
 		loss = penalty.Rule
 		return nil, true
 	}
 
-	rt.advancePKRecords()
-	clock.Advance(murdererDrainTestPeriod)
-	frames := rt.advancePKRecords()
+	frames := rt.advanceNaturalRecovery(clock.NowMs() + drainTestFirstPulseMs)
 
 	if got := enterworld.CurrentHP(c); got != 0 {
 		t.Fatalf("HP %d after the lethal pulse, want the corpse", got)
@@ -301,83 +270,7 @@ func TestMurdererDrainDeathIsAMurdererDeath(t *testing.T) {
 	}
 
 	// A corpse is not drained, even though it is still a murderer.
-	clock.Advance(murdererDrainTestPeriod)
-	if frames := rt.advancePKRecords(); len(frames) != 0 || enterworld.CurrentHP(c) != 0 {
+	if frames := rt.advanceNaturalRecovery(clock.NowMs() + 2*drainTestFirstPulseMs); len(frames) != 0 || enterworld.CurrentHP(c) != 0 {
 		t.Fatalf("a corpse was drained: HP %d, frames %+v", enterworld.CurrentHP(c), frames)
-	}
-}
-
-/*
-================
-TestMurdererDrainRestartsAfterRevival
-
-A corpse keeps no drain clock: a murderer revived 9.9 s into a period is
-not bled 100 ms later. The clock arms at the revival sweep and the first
-pulse lands a full period after it.
-================
-*/
-func TestMurdererDrainRestartsAfterRevival(t *testing.T) {
-	c := rebirthTestCharacter(1, 0)
-	c.PK = &domain.PKRecord{Penalty: murdererDrainTestPenalty}
-	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
-	admitDrainTestPlayer(rt, c)
-
-	// Two dead sweeps: the first sight used to arm the clock on the corpse.
-	rt.advancePKRecords()
-	clock.Advance(murdererDrainTestPeriod - 100*time.Millisecond)
-	rt.advancePKRecords()
-	if _, tracked := rt.murdererDrains[petOwnerKey{division: testDivision, name: c.Name}]; tracked {
-		t.Fatal("a corpse kept a drain clock")
-	}
-
-	if out := rt.HandleLocalRebirth(testDivision, c, []byte{wire.RebirthAtPresentPoint}); len(out.Frames) == 0 || !enterworld.CharacterAlive(c) {
-		t.Fatalf("rebirth refused: %+v", out)
-	}
-	hp := enterworld.CurrentHP(c)
-	rt.advancePKRecords() // arm at the revival sweep
-
-	clock.Advance(100 * time.Millisecond)
-	if frames := rt.advancePKRecords(); len(frames) != 0 || enterworld.CurrentHP(c) != hp {
-		t.Fatalf("drained 100 ms after revival: HP %d, frames %+v", enterworld.CurrentHP(c), frames)
-	}
-	clock.Advance(murdererDrainTestPeriod - 101*time.Millisecond)
-	if frames := rt.advancePKRecords(); len(frames) != 0 {
-		t.Fatalf("drained before the revived period: %+v", frames)
-	}
-	clock.Advance(time.Millisecond)
-	rt.advancePKRecords()
-	if got, want := enterworld.CurrentHP(c), hp-pk.DrainAmount(enterworld.DerivedMaxHP(c)); got != want {
-		t.Fatalf("HP %d after the revived period, want %d", got, want)
-	}
-}
-
-/*
-================
-TestMurdererDrainRunsOnTheActionTick
-
-The drain belongs to the action runtime's tick hook, which the
-sro-gameworld wiring installs, so the rule runs in the real GameWorld and
-not only in tests.
-================
-*/
-func TestMurdererDrainRunsOnTheActionTick(t *testing.T) {
-	c := testCharacter()
-	maximum := enterworld.DerivedMaxHP(c)
-	hp := maximum
-	c.CurrentHP = &hp
-	c.PK = &domain.PKRecord{Penalty: murdererDrainTestPenalty}
-	rt, clock := newTestRuntime(c, testItems())
-	rt.pkOwners.track(testDivision, c.Name)
-	admitDrainTestPlayer(rt, c)
-
-	rt.TickHook()(clock.NowMs())
-	clock.Advance(murdererDrainTestPeriod)
-	if enterworld.CurrentHP(c) != maximum {
-		t.Fatal("the arming tick drained")
-	}
-	rt.TickHook()(clock.NowMs())
-	if got, want := enterworld.CurrentHP(c), maximum-maximum/20; got != want {
-		t.Fatalf("HP %d after a tick period, want %d", got, want)
 	}
 }

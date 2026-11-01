@@ -248,7 +248,7 @@ maximum draining.
 */
 func TestDrainAmount(t *testing.T) {
 	for _, tc := range []struct{ maximum, want int64 }{
-		{1000, 50}, {120, 6}, {119, 5}, {20, 1}, {19, 1}, {1, 1}, {0, 0}, {-5, 0},
+		{1000, 19}, {1001, 20}, {100, 1}, {101, 2}, {51, 1}, {50, 0}, {1, 0}, {0, 0}, {-5, 0},
 	} {
 		if got := DrainAmount(tc.maximum); got != tc.want {
 			t.Fatalf("DrainAmount(%d) = %d, want %d", tc.maximum, got, tc.want)

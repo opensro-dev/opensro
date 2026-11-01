@@ -1,44 +1,32 @@
 /*
 ===========================================================================
 
-drain.go - the murderer status HP drain's numbers
+drain.go - the murderer status HP drain's number
 
-A living player in murderer status (a positive PK penalty) loses a share of
-its maximum HP on a fixed period. The action runtime owns the clock, the
-commit and the publication; this file owns only the rate and the period, so
+The share of maximum HP a murderer's recovery pulse takes outside a safe
+region. The action runtime owns the pulse, the gates and the publication;
 the rule's arithmetic has one home beside the other PK tables.
-
-INFERENCE: the owner played the original and reports 5% of maximum HP every
-10 s. The server binary is not on this machine, so the timing is an owner
-estimate, not a read constant. The v1.150 vitals causes carry no bit for it
-(simulation/gameready.go), so the action runtime publishes the loss as a
-plain vitals refresh with source zero.
 
 ===========================================================================
 */
 
 package pk
 
-const (
-	// MurdererDrainPercent is the share of max HP one drain pulse takes.
-	MurdererDrainPercent int64 = 5
-	// MurdererDrainPeriodMs is the drain period: 10 s between pulses
-	// (owner estimate, see the file banner).
-	MurdererDrainPeriodMs int64 = 10000
-)
+// murdererDrainRate is the native multiplier: a single-precision 0.02 held in
+// a double, so 2% of a whole fifty truncates one point low (100 loses 1).
+const murdererDrainRate = float64(float32(0.02))
 
 /*
 ================
 DrainAmount
 
-The HP one pulse takes: MurdererDrainPercent of the maximum, truncated.
-The floor of one is the port's inference: a maximum below 20 would
-otherwise lose nothing, and the rule's point is that the drain can kill.
+The HP one pulse takes, truncated as the native conversion does. There is no
+floor: a maximum of 50 or less loses nothing.
 ================
 */
 func DrainAmount(maximum int64) int64 {
 	if maximum <= 0 {
 		return 0
 	}
-	return max(maximum*MurdererDrainPercent/100, 1)
+	return int64(float64(maximum) * murdererDrainRate)
 }
