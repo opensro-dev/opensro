@@ -222,7 +222,7 @@ func TestRecoveryStaysForCleanAndOfflineRecords(t *testing.T) {
 TestMurdererDrainDeathIsAMurdererDeath
 
 A lethal pulse reuses the shared fatal transition: the death is classified
-as pk.DeathPlayer, the penalty drops by 200, the daily count by one, and
+as pk.DeathMonster, the penalty drops by 600, the daily count by one, and
 the murderer drop roll runs (penalty 30000 always drops). The fixture's
 rand() is 100, so the equipped roll lands on an empty slot and the bag
 potion goes.
@@ -254,16 +254,14 @@ func TestMurdererDrainDeathIsAMurdererDeath(t *testing.T) {
 	if got := enterworld.CurrentHP(c); got != 0 {
 		t.Fatalf("HP %d after the lethal pulse, want the corpse", got)
 	}
-	if c.DeathKind != uint8(pk.DeathPlayer) {
-		t.Fatalf("death kind %d, want a player death", c.DeathKind)
+	if c.DeathKind != uint8(pk.DeathMonster) {
+		t.Fatalf("death kind %d, want a monster death", c.DeathKind)
 	}
-	// No killer object: DeathLoss reads the killer-less murderer row, the
-	// same row a monster's blow takes.
 	if loss != (pk.LossRule{Percent: 0.06, CapFactor: 300, SP: 60}) {
-		t.Fatalf("death loss %+v, want the killer-less murderer row", loss)
+		t.Fatalf("death loss %+v, want the murderer's monster row", loss)
 	}
-	if c.PK.Penalty != 30000-200 || c.PK.DailyCount != 0 {
-		t.Fatalf("record %+v, want penalty 29800 and daily 0", c.PK)
+	if c.PK.Penalty != 30000-600 || c.PK.DailyCount != 0 {
+		t.Fatalf("record %+v, want penalty 29400 and daily 0", c.PK)
 	}
 	for _, row := range c.MissionInventory {
 		if row.Slot == 13 {
