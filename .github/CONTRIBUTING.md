@@ -94,10 +94,10 @@ Also:
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
 - **Say whether an open browser tab still copes.** A release that keeps the
-  browser protocol leaves every open tab running the old client. The release
-  tool refuses such a release while a commit since the live client changes
-  what a tab receives or decodes, unless that commit carries the trailer
-  `Old-tab: safe - <reason>` on its squash commit. It applies to a new
+  browser protocol leaves every open tab running the old client. A commit
+  that changes what a tab receives or decodes carries the trailer
+  `Old-tab: safe - <reason>` on its squash commit. Reviewers hold this; no
+  tool reads the trailer yet. It applies to a new
   encoder call or frame on the server, any change to the session worker or
   the `foundation/gameplay` decoders, and any other server change under
   `internal/game`, `internal/transport` or `internal/agent` (a new value in
