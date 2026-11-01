@@ -231,7 +231,8 @@ export function createNoticeBanner( kind: "banner" | "notificationBanner" = "ban
 				if ( copy && !ready ) continue;
 				sequence = notice.sequence;
 				if ( copy && !noticeText( copy, notice, "banner" ) ) continue;
-				const louder = current && alpha > 0 ? noticeSealTier( current ) : undefined,
+				// A line adopted in this batch has not started yet, and still counts.
+				const louder = current && (alpha > 0 || started === null) ? noticeSealTier( current ) : undefined,
 					incoming = noticeSealTier( notice );
 				if ( louder !== undefined && incoming !== undefined && incoming < louder ) continue;
 				current = notice;

@@ -108,6 +108,9 @@ test("a quieter seal never cuts off a louder one, and a louder one always does",
 	quiet.step( [ notice( STAR, 1 ) ], 0, true );
 	quiet.step( [ notice( SUN, 2 ) ], 100, true );
 	assert.equal( quiet.sealTier(), 2 );
+	const batch = createNoticeBanner( "notificationBanner" );
+	batch.step( [ notice( SUN, 1 ), notice( STAR, 2 ) ], 0, true );
+	assert.equal( batch.sealTier(), 2, "a Star in the same batch cannot erase a Sun" );
 	const faded = createNoticeBanner( "notificationBanner" );
 	faded.step( [ notice( SUN, 1 ) ], 0, true );
 	faded.step( [], 8000, true );
