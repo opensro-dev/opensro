@@ -19,6 +19,7 @@ falling back to the plain commits) goes red.
 package simulation
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -151,5 +152,54 @@ func TestMonsterLegStepDropsPendingSettleAfterSlowerLaneSet(t *testing.T) {
 	if stored.ArriveMs != pending.ArriveMs || stored.Pose != pending.Pose {
 		t.Fatalf("settle landed on the stale snapshot: ArriveMs %d Pose %+v, want the in-flight segment (ArriveMs %d) kept",
 			stored.ArriveMs, stored.Pose, pending.ArriveMs)
+	}
+}
+
+/*
+================
+TestMonsterLegStepSkipsAnActorStunnedAfterTheSnapshot
+
+A stun on an actor that is not moving changes the instance and leaves
+the mover row alone, so the commit generation cannot see it, and the
+step's snapshot instance still reads as free. The RunAction double
+lands the stun after the leg's snapshot and before the step: the
+attack-start commit must refuse on the live instance's motion hold
+(commitMoverLocked), so no attack follows. A kill reaches the same
+result through the generation: settling the corpse rewrites the row.
+================
+*/
+func TestMonsterLegStepSkipsAnActorStunnedAfterTheSnapshot(t *testing.T) {
+	const stunMotionState = 9
+	ops, instance := monsterLegFixture(t, aggressiveTactics())
+	ops.AttackPlan = func(monster.Instance, uint32, AttackPick) (MonsterAttackPlan, bool) {
+		return MonsterAttackPlan{SkillID: 0x1234, Reach: ActionReach(50), CooldownMs: 1000, ActionLifecycleMs: 600}, true
+	}
+	attacks := 0
+	stunned := false
+	ops.RunAction = func(_ string, run func(MonsterAttackOperation)) {
+		if !stunned {
+			ops.Monsters.mu.Lock()
+			state := ops.Monsters.populationForObject(monsterTestDivision, instance.Gid)
+			actor := state.instances.get(instance.Gid)
+			actor.Motion = monster.MotionHold{State: stunMotionState, UntilMs: math.MaxInt64}
+			state.instances.set(instance.Gid, actor)
+			ops.Monsters.mu.Unlock()
+			stunned = true
+		}
+		run(func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
+			attacks++
+			return MonsterAttackResult{Accepted: true, TargetAlive: true}
+		})
+	}
+	if !ops.Monsters.ArmRetaliation(monsterTestDivision, instance.Gid, PlayerObjectID(1)) {
+		t.Fatal("retaliation refused")
+	}
+	legAt := time.Now().UnixMilli() + 2000
+	ops.RunMonsterLeg(legAt, []SessionSnapshot{playerSessionAt(1, 1000, 1000)}, &fakePusher{})
+	if !stunned {
+		t.Fatal("the leg never reached the action lane")
+	}
+	if attacks != 0 {
+		t.Fatalf("a stunned actor took its step: %d attacks", attacks)
 	}
 }

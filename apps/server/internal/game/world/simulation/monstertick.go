@@ -406,8 +406,8 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
 				// The lane wall outside the step: the per-actor
-				// division-lock entry plus the in-lock actor
-				// resolution act runs before advanceAndPublish.
+				// division-lock entry plus the snapshot read act
+				// runs before advanceAndPublish.
 				if outside := time.Since(laneStarted) - (stats.advance - advanceBefore); outside > 0 {
 					stats.lane += outside
 				}

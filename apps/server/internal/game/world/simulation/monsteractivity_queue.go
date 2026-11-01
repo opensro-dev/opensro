@@ -494,8 +494,8 @@ MonsterState.behaviorActorLive
 
 The dispatch's existence probe: whether the population still holds
 the actor, without building its instance value. The leg's dispatch
-decides only this; the actor itself is read inside the action lane
-(behaviorActorMover), under the lane's division lock (#2047 review).
+decides only this; the actor itself comes from the batch's leg-start
+snapshot (monsterlegsnapshot.go).
 ================
 */
 func (s *MonsterState) behaviorActorLive(key populationKey, gid uint32) bool {
@@ -515,11 +515,9 @@ locked pass: the step otherwise re-pays the lock, a population scan
 (#2029). The mover half is MonsterState.Mover's value for this
 population - the stored row, or the synthesized spawn mover when no
 row exists yet - so the step continues with exactly what its own read
-would have returned. Called from inside the action lane (or the
-adjacent direct dispatch), never ahead of its lock: a mover set by a
-slower lane while the leg waits for the lock must be the value the
-step starts from, or the step's whole-value commits overwrite it
-(#2047 review).
+would have returned. The leg no longer calls this: it reads
+legSnapshot, whose commit generation drops a commit planned from a
+value a slower lane has since replaced (#2047 review, #2137 slice 1).
 ================
 */
 func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRef) behaviorActorSnapshot {
