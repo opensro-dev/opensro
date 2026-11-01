@@ -91,7 +91,7 @@ published without its sheet would point every icon at a missing file.
 export function isPrivateAsset( name ) {
 	return name === "/assets/cif/cif-implementation-status.json" ||
 		name === "/assets/cif/cif-implementation-status.json.gz" ||
-		name.startsWith( "/assets/ui-atlas/" );
+		(typeof name === "string" && name.startsWith( "/assets/ui-atlas/" ));
 }
 /*
 ================
