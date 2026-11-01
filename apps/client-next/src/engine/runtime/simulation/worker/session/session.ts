@@ -92,11 +92,23 @@ mintWorldToken
 		return http.mint( identity.apiBase, identity.token, kind, character, identity.divisionId, signal ).then(
 			result => {
 				if ( result.status === 401 ) throw new Error( "Authentication required" );
-				const value = result.body as { ok?: boolean; token?: string; };
+				const value = result.body as { ok?: boolean; token?: string; code?: string; };
 				if (
 					!result.httpOk || value?.ok !== true || typeof value.token !== "string" || !value.token ||
 					value.token.length > 512
-				) throw new Error( "Admission rejected" );
+				) {
+					// Port-only, not native (the original has no self-explaining
+					// maintenance refusal): a structured refusal - the Agent
+					// answered with a code - rides out as the error message, so
+					// the world hop can tell an answered refusal from a failure
+					// that never got an answer. It shows the maintenance text
+					// for MAINTENANCE and makes every coded refusal definitive
+					// (a refused ticket cannot succeed on retry); a refusal
+					// with no code keeps the generic error and its old path.
+					throw new Error(
+						typeof value?.code === "string" && value.code ? value.code : "Admission rejected"
+					);
+				}
 				return value.token;
 			}
 		);

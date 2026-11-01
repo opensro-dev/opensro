@@ -71,6 +71,16 @@ const (
 	// deliberately off unless the deployment explicitly enables it; the
 	// Nomad development job does so only on its loopback network.
 	EnvBenchmarkFixtureControl = "SRO_BENCHMARK_FIXTURE_CONTROL"
+
+	// EnvMaintenanceMessage names the maintenance refusals (the gate's
+	// world-entry refusal here, the Agent's not-operating refusals in
+	// internal/agent/server). Port-only, not native (the original has no
+	// self-explaining maintenance refusal): off answers SHARD_OFFLINE, a
+	// code no client maps, so players keep the player-visible behaviour
+	// shipped today even though the wire code differs from the
+	// MAINTENANCE the gate answered before this switch existed; on
+	// answers MAINTENANCE so the client can explain the refusal.
+	EnvMaintenanceMessage = "SRO_MAINTENANCE_MESSAGE"
 )
 
 // Native agent error codes (the client's data_cc9e5c table; see
@@ -187,6 +197,10 @@ type Config struct {
 	// MaintenanceGatePath is the maintenance release gate (EnvMaintenanceGate,
 	// maintenance_gate.go); empty means no gate.
 	MaintenanceGatePath string
+	// MaintenanceMessage names the gate's world-entry refusal MAINTENANCE
+	// instead of SHARD_OFFLINE (EnvMaintenanceMessage). Port-only, not
+	// native: see the EnvMaintenanceMessage comment.
+	MaintenanceMessage bool
 }
 
 // API serves the agent HTTP surface.
@@ -227,6 +241,7 @@ type API struct {
 	privateNetwork          bool
 	now                     func() time.Time
 	maintenanceGatePath     string
+	maintenanceMessage      bool
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
@@ -297,6 +312,7 @@ func New(config Config) (*API, error) {
 		privateNetwork:          config.PrivateNetwork,
 		now:                     now,
 		maintenanceGatePath:     config.MaintenanceGatePath,
+		maintenanceMessage:      config.MaintenanceMessage,
 		allowedOrigins:          allowedOrigins,
 		revocations:             newAccountRevoker(),
 	}
@@ -317,6 +333,9 @@ func New(config Config) (*API, error) {
 	log.Infof("agentapi: transport admission mint enabled (POST /auth/transport-token, ttl %s)", transportAdmissionTokenTTL)
 	if api.benchmarkFixtureControl {
 		log.Infof("agentapi: deterministic benchmark fixture control enabled at %s", BenchmarkFixtureResetPath)
+	}
+	if api.maintenanceMessage {
+		log.Infof("agentapi: maintenance gate refusal code is MAINTENANCE (%s on); off answers SHARD_OFFLINE", EnvMaintenanceMessage)
 	}
 	return api, nil
 }

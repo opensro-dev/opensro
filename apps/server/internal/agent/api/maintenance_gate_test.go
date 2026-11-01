@@ -59,8 +59,13 @@ func TestMaintenanceGateAdmitsOnlyListedAccounts(t *testing.T) {
 ================
 TestEnterWorldTokenRefusedWhileGated
 
-The token route answers MAINTENANCE to an account the gate does not list,
-mints for one it does, and mints for everyone once the gate is removed.
+The token route refuses an account the gate does not list, mints for one
+it does, and mints for everyone once the gate is removed. The refusal
+code is SHARD_OFFLINE by default - not the MAINTENANCE the gate answered
+before the port-only EnvMaintenanceMessage switch existed: no client
+maps SHARD_OFFLINE, so players keep the generic admission failure they
+see today - and MAINTENANCE only with the switch on; the refusal itself
+never mints either way.
 ================
 */
 func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
@@ -74,9 +79,14 @@ func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
 	if err := os.WriteFile(api.maintenanceGatePath, []byte(`{"accounts":["release-probe"]}`), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if minted := mint(); minted["ok"] != false || minted["code"] != "MAINTENANCE" {
+	if minted := mint(); minted["ok"] != false || minted["code"] != "SHARD_OFFLINE" {
 		t.Fatalf("gated mint = %v", minted)
 	}
+	api.maintenanceMessage = true
+	if minted := mint(); minted["ok"] != false || minted["code"] != "MAINTENANCE" {
+		t.Fatalf("gated mint with maintenance message = %v", minted)
+	}
+	api.maintenanceMessage = false
 	if err := os.WriteFile(api.maintenanceGatePath, []byte(`{"accounts":["`+testAccount+`"]}`), 0o640); err != nil {
 		t.Fatal(err)
 	}

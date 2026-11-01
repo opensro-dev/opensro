@@ -570,7 +570,18 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 	api.store.ReapMaturedDeletions()
 	division := requestShardID(r)
 	if !maintenanceAdmits(api.maintenanceGatePath, requestAccountID(r)) {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "MAINTENANCE"})
+		// Port-only, not native (EnvMaintenanceMessage): off answers
+		// SHARD_OFFLINE, a code no client maps, so the player keeps
+		// today's visible result (the generic admission failure) even
+		// though the wire code differs from the MAINTENANCE this gate
+		// answered before the switch existed; on answers MAINTENANCE so
+		// the client can explain the refusal. Either way the refusal
+		// itself is identical: no token is minted.
+		code := "SHARD_OFFLINE"
+		if api.maintenanceMessage {
+			code = "MAINTENANCE"
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": code})
 		return
 	}
 	found, startable := api.characterStartable(division, requestAccountID(r), request.CharacterName)
