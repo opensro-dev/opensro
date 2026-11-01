@@ -258,10 +258,15 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// The TCP side: WebSocket alternate plus the cert-hash and health
 	// endpoints. Plain HTTP in dev; production puts real TLS in front.
+	// EnableCompression only negotiates permessage-deflate when the
+	// peer offers it; which messages actually deflate is decided per
+	// message in wsConn.WriteFrame (wsCompressMinBytes, #2311). A
+	// peer that never offers it is served exactly as before.
 	upgrader := websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-		CheckOrigin:     checkOrigin,
+		ReadBufferSize:    4096,
+		WriteBufferSize:   4096,
+		CheckOrigin:       checkOrigin,
+		EnableCompression: true,
 	}
 	tcpMux := http.NewServeMux()
 	tcpMux.HandleFunc("/transport/references/", func(w http.ResponseWriter, r *http.Request) {
