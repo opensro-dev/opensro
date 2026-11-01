@@ -35,7 +35,7 @@ func TestWavesRunTwiceADayClearOfTheResetAndBackup(t *testing.T) {
 			continue
 		}
 		waves++
-		end := moment.Wave.At.Add(HalloweenWaveLifetime)
+		end := moment.Wave.At.Add(HalloweenWaveSpan())
 		for _, at := range []time.Time{moment.Wave.At, end} {
 			if hour := at.Hour(); hour >= 3 && hour < 6 {
 				t.Fatalf("wave at %v runs into the reset or the backup", moment.Wave.At)
