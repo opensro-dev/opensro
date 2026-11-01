@@ -208,3 +208,42 @@ func BenchmarkTargetSnapshotResolveAdmitted(b *testing.B) {
 		}
 	}
 }
+
+/*
+================
+BenchmarkTargetSnapshotExistsRejected
+
+#2139: the exists-only verdict on a refused target detaches nothing.
+================
+*/
+func BenchmarkTargetSnapshotExistsRejected(b *testing.B) {
+	rt, attacker, victims, _ := targetSnapshotBenchRuntime(b, 1, 0)
+	gid := enterworld.ObjectIDForCharacter(victims[0])
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if rt.combatTargetExists(testDivision, attacker, gid) {
+			b.Fatal("the dead victim exists")
+		}
+	}
+}
+
+/*
+================
+BenchmarkTargetSnapshotExistsAdmitted
+
+#2139: the control above still pays the whole record for its answer;
+the exists-only verdict on an admitted target must not.
+================
+*/
+func BenchmarkTargetSnapshotExistsAdmitted(b *testing.B) {
+	rt, attacker, victims, _ := targetSnapshotBenchRuntime(b, 1, 100)
+	gid := enterworld.ObjectIDForCharacter(victims[0])
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if !rt.combatTargetExists(testDivision, attacker, gid) {
+			b.Fatal("the living victim does not exist")
+		}
+	}
+}

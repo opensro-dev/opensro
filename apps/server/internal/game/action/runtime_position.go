@@ -85,6 +85,35 @@ func (rt *Runtime) characterSnapshotAdmitted(
 
 /*
 ==================
+characterAdmitted
+
+characterSnapshotAdmitted's door contract without the copy: the
+admission verdict alone, judged on the live record under the one read
+door, for readers that ask only whether the record passes (#2139).
+admit reads record fields only, the same contract as above, so its
+verdict weighs the same inputs the copy would carry.
+==================
+*/
+func (rt *Runtime) characterAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) bool {
+	if character == nil {
+		return false
+	}
+
+	admitted := false
+
+	rt.deps.Read(divisionID, func() {
+		admitted = admit == nil || admit(character)
+	})
+
+	return admitted
+}
+
+/*
+==================
 characterSnapshotEquipment
 
 characterSnapshot for readers that never leave the worn equipment and
