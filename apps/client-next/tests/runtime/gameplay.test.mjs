@@ -592,6 +592,95 @@ test("a timed-out inventory recovers on the resumed transport's EnterWorld boots
 	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
 	assert.equal( inv.state().inventoryPending, false );
 });
+
+/*
+================
+an inventory answer behind a flowing stream is not lost
+
+Answers are ordered behind the inbound stream: while frames still
+arrive, an answer past its first deadline is in transit behind what has
+not been consumed yet, not lost (#2148; the movement rule of #1978).
+================
+*/
+test("an inventory answer in transit behind a flowing stream does not time out", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 30000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.equal( inv.state().inventoryPending, true );
+	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
+	assert.equal( inv.state().inventoryPending, false );
+});
+
+/*
+================
+an inventory answer is lost once the stream falls silent
+
+The hold reaches one window past the last frame; silence beyond it is
+the lost answer the hard deadline used to name at once.
+================
+*/
+test("an inventory answer is lost once the stream falls silent", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 5000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.throws( () => inv.step( 15001 ), /timed out \(0xB06D move 0\); reconnect/ );
+});
+
+/*
+================
+the inventory backstop ends the wait under a flowing stream
+
+Progress never stops, but the hard limit from the first frame seen is
+past: the answer can only be missing (#2148).
+================
+*/
+test("the inventory backstop ends the wait even while the stream keeps flowing", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 90000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.equal( inv.state().inventoryPending, true );
+	assert.throws( () => inv.step( 91001 ), /timed out \(0xB06D move 0\)/ );
+});
+
+/*
+================
+inbound progress holds an open mall request
+
+The mall's request rides the same ordered stream, so the bag's holds
+carry it: a catalog answer behind a burst is not a lost request.
+================
+*/
+test("inbound progress holds an open mall request with the bag's answers", () => {
+	const inv = createInventory( () => {} );
+	inv.openMall( 0 );
+	for ( let now = 1000; now <= 30000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	// The last frame (30000) holds the catalog request to 40000.
+	assert.throws( () => inv.step( 40001 ), /Mall request timed out/ );
+});
 test("an item use answer sets the stack the server reports, as 755E40, even after another change", () => {
 	// Production incident: 0xB5BD 01 19 1f00 ec10 (slot 25, 31 left, an HP
 	// potion) reached a client that no longer held 32 there. 755E40 never
@@ -762,6 +851,78 @@ test("an unanswered target release is a lost answer the bootstrap retires", () =
 	);
 	t.clear();
 	assert.equal( t.step( 30000 ), false, "the bootstrap's clear retires the release" );
+});
+
+/*
+================
+a target release behind a flowing stream is not lost
+
+The untagged release answer is ordered behind the inbound stream like
+the item lane's: while frames arrive it is in transit, not lost (#2148).
+================
+*/
+test("a target release in transit behind a flowing stream is not lost", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	for ( let now = 2000; now <= 31000; now += 1000 ) {
+		t.noteInboundProgress( now );
+		assert.equal( t.step( now ), false );
+	}
+	assert.equal( t.receive( 0xb4b3, Uint8Array.of( 1 ) ), true );
+	assert.equal( t.step( 31001 ), false );
+});
+
+/*
+================
+a target release is lost once the stream falls silent
+
+The last frame holds the release one reply window past it; silence
+beyond that is the lost answer.
+================
+*/
+test("a target release is lost once the stream falls silent", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	t.noteInboundProgress( 5000 );
+	assert.equal( t.step( 14999 ), false );
+	assert.throws(
+		() => t.step( 15000 ),
+		/** @param {Error} error */ error =>
+			error.cause === "target_release_timeout" && /Target release timed out/.test( error.message )
+	);
+});
+
+/*
+================
+the target release backstop under a flowing stream
+
+Progress never stops, but the hard limit from the first frame seen is
+past: the answer can only be missing (#2148).
+================
+*/
+test("the target release backstop ends the wait even while the stream keeps flowing", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	for ( let now = 2000; now <= 91000; now += 1000 ) {
+		t.noteInboundProgress( now );
+		assert.equal( t.step( now ), false );
+	}
+	assert.throws( () => t.step( 92001 ), /Target release timed out/ );
 });
 
 test("motion output contains only owned pose fields and gait retiming crosses regions continuously", () => {
