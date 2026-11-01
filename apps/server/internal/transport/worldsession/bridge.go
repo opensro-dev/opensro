@@ -115,7 +115,7 @@ owner appends to ticker.Hooks after this call run behind the sample.
 func NewTicker(
 	hub *transport.Hub,
 	roster []simulation.NpcDef,
-	hooks ...simulation.TickHook,
+	hooks ...simulation.NamedTickHook,
 ) *simulation.Ticker {
 	bridge := New(hub)
 	// The ticker bridge owns the resume registry (resume.go): a resumed
@@ -129,7 +129,7 @@ func NewTicker(
 	ticker := simulation.NewTicker(bridge, bridge)
 	ticker.Roster = append([]simulation.NpcDef(nil), roster...)
 	ticker.Hooks = append(ticker.Hooks, hooks...)
-	ticker.Hooks = append(ticker.Hooks, tickDurationHook(hub, ticker))
+	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "tick-duration", Hook: tickDurationHook(hub, ticker)})
 	ticker.PhaseObserver = tickPhaseObserver(hub)
 	return ticker
 }

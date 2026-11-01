@@ -292,6 +292,22 @@ type TickHook func(nowMs int64) []DivisionFrames
 
 /*
 ==================
+NamedTickHook
+
+One tick hook and the name its owner gives it. Slow-hook reports and
+the stall watchdog print this name, never the hook's runtime name: a
+closure registered in a constructor reports as <constructor>.funcN
+(newMissionTicker.func2), which named nothing when a tick stalled
+(#2294). An empty Name falls back to the runtime name, as before.
+==================
+*/
+type NamedTickHook struct {
+	Name string
+	Hook TickHook
+}
+
+/*
+==================
 Ticker
 
 Ticker is the server push tick: the capability the HTTP GET/POST transport
@@ -331,11 +347,11 @@ type Ticker struct {
 	ShardCount int
 	Now        Clock
 	// Hooks run once at the end of every coordinated tick (see TickHook).
-	Hooks []TickHook
+	Hooks []NamedTickHook
 	// BeforeHooks settle already accepted monster actions before division AI
 	// makes another decision at this clock. They run on the coordinator and
 	// use the same scoped publication path as end-of-tick hooks.
-	BeforeHooks []TickHook
+	BeforeHooks []NamedTickHook
 	// Monsters is the monster mover + scope-stream leg (monstertick.go).
 	// Wired whenever the population is enabled, which is the DEFAULT;
 	// nil only under the MISSION_SPAWN_MONSTERS=0 kill switch (then the
@@ -724,15 +740,15 @@ func (t *Ticker) runHooks(nowMs int64, work []divisionTickWork) {
 runHookList
 ================
 */
-func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickWork) {
+func (t *Ticker) runHookList(hooks []NamedTickHook, nowMs int64, work []divisionTickWork) {
 	for _, hook := range hooks {
 		func() {
 			defer recoverTickPanic("hook")
-			t.watch.enterHook(hook)
+			t.watch.enterHook(hook.Name)
 			defer t.watch.leaveHook()
 			// The hook's routing and pushes below are part of its time.
 			t.clock.timeHook(hook, t.timingNow, func() {
-				t.routeHookFrames(hook(nowMs), work)
+				t.routeHookFrames(hook.Hook(nowMs), work)
 			})
 		}()
 	}

@@ -13,9 +13,9 @@ func TestCastControlUsesCurrentSourceScope(t *testing.T) {
 	source := &fakeSource{sessions: []SessionSnapshot{a, b, foreign}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{DivisionID: "A", SourceGID: PlayerObjectID(1), Frames: []Frame{{Opcode: wire.OpSkillEffectControl}}}}
-	}}
+	}}}
 	ticker.RunTick(100)
 	if len(peerFramesTo(push, "a", wire.OpSkillEffectControl)) != 1 || len(peerFramesTo(push, "b", wire.OpSkillEffectControl)) != 1 || len(peerFramesTo(push, "c", wire.OpSkillEffectControl)) != 0 || len(push.toDivision) != 0 {
 		t.Fatal("cast scope leaked or omitted source")
@@ -54,9 +54,9 @@ func TestOwnPetCastControlReachesItsOwner(t *testing.T) {
 	source := &fakeSource{sessions: []SessionSnapshot{owner, near, far}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{DivisionID: "A", SourceGID: petGID, Frames: []Frame{{Opcode: wire.OpSkillEffectControl}}}}
-	}}
+	}}}
 	ticker.RunTick(100)
 	ticker.RunTick(200)
 	if len(peerFramesTo(push, "owner", wire.OpSkillEffectControl)) != 2 {
@@ -89,9 +89,9 @@ func TestPetPublicEventsFollowThePetsScope(t *testing.T) {
 	source := &fakeSource{sessions: []SessionSnapshot{owner, byOwner, byPet}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{DivisionID: "A", SourceGID: petGID, ExceptCharacterID: 1, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}}}
-	}}
+	}}}
 	ticker.RunTick(100)
 	if len(peerFramesTo(push, "by-owner", wire.OpSingleObjectSpawn)) == 0 {
 		t.Fatal("fixture: the owner's neighbour must see the owner")

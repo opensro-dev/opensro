@@ -60,8 +60,8 @@ func TestTickFlushesItsBatchAfterEveryHook(t *testing.T) {
 		rec.events = append(rec.events, "panics")
 		panic("hook failure")
 	}
-	ticker, got := timedTicker(clock, hook("hook"), panics)
-	ticker.BeforeHooks = []TickHook{hook("before")}
+	ticker, got := timedTicker(clock, NamedTickHook{Hook: hook("hook")}, NamedTickHook{Hook: panics})
+	ticker.BeforeHooks = []NamedTickHook{{Hook: hook("before")}}
 	ticker.Commit = rec.commit()
 	ticker.RunTick(0)
 	want := []string{"begin", "before", "hook", "panics", "flush"}

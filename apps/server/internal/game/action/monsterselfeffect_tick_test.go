@@ -69,7 +69,7 @@ func TestRetiredSummonBuffReachesViewerAfterSeveralShownTicks(t *testing.T) {
 	push := &shownBuffPush{}
 	ticker := simulation.NewTicker(tickSessionSource{sessions: []simulation.SessionSnapshot{viewer}}, push)
 	ticker.Monsters = ops
-	ticker.BeforeHooks = []simulation.TickHook{rt.MonsterActionTickHook()}
+	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: rt.MonsterActionTickHook()}}
 	var child uint32
 	for step := int64(0); step < 5; step++ {
 		now += 100
