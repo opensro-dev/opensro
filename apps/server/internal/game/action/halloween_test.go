@@ -12,6 +12,7 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -120,7 +122,7 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
 	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("no-box exchange", frames, err)
 	}
 
@@ -132,7 +134,7 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) < 2 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("granted exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 1 {
@@ -146,8 +148,58 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 22527, nil } // roll 55 of 80: the HP potion band (48, 61]
 	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || bagCount(c, "ITEM_ETC_HP_SPOTION_01") != 10 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("grain exchange", frames, err, c.MissionInventory)
+	}
+}
+
+/*
+================
+TestHalloweenExchangeSpendsEveryBox
+
+One click turns the whole bag of boxes into gifts and the banner counts
+them; a bag that fills part way keeps the remaining boxes and says so.
+================
+*/
+func TestHalloweenExchangeSpendsEveryBox(t *testing.T) {
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 3), halloweenBoxRow(21, 2)}
+	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+	rt.DropRoll = func() (uint32, error) { return 0, nil }
+	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("exchange all", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 5 {
+		t.Fatal("exchange all bag", c.MissionInventory)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenGiftsDoneBanner, 5))) {
+		t.Fatal("exchange all banner", frames)
+	}
+
+	// One free row holds fifty scrolls: the run stops there, the other
+	// boxes stay and the banner names them.
+	c = testCharacter()
+	c.MissionInventory = nil
+	potion := halloweenTestItems()["ITEM_ETC_HP_SPOTION_01"]
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagEnd(c))-1; slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: potion.RefObjID, Codename: potion.Codename,
+			TypeFlags: potion.TypeFlags(), StackCount: 50,
+		})
+	}
+	c.MissionInventory[0] = halloweenBoxRow(c.MissionInventory[0].Slot, 60)
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	rt.DropRoll = func() (uint32, error) { return 0, nil }
+	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("partial exchange", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 10 || bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != 50 {
+		t.Fatal("partial exchange bag", c.MissionInventory)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenGiftsLeftBanner, 50, 10))) {
+		t.Fatal("partial exchange banner", frames)
 	}
 }
 
@@ -174,7 +226,7 @@ func TestHalloweenExchangeFullBagRefusesBeforeTouchingTheBox(t *testing.T) {
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
 	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkBagFull)) {
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkBagFull)) {
 		t.Fatal("full-bag exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 1 {
@@ -418,9 +470,12 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 59)}
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
 	frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
-	if err != nil || len(frames) != 1 ||
-		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+	if err != nil || len(frames) != 2 ||
+		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("short helmet exchange", frames, err)
+	}
+	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice("A helmet costs 60 Jewel Boxes. You have 59.")) {
+		t.Fatal("short helmet banner", frames[0])
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 59 {
 		t.Fatal("short helmet exchange touched the boxes", c.MissionInventory)
@@ -431,7 +486,7 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60), halloweenBoxRow(21, 5)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
 	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
-	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkGranted)) {
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("helmet exchange", frames, err)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 5 || bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 1 {
@@ -444,7 +499,7 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
 	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD")
-	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogSymbol(halloweenTalkNoBox)) {
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("cross-sex helmet exchange", frames, err)
 	}
 	female := int64(enterworld.GenderFemale)
@@ -453,6 +508,104 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	options := rt.HalloweenTalkOptions(halloweenSoOkCodename, c)
 	if len(options) != 5 || options[1].Codename != HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD" {
 		t.Fatal("female helmet rows", options)
+	}
+}
+
+/*
+================
+TestHalloweenPriceAndGiftShownAtEveryBoxCount
+
+The owner-facing matrix: with 0, 1, 59 and 60 boxes, a helmet row click
+always shows the price (the short banner names the price and the holding,
+the granted banner names the price spent) and the gift row always shows
+a result (the no-box line at zero, the granted line and the counting
+banner above it). Nothing moves on a refusal.
+================
+*/
+func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
+	helmetService := HalloweenHelmetServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
+
+	// Helmet rows, short of the price: the banner states the price and
+	// the holding, the no-box line closes, the bag is untouched.
+	for _, held := range []int64{0, 1, 59} {
+		c := testCharacter()
+		if held > 0 {
+			c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, held)}
+		}
+		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+		frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, helmetService)
+		if err != nil || len(frames) != 2 {
+			t.Fatalf("helmet at %d boxes: %v %v", held, frames, err)
+		}
+		want := fmt.Sprintf(halloweenHelmetShortBanner, progression.HalloweenHelmetPrice, held)
+		if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice(want)) {
+			t.Fatalf("helmet at %d boxes: banner %q, want %q", held, frames[0].Payload, want)
+		}
+		if !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+			t.Fatalf("helmet at %d boxes: answer is not the no-box line", held)
+		}
+		if got := bagCount(c, progression.HalloweenBoxCodename); got != int(held) {
+			t.Fatalf("helmet at %d boxes: bag holds %d after a refusal", held, got)
+		}
+		if bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 0 {
+			t.Fatalf("helmet at %d boxes: a helmet landed on a refusal", held)
+		}
+	}
+
+	// Helmet row at the exact price: the helmet lands, every box leaves,
+	// and the banner names the price spent.
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, progression.HalloweenHelmetPrice)}
+	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, helmetService)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatalf("helmet at the price: %v %v", frames, err)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenHelmetDoneBanner, progression.HalloweenHelmetPrice))) {
+		t.Fatal("helmet at the price: the spent banner is missing", frames)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 1 {
+		t.Fatal("helmet at the price: bag", c.MissionInventory)
+	}
+
+	// Gift row across the same counts: zero shows the no-box line alone;
+	// every other count spends the whole bag and the banner counts gifts.
+	gifts := []struct {
+		boxes int64
+		want  string
+	}{
+		{0, ""},
+		{1, fmt.Sprintf(halloweenGiftsDoneBanner, 1)},
+		{59, fmt.Sprintf(halloweenGiftsDoneBanner, 59)},
+		{60, fmt.Sprintf(halloweenGiftsDoneBanner, 60)},
+	}
+	for _, tc := range gifts {
+		c := testCharacter()
+		if tc.boxes > 0 {
+			c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, tc.boxes)}
+		}
+		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+		rt.DropRoll = func() (uint32, error) { return 0, nil }
+		frames, err := rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
+		if err != nil {
+			t.Fatalf("gifts at %d boxes: %v", tc.boxes, err)
+		}
+		if tc.want == "" {
+			if len(frames) != 1 || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+				t.Fatalf("gifts at 0 boxes: %v", frames)
+			}
+			continue
+		}
+		if !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+			t.Fatalf("gifts at %d boxes: answer is not the granted line", tc.boxes)
+		}
+		if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(tc.want)) {
+			t.Fatalf("gifts at %d boxes: banner %q, want %q", tc.boxes, frames[len(frames)-2].Payload, tc.want)
+		}
+		if bagCount(c, progression.HalloweenBoxCodename) != 0 ||
+			bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != int(tc.boxes) {
+			t.Fatalf("gifts at %d boxes: bag %v", tc.boxes, c.MissionInventory)
+		}
 	}
 }
 

@@ -14,6 +14,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { UiHelpSource } from "@/engine/contracts/ui";
 import { effectRemainingMs } from "../gameplay/attached-effects";
 import type { TooltipSkillCatalog } from "./skill-tooltip-data";
+import { tooltipDescription } from "./tooltip-description";
 import type { TooltipRow } from "./tooltip-rows";
 import { skillParameterFormatters } from "./skill-tooltip-params";
 import { statusCodes } from "../animation/status-presentation";
@@ -155,8 +156,9 @@ export function buffTooltip(
 			"\n ",
 		color: TOOLTIP_WHITE
 	} ];
-	const description = text( row.tooltipDescriptionSymbol );
-	if ( description ) rows.push( { value: description + "\n ", color: TOOLTIP_WHITE } );
+	// Skill text is PML like item text: markup never reaches the tooltip.
+	const description = tooltipDescription( text( row.tooltipDescriptionSymbol ) );
+	if ( description.length ) rows.push( ...description, { value: " ", color: TOOLTIP_WHITE } );
 	for ( const value of skillParameterFormatters( text ).direct( row ) ) rows.push( { value, color: TOOLTIP_WHITE } );
 	const remaining = source.viewer ? null : effectRemainingMs( effect, timeMs );
 	if ( remaining !== null ) appendRemainingTime( rows, remaining, text );
