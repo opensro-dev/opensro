@@ -136,6 +136,28 @@ export function isOutOfMemoryFailure( error: unknown ): boolean {
 
 /*
 ================
+outOfMemoryFailure
+
+The failure an out-of-memory refusal reports, or null when the error is
+not one. Every catch that can meet the refusal - packet application, the
+receive path, a world step - asks here, so the code that routes the
+incident to "runtime" and the reload remedy (the only fix a player has)
+live once. The refusal says nothing about the work in flight, so no
+catch may let it wear that work's classification.
+================
+*/
+export function outOfMemoryFailure( error: unknown ): NetworkFailure | null {
+	if ( !isOutOfMemoryFailure( error ) ) return null;
+	return {
+		category: "software",
+		code: "out_of_memory",
+		message: "The game ran out of memory. Please reload the page to keep playing.",
+		stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+	};
+}
+
+/*
+================
 createNetwork
 ================
 */
@@ -408,7 +430,10 @@ export function createNetwork(
 			inbox.push( frame );
 			bytes += data.byteLength;
 		} catch ( error ) {
-			fail( String( error ) );
+			// A decode-side failure with no frame to blame keeps the
+			// transport default, unless the engine refused an allocation
+			// on the way in - that is memory, not protocol.
+			fail( String( error ), undefined, outOfMemoryFailure( error ) ?? undefined );
 		}
 	}
 	/*
@@ -940,21 +965,18 @@ export function createNetwork(
 				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
 				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
-				const outOfMemory = isOutOfMemoryFailure( error );
-				fail( `Packet application failed: ${String( error )}`, current, {
-					category: "software",
-					code: outOfMemory ?
-						"out_of_memory" :
-						unsupported ?
-						"unsupported_feature" :
-						"packet_application_failed",
-					message: outOfMemory ?
-						"The game ran out of memory. Please reload the page to keep playing." :
-						unsupported ?
-						"An unsupported game operation interrupted your session." :
-						"A game error interrupted your session.",
-					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
-				} );
+				fail(
+					`Packet application failed: ${String( error )}`,
+					current,
+					outOfMemoryFailure( error ) ?? {
+						category: "software",
+						code: unsupported ? "unsupported_feature" : "packet_application_failed",
+						message: unsupported ?
+							"An unsupported game operation interrupted your session." :
+							"A game error interrupted your session.",
+						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+					}
+				);
 				return;
 			}
 			// Outside the consume try: a full outbound buffer is a transport

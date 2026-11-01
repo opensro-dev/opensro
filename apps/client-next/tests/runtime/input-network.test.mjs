@@ -409,6 +409,49 @@ for ( const refusal of [ "out of memory", RangeError( "Array buffer allocation f
 
 /*
 ================
+an engine out-of-memory refusal on the way in is memory, not protocol
+
+#2299 follow-up: the receive path can meet the refusal before any frame
+exists to blame - the welcome's own report send is the first allocation
+after decode. The stub socket's send plays the engine: with the row set
+to throw the refusal, the failure must name memory with the reload
+remedy; any other throw keeps the transport default untouched.
+================
+*/
+test("an out-of-memory refusal while receiving names memory, not the protocol", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.send = () => {
+		throw "out of memory";
+	};
+	socket.receive( welcome() );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].frame, undefined );
+	assert.equal( failures[0].reason.code, "out_of_memory" );
+	assert.match( failures[0].reason.message, /ran out of memory/ );
+	assert.ok( socket.closed );
+});
+test("a receive failure that is not a refusal keeps the transport classification", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.send = () => {
+		throw new Error( "socket write broke" );
+	};
+	socket.receive( welcome() );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].reason.code, "transport_protocol_failed" );
+	assert.match( failures[0].reason.message, /A game error interrupted your session/ );
+	assert.ok( socket.closed );
+});
+
+/*
+================
 third-person rear hemisphere
 ================
 */

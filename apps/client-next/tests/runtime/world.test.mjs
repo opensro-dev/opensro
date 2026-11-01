@@ -36,6 +36,7 @@ async function load( file ) {
 }
 const { createEntities } = await load( "src/engine/runtime/simulation/worker/session/world/entities/entities.ts" );
 const { createWorldSession } = await load( "src/engine/runtime/simulation/worker/session/world/world.ts" );
+const { outOfMemoryFailure } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
 const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/session/http/http.ts" );
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
@@ -1634,6 +1635,29 @@ test("movement activity clears on death, revival, teleport and explicit stop", (
 	owner.receive( { opcode: 0x3122, payload: Buffer.from( [ 7, 0, 0, 0, 1, 0 ] ) }, 332 );
 	assert.equal( owner.read( 7 ).moving, false );
 	owner.dispose();
+});
+
+/*
+================
+a world step refuses memory before it blames the simulation
+
+#2299 follow-up: both step catches in world.ts consult the network
+owner's refusal classifier, so a step that only met the heap's limit
+reports out_of_memory with the reload remedy instead of
+simulation_failed. This pins the mapping the catches consult - the two
+refusal shapes name memory, and a plain step error is not a refusal, so
+it keeps the simulation classification. The lost-answer precedence sits
+ahead of the consult and is unchanged.
+================
+*/
+test("the step failure classifier names memory only for an engine refusal", () => {
+	for ( const refusal of [ "out of memory", RangeError( "Array buffer allocation failed" ) ] ) {
+		const reason = outOfMemoryFailure( refusal );
+		assert.equal( reason.code, "out_of_memory" );
+		assert.match( reason.message, /ran out of memory/ );
+	}
+	assert.equal( outOfMemoryFailure( new Error( "step broke" ) ), null );
+	assert.equal( outOfMemoryFailure( RangeError( "Maximum call stack size exceeded" ) ), null );
 });
 
 test("transport loss retains the admitted inventory and entities until explicit logout", async t => {
