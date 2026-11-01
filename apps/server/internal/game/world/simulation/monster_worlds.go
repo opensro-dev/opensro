@@ -10,7 +10,6 @@ World leases isolate actors; interest queries use current movement geometry.
 package simulation
 
 import (
-	"slices"
 	"sort"
 	"strings"
 
@@ -454,6 +453,48 @@ func (state *divisionMonsterState) interestStaticsNow() interestStaticsStamp {
 
 /*
 ================
+interestStamp
+
+The stamp a viewer answer for this population keys on: the mover block
+generation, the instance view generation and the statics stamp. The
+caller reconciles the block index at the read instant first
+(populationInterestGIDs does; so does the scope stamp read).
+================
+*/
+func (state *divisionMonsterState) interestStamp() interestMemoStamp {
+	stamp := interestMemoStamp{instances: state.instances.viewGeneration, statics: state.interestStaticsNow()}
+	if state.movers != nil {
+		stamp.blocks = state.movers.blocks.generation
+	}
+	return stamp
+}
+
+/*
+================
+scopeInterestStamp
+
+The interest stamp a scope leg for this viewer keys on, sampled under
+the population lock after reconciling the block index at the leg
+instant - the same inputs populationInterestGIDs memoizes on, so a
+leg whose block and stamp both match its last full pass provably
+faces the same in-scope set (#2134).
+================
+*/
+func (s *MonsterState) scopeInterestStamp(division string, lease instance.Lease, nowMs int64) (interestMemoStamp, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(division, lease)
+	if state == nil {
+		return interestMemoStamp{}, false
+	}
+	if state.movers != nil {
+		state.movers.reconcileBlocks(nowMs)
+	}
+	return state.interestStamp(), true
+}
+
+/*
+================
 regionStatics
 
 The entries of byRegion[region] that have no mover. Most generated actors
@@ -488,7 +529,10 @@ Filter exact live blocks before any archived actor read (the retail
 server's neighbour-block resolution).
 Caller holds MonsterState.mu.
 
-Static entries still use their immutable spawn position.
+Static entries still use their immutable spawn position. The returned
+slice is the memo's own once stored: callers read it, never mutate it
+(#2134 slice 2a - the per-leg clone cost a copy per viewer per leg and
+nobody consumed the isolation).
 ================
 */
 func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
@@ -497,13 +541,13 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 	}
 	block := worldgeom.InterestBlockAt(viewer)
 	state.movers.reconcileBlocks(nowMs)
-	stamp := interestMemoStamp{state.movers.blocks.generation, state.instances.viewGeneration, state.interestStaticsNow()}
+	stamp := state.interestStamp()
 	if state.interestMemo == nil || state.interestMemoStamp != stamp {
 		state.interestMemo = make(map[worldgeom.InterestBlock][]uint32)
 		state.interestMemoStamp = stamp
 	}
 	if gids, ok := state.interestMemo[block]; ok {
-		return slices.Clone(gids)
+		return gids
 	}
 	members := state.movers.blockMembers(block, nil)
 	out := members[:0]
@@ -514,7 +558,7 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 	}
 	out = appendInterestStatics(state, viewer, out)
 	state.interestMemo[block] = out
-	return slices.Clone(out)
+	return out
 }
 
 /*

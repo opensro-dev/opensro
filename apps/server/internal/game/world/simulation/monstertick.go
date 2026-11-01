@@ -146,6 +146,12 @@ type MonsterMoverOps struct {
 	// breachLogged keeps the A19-b budget-breach log to once per
 	// division (a per-tick log line would be its own flood).
 	breachLogged map[string]bool
+	// scopeMemo is each seeded viewer's last full scope pass: the
+	// block and interest stamp its shown set synced under. A later
+	// leg matching all of them faces the same in-scope set and
+	// skips the delta work (#2134). Only the owning division shard
+	// touches it, like shownMonsters.
+	scopeMemo map[string]scopeViewerMemo
 }
 
 /*
