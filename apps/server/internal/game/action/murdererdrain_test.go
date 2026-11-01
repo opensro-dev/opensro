@@ -148,6 +148,32 @@ func TestMurdererDrainIgnoresTheRecoveryGates(t *testing.T) {
 
 /*
 ================
+TestMurdererDrainIgnoresAnOpenCast
+
+An open cast holds a clean character's recovery back, but not a drain.
+================
+*/
+func TestMurdererDrainIgnoresAnOpenCast(t *testing.T) {
+	rt, c, maximum, start := drainTestMurderer(t)
+	rt.pendingSkillFinalizes = append(rt.pendingSkillFinalizes, pendingSkillFinalize{
+		divisionID: testDivision, characterName: c.Name, ownerKey: simulation.WorldKey(testDivision, c.Name),
+		dueAtMs: start + 10*drainTestFirstPulseMs,
+	})
+	hp := enterworld.CurrentHP(c)
+	rt.advanceNaturalRecovery(start + drainTestFirstPulseMs)
+	drained := hp - pk.DrainAmount(maximum)
+	if got := enterworld.CurrentHP(c); got != drained {
+		t.Fatalf("HP %d during a cast, want %d", got, drained)
+	}
+	c.PK = nil
+	rt.advanceNaturalRecovery(start + 2*drainTestFirstPulseMs)
+	if got := enterworld.CurrentHP(c); got != drained {
+		t.Fatalf("clean caster HP %d, want no recovery from %d", got, drained)
+	}
+}
+
+/*
+================
 TestMurdererRecoversInASafeRegion
 
 A town is the one place a murderer's pulse is still recovery.
