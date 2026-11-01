@@ -478,8 +478,7 @@ func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 const OpcodeGameReady uint16 = 0x3012
 
 // OpcodeResetClientAck is the client's empty answer to OpcodeResetClient
-// (0x3369): the native handler sub_74b880 sends 0x36DD first, then applies
-// the reset. Native capture shows no server response and no state riding
+// (0x3369): the native client sends 0x36DD first, then applies the reset. Native capture shows no server response and no state riding
 // on it - a bare acknowledgement the native server ignores
 // (research/docs/reverse-engineering/gateway/GatewayProtocol.md).
 const OpcodeResetClientAck uint16 = 0x36DD
