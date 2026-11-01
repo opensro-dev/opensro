@@ -391,6 +391,8 @@ export interface GeometryCommands {
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
 	// original draws because their UI consumer retains native alpha blending.
 	hdrPreview( draws: readonly GeometryDraw[] ): readonly GeometryDraw[];
+	// Port-only, not native: the MSAA stage's draws for single-sampled passes.
+	singleSampled( draws: readonly GeometryDraw[] ): readonly GeometryDraw[];
 	waterReflection(
 		input: { matrix?: Float32Array; height: number; above: boolean; seconds: number; },
 		draws: readonly GeometryDraw[]

@@ -702,9 +702,9 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		sky( sceneFloat = false, msaa = false ) {
 			if ( !sceneFloat && !msaa ) return skyPipeline!;
 			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
-			skyStagePipelines.get( key ) ?? skyStagePipelines.set(
-				key,
-				created.createRenderPipeline( {
+			let selected = skyStagePipelines.get( key );
+			if ( !selected ) {
+				selected = created.createRenderPipeline( {
 					layout: "auto",
 					vertex: { module: skyShader, entryPoint: "vs" },
 					fragment: {
@@ -715,17 +715,18 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 					primitive: { topology: "triangle-list" },
 					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
 					multisample: { count: msaa ? 4 : 1 }
-				} )
-			);
-			return skyStagePipelines.get( key )!;
+				} );
+				skyStagePipelines.set( key, selected );
+			}
+			return selected;
 		},
 		mips: () => mipPipeline!,
 		image( sceneFloat = false, msaa = false ) {
 			if ( !sceneFloat && !msaa ) return pipeline!;
 			const key = `${sceneFloat ? 1 : 0}${msaa ? 1 : 0}`;
-			imageStagePipelines.get( key ) ?? imageStagePipelines.set(
-				key,
-				created.createRenderPipeline( {
+			let selected = imageStagePipelines.get( key );
+			if ( !selected ) {
+				selected = created.createRenderPipeline( {
 					layout: "auto",
 					vertex: { module: shader, entryPoint: "vs" },
 					fragment: {
@@ -736,9 +737,10 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 					primitive: { topology: "triangle-list" },
 					depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
 					multisample: { count: msaa ? 4 : 1 }
-				} )
-			);
-			return imageStagePipelines.get( key )!;
+				} );
+				imageStagePipelines.set( key, selected );
+			}
+			return selected;
 		},
 		/*
 ================

@@ -16,8 +16,12 @@ The multisampled depth cannot be resolved by the driver, and two readers
 need a single-sampled scene depth: the world-labels pass (full-resolution
 labels stay occluded, the render-scale depth resolve's rule) and the flare
 visibility probe. resolveDepth() writes the minimum of the four samples
-into the frame's single-sampled depth - the nearest surface wins, so a
-label behind any coverage stays behind it.
+into the scene's single-sampled depth - the nearest surface wins, so a
+label behind any coverage stays behind it. The render-scale stage then
+upscales that depth as it does without this stage.
+
+Coverage comes from geometry edges only: alpha-tested cutouts still discard
+per pixel, so foliage keeps its hard edge.
 
 ===========================================================================
 */
@@ -37,7 +41,6 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		depth: GPUTexture | null = null,
 		colourView: GPUTextureView | null = null,
 		depthView: GPUTextureView | null = null,
-		bound: GPUTextureView | null = null,
 		binding: GPUBindGroup | null = null,
 		width = 0,
 		height = 0,
@@ -55,7 +58,6 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		depth = null;
 		colourView = null;
 		depthView = null;
-		bound = null;
 		binding = null;
 		width = height = 0;
 		format = null;
@@ -74,7 +76,7 @@ export function createMsaa( device: GPUDevice, retire: Retire = destroyNow ) {
 		const module = device.createShaderModule( {
 			label: "msaa-depth",
 			code: `
-@group(0) @binding(0) var source:texture_depth_2d;
+@group(0) @binding(0) var source:texture_depth_multisampled_2d;
 struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 @vertex fn vs(@builtin(vertex_index) i:u32)->V{
  let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];
@@ -132,10 +134,14 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 					size: [ w, h ],
 					sampleCount: 4,
 					format: "depth24plus",
-					usage: GPUTextureUsage.RENDER_ATTACHMENT
+					usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 				} );
 				colourView = colour.createView();
 				depthView = depth.createView();
+				binding = device.createBindGroup( {
+					layout: pipeline!.getBindGroupLayout( 0 ),
+					entries: [ { binding: 0, resource: depthView } ]
+				} );
 			}
 			const epoch = depth;
 			return {
@@ -146,19 +152,11 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 				resolveDepth
 
 				Port-only, not native: the four samples' minimum into the
-				frame's single-sampled depth, before the labels and the flare
-				probe read it.
+				scene's single-sampled depth, before anything reads it.
 				================
 				*/
 				resolveDepth( encoder: GPUCommandEncoder, target: GPUTextureView ) {
 					if ( disposed || epoch !== depth || !pipeline ) throw Error( "Stale MSAA buffers" );
-					if ( target !== bound ) {
-						bound = target;
-						binding = device.createBindGroup( {
-							layout: pipeline.getBindGroupLayout( 0 ),
-							entries: [ { binding: 0, resource: depthView! } ]
-						} );
-					}
 					const pass = encoder.beginRenderPass( {
 						label: "msaa-depth",
 						colorAttachments: [],

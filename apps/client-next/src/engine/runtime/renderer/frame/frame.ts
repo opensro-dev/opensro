@@ -307,10 +307,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			}
 			pass.end();
 			// The multisampled depth cannot be resolved by the driver: write the
-			// four samples' minimum into the frame's single-sampled depth now,
-			// before the flare probe and the labels read it (the render-scale
-			// resolve then upscales it when that stage is on too).
-			if ( msaaScene && uiDepth ) msaa!.resolveDepth( encoder, uiDepth );
+			// four samples' minimum into the scene's single-sampled depth now,
+			// before the deferred tail, the flare probe and the labels read it.
+			// The render-scale stage upscales this depth as it always does.
+			if ( msaaScene && depth ) msaa!.resolveDepth( encoder, depth );
 			/*
 			================
 			previewPass
@@ -377,7 +377,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+									depthStoreOp: flares || ((bloom || hdrScene || sceneScale || msaaScene) && !!worldUiBundle) ?
 										"store" as const :
 										"discard" as const
 								}
@@ -398,11 +398,15 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							draw.baseVertex ?? 0
 						);
 					}
-					if ( !bloom && !hdrScene && !sceneScale && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+					if ( !bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ) {
+						tail.executeBundles( [ worldUiBundle ] );
+					}
+					if ( !bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && backgroundBundle ) {
 						tail.executeBundles( [ backgroundBundle ] );
 					}
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle ) {
+					if (
+						!bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && !preview.length && uiBundle
+					) {
 						tail.executeBundles( [ uiBundle ] );
 					}
 					tail.end();

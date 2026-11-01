@@ -736,8 +736,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			if ( !skyFactory ) return sky;
 			if ( !hdrOn && !msaaOn ) return sky;
 			const key = `${hdrOn ? 1 : 0}${msaaOn ? 1 : 0}`;
-			skyStages.get( key ) ?? skyStages.set( key, skyFactory( hdrOn, msaaOn ) );
-			return skyStages.get( key ) ?? sky;
+			let draw = skyStages.get( key );
+			if ( !draw ) {
+				draw = skyFactory( hdrOn, msaaOn );
+				skyStages.set( key, draw );
+			}
+			return draw;
 		},
 		/*
 		================

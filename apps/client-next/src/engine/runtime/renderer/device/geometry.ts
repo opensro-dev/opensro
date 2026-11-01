@@ -105,6 +105,7 @@ export function createGeometryResources(
 	const waterSampler = worldSampler;
 	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
 	const previewBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
+	const singleSampledBindings: typeof previewBindings = new WeakMap();
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
 	// Released draws and their release records (releasedDraw).
 	const releasedDraws = new WeakMap<GeometryDraw, { atMs: number; error: Error; }>();
@@ -353,6 +354,48 @@ export function createGeometryResources(
 			},
 			retire
 		);
+	/*
+	================
+	passSibling
+
+	One draw's single-sampled sibling. Borrows buffers without changing source
+	handles; bindings follow their source revision and counts are refreshed
+	for each prepared frame.
+	================
+	*/
+	function passSibling( draw: GeometryDraw, bindings: typeof previewBindings, previewCoverage: boolean ) {
+		const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
+		if ( !meta || !buffers ) throw Error( "Unknown or released sibling draw" );
+		let cached = bindings.get( draw );
+		if ( !cached || cached.source !== draw.binding ) {
+			const pipeline = pipelines( meta.state, floatScene, previewCoverage );
+			cached = {
+				source: draw.binding,
+				draw: {
+					...draw,
+					pipeline,
+					binding: geometryBinding(
+						meta.uniform,
+						meta.instances,
+						meta.material,
+						pipeline,
+						meta.clampedSampling,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage
+					)
+				}
+			};
+			bindings.set( draw, cached );
+		}
+		return {
+			...cached.draw,
+			indexCount: draw.indexCount,
+			instanceCount: draw.instanceCount,
+			instanceCapacity: draw.instanceCapacity
+		};
+	}
 	const commands: GeometryCommands = Object.freeze( {
 		/*
 		================
@@ -360,51 +403,25 @@ export function createGeometryResources(
 
 		Port-only, not native: only the fullscreen preview resolve consumes
 		coverage alpha. Portrait and doll UI textures retain authored alpha.
-		Borrow buffers without changing source handles; bindings follow their
-		source revision and counts are refreshed for each prepared frame.
+		The preview pass is single-sampled, so the MSAA stage needs siblings
+		here even without HDR.
 		================
 		*/
 		hdrPreview( draws: readonly GeometryDraw[] ): readonly GeometryDraw[] {
-			if ( !floatScene ) return draws;
-			return draws.map( draw => {
-				const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
-				if ( !meta || !buffers ) throw Error( "Unknown or released HDR preview draw" );
-				let cached = previewBindings.get( draw );
-				if ( !cached || cached.source !== draw.binding ) {
-					const pipeline = pipelines( meta.state, true, true );
-					cached = {
-						source: draw.binding,
-						draw: {
-							...draw,
-							pipeline,
-							binding: geometryBinding(
-								meta.uniform,
-								meta.instances,
-								meta.material,
-								pipeline,
-								meta.clampedSampling,
-								meta.image,
-								meta.skin,
-								meta.bones,
-								meta.environmentImage
-							),
-							vertices: draw.vertices,
-							indices: draw.indices,
-							count: draw.count,
-							indexCount: draw.indexCount,
-							instanceCount: draw.instanceCount,
-							instanceCapacity: draw.instanceCapacity
-						}
-					};
-					previewBindings.set( draw, cached );
-				}
-				return {
-					...cached.draw,
-					indexCount: draw.indexCount,
-					instanceCount: draw.instanceCount,
-					instanceCapacity: draw.instanceCapacity
-				};
-			} );
+			if ( !floatScene && !msaaScene ) return draws;
+			return draws.map( draw => passSibling( draw, previewBindings, floatScene ) );
+		},
+		/*
+		================
+		singleSampled
+
+		Port-only, not native: the siblings of the MSAA stage's 4x draws for
+		passes that stay single-sampled (portraits, dolls, deferred particles).
+		================
+		*/
+		singleSampled( draws: readonly GeometryDraw[] ): readonly GeometryDraw[] {
+			if ( !msaaScene ) return draws;
+			return draws.map( draw => passSibling( draw, singleSampledBindings, false ) );
 		},
 		/*
         ================
@@ -502,9 +519,10 @@ export function createGeometryResources(
 						{ instances: meta.instances, material: meta.material, skin: meta.skin, bones: meta.bones } :
 						undefined;
 				},
-				// The receiver draws land in the scene target: the getter
-				// follows the HDR stage's scene format.
+				// The receiver draws land in the scene target: the getters
+				// follow the HDR stage's format and the MSAA stage's samples.
 				() => (floatScene ? "rgba16float" : format),
+				() => (msaaScene ? 4 : 1),
 				retire
 			);
 			return shadows.prepare( requests, blob );
