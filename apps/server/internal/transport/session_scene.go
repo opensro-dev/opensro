@@ -256,7 +256,7 @@ the active-scene requirement for SendSceneBatch or visibility publication.
 ================
 */
 func (s *Session) SendSceneReceiptBatch(revision uint64, frames []Frame) error {
-	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, allowLoading: true})
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: &revision, allowLoading: true, parkBehindBootstrap: true})
 }
 
 /*
@@ -351,13 +351,40 @@ func (s *Session) OnSceneReady(fn func()) {
 // admission path for the EnterWorld result and its native bootstrap stream.
 //
 // The batch remains bounded by both configured frame and byte limits. Payloads
-// are copied before publication, exactly as in Send.
+// are copied before publication, exactly as in Send. A batch of native game
+// frames sent while a scene bootstrap is still being built parks behind
+// it (#2294); a batch carrying a transport-control frame (the admission
+// answer itself, machinery traffic) stays immediate.
 /*
 ================
 SendBatch
 ================
 */
-func (s *Session) SendBatch(frames []Frame) error { return s.sendSceneBatch(frames, nil, false) }
+func (s *Session) SendBatch(frames []Frame) error {
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{parkBehindBootstrap: directBatchWaitsBehindBootstrap(frames)})
+}
+
+/*
+================
+directBatchWaitsBehindBootstrap
+
+A direct batch parks behind a not-yet-queued bootstrap only when it is
+game traffic end to end. Any transport-control frame in the batch -
+above all the EnterWorld result that answers an admission, refusal
+included - keeps the whole batch immediate and in order.
+================
+*/
+func directBatchWaitsBehindBootstrap(frames []Frame) bool {
+	if len(frames) == 0 {
+		return false
+	}
+	for _, frame := range frames {
+		if frame.IsControl() {
+			return false
+		}
+	}
+	return true
+}
 
 /*
 ================
@@ -372,9 +399,9 @@ func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) e
 ================
 pendingReceipt
 
-One private receipt batch parked behind a scene whose bootstrap is
-not queued yet: its copied frames and the scope changes they carry,
-in arrival order.
+One batch parked behind a scene whose bootstrap is not queued yet: a
+private receipt or a direct game-frame send, as copied frames and the
+scope changes they carry, in arrival order.
 ================
 */
 type pendingReceipt struct {
@@ -399,6 +426,10 @@ type sceneBatchOptions struct {
 	unobservedGID uint32
 	changes       []ObjectScopeChange
 	allowLoading  bool
+	// parkBehindBootstrap marks a batch the bootstrap may precede:
+	// private receipts and direct game-frame batches. Scene-visibility
+	// batches keep the loading drop instead.
+	parkBehindBootstrap bool
 }
 
 /*
@@ -482,12 +513,12 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		// is the moment the scene has an answer on the wire.
 		s.sceneBootstrapEnqueued = true
 	}
-	// A private receipt accepted while this scene's bootstrap is not
-	// queued yet waits behind it (#2294): the bootstrap is the
-	// snapshot, and a receipt committed against it must follow it on
-	// the wire, never precede it. The entry handler releases the
-	// publication gate before encoding, so this window is real now.
-	if options.allowLoading && s.sceneLoading && !s.sceneBootstrapEnqueued {
+	// A batch accepted while this scene's bootstrap is not queued yet
+	// waits behind it (#2294): the bootstrap is the snapshot, and work
+	// committed against it must follow it on the wire, never precede
+	// it. The entry handler releases the publication gate before
+	// encoding, so this window is real now.
+	if options.parkBehindBootstrap && s.sceneLoading && !s.sceneBootstrapEnqueued {
 		copied := make([]Frame, len(frames))
 		for i, frame := range frames {
 			copied[i] = Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current}

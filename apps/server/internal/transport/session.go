@@ -88,8 +88,8 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
-	// pendingReceipts are private receipts accepted for this scene
-	// while its bootstrap was not yet queued (sendSceneObjectBatch):
+	// pendingReceipts are batches parked for this scene while its
+	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
 	// they join the queue behind the bootstrap batch, never ahead of
 	// it, and are dropped when the scene is replaced or answered with
 	// a refusal. pendingBytes is their EncodedLen sum, carried in
@@ -313,7 +313,9 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // Send queues a frame on the reliable, ordered channel. It never blocks on
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
-// callers may reuse their buffer immediately.
+// callers may reuse their buffer immediately. A native game frame sent
+// while a scene bootstrap is still being built parks behind it (#2294);
+// transport-control frames are the machinery's own and stay immediate.
 /*
 ================
 Send
@@ -341,11 +343,21 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 	// resume ring is still draining (resendFrames) is retained state
 	// the producer did not create, and closing here would kill the
 	// resumed session the ring just served (#2146).
-	if len(s.queue)-s.resendFrames >= s.hub.cfg.OutboundQueue ||
+	if len(s.queue)+s.pendingFrames-s.resendFrames >= s.hub.cfg.OutboundQueue ||
 		s.queueBytes-s.resendBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
+	}
+	// A game frame that finds the scene still waiting for its bootstrap
+	// queues behind it, in issue order with the parked receipts.
+	if opcode > maxControlOpcode && s.sceneLoading && !s.sceneBootstrapEnqueued {
+		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: []Frame{{Opcode: opcode, Payload: owned}}})
+		s.pendingFrames++
+		s.pendingBytes += frameBytes
+		s.queueBytes += frameBytes
+		s.mu.Unlock()
+		return nil
 	}
 	s.queue = append(s.queue, Frame{Opcode: opcode, Payload: owned})
 	s.queueBytes += frameBytes
