@@ -135,20 +135,27 @@ ensure_repository() {
 copy_sqlite() {
 	local source="$1" target="$2"
 	mkdir -p "$(dirname "$target")"
+	# A path reaches the SQL below as a literal, so its quotes double.
+	local literal="${target//\'/\'\'}"
 	# The authority database is written constantly, and an online .backup
 	# restarts on every write from another connection, so it never finishes
 	# (#2142). VACUUM INTO copies one read snapshot.
 	if [[ "$(basename "$source")" == "state.db" ]]; then
-		sqlite3 "$source" ".timeout 10000" "VACUUM INTO '$target';"
+		sqlite3 "$source" ".timeout 10000" "VACUUM INTO '$literal';"
 		local quick
 		quick=$(sqlite3 "$target" "PRAGMA quick_check;")
 		[[ "$quick" == "ok" ]] || { log "quick check failed for $source: $quick"; return 1; }
 	else
-		sqlite3 "$source" ".timeout 10000" ".backup '$target'"
+		sqlite3 "$source" ".timeout 10000" ".backup '$literal'"
 	fi
 	local verdict
 	verdict=$(sqlite3 "$target" "PRAGMA integrity_check;")
 	[[ "$verdict" == "ok" ]] || { log "integrity check failed for $source: $verdict"; return 1; }
+	# Both checks answer ok on an empty file, so a source emptied before the
+	# copy would otherwise pass as a good backup.
+	local pages
+	pages=$(sqlite3 "$target" "PRAGMA page_count;")
+	[[ "$pages" -gt 0 ]] || { log "empty copy of $source"; return 1; }
 }
 
 # ================
