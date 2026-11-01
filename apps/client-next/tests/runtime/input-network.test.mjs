@@ -378,6 +378,37 @@ test("a frame the consumer cannot apply ends the session and names that frame fo
 
 /*
 ================
+an engine out-of-memory refusal is not the packet's fault
+
+#2299: after a long session the heap sits at its limit and the engine
+refuses an allocation while an ordinary packet applies. That classifies
+as out_of_memory with the reload remedy, not packet_application_failed.
+The live incident was the bare string; the RangeError is the other shape.
+================
+*/
+for ( const refusal of [ "out of memory", RangeError( "Array buffer allocation failed" ) ] ) {
+	test(`an out-of-memory refusal (${String( refusal )}) names memory, not the packet`, t => {
+		const sockets = socketHarness( t ), failures = [];
+		const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+		network.connect( "ws://localhost/transport", "abc" );
+		const socket = sockets[0];
+		socket.onopen();
+		socket.receive( welcome() );
+		socket.receive( Uint8Array.of( 0, 1, 11 ) );
+		socket.receive( Uint8Array.of( 0x6f, 0x37, 1, 2, 3 ) );
+		network.drain( frame => {
+			if ( frame.opcode === 0x376f ) throw refusal;
+		} );
+		assert.equal( failures.length, 1 );
+		assert.equal( failures[0].frame.opcode, 0x376f );
+		assert.equal( failures[0].reason.code, "out_of_memory" );
+		assert.match( failures[0].reason.message, /ran out of memory/ );
+		assert.ok( socket.closed );
+	});
+}
+
+/*
+================
 third-person rear hemisphere
 ================
 */
