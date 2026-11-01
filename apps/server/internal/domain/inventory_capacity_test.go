@@ -2,29 +2,31 @@ package domain
 
 import "testing"
 
-// A grant waits; the cap counts the waiting slots too, and a refused grant
+// A grant grows the capacity in force at once; the cap counts any slots
+// still waiting from before grants applied live, and a refused grant
 // leaves the record untouched.
-func TestInventoryExpansionGrantWaitsAndCaps(t *testing.T) {
+func TestInventoryExpansionGrantAppliesAndCaps(t *testing.T) {
 	c := &Character{}
 	if c.InventoryCapacity() != 45 {
 		t.Fatalf("fresh capacity = %d, want 45", c.InventoryCapacity())
 	}
-	if !c.GrantInventoryExpansion(10) || c.InventoryCapacity() != 45 || c.InventoryExpansion != 10 {
-		t.Fatalf("grant = %d (+%d), want 45 (+10)", c.InventoryCapacity(), c.InventoryExpansion)
+	if !c.GrantInventoryExpansion(10) || c.InventoryCapacity() != 55 || c.InventoryExpansion != 0 {
+		t.Fatalf("grant = %d (+%d), want 55 (+0) at once", c.InventoryCapacity(), c.InventoryExpansion)
 	}
-	if !c.GrantInventoryExpansion(22) || c.InventoryExpansion != 32 {
-		t.Fatalf("second grant waiting = %d, want 32", c.InventoryExpansion)
+	if !c.GrantInventoryExpansion(22) || c.InventoryCapacity() != 77 {
+		t.Fatalf("second grant = %d, want 77", c.InventoryCapacity())
 	}
-	if c.GrantInventoryExpansion(1) || c.InventoryExpansion != 32 {
-		t.Fatalf("grant past 77 was taken: waiting %d", c.InventoryExpansion)
+	if c.GrantInventoryExpansion(1) || c.InventoryCapacity() != 77 {
+		t.Fatalf("grant past 77 was taken: capacity %d", c.InventoryCapacity())
 	}
 	if c.GrantInventoryExpansion(0) {
 		t.Fatal("an empty grant reported a change")
 	}
 }
 
-// Presenting moves every waiting slot; adopting moves only what an entry
-// presented, so a grant paid meanwhile keeps waiting.
+// Presenting moves every waiting slot; adopting takes a presented size
+// only past the size in force, so a grant paid live while the entry was
+// being built is never shrunk away by the older snapshot.
 func TestInventoryExpansionPresentAndAdopt(t *testing.T) {
 	detached := &Character{InventorySize: 55, InventoryExpansion: 2}
 	if !detached.PresentInventoryExpansion() || detached.InventorySize != 57 || detached.InventoryExpansion != 0 {
@@ -35,14 +37,12 @@ func TestInventoryExpansionPresentAndAdopt(t *testing.T) {
 	}
 
 	live := &Character{InventorySize: 55, InventoryExpansion: 2}
-	live.GrantInventoryExpansion(10)
-	live.AdoptInventorySize(57)
-	if live.InventorySize != 57 || live.InventoryExpansion != 10 {
-		t.Fatalf("adopt = %d (+%d), want 57 (+10)", live.InventorySize, live.InventoryExpansion)
+	if !live.GrantInventoryExpansion(10) || live.InventorySize != 65 || live.InventoryExpansion != 2 {
+		t.Fatalf("live grant = %d (+%d), want 65 (+2 still waiting)", live.InventorySize, live.InventoryExpansion)
 	}
 	for _, presented := range []uint8{0, 45, 57, 70} {
 		live.AdoptInventorySize(presented)
-		if live.InventorySize != 57 || live.InventoryExpansion != 10 {
+		if live.InventorySize != 65 || live.InventoryExpansion != 2 {
 			t.Fatalf("adopting %d changed the record: %d (+%d)", presented, live.InventorySize, live.InventoryExpansion)
 		}
 	}

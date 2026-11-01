@@ -961,14 +961,6 @@ variable "beta_gold_rate" {
   default = "1"
 }
 
-# instant_inventory_expansion makes quest bag slots usable at the turn-in
-# (port-only, not native: v1.150 learns its bag size at world entry). The
-# owner approved it on for the beta; "off" restores the native wait.
-variable "instant_inventory_expansion" {
-  type    = string
-  default = "on"
-}
-
 variable "beta_rare_rate" {
   type    = string
   default = "1"
@@ -1329,7 +1321,6 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
-        SRO_INSTANT_INVENTORY_EXPANSION         = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only

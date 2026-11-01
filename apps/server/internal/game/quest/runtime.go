@@ -55,9 +55,6 @@ type Runtime struct {
 	// quest-reward authority transaction. It opens no door itself, allowing
 	// quest completion, gold, and experience to commit atomically.
 	ApplyExperience func(character *enterworld.Character, expDelta, skillExpDelta int64, sourceGid uint32) ([]wire.Frame, bool)
-	// InstantInventoryExpansion presents quest bag slots at the turn-in
-	// (port-only, not native; instant_expansion.go).
-	InstantInventoryExpansion bool
 	// instanceHandlers is the instanced-world handler registry
 	// (instance_handlers.go), keyed by instance definition.
 	instanceHandlers instanceHandlerTable
@@ -899,12 +896,12 @@ func (rt *Runtime) settleReward(character *enterworld.Character, def *Definition
 			}
 		}
 		// Slots follow the items and gold, as the server's reward-row payout
-		// pays them. A grant past
-		// the capacity limit is refused and the quest still completes: the grant's
-		// refusal is ignored by its caller.
-		if character.GrantInventoryExpansion(def.RewardInventorySlots) && rt.InstantInventoryExpansion {
-			// Port-only: the slots are usable now, not at the next entry.
-			character.PresentInventoryExpansion()
+		// pays them. The grant grows the bag in force at the turn-in and
+		// the new size is announced, as native applies the expansion on
+		// its completion. A grant past the capacity limit is refused and
+		// the quest still completes: the grant's refusal is ignored by
+		// its caller.
+		if character.GrantInventoryExpansion(def.RewardInventorySlots) {
 			capacity := storageCapacityFrame(character.InventoryCapacity())
 			capacityFrame = &capacity
 		}

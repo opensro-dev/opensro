@@ -90,10 +90,9 @@ import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-cont
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
-// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
-// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
-// its bag size at world entry. The server sends it only with
-// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+// Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
+// grows the bag live when a paid expansion completes and announces the new
+// size here, in the same session, with no world entry in between.
 const STORAGE_CAPACITY_OPCODE = 0x3092;
 const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;

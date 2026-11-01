@@ -27,7 +27,6 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -253,10 +252,6 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
 				Why:    "Testers spend their time on the systems under test, not on walking."},
-			{Flag: quest.EnvInstantInventoryExpansion, On: quest.InstantInventoryExpansionFromEnv(),
-				Native: "A bigger bag takes effect at the next world entry.",
-				Now:    "A bigger bag takes effect at once.",
-				Why:    "Relogging to see new slots read as a bug."},
 			{Flag: companion.EnvPetPacing, On: companion.PoliciesFromEnv().Pacing,
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",

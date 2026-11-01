@@ -308,7 +308,6 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_INSTANT_INVENTORY_EXPANSION", NomadVar: "instant_inventory_expansion", Default: "on"},
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off", Catalogue: true,
 		Validation: ValueSwitch},
