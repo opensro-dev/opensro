@@ -233,7 +233,7 @@ func TestBetaSilkWiringPublicationBarrier(t *testing.T) {
 			// The transport timing hook remains last; exercise the installed hook.
 			hook := ticker.Hooks[len(ticker.Hooks)-2]
 			for minute := int64(0); minute < 60; minute++ {
-				if out := hook(minute * betaWiringMinute); out != nil {
+				if out := hook.Hook(minute * betaWiringMinute); out != nil {
 					t.Fatal("beta hook leaked generic routing")
 				}
 			}
@@ -251,7 +251,7 @@ func TestBetaSilkWiringPublicationBarrier(t *testing.T) {
 			}
 			started, done := make(chan struct{}), make(chan []simulation.DivisionFrames, 1)
 			beforeSnapshots := source.calls.Load()
-			go func() { close(started); done <- hook(60 * betaWiringMinute) }()
+			go func() { close(started); done <- hook.Hook(60 * betaWiringMinute) }()
 			<-started
 			wait.Consistently(t, betaWiringBlockedWindow, "publication gate blocks the beta snapshot", func() bool {
 				return source.calls.Load() == beforeSnapshots

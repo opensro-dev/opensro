@@ -86,7 +86,7 @@ func gmMonsterTicker(t *testing.T, f *mobKillFixture) (*simulation.Ticker, gmMon
 	ticker := simulation.NewTicker(tickSessionSource{sessions: viewers}, push)
 	ticker.Now = f.clock.Now
 	ticker.Monsters = &simulation.MonsterMoverOps{Monsters: f.rt.Monsters, Rand: func() float64 { return 0 }}
-	ticker.Hooks = []simulation.TickHook{f.rt.TickHook()}
+	ticker.Hooks = []simulation.NamedTickHook{{Name: "action", Hook: f.rt.TickHook()}}
 	return ticker, push
 }
 
@@ -142,8 +142,8 @@ func TestGMZoeCreatedAfterScopeIsPublishedDeadOnNextTick(t *testing.T) {
 	f.rt.DropRoll = goldOnlyMonsterDropRoll(0, 0)
 	ticker, push := gmMonsterTicker(t, f)
 	created := false
-	ticker.Hooks = []simulation.TickHook{
-		func(int64) []simulation.DivisionFrames {
+	ticker.Hooks = []simulation.NamedTickHook{
+		{Hook: func(int64) []simulation.DivisionFrames {
 			if !created {
 				created = true
 				if !f.rt.KillGMZoe(testDivision, f.gm.Name, 1933, 1) {
@@ -151,8 +151,8 @@ func TestGMZoeCreatedAfterScopeIsPublishedDeadOnNextTick(t *testing.T) {
 				}
 			}
 			return nil
-		},
-		f.rt.TickHook(),
+		}},
+		{Name: "action", Hook: f.rt.TickHook()},
 	}
 	ticker.RunTick(f.clock.NowMs())
 	drops := f.rt.Ground.All(testDivision)

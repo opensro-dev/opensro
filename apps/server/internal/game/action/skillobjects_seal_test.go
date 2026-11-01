@@ -144,17 +144,20 @@ func TestTrapKillEXPStillReachesAReadyPlanter(t *testing.T) {
 
 /*
 ================
-TestSkillObjectPassWaitsForAnEntryBootstrap
+TestSkillObjectPassCutsAheldEntryGate
 
 An entry bootstrap holds the division's publication gate from its snapshot
 through its enqueue. A trap kill committed inside that span would be
 missing from the snapshot and captured before the new session could
-receive it, so the pass must wait for the gate.
+receive it, so the pass must commit nothing behind the gate - and it
+must not wait for it past the tick gate's bound either (#2294: a held
+gate once parked the pass, and with it the tick, for over a second).
+The kill is due-timed, so it lands whole on the next served pass.
 ================
 */
-func TestSkillObjectPassWaitsForAnEntryBootstrap(t *testing.T) {
-	rt, _, scan, _ := lethalTrapFixture(t)
-	unlock := rt.LockPublication(testDivision, "test")
+func TestSkillObjectPassCutsAheldEntryGate(t *testing.T) {
+	rt, c, scan, captured := lethalTrapFixture(t)
+	unlock := rt.LockPublication(testDivision, "enterWorld")
 	done := make(chan struct{})
 	go func() {
 		rt.AdvanceSkillObjects(scan, nil)
@@ -162,14 +165,18 @@ func TestSkillObjectPassWaitsForAnEntryBootstrap(t *testing.T) {
 	}()
 	select {
 	case <-done:
+	case <-time.After(2 * time.Second):
 		unlock()
-		t.Fatal("the skill-object pass committed while an entry bootstrap held the publication gate")
-	case <-time.After(200 * time.Millisecond):
+		<-done
+		t.Fatal("the skill-object pass waited past its bound behind an entry-held gate")
+	}
+	if len(rt.SkillObjects.Snapshot()) != 1 {
+		unlock()
+		t.Fatal("the cut pass committed: the trap fired while an entry held the gate")
 	}
 	unlock()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the skill-object pass never ran after the gate was released")
+	out := rt.AdvanceSkillObjects(scan, nil)
+	if !hasExpUpdate(deliverToReadySessions(out, map[int64]bool{}, captured, c.ID)) {
+		t.Fatal("the deferred trap kill never landed after the gate freed")
 	}
 }

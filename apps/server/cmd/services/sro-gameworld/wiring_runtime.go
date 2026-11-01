@@ -55,48 +55,50 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold
-	hooks := []simulation.TickHook{
-		game.movement.GroundTickHook(),
-		game.items.TickHook(),
+	// Every hook carries the name slow-hook reports print (#2294): the
+	// closures below would otherwise report as newMissionTicker.funcN.
+	hooks := []simulation.NamedTickHook{
+		{Name: "movement-ground", Hook: game.movement.GroundTickHook()},
+		{Name: "action", Hook: game.items.TickHook()},
 		// Direction walks continue leg by leg on the mission clock.
-		game.movement.DirectionTickHook(),
-		func(nowMs int64) []simulation.DivisionFrames {
+		{Name: "movement-direction", Hook: game.movement.DirectionTickHook()},
+		{Name: "skill-objects", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceSkillObjects(nowMs, sessionViews(ticker.Source))
-		},
+		}},
 		// Drops enter and leave each scene with its range (#617).
-		func(nowMs int64) []simulation.DivisionFrames {
+		{Name: "ground-scope", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.items.AdvanceGroundScope(nowMs, sessionViews(ticker.Source), ticker.Source.(*worldsession.Bridge).SceneSession)
 			return nil
-		},
+		}},
 		// A marked player's moves reach its hunter out of sight (hntp).
-		func(nowMs int64) []simulation.DivisionFrames {
+		{Name: "hunting-points", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceHuntingPoints(nowMs, sessionViews(ticker.Source))
-		},
-		game.questMarkerTick(),
-		func(nowMs int64) []simulation.DivisionFrames {
+		}},
+		{Name: "quest-markers", Hook: game.questMarkerTick()},
+		{Name: "parties", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)
 			return game.parties.MemberUpdates(sessionViews(ticker.Source), nowMs)
-		},
+		}},
 		// The fortress war's schedule edges run on the mission clock.
-		game.siege.Tick,
-		game.guildWars.Tick,
+		{Name: "siege", Hook: game.siege.Tick},
+		{Name: "guild-wars", Hook: game.guildWars.Tick},
 		// The job guilds' week closes on the mission clock (jobrank.go).
-		func(nowMs int64) []simulation.DivisionFrames {
+		{Name: "job-week", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.items.JobWeekTick(game.divisionID, nowMs)
 			return nil
-		},
+		}},
 	}
 	// Native/off installs no hook and takes no extra session snapshots.
 	if game.betaSilk != nil {
-		hooks = append(hooks, func(nowMs int64) []simulation.DivisionFrames {
+		hooks = append(hooks, simulation.NamedTickHook{Name: "beta-silk", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			return game.betaSilkTick(ticker, nowMs)
-		})
+		}})
 	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	// A quest instance's exit gate joins its world's NPC scope pass.
 	ticker.WorldNpcs = game.items.QuestGateNpcs
-	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
+	ticker.BeforeHooks = []simulation.NamedTickHook{{Name: "monster-actions", Hook: game.items.MonsterActionTickHook()}}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames
 	// A deadlocked tick dumps its stacks and exits for the supervisor to
