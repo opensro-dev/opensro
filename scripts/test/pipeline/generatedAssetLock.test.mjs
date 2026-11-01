@@ -19,6 +19,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { isDeletePendingClaimError } from "../../rebuildLock.mjs";
+
 const SCRIPTS_ROOT = fileURLToPath( new URL( "../../", import.meta.url ) );
 // The caller's generated-root override would point every child at the real tree.
 const LOCK_ENV = [ "SRO_REBUILD_LOCK_NAME", "SRO_REBUILD_LOCK_TOKEN", "SRO_REBUILD_LOCK_DIR", "SRO_GENERATED_ROOT" ];
@@ -437,4 +439,11 @@ test("the command-line entry prints status and runs a command under a read hold"
 	] );
 	assert.equal( ran.code, 0, ran.output );
 	assert.match( ran.output, /UNDER CLI/ );
+});
+
+test("a mutex claim retries only the Windows delete-pending errors", () => {
+	assert.equal( isDeletePendingClaimError( { code: "EPERM" }, "win32" ), true );
+	assert.equal( isDeletePendingClaimError( { code: "EACCES" }, "win32" ), true );
+	assert.equal( isDeletePendingClaimError( { code: "EPERM" }, "linux" ), false );
+	assert.equal( isDeletePendingClaimError( { code: "EEXIST" }, "win32" ), false );
 });
