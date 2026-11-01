@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 const { createFrame } = await import( "../../src/engine/runtime/renderer/frame/frame.ts" );
 
+/** @type {any} */
 const WORLD_LABELS = { layer: "world", count: 1, first: 0, pipeline: {}, binding: {} };
 
 /*
@@ -88,12 +89,13 @@ drawFrame
 One frame with the world labels, no scene content and the given inputs.
 ================
 */
-function drawFrame( commands, { deferred = undefined, experimental } ) {
+/** @param {any} commands @param {{ deferred?: any, experimental: any }} input */
+function drawFrame( commands, { deferred, experimental } ) {
 	return createFrame( commands ).draw(
 		/** @type {any} */ ("view"),
 		undefined,
 		undefined,
-		"scene-depth",
+		/** @type {any} */ ("scene-depth"),
 		[],
 		[ WORLD_LABELS ],
 		[],
