@@ -271,7 +271,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || water ||
+							// The soft overlay copies this depth even without water in the scene -
+							// the split's other family. A tile-based GPU really discards a
+							// discarded attachment, and the fade would read zeroes and
+							// drop the sprites.
+							depthStoreOp: flares || deferred || water || softParticles ||
 									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const

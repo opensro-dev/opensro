@@ -38,9 +38,15 @@ test(
 				/** The page's instrumentation slots (typed for the test checker). */
 				const trace = /** @type {any} */ (globalThis);
 				trace.__passes = [];
+				trace.__mainDepthStore = [];
 				const origPass = GPUCommandEncoder.prototype.beginRenderPass;
 				GPUCommandEncoder.prototype.beginRenderPass = function( d ) {
 					trace.__passes.push( d.label ?? "?" );
+					// The main pass's depth-store choice: the soft overlay
+					// copies that depth even without water in the scene.
+					if ( d.label === "main-pass" ) {
+						trace.__mainDepthStore.push( d.depthStencilAttachment?.depthStoreOp ?? "none" );
+					}
 					return origPass.call( this, d );
 				};
 			} );
@@ -161,7 +167,8 @@ test(
 					shots.push( {
 						mode,
 						rgba: [ ...context.getImageData( 0, 0, width, height ).data ],
-						passes: trace.__passes.slice( -14 )
+						passes: trace.__passes.slice( -14 ),
+						mainDepthStore: trace.__mainDepthStore.at( -1 )
 					} );
 				}
 				renderer.dispose();
@@ -173,6 +180,12 @@ test(
 			// The on frames run the stage's copies and the overlay.
 			assert.ok( during.passes.includes( "water-refraction-copies" ), "The on frames copy the frame" );
 			assert.ok( during.passes.includes( "water-refraction-overlay" ), "The on frames redraw the sprites" );
+			// Soft particles alone - no water in this scene - still own the
+			// depth they copy: the main pass must store it. A tile-based GPU
+			// really discards a discarded attachment, and the fade would read
+			// zeroes and drop the sprites (the review's failing case).
+			assert.equal( during.mainDepthStore, "store", "Soft alone stores the copied depth" );
+			assert.equal( before.mainDepthStore, "discard", "Off keeps the native discard" );
 			// The off frames run no stage pass.
 			for ( const off of [ before, after ] ) {
 				assert.equal( off.passes.indexOf( "water-refraction-overlay" ), -1, "No overlay pass off" );
