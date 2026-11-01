@@ -245,6 +245,25 @@ variable "pharaoh_tomb_gear_rate" {
   default = "1"
 }
 
+# Port-only, not native: the Halloween Day event. "off" is native. "on" needs
+# halloween_event_window, START/END in UTC; without a valid window it stays off.
+variable "halloween_event" {
+  type    = string
+  default = "off"
+}
+
+variable "halloween_event_window" {
+  type    = string
+  default = ""
+}
+
+# Port-only, not native: seals the event's helmets at every transfer door.
+# Stays on after the event ends, so they stay with whoever earned them.
+variable "halloween_helmet_seal" {
+  type    = string
+  default = "off"
+}
+
 # beta_silk is the silk one in-world hour earns into the account's real Item
 # Mall wallet (BUG-062, port-only): earning pauses at 1500, and a new account
 # starts with 300. Earned silk is REAL and survives "off", which only stops
@@ -1247,6 +1266,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_TEMPLE                  = var.cap110_temple
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
+        SRO_HALLOWEEN_EVENT                = var.halloween_event
+        SRO_HALLOWEEN_EVENT_WINDOW         = var.halloween_event_window
+        SRO_HALLOWEEN_HELMET_SEAL          = var.halloween_helmet_seal
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
