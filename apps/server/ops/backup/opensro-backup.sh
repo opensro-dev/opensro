@@ -135,7 +135,17 @@ ensure_repository() {
 copy_sqlite() {
 	local source="$1" target="$2"
 	mkdir -p "$(dirname "$target")"
-	sqlite3 "$source" ".timeout 10000" ".backup '$target'"
+	# The authority database is written constantly, and an online .backup
+	# restarts on every write from another connection, so it never finishes
+	# (#2142). VACUUM INTO copies one read snapshot.
+	if [[ "$(basename "$source")" == "state.db" ]]; then
+		sqlite3 "$source" ".timeout 10000" "VACUUM INTO '$target';"
+		local quick
+		quick=$(sqlite3 "$target" "PRAGMA quick_check;")
+		[[ "$quick" == "ok" ]] || { log "quick check failed for $source: $quick"; return 1; }
+	else
+		sqlite3 "$source" ".timeout 10000" ".backup '$target'"
+	fi
 	local verdict
 	verdict=$(sqlite3 "$target" "PRAGMA integrity_check;")
 	[[ "$verdict" == "ok" ]] || { log "integrity check failed for $source: $verdict"; return 1; }
