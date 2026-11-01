@@ -19,7 +19,7 @@ import (
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -28,8 +28,8 @@ TestKnockbackOffTheRidgeStopsAtTheWalkableEdge
 ================
 */
 func TestKnockbackOffTheRidgeStopsAtTheWalkableEdge(t *testing.T) {
-	licensed.RequireGameData(t)
-	root, err := licensed.ClientPublicRoot()
+	clientdata.RequireGameData(t)
+	root, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		t.Fatal(err)
 	}

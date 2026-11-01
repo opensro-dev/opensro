@@ -16,7 +16,7 @@ export const BUILD_TASKS = [
 		description: "Build resources, then every workspace package",
 		kind: "build",
 		ci: true,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		tasks: [ "assets:build", "workspace:build" ]
 	} ),

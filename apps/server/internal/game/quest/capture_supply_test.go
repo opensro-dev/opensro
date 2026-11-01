@@ -19,7 +19,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/calendar"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -55,7 +55,7 @@ single-use and the saved reservation retains those rules after JSON reload.
 ================
 */
 func TestCaptureSupplyAcceptanceRefillAndCleanup(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, supply := range captureSupplies {
 		if supply.afterCompletion {
 			continue

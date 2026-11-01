@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,7 +25,7 @@ TestCompiledQuestOpensAtItsMinimumLevel
 ================
 */
 func TestCompiledQuestOpensAtItsMinimumLevel(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def, ok := rt.Defs.ByCodename("QNO_EU_EASTEU_4")
 	if !ok {

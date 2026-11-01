@@ -13,7 +13,7 @@ package simulation
 import (
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,7 +25,7 @@ The shipped roster under this test's environment.
 */
 func janganRoster(t *testing.T) map[string]NpcDef {
 	t.Helper()
-	roster := LoadNpcWorldRoster(licensed.RetailTextdataDir(t))
+	roster := LoadNpcWorldRoster(clientdata.RetailTextdataDir(t))
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}

@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -27,7 +27,7 @@ shippedCatalog
 */
 func shippedCatalog(t *testing.T) (*Catalog, enterworld.ItemRefSource) {
 	t.Helper()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, e := os.Stat(dir); e != nil {
 		t.Skip("original media unavailable")
 	}

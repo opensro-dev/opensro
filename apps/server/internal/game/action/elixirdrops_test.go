@@ -18,8 +18,8 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -28,7 +28,7 @@ TestElixirDropsOffPicksNothing
 ================
 */
 func TestElixirDropsOffPicksNothing(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	elixirs := []string{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B"}
 	others := []string{"ITEM_ETC_HP_POTION_01", "ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"}

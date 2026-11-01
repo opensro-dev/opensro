@@ -21,8 +21,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/wait"
 )
 
@@ -144,7 +144,7 @@ starter position.
 ================
 */
 func TestFreshCharacterReturnScrollLandsAtJanganGate(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, clock, _ := returnFixture(t, 5000)
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)

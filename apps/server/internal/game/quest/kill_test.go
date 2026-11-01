@@ -3,12 +3,12 @@ package quest
 import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"testing"
 )
 
 func TestKillQuestCountsOnlyTargetsAndPaysNativeV150RewardOnce(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	character := questCharacter()
 	level := int64(3)
@@ -70,7 +70,7 @@ func TestKillQuestCountsOnlyTargetsAndPaysNativeV150RewardOnce(t *testing.T) {
 }
 
 func TestRankedParallelKillCountersDoNotCrossCredit(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	root := &Definition{QuestSpec: QuestSpec{Codename: "RANKED", Objective: ObjectiveParallel, KindByte: 1, Objectives: []MissionSpec{
 		{ContentsSymbol: "normal", Objective: ObjectiveKill, KillMonsterCodenames: []string{"CRAB"}, KillRanks: []uint8{0}, KillCount: 30},

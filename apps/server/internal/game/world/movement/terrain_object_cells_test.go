@@ -5,15 +5,15 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
 )
 
 func TestPublishedJanganPotionBuildingEntryAndWestwardTrap(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	inside := simulation.Spawn{RegionID: 25000, X: 1640, Y: 0, Z: 1390}
 	for _, z := range []float64{1250, 1300, 1550} {
@@ -56,7 +56,7 @@ func TestPublishedJanganPotionBuildingEntryAndWestwardTrap(t *testing.T) {
 }
 
 func TestPublishedRebirthBuildingHeightIndependentEntry(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	for _, y := range []float64{80, 82, 120} {
 		a := simulation.Spawn{RegionID: 27471, X: 1205, Y: y, Z: 396}
@@ -144,7 +144,7 @@ associations").
 ================
 */
 func TestPublishedJanganFerryKeepsItsSurface(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	v := NewAuthorityValidator(gamedatatest.WorldAuthorityDir(t))
 	for _, region := range []uint16{0x5ebc, 0x5fbc} {
 		surface := v.surfaceForRegion(region)

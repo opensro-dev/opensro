@@ -14,7 +14,7 @@ import (
 	"errors"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"reflect"
 	"testing"
 )
@@ -25,7 +25,7 @@ TestBanditChainCannotSkipPredecessorAndPaysEachRewardOnce
 ================
 */
 func TestBanditChainCannotSkipPredecessorAndPaysEachRewardOnce(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	exp := int64(0)
@@ -95,7 +95,7 @@ TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry
 ================
 */
 func TestRewardFullBagLeavesObjectiveAndScalarsAvailableForRetry(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	def, _ := rt.Defs.ByRefID(6)
@@ -135,7 +135,7 @@ TestDeliveryRequiresGuardVisitAndConsumesListAtBlacksmith
 ================
 */
 func TestDeliveryRequiresGuardVisitAndConsumesListAtBlacksmith(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	code := "QNO_CH_SMITH_1"
@@ -170,7 +170,7 @@ TestChainValidationRejectsCyclesAndMissingParents
 ================
 */
 func TestChainValidationRejectsCyclesAndMissingParents(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, parent := range []uint32{11, 9999} {
 		defs := loadTestDefinitions(t)
 		a, _ := defs.ByRefID(10)
@@ -187,7 +187,7 @@ TestAbandonDeliveryRemovesItsItemBeforeReacceptance
 ================
 */
 func TestAbandonDeliveryRemovesItsItemBeforeReacceptance(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	c.CompletedQuestIds = []uint32{2}
@@ -220,7 +220,7 @@ the next acceptance without allowing a replay of the paid reward.
 ================
 */
 func TestResuscitationExchangesHeartsNotPotionsAndCanRepeat(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{{Slot: 20, RefObjID: 3673, Codename: "ITEM_QSP_ALL_POTION_1_01", StackCount: 10, TypeFlags: wire.PackTypeFlags(3, 3, 9, 0)}}

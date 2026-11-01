@@ -83,7 +83,7 @@ export const CHECK_TASKS = [
 		description: "Run the complete concurrent repository check pipeline",
 		kind: "check",
 		ci: true,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		pipeline: "full"
 	} ),

@@ -13,7 +13,7 @@ package monster
 import (
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -23,7 +23,7 @@ TestShippedMangnyangCombatColumnsStayPinned
 */
 func TestShippedMangnyangCombatColumnsStayPinned(t *testing.T) {
 	t.Parallel()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	refs := LoadMonsterRefs(dir)
 	ref, ok := refs[1933]
 	if !ok {
@@ -51,7 +51,7 @@ TestShippedBaroiBodyRadiusStaysPinned
 */
 func TestShippedBaroiBodyRadiusStaysPinned(t *testing.T) {
 	t.Parallel()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	refs := LoadMonsterRefs(dir)
 	ref, ok := refs[5858]
 	if !ok {

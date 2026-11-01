@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -30,7 +30,7 @@ The shipped catalogue with the environment's extra goods applied.
 */
 func janganCatalog(t *testing.T) *Catalog {
 	t.Helper()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, e := os.Stat(dir); e != nil {
 		t.Skip("original media unavailable")
 	}

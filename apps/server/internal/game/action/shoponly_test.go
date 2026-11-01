@@ -15,7 +15,7 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -28,7 +28,7 @@ degree 8 and elixirs still drop. Off, every one of them drops.
 ================
 */
 func TestDegree9AlchemyComesOnlyFromTheShop(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, clock, _, _ := newCombatTestRuntime(t, 1)
 	rt.deps.(*enterworld.Deps).Items = shippedItems(t)
 	cases := map[string]bool{

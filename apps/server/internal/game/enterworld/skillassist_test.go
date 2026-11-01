@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -100,7 +100,7 @@ shield buff does not, and the flag reaches the catalogue the client loads.
 ================
 */
 func TestShippedBasicAttacksAssistAndShieldsDoNot(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	skills := NewTextdataSkills(gamedatatest.TextdataDir(t))
 	byID := map[uint32]bool{}
 	for _, row := range skills.SpawnSkillRows() {

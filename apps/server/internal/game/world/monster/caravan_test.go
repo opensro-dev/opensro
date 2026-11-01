@@ -13,8 +13,8 @@ import (
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -133,7 +133,7 @@ across levels 1..140.
 */
 func TestShippedJobMonstersFillEveryZoneAndLevel(t *testing.T) {
 	tier.Long(t, "job monsters fill every zone and level")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	refs := LoadMonsterRefs(gamedatatest.TextdataDir(t))
 	list := make([]MonsterRef, 0, len(refs))
 	for _, ref := range refs {

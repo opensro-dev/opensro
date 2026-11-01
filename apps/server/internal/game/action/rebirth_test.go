@@ -11,8 +11,8 @@ package action
 import (
 	"encoding/binary"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -315,7 +315,7 @@ TestRecallAppointmentGateCatalogAndPersistence
 ================
 */
 func TestRecallAppointmentGateCatalogAndPersistence(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	c := rebirthTestCharacter(20, 100)
 	rt, _ := newTestRuntime(c, testItems())
 	rt.NpcSpawn.Enabled = true
@@ -417,7 +417,7 @@ TestRecallAppointmentSurvivesAuthorityReopen
 ================
 */
 func TestRecallAppointmentSurvivesAuthorityReopen(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	d := openDoorRuntime(t, t.TempDir(), rebirthTestCharacter(20, 100))
 	deps := d.rt.deps.(*enterworld.Deps)
 	deps.UpdateCharacter = d.authority.UpdateCharacter
@@ -458,7 +458,7 @@ for a European one, not the starter position it entered the world at.
 ================
 */
 func TestFreshCharacterAppointedRebirthUsesRaceTownGate(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	cases := []struct {
 		name  string
 		model string
@@ -500,7 +500,7 @@ character revives at the Jangan gate recall spawn.
 ================
 */
 func TestFreshCharacterTownReviveLandsAtJanganGate(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	c := rebirthTestCharacter(20, 0)
 	rt, _ := newTestRuntime(c, testItems())
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
@@ -529,7 +529,7 @@ Constantinople gate still returns there.
 ================
 */
 func TestAppointedRebirthKeepsTheAppointedTown(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	c := rebirthTestCharacter(20, 100)
 	rt, _ := newTestRuntime(c, testItems())
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {

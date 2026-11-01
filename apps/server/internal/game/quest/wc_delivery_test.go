@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -44,7 +44,7 @@ TestBirthdayGiftsStayForTheSecondDelivery
 ================
 */
 func TestBirthdayGiftsStayForTheSecondDelivery(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_POTION_2")
 	const medicine, letter, gift = "ITEM_QNO_WC_POTION_3_01", "ITEM_QNO_WC_POTION_3_02", "ITEM_QNO_WC_POTION_3_03"
@@ -114,7 +114,7 @@ is therefore unreachable through an offer.
 ================
 */
 func TestSecondGiftNeedsBothFirstGifts(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_POTION_3")
 	holdItems(t, rt, c, "ITEM_QNO_WC_POTION_3_01", 1)
@@ -142,7 +142,7 @@ all fifty; Agol's _04 answers while they travel.
 ================
 */
 func TestPaddleDeliveryAsksAndAnswers(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_SMITH_2")
 	const paddle = "ITEM_QNO_WC_SMITH_3_01"

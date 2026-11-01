@@ -19,7 +19,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -205,8 +205,8 @@ TestKnockbackCompleteAuthoredFamilies
 ================
 */
 func TestKnockbackCompleteAuthoredFamilies(t *testing.T) {
-	licensed.RequireGameData(t)
-	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	source := enterworld.NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	for family, count := range map[string]int{"SKILL_EU_WARRIOR_TWOHANDA_DASH_A": 22, "SKILL_CH_SPEAR_ROUNDAREA_B": 9, "SKILL_CH_SPEAR_ROUNDAREA_C": 9, "SKILL_CH_SPEAR_ROUNDAREA_D": 3} {
 		for rank := 1; rank <= count; rank++ {
 			code := fmt.Sprintf("%s_%02d", family, rank)
