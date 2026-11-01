@@ -497,6 +497,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				finish.ready
 			] ).then( () => {
 				if ( generation === epoch && phase === "starting" ) {
+					skyStages.clear();
 					sky = skyDraw( false, false );
 					skyFactory = skyDraw;
 					phase = "running";

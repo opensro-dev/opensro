@@ -89,8 +89,8 @@ drawFrame
 One frame with the world labels, no scene content and the given inputs.
 ================
 */
-/** @param {any} commands @param {{ deferred?: any, experimental: any }} input */
-function drawFrame( commands, { deferred, experimental } ) {
+/** @param {any} commands @param {{ deferred?: any, bloom?: any, experimental: any }} input */
+function drawFrame( commands, { deferred, experimental, bloom } ) {
 	return createFrame( commands ).draw(
 		/** @type {any} */ ("view"),
 		undefined,
@@ -106,7 +106,7 @@ function drawFrame( commands, { deferred, experimental } ) {
 		[],
 		1,
 		deferred,
-		undefined,
+		bloom,
 		undefined,
 		experimental
 	);
@@ -131,6 +131,16 @@ test("the 4x depth resolves into the scene depth under the render-scale stage", 
 	assert.equal( resolve.depth, "scene-depth", "the upscale reads the scene depth, so that is what must hold it" );
 	assert.deepEqual( upscales, [ "msaa-resolve" ], "the upscale runs after the resolve" );
 	assert.equal( passes.find( pass => pass.label === "hdr-world-ui" ).depth, "frame-depth" );
+});
+
+test("bloom leaves the labels to the pass after the depth resolve", () => {
+	const { passes, commands } = recordingCommands();
+	drawFrame( commands, {
+		bloom: { view: "bloom-capture", encode() {} },
+		experimental: msaaExperimental( passes )
+	} );
+	const labels = passes.filter( pass => pass.bundles > 0 ).map( pass => pass.label );
+	assert.deepEqual( labels, [ "hdr-world-ui" ], "the world labels draw exactly once" );
 });
 
 test("the deferred tail leaves the labels to the pass after it", () => {

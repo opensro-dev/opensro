@@ -159,8 +159,8 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 		================
 		view
 
-		The single-sampled view the water shader samples: the mirror itself
-		under MSAA, the resolved texture.
+		The single-sampled view the water shader samples: the resolved texture
+		under MSAA, the mirror itself otherwise.
 		================
 		*/
 		view() {

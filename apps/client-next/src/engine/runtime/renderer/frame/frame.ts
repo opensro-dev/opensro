@@ -479,7 +479,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: uiDepth,
 									depthClearValue: 1,
-									depthLoadOp: bloom && !hdrScene && !sceneScale && worldUiBundle ?
+									depthLoadOp: bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ?
 										"load" as const :
 										"clear" as const,
 									depthStoreOp: "discard" as const
@@ -488,7 +488,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							{}),
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
-					if ( bloom && !hdrScene && !sceneScale && worldUiBundle ) hud.executeBundles( [ worldUiBundle ] );
+					if ( bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ) {
+						hud.executeBundles( [ worldUiBundle ] );
+					}
 					if ( backgroundBundle ) hud.executeBundles( [ backgroundBundle ] );
 					if ( !preview.length && uiBundle ) hud.executeBundles( [ uiBundle ] );
 					hud.end();
