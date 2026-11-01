@@ -161,3 +161,76 @@ func TestGachaRequestWithoutCatalogueIsRefused(t *testing.T) {
 	frames, refusal := rt.routeNpcAction(testDivision, c, gacha.InteractionFlagGacha, npcActionBody(17, gacha.InteractionFlagGacha))
 	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
 }
+
+/*
+================
+TestGachaOpenWithoutCatalogueIsRefused
+
+The handler itself, called with no catalogue, answers the generic
+invalid-request refusal; the routed path is pinned above.
+================
+*/
+func TestGachaOpenWithoutCatalogueIsRefused(t *testing.T) {
+	rt, c, _ := gachaFixture(t)
+	rt.GachaCatalog = nil
+	frames, refusal := rt.HandleGachaNpcAction(testDivision, c, npcActionBody(17, gacha.InteractionFlagGacha))
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestGachaOpenWithMalformedPayloadIsRefused
+
+A Magic Pop action whose body does not decode answers the generic
+invalid-request refusal instead of leaving the request pending.
+================
+*/
+func TestGachaOpenWithMalformedPayloadIsRefused(t *testing.T) {
+	rt, c, _ := gachaFixture(t)
+	frames, refusal := rt.HandleGachaNpcAction(testDivision, c, []byte{17, 0, 0})
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestGachaOpenWithUnsupportedFlagsIsRefused
+
+The dispatcher routes only the Magic Pop flag here, but the handler
+itself refuses any other flag set rather than answering silence.
+================
+*/
+func TestGachaOpenWithUnsupportedFlagsIsRefused(t *testing.T) {
+	rt, c, _ := gachaFixture(t)
+	frames, refusal := rt.HandleGachaNpcAction(testDivision, c, npcActionBody(17, 0x20000))
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestGachaOpenForUnselectedNpcIsRefused
+
+The machine named is not the bound selection: the native no-object
+answer (code 3) retires the request.
+================
+*/
+func TestGachaOpenForUnselectedNpcIsRefused(t *testing.T) {
+	rt, c, _ := gachaFixture(t)
+	rt.Selected.Set(testDivision, c.Name, 18)
+	frames, refusal := rt.HandleGachaNpcAction(testDivision, c, npcActionBody(17, gacha.InteractionFlagGacha))
+	assertNpcFunctionRefusal(t, frames, refusal, selectObjectNotFound)
+}
+
+/*
+================
+TestGachaOpenForNpcWithoutSetIsRefused
+
+The bound NPC is live but has no Magic Pop set: the not-offered answer
+(code 5) retires the request.
+================
+*/
+func TestGachaOpenForNpcWithoutSetIsRefused(t *testing.T) {
+	rt, c, _ := gachaFixture(t)
+	rt.NpcRoster[0].RefObjID = 9999
+	frames, refusal := rt.HandleGachaNpcAction(testDivision, c, npcActionBody(17, gacha.InteractionFlagGacha))
+	assertNpcFunctionRefusal(t, frames, refusal, npcFunctionNotOffered)
+}
