@@ -171,7 +171,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		rt.NpcDialogs.Clear(divisionID, character.Name)
 		return []wire.Frame{{
 			Opcode:  wire.OpNpcDialog,
-			Payload: wire.EncodeNpcDialogSymbol(npc.BaseSpeechSymbol),
+			Payload: wire.EncodeNpcDialogAnswer(npc.BaseSpeechSymbol),
 		}}, ""
 	case simulation.NpcTalkFlagShop, simulation.NpcTalkFlagSpecialTrade:
 		ack := wire.EncodeNpcInteractionAck(mask)

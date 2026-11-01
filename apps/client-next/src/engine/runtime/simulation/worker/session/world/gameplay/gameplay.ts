@@ -4543,11 +4543,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
-				// 756CF0 compares the bag slot before and after a 0xB06D pickup.
-				const pickupSlot = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 6 &&
+				// 756CF0 compares the bag slot before and after a 0xB06D pickup
+				// (type 6) or server grant (type 0xE).
+				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;
+				const pickupSlot =
+					(pickupGrant || frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 6) &&
 						frame.payload.length > 3 && frame.payload[2] !== 254 ?
-					frame.payload[2] :
-					undefined;
+						frame.payload[2] :
+						undefined;
 				const pickupBefore = pickupSlot === undefined ?
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
@@ -4667,7 +4670,8 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( item && pickupSlot !== undefined ) {
 					const notice = pickupNotice(
 						pickupBefore,
-						inventory.state().inventory.find( i => i.slot === pickupSlot )
+						inventory.state().inventory.find( i => i.slot === pickupSlot ),
+						pickupGrant
 					);
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 				}
