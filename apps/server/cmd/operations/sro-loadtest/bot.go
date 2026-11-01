@@ -59,7 +59,7 @@ the step context ends. The returned row always names the bot; a failure
 names its stage.
 ================
 */
-func runBot(ctx context.Context, cfg runConfig, acct botAccount) botResult {
+func runBot(ctx context.Context, cfg runConfig, acct botAccount, index int) botResult {
 	row := botResult{Account: acct.ID, Character: acct.Character}
 	fail := func(stage string, err error) botResult {
 		row.FailedStage = stage
@@ -68,7 +68,7 @@ func runBot(ctx context.Context, cfg runConfig, acct botAccount) botResult {
 	}
 	started := time.Now()
 
-	agent, err := newAgentClient(cfg.agentURL, cfg.serverID, cfg.division, cfg.timeout)
+	agent, err := newAgentClient(cfg.agentURL, cfg.serverID, cfg.division, cfg.timeout, botSourceIP(index))
 	if err != nil {
 		return fail("agent-client", err)
 	}
@@ -122,6 +122,9 @@ func runBot(ctx context.Context, cfg runConfig, acct botAccount) botResult {
 			return fail("enterworld", ctx.Err())
 		case frame, ok := <-conn.frames:
 			if !ok {
+				if conn.overflow.Load() {
+					return fail("enterworld", fmt.Errorf("connection closed before the enter-world answer: the bot's frame buffer overflowed"))
+				}
 				return fail("enterworld", fmt.Errorf("connection closed before the enter-world answer"))
 			}
 			row.FramesIn++
@@ -160,6 +163,9 @@ func runBot(ctx context.Context, cfg runConfig, acct botAccount) botResult {
 			if !ok {
 				row.HeldSeconds = time.Since(holdStarted).Seconds()
 				row.BytesIn = conn.bytesIn.Load()
+				if conn.overflow.Load() {
+					return fail("hold", fmt.Errorf("connection closed after %.1fs in world: the bot's frame buffer overflowed (the server kept the session detached; this drop is the bot's)", row.HeldSeconds))
+				}
 				return fail("hold", fmt.Errorf("connection closed after %.1fs in world", row.HeldSeconds))
 			}
 			row.FramesIn++
