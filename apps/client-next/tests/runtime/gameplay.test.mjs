@@ -541,6 +541,97 @@ test("gold pickup grants are decoded without touching bag slots or acknowledging
 		assert.throws( () => inv.receive( 0xb06d, grant.subarray( 0, n ) ), /gold pickup/ );
 	}
 });
+test("quest grants apply to the bag and print only for a new row (#2256)", async () => {
+	// A quest grant (0xB06D type 14, source 3) prints the bag's item line
+	// for a new row; a merge into an existing stack stays silent. The gold
+	// heap at slot 254 is an amount, never a row, and prints its gain line.
+	const { createGameplay } = await load( "gameplay" ),
+		game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [],
+		refItemSnapshot: [ { refObjId: 5, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 5, slot: 20, body: item( 5, 10 ) } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 21, 0, ...item( 5, 7 ) ) }, 100 );
+	let s = game.take(),
+		qty = slot => s.inventory.find( row => row.slot === slot )?.quantity;
+	assert.equal( qty( 21 ), 7 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		7
+	] );
+	const granted = s.notices?.at( -1 )?.sequence;
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 20, 0, ...item( 5, 25 ) ) }, 101 );
+	s = game.take();
+	assert.equal( qty( 20 ), 25 );
+	assert.equal( s.notices?.at( -1 )?.sequence ?? granted, granted );
+	// The gold heap applies as an amount and prints the gain line.
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 254, 200, 3, 0, 0 ) }, 102 );
+	s = game.take();
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [ "UIIT_MSG_STATE_GAIN_GOLD", 968 ] );
+	assert.equal( qty( 20 ), 25 );
+	// Type 15 takes a granted row back out again ([1, 15, slot, 0] on the wire).
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 15, 21, 0 ) }, 103 );
+	s = game.take();
+	assert.equal( qty( 21 ), undefined );
+	// A grant whose item ref is zero grants nothing, a grant short of its
+	// header stops at the door, and a gold grant short of its amount refuses.
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 22, 0, 0, 0, 0, 0 ) }, 104 ),
+		/Empty quest item grant/
+	);
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 22 ) }, 105 ),
+		/Truncated quest inventory result/
+	);
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 254, 200, 3 ) }, 106 ),
+		/Invalid quest gold grant result/
+	);
+	game.dispose();
+});
+test("a pet's pickup lands in the player bag and prints its gain (#2257)", async () => {
+	// The pet-bag pickup into the player bag (0xB06D type 0x1C, source 0)
+	// prints like a ground pickup: a new stack names its whole count, a
+	// merge names the gain. A merged pet grant instead stays silent,
+	// and gold at slot 254 prints the gain line on both result types.
+	const { createGameplay } = await load( "gameplay" ),
+		game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [],
+		refItemSnapshot: [ { refObjId: 5, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 5, slot: 20, body: item( 5, 10 ) } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 22, ...item( 5, 4 ) ) }, 100 );
+	let s = game.take(),
+		qty = slot => s.inventory.find( row => row.slot === slot )?.quantity;
+	assert.equal( qty( 22 ), 4 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		4
+	] );
+	const added = s.notices?.at( -1 )?.sequence;
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 20, ...item( 5, 30 ) ) }, 101 );
+	s = game.take();
+	assert.equal( qty( 20 ), 30 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		20
+	] );
+	assert.notEqual( s.notices?.at( -1 )?.sequence, added );
+	// Gold from the pet prints the gain line, on 0x1C as on 6 and 14.
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 254, 200, 1, 0, 0 ) }, 102 );
+	s = game.take();
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [ "UIIT_MSG_STATE_GAIN_GOLD", 456 ] );
+	assert.equal( qty( 20 ), 30 );
+	game.dispose();
+});
 test("unrelated pickup cannot acknowledge a move and timed-out transactions cannot be retried", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
