@@ -557,6 +557,14 @@ func TestLoginRefusesDisabledShardExplicitly(t *testing.T) {
 	if body["ok"] != false || body["code"] != "SHARD_OFFLINE" {
 		t.Fatalf("disabled shard login = %#v, want SHARD_OFFLINE", body)
 	}
+	servers := performJSON(t, server.Handler(), http.MethodGet, "/title/servers", "", "")
+	var rows []serverInfo
+	if err := json.Unmarshal(servers.Body.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("disabled shard listed: %+v", rows)
+	}
 }
 
 /*
