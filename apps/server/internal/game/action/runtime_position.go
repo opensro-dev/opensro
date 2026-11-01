@@ -154,8 +154,9 @@ characterSnapshot for the skill press, the prepared-cast release
 every companion-carrying bag row and the whole avatar inventory. The
 press flows resolve the caster's companions through this copy (the
 crow lane walks the bag-row Summon records, at the strike both routes
-reach), and the entry read's wolf grants walk them the same way, so
-the copy keeps exactly those bag rows; a root takes it only when
+reach); the entry read's load-bearing inventory inputs are its slot-8
+suit and cape verdicts, and its stat writers walk the same kept
+companion rows, so the copy keeps exactly those bag rows; a root takes it only when
 every reader of its copy is cleared for the dropped plain bag rows
 root by root, and the cast-copy differential tests pin every root
 against the full copy.

@@ -79,10 +79,14 @@ the copy is cleared for the dropped plain bag rows - the projection
 reads the level, max level and base stats, statModifierWrites reads
 the name (its effect writes), the wanted streak and the job-suit slot,
 and, under the attack-pet expansion, the owner's life, town and
-free-battle state, worn suit and companions. The cast copy keeps all
-of that: every non-inventory child, the equipment and avatar rows and
-every companion-carrying bag row. TestEntryActionSpeedCastCopyMatchesFullCopy
-pins this root against the full copy.
+free-battle state and worn suit. The two slot-8 verdicts (suit, cape)
+are this read's load-bearing inventory inputs; the companion-walking
+writers also run over the copy, though their writes name other
+parameters and are filtered out of the one parameter this read
+serves. The cast copy keeps all of that: every non-inventory child,
+the equipment and avatar rows and every companion-carrying bag row.
+TestEntryActionSpeedCastCopyMatchesFullCopy pins this root against
+the full copy.
 ================
 */
 func (rt *Runtime) EntryActionSpeed(division, name string) float32 {

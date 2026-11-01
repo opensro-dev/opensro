@@ -78,8 +78,9 @@ The entry read takes the cast copy (#2140): every reader of that copy
 is cleared for the dropped plain bag rows (see EntryActionSpeed). Pin
 this root against the full copy over the states whose result the
 copy's kept fields decide - a fattened plain record, an abnormal
-haste, and a wolf-howl grant walking the companions - each also held
-to its known value, so the agreement cannot be vacuous.
+haste, a wolf-howl grant, and the same grant refused by the slot-8
+job suit - each also held to its known value, so the agreement
+cannot be vacuous.
 ================
 */
 func TestEntryActionSpeedCastCopyMatchesFullCopy(t *testing.T) {
@@ -92,6 +93,10 @@ func TestEntryActionSpeedCastCopyMatchesFullCopy(t *testing.T) {
 	}
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 45, RefObjID: 3632, StackCount: 1,
 		Summon: &enterworld.CharacterCOS{GID: 0x00C00009, Codename: "COS_P_WOLF"}})
+	// A job suit ref for the dressed state below: the slot-8 verdict is
+	// this root's one inventory-coupled input.
+	rt.deps.(*enterworld.Deps).Items.(staticItemSource)["ITEM_TEST_JOB_SUIT"] = &enterworld.ItemRef{
+		RefObjID: 90001, Codename: "ITEM_TEST_JOB_SUIT", TypeIDs: [4]int64{3, 1, 7, 3}}
 
 	speeds := func() (float32, float32) {
 		cast := rt.EntryActionSpeed(testDivision, c.Name)
@@ -136,6 +141,14 @@ func TestEntryActionSpeedCastCopyMatchesFullCopy(t *testing.T) {
 	*c.CurrentHP = 0
 	check("howl grant, dead owner", 100)
 	*c.CurrentHP = 100
+
+	// Dressed: the worn suit's slot-8 verdict refuses the howl grant.
+	// An inventory-blind copy would go on applying it, so this state is
+	// the one that sees the copy's equipment rows at all.
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+		Slot: enterworld.JobSuitSlot, RefObjID: 90001, Codename: "ITEM_TEST_JOB_SUIT",
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, 3), StackCount: 1})
+	check("howl grant, suited owner", 100)
 }
 
 /*
