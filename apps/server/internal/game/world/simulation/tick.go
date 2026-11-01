@@ -663,6 +663,7 @@ func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 	clone := *source
 	clone.shownMonsters = nil
 	clone.breachLogged = nil
+	clone.scopeMemo = nil
 	return &clone
 }
 
