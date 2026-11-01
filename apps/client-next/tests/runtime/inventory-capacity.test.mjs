@@ -3,8 +3,7 @@
 
 inventory-capacity.test.mjs - the bag grows when the server announces it
 
-Port-only, not native: with SRO_INSTANT_INVENTORY_EXPANSION on, a quest that
-pays bag slots sends the v1.188 0x3092 [1][capacity] at the turn-in, and the
+A quest that pays bag slots sends 0x3092 [1][capacity] at the turn-in, and the
 inventory owner adopts the new capacity without a world entry. A shrink, a
 chest announce or a malformed payload is refused.
 

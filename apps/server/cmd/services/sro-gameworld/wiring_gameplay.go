@@ -788,9 +788,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			Accepted:   event.Accepted,
 		})
 	}
-	if quests.InstantInventoryExpansion = quest.InstantInventoryExpansionFromEnv(); quests.InstantInventoryExpansion {
-		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
-	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
 	if err := game.validateQuestMarkerRoster(); err != nil {
