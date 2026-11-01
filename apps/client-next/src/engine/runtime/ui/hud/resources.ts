@@ -223,6 +223,8 @@ export function createHudResources(
 		"ifquestslot",
 		"ifquestslotmain",
 		"ifquestslotsub",
+		"ifquestinfo",
+		"ifquestinfoslot",
 		"ifpartymatch",
 		"ifpartymatchregister",
 		"ifpartymatchreqjoin",

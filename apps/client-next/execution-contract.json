@@ -296,6 +296,20 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-info.ts",
+			"functions": [
+				"closeWindow",
+				"entries",
+				"iconPath",
+				"iconVisible",
+				"observe",
+				"openWindow",
+				"reset",
+				"windowOpen"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/notice-text.ts",
 			"provider": "src/engine/runtime/ui/hud/quest-banner.ts",
 			"functions": [

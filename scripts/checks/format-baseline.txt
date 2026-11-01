@@ -137,7 +137,6 @@ apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
 apps/client-next/src/engine/foundation/ui/quest-guide.ts
-apps/client-next/src/engine/foundation/ui/quest-presentation.ts
 apps/client-next/src/engine/foundation/ui/quest-time.ts
 apps/client-next/src/engine/foundation/ui/quick-status.ts
 apps/client-next/src/engine/foundation/ui/rebirth-dialog.ts
