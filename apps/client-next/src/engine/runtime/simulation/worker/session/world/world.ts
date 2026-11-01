@@ -19,7 +19,7 @@ rejects the entry.
 ===========================================================================
 */
 import { isWorldControl } from "@/engine/foundation/gameplay/commerce-controls";
-import { createNetwork } from "@/engine/runtime/simulation/worker/network/network";
+import { createNetwork, outOfMemoryFailure } from "@/engine/runtime/simulation/worker/network/network";
 import { createWorldCore } from "./core";
 import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
@@ -170,6 +170,8 @@ onNetworkFailure
 				"unsupported" :
 				reason?.code === "reference_loading_failed" ?
 				"asset" :
+				reason?.code === "out_of_memory" ?
+				"runtime" :
 				frame ?
 				"packet" :
 				reason?.category === "software" ?
@@ -781,17 +783,23 @@ step
 				} catch ( error ) {
 					// A lost answer, not a game error: every such lane resumes through
 					// the bootstrap, which rebuilds the state the request left pending.
+					// An engine out-of-memory refusal is not a game error either: the
+					// step only met the heap's limit, and reload is the remedy. A lost
+					// answer keeps precedence - its throw never reads as a refusal.
 					const cause = error instanceof Error ? error.cause : undefined;
 					const lost = lostAnswer( cause );
+					const oom = lost ? null : outOfMemoryFailure( error );
 					onNetworkFailure( lost ? `${String( error )}; ${inboundAge()}` : String( error ), undefined, {
 						category: lost ? "unknown" : "software",
-						code: lost ? cause as string : "simulation_failed",
+						code: lost ? cause as string : oom ? oom.code : "simulation_failed",
 						message: cause === MOVEMENT_RECEIPT_TIMEOUT ?
 							"Movement synchronization timed out. Please reconnect." :
 							cause === TARGET_RELEASE_TIMEOUT ?
 							"Target synchronization timed out. Please reconnect." :
 							lost ?
 							"Item synchronization timed out. Please reconnect." :
+							oom ?
+							oom.message :
 							"A game error interrupted your session.",
 						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 					} );
@@ -803,12 +811,18 @@ step
 					core.step( now, false );
 				} catch ( error ) {
 					if ( !failure ) {
-						onNetworkFailure( String( error ), undefined, {
-							category: "software",
-							code: "simulation_failed",
-							message: "A game error interrupted your session.",
-							stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
-						} );
+						// Same refusal rule as the live step: memory names
+						// itself, anything else is a simulation failure.
+						onNetworkFailure(
+							String( error ),
+							undefined,
+							outOfMemoryFailure( error ) ?? {
+								category: "software",
+								code: "simulation_failed",
+								message: "A game error interrupted your session.",
+								stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+							}
+						);
 					}
 				}
 			}

@@ -313,6 +313,17 @@ def report(before, after, bursts):
         s = b.get("slowest_step") or "(unnamed)"
         steps[s] = steps.get(s, 0) + 1
     print(f"  spike slowest steps: {dict(sorted(steps.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
+    # #2295: the phase and hook that took the burst's time. Records from
+    # before the attribution fix carry neither and tally as unattributed.
+    phases = {}
+    hooks = {}
+    for b in bursts:
+        p = b.get("slowest_phase") or "(unattributed)"
+        phases[p] = phases.get(p, 0) + 1
+        h = b.get("slowest_hook") or "(unattributed)"
+        hooks[h] = hooks.get(h, 0) + 1
+    print(f"  spike slowest phases: {dict(sorted(phases.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
+    print(f"  spike slowest hooks: {dict(sorted(hooks.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
 
     v = m["verdicts"]
     print()
