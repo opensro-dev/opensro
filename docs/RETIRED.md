@@ -42,3 +42,21 @@ Retired later; restore these from `8a456bb` the same way.
 | `docs/GRAPHICS_UPGRADE_2026-10-05.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
 | `docs/GRAPHICS_UPGRADE_2026-10-06.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
 | `docs/GRAPHICS_UPGRADE_2026-10-08.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
+
+## Second cut, 2026-11-01
+
+Restore these with `git checkout d27317ea55 -- <path>`. Paths are as of that commit.
+
+| Path | Now |
+| --- | --- |
+| `docs/features/CAP110_PROGRESS.md` | Rewritten as `docs/features/CAP110.md` |
+| `docs/features/ATTACK-PET-EXPANSION-PLAN.md` | Current parts in `docs/pet-expansion/ATTACK-PET-SYSTEM.md` |
+| `docs/pet-expansion/PET-GEAR-DEGREES.md`, `PET-GEAR-PROCS.md`, `PET-GEAR-SEALS.md` | Folded into `ATTACK-PET-SYSTEM.md` |
+| `docs/pet-expansion/ASSET-PROVENANCE.md`, `PET-ITEM-ICONS.md` | Folded into `docs/pet-expansion/assets/README.md` |
+| `docs/features/GRAB_PETS.md`, `PET_NAMEPLATES.md`, `TRAINING-DUMMY.md`, `BETA_MASTERY.md` | Folded into `docs/features/SMALL_FEATURES.md` |
+| `docs/features/ALEXANDRIA_NPC_FIXES.md` | Finished bug report |
+| `docs/pet-expansion/ALL-PET-SKILL-ACCEPTANCE.md` | Dated acceptance matrix |
+| `docs/pet-expansion/CROW-REWORK.md`, `PENGUIN-REWORK.md`, `WOLF-REWORK.md` | Numbers live in `petdesign.json` |
+| `docs/pet-expansion/PET-SKILL-UI.md`, `PET-LOOT-MODEL.md`, `PET-SURVIVABILITY-BALANCE.md` | Finished work notes |
+| `docs/pet-expansion/REVIEW-2026-10-14.md`, `REVIEW-VALIDATION.md` | Dated reviews |
+| Per-feature native evidence, and `docs/evidence/` | Moved to `../research/docs/port-native` |

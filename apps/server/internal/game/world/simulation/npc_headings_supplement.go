@@ -8,7 +8,7 @@ ISRO-R shard SHA256:
 Twelve exact placements agree in Tab_RefNest and Tab_RefNest_Back. Five moved
 placements below are explicit inferences, keyed to the original v1.150 position.
 SQL SMALLINT headings retain their unsigned wire bits, including negative SQL
-values. See docs/native/npc-facing-recovery.md for joins, offsets and decisions.
+values. See ../research/docs/port-native/npc-facing-recovery.md for joins, offsets and decisions.
 
 ===========================================================================
 */

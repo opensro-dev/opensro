@@ -521,9 +521,7 @@ data release.
 
 | Change | Measured effect |
 | --- | --- |
-| Members stored gzip-compressed inside packs, retiring the gzip transports (asset schema 4) | done: packs 2.506 → 1.664 GiB served (full build, 2026-10-09) |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
-| Size gate measures the bytes actually served | done: `pnpm assets check served` (`check_served_size.mjs`) sums the served packs, prints the full download, the startup share and each group, and fails above 80% of the original PK2s. The compact profile and its zstd pack copies are retired. |
 
 Target: a full download of about 1.1 GiB instead of 2.04 GiB, with no
 visual change.
