@@ -3,7 +3,7 @@
 
 data_release.py - stage a browser release that carries new asset data.
 
-Runs on the operator's machine, which alone holds the licensed asset build.
+Runs on the operator's machine, which alone holds the asset build.
 It reads the live release identity from the public origin, bundles the
 built package against it (client_data.bundle), sends each payload batch to
 the stage role until the host holds it, and stages the candidate. The

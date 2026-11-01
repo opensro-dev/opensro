@@ -14,7 +14,7 @@ cells using normalized UVs.
 
 `buildPetItemIcons()` publishes this source through full CIF and focused
 `pnpm assets refresh pet-loot` builds, with the normal publication ledger and
-UI icon packs. Set `SRO_GAME_ROOT` to your licensed extracted client root.
+UI icon packs. Set `SRO_GAME_ROOT` to your extracted client root.
 
 Top-right badges show server-observed Resolve, bear retaliation hits or crow
 burst progress. Mark Prey shows attacks remaining to recharge. The left row
@@ -74,7 +74,7 @@ and client reload.
 
 ## Provenance
 
-No retail archives or generated GLBs/WAVs are included. Existing licensed
+No retail archives or generated GLBs/WAVs are included. Existing
 client assets are resolved by the standard local build. The new original pet
 skill atlas is tracked as source artwork; its published copy belongs to the
 normal generated tree. Nothing is injected into a PK2 archive.
@@ -86,7 +86,7 @@ normal generated tree. Nothing is injected into a PK2 archive.
 | 27 degree icons | `docs/pet-expansion/assets/pet-gear-*.png` and `scripts/build/shared/pet_item_icons.py` | Original AI-painted collar/harness/charm artwork; native character gear style references, deterministic32px export |
 | 60 pet skill icons | `docs/pet-expansion/assets/pet-skills*.png` | Original AI-generated painted atlases; simple/intermediate/full variants, native character skill style |
 | Skill/equipment balance | `apps/server/internal/game/companion/petdesign.json` | Original port-only design; one source, the exporter generates the client module |
-| Bear standing roar | `apps/client-next/src/engine/foundation/animation/bear-roar.ts` | Original animation adjustment on licensed native bear rig; see recipe for bone operations |
+| Bear standing roar | `apps/client-next/src/engine/foundation/animation/bear-roar.ts` | Original animation adjustment on the native bear rig; see recipe for bone operations |
 | Shield, roar aura, retaliation ripple and Guardian recovery | Client `characters/resources/resources.ts` | Original procedural geometry/textures; standard renderer |
 | Pet bodies/rigs, native drop glow and audio | Operator-supplied v1.150 client | Native dependencies remain outside Git; hashes below |
 
@@ -100,7 +100,7 @@ output belongs in the existing ignored asset tree.
 
 These hashes identify the supplied v1.150 inputs used for this validation,
 not a grant to redistribute them. Material/animation dependencies continue
-through the existing BSR build pipeline and licensed preparation manifest.
+through the existing BSR build pipeline and preparation manifest.
 
 | Native path | SHA-256 |
 | --- | --- |

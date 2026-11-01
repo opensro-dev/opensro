@@ -8,4 +8,4 @@
   a skipped section loses a write.
 - **review** A hashed fixture or source pins exact bytes. When line endings or imports change it, prove the change is
   mechanical before updating the hash.
-- **review** Tests that need game data call the licensed-data check first, because CI has no game data.
+- **review** Tests that need game data call the game-data check first, because CI has no game data.
