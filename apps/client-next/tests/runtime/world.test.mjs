@@ -3249,3 +3249,246 @@ test("an answer behind endless scene references still reaches its limit", async 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
 });
+
+/*
+================
+wtRecord
+
+One WebTransport wire record: [u32 byte count][u16 opcode][payload].
+================
+*/
+function wtRecord( opcode, payload ) {
+	const framed = new Uint8Array( payload.byteLength + 2 );
+	new DataView( framed.buffer ).setUint16( 0, opcode, true );
+	framed.set( payload, 2 );
+	const record = new Uint8Array( framed.byteLength + 4 );
+	new DataView( record.buffer ).setUint32( 0, framed.byteLength, true );
+	record.set( framed, 4 );
+	return record;
+}
+
+/*
+================
+wtHarness
+
+A WebTransport stand-in whose inbound bytes the test pushes one stream
+chunk at a time; the certificate fetch answers "no pin document", so the
+attempt proceeds unpinned, as it does against a public certificate.
+================
+*/
+function wtHarness( t ) {
+	const transports = [];
+	/*
+	================
+	Transport
+	================
+	*/
+	class Transport {
+		ready = Promise.resolve();
+		closed = new Promise( () => {} );
+		sent = [];
+		queued = [];
+		waiting = null;
+		constructor() {
+			transports.push( this );
+		}
+		/*
+		================
+		createBidirectionalStream
+		================
+		*/
+		createBidirectionalStream() {
+			return {
+				writable: {
+					getWriter: () => ({
+						write: bytes => {
+							this.sent.push( bytes.slice() );
+							return Promise.resolve();
+						},
+						close: () => Promise.resolve()
+					})
+				},
+				readable: {
+					getReader: () => ({
+						read: () =>
+							this.queued.length ?
+								Promise.resolve( { done: false, value: this.queued.shift() } ) :
+								new Promise( resolve => {
+									this.waiting = resolve;
+								} ),
+						cancel: () => Promise.resolve()
+					})
+				}
+			};
+		}
+		/*
+		================
+		push
+		================
+		*/
+		push( bytes ) {
+			if ( this.waiting ) {
+				const wake = this.waiting;
+				this.waiting = null;
+				wake( { done: false, value: bytes } );
+			} else this.queued.push( bytes );
+		}
+		/*
+		================
+		close
+		================
+		*/
+		close() {}
+	}
+	const transportGlobal = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
+	Object.defineProperty( globalThis, "WebTransport", { value: Transport, configurable: true } );
+	const fetchGlobal = Object.getOwnPropertyDescriptor( globalThis, "fetch" );
+	Object.defineProperty( globalThis, "fetch", {
+		value: async () => ({ ok: false }),
+		configurable: true,
+		writable: true
+	} );
+	t.after( () => {
+		if ( transportGlobal ) Object.defineProperty( globalThis, "WebTransport", transportGlobal );
+		else Reflect.deleteProperty( globalThis, "WebTransport" );
+		if ( fetchGlobal ) Object.defineProperty( globalThis, "fetch", fetchGlobal );
+		else Reflect.deleteProperty( globalThis, "fetch" );
+	} );
+	return transports;
+}
+
+/*
+================
+a slow-streaming EnterWorld record holds the entry open
+
+The EnterWorld answer is one record of about a megabyte (0x0007): a
+link that delivers it in chunks over more than the 10 s entry window
+is streaming, not stalled, so the entry may not demand a finished frame
+before the deadline is allowed to fire (#2311).
+================
+*/
+test("a slow-streaming EnterWorld record holds the entry open", async t => {
+	const transports = wtHarness( t ), sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	world.experimental( { webTransport: true } );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	await settle();
+	assert.equal( transports.length, 1, "entry starts on WebTransport" );
+	assert.equal( sockets.length, 0, "no socket while QUIC is unproven" );
+	const transport = transports[0];
+	transport.push( wtRecord( 2, welcome() ) );
+	await settle();
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	// The answer in thirds, the last third riding with the entry rows:
+	// twelve seconds of delivery against a ten-second window.
+	const answer = wtRecord( 7, entered() );
+	const third = Math.ceil( answer.byteLength / 3 );
+	transport.push( answer.subarray( 0, third ) );
+	await settle();
+	world.step( 4000 );
+	assert.equal( world.status().phase, "entering-world", "first third: still entering, not rejected" );
+	transport.push( answer.subarray( third, third * 2 ) );
+	await settle();
+	world.step( 9000 );
+	assert.equal( world.status().phase, "entering-world", "second third: the deadline slid on bytes" );
+	// Past the armed deadline with the record still incomplete: only the
+	// bytes already streamed can be keeping this entry alive.
+	world.step( 10050 );
+	assert.equal( world.status().phase, "entering-world", "past the deadline on bytes alone" );
+	const tail = rows.reduce(
+		( chunks, row ) => [ ...chunks, wtRecord( row.opcode, row.payload ) ],
+		[ answer.subarray( third * 2 ) ]
+	);
+	const joined = new Uint8Array( tail.reduce( ( total, chunk ) => total + chunk.byteLength, 0 ) );
+	tail.reduce( ( offset, chunk ) => {
+		joined.set( chunk, offset );
+		return offset + chunk.byteLength;
+	}, 0 );
+	transport.push( joined );
+	await settle();
+	world.step( 12000 );
+	let batch;
+	while ( (batch = world.take()) ) world.ack( batch.sequence );
+	world.step( 12001 );
+	world.ready();
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+	assert.equal( transports.length, 1, "the entry never started over" );
+	assert.equal( sockets.length, 0, "no socket fallback was needed" );
+	world.dispose();
+});
+
+/*
+================
+a silent socket still times out
+
+Byte liveness must not keep a dead wire alive: with the EnterWorld
+answer never arriving at all, the entry deadline still fires on the
+socket exactly as before (#2311).
+================
+*/
+test("a silent socket still times out", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	world.step( 9999 );
+	assert.equal( world.status().phase, "entering-world", "inside the window" );
+	world.step( 10010 );
+	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
+	world.dispose();
+});
+
+/*
+================
+a record that stops streaming still times out
+
+Bytes buy time only while they keep coming: one third of the answer
+and then silence leaves the deadline nothing to slide on (#2311).
+================
+*/
+test("a record that stops streaming still times out", async t => {
+	const transports = wtHarness( t ), sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	world.experimental( { webTransport: true } );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	await settle();
+	const transport = transports[0];
+	transport.push( wtRecord( 2, welcome() ) );
+	await settle();
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	const answer = wtRecord( 7, entered() );
+	transport.push( answer.subarray( 0, Math.ceil( answer.byteLength / 3 ) ) );
+	await settle();
+	world.step( 4000 );
+	assert.equal( world.status().phase, "entering-world", "the third bought its window" );
+	world.step( 13999 );
+	assert.equal( world.status().phase, "entering-world", "window from the last byte still open" );
+	world.step( 14010 );
+	assert.equal( world.status().phase, "reconnecting", "silence after the bytes still fails" );
+	assert.equal( sockets.length, 0, "the retry has not run yet" );
+	world.dispose();
+});
