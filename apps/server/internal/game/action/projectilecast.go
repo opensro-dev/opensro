@@ -232,8 +232,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	}
 	valid := snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
 	if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea && !p.threatDecrease {
-		_, exists := rt.resolveCombatTarget(p.divisionID, snapshot, p.cast.TargetGid, now)
-		valid = valid && exists
+		valid = valid && rt.combatTargetExists(p.divisionID, snapshot, p.cast.TargetGid)
 	}
 	// The native instant handler runs mask 0x1C before reading the
 	// timer; the projectile handler likewise.
