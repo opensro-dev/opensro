@@ -275,6 +275,21 @@ func TestSnapshotSeesTheOtherWriters(t *testing.T) {
 		}
 		viewMatches(t, r, "d", "anna")
 	})
+	t.Run("quiet sweeps keep the view", func(t *testing.T) {
+		r := NewRegistry()
+		r.Apply(plain)
+		got := r.Snapshot("d", "anna")
+		// Neither per-tick sweep moves a plain row: Expire finds no
+		// deadline and no job clock, and the checkpoint probe finds
+		// no clock either. The published view must stand.
+		r.Expire(5000)
+		r.AnyJobCheckpointDue(5000)
+		again := r.Snapshot("d", "anna")
+		if len(again) != 1 || &again[0] != &got[0] {
+			t.Fatal("a sweep over unchanged rows republished the view")
+		}
+		viewMatches(t, r, "d", "anna")
+	})
 	t.Run("link install", func(t *testing.T) {
 		r := NewRegistry()
 		r.Snapshot("d", "anna")
