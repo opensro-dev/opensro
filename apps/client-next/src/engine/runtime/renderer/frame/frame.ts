@@ -377,9 +377,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale || msaaScene) && !!worldUiBundle) ?
-										"store" as const :
-										"discard" as const
+									depthStoreOp:
+										flares || ((bloom || hdrScene || sceneScale || msaaScene) && !!worldUiBundle) ?
+											"store" as const :
+											"discard" as const
 								}
 							} :
 							{})
@@ -405,7 +406,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						tail.executeBundles( [ backgroundBundle ] );
 					}
 					if (
-						!bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && !preview.length && uiBundle
+						!bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && !preview.length &&
+						uiBundle
 					) {
 						tail.executeBundles( [ uiBundle ] );
 					}

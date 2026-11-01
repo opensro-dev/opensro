@@ -772,7 +772,9 @@ export function createRenderer(
 						{
 							target: device.portraitTarget( "__portrait" + (i + 1) ),
 							depth: portraitDepth!.view,
-							draws: device.geometry()!.singleSampled( staleDraws.live( "party-portrait-" + (i + 1), draws ) )
+							draws: device.geometry()!.singleSampled(
+								staleDraws.live( "party-portrait-" + (i + 1), draws )
+							)
 						};
 				} ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
 				const dollInput = uiProduct?.doll;
@@ -947,7 +949,11 @@ export function createRenderer(
 						} :
 						undefined,
 					dollTarget ?
-						{ target: dollTarget, depth: dollDepth!.view, draws: device.geometry()!.singleSampled( staleDraws.live( "doll", dollDraws ) ) } :
+						{
+							target: dollTarget,
+							depth: dollDepth!.view,
+							draws: device.geometry()!.singleSampled( staleDraws.live( "doll", dollDraws ) )
+						} :
 						undefined,
 					partyDraws,
 					frameId,

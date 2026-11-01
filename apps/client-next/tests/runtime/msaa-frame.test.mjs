@@ -29,15 +29,15 @@ the bundles each pass executed.
 */
 function recordingCommands() {
 	const passes = [];
-	const bundleEncoder = () => ( {
+	const bundleEncoder = () => ({
 		setPipeline() {},
 		setBindGroup() {},
 		setVertexBuffer() {},
 		setIndexBuffer() {},
 		draw() {},
 		drawIndexed() {},
-		finish: () => ( { bundle: true } )
-	} );
+		finish: () => ({ bundle: true })
+	});
 	const encoder = {
 		beginRenderPass( descriptor ) {
 			const row = { label: descriptor.label, depth: descriptor.depthStencilAttachment?.view, bundles: 0 };
@@ -56,7 +56,7 @@ function recordingCommands() {
 				end() {}
 			};
 		},
-		finish: () => ( {} )
+		finish: () => ({})
 	};
 	return { passes, commands: { createBundleEncoder: bundleEncoder, createEncoder: () => encoder, submit() {} } };
 }
@@ -110,7 +110,7 @@ function drawFrame( commands, { deferred, experimental } ) {
 	);
 }
 
-test( "the 4x depth resolves into the scene depth under the render-scale stage", () => {
+test("the 4x depth resolves into the scene depth under the render-scale stage", () => {
 	const { passes, commands } = recordingCommands();
 	const upscales = [];
 	drawFrame( commands, {
@@ -129,9 +129,9 @@ test( "the 4x depth resolves into the scene depth under the render-scale stage",
 	assert.equal( resolve.depth, "scene-depth", "the upscale reads the scene depth, so that is what must hold it" );
 	assert.deepEqual( upscales, [ "msaa-resolve" ], "the upscale runs after the resolve" );
 	assert.equal( passes.find( pass => pass.label === "hdr-world-ui" ).depth, "frame-depth" );
-} );
+});
 
-test( "the deferred tail leaves the labels to the pass after it", () => {
+test("the deferred tail leaves the labels to the pass after it", () => {
 	const { passes, commands } = recordingCommands();
 	drawFrame( commands, {
 		deferred: { asynchronous: false, prepare: () => [] },
@@ -140,4 +140,4 @@ test( "the deferred tail leaves the labels to the pass after it", () => {
 	const labels = passes.filter( pass => pass.bundles > 0 ).map( pass => pass.label );
 	assert.deepEqual( labels, [ "hdr-world-ui" ], "the world labels draw exactly once" );
 	assert.equal( passes.find( pass => pass.label === "deferred-particles" ).depth, "scene-depth" );
-} );
+});

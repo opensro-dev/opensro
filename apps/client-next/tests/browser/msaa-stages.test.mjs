@@ -3,10 +3,12 @@
 
 msaa-stages.test.mjs - the 4x multisampled scene in isolation
 
-Two proofs. The first pins the environment's own capability: a raw
+Three proofs. The owner's depth resolve runs alone on a real device under a
+validation scope, because the renderer fixture does not surface its errors.
+The next pins the environment's own capability: a raw
 WebGPU diagonal rendered single-sampled holds hard 0/255 edges, and the
 same diagonal through a 4x multisampled attachment with a resolveTarget
-blends them - the mechanism the row rides on. The second pins the
+blends them - the mechanism the row rides on. The last pins the
 renderer's wiring through the hdr-stages fixture: with the row on, the
 frame's main pass renders into the 4x scene colour and resolves into the
 canvas texture (the attachments are traced by name), the 4x depth
@@ -112,6 +114,122 @@ async function diagonalProbe() {
 	}
 	return blended;
 }
+
+/*
+================
+depthResolveProbe
+
+The MSAA owner on its own device: a 4x depth cleared to DEPTH_VALUE resolves
+into a single-sampled depth, and two depth-tested quads on either side of
+that value read it back. Returns the validation error, if any, and whether
+each quad drew.
+================
+*/
+async function depthResolveProbe() {
+	const DEPTH_VALUE = 0.5, NEARER = 0.25, FARTHER = 0.75, SIZE = 4;
+	const { createMsaa } = await import( "/src/engine/runtime/renderer/device/msaa.ts" );
+	const adapter = await navigator.gpu.requestAdapter();
+	if ( !adapter ) throw Error( "WebGPU adapter unavailable" );
+	const device = await adapter.requestDevice();
+	device.pushErrorScope( "validation" );
+	const stage = createMsaa( device );
+	const buffers = stage.prepare( SIZE, SIZE, "rgba8unorm", true );
+	if ( !buffers ) throw Error( "The enabled stage owns no buffers" );
+	const target = device.createTexture( {
+		size: [ SIZE, SIZE ],
+		format: "depth24plus",
+		usage: GPUTextureUsage.RENDER_ATTACHMENT
+	} );
+	const colour = device.createTexture( {
+		size: [ SIZE, SIZE ],
+		format: "rgba8unorm",
+		usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+	} );
+	const module = device.createShaderModule( {
+		code: `
+		@vertex fn vs(@builtin(vertex_index) i:u32,@builtin(instance_index) z:u32)->@builtin(position) vec4f {
+		 let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];
+		 return vec4f(p,f32(z)/100.0,1);
+		}
+		@fragment fn fs()->@location(0) vec4f { return vec4f(1,1,1,1); }
+		`
+	} );
+	const pipeline = device.createRenderPipeline( {
+		layout: "auto",
+		vertex: { module, entryPoint: "vs" },
+		fragment: { module, entryPoint: "fs", targets: [ { format: "rgba8unorm" } ] },
+		depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" }
+	} );
+	/*
+	================
+	drewAt
+
+	Whether a quad at this depth passes the resolved depth's test.
+	================
+	*/
+	async function drewAt( z ) {
+		const encoder = device.createCommandEncoder();
+		const clear = encoder.beginRenderPass( {
+			colorAttachments: [ { view: buffers.view, loadOp: "clear", storeOp: "discard" } ],
+			depthStencilAttachment: {
+				view: buffers.depth,
+				depthClearValue: DEPTH_VALUE,
+				depthLoadOp: "clear",
+				depthStoreOp: "store"
+			}
+		} );
+		clear.end();
+		buffers.resolveDepth( encoder, target.createView() );
+		const pass = encoder.beginRenderPass( {
+			colorAttachments: [ {
+				view: colour.createView(),
+				clearValue: [ 0, 0, 0, 1 ],
+				loadOp: "clear",
+				storeOp: "store"
+			} ],
+			depthStencilAttachment: { view: target.createView(), depthLoadOp: "load", depthStoreOp: "store" }
+		} );
+		pass.setPipeline( pipeline );
+		pass.draw( 3, 1, 0, Math.round( z * 100 ) );
+		pass.end();
+		const read = device.createBuffer( {
+			size: 256 * SIZE,
+			usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+		} );
+		encoder.copyTextureToBuffer(
+			{ texture: colour },
+			{ buffer: read, bytesPerRow: 256 },
+			[ SIZE, SIZE ]
+		);
+		device.queue.submit( [ encoder.finish() ] );
+		await read.mapAsync( GPUMapMode.READ );
+		const drew = new Uint8Array( read.getMappedRange() )[0] === 255;
+		read.unmap();
+		return drew;
+	}
+	const nearer = await drewAt( NEARER ), farther = await drewAt( FARTHER );
+	const error = await device.popErrorScope();
+	stage.dispose();
+	return { error: error?.message ?? null, nearer, farther };
+}
+
+test( "the 4x depth resolves through the owner's own shader on a real device", { timeout: 120000 }, async () => {
+	const { browser, page } = await launchProbeBrowser();
+	try {
+		await page.route(
+			CLIENT_NEXT_BASE_URL + "/",
+			route => route.fulfill( { contentType: "text/html", body: "<!doctype html><body></body>" } )
+		);
+		await page.goto( CLIENT_NEXT_BASE_URL );
+		assert.deepEqual(
+			await page.evaluate( depthResolveProbe ),
+			{ error: null, nearer: true, farther: false },
+			"The resolved depth holds the 4x depth's value"
+		);
+	} finally {
+		await browser.close();
+	}
+} );
 
 test(
 	"the device resolves a 4x multisampled diagonal into blended edge texels",
