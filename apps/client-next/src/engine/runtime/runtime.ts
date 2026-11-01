@@ -1462,7 +1462,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 ================
 startViewerRuntime
 
-Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+Port-only, not native (docs/guides/VIEWER.md): the embeddable 3D viewer page. It
 creates only the owners one drawn model needs (assets, renderer and the
 character presentation, as startRuntime builds them) and drives
 viewer/viewer.ts by animation frames only while it asks for them: an idle

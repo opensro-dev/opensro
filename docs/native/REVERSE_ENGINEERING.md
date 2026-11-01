@@ -1,18 +1,18 @@
 # Reverse engineering with Python
 
-You can investigate `SRO_Client.exe` and `SR_GameServer.exe` with Python without
+You can investigate `SRO_Client.exe` and the later server binary with Python without
 owning Binary Ninja. This tutorial gets you from a retail executable to readable
 instructions and a saved, reviewable finding. It does not produce an automatic
 C++ reconstruction or run the entire game inside Python.
 
 The v1.150 client defines data, wire messages and UI. For server-only mechanics,
-use the v1.188 server, restricted to the v1.150 feature set. Names and version
+use the later server, restricted to the v1.150 feature set. Names and version
 strings are not sufficient identity: hash each file. Never transfer addresses
 between builds without checking them.
 
 ## 1. Start an investigation
 
-Read [AGENTS.md](../AGENTS.md) and the applicable area instructions. Search the
+Read [AGENTS.md](../../AGENTS.md) and the applicable area instructions. Search the
 product and any available research for the feature, packet opcode, existing
 native address, callers and tests. Write down one question, such as "does this
 window restore its position before or after layout?"
@@ -158,7 +158,7 @@ PowerShell example; replace both paths with your actual locations:
 $rePython = (Resolve-Path .state/re-venv/Scripts/python.exe).Path
 $researchDir = 'D:/sro-research'
 $clientExe = 'D:/games/SRO_Client.exe'
-$serverExe = 'D:/games/SR_GameServer.exe'
+$serverExe = '<path to the server binary>'
 & $rePython "$researchDir/inspect_pe.py" $clientExe
 & $rePython "$researchDir/inspect_pe.py" $serverExe
 ```
@@ -232,9 +232,9 @@ Install only when the investigation needs emulation:
 On POSIX replace the interpreter path as above. Use the
 [Unicorn Python package](https://pypi.org/project/unicorn/2.1.4/).
 For a concrete repository example, read
-[`native-region-move-reference.py`](../apps/client-next/tools/native-region-move-reference.py)
+[`native-region-move-reference.py`](../../apps/client-next/tools/native-region-move-reference.py)
 before running it. It pins one client hash and constructs specific states; it is
-not a generic harness for another build or for `SR_GameServer.exe`.
+not a generic harness for another build or for the server binary.
 
 An evidence-producing harness needs all of the following:
 
@@ -256,7 +256,7 @@ An evidence-producing harness needs all of the following:
   finite test set is bounded evidence, not universal equivalence or a whole-game
   synchronization/performance result.
 
-Coordinate expensive runs using [AGENT-COORDINATION.md](AGENT-COORDINATION.md).
+Coordinate expensive runs using [AGENT-COORDINATION.md](../agents/AGENT-COORDINATION.md).
 Review contributed harness code, dependencies and hooks before local execution,
 as required by the root instructions.
 
@@ -280,7 +280,7 @@ tool names. Never overwrite the retail executable with an analysis export.
 
 Use this prompt with your real paths and question:
 
-> Read AGENTS.md, docs/REVERSE_ENGINEERING.md and docs/RESEARCH_PROGRESS.md.
+> Read AGENTS.md, docs/native/REVERSE_ENGINEERING.md and docs/native/RESEARCH_PROGRESS.md.
 > Investigate [specific native question] using [binary path] and the shared
 > research directory [absolute path]. Reuse hash-matched notes first. Set up
 > the documented isolated Python environment and install the pinned packages

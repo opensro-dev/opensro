@@ -8,7 +8,7 @@ Thanks for helping rebuild Silkroad Online! OpenSRO is a full client and server,
 
 ## 🚀 1. Get set up
 
-1. Follow [docs/GETTING_STARTED.md](../docs/GETTING_STARTED.md). The asset build needs your own v1.150 client.
+1. Follow [docs/guides/GETTING_STARTED.md](../docs/guides/GETTING_STARTED.md). The asset build needs your own v1.150 client.
 2. Working only on code? `corepack pnpm check source` runs the CI gates with no game data at all.
 3. Find something to do: issues labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue), the bug reports on [Discord](https://discord.gg/RUua9HY657), or ask in #🛠️contributing.
 
@@ -26,8 +26,8 @@ OpenSRO ports the original game's behaviour; it does not reinvent it.
 A change that makes the game behave like the original needs no special approval; it needs evidence and tests.
 
 You do not need Binary Ninja to contribute native evidence. Start with the
-[Python reverse-engineering tutorial](../docs/REVERSE_ENGINEERING.md), then follow
-[saving labels and research progress](../docs/RESEARCH_PROGRESS.md) so people and
+[Python reverse-engineering tutorial](../docs/native/REVERSE_ENGINEERING.md), then follow
+[saving labels and research progress](../docs/native/RESEARCH_PROGRESS.md) so people and
 AI agents can continue your investigation later.
 
 ---

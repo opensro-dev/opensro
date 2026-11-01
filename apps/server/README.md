@@ -4,8 +4,8 @@ Go implementation of the Silkroad Online v1.150 (Legend III) server contracts
 for the browser client. WebTransport is the primary game channel, with a
 WebSocket fallback on the same port.
 
-Local setup: [docs/GETTING_STARTED.md](../../docs/GETTING_STARTED.md).
-How the pieces fit: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).
+Local setup: [docs/guides/GETTING_STARTED.md](../../docs/guides/GETTING_STARTED.md).
+How the pieces fit: [docs/architecture/ARCHITECTURE.md](../../docs/architecture/ARCHITECTURE.md).
 
 ## Processes
 

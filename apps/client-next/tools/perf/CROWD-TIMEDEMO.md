@@ -8,7 +8,7 @@ are not restored. Use the same replay seed, camera, capture and asset hashes for
 paired experiments. A live server/client settlement check remains necessary.
 
 Announce a capture, image check or timedemo in the coordination log before
-it starts and when it ends (docs/AGENT-COORDINATION.md). Capturing perturbs
+it starts and when it ends (docs/agents/AGENT-COORDINATION.md). Capturing perturbs
 the running client; keep its window separate from FPS measurements.
 
 After the existing benchmark `instrument()` and authenticated `openClient()`:

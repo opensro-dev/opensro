@@ -3,7 +3,7 @@
 
 portrait-readback.ts - a portrait target's pixels copied back to the CPU
 
-Port-only, not native: the 3D viewer's still (docs/VIEWER.md). One copy
+Port-only, not native: the 3D viewer's still (docs/guides/VIEWER.md). One copy
 per call, submitted after the frames already queued so it reads what they
 drew, then unpacked to 8-bit RGBA (texel-readback.ts). The staging buffer
 retires through the device's retirement, never destroyed directly. The

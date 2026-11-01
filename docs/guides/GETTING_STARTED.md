@@ -5,7 +5,7 @@ cluster, run the browser client, log in.
 
 Local development targets one Windows 10/11 workstation; macOS (Apple Silicon)
 also works, see [Developing on macOS](#developing-on-macos). Production
-deployment is described in [DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md).
+deployment is described in [DEPLOYMENT.md](../../apps/server/ops/docs/DEPLOYMENT.md).
 
 ## 1. Prerequisites
 
@@ -89,12 +89,12 @@ none on a fresh machine.
 The second `assets build` and `assets ledger` check the tree against the
 publication ledger: every packed file must come from a current build step,
 so nothing that only exists on your machine reaches a release.
-[ASSET_DELIVERY.md](ASSET_DELIVERY.md) explains the ledger, and how to
+[ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md) explains the ledger, and how to
 size the build with `SRO_BUILD_JOBS` (default: every core but one).
 
 The results land in the ignored `.generated/` folder: browser assets in
 `.generated/client-public/assets/`, the server projection in
-`.generated/game-data/1.150/`. See [ASSET_PIPELINE.md](ASSET_PIPELINE.md).
+`.generated/game-data/1.150/`. See [ASSET_PIPELINE.md](../architecture/ASSET_PIPELINE.md).
 
 This prepares data for the browser client and the Go server. The original
 `SRO_Client.exe` does not connect to this server: the server speaks to
@@ -157,7 +157,7 @@ has no characters; create one on `global-official`.
 The development server proxies `/api` to the Agent and `/shards/<id>` to each
 GameWorld, so the browser only talks to its own origin. `pnpm dev:https`
 serves the same client over TLS for other devices on your network; see
-[HOSTING.md](../apps/client-next/docs/HOSTING.md).
+[HOSTING.md](../../apps/client-next/docs/HOSTING.md).
 
 ## 5. Daily workflow
 

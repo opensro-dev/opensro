@@ -150,7 +150,7 @@ def find_ffmpeg():
 	"""The ffmpeg that converts the music, refused before any record changes."""
 	ffmpeg = shutil.which("ffmpeg")
 	if not ffmpeg:
-		raise SystemExit("ffmpeg is not on PATH; it converts the Music.pk2 tracks (see docs/GETTING_STARTED.md)")
+		raise SystemExit("ffmpeg is not on PATH; it converts the Music.pk2 tracks (see docs/guides/GETTING_STARTED.md)")
 	return ffmpeg
 
 

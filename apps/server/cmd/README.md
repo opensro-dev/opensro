@@ -6,7 +6,7 @@ Run commands from the server module root:
 go run ./cmd/operations/sro-nomad status
 ```
 
-New operators should follow [Getting started](../../../docs/GETTING_STARTED.md). This file is a
+New operators should follow [Getting started](../../../docs/guides/GETTING_STARTED.md). This file is a
 command catalog, not a second setup procedure.
 
 Commands are grouped by ownership while each executable remains an independent
@@ -54,7 +54,7 @@ go build -o agent.exe ./cmd/services/sro-agent
 ```
 
 Do not run those binaries directly during normal operation.
-[Getting started](../../../docs/GETTING_STARTED.md) owns the source-checkout build/bootstrap/start
+[Getting started](../../../docs/guides/GETTING_STARTED.md) owns the source-checkout build/bootstrap/start
 sequence. [DEPLOYMENT.md](../ops/docs/DEPLOYMENT.md) owns runtime security and
 state contracts. [The Nomad guide](../ops/nomad/README.md) owns production
 fleet operations.
