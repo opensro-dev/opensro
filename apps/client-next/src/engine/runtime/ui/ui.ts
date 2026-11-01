@@ -517,6 +517,7 @@ import { pkStatusTooltip } from "@/engine/foundation/gameplay/pk-status";
 import { mouseModeLabel } from "@/engine/foundation/ui/mouse-modes";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
+import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
 import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
@@ -2282,6 +2283,10 @@ export function createUi(
 		}
 		if ( id === 1002 ) {
 			if ( game.target ) sendGameplay( { kind: "attack", gid: game.target } );
+			return;
+		}
+		if ( id === AUTO_SELECT_ACTION_ID ) {
+			if ( experimental.state().saved.autoSelect ) sendGameplay( { kind: "select-nearest-monster" } );
 			return;
 		}
 		if ( id === ACTION_STALL ) {
@@ -12700,7 +12705,9 @@ export function createUi(
 						game?.inventory.find( item => item.slot === quickSlotItemSlot( binding ) ) :
 						undefined;
 					const action = binding?.kind === 0x4a ?
-						hudData?.actions.find( a => a.id === (binding.payload & 0xffffff) ) :
+						offeredActions( hudData?.actions ?? [], experimental.state().saved.autoSelect ).find( a =>
+							a.id === (binding.payload & 0xffffff)
+						) :
 						undefined;
 					const petDesign = binding?.kind === 0x4a && binding.payload > PET_SKILL_SHORTCUT_BASE ?
 						petSkillDesign( binding.payload - PET_SKILL_SHORTCUT_BASE ) :
@@ -14901,7 +14908,7 @@ export function createUi(
 							oy
 						);
 					}
-					for ( const action of hudData.actions ) {
+					for ( const action of offeredActions( hudData.actions, experimental.state().saved.autoSelect ) ) {
 						const node = Object.values( page ).find( n =>
 							n.type === "CIFSlotWithHelp" && n.id === action.slot
 						);
@@ -26124,7 +26131,9 @@ export function createUi(
 						skillMetadataById( game, binding.payload ) :
 						undefined,
 					action = binding?.kind === 0x4a ?
-						hud.data()?.actions.find( r => r.id === (binding.payload & 0xffffff) ) :
+						offeredActions( hud.data()?.actions ?? [], experimental.state().saved.autoSelect ).find( r =>
+							r.id === (binding.payload & 0xffffff)
+						) :
 						undefined,
 					item = binding ? game.inventory.find( r => r.slot === quickSlotItemSlot( binding ) ) : undefined,
 					petDesign = binding?.kind === 0x4a ?
@@ -26247,7 +26256,7 @@ export function createUi(
 					const action = actionTooltipKey(
 						id,
 						game,
-						hudData.actions,
+						offeredActions( hudData.actions, experimental.state().saved.autoSelect ),
 						next.entities.find( e => e.gid === game.localGid )?.movementMode
 					);
 					if ( action ) tooltip = [ { value: lookup( action ), color: 0xffffffff } ];

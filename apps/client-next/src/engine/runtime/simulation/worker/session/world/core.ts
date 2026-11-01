@@ -524,6 +524,11 @@ UI and quickslot commands. A skill aims at the newest selection intent
 				if ( !gid ) return;
 				command = { kind: "pickup", gid };
 			}
+			if ( command.kind === "select-nearest-monster" ) {
+				const gid = gameplay.selectNearestMonster( entities.monsters() );
+				if ( !gid ) return;
+				command = { kind: "select", gid };
+			}
 			if ( command.kind === "player-interact" ) {
 				const attack = playerAttack( command.gid, command.alt );
 				if ( !attack ) return;

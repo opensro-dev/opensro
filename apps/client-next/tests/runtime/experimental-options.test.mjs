@@ -92,6 +92,7 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
 	attackPetTraining: false,
+	autoSelect: false,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
