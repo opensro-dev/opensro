@@ -131,6 +131,7 @@ The timetable names fields by codename; a typo would silently skip a field.
 ================
 */
 func TestEveryWaveFieldHasOpenWorldGroundInShippedData(t *testing.T) {
+	licensed.RequireGameData(t)
 	state := simulation.NewMonsterState(monster.LoadTemplate(licensed.RetailTextdataDir(t)))
 	if _, found := state.ReferenceByCodename(halloweenGourdCodename); !found {
 		t.Fatal("the Gourd is not in shipped data")
