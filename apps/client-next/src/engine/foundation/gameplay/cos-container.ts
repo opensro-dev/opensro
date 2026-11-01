@@ -17,6 +17,30 @@ export function cosGroundRequest( record: CosRecord, kind: "pickup" | "drop", ta
 	return { opcode: 0x706d, payload };
 }
 
+// A server grant into the pet bag (0xB06D type 0x15): the same record
+// shape as a pet ground pickup, minus the ground it came from.
+export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
+	if (
+		p.length < 7 || p[0] !== 1 || p[1] !== 0x15 ||
+		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) !== record.gid || !record.inventory
+	) throw Error( "Invalid COS grant result" );
+	const slot = p[6]!;
+	if ( slot === 254 ) {
+		if ( p.length !== 11 ) throw Error( "Invalid COS grant result" );
+		return record;
+	}
+	if ( slot >= record.status ) throw Error( "COS grant slot exceeds capacity" );
+	const decoded = decodeInventoryItem( p, 7, refs );
+	if ( !decoded.item || decoded.next !== p.length ) throw Error( "Invalid COS grant item" );
+	return {
+		...record,
+		inventory: [ ...record.inventory.filter( row => row.slot !== slot ), { ...decoded.item, slot } ].sort( (
+			a,
+			b
+		) => a.slot - b.slot )
+	};
+}
+
 export function cosGroundResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || ![ 0x11, 0x12 ].includes( p[1]! ) ||

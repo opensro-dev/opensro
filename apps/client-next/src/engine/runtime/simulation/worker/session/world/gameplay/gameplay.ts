@@ -230,6 +230,7 @@ import { debugWeather, entryEnvironment, environmentPacket } from "@/engine/foun
 import {
 	cosContainerRequest,
 	cosContainerResult,
+	cosGrantResult,
 	cosGroundRequest,
 	cosGroundResult
 } from "@/engine/foundation/gameplay/cos-container";
@@ -4468,6 +4469,22 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if (
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x15
+				) {
+					if ( frame.payload.length < 7 ) throw Error( "Invalid COS grant result" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 2, true ),
+						record = cosRecords.get( gid );
+					if ( !record ) throw Error( "Absent COS grant owner" );
+					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
+					// only, and a grant is source 3 (#2258).
+					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x10 ) {
 					if ( frame.payload.length !== 10 ) throw Error( "Invalid COS container result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 10 ).getUint32( 2, true ),
@@ -4544,13 +4561,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup
-				// (type 6) or server grant (type 0xE).
+				// (types 6 and 0x1C) or server grant (type 0xE).
 				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;
-				const pickupSlot =
-					(pickupGrant || frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 6) &&
+				const pickupSlot = (pickupGrant || frame.opcode === 0xb06d && frame.payload[0] === 1 &&
+							(frame.payload[1] === 6 || frame.payload[1] === 0x1c)) &&
 						frame.payload.length > 3 && frame.payload[2] !== 254 ?
-						frame.payload[2] :
-						undefined;
+					frame.payload[2] :
+					undefined;
 				const pickupBefore = pickupSlot === undefined ?
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
@@ -4668,6 +4685,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 				}
 				if ( item && pickupSlot !== undefined ) {
+					// Source-window line rules: a pickup (types 6/0x1C, source
+					// 0) names the gain even on a merge; a grant (type 0x0E,
+					// source 3) stays silent on a merge (#2256, #2257).
 					const notice = pickupNotice(
 						pickupBefore,
 						inventory.state().inventory.find( i => i.slot === pickupSlot ),
@@ -4675,13 +4695,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					);
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 				}
-				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
-				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch
-				// of CPSMission_ApplyInventoryOperation reads the u32 and prints
+				// A gain into the gold slot (0xFE) prints the whole heap: pickup
+				// types 6/0x1C and the grant type 0x0E resolve to window 0x46 with
+				// slot 0xFE (7653D0), and that branch of
+				// CPSMission_ApplyInventoryOperation reads the u32 and prints
 				// UIIT_MSG_STATE_GAIN_GOLD (7571E1). The balance itself rides 0x30B3.
 				if (
 					item && frame.opcode === 0xb06d && frame.payload.length === 7 && frame.payload[0] === 1 &&
-					frame.payload[1] === 6 && frame.payload[2] === 254
+					(frame.payload[1] === 6 || frame.payload[1] === 0x1c || frame.payload[1] === 14) &&
+					frame.payload[2] === 254
 				) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_STATE_GAIN_GOLD",
