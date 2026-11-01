@@ -458,6 +458,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || !isCOS && q.SourceSlot < inventory.EquipmentSlotEnd {
 				return false
 			}
+			// Port-only, not native (halloween.go): a sealed event
+			// helmet is never sold, however sellable its row is.
+			if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+				return false
+			}
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false

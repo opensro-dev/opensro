@@ -294,6 +294,12 @@ func (rt *Runtime) applyGroundDrop(
 
 		inv := bagOf(character)
 
+		// Port-only, not native (halloween.go): a sealed event helmet
+		// never leaves for the ground.
+		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
+			return false
+		}
+
 		// The native type-7 wire has no quantity field: the whole row goes.
 		dropped, fault := inv.Drop(sourceSlot)
 		if fault != nil {

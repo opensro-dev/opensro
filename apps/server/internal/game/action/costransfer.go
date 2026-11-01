@@ -36,6 +36,11 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		if !present {
 			return false
 		}
+		// Port-only, not native (halloween.go): a sealed event helmet
+		// never leaves for a companion's bag; bringing one back is fine.
+		if q.MovementType == wire.MoveTypePlayerToCos && rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+			return false
+		}
 		if fault := source.TransferWholeTo(dest, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
 			return false
 		}

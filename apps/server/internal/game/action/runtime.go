@@ -514,6 +514,14 @@ type Runtime struct {
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).
 	SunEventOnly progression.SunEventOnly
+	// Halloween is the rebuilt Halloween Day event (port-only, not
+	// native in this client build; progression/halloween.go). The zero
+	// value is off: no box drops, no So-ok exchange, no cleanup.
+	Halloween progression.HalloweenEvent
+	// HalloweenHelmetSeal seals the event helmets at the transfer doors
+	// (port-only, not native; progression/halloween.go). The zero value
+	// is off: the helmets move like any item.
+	HalloweenHelmetSeal progression.HalloweenHelmetSeal
 	// UniqueRules: the unique reward switches (progression/uniquerules.go; port-only, not native). Zero is native.
 	UniqueRules progression.UniqueRules
 
