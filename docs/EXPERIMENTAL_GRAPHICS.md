@@ -15,10 +15,11 @@ or the render-bundle structure.
 
 **Every renderer stage is an opt-in under Experimental > Video, off by
 default.** Off is the native 2005 frame: the plain swapchain copy, retail
-samplers (`maxAnisotropy: 1`), D3DFOG_LINEAR, flat water and no sheen. The
+samplers (`maxAnisotropy: 1`) and D3DFOG_LINEAR. The
 preferences are saved with the other Experimental options; the renderer
 switches the presentation pass and the samplers at run time, and the shader
-stages read `env.stages` (x height fog, y water reflection, z garment sheen).
+stages read `env.stages` (x height fog, y sun direction; z and w are retired).
+Water reflection and equipment shine are native Video options, not stages here.
 The asset-side block textures (section 6) keep the authored pixels and are
 not a toggle.
 
