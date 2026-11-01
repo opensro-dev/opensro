@@ -94,7 +94,9 @@ Runtime.spawnHalloweenField
 
 One field's share of a wave: the Gourds close to the field's anchor nest,
 then the ring of its own mobs just outside them, as hostile as that nest.
-A ground refusal drops one monster, never the wave.
+A ground refusal drops one monster, never the wave. The leaving is
+staggered by spawn order (halloweenWaveLifetimeMs), so the field drains
+over about a minute instead of expiring in one tick.
 ================
 */
 func (rt *Runtime) spawnHalloweenField(population simulation.WorldPopulation, field string, nowMs int64) {
@@ -106,17 +108,36 @@ func (rt *Runtime) spawnHalloweenField(population simulation.WorldPopulation, fi
 		Division: population.Division, Population: population.Lease,
 		Position:      simulation.Spawn{RegionID: nest.RegionID, X: nest.X, Y: nest.Y, Z: nest.Z},
 		FixedPosition: true, NowMs: nowMs,
-		LifetimeMs: progression.HalloweenWaveLifetime.Milliseconds(),
 	}
+	index := 0
 	gourd := request
 	gourd.Codename, gourd.RadiusSpan = halloweenGourdCodename, progression.HalloweenWaveGourdRadius
 	for range progression.HalloweenWaveGourdsPerField {
+		gourd.LifetimeMs = halloweenWaveLifetimeMs(index)
 		rt.Monsters.SpawnQuestMonster(gourd)
+		index++
 	}
 	ring := request
 	ring.Codename, ring.TacticsFrom = field, &nest
 	ring.RadiusMin, ring.RadiusSpan = progression.HalloweenWaveRingRadius, progression.HalloweenWaveRingDepth
 	for range progression.HalloweenWaveRingPerField {
+		ring.LifetimeMs = halloweenWaveLifetimeMs(index)
 		rt.Monsters.SpawnQuestMonster(ring)
+		index++
 	}
+}
+
+/*
+================
+halloweenWaveLifetimeMs
+
+When a field's index-th wave monster leaves: the wave lifetime plus one
+despawn step per place in the spawn order. The #2124 crowded-field run
+showed one synchronized 140-monster expiry costing an 11-tick burst
+(worst tick 6.2 s); the ladder drains a field over about a minute.
+================
+*/
+func halloweenWaveLifetimeMs(index int) int64 {
+	lifetime := progression.HalloweenWaveLifetime + time.Duration(index)*progression.HalloweenWaveDespawnStep
+	return lifetime.Milliseconds()
 }

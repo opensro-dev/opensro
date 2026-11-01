@@ -27,6 +27,12 @@ const (
 	// HalloweenWaveLifetime removes what a wave left: a wave's monsters
 	// have no nest, so nothing else ever would.
 	HalloweenWaveLifetime = 30 * time.Minute
+	// HalloweenWaveDespawnStep staggers that leaving: a field's monster
+	// i, in spawn order, leaves i steps after the lifetime ends, so a
+	// field drains over about a minute instead of expiring in one tick.
+	// A synchronized 140-monster expiry cost an 11-tick burst (worst
+	// tick 6.2 s) in the #2124 crowded-field run.
+	HalloweenWaveDespawnStep = time.Second
 	// HalloweenWaveGourdsPerField must stay high: the Gourd has 11 HP, so a
 	// thin wave pays only the best area damage in the field. The live
 	// crowded-field run (#2144) proves or moves this before launch.
@@ -49,7 +55,8 @@ const (
 )
 
 // halloweenRotatingHours is the rotating wave's hour, one entry a day. A
-// wave and its 30-minute lifetime keep clear of 03:00-06:00 UTC.
+// wave, its 30-minute lifetime and its minute of staggered drain keep
+// clear of 03:00-06:00 UTC.
 var halloweenRotatingHours = [...]int{7, 11, 15, 19, 1}
 
 // halloweenLowFields and halloweenHighFields are ordinary field monsters
@@ -59,6 +66,20 @@ var (
 	halloweenLowFields  = [...]string{"MOB_CH_WHITETIGER", "MOB_EU_KYKLOPES", "MOB_AM_CRAB"}
 	halloweenHighFields = [...]string{"MOB_KK_YETI_CLON", "MOB_TK_DEATHKARA_CLON", "MOB_TK_DEVILEYE"}
 )
+
+/*
+================
+HalloweenWaveSpan
+
+How long a field's wave can still have monsters in it: the lifetime
+plus the staggered drain of its last monster. The reset and backup
+clearance is judged against this, not the bare lifetime.
+================
+*/
+func HalloweenWaveSpan() time.Duration {
+	perField := HalloweenWaveGourdsPerField + HalloweenWaveRingPerField
+	return HalloweenWaveLifetime + time.Duration(perField-1)*HalloweenWaveDespawnStep
+}
 
 /*
 ================
