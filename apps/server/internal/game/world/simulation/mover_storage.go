@@ -97,6 +97,14 @@ count (monstersquad does both), they never inherit one.
 type moverSlot struct {
 	gid uint32
 	rec moverRecord
+	// gen counts whole-value sets of this row (moverStorage.set). A
+	// plan taken from the row at one generation must not commit over
+	// a newer one: the leg snapshot carries the generation it read,
+	// and CommitMoverGen drops a commit whose base has moved (#2137
+	// slice 1). Cadence-only stamps (setActivity, catchUpActivity)
+	// deliberately do not advance it: they merge into an in-flight
+	// plan by design, and commitActivity already value-guards them.
+	gen uint64
 }
 
 /*
@@ -164,6 +172,7 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		s.slots = append(s.slots, moverSlot{gid: gid})
 		s.byGID[gid] = slot
 	}
+	s.slots[slot].gen++
 	old := s.slots[slot].rec
 	after := moverInterestBoundsFor(row)
 	if !exists {
@@ -189,6 +198,27 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	live := new(monster.MoverState)
 	*live = row
 	s.slots[slot].rec = moverRecord{live: live}
+}
+
+/*
+================
+generation
+
+The row's commit generation (see moverSlot.gen); zero when the
+storage holds no row for gid - a not-yet-created row reads as
+generation zero, so a commit planned from a synthesized spawn mover
+drops if a slower lane created the row first.
+================
+*/
+func (s *moverStorage) generation(gid uint32) uint64 {
+	if s == nil {
+		return 0
+	}
+	slot, ok := s.slotOf(gid)
+	if !ok {
+		return 0
+	}
+	return s.slots[slot].gen
 }
 
 /*

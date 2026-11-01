@@ -72,7 +72,13 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	// this tick. Complete that entry before invoking its first OnTick.
 	if mover.IdleEntryPending() {
 		frames := ops.commitIdleEntry(divisionID, instance, mover, nil, nowMs)
-		mover, ok = ops.Monsters.Mover(divisionID, instance.Gid)
+		// The entry commit advanced the row; the fresh read below is
+		// the step's new base, generation included (#2137 slice 1).
+		var freshGen uint64
+		mover, freshGen, ok = ops.Monsters.MoverGeneration(divisionID, instance.Gid)
+		if ok && ops.stepGenArmed {
+			ops.stepBaseGen = freshGen
+		}
 		if !ok || mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
 			return frames, nil
 		}
@@ -90,6 +96,14 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return frames, nil
 		}
 		mover = gated
+		// The gate's own commit may have advanced the row (a whole
+		// write past the cadence stamp): re-base the step on the
+		// generation the gated value sits at (#2137 slice 1).
+		if ops.stepGenArmed {
+			if _, gen, fresh := ops.Monsters.MoverGeneration(divisionID, instance.Gid); fresh {
+				ops.stepBaseGen = gen
+			}
+		}
 	}
 	if frames, handled := ops.handleHelp(divisionID, instance, mover, divisionPlayers, nowMs); handled {
 		return frames, nil
@@ -228,7 +242,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
 		if mover.NoteMoveStopped(mover.Pose) {
-			return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover,
+			return ops.commitSteppedMoverFrames(divisionID, instance.Gid, mover,
 				[]Frame{correctionFrame(instance.Gid, mover.Pose)}), nil
 		}
 		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
