@@ -116,7 +116,13 @@ func TestPickupEntryPublicationOrder(t *testing.T) {
 						if shared {
 							go pickup()
 							wait.Eventually(t, publicationTimeout, "pickup entered tick", func() bool { return lenSignal(pickupStarted) })
-							wait.Consistently(t, pickupPublicationWindow, "pickup waits for entry publication", func() bool { return !lenSignal(pickupDone) })
+							// The entry releases its gate before encoding
+							// (#2294), so the pickup commits during the
+							// encode now; any receipt for the resuming
+							// session parks behind the bootstrap in the
+							// transport until the bootstrap queues.
+							wait.Eventually(t, publicationTimeout, "pickup commits during entry encode", func() bool { return lenSignal(pickupDone) })
+							wait.Consistently(t, pickupPublicationWindow, "nothing reaches the resuming client before its bootstrap", func() bool { return len(current.out) == 0 })
 						}
 					}
 					unblock()

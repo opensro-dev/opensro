@@ -132,20 +132,51 @@ handleEnterWorldWithDiagnostics
 ================
 */
 func handleEnterWorldWithDiagnostics(deps *Deps, payload []byte, session string) EnterWorldOutcome {
+	result, failure, ok := buildEnterWorld(deps, payload)
+	if !ok {
+		return failure
+	}
+	return encodeEnterWorld(deps, result, session)
+}
+
+/*
+================
+buildEnterWorld
+
+Decode and Build only: the snapshot the publication gate orders
+against tick commits. The encode that follows reads nothing but the
+detached result, so the enter handler releases the gate between the
+two (RegisterEnterWorld).
+================
+*/
+func buildEnterWorld(deps *Deps, payload []byte) (*BootstrapResult, EnterWorldOutcome, bool) {
 	decoded, err := transport.DecodeEnterWorld(payload)
 	if err != nil {
 		failure := Failure(nativeErrorInvalidRequest, "malformedEnterWorld")
-		return enterWorldFailureOutcome(failure)
+		return nil, enterWorldFailureOutcome(failure), false
 	}
 	result := Build(deps, BootstrapRequest{
 		DivisionID:    decoded.Division,
 		CharacterName: decoded.CharName,
 	})
 	if result.NativeResult != 1 {
-		return enterWorldFailureOutcome(result)
+		return nil, enterWorldFailureOutcome(result), false
 	}
+	return result, EnterWorldOutcome{}, true
+}
+
+/*
+================
+encodeEnterWorld
+
+Marshal the detached result, adopt what it presents and assemble the
+outcome. Touches no live record but its own doors (the adoption, the
+login stamp), so it may run after the publication gate is released.
+================
+*/
+func encodeEnterWorld(deps *Deps, result *BootstrapResult, session string) EnterWorldOutcome {
 	result.DiagnosticSessionID = session
-	resultPayload, err := browserEntryPayload(result, deps.BrowserReferences)
+	resultPayload, err := deps.entryPayload(result)
 	if err != nil {
 		failure := Failure(nativeErrorInvalidRequest, "blobEncodeFailed")
 		return enterWorldFailureOutcome(failure)
@@ -298,6 +329,9 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 		}
 		var requestName string
 		var gateWait time.Duration
+		// releaseGate frees the publication gate early (after Build, below)
+		// and is a no-op when no gate was taken; the defer is its safety net.
+		releaseGate := func() {}
 		// Acquire before invalidating the old scene. A committed pickup must
 		// publish before this replacement snapshot, including entry refills.
 		if deps.LockPublication != nil {
@@ -325,7 +359,14 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 						}
 						return
 					}
-					defer unlock()
+					release := unlock
+					releaseGate = func() {
+						if release != nil {
+							release()
+							release = nil
+						}
+					}
+					defer releaseGate()
 				}
 			}
 		}
@@ -350,16 +391,34 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 				return nil
 			}
 		}
-		outcome := handleEnterWorldWithDiagnostics(&admission, payload, s.DiagnosticSessionID())
-		if outcome.OK {
-			// Bind identity BEFORE the result frame so any handler racing
-			// on another frame already sees the bound character.
-			s.BindCharacter(outcome.DivisionID, outcome.CharacterName, ObjectIDForCharacter(outcome.Result.Character))
+		result, failure, built := buildEnterWorld(&admission, payload)
+		if built {
+			// Bind identity before the gate opens (#2294): lanes that
+			// wake during the encode below must see this scene's
+			// not-ready binding, not the previous scene's ready one —
+			// a shared pickup's recipient rotation reads exactly that.
+			s.BindCharacter(result.DivisionID, result.Character.Name, ObjectIDForCharacter(result.Character))
 		}
-		// EnterWorld is one ordered admission transaction. Publishing it as
-		// one batch prevents a large legal object list from racing the socket
-		// writer against the transport queue cap, and prevents unrelated
-		// producers from interleaving inside the native bootstrap brackets.
+		// The gate ordered this snapshot against tick commits; Build is
+		// the last read of live state. The encode and publish below read
+		// only the detached result, so the gate opens now (#2294): the
+		// marshal no longer queues every tick behind it. Wire order
+		// still holds — visibility stays fenced until the bootstrap
+		// lands, and receipts committed from now on park behind it in
+		// the transport until the bootstrap batch queues.
+		releaseGate()
+		var outcome EnterWorldOutcome
+		if !built {
+			outcome = failure
+		} else {
+			outcome = encodeEnterWorld(&admission, result, s.DiagnosticSessionID())
+		}
+		// EnterWorld publishes as one ordered batch: a large legal object
+		// list cannot race the socket writer against the transport queue
+		// cap, and unrelated producers cannot interleave inside the
+		// native bootstrap brackets. The batch goes out after the
+		// publication gate opens (#2294); the transport's visibility
+		// fence and receipt park keep this snapshot first on the wire.
 		frames := make([]transport.Frame, 1, 1+len(outcome.Frames))
 		frames[0] = transport.Frame{
 			Opcode:  transport.OpEnterWorldResult,

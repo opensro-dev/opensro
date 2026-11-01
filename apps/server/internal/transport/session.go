@@ -88,7 +88,16 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
-	observedObjects        map[uint32]struct{}
+	// pendingReceipts are private receipts accepted for this scene
+	// while its bootstrap was not yet queued (sendSceneObjectBatch):
+	// they join the queue behind the bootstrap batch, never ahead of
+	// it, and are dropped when the scene is replaced or answered with
+	// a refusal. pendingBytes is their EncodedLen sum, carried in
+	// queueBytes from acceptance until the frames drain (#2294).
+	pendingReceipts []pendingReceipt
+	pendingFrames   int
+	pendingBytes    int
+	observedObjects map[uint32]struct{}
 	// publishedSorted is observedObjects in ascending order, rebuilt into a
 	// fresh array on the first PublishedObjects read after any change marks
 	// it stale. Readers share it, so it is never written once built.
@@ -618,6 +627,7 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
+	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil
 	s.lossyBytes = 0

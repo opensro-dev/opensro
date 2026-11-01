@@ -128,6 +128,7 @@ func (s *Session) BeginSceneAdmission() {
 	s.sceneLoading = true
 	s.sceneLoadingSince = time.Now()
 	s.sceneBootstrapEnqueued = false
+	s.dropPendingReceiptsLocked()
 	s.clearObservedLocked()
 	revision := s.sceneRevision
 	s.mu.Unlock()
@@ -280,8 +281,27 @@ has no answer on the wire at all, which is the wedged-entry signature.
 */
 func (s *Session) MarkSceneBootstrapEnqueued() {
 	s.mu.Lock()
+	// A refusal (or any non-reset bootstrap answer) leaves no snapshot
+	// for parked receipts to follow; they belong to the refused scene.
+	s.dropPendingReceiptsLocked()
 	s.sceneBootstrapEnqueued = true
 	s.mu.Unlock()
+}
+
+/*
+================
+Session::dropPendingReceiptsLocked
+
+Discards receipts parked behind a bootstrap that will not queue and
+returns their bytes to the queue budget. Caller holds s.mu.
+================
+*/
+func (s *Session) dropPendingReceiptsLocked() {
+	if s.pendingBytes == 0 {
+		return
+	}
+	s.queueBytes -= s.pendingBytes
+	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 }
 
 // Initial admission still owns WorldBound hooks; scene-ready only releases
@@ -346,6 +366,20 @@ sendSceneBatch
 */
 func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) error {
 	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: revision, reset: reset})
+}
+
+/*
+================
+pendingReceipt
+
+One private receipt batch parked behind a scene whose bootstrap is
+not queued yet: its copied frames and the scope changes they carry,
+in arrival order.
+================
+*/
+type pendingReceipt struct {
+	frames  []Frame
+	changes []ObjectScopeChange
 }
 
 /*
@@ -425,7 +459,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		s.mu.Unlock()
 		return ErrSessionClosed
 	}
-	if len(s.queue) > s.hub.cfg.OutboundQueue-len(frames) ||
+	if len(s.queue)+s.pendingFrames > s.hub.cfg.OutboundQueue-len(frames) ||
 		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-batchBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
@@ -448,35 +482,63 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		// is the moment the scene has an answer on the wire.
 		s.sceneBootstrapEnqueued = true
 	}
-	for _, frame := range frames {
-		s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})
+	// A private receipt accepted while this scene's bootstrap is not
+	// queued yet waits behind it (#2294): the bootstrap is the
+	// snapshot, and a receipt committed against it must follow it on
+	// the wire, never precede it. The entry handler releases the
+	// publication gate before encoding, so this window is real now.
+	if options.allowLoading && s.sceneLoading && !s.sceneBootstrapEnqueued {
+		copied := make([]Frame, len(frames))
+		for i, frame := range frames {
+			copied[i] = Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current}
+		}
+		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: copied, changes: changes})
+		s.pendingFrames += len(copied)
+		s.pendingBytes += batchBytes
+		s.queueBytes += batchBytes
+		s.mu.Unlock()
+		return nil
 	}
-	for _, change := range changes {
-		if change.GID == 0 {
-			continue
+	enqueue := func(batch []Frame, batchChanges []ObjectScopeChange) {
+		for _, frame := range batch {
+			s.queue = append(s.queue, Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current})
 		}
-		if change.Visible {
-			if s.observedObjects == nil {
-				s.observedObjects = make(map[uint32]struct{})
+		for _, change := range batchChanges {
+			if change.GID == 0 {
+				continue
 			}
-			s.observedObjects[change.GID] = struct{}{}
-			s.publishedStale = true
-		} else {
-			delete(s.observedObjects, change.GID)
-			s.publishedStale = true
-			// Reliable removal takes priority over queued loss-tolerant motion.
-			// Retire that motion here so it cannot follow the despawn on WS.
-			kept := s.lossyKeys[:0]
-			for _, slot := range s.lossyKeys {
-				if slot.Key == uint64(change.GID) && (slot.Opcode == OpObjectSourceMove || slot.Opcode == OpObjectSourceCorrection) {
-					s.lossyBytes -= s.lossy[slot].EncodedLen()
-					delete(s.lossy, slot)
-				} else {
-					kept = append(kept, slot)
+			if change.Visible {
+				if s.observedObjects == nil {
+					s.observedObjects = make(map[uint32]struct{})
 				}
+				s.observedObjects[change.GID] = struct{}{}
+				s.publishedStale = true
+			} else {
+				delete(s.observedObjects, change.GID)
+				s.publishedStale = true
+				// Reliable removal takes priority over queued loss-tolerant motion.
+				// Retire that motion here so it cannot follow the despawn on WS.
+				kept := s.lossyKeys[:0]
+				for _, slot := range s.lossyKeys {
+					if slot.Key == uint64(change.GID) && (slot.Opcode == OpObjectSourceMove || slot.Opcode == OpObjectSourceCorrection) {
+						s.lossyBytes -= s.lossy[slot].EncodedLen()
+						delete(s.lossy, slot)
+					} else {
+						kept = append(kept, slot)
+					}
+				}
+				s.lossyKeys = kept
 			}
-			s.lossyKeys = kept
 		}
+	}
+	enqueue(frames, changes)
+	if options.reset {
+		// The bootstrap is queued; everything parked behind it lands
+		// now, in arrival order. Their bytes were counted at park.
+		for _, parked := range s.pendingReceipts {
+			enqueue(parked.frames, parked.changes)
+		}
+		s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	}
 	s.queueBytes += batchBytes
 	s.hub.observeQueueDepth(len(s.queue)+len(s.lossyKeys), s.queueBytes+s.lossyBytes)
