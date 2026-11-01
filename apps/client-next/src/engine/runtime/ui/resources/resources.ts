@@ -367,7 +367,7 @@ export function createUiAssets(
 		*/
 		residentAll( paths: readonly string[] ): boolean {
 			if ( residentLists.get( paths ) === evictions ) return true;
-			for ( const path of paths ) if ( !loaded.has( path ) && !missing.has( path ) ) return false;
+			for ( const path of paths ) if ( !loaded.has( target( path ) ) && !missing.has( path ) ) return false;
 			residentLists.set( paths, evictions );
 			return true;
 		},
