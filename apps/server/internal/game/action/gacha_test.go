@@ -249,6 +249,10 @@ func TestGachaRollIgnoresTheSelection(t *testing.T) {
 /*
 ================
 TestGachaOpeningUsesWorldAdmission
+
+An out-of-scope machine answers the no-object refusal (code 3) on
+0xB338; before the refusal lane it answered silence and stranded the
+client's pending function request.
 ================
 */
 func TestGachaOpeningUsesWorldAdmission(t *testing.T) {
@@ -260,9 +264,8 @@ func TestGachaOpeningUsesWorldAdmission(t *testing.T) {
 	}
 	assertOpcodes(t, frames, 0xb338)
 	rt.NpcRoster[0].Spawn.RegionID = 0
-	if frames, reason = rt.HandleGachaNpcAction(testDivision, c, p); reason == "" || len(frames) != 0 {
-		t.Fatal("out-of-scope machine admitted")
-	}
+	frames, reason = rt.HandleGachaNpcAction(testDivision, c, p)
+	assertNpcFunctionRefusal(t, frames, reason, selectObjectNotFound)
 }
 
 /*
