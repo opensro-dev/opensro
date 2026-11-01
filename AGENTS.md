@@ -8,6 +8,8 @@ Area rules live next to the code:
 - [`apps/client-next/AGENTS.md`](apps/client-next/AGENTS.md) - browser client
 - [`scripts/AGENTS.md`](scripts/AGENTS.md) - asset pipeline, checks, task runner
 
+Topic guides for contributors' agents live in [`docs/agents/`](docs/agents/README.md).
+
 Several agents working at once also follow
 [`docs/AGENT-COORDINATION.md`](docs/AGENT-COORDINATION.md): the shared log,
 reviews, merges and evidence for performance claims.

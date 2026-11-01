@@ -15,6 +15,7 @@
 | [RELEASE.md](../RELEASE.md) | Release checklist |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Getting a change merged: setup, native first, flags for non-native behaviour, tests and pull requests |
 | [AGENTS.md](../AGENTS.md) | Code style (id Software) and working rules for contributors and coding agents |
+| [agents/](agents/README.md) | Topic guides for contributors' coding agents |
 | [PROFILING.md](PROFILING.md) | Measuring frame rate and allocations, finding the cost, proving a fix |
 | [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | Python-only native investigation, package setup, disassembly and bounded emulation; optional Binary Ninja |
 | [RESEARCH_PROGRESS.md](RESEARCH_PROGRESS.md) | Durable labels, binary identity, evidence, backups and agent handoffs |
