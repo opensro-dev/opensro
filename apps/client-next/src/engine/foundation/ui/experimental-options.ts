@@ -74,6 +74,9 @@ export interface ExperimentalOptions {
 	readonly enchantSparks: boolean;
 	// Port-only wolf skill tree controls; requires the server's matching opt-in.
 	readonly attackPetTraining: boolean;
+	// Port-only, not native: the Actions window gains Auto Select (action 1005,
+	// select-nearest.ts). Native holds the code but no row or key reaches it.
+	readonly autoSelect: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
@@ -428,6 +431,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		attackPetTraining: enabled( "attackPetTraining" ),
+		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),

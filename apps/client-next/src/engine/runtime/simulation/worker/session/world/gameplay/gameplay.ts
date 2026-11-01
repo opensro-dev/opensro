@@ -301,6 +301,7 @@ import { createUniqueDamageRank } from "./unique-rank/unique-rank";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
+import { nearestMonster } from "@/engine/foundation/gameplay/select-nearest";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
 import { npcRefusesWalk } from "@/engine/foundation/gameplay/npc-click-refusal";
 import {
@@ -1927,6 +1928,19 @@ live pose, and the party whose drops the server may share.
 				party
 			)
 				?.gid;
+		},
+		/*
+================
+selectNearestMonster
+
+Auto Select's monster (select-nearest.ts). 695420 case 1005 waits out a
+selection already in flight (CGInterface_GetCombatInteractionMode).
+================
+		*/
+		selectNearestMonster( candidates: readonly EntityState[] ): number | undefined {
+			const pose = movement.state().pose;
+			if ( !pose || !localGid || targeting.state().targetPending ) return undefined;
+			return nearestMonster( candidates, pose )?.gid;
 		},
 		/*
 ================

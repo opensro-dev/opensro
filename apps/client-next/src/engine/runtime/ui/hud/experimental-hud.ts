@@ -354,6 +354,11 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pickup",
 		section: "Pickup pet filter",
 		rows: [ {
+			key: "autoSelect",
+			id: "experimental-auto-select",
+			label: "Auto Select",
+			description: "Actions window: select the nearest monster."
+		}, {
 			key: "smartPetPickup",
 			id: "experimental-smart-pet-pickup",
 			label: "Keep pet gold pickup when full",

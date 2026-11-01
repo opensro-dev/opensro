@@ -106,7 +106,6 @@ apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
-apps/client-next/src/engine/foundation/ui/action-layout.ts
 apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
