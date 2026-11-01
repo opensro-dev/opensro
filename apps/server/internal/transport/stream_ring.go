@@ -38,7 +38,10 @@ frame volumes grow by orders of magnitude.
 */
 package transport
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // errResumeGap refuses a resume whose stream position the ring cannot serve.
 var errResumeGap = errors.New("transport: resume position not covered")
@@ -143,8 +146,10 @@ func (s *Session) unnoteLocked(pos uint32, ordered bool) {
 ackLocked
 
 Drops the ring frames the client has applied. Freed room wakes the
-writer when the ring gate held it (ringGateLocked, #2146). Caller
-holds s.mu.
+writer when the ring gate held it (ringGateLocked, #2146), and the
+advance restamps lastStreamAck: ack progress is what keeps a parked
+writer inside its bound. A duplicate ack (n == 0) is not progress
+and restamps nothing. Caller holds s.mu.
 ================
 */
 func (s *Session) ackLocked(pos uint32) {
@@ -159,6 +164,7 @@ func (s *Session) ackLocked(pos uint32) {
 	}
 	s.ring = s.ring[n:]
 	if n > 0 {
+		s.lastStreamAck = time.Now()
 		s.cond.Broadcast()
 	}
 }
@@ -203,10 +209,14 @@ Prepares a resume from the client's last applied position: the ring frames
 past it are re-queued ahead of the frames queued while detached, and the
 position restarts there (they are counted again as they are rewritten).
 False when the position cannot be served - beyond what was written, or
-older than a frame the ring has already dropped, or a re-sent block that
-with the frames queued while detached would overflow the outbound queue
-(the next Send would then close the session as a slow consumer). Caller
-holds s.mu.
+older than a frame the ring has already dropped, or when the re-send
+with everything already queued would pass the outbound byte bound (the
+one capacity that still refuses: memory). The frame bound does not
+refuse here: the re-sent block is retained ring state, not producer
+output, and Session.Send's bound subtracts it while it drains
+(resendFrames) - refusing it turned every mid-burst detach into a
+fresh session even though the ring covered the position (#2146).
+Caller holds s.mu.
 ================
 */
 func (s *Session) resumeFromLocked(lastApplied uint32) bool {
@@ -218,11 +228,11 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 	for _, r := range s.ring {
 		resendBytes += r.f.EncodedLen()
 	}
-	if len(s.ring)+len(s.queue) >= s.hub.cfg.OutboundQueue ||
-		resendBytes+s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes {
+	if resendBytes+s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes {
 		return false
 	}
-	resend := make([]Frame, 0, len(s.ring)+len(s.queue))
+	resendCount := len(s.ring)
+	resend := make([]Frame, 0, resendCount+len(s.queue))
 	for _, r := range s.ring {
 		resend = append(resend, r.f)
 		s.queueBytes += r.f.EncodedLen()
@@ -231,6 +241,8 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 	s.ring = nil
 	s.ringBytes = 0
 	s.streamPos = lastApplied
+	s.resendFrames += resendCount
+	s.resendBytes += resendBytes
 	return true
 }
 
@@ -243,7 +255,7 @@ own numbers beside it (#2146): the reported position against the oldest
 position the ring still holds and the newest it has written. Logged on
 every refusal, so a live refusal wave names its own cause - a client
 ahead of the stream, a client behind frames the ring already dropped,
-or a re-send that would overflow the outbound queue.
+or a re-send that would overflow the outbound byte bound.
 ================
 */
 type resumeRefusal struct {

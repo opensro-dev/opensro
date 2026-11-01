@@ -170,8 +170,9 @@ func NewServerFromViper() (*Server, error) {
 func NewServer(cfg Config) (*Server, error) {
 	cfg.applyDefaults()
 	if cfg.HelloTimeout <= 0 || cfg.GracePeriod <= 0 ||
-		cfg.KeepaliveInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 {
-		return nil, fmt.Errorf("transport: handshake, grace, keepalive, idle and entry bootstrap durations must be positive")
+		cfg.KeepaliveInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 ||
+		cfg.RingParkBound <= 0 {
+		return nil, fmt.Errorf("transport: handshake, grace, keepalive, idle, entry bootstrap and ring park durations must be positive")
 	}
 	if cfg.OutboundQueue <= 0 || cfg.OutboundQueueBytes <= 0 {
 		return nil, fmt.Errorf("transport: outbound queue frame and byte limits must be positive")
