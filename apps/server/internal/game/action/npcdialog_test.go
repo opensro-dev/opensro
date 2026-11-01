@@ -354,3 +354,180 @@ func TestQuestOfferPageRefusalRow(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+dialogRefusalFixture
+
+A live selected roster NPC with the spawn gate the dialog liveness
+checks read; the caller stores the conversation it wants refused.
+================
+*/
+func dialogRefusalFixture(t *testing.T) (*Runtime, *enterworld.Character, simulation.NpcDef) {
+	t.Helper()
+	c := testCharacter()
+	rt := selectTestRuntime(c)
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
+	npc := rt.NpcRoster[0]
+	rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
+	return rt, c, npc
+}
+
+/*
+================
+assertDialogRefused
+
+A refused choice answers the one closing dialog line (the base symbol
+with its Exit row), leaves no conversation behind, and counts once
+under its reason class (#2293).
+================
+*/
+func assertDialogRefused(t *testing.T, rt *Runtime, c *enterworld.Character, frames []wire.Frame, refusal, symbol string) {
+	t.Helper()
+	if refusal == "" || len(frames) != 1 || frames[0].Opcode != wire.OpNpcDialog ||
+		string(frames[0].Payload) != string(wire.EncodeNpcDialogAnswer(symbol)) {
+		t.Fatalf("refusal = %+v / %q, want one closing answer %q", frames, refusal, symbol)
+	}
+	if _, live := rt.NpcDialogs.Get(testDivision, c.Name); live {
+		t.Fatal("the refusal left the conversation open")
+	}
+}
+
+/*
+================
+TestNpcDialogMalformedChoiceIsAnswered
+================
+*/
+func TestNpcDialogMalformedChoiceIsAnswered(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	for _, payload := range [][]byte{{}, {5, 5}} {
+		rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+			Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", Informational: true}}})
+		frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, payload)
+		assertDialogRefused(t, rt, c, frames, refusal, "BASE")
+	}
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalMalformed); got != 2 {
+		t.Fatalf("malformed refusals counted %d, want 2", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceWithoutConversationIsAnswered
+
+The still-selected live NPC's base line closes a pane the server has
+forgotten; with no selection there is no line, only the count.
+================
+*/
+func TestNpcDialogChoiceWithoutConversationIsAnswered(t *testing.T) {
+	rt, c, _ := dialogRefusalFixture(t)
+	rt.NpcRoster[0].BaseSpeechSymbol = "NPC_BS"
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{7})
+	assertDialogRefused(t, rt, c, frames, refusal, "NPC_BS")
+	rt.Selected.Clear(testDivision, c.Name)
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{7})
+	if refusal == "" || len(frames) != 0 {
+		t.Fatalf("unanswerable refusal = %+v / %q, want no frames and a reason", frames, refusal)
+	}
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalNoConversation); got != 2 {
+		t.Fatalf("no-conversation refusals counted %d, want 2", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceForUnselectedNpcIsAnswered
+================
+*/
+func TestNpcDialogChoiceForUnselectedNpcIsAnswered(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", Informational: true}}})
+	rt.Selected.Set(testDivision, c.Name, npc.ObjectID+1)
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
+	assertDialogRefused(t, rt, c, frames, refusal, "BASE")
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalNpcUnselected); got != 1 {
+		t.Fatalf("unselected refusals counted %d, want 1", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceForOutOfScopeNpcIsAnswered
+================
+*/
+func TestNpcDialogChoiceForOutOfScopeNpcIsAnswered(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", Informational: true}}})
+	rt.NpcRoster = nil
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
+	assertDialogRefused(t, rt, c, frames, refusal, "BASE")
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalNpcOutOfScope); got != 1 {
+		t.Fatalf("out-of-scope refusals counted %d, want 1", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceOutsideRowsIsCounted
+
+A choice byte that matches no row on screen (an options row past the
+end, a confirm choice that is neither yes nor no) cannot come from the
+rows the client shows: the live conversation is kept for the real
+click, and the refusal is only counted.
+================
+*/
+func TestNpcDialogChoiceOutsideRowsIsCounted(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", Informational: true}}})
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{9})
+	if refusal == "" || len(frames) != 0 {
+		t.Fatalf("options mismatch = %+v / %q, want no frames and a reason", frames, refusal)
+	}
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogConfirm, Pending: NpcQuestOption{Codename: "QUEST"}})
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{7})
+	if refusal == "" || len(frames) != 0 {
+		t.Fatalf("confirm mismatch = %+v / %q, want no frames and a reason", frames, refusal)
+	}
+	if _, live := rt.NpcDialogs.Get(testDivision, c.Name); !live {
+		t.Fatal("a mismatched choice ended the live conversation")
+	}
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalChoiceMismatch); got != 2 {
+		t.Fatalf("mismatched-choice refusals counted %d, want 2", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceWithoutOwnerIsAnswered
+================
+*/
+func TestNpcDialogChoiceWithoutOwnerIsAnswered(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "SERVICE", PromptSymbol: "OFFER", Immediate: true}}})
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
+	assertDialogRefused(t, rt, c, frames, refusal, "BASE")
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalOwnerMissing); got != 1 {
+		t.Fatalf("owner-missing refusals counted %d, want 1", got)
+	}
+}
+
+/*
+================
+TestNpcDialogChoiceWithUnknownStageIsAnswered
+================
+*/
+func TestNpcDialogChoiceWithUnknownStageIsAnswered(t *testing.T) {
+	rt, c, npc := dialogRefusalFixture(t)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogStage(99), Pending: NpcQuestOption{Codename: "QUEST"}})
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
+	assertDialogRefused(t, rt, c, frames, refusal, "BASE")
+	if got := rt.npcDialogRefusals.count(npcDialogRefusalUnknownStage); got != 1 {
+		t.Fatalf("unknown-stage refusals counted %d, want 1", got)
+	}
+}

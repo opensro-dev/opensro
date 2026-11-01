@@ -192,6 +192,130 @@ func (s *NpcDialogStore) Clear(divisionID, characterName string) {
 	delete(s.byCharacter, selectionKey(divisionID, characterName))
 }
 
+// The reason classes a refused 0x3773 choice is counted under (#2293).
+// Classes stay coarse on purpose: the counted thing is why the choice
+// could not run, not the formatted refusal line.
+const (
+	npcDialogRefusalMalformed      = "malformed choice"
+	npcDialogRefusalNoConversation = "no active conversation"
+	npcDialogRefusalNpcUnselected  = "dialog NPC no longer selected"
+	npcDialogRefusalNpcOutOfScope  = "dialog NPC no longer live/in scope"
+	npcDialogRefusalChoiceMismatch = "choice does not match the open conversation"
+	npcDialogRefusalOwnerMissing   = "quest or service owner unavailable"
+	npcDialogRefusalUnknownStage   = "unknown dialog stage"
+)
+
+/*
+================
+npcDialogRefusalCounts
+
+Refused dialog choices counted per reason class; a class's first
+refusal also logs at info, so a live server sees each reason once
+without a debug build (#2293). Later refusals of a class only move
+its count.
+================
+*/
+type npcDialogRefusalCounts struct {
+	mu      sync.Mutex
+	byClass map[string]int64
+}
+
+/*
+================
+note
+
+Counts one refusal of the class and reports whether it is the first.
+================
+*/
+func (c *npcDialogRefusalCounts) note(class string) (count int64, first bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.byClass == nil {
+		c.byClass = make(map[string]int64)
+	}
+	c.byClass[class]++
+	return c.byClass[class], c.byClass[class] == 1
+}
+
+/*
+================
+count
+
+The refusals counted for the class so far.
+================
+*/
+func (c *npcDialogRefusalCounts) count(class string) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.byClass[class]
+}
+
+/*
+================
+Runtime.noteNpcDialogRefusal
+
+Counts the refusal; the class's first one logs at info with the
+refusal line itself, so the reason is visible once per class.
+================
+*/
+func (rt *Runtime) noteNpcDialogRefusal(class, characterName, refusal string) {
+	if _, first := rt.npcDialogRefusals.note(class); first {
+		log.Infof("npcdialog: first %s refusal (for %s): %s; later refusals of this class are counted, not logged", class, characterName, refusal)
+	}
+}
+
+/*
+================
+Runtime.refuseNpcDialogChoice
+
+The refused-choice answer for a choice that had a conversation: the
+conversation ends and the NPC's base line answers with its Exit row,
+the shape every refused quest branch in this file already uses, so the
+client's talk pane is never left waiting on a choice the server will
+not run. The refusal is counted under its reason class.
+================
+*/
+func (rt *Runtime) refuseNpcDialogChoice(divisionID string, character *enterworld.Character, conversation npcDialogSession, class, refusal string) ([]wire.Frame, string) {
+	rt.NpcDialogs.Clear(divisionID, character.Name)
+	rt.noteNpcDialogRefusal(class, character.Name, refusal)
+	return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(conversation.DefaultSymbol)}}, refusal
+}
+
+/*
+================
+Runtime.countNpcDialogRefusal
+
+A refusal that keeps its conversation: the stored conversation is
+still the live one (the choice byte matched no row on screen, which
+the client cannot send from the rows it shows), so the pane is not
+stuck and no line replaces it; the refusal is only counted.
+================
+*/
+func (rt *Runtime) countNpcDialogRefusal(character *enterworld.Character, class, refusal string) ([]wire.Frame, string) {
+	rt.noteNpcDialogRefusal(class, character.Name, refusal)
+	return nil, refusal
+}
+
+/*
+================
+Runtime.refuseNpcDialogWithoutConversation
+
+A choice with no stored conversation behind it: when the still-selected
+NPC is live, its base line answers with the Exit row, so a talk pane the
+server has forgotten still gets its closing line. With nothing selected
+or live there is no line to answer with; the refusal is only counted.
+================
+*/
+func (rt *Runtime) refuseNpcDialogWithoutConversation(divisionID string, character *enterworld.Character, class, refusal string) ([]wire.Frame, string) {
+	rt.noteNpcDialogRefusal(class, character.Name, refusal)
+	if selected, bound := rt.Selected.Get(divisionID, character.Name); bound {
+		if npc, live := rt.npcForCurrentViewer(divisionID, character, selected); live && npc.BaseSpeechSymbol != "" {
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(npc.BaseSpeechSymbol)}}, refusal
+		}
+	}
+	return nil, refusal
+}
+
 /*
 ================
 registerNpcDialogResponse
@@ -205,8 +329,9 @@ func (rt *Runtime) registerNpcDialogResponse(hub *transport.Hub) {
 		}
 		frames, refusal := rt.HandleNpcDialogResponse(divisionID, character, payload)
 		if refusal != "" {
+			// A refused choice still answers (the closing dialog line);
+			// the reason string is only the log line (#2293).
 			log.Debugf("npcdialog: response refused for %s: %s", character.Name, refusal)
-			return
 		}
 		sendFrames(session, frames)
 		if public := wire.ProgressionBroadcastFrames(frames); len(public) > 0 && rt.PushDivisionPeerFrames != nil {
@@ -221,15 +346,22 @@ HandleNpcDialogResponse
 
 Rebind every one-byte choice to the still-live selected NPC before calling
 a quest mutation or service. Clear immediate choices before returning frames.
+Every refusal is counted per reason class. A stale or unrunnable choice
+also answers the closing dialog line (refuseNpcDialogChoice), since
+silence would leave the client's talk pane waiting (#2293). A choice byte
+that matches no row keeps the live conversation and is only counted.
 ================
 */
 func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterworld.Character, payload []byte) ([]wire.Frame, string) {
+	conversation, hasConversation := rt.NpcDialogs.Get(divisionID, character.Name)
 	choice, err := wire.DecodeNpcDialogChoice(payload)
 	if err != nil {
-		return nil, err.Error()
+		if hasConversation {
+			return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalMalformed, err.Error())
+		}
+		return rt.refuseNpcDialogWithoutConversation(divisionID, character, npcDialogRefusalMalformed, err.Error())
 	}
-	conversation, ok := rt.NpcDialogs.Get(divisionID, character.Name)
-	if !ok {
+	if !hasConversation {
 		// Informational Confirm terminates the interaction: later server
 		// quest talk does the same; v1.150 client 761820 closes on B4B3 [1].
 		// Re-sending the base prompt creates an endless Confirm loop. The
@@ -242,27 +374,25 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 				}
 			}
 		}
-		return nil, "no active NPC dialog"
+		return rt.refuseNpcDialogWithoutConversation(divisionID, character, npcDialogRefusalNoConversation, "no active NPC dialog")
 	}
 	selected, ok := rt.Selected.Get(divisionID, character.Name)
 	if !ok || selected != conversation.NpcGID {
-		rt.NpcDialogs.Clear(divisionID, character.Name)
-		return nil, "dialog NPC is no longer selected"
+		return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalNpcUnselected, "dialog NPC is no longer selected")
 	}
 	if _, live := rt.npcForCurrentViewer(divisionID, character, selected); !live {
-		rt.NpcDialogs.Clear(divisionID, character.Name)
-		return nil, "dialog NPC is no longer live/in scope"
+		return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalNpcOutOfScope, "dialog NPC is no longer live/in scope")
 	}
 
 	switch conversation.Stage {
 	case npcDialogOptions:
 		if choice < 5 || int(choice-5) >= len(conversation.Options) {
-			return nil, fmt.Sprintf("choice %d is outside %d option row(s)", choice, len(conversation.Options))
+			return rt.countNpcDialogRefusal(character, npcDialogRefusalChoiceMismatch, fmt.Sprintf("choice %d is outside %d option row(s)", choice, len(conversation.Options)))
 		}
 		conversation.Pending = conversation.Options[int(choice-5)]
 		if conversation.Pending.Immediate {
 			if rt.NpcQuests.Finish == nil {
-				return nil, "NPC service owner is unavailable"
+				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "NPC service owner is unavailable")
 			}
 			frames, serviceError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
 			rt.NpcDialogs.Clear(divisionID, character.Name)
@@ -276,7 +406,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			// step; closing the line is that step, so it is recorded here.
 			rt.NpcDialogs.Clear(divisionID, character.Name)
 			if rt.NpcQuests.Finish == nil {
-				return nil, "NPC quest owner is unavailable"
+				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "NPC quest owner is unavailable")
 			}
 			frames, heardError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
 			if heardError != nil {
@@ -302,7 +432,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			return rt.refuseNpcQuest(divisionID, character, conversation, page), ""
 		}
 		if choice != npcDialogFirstRow {
-			return nil, fmt.Sprintf("page choice %d is not the page's reply row", choice)
+			return rt.countNpcDialogRefusal(character, npcDialogRefusalChoiceMismatch, fmt.Sprintf("page choice %d is not the page's reply row", choice))
 		}
 		conversation.Page++
 		if conversation.Page < len(conversation.Pending.Pages) {
@@ -313,7 +443,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 	case npcDialogBranches:
 		row := int(choice) - npcDialogFirstRow
 		if row < 0 || row > len(conversation.Pending.Branches) {
-			return nil, fmt.Sprintf("branch choice %d is outside %d reply row(s)", choice, len(conversation.Pending.Branches)+1)
+			return rt.countNpcDialogRefusal(character, npcDialogRefusalChoiceMismatch, fmt.Sprintf("branch choice %d is outside %d reply row(s)", choice, len(conversation.Pending.Branches)+1))
 		}
 		rt.NpcDialogs.Clear(divisionID, character.Name)
 		if row == len(conversation.Pending.Branches) {
@@ -324,7 +454,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}, ""
 		}
 		if rt.NpcQuests.Accept == nil {
-			return nil, "quest acceptance owner is unavailable"
+			return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "quest acceptance owner is unavailable")
 		}
 		branch := conversation.Pending.Branches[row]
 		frames, acceptError := rt.NpcQuests.Accept(character, branch.Codename)
@@ -340,7 +470,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 	case npcDialogAcceptRow:
 		// The offer's only row is its acceptance: answer it as confirm's yes.
 		if choice != npcDialogFirstRow {
-			return nil, fmt.Sprintf("accept row choice %d is not the offer's row", choice)
+			return rt.countNpcDialogRefusal(character, npcDialogRefusalChoiceMismatch, fmt.Sprintf("accept row choice %d is not the offer's row", choice))
 		}
 		choice = npcDialogConfirmYes
 		fallthrough
@@ -354,17 +484,17 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}, ""
 		}
 		if choice != npcDialogConfirmYes {
-			return nil, fmt.Sprintf("confirm choice %d is neither yes(2) nor no(3)", choice)
+			return rt.countNpcDialogRefusal(character, npcDialogRefusalChoiceMismatch, fmt.Sprintf("confirm choice %d is neither yes(2) nor no(3)", choice))
 		}
 		var frames []wire.Frame
 		if conversation.Pending.Complete {
 			if rt.NpcQuests.Finish == nil {
-				return nil, "quest completion owner is unavailable"
+				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "quest completion owner is unavailable")
 			}
 			frames, err = rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
 		} else {
 			if rt.NpcQuests.Accept == nil {
-				return nil, "quest acceptance owner is unavailable"
+				return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalOwnerMissing, "quest acceptance owner is unavailable")
 			}
 			frames, err = rt.NpcQuests.Accept(character, conversation.Pending.Codename)
 		}
@@ -391,7 +521,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 		}
 		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}), ""
 	default:
-		return nil, "unknown NPC dialog stage"
+		return rt.refuseNpcDialogChoice(divisionID, character, conversation, npcDialogRefusalUnknownStage, "unknown NPC dialog stage")
 	}
 }
 
