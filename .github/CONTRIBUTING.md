@@ -93,6 +93,8 @@ Also:
   data, native capture, or inference (stated in a code comment). A claim
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
+  The `native-claims` check fails a change whose new source comments cite a
+  client address while this table has no rows.
 - **A player note belongs in a commit message.** Patch notes read the
   `Player-note:` trailer of the merged commit, so a note left only in the pull
   request's text never reaches players. `Player-note-retract: #<pr>` withdraws
