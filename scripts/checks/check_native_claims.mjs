@@ -25,12 +25,13 @@ import { fileURLToPath } from "node:url";
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 
 // The product sources that carry citations. Tests quote numbers freely.
-const CITING_SOURCE = /^apps\/(server\/.*(?<!_test)\.go|client-next\/src\/.*\.ts)$/;
+const CITING_SOURCE = /^apps\/(server\/.*(?<!_test)\.go|client-next\/src\/.*\.tsx?)$/;
 
 // The client's code begins at this address; a lower number in a comment is a
 // quantity, not a citation.
 const CLIENT_TEXT_BASE = 0x401000;
-const ADDRESS_TOKEN = /\b(?:0x|sub_)?([0-9a-fA-F]{6})\b/g;
+// Zero padding is absorbed: 0x0085EA70 is the same citation as 85EA70.
+const ADDRESS_TOKEN = /\b(0x|sub_)?0{0,2}([0-9a-fA-F]{6})\b/g;
 
 const CLAIMS_HEADING = /^##\s+Native claims\s*$/im;
 
@@ -109,14 +110,16 @@ export function addedLinesByFile( diff ) {
 citedAddresses
 
 The client addresses a piece of comment text names. A round thousand is a
-quantity far more often than a function start.
+quantity far more often than a function start, and an unprefixed token with
+no digit is a word such as "facade": write 0x on a digit-less address.
 ================
 */
 export function citedAddresses( text ) {
 	const cited = [];
 	for ( const match of text.matchAll( ADDRESS_TOKEN ) ) {
-		const value = Number.parseInt( match[1], 16 );
-		if ( value >= CLIENT_TEXT_BASE && !match[1].endsWith( "000" ) ) cited.push( match[1] );
+		const prefix = match[1], digits = match[2];
+		if ( !prefix && !/[0-9]/.test( digits ) ) continue;
+		if ( Number.parseInt( digits, 16 ) >= CLIENT_TEXT_BASE && !digits.endsWith( "000" ) ) cited.push( digits );
 	}
 	return cited;
 }

@@ -69,6 +69,12 @@ test("quantities are not addresses", () => {
 	assert.deepEqual( citedAddresses( "100000 frames, 500000 ms, then 0x58E2F4" ), [ "58E2F4" ] );
 });
 
+test("padded citations count, hex-shaped words do not", () => {
+	assert.deepEqual( citedAddresses( "at 0x0085EA70 and 0085EA71" ), [ "85EA70", "85EA71" ] );
+	assert.deepEqual( citedAddresses( "the presence facade" ), [] );
+	assert.deepEqual( citedAddresses( "0xBCBEEC and sub_BFBDAC" ), [ "BCBEEC", "BFBDAC" ] );
+});
+
 test("a comment's slashes inside a string are not a comment", () => {
 	assert.equal( commentTextByLine( 'const u = "http://861580";\n' ).size, 0 );
 });
