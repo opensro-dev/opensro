@@ -188,7 +188,15 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 		rows.push( { text: "", color: normal } );
 	}
 	if ( dialogue ) {
-		for ( const text of wrap( copy( dialogue.prompt ) ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
+		// 5D60C0 kind 5: the prompt formats the item's name, then its count.
+		const item = dialogue.item,
+			promptText = item ?
+				copy( dialogue.prompt ).replace( "%s", copy( "SN_" + item.codename ) ).replace(
+					"%d",
+					String( item.count )
+				) :
+				copy( dialogue.prompt );
+		for ( const text of wrap( promptText ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
 		rows.push( { text: "", color: normal } );
 	}
 	const options: { id: string; label: string; disabled?: boolean; color?: UiQuad["color"]; }[] = dialogue ?

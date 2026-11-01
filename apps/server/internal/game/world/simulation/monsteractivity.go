@@ -157,7 +157,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		if !m.NoteMoveStopped(m.Pose) {
 			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
 		}
-		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
+		return ops.commitSteppedMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
 	}
 	return nil, m, true
 }

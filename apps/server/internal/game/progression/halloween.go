@@ -11,8 +11,8 @@ configuration, read once at boot; both ends are UTC.
 
 The sibling event quests that still survive on the reference side fix the
 exchange's shape: one weighted roll, the first row whose running sum is
-not below the roll pays, and the event's three grain gifts pay ten at a
-time. Above that rolled tier sits the prize the 2008 notice's list cannot
+not below the roll pays. The rows and weights are the owner's event table
+(#2131), port-only like the rest of the event. Above that rolled tier sits the prize the 2008 notice's list cannot
 give: the eight event helmets at a flat box price, the exact row chosen.
 How many boxes one rolled gift costs is an inference
 (HalloweenBoxesPerGift): the notice and talk line B read as one box,
@@ -142,31 +142,37 @@ type HalloweenGift struct {
 	Weight   float64
 }
 
-// The sibling table's first seven rows (alchemy stones and reinforce
-// recipes, weights 0.3-5) are the rows the avatar gifts replace. These
-// nine keep the sibling weights verbatim; the three potion rows are its
-// grain rows and pay ten each, every other row one.
+// The owner's table (#2131), weights out of 100: buff and 500 scrolls
+// singly, grains in stacks of twenty, the buff scrolls in threes, and one
+// rare band of the four plain Elixirs at 4.5% in all. The band sits on
+// the rows monsters already drop, and the daily box cap bounds it.
 var halloweenConsumableGifts = []HalloweenGift{
-	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 10},
-	{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 10},
-	{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 10, Weight: 13},
-	{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 10, Weight: 13},
-	{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 10, Weight: 6},
+	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 12},
+	{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 12},
+	{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 20, Weight: 7},
+	{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 20, Weight: 7},
+	{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 20, Weight: 10},
+	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
 }
 
 /*
 ================
 HalloweenGifts
 
-The rolled tier of the exchange: the nine consumables at the sibling
-weights (the table's own total is the roll's range, so the sibling
-ratios hold exactly). The three potion rows are its grain rows and pay
-ten each, every other row one. The mall avatar rows are not gifts: they
-stay buyable with silk, and an event prize silk can buy is not a prize.
+The rolled tier of the exchange. The table's own total is the roll's
+range. The mall avatar rows are not gifts: they stay buyable with silk,
+and an event prize silk can buy is not a prize.
 ================
 */
 func HalloweenGifts() []HalloweenGift {

@@ -81,24 +81,32 @@ func TestHalloweenEventWindowBoundaries(t *testing.T) {
 
 /*
 ================
-TestHalloweenGiftTableKeepsTheSiblingRows
+TestHalloweenGiftTableIsTheOwnersTable
 ================
 */
-func TestHalloweenGiftTableKeepsTheSiblingRows(t *testing.T) {
+func TestHalloweenGiftTableIsTheOwnersTable(t *testing.T) {
 	gifts := HalloweenGifts()
-	if len(gifts) != 9 {
-		t.Fatalf("gift rows = %d, want the 9 consumables (avatars are not gifts)", len(gifts))
+	if len(gifts) != 17 {
+		t.Fatalf("gift rows = %d, want the 17 consumables (avatars are not gifts)", len(gifts))
 	}
 	wantConsumables := []HalloweenGift{
-		{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 7},
-		{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 7},
-		{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 7},
-		{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 7},
-		{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 10},
-		{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 10},
-		{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 10, Weight: 13},
-		{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 10, Weight: 13},
-		{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 10, Weight: 6},
+		{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 8},
+		{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 8},
+		{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 8},
+		{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 8},
+		{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 12},
+		{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 12},
+		{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 20, Weight: 7},
+		{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 20, Weight: 7},
+		{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 20, Weight: 10},
+		{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 3, Weight: 3.875},
+		{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
+		{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
+		{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
+		{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
 	}
 	total := 0.0
 	for i, want := range wantConsumables {
@@ -107,8 +115,8 @@ func TestHalloweenGiftTableKeepsTheSiblingRows(t *testing.T) {
 		}
 		total += gifts[i].Weight
 	}
-	if total != 80 {
-		t.Fatalf("gift weights sum to %v, want the sibling table's 80", total)
+	if total != 100 {
+		t.Fatalf("gift weights sum to %v, want 100", total)
 	}
 	helmets := HalloweenHelmets()
 	if len(helmets) != 8 {

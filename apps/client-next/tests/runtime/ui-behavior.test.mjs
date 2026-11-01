@@ -384,6 +384,66 @@ test("an installed atlas serves the icon family from its sheet", () => {
 	f.resources.dispose();
 });
 
+/*
+================
+atlasBaselineResidency
+
+World entry waits on residentAll over a baseline holding icon paths. A mapped
+icon has no residency of its own, so its sheet answers for it: asking the icon's
+own path held the loading screen open forever once the atlas installed.
+================
+*/
+test("a baseline of mapped icons is resident once their sheet loads", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const baseline = Object.freeze( [ a ] );
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( baseline, 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( baseline, 1 );
+	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet );
+	assert.equal( f.resources.residentAll( baseline ), false, "the sheet is still loading" );
+	f.results.set( 3, { kind: "image", image: { width: 2048, height: 2047 } } );
+	f.resources.step( baseline, 2 );
+	assert.equal( f.resources.residentAll( baseline ), true );
+	f.resources.dispose();
+});
+
+/*
+================
+atlasIconDrawable
+
+A window withholds its pixels and its hit areas until has() answers for every
+image it names, and image() draws only what has() admits. A mapped icon is ready
+when its sheet is, or the inventory never opens and no mapped icon ever draws.
+================
+*/
+test("a mapped icon is available once its sheet loads", () => {
+	const f = assetFixture();
+	const a = "/assets/images/Media_extracted/icon/a.png";
+	const sheet = "/assets/ui-atlas/sheet-0.png";
+	const manifest = {
+		version: 1,
+		sheets: [ sheet ],
+		sheetSize: [ [ 2048, 2047 ] ],
+		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
+	};
+	f.resources.step( [ a ], 0 );
+	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
+	f.resources.step( [ a ], 1 );
+	assert.equal( f.resources.has( a ), false, "the sheet is still loading" );
+	f.results.set( 3, { kind: "image", image: { width: 2048, height: 2047 } } );
+	f.resources.step( [ a ], 2 );
+	assert.equal( f.resources.has( a ), true );
+	f.resources.dispose();
+});
+
 test("a failed sheet turns the atlas off and the icons take their own paths", () => {
 	const f = assetFixture();
 	const a = "/assets/images/Media_extracted/icon/a.png";

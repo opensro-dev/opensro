@@ -1,7 +1,13 @@
 /*
 ===========================================================================
 
-npcaction.go - Package action.
+npcaction.go - the NPC function request: talk, shop and service admission
+
+One 0x7338 names an NPC and a function mask. This module binds the
+request to the still-selected NPC, runs the native hit-range gate and
+admits the function the NPC grants. Every refusal answers with the
+native 0xB338 kind-2 refusal, so the client's pending function request
+always retires; silence would leave it pending forever.
 
 ===========================================================================
 */
@@ -51,19 +57,10 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 			log.Infof("npcaction: 0x7338 mask 0x%X from %s refused: the scene is loading", mask, character.Name)
 			return
 		}
-		var frames []wire.Frame
-		var refusal string
-		if mask == gacha.InteractionFlagGacha {
-			if rt.GachaCatalog == nil {
-				refusal = "Gacha catalogue is unavailable"
-			} else {
-				frames, refusal = rt.HandleGachaNpcAction(divisionID, character, payload)
-			}
-		} else {
-			frames, refusal = rt.HandleNpcAction(divisionID, character, payload)
-		}
+		frames, refusal := rt.routeNpcAction(divisionID, character, mask, payload)
 		if refusal != "" {
-			// A typed refusal (0xB338 kind 2) still answers the client.
+			// The frames carry the refusal's 0xB338 kind-2 answer; the
+			// string is only logged.
 			log.Debugf("npcaction: 0x7338 mask 0x%X refused for %s: %s", mask, character.Name, refusal)
 		}
 		sendFrames(session, frames)
@@ -72,11 +69,35 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 
 /*
 ================
+routeNpcAction
+
+Routes one decoded 0x7338 by its mask: the gacha flag to the Magic Pop
+machine, everything else to the ordinary function handler. With no
+gacha catalogue configured the machine cannot open; the click answers
+the generic invalid-request refusal like every other unconfigured
+service, so the client's pending function request retires instead of
+hanging on silence.
+================
+*/
+func (rt *Runtime) routeNpcAction(divisionID string, character *enterworld.Character, mask uint32, payload []byte) ([]wire.Frame, string) {
+	if mask == gacha.InteractionFlagGacha {
+		if rt.GachaCatalog == nil {
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "Gacha catalogue is unavailable"
+		}
+		return rt.HandleGachaNpcAction(divisionID, character, payload)
+	}
+	return rt.HandleNpcAction(divisionID, character, payload)
+}
+
+/*
+================
 HandleNpcAction
 
 HandleNpcAction applies the ordinary talk/shop subset whose server and
 client contracts are both closed. Other masks fail closed; a visible menu
-action is never acknowledged by an unrelated feature.
+action is never acknowledged by an unrelated feature. A refusal always
+carries its 0xB338 kind-2 frame (see npcFunctionRefusal); the returned
+string is only the server's log line.
 ================
 */
 func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Character, payload []byte) ([]wire.Frame, string) {
@@ -96,7 +117,9 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		return rt.retireHide(divisionID, character, rt.Now().UnixMilli())
 	})
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
-		return nil, "bound NPC is not the current selected object"
+		// The named object is not the bound one, so the request resolves
+		// to no object: the native no-object answer (code 3).
+		return npcFunctionRefusal(selectObjectNotFound), "bound NPC is not the current selected object"
 	}
 	// A warehouse ticket's room (storage.go) opens without an NPC.
 	if mask == simulation.NpcTalkFlagStorage && rt.storageAuthority != nil && rt.remoteStorageOpen(divisionID, character, gid) {
@@ -104,10 +127,10 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	}
 	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
-		return nil, fmt.Sprintf("gid %d is not a live in-scope NPC", gid)
+		return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("gid %d is not a live in-scope NPC", gid)
 	}
 	if npc.TalkFlags&mask == 0 {
-		return nil, fmt.Sprintf("NPC %s does not grant action mask 0x%X", npc.Codename, mask)
+		return npcFunctionRefusal(npcFunctionNotOffered), fmt.Sprintf("NPC %s does not grant action mask 0x%X", npc.Codename, mask)
 	}
 	// The native NPC function request runs the hit-range check before any NPC function; a dialog the client kept
 	// open while walking away is refused here with the "too far" notice.
@@ -118,7 +141,9 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 	switch mask {
 	case simulation.NpcTalkFlagTalk:
 		if npc.BaseSpeechSymbol == "" {
-			return nil, fmt.Sprintf("NPC %s has no npcchat base-speech symbol", npc.Codename)
+			// The talk entry resolves to no dialog: the native no-object
+			// answer (code 3) retires the request.
+			return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("NPC %s has no npcchat base-speech symbol", npc.Codename)
 		}
 		if rt.NpcQuests.Options != nil {
 			options := rt.NpcQuests.Options(divisionID, character, npc.Codename)
@@ -126,7 +151,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 				symbols := make([]string, 0, len(options))
 				for _, option := range options {
 					if option.Codename == "" || option.TitleSymbol == "" || option.PromptSymbol == "" {
-						return nil, fmt.Sprintf("NPC %s quest option has an incomplete symbol contract", npc.Codename)
+						return npcFunctionRefusal(wire.ErrCodeInvalidRequest), fmt.Sprintf("NPC %s quest option has an incomplete symbol contract", npc.Codename)
 					}
 					symbols = append(symbols, option.TitleSymbol)
 				}
@@ -146,7 +171,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		rt.NpcDialogs.Clear(divisionID, character.Name)
 		return []wire.Frame{{
 			Opcode:  wire.OpNpcDialog,
-			Payload: wire.EncodeNpcDialogSymbol(npc.BaseSpeechSymbol),
+			Payload: wire.EncodeNpcDialogAnswer(npc.BaseSpeechSymbol),
 		}}, ""
 	case simulation.NpcTalkFlagShop, simulation.NpcTalkFlagSpecialTrade:
 		ack := wire.EncodeNpcInteractionAck(mask)
@@ -169,7 +194,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		// The room list (0x72C3) already reached the client; B338 [1][4]
 		// opens it beside the inventory (SetNpcShopVisible( 5 )).
 		if rt.storageAuthority == nil {
-			return nil, "storage authority is not configured"
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "storage authority is not configured"
 		}
 		// The storage function state, and the warehouse session the moves
 		// check (storage.go), which outlives later selections.
@@ -180,7 +205,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		// B338 lock 0x80000000 opens the avatar grant window beside the
 		// inventory; 0x361A (avatarbless.go) checks this function state.
 		if rt.Alchemy == nil {
-			return nil, "alchemy catalogue is not configured"
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "alchemy catalogue is not configured"
 		}
 		rt.Selected.OpenFunction(divisionID, character.Name, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
@@ -189,7 +214,7 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		// (0x7515, npcguildstorage.go); the admission runs there.
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
 	default:
-		return nil, fmt.Sprintf("action mask 0x%X has no reconstructed gameplay owner", mask)
+		return npcFunctionRefusal(npcFunctionNotOffered), fmt.Sprintf("action mask 0x%X has no reconstructed gameplay owner", mask)
 	}
 }
 

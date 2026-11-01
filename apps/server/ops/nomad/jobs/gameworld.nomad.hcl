@@ -289,6 +289,18 @@ variable "maintenance_gate_path" {
   default = ""
 }
 
+# maintenance_message names the maintenance gate's world-entry refusal
+# (port-only, not native): "off" answers SHARD_OFFLINE, a code no client
+# maps, so players keep today's player-visible result (the generic
+# admission failure) even though the wire code differs from the
+# MAINTENANCE the gate answered before this switch existed; "on" answers
+# MAINTENANCE so the client can explain the refusal instead. Set it with
+# the Agent job's same variable.
+variable "maintenance_message" {
+  type    = string
+  default = "off"
+}
+
 # pet_pacing moves grab and growth pets at four fifths of their run speed
 # (port-only, not native). "off" is native.
 variable "pet_pacing" {
@@ -1272,6 +1284,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
+        SRO_MAINTENANCE_MESSAGE                 = var.maintenance_message == "on" ? "1" : "0"
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return

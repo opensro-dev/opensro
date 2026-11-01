@@ -541,6 +541,97 @@ test("gold pickup grants are decoded without touching bag slots or acknowledging
 		assert.throws( () => inv.receive( 0xb06d, grant.subarray( 0, n ) ), /gold pickup/ );
 	}
 });
+test("quest grants apply to the bag and print only for a new row (#2256)", async () => {
+	// A quest grant (0xB06D type 14, source 3) prints the bag's item line
+	// for a new row; a merge into an existing stack stays silent. The gold
+	// heap at slot 254 is an amount, never a row, and prints its gain line.
+	const { createGameplay } = await load( "gameplay" ),
+		game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [],
+		refItemSnapshot: [ { refObjId: 5, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 5, slot: 20, body: item( 5, 10 ) } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 21, 0, ...item( 5, 7 ) ) }, 100 );
+	let s = game.take(),
+		qty = slot => s.inventory.find( row => row.slot === slot )?.quantity;
+	assert.equal( qty( 21 ), 7 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		7
+	] );
+	const granted = s.notices?.at( -1 )?.sequence;
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 20, 0, ...item( 5, 25 ) ) }, 101 );
+	s = game.take();
+	assert.equal( qty( 20 ), 25 );
+	assert.equal( s.notices?.at( -1 )?.sequence ?? granted, granted );
+	// The gold heap applies as an amount and prints the gain line.
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 254, 200, 3, 0, 0 ) }, 102 );
+	s = game.take();
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [ "UIIT_MSG_STATE_GAIN_GOLD", 968 ] );
+	assert.equal( qty( 20 ), 25 );
+	// Type 15 takes a granted row back out again ([1, 15, slot, 0] on the wire).
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 15, 21, 0 ) }, 103 );
+	s = game.take();
+	assert.equal( qty( 21 ), undefined );
+	// A grant whose item ref is zero grants nothing, a grant short of its
+	// header stops at the door, and a gold grant short of its amount refuses.
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 22, 0, 0, 0, 0, 0 ) }, 104 ),
+		/Empty quest item grant/
+	);
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 22 ) }, 105 ),
+		/Truncated quest inventory result/
+	);
+	assert.throws(
+		() => game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 14, 254, 200, 3 ) }, 106 ),
+		/Invalid quest gold grant result/
+	);
+	game.dispose();
+});
+test("a pet's pickup lands in the player bag and prints its gain (#2257)", async () => {
+	// The pet-bag pickup into the player bag (0xB06D type 0x1C, source 0)
+	// prints like a ground pickup: a new stack names its whole count, a
+	// merge names the gain. A merged pet grant instead stays silent,
+	// and gold at slot 254 prints the gain line on both result types.
+	const { createGameplay } = await load( "gameplay" ),
+		game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [],
+		refItemSnapshot: [ { refObjId: 5, typeFlags: 0x86c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 5, slot: 20, body: item( 5, 10 ) } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 22, ...item( 5, 4 ) ) }, 100 );
+	let s = game.take(),
+		qty = slot => s.inventory.find( row => row.slot === slot )?.quantity;
+	assert.equal( qty( 22 ), 4 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		4
+	] );
+	const added = s.notices?.at( -1 )?.sequence;
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 20, ...item( 5, 30 ) ) }, 101 );
+	s = game.take();
+	assert.equal( qty( 20 ), 30 );
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [
+		"UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",
+		20
+	] );
+	assert.notEqual( s.notices?.at( -1 )?.sequence, added );
+	// Gold from the pet prints the gain line, on 0x1C as on 6 and 14.
+	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0x1c, 254, 200, 1, 0, 0 ) }, 102 );
+	s = game.take();
+	assert.deepEqual( [ s.notices?.at( -1 )?.key, s.notices?.at( -1 )?.value ], [ "UIIT_MSG_STATE_GAIN_GOLD", 456 ] );
+	assert.equal( qty( 20 ), 30 );
+	game.dispose();
+});
 test("unrelated pickup cannot acknowledge a move and timed-out transactions cannot be retried", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
@@ -591,6 +682,95 @@ test("a timed-out inventory recovers on the resumed transport's EnterWorld boots
 	assert.equal( inv.state().inventoryPending, true );
 	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
 	assert.equal( inv.state().inventoryPending, false );
+});
+
+/*
+================
+an inventory answer behind a flowing stream is not lost
+
+Answers are ordered behind the inbound stream: while frames still
+arrive, an answer past its first deadline is in transit behind what has
+not been consumed yet, not lost (#2148; the movement rule of #1978).
+================
+*/
+test("an inventory answer in transit behind a flowing stream does not time out", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 30000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.equal( inv.state().inventoryPending, true );
+	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
+	assert.equal( inv.state().inventoryPending, false );
+});
+
+/*
+================
+an inventory answer is lost once the stream falls silent
+
+The hold reaches one window past the last frame; silence beyond it is
+the lost answer the hard deadline used to name at once.
+================
+*/
+test("an inventory answer is lost once the stream falls silent", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 5000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.throws( () => inv.step( 15001 ), /timed out \(0xB06D move 0\); reconnect/ );
+});
+
+/*
+================
+the inventory backstop ends the wait under a flowing stream
+
+Progress never stops, but the hard limit from the first frame seen is
+past: the answer can only be missing (#2148).
+================
+*/
+test("the inventory backstop ends the wait even while the stream keeps flowing", () => {
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	} );
+	inv.move( 13, 14, 10, 100 );
+	for ( let now = 1000; now <= 90000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	assert.equal( inv.state().inventoryPending, true );
+	assert.throws( () => inv.step( 91001 ), /timed out \(0xB06D move 0\)/ );
+});
+
+/*
+================
+inbound progress holds an open mall request
+
+The mall's request rides the same ordered stream, so the bag's holds
+carry it: a catalog answer behind a burst is not a lost request.
+================
+*/
+test("inbound progress holds an open mall request with the bag's answers", () => {
+	const inv = createInventory( () => {} );
+	inv.openMall( 0 );
+	for ( let now = 1000; now <= 30000; now += 1000 ) {
+		inv.noteInboundProgress( now );
+		inv.step( now );
+	}
+	// The last frame (30000) holds the catalog request to 40000.
+	assert.throws( () => inv.step( 40001 ), /Mall request timed out/ );
 });
 test("an item use answer sets the stack the server reports, as 755E40, even after another change", () => {
 	// Production incident: 0xB5BD 01 19 1f00 ec10 (slot 25, 31 left, an HP
@@ -762,6 +942,78 @@ test("an unanswered target release is a lost answer the bootstrap retires", () =
 	);
 	t.clear();
 	assert.equal( t.step( 30000 ), false, "the bootstrap's clear retires the release" );
+});
+
+/*
+================
+a target release behind a flowing stream is not lost
+
+The untagged release answer is ordered behind the inbound stream like
+the item lane's: while frames arrive it is in transit, not lost (#2148).
+================
+*/
+test("a target release in transit behind a flowing stream is not lost", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	for ( let now = 2000; now <= 31000; now += 1000 ) {
+		t.noteInboundProgress( now );
+		assert.equal( t.step( now ), false );
+	}
+	assert.equal( t.receive( 0xb4b3, Uint8Array.of( 1 ) ), true );
+	assert.equal( t.step( 31001 ), false );
+});
+
+/*
+================
+a target release is lost once the stream falls silent
+
+The last frame holds the release one reply window past it; silence
+beyond that is the lost answer.
+================
+*/
+test("a target release is lost once the stream falls silent", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	t.noteInboundProgress( 5000 );
+	assert.equal( t.step( 14999 ), false );
+	assert.throws(
+		() => t.step( 15000 ),
+		/** @param {Error} error */ error =>
+			error.cause === "target_release_timeout" && /Target release timed out/.test( error.message )
+	);
+});
+
+/*
+================
+the target release backstop under a flowing stream
+
+Progress never stops, but the hard limit from the first frame seen is
+past: the answer can only be missing (#2148).
+================
+*/
+test("the target release backstop ends the wait even while the stream keeps flowing", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	t.release( 1000 );
+	for ( let now = 2000; now <= 91000; now += 1000 ) {
+		t.noteInboundProgress( now );
+		assert.equal( t.step( now ), false );
+	}
+	assert.throws( () => t.step( 92001 ), /Target release timed out/ );
 });
 
 test("motion output contains only owned pose fields and gait retiming crosses regions continuously", () => {

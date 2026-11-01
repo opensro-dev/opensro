@@ -353,7 +353,8 @@ export function createUiAssets(
 			}
 			return { pending, failed: [ ...failures.keys() ] };
 		},
-		has: ( path: string ) => loaded.has( path ),
+		// A mapped icon has no residency of its own: its sheet answers for it.
+		has: ( path: string ) => loaded.has( target( path ) ),
 		/*
 		================
 		residentAll
@@ -367,7 +368,7 @@ export function createUiAssets(
 		*/
 		residentAll( paths: readonly string[] ): boolean {
 			if ( residentLists.get( paths ) === evictions ) return true;
-			for ( const path of paths ) if ( !loaded.has( path ) && !missing.has( path ) ) return false;
+			for ( const path of paths ) if ( !loaded.has( target( path ) ) && !missing.has( path ) ) return false;
 			residentLists.set( paths, evictions );
 			return true;
 		},

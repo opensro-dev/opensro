@@ -285,18 +285,42 @@ func TestRingStaleFrameTakesBackItsPosition(t *testing.T) {
 	}
 }
 
-func TestRingResumeThatWouldOverflowTheQueueIsRefused(t *testing.T) {
+/*
+================
+TestRingResumeServedWhenRingPlusQueueExceedsTheFrameBound
+
+A covered position is served however deep the re-send plus the
+detached queue stands against the producer frame bound: the block
+is retained ring state, and refusing it burned every mid-burst
+resume whose ring sat full (#2146). The block is accounted as it
+drains (resendFrames), which the producer-bound test below leans on.
+================
+*/
+func TestRingResumeServedWhenRingPlusQueueExceedsTheFrameBound(t *testing.T) {
 	_, sess, _ := attachedSession(t, false)
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
-	for i := 0; i < sess.hub.cfg.OutboundQueue/2+1; i++ {
+	ringFrames := sess.hub.cfg.OutboundQueue/2 + 1
+	for i := 0; i < ringFrames; i++ {
 		sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
 	}
-	for i := 0; i < sess.hub.cfg.OutboundQueue/2; i++ {
+	// Whatever attach already queued (the WELCOME, if the writer has
+	// not taken it yet) rides along; only the growth is the test's.
+	base := len(sess.queue)
+	queued := sess.hub.cfg.OutboundQueue / 2
+	for i := 0; i < queued; i++ {
 		sess.queue = append(sess.queue, Frame{Opcode: ringTestOp, Payload: []byte{2}})
 	}
-	if sess.resumeFromLocked(0) {
-		t.Fatal("a re-sent block that overflows the outbound queue was accepted")
+	if !sess.resumeFromLocked(0) {
+		t.Fatal("a resume the ring covers was refused for producer queue depth")
+	}
+	if sess.resendFrames != ringFrames || len(sess.queue) != base+ringFrames+queued {
+		t.Fatalf("after the resume: resend %d queued %d, want %d/%d",
+			sess.resendFrames, len(sess.queue), ringFrames, base+ringFrames+queued)
+	}
+	frameBytes := (Frame{Opcode: ringTestOp, Payload: []byte{1}}).EncodedLen()
+	if sess.resendBytes != ringFrames*frameBytes {
+		t.Fatalf("resend block = %d bytes, want %d", sess.resendBytes, ringFrames*frameBytes)
 	}
 }
 
@@ -334,22 +358,160 @@ func TestRingResumeRefusalNamesTheGap(t *testing.T) {
 		t.Fatalf("unwritten position refusal = %+v, want beyond-head at %d", d, head+1)
 	}
 
-	_, full, _ := attachedSession(t, false)
-	full.mu.Lock()
-	for i := 0; i < full.hub.cfg.OutboundQueue/2+1; i++ {
-		full.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	// The one capacity refusal left is the byte bound: a small
+	// outbound byte cap against kilobyte ring frames.
+	byteCfg := testCfg()
+	byteCfg.OutboundQueueBytes = 1024
+	byteHub := newHub(byteCfg)
+	full, err := byteHub.createSession()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for i := 0; i < full.hub.cfg.OutboundQueue/2; i++ {
+	t.Cleanup(func() { byteHub.closeSession(full, nil) })
+	if err := full.attach(newFakeConn(false), false, 0); err != nil {
+		t.Fatal(err)
+	}
+	full.mu.Lock()
+	for i := 0; i < 4; i++ {
+		full.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: make([]byte, 512)}, true)
+	}
+	for i := 0; i < 2; i++ {
 		full.queue = append(full.queue, Frame{Opcode: ringTestOp, Payload: []byte{2}})
 	}
 	if full.resumeFromLocked(0) {
 		full.mu.Unlock()
-		t.Fatal("a re-sent block that overflows the outbound queue was accepted")
+		t.Fatal("a re-sent block that overflows the outbound byte bound was accepted")
 	}
 	full.mu.Unlock()
 	d = full.ResumeRefusal(0)
 	if d.Reason != "resend-overflow" || d.QueuedFrames == 0 || d.RingFrames == 0 {
-		t.Fatalf("queue refusal = %+v, want resend-overflow with ring and queue populated", d)
+		t.Fatalf("byte refusal = %+v, want resend-overflow with ring and queue populated", d)
+	}
+}
+
+/*
+================
+TestRingResumeWithARealGapIsStillRefusedAtAttach
+
+Both ways at the attach door (#2146): a position past everything
+written, and one older than a frame the ring already dropped, still
+refuse with errResumeGap. The covered-position fix did not widen
+what the ring can serve; it stopped refusing what it already held.
+================
+*/
+func TestRingResumeWithARealGapIsStillRefusedAtAttach(t *testing.T) {
+	_, sess, _ := attachedSession(t, false)
+	sess.mu.Lock()
+	for i := 0; i <= streamRingMaxFrames; i++ {
+		sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	}
+	head := sess.streamPos
+	sess.mu.Unlock()
+
+	if err := sess.attach(newFakeConn(false), true, head+1); !errors.Is(err, errResumeGap) {
+		t.Fatalf("resume beyond the head = %v, want errResumeGap", err)
+	}
+	if err := sess.attach(newFakeConn(false), true, 0); !errors.Is(err, errResumeGap) {
+		t.Fatalf("resume behind the floor = %v, want errResumeGap", err)
+	}
+}
+
+/*
+================
+TestRingResumeServedAfterAFrameBoundBurstOutranTheClient
+
+The frame-bound twin of the entry-burst resume below, and the shape
+the queue-depth refusal used to burn (#2146): the writer paces at
+8192 frames with the tail still queued, the link dies, and the
+resume - ring plus queue well past the producer frame bound - must
+be served the unapplied tail, not refused into a fresh session.
+================
+*/
+func TestRingResumeServedAfterAFrameBoundBurstOutranTheClient(t *testing.T) {
+	_, sess, fc := attachedSession(t, false)
+	const total = streamRingMaxFrames + 64
+	payloads := make([][]byte, total)
+	for i := range payloads {
+		payloads[i] = make([]byte, 4)
+		binary.LittleEndian.PutUint32(payloads[i], uint32(i))
+	}
+	sendBurst(t, sess, fc, payloads)
+	writtenCount(t, fc, streamRingMaxFrames)
+	fc.Close("link died")
+	detached(t, sess)
+
+	second := newFakeConn(false)
+	if err := sess.attach(second, true, 100); err != nil {
+		t.Fatalf("resume from inside a full ring: %v", err)
+	}
+	for delivered := 0; delivered < total-100; {
+		wait.Eventually(t, 5*time.Second, "re-send advances", func() bool {
+			return len(dataFrames(second.written())) > delivered
+		})
+		delivered = len(dataFrames(second.written()))
+		ack := make([]byte, 4)
+		binary.LittleEndian.PutUint32(ack, uint32(100+delivered))
+		second.inbound <- Frame{Opcode: OpStreamAck, Payload: ack}
+	}
+	got := dataFrames(second.written())
+	if len(got) != total-100 {
+		t.Fatalf("re-sent %d frames, want %d", len(got), total-100)
+	}
+	for i, f := range got {
+		if idx := binary.LittleEndian.Uint32(f.Payload); idx != uint32(100+i) {
+			t.Fatalf("re-sent frame %d carries burst index %d, want %d", i, idx, 100+i)
+		}
+	}
+	sess.mu.Lock()
+	resendLeft := sess.resendFrames
+	sess.mu.Unlock()
+	if resendLeft != 0 {
+		t.Fatalf("resend block accounting left %d frames after full delivery", resendLeft)
+	}
+}
+
+/*
+================
+TestRingResendBlockDoesNotSpendTheProducerBound
+
+While a re-sent block drains, the producer frame bound measures
+producer frames only: a resumed session taking its full bound of
+fresh Sends is fine, and the next one still closes it as a slow
+consumer (#2146). Without the exemption the first Send after a
+full-ring resume closed the session the ring had just saved.
+================
+*/
+func TestRingResendBlockDoesNotSpendTheProducerBound(t *testing.T) {
+	cfg := testCfg()
+	cfg.OutboundQueue = 16
+	hub := newHub(cfg)
+	sess, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(sess, nil) })
+
+	sess.mu.Lock()
+	for i := 0; i < 32; i++ {
+		sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	}
+	if !sess.resumeFromLocked(0) {
+		sess.mu.Unlock()
+		t.Fatal("resume the ring covers was refused")
+	}
+	resend := sess.resendFrames
+	sess.mu.Unlock()
+	if resend != 32 {
+		t.Fatalf("resend block = %d frames, want 32", resend)
+	}
+
+	for i := 0; i < cfg.OutboundQueue; i++ {
+		if err := sess.Send(ringTestOp, []byte{9}); err != nil {
+			t.Fatalf("producer Send %d inside its bound: %v", i, err)
+		}
+	}
+	if err := sess.Send(ringTestOp, []byte{9}); !errors.Is(err, errSlowConsumer) {
+		t.Fatalf("producer Send past its bound = %v, want errSlowConsumer", err)
 	}
 }
 

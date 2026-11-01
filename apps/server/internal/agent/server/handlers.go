@@ -31,6 +31,31 @@ import (
 // as the shard opens is never refused as RATE_LIMITED.
 const loginStartingRetrySeconds = int(loginAttemptRefill / time.Second)
 
+// maintenanceMessageText is the one refusal sentence every surface shows
+// while SRO_MAINTENANCE_MESSAGE is on (title login here, the shard-request
+// refusal below, and the client's admission error): the client pins the
+// same sentence for the MAINTENANCE code its world hop receives.
+const maintenanceMessageText = "The server is under maintenance. Please try again later."
+
+/*
+================
+admissionOffline
+
+The refusal for a shard that is not operating (disabled, or no live
+GameWorld): SHARD_OFFLINE and the message shown today, or - port-only,
+not native, behind SRO_MAINTENANCE_MESSAGE - MAINTENANCE and the
+maintenance sentence, so a release window explains itself at login
+instead of reading as a generic admission failure. The refusal itself
+(a 200 login refusal, a 503 shard refusal) is identical either way.
+================
+*/
+func (server *Server) admissionOffline() (string, string) {
+	if server.maintenanceMessage {
+		return "MAINTENANCE", maintenanceMessageText
+	}
+	return "SHARD_OFFLINE", "The selected server is not operating."
+}
+
 /*
 ================
 serverInfo
@@ -210,7 +235,8 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !definition.Enabled {
-		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")
+		code, message := server.admissionOffline()
+		refuse(5, code, message)
 		return
 	}
 	var status shard.Status
@@ -221,7 +247,8 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !status.Operating {
-		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")
+		code, message := server.admissionOffline()
+		refuse(5, code, message)
 		return
 	}
 	if status.OnlinePlayers >= status.Capacity {
@@ -430,6 +457,18 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !operating {
+		if server.maintenanceMessage {
+			// Port-only, not native (admissionOffline): the refusal names
+			// the maintenance as a JSON code, the shape the client's
+			// admission mint reads; off keeps the plain refusal below.
+			code, message := server.admissionOffline()
+			server.logRefusal(r, refusal{Route: r.URL.Path, Code: code, Status: http.StatusServiceUnavailable,
+				Account: account, Shard: shardID, Kind: requestRefusedKind})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"ok": false, "code": code, "message": message,
+			})
+			return
+		}
 		refuse(http.StatusServiceUnavailable, "SHARD_OFFLINE", "shard unavailable")
 		return
 	}

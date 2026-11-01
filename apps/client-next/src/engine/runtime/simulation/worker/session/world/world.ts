@@ -19,7 +19,7 @@ rejects the entry.
 ===========================================================================
 */
 import { isWorldControl } from "@/engine/foundation/gameplay/commerce-controls";
-import { createNetwork } from "@/engine/runtime/simulation/worker/network/network";
+import { createNetwork, outOfMemoryFailure } from "@/engine/runtime/simulation/worker/network/network";
 import { createWorldCore } from "./core";
 import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
@@ -58,6 +58,16 @@ const TRANSPORT_STALL_CONFIRM_MS = 1000;
 // waking or a Wi-Fi hand-over outlasts a few fast attempts.
 const RESUME_GRACE_MS = 30000;
 const MAX_CHARACTER_NAME_LENGTH = 64;
+// Port-only, not native (the original has no self-explaining maintenance
+// refusal): shown when the Agent refuses the world-entry mint with the
+// MAINTENANCE code, which it only does behind SRO_MAINTENANCE_MESSAGE.
+// The text is absent from both retry lists below, so the refusal is
+// definitive: the player retries by hand, not the retry loop.
+const MAINTENANCE_ERROR = "The server is under maintenance. Please try again later.";
+// The mint refusals a retry cannot change: the ticket stays refused until
+// the player acts or the window ends. INTERNAL is absent on purpose: a
+// passing store failure must keep the resume retry, not end the session.
+const DEFINITIVE_REFUSALS = [ "MAINTENANCE", "SHARD_OFFLINE", "UNKNOWN_CHARACTER", "BAD_REQUEST" ];
 
 /*
 ================
@@ -98,6 +108,9 @@ export function createWorldSession(
 	reportIncident: ( incident: ClientIncident ) => void
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
+	// True while failure is a refusal no retry can change
+	// (DEFINITIVE_REFUSALS): the retry rule never retries it.
+	let failureDefinitive = false;
 	let diagnosticSession = "", disconnectMessage = "", incidentID = "", failureCode = "";
 	// Degraded codes reported, keyed "<diagnostic session>|<code>" (reportDegradations).
 	const reportedDegradations = new Set<string>();
@@ -170,6 +183,8 @@ onNetworkFailure
 				"unsupported" :
 				reason?.code === "reference_loading_failed" ?
 				"asset" :
+				reason?.code === "out_of_memory" ?
+				"runtime" :
 				frame ?
 				"packet" :
 				reason?.category === "software" ?
@@ -202,6 +217,10 @@ onNetworkFailure
 		kind: "transport" | "enterworld";
 		token?: string;
 		error?: string;
+		// The refusal code a structured mint refusal carried (the mint
+		// throws it as the error message). The retry rule ends on the
+		// codes in DEFINITIVE_REFUSALS.
+		code?: string;
 	} | null = null;
 	let boundThisTransport = false, resumedTransport = false, entryAttempt = false;
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
@@ -363,12 +382,26 @@ request
 			}
 		}, error => {
 			if ( !disposed && epoch === current ) {
+				const message = error instanceof Error ? error.message : "";
 				completion = {
 					epoch: current,
 					kind,
-					error: error instanceof Error && error.message === "Authentication required" ?
-						error.message :
-						"Admission request failed"
+					// Port-only, not native: a MAINTENANCE refusal explains
+					// itself (MAINTENANCE_ERROR, above); auth failure keeps
+					// its own text; every other refusal collapses to the
+					// generic admission failure exactly as before. The
+					// code (below) goes to the retry rule, which ends on
+					// DEFINITIVE_REFUSALS at either bound; anything else,
+					// answerless or INTERNAL, keeps its retry.
+					error: message === "Authentication required" ?
+						message :
+						message === "MAINTENANCE" ?
+						MAINTENANCE_ERROR :
+						"Admission request failed",
+					code: message === "Authentication required" || message === "Admission rejected" ||
+							message === "" ?
+						undefined :
+						message
 				};
 			}
 		} );
@@ -383,6 +416,7 @@ connect
 		boundThisTransport = false;
 		resumedTransport = false;
 		failure = null;
+		failureDefinitive = false;
 		failureCode = "";
 		disconnectMessage = "";
 		incidentID = "";
@@ -525,6 +559,7 @@ receive
 				deadline = 0;
 				retryAt = 0;
 				failure = null;
+				failureDefinitive = false;
 				transition( "disconnected" );
 			}
 			return;
@@ -680,6 +715,7 @@ disconnect
 			deadline = 0;
 			retryAt = 0;
 			failure = null;
+			failureDefinitive = false;
 			transition( "disconnected" );
 		},
 		/*
@@ -705,6 +741,7 @@ step
 				if ( result.epoch === epoch ) {
 					if ( result.error ) {
 						failure = result.error;
+						failureDefinitive = DEFINITIVE_REFUSALS.includes( result.code ?? "" );
 					} else {
 						try {
 							if ( result.kind === "transport" ) {
@@ -754,7 +791,11 @@ step
 			// count moving. A wire that still answers is not stalled, and its
 			// pings slide the window - up to the arm's ceiling, past which the
 			// entry is wedged, not slow, and fails the attempt (#1417, #1471).
-			const activity = network.received();
+			// The bytes count too: the EnterWorld answer is one ~1 MB record
+			// (0x0007) that yields no frame until its last byte lands, so a
+			// link still streaming it must slide the window exactly as a
+			// finished frame does (#2311).
+			const activity = network.received() + network.receivedBytes();
 			if ( activity !== inboundSeen ) {
 				inboundSeen = activity;
 				noteProgress();
@@ -777,17 +818,23 @@ step
 				} catch ( error ) {
 					// A lost answer, not a game error: every such lane resumes through
 					// the bootstrap, which rebuilds the state the request left pending.
+					// An engine out-of-memory refusal is not a game error either: the
+					// step only met the heap's limit, and reload is the remedy. A lost
+					// answer keeps precedence - its throw never reads as a refusal.
 					const cause = error instanceof Error ? error.cause : undefined;
 					const lost = lostAnswer( cause );
+					const oom = lost ? null : outOfMemoryFailure( error );
 					onNetworkFailure( lost ? `${String( error )}; ${inboundAge()}` : String( error ), undefined, {
 						category: lost ? "unknown" : "software",
-						code: lost ? cause as string : "simulation_failed",
+						code: lost ? cause as string : oom ? oom.code : "simulation_failed",
 						message: cause === MOVEMENT_RECEIPT_TIMEOUT ?
 							"Movement synchronization timed out. Please reconnect." :
 							cause === TARGET_RELEASE_TIMEOUT ?
 							"Target synchronization timed out. Please reconnect." :
 							lost ?
 							"Item synchronization timed out. Please reconnect." :
+							oom ?
+							oom.message :
 							"A game error interrupted your session.",
 						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 					} );
@@ -799,12 +846,18 @@ step
 					core.step( now, false );
 				} catch ( error ) {
 					if ( !failure ) {
-						onNetworkFailure( String( error ), undefined, {
-							category: "software",
-							code: "simulation_failed",
-							message: "A game error interrupted your session.",
-							stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
-						} );
+						// Same refusal rule as the live step: memory names
+						// itself, anything else is a simulation failure.
+						onNetworkFailure(
+							String( error ),
+							undefined,
+							outOfMemoryFailure( error ) ?? {
+								category: "software",
+								code: "simulation_failed",
+								message: "A game error interrupted your session.",
+								stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+							}
+						);
 					}
 				}
 			}
@@ -843,8 +896,13 @@ step
 						"Transport connection failed",
 						"World connection timed out"
 					].includes( error );
+				// A definitive refusal ends at either bound: the Agent
+				// refused the ticket, so a retry cannot succeed, and in a
+				// maintenance window it would loop against the gate. A
+				// dropped socket, a lost mint or INTERNAL keeps the retry.
 				if (
-					(bound || unbound) && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS)
+					!failureDefinitive && (bound || unbound) &&
+					(attempt === 0 || now - reconnectSince < RESUME_GRACE_MS)
 				) {
 					if ( attempt === 0 ) reconnectSince = now;
 					retryAt = now + Math.min( RECONNECT_DELAY_MS * 2 ** attempt++, MAX_RECONNECT_DELAY_MS );
@@ -855,6 +913,7 @@ step
 					transition( "disconnected" );
 				}
 				failure = null;
+				failureDefinitive = false;
 				lastError = error;
 			}
 		},

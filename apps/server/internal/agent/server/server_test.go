@@ -750,6 +750,58 @@ func TestLoginRefusesOfflineAndFullShard(t *testing.T) {
 
 /*
 ================
+TestAdmissionRefusalsNameMaintenance
+
+With the port-only maintenance message switch on, this Agent's refusals
+for a shard that is not operating name the maintenance: the title login
+code and message, and the shard-request refusal as a JSON code the
+client's admission mint can read. Off, both keep today's answers:
+SHARD_OFFLINE at login and the plain "shard unavailable" 503.
+================
+*/
+func TestAdmissionRefusalsNameMaintenance(t *testing.T) {
+	maintenance := "The server is under maintenance. Please try again later."
+	loginBody := `{"id":"tester","password":"123123","serverId":"alpha"}`
+
+	// A token from a leased, operating shard (the fixtures share the test
+	// signer and clock, so it verifies on both unleased fixtures below).
+	leased := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
+	publishFixtureLease(t, leased, "alpha", "worker-a", 1, 0)
+	login := performJSON(t, leased.handler, http.MethodPost, "/title/login", loginBody, "")
+	token, _ := decodeObject(t, login)["sessionToken"].(string)
+	if token == "" {
+		t.Fatalf("login = %s", login.Body.String())
+	}
+
+	on := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler(), func(config *Config) {
+		config.MaintenanceMessage = true
+	})
+	body := decodeObject(t, performJSON(t, on.handler, http.MethodPost, "/title/login", loginBody, ""))
+	if body["code"] != "MAINTENANCE" || body["message"] != maintenance {
+		t.Fatalf("maintenance login refusal = %#v", body)
+	}
+	refused := performJSON(t, on.handler, http.MethodPost, "/character/list", `{}`, token)
+	if refused.Code != http.StatusServiceUnavailable {
+		t.Fatalf("maintenance shard refusal status = %d", refused.Code)
+	}
+	body = decodeObject(t, refused)
+	if body["ok"] != false || body["code"] != "MAINTENANCE" || body["message"] != maintenance {
+		t.Fatalf("maintenance shard refusal = %#v", body)
+	}
+
+	off := newAgentFixture(t, http.NotFoundHandler(), http.NotFoundHandler())
+	body = decodeObject(t, performJSON(t, off.handler, http.MethodPost, "/title/login", loginBody, ""))
+	if body["code"] != "SHARD_OFFLINE" || body["message"] != "The selected server is not operating." {
+		t.Fatalf("default login refusal = %#v", body)
+	}
+	refused = performJSON(t, off.handler, http.MethodPost, "/character/list", `{}`, token)
+	if refused.Code != http.StatusServiceUnavailable || refused.Body.String() != "shard unavailable\n" {
+		t.Fatalf("default shard refusal = %d %q", refused.Code, refused.Body.String())
+	}
+}
+
+/*
+================
 TestHeartbeatRequiresControlSecret
 ================
 */

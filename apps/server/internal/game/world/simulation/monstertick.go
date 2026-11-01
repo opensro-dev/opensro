@@ -76,6 +76,15 @@ type MonsterMoverOps struct {
 	// per-actor publish path iterates one division's viewers instead of
 	// rescanning every session. Nil outside a leg.
 	legSessions map[string][]SessionSnapshot
+	// stepBaseGen is the commit generation the running step's actor
+	// was read at, armed by advanceAndPublish for the step's duration
+	// (#2137 slice 1): the generation-guarded commit helpers
+	// (monsterpublish.go) re-base it on each accepted commit, so a
+	// step's own commits chain while a slower lane's set in between
+	// drops the next one. Unarmed outside advanceAndPublish, where
+	// the helpers fall back to the plain commits of before.
+	stepBaseGen  uint64
+	stepGenArmed bool
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -329,20 +338,22 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		key      populationKey
 		ref      behaviorActorRef
 		players  []playerPose
+		view     *legSnapshot
 	}
 	act := func(attack MonsterAttackOperation) {
 		// Bind the capability to a value copy, not the shard's dependency
 		// set. Mutable actor state remains in MonsterState.
 		owned := *ops
 		owned.BasicAttack = attack
-		// Resolve the actor here, inside the action lane's division
-		// lock: a mover set by a slower lane (an abnormal retime, a GM
-		// or impact set) while the leg waited for the lock is then the
-		// value the step starts from, instead of a dispatch-time
-		// snapshot the step's whole-value commits would overwrite
-		// (#2047 review).
-		actor := ops.Monsters.behaviorActorMover(dispatch.key, dispatch.ref)
-		if !actor.ok {
+		// The step starts from the leg-start snapshot (monsterlegsnapshot.go),
+		// not a resolve inside this lock: a mover set by a slower lane
+		// (an abnormal retime, a GM or impact set) while the leg waited
+		// for the lock has advanced the row's commit generation, so the
+		// step's whole-value commits drop instead of overwriting it -
+		// the #2047 overwrite hazard is now carried by the generation
+		// guard rather than by resolve-inside-the-lock timing.
+		actor, ok := dispatch.view.actor(dispatch.ref)
+		if !ok {
 			return
 		}
 		owned.advanceAndPublish(dispatch.division, actor, dispatch.players, nowMs, sessions, push)
@@ -368,15 +379,18 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			players = append(players, player)
 			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
+		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
 		for _, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
 			// All dispatch decides is that the actor is still there: a
-			// despawn between scheduling and dispatch drops it here, and
-			// its instance and mover are read only inside the action
-			// lane, under its division lock (act), so nothing read here
-			// can go stale while the leg waits for that lock (#2047
-			// review). The direct path below resolves at the same
-			// adjacency it always had.
+			// despawn between scheduling and dispatch drops it here. Its
+			// instance and mover come from the batch's leg-start
+			// snapshot; a slower lane's set since then has advanced the
+			// mover's commit generation, so the step's whole-value
+			// commits drop instead of overwriting the newer value
+			// (#2047 review, carried by the generation since #2137
+			// slice 1). The direct path below reads the same view at
+			// the same adjacency it always had.
 			if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
 				continue
 			}
@@ -387,20 +401,20 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.key, dispatch.ref, dispatch.players = divisionID, batch.key, ref, players
+				dispatch.division, dispatch.key, dispatch.ref, dispatch.players, dispatch.view = divisionID, batch.key, ref, players, view
 				advanceBefore := stats.advance
 				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
 				// The lane wall outside the step: the per-actor
-				// division-lock entry plus the in-lock actor
-				// resolution act runs before advanceAndPublish.
+				// division-lock entry plus the snapshot read act
+				// runs before advanceAndPublish.
 				if outside := time.Since(laneStarted) - (stats.advance - advanceBefore); outside > 0 {
 					stats.lane += outside
 				}
 				continue
 			}
-			actor := ops.Monsters.behaviorActorMover(batch.key, ref)
-			if !actor.ok {
+			actor, ok := view.actor(ref)
+			if !ok {
 				continue
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
@@ -496,7 +510,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 		mustMoverTransition(&mover, monster.MoverEventEntryRefused, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		mover, frames := ops.planIdleEntry(instance, mover, nowMs)
-		return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+		return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 	}
 	// Nest containment, probe origin and movement goal are separate inputs.
 	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
@@ -513,7 +527,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 			// Missing geometry cannot be interpreted as a successful probe.
 			mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 			mover, frames := ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+			return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 		}
 		motion = motion.AfterProbe(path.Result())
 	}
@@ -521,7 +535,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 }
 
 /*
@@ -543,6 +557,32 @@ func (ops *MonsterMoverOps) commitSegment(divisionID string, instance monster.In
 	return ops.commitPreparedSegment(divisionID, before, instance, mover, dest, speed, channel, nowMs)
 }
 
+/*
+================
+commitSteppedNavigation
+
+The step's navigation-transaction commits (commitSegment,
+startReturnLeg, startWanderLeg, commitIdleEntry) funnel here: the
+transaction itself value-guards its commit exactly as before, and
+an accepted one re-bases the running step's commit generation on
+the row's new generation, so the step's later generation-guarded
+commits chain off it instead of dropping against their own leg
+(#2137 slice 1). The stored value equalling next is the acceptance
+witness - commitNavigation's frame return cannot tell a landed
+commit with no frames from a dropped one. Unarmed callers pay
+nothing.
+================
+*/
+func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
+	if ops.stepGenArmed {
+		if mover, gen, ok := ops.Monsters.MoverGeneration(divisionID, before.instance.Gid); ok && mover == next {
+			ops.stepBaseGen = gen
+		}
+	}
+	return committed
+}
+
 // Approach allocation and geometry must publish in the same navigation transaction.
 /*
 ================
@@ -551,7 +591,7 @@ commitPreparedSegment
 */
 func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 }
 
 // Plan only: terrain sampling may run concurrently with damage/lifecycle work.
