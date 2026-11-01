@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -49,7 +49,7 @@ kept. Outside an order the amulet cannot be used.
 ================
 */
 func TestAmuletTurnsAuthenticOrFlawedUntilTheOrderIsHeld(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := amuletFixture(t)
 	if _, admitted := rt.BeginItemUse(c, amuletHunted, adventurerHorse(), 0); admitted {
 		t.Fatal("amulet used without an order")
@@ -84,7 +84,7 @@ its OK row, answered _08; two completions open QNO_WC_WAREHOUSE_W_3.
 ================
 */
 func TestAmuletOrderRepeatsThenOpensTheSecond(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := amuletFixture(t)
 	second := mustQuest(t, rt, amuletSecondQuest)
 	for run := 0; run < 2; run++ {

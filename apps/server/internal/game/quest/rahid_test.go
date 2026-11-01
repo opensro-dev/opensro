@@ -16,7 +16,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const rahidGiant = 4
@@ -83,7 +83,7 @@ Shiphr offers Rahid 5 through the four story pages, then _09.
 ================
 */
 func TestRahidOfferPagesBeforeTheOffer(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidFixture(t)
 	for _, row := range rt.OptionsForNpc(c, def.StartNpcCodename) {
 		if row.Codename != rahidQuest {
@@ -106,7 +106,7 @@ Only a giant MOB_RM_ROCKY (grade 4, party or not) drops, and it drops five.
 ================
 */
 func TestRahidEssencesDropOnlyFromGuardianRockies(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _ := rahidFixture(t)
 	if _, err := rt.StartQuest(c, rahidQuest); err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ Seven Piles stand the objective complete and completion clears the Essences.
 ================
 */
 func TestRahidPeaksRunInOrder(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidFixture(t)
 	if _, err := rt.StartQuest(c, rahidQuest); err != nil {
 		t.Fatal(err)

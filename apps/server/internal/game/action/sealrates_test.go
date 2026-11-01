@@ -14,7 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -29,7 +29,7 @@ times as wide, each seal's chance is its multiplier times the old one.
 ================
 */
 func TestSealRatesKeepEachSealAtItsMultiplier(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(progression.EnvBetaSealRates, "on")
 	rt, _, _, _ := newCombatTestRuntime(t, 1)
 	rt.deps.(*enterworld.Deps).Items = shippedItems(t)

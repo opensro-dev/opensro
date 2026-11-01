@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -30,7 +30,7 @@ TestOpenValidatesCompletePinnedBundle
 ================
 */
 func TestOpenValidatesCompletePinnedBundle(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	root, manifestDigest := writeTestBundle(t, nil)
 
 	bundle, err := Open(root, manifestDigest)

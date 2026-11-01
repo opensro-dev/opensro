@@ -11,8 +11,8 @@ import (
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -130,7 +130,7 @@ potion refill still tops up to the native 50.
 */
 func TestShippedStackSizesReachEveryReader(t *testing.T) {
 	tier.Long(t, "stack-size raises reach every reader of the shipped itemdata")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	raised, err := items.ApplyStackSizes(StackSizes{"potion": 2000, "elixir": 50, "universalpill": 500})
 	if err != nil {
@@ -200,7 +200,7 @@ so no stored stack or mall bag exceeds its row; nothing else changes.
 ================
 */
 func TestShippedLuckyPowderStacksTo500(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	native := NewTextdataItems(dir)
 	items := NewTextdataItems(dir)
@@ -243,7 +243,7 @@ only raises. Every other row keeps its cap.
 ================
 */
 func TestShippedAmmunitionStacksTo2500(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	native := NewTextdataItems(dir)
 	items := NewTextdataItems(dir)

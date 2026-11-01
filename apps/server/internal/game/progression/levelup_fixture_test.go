@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 type burstFixture struct {
@@ -72,7 +72,7 @@ TestLevelUpBurstFixturePinsRealEmitterBytes
 // substitute table would exercise a different server than the one
 // deployed) and compares every frame byte and every persisted field.
 func TestLevelUpBurstFixturePinsRealEmitterBytes(t *testing.T) {
-	textdataDir := licensed.RetailTextdataDir(t)
+	textdataDir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(textdataDir, "leveldata.txt")); err != nil {
 		t.Skipf("shipped textdata not present in this checkout: %v", err)
 	}

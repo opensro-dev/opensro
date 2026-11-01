@@ -22,8 +22,8 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -32,7 +32,7 @@ TestAstralOnAccessoryFollowsTheImmortalCharge
 ================
 */
 func TestAstralOnAccessoryFollowsTheImmortalCharge(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	c, err := LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {

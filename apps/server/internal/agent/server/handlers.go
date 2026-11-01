@@ -66,12 +66,18 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 ================
 serverRows
 
-The public server list rows of a directory snapshot.
+The public server list rows of a directory snapshot: the enabled shards.
+A disabled shard can never hold a lease or admit a login, so it is not a
+row. An enabled shard with no live GameWorld stays listed, and the title
+shows it as Check.
 ================
 */
 func serverRows(statuses []shard.Status) []serverInfo {
 	rows := make([]serverInfo, 0, len(statuses))
 	for _, status := range statuses {
+		if !status.Enabled {
+			continue
+		}
 		rows = append(rows, serverInfo{
 			ID:             status.ID,
 			NativeServerID: status.NativeServerID,
@@ -92,7 +98,7 @@ func serverRows(statuses []shard.Status) []serverInfo {
 OfflineServerList
 
 The /title/servers body this catalog's Agent serves while no GameWorld has
-a lease: every shard listed, none operating, so the title shows each one as
+a lease: every enabled shard listed, none operating, so the title shows each as
 native "Check" (CPSTitle 0x747E1F). The release edge serves it in place of
 the Agent while the Agent itself is down for maintenance.
 ================

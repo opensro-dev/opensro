@@ -79,22 +79,22 @@
 		"types": ["node"],
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"paths": {
-			"@wip/*": ["./reconstruct/wip/browser-1to1/*"],
-			"@sro/wip-bridge/*": ["./packages/wip-bridge/src/*"]
+			"@wip/*": ["../reconstruct/wip/browser-1to1/*"],
+			"@sro/wip-bridge/*": ["../packages/wip-bridge/src/*"]
 		}
 	},
 	"files": [
 		// ambient types: window debug hooks used by browser-context code
 		// test/ (see banner for the idStyleChecker.test.mjs note)
-		"scripts/test/assets/assetPackGroupParity.test.mjs",
-		"scripts/test/assets/assetPackIntegrity.test.mjs",
-		"scripts/test/assets/generatedAssetMembership.test.mjs",
-		"scripts/test/assets/jsonAssetCompression.test.mjs",
-		"scripts/test/mission/missionMinimapBuild.test.mjs",
-		"scripts/test/helpers/outdoorRegionPayloadCheck.mjs",
-		"scripts/test/world/outdoorWorldRegionResources.test.mjs",
-		"scripts/test/assets/pythonRun.test.mjs",
-		"scripts/test/assets/rebuildLockInterop.test.mjs",
-		"scripts/test/world/worldFormats.test.mjs"
+		"test/assets/assetPackGroupParity.test.mjs",
+		"test/assets/assetPackIntegrity.test.mjs",
+		"test/assets/generatedAssetMembership.test.mjs",
+		"test/assets/jsonAssetCompression.test.mjs",
+		"test/mission/missionMinimapBuild.test.mjs",
+		"test/helpers/outdoorRegionPayloadCheck.mjs",
+		"test/world/outdoorWorldRegionResources.test.mjs",
+		"test/assets/pythonRun.test.mjs",
+		"test/assets/rebuildLockInterop.test.mjs",
+		"test/world/worldFormats.test.mjs"
 	]
 }

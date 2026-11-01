@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -32,7 +32,7 @@ TestFirecrackersHandOverThenReportToYeosun
 ================
 */
 func TestFirecrackersHandOverThenReportToYeosun(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_ACCESSORY_2")
 	def := mustQuest(t, rt, "QNO_WC_ACCESSORY_3")
@@ -94,7 +94,7 @@ at Jinjin, the handed-over quest pays as it would at Yeosun.
 ================
 */
 func TestHandOverNpcPaysOnceHandedOver(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_ACCESSORY_2")
 	def := mustQuest(t, rt, "QNO_WC_ACCESSORY_3")
@@ -120,7 +120,7 @@ Abandonment removes the exchange with the delivered items.
 ================
 */
 func TestAbandonedHandOverLeavesNoExchange(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_ACCESSORY_2")
 	def := mustQuest(t, rt, "QNO_WC_ACCESSORY_3")
@@ -145,7 +145,7 @@ lock, never indexed, and leaves the bag as it was.
 ================
 */
 func TestHandOverRefusesARecordWithoutItsNode(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_ACCESSORY_2")
 	def := mustQuest(t, rt, "QNO_WC_ACCESSORY_3")
@@ -171,7 +171,7 @@ page [NEXT] before _07, instead of handing over on the first page.
 ================
 */
 func TestHandOverPagesPrecedeTheHandOver(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	thief := mustQuest(t, rt, "QNO_CA_THIEF_4")
 	if len(thief.TalkPages) != 3 || thief.TalkPages[0].PromptSymbol != "SN_TALK_QNO_CA_THIEF_4_06" ||
@@ -206,7 +206,7 @@ to the remaining NPC, and Yangyun pays once both are handed over.
 ================
 */
 func TestParallelDeliveriesHandOverInEitherOrder(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_CH_POTION_4")
 	if def.Objective != ObjectiveParallel || len(def.Objectives) != 2 {
@@ -279,7 +279,7 @@ abandoned quest leaves no plan behind.
 ================
 */
 func TestParallelExchangesReturnAtTheReport(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_RM_SLAVE1_3")
 	newCharacter := func() *enterworld.Character {
@@ -336,7 +336,7 @@ exchange. Tricia pays once all three missions stand, and takes the water.
 ================
 */
 func TestReceiveOnlyHandOverAmongGathers(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_CA_TREASURE_4")
 	if def.Objective != ObjectiveParallel || len(def.Objectives) != 3 {

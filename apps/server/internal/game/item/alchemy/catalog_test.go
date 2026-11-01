@@ -3,7 +3,7 @@
 
 catalog_test.go - the alchemy catalogue against the shipped tables
 
-Read through licensed.RequireGameData: a clean checkout skips, the full
+Read through clientdata.RequireGameData: a clean checkout skips, the full
 check (SRO_REQUIRE_GAME_DATA=1) fails when the data is missing.
 
 ===========================================================================
@@ -15,8 +15,8 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 	"sort"
 	"testing"
@@ -34,7 +34,7 @@ func TestPublishedCatalog(t *testing.T) {
 	tier.Long(t, "the whole published alchemy catalogue loads")
 	// The shipped tables, as every licensed test reads them: a clean
 	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	c, err := LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {

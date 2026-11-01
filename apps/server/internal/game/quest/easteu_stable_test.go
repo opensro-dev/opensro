@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -63,7 +63,7 @@ way refuses another, and five Filths refuse the water (_11).
 ================
 */
 func TestHolyWaterPurifiesTheStable(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := stableFixture(t)
 	away := stablePoint()
 	away.X += stableRadius + 1
@@ -108,7 +108,7 @@ once it is done he answers _11 while water is held, then grants ten more
 ================
 */
 func TestUvetinoGivesHolyWaterOnceADay(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def, day := stableFixture(t)
 	if row, _ := npcRow(rt, c, def.Codename, def.EndNpcCodename); row.PromptSymbol != "SN_TALK_QNO_EU_EASTEU_1_04" {
 		t.Fatalf("the Witch without holy water answered %s", row.PromptSymbol)

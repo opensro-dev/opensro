@@ -1,7 +1,7 @@
 package quest
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestEuropeanStarterQuestNpcOfferAndTalkCompletion(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	defs, items := loadShippedDefinitions(t)
 	rt, err := NewRuntime(&enterworld.Deps{Items: items}, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) {
 		return nil, true

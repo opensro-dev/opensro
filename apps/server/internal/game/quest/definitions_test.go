@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -167,7 +167,7 @@ that need a quest the small fixture catalog does not carry.
 */
 func loadShippedDefinitions(t *testing.T) (*Definitions, *enterworld.TextdataItems) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
@@ -183,7 +183,7 @@ TestLoadDefinitionsResolvesTheCuratedTable
 ================
 */
 func TestLoadDefinitionsResolvesTheCuratedTable(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	defs := loadTestDefinitions(t)
 	if defs.Len() != len(curatedQuestSpecs) {
@@ -261,7 +261,7 @@ TestLoadDefinitionsAgainstShippedMedia
 func TestLoadDefinitionsAgainstShippedMedia(t *testing.T) {
 	tier.Long(t, "the quest definitions load against the shipped media")
 	t.Parallel()
-	devDefault := licensed.RetailTextdataDir(t)
+	devDefault := clientdata.RetailTextdataDir(t)
 	dir := ""
 	for _, candidate := range []string{devDefault, filepath.Join("..", devDefault), filepath.Join("..", "..", devDefault)} {
 		if _, err := os.Stat(filepath.Join(candidate, "questdata.txt")); err == nil {

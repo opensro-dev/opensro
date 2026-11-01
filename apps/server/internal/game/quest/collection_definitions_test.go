@@ -1,7 +1,7 @@
 package quest
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -17,7 +17,7 @@ var collectionCatalogFixture = []struct {
 }
 
 func TestCollectionCatalogUsesV150CountsAndAtomicTurnIn(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, tc := range []struct {
 		code          string
 		count         uint32

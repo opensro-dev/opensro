@@ -4,11 +4,11 @@
 combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
-release, the periodic pulse, the pulse area and the skill-object owner
-pass take the narrow combat copy: equipment rows and the avatar
-inventory, no bag rows. The skill press takes the cast copy: the
-combat rows plus the companion-carrying bag rows, because its flow
-resolves companions through the copy. Each scenario here runs twice on a bag loaded
+release, the periodic pulse, the pulse area, the skill-object owner
+pass and the attacking hawk's strike tick take the narrow combat copy:
+equipment rows and the avatar inventory, no bag rows. The skill press
+takes the cast copy: the combat rows plus the companion-carrying bag
+rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
 with everything a root could trip on - spare ammunition, an attack pet's
 summon row, a quest item - once on the narrow copy and once forced onto
 the full copy, and every frame and the end state must agree. A root that
@@ -472,6 +472,35 @@ func skillObjectTrace(t *testing.T, full bool) string {
 
 /*
 ================
+hawkTrace
+
+One Black Hawk strike at the interval on a loaded bag, and its end
+state: the target's HP, the caster's rows and the hawk record. The
+strike root takes the combat copy of the caster; the bag carries an
+attack pet's summon row, so a strike that resolved the caster's
+companions through its copy would find none on the narrow root and
+diverge.
+================
+*/
+func hawkTrace(t *testing.T, full bool) string {
+	rt, c, target, h, now, interval := aimedHawk(t)
+	loadCombatBag(c)
+	if full {
+		forceFullCombatCopy(rt)
+	}
+	before, _ := rt.Monsters.Get(testDivision, target)
+	at := now + interval
+	trace := fmt.Sprintf("%+v\n", rt.advanceHawk(h, at))
+	after, _ := rt.Monsters.Get(testDivision, target)
+	if after.CurrentHP >= before.CurrentHP {
+		t.Fatal("the hawk strike never landed; the trace would agree vacuously")
+	}
+	record := rt.hawks[hawkKey(testDivision, c.Name)]
+	return trace + fmt.Sprintf("hp=%d rows=%s record=%+v", after.CurrentHP, combatRowsView(c), *record)
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -479,7 +508,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {

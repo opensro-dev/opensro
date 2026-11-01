@@ -2,13 +2,13 @@ package monster
 
 import (
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestRecoveredSixteenOwnTacticsEveryGrade(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	refs := LoadMonsterRefs(gamedatatest.TextdataDir(t))
 	var doc supplementalSummonTactics
 	if err := json.Unmarshal(supplementalSummonTacticsJSON, &doc); err != nil {

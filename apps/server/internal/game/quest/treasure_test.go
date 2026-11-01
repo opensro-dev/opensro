@@ -17,7 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -58,7 +58,7 @@ Treasure Box refuses another.
 ================
 */
 func TestTreasureKeyCallsTheGuardianAtTheHabitat(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := treasureFixture(t)
 	if captureItemCount(c, treasureKey) != treasureKeyCount {
 		t.Fatal("acceptance did not grant five Seal Keys", c.MissionInventory)
@@ -109,7 +109,7 @@ pages _09, _11 and _13 before _16 pays, and completion takes the keys.
 ================
 */
 func TestTreasureRefillAndTurnIn(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := treasureFixture(t)
 	if _, offered := rt.captureSupplyOption(c, def, def.StartNpcCodename); offered {
 		t.Fatal("refill offered while keys are held")

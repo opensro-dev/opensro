@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 // maxAdjacentLevelStep bounds one level's cost over the level before it.
@@ -69,8 +69,8 @@ rate.
 ================
 */
 func TestDefaultGrowthBandsKeepASmoothCurve(t *testing.T) {
-	licensed.RequireGameData(t)
-	levels := enterworld.NewTextdataLevels(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	levels := enterworld.NewTextdataLevels(clientdata.RetailTextdataDir(t))
 	data, err := os.ReadFile(shardProfile)
 	if err != nil {
 		t.Fatal(err)

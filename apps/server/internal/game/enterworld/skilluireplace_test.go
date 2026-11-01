@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/item/statuseffect"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -57,7 +57,7 @@ one over the other.
 ================
 */
 func TestConcentrationTiersPublishTheirDescriptors(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rows := map[uint32]*SkillUiReplace{}
 	for _, row := range NewTextdataSkills(gamedatatest.TextdataDir(t)).SpawnSkillRows() {
 		if row.UI != nil && row.UI.Admit != nil {

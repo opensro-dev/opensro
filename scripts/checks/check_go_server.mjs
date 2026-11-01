@@ -27,9 +27,9 @@ Go's test cache is on. A cached result is valid only for the inputs it was
 produced from, so every input must be visible to Go:
   - the server game-data projection lives inside the module
     (apps/server/.generated), where Go validates the files a test opened;
-  - the licensed data outside the module (the retail textdata and the
-    published client assets) is named by SRO_LICENSED_DATA_IDENTITY, which
-    licensed.RequireGameData reads, so it joins every licensed test's key.
+  - the game data outside the module (the retail textdata and the
+    published client assets) is named by SRO_GAME_DATA_IDENTITY, which
+    clientdata.RequireGameData reads, so it joins every game-data test's key.
 Measured 2026-09-29: the projection outside the module made a fully cached
 run cost 105s, because Go resolved symlinks for each of ~89k logged file
 operations per package; inside it, a cached run of every package takes 10s.
@@ -123,7 +123,7 @@ const [moduleFiles, goVersion, vulnerabilityDatabase] = await Promise.all( [
 	commandOutput( "go", [ "version" ] ),
 	vulnerabilityDatabaseModified()
 ] );
-const licensedIdentity = licensedDataIdentity();
+const gameIdentity = gameDataIdentity();
 const toolchain = `=${goVersion}`;
 // Environment that changes what a step checks: a pass under one setting is
 // no evidence for another (SRO_REQUIRE_GAME_DATA=1 turns skips into failures).
@@ -140,7 +140,7 @@ const isScannedGo = ( file ) =>
 	file === "apps/server/go.sum";
 const testKeys = [
 	"!apps/server/.generated/game-data/1.150/server/manifest.json",
-	`=licensed ${licensedIdentity}`,
+	`=game-data ${gameIdentity}`,
 	`=cache ${testCache} p ${packageParallelism}`,
 	toolchain,
 	stepEnvironment
@@ -548,7 +548,7 @@ step is up to date, no compiler lookup runs.
 ================
 */
 function goEnvironment() {
-	goEnvironmentValue ??= { ...compilerFirstEnvironment(), SRO_LICENSED_DATA_IDENTITY: licensedIdentity };
+	goEnvironmentValue ??= { ...compilerFirstEnvironment(), SRO_GAME_DATA_IDENTITY: gameIdentity };
 	return goEnvironmentValue;
 }
 
@@ -618,15 +618,15 @@ function compilerFirstEnvironment() {
 
 /*
 ================
-licensedDataIdentity
+gameDataIdentity
 
-A digest of the licensed data the server's tests read from outside the
+A digest of the game data the server's tests read from outside the
 module: the stat of every retail textdata file and the published pack
 manifest's bytes (which pin every packed asset by sha256). Absent data
 contributes its absence, so building it later changes the identity.
 ================
 */
-function licensedDataIdentity() {
+function gameDataIdentity() {
 	const hash = createHash( "sha256" );
 	try {
 		for ( const name of readdirSync( retailTextdataRoot ).sort() ) {

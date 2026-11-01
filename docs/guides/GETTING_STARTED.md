@@ -14,7 +14,7 @@ deployment is described in [DEPLOYMENT.md](../../apps/server/ops/docs/DEPLOYMENT
 | Go | 1.27.1, the release `apps/server/go.mod` names; an older Go downloads it automatically |
 | Node.js | 24 LTS (CI runs it); 22.15 is the oldest supported |
 | pnpm | 12.6.0, the version `package.json` `packageManager` names; through Corepack (`npm install --global corepack` if missing) |
-| Python | 3.12 (`py -3`) with `py -3 -m pip install -r requirements-build.txt`: client extraction, image and font conversion, cursor extraction |
+| Python | 3.12 (`py -3`) with `py -3 -m pip install -r scripts/requirements-build.txt`: client extraction, image and font conversion, cursor extraction |
 | ffmpeg | Any current build on `PATH`; `assets prepare` converts the client's OGG music to MP3 with it |
 | DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. |
 | Nomad | 2.0.7 at `.tools/nomad/2.0.7/nomad.exe` (see below) |
@@ -46,8 +46,8 @@ Expand-Archive $Zip -DestinationPath $Dir -Force
 
 ## 2. Game data
 
-Retail game media is not in this repository. You need your own licensed
-Silkroad Online v1.150 (Legend III) client. The tools below extract and
+Retail game media is not in this repository. You need a Silkroad Online
+v1.150 (Legend III) client that you have the right to use. The tools below extract and
 convert it on your machine; nothing is uploaded. On Windows the asset build
 reproduces the original lens mips (32-bit D3DX) and font atlas (GDI) byte for
 byte; on macOS portable generators produce equivalent output.
@@ -69,7 +69,7 @@ Then, from the checkout:
 ```powershell
 $env:SRO_GAME_ROOT = 'D:\Games\Silkroad-v1.150'   # only if the client is elsewhere
 corepack pnpm install --frozen-lockfile
-py -3 -m pip install -r requirements-build.txt
+py -3 -m pip install -r scripts/requirements-build.txt
 corepack pnpm assets prepare            # extract the archives, convert the music (a few minutes)
 corepack pnpm assets doctor             # every input and tool, with the fix for each problem
 corepack pnpm assets build full         # outdoor world, everything else, every family; about 6 minutes on 16 cores
@@ -193,12 +193,12 @@ with Homebrew and [uv](https://docs.astral.sh/uv/):
 ```sh
 brew install go node ffmpeg uv unar
 corepack enable --install-directory ~/.local/bin pnpm
-uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements-build.txt
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r scripts/requirements-build.txt
 export SRO_PYTHON="$PWD/.venv/bin/python"   # used by every asset build step
 ```
 
 There is no `py` launcher outside Windows: build steps run `SRO_PYTHON`, then
-`python3`, then `python`. A licensed client shipped as a `.rar` extracts with
+`python3`, then `python`. A client shipped as a `.rar` extracts with
 `unar`.
 
 **Assets.** No DirectX runtime is needed. `scripts/build/native_texture_mips.py`

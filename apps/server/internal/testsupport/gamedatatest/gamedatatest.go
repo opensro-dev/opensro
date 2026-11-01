@@ -8,8 +8,8 @@ the server uses, never through a path of their own. A hand-counted
 "../../../../.." breaks when the projection or the package moves, and did:
 several tests climbed out of the repository and silently read nothing.
 
-Each accessor first gates on licensed.RequireGameData, so a machine without
-the licensed data skips (or, under SRO_REQUIRE_GAME_DATA=1, fails) instead
+Each accessor first gates on clientdata.RequireGameData, so a machine without
+missing game data skips (or, under SRO_REQUIRE_GAME_DATA=1, fails) instead
 of erroring deep inside a loader.
 
 The projection resolves once per test process. gamedata.Resolve
@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/gamedata"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 var (
@@ -59,7 +59,7 @@ The verified projection, or the test stops.
 */
 func Paths(t testing.TB) gamedata.Paths {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	paths, err := resolve()
 	if err != nil {
 		t.Fatalf("resolve server game-data projection: %v", err)
@@ -96,7 +96,7 @@ For lazily built shared fixtures whose loaders run outside a test's scope
 which precedes the test log): the verified textdata directory, or "" when
 the projection is absent. Loaders given ""
 report missing data when a test uses them, and such tests call
-licensed.RequireGameData first.
+clientdata.RequireGameData first.
 ================
 */
 func TextdataDirOrEmpty() string {

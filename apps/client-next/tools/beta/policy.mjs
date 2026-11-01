@@ -63,6 +63,9 @@ const audiences = {
 	"world-textures": "public",
 	"map-tiles": "public",
 	"ui-icons": "public",
+	// Held out of public releases until the sheet is proven in a real browser
+	// (#2070): without it the client reads the per-icon files, as it always has.
+	"ui-atlas": "private",
 	"particle-textures": "public",
 	"texture-variants-astc": "public",
 	"game-models": "public",
@@ -81,11 +84,14 @@ isPrivateAsset
 
 This obsolete implementation report is development evidence, with no runtime
 consumer. Older publications placed it in game-data alongside real UI assets.
+The icon atlas stays out whichever group its files land in: a manifest
+published without its sheet would point every icon at a missing file.
 ================
 */
 export function isPrivateAsset( name ) {
 	return name === "/assets/cif/cif-implementation-status.json" ||
-		name === "/assets/cif/cif-implementation-status.json.gz";
+		name === "/assets/cif/cif-implementation-status.json.gz" ||
+		(typeof name === "string" && name.startsWith( "/assets/ui-atlas/" ));
 }
 /*
 ================

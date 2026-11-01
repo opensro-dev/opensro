@@ -34,11 +34,11 @@ grant no rights to third-party game clients, servers, artwork, audio, text,
 databases or trademarks.
 
 This repository does not contain a retail client or server, extracted media,
-account databases, secrets or private keys. Asset use by the OpenSRO project is
-covered by a separate license; anyone else running the asset pipeline must
-supply a client they are permitted to use. Tests include small protocol
-fixtures and derived reference values used to check compatibility; do not add
-complete retail files or material that cannot be redistributed.
+account databases, secrets or private keys. The asset pipeline reads a client
+the operator supplies. OpenSRO grants no rights to that client, and each
+operator is responsible for having the right to use it. Tests include small
+protocol fixtures and derived reference values used to check compatibility; do
+not add complete retail files or material that cannot be redistributed.
 
 ## Dependencies
 

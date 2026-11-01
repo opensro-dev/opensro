@@ -4,7 +4,7 @@ Three parts that meet at two contracts: the wire protocol between the browser
 client and the server, and the generated data both of them load.
 
 ```text
-licensed v1.150 client ──► asset pipeline (scripts/) ──► .generated/
+v1.150 client ──► asset pipeline (scripts/) ──► .generated/
                                                           ├── client-public/  ──► client-next (browser)
                                                           └── game-data/      ──► server (Agent + GameWorld)
 client-next ◄── HTTP /api (Agent) + WebTransport/WebSocket (GameWorld) ──► server
@@ -66,7 +66,7 @@ used as test oracles live in `tests/fixtures/native/`.
 
 ## Asset pipeline (`scripts/`)
 
-Node and Python build steps that read the licensed client extraction and
+Node and Python build steps that read the client extraction and
 produce the browser asset tree (content-addressed packs plus a verified
 manifest) and the server game-data projection. See
 [ASSET_PIPELINE.md](ASSET_PIPELINE.md).

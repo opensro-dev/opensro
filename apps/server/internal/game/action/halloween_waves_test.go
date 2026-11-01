@@ -14,7 +14,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const waveTestRegion = 0x655e
@@ -131,8 +131,8 @@ The timetable names fields by codename; a typo would silently skip a field.
 ================
 */
 func TestEveryWaveFieldHasOpenWorldGroundInShippedData(t *testing.T) {
-	licensed.RequireGameData(t)
-	state := simulation.NewMonsterState(monster.LoadTemplate(licensed.RetailTextdataDir(t)))
+	clientdata.RequireGameData(t)
+	state := simulation.NewMonsterState(monster.LoadTemplate(clientdata.RetailTextdataDir(t)))
 	if _, found := state.ReferenceByCodename(halloweenGourdCodename); !found {
 		t.Fatal("the Gourd is not in shipped data")
 	}

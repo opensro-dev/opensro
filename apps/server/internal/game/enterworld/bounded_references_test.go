@@ -1,8 +1,8 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 	"reflect"
 	"testing"
@@ -10,7 +10,7 @@ import (
 
 func TestBoundedShippedReferencesPreserveEveryRowAndExecutionStage(t *testing.T) {
 	tier.Long(t, "every shipped item and skill row survives the bounded cache")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	skills := NewTextdataSkills(dir)
 	if err := skills.Load(); err != nil {

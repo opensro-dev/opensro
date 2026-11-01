@@ -3,8 +3,8 @@ package quest
 import (
 	"encoding/hex"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"testing"
 
@@ -15,7 +15,7 @@ import (
 
 // The same accepted production frames drive client-next's closed-journal probe.
 func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	data, err := os.ReadFile("graesp_wire_fixture.json")
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestGraespKillProducerMatchesClientFeedbackFixture(t *testing.T) {
 }
 
 func TestCollectionCompletionLatchSurvivesReloadLossAndReacquisition(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, "QSP_ALL_POTION_1"); err != nil {

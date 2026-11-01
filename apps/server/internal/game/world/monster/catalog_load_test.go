@@ -20,7 +20,7 @@ import (
 
 	. "opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -264,7 +264,7 @@ TestShippedTemplateCanary
 func TestShippedTemplateCanary(t *testing.T) {
 	dir := ""
 	for _, candidate := range []string{
-		licensed.RetailTextdataDir(t),
+		clientdata.RetailTextdataDir(t),
 	} {
 		if _, err := os.Stat(filepath.Join(candidate, "npcpos.txt")); err == nil {
 			dir = candidate
