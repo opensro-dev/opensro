@@ -232,8 +232,7 @@ import {
 	cosContainerResult,
 	cosGrantResult,
 	cosGroundRequest,
-	cosGroundResult,
-	cosRemovalResult
+	cosGroundResult
 } from "@/engine/foundation/gameplay/cos-container";
 import {
 	advancedPetAssistCountdowns,
@@ -4471,19 +4470,16 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				if (
-					frame.opcode === 0xb06d && frame.payload[0] === 1 &&
-					(frame.payload[1] === 0x15 || frame.payload[1] === 0x16)
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x15
 				) {
 					if ( frame.payload.length < 7 ) throw Error( "Invalid COS grant result" );
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					const next = frame.payload[1] === 0x15 ?
-						cosGrantResult( record, frame.payload, cosItemRefs ) :
-						cosRemovalResult( record, frame.payload );
-					// Both print nothing: 756CF0's pet branch (window 0x7A) prints for
-					// source 0 only, and a grant is source 3 (#2258).
+					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
+					// only, and a grant is source 3 (#2258).
+					const next = cosGrantResult( record, frame.payload, cosItemRefs );
 					cosRecords.set( gid, next );
 					cosPickup.spaceChanged( gid );
 					dirty = true;
