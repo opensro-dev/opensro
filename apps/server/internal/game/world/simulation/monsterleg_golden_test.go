@@ -281,24 +281,26 @@ func TestMonsterLegActivityGateResolvesSettledBlockOnce(t *testing.T) {
 
 /*
 ================
-TestMonsterLegStepStartsFromTheInterleavedMover
+TestMonsterLegStepKeepsTheInterleavedMover
 
-TestMonsterLegStepStartsFromTheInterleavedMover pins where the leg
-resolves a due actor (#2047 review): inside the action lane, not at
-dispatch. The RunAction double stands in for the wired lane's division
-lock and lands a slower lane's mover set - an abnormal-style cadence
-retime put through CommitMover - while the leg "waits for the lock",
-before it lets the step run. Read at dispatch, the step would start
-from the pre-retime mover: the gate would find the cadence due, plan
-the suspension, and only the commit guard (commitActivity's before
-check) would keep the retime from being lost under the step's
-whole-value commits - the actor would end the leg still wandering.
-Read inside the lane, the gate sees the retime (not yet due) and the
-step runs on to the expired wander deadline, ending idle with the
-retimed cadence intact.
+The #2047 hazard, re-pinned on the #2137 slice 1 mechanism. The
+RunAction double stands in for the wired lane's division lock and
+lands a slower lane's mover set - an abnormal-style cadence retime
+put through CommitMover - after the leg's snapshot was built, before
+the step runs. The step starts from the snapshot: its gate finds the
+pre-retime cadence due and plans the suspension, but every commit
+that plan makes is based on a mover the retime has since replaced -
+commitActivity's before check (and, for whole-value commits, the
+commit generation) - so the retime survives untouched and the actor
+simply replans at its next due. The next leg reads the retimed
+mover, the gate finds the cadence not yet due, and the step runs on
+to the expired wander deadline, ending idle with the retimed
+cadence intact. What #2047 protected - the slower lane's set is
+never overwritten - is unchanged; only the mechanism moved, from
+resolve-inside-the-lock to snapshot-plus-generation.
 ================
 */
-func TestMonsterLegStepStartsFromTheInterleavedMover(t *testing.T) {
+func TestMonsterLegStepKeepsTheInterleavedMover(t *testing.T) {
 	ops, actor, now := activityFixture(t)
 	legAt := now + 2001
 	retimed := uint32(now + 1500)
@@ -325,8 +327,19 @@ func TestMonsterLegStepStartsFromTheInterleavedMover(t *testing.T) {
 	if stored.Activity.LastCheck != retimed {
 		t.Fatalf("the interleaved retime was overwritten: LastCheck %d, want %d", stored.Activity.LastCheck, retimed)
 	}
+	if stored.Mode() == monster.MoverIdle {
+		t.Fatal("step ran past the gate on a stale snapshot: the suspension plan should have dropped its commit and replanned")
+	}
+	// The next leg starts from the retimed mover: the cadence is not
+	// yet due, so the step runs on to the expired wander deadline.
+	ops.RunAction = nil
+	ops.RunMonsterLeg(legAt+100, nil, &fakePusher{})
+	stored, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if stored.Activity.LastCheck != retimed {
+		t.Fatalf("the interleaved retime was overwritten by the replan: LastCheck %d, want %d", stored.Activity.LastCheck, retimed)
+	}
 	if stored.Mode() != monster.MoverIdle {
-		t.Fatalf("step did not run past the retimed gate to the wander deadline: %v", stored.Mode())
+		t.Fatalf("replanned step did not run past the retimed gate to the wander deadline: %v", stored.Mode())
 	}
 }
 

@@ -480,6 +480,11 @@ is gone; the mover is then meaningless.
 type behaviorActorSnapshot struct {
 	instance monster.Instance
 	mover    monster.MoverState
+	// moverGen is the mover row's commit generation read with the
+	// mover (zero when no row exists yet and the mover was
+	// synthesized): the base generation the step's commits guard on
+	// (#2137 slice 1, CommitMoverGen).
+	moverGen uint64
 	ok       bool
 }
 
@@ -524,6 +529,20 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if state == nil {
 		return behaviorActorSnapshot{}
 	}
+	return s.behaviorActorMoverLocked(state, ref)
+}
+
+/*
+================
+MonsterState.behaviorActorMoverLocked
+
+behaviorActorMover's read with the population resolved and s.mu
+held: the leg snapshot (monsterlegsnapshot.go) reads a whole batch
+through this one helper under its single locked pass, so a snapshot
+actor and a dispatch-read actor are the same values by construction.
+================
+*/
+func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref behaviorActorRef) behaviorActorSnapshot {
 	// The batch carried the monster's slot (#2133): read through it
 	// when it still names this actor, else resolve by gid as before.
 	actor, ok := state.instances.lookupAt(ref.monsterSlot, ref.gid)
@@ -539,17 +558,18 @@ func (s *MonsterState) behaviorActorMover(key populationKey, ref behaviorActorRe
 	if !ok {
 		mover, ok = state.movers.lookup(ref.gid)
 	}
+	gen := state.movers.generation(ref.gid)
 	if ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
 	}
 	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, ok: true}
+	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
 }
 
 /*
