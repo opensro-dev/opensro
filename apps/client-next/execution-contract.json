@@ -657,7 +657,8 @@
 				"updateInstances",
 				"releasedDraw",
 				"waterReflection",
-				"hdrPreview"
+				"hdrPreview",
+				"singleSampled"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/renderer.ts"
@@ -2442,6 +2443,14 @@
 				"encode",
 				"encodePreview"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/msaa.ts",
+			"functions": [
+				"resolveDepth"
+			],
+			"reason": "The frame owner resolves the multisampled scene depth into the scene's single-sampled depth right after the scene pass, before the flare probe and the labels read it."
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",

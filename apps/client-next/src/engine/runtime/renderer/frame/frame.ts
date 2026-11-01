@@ -102,11 +102,16 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
+			const msaa = experimental?.msaa;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
 			// then be reused for an independently composited character preview.
 			const hdrScene = !!experimental?.hdr;
+			// The MSAA stage renders the scene into its 4x colour and resolves
+			// into the stage chain's own scene view; every later pass, and the
+			// UI, read the resolved target single-sampled.
+			const msaaScene = !!msaa;
 			if ( ui !== recordedUi ) {
 				/*
 				================
@@ -266,36 +271,46 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				...(depth ?
 					{
 						depthStencilAttachment: {
-							view: depth,
+							view: msaaScene ? msaa!.depth : depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: flares || deferred || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+							depthStoreOp: msaaScene || flares || deferred ||
+									((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
 								"store" as const :
 								"discard" as const
 						}
 					} :
 					{}),
 				colorAttachments: [ {
-					view: sceneView,
+					view: msaaScene ? msaa!.view : sceneView,
+					...(msaaScene ? { resolveTarget: sceneView } : {}),
 					clearValue: { r: 0.035, g: 0.07, b: 0.09, a: 1 },
 					loadOp: "clear",
-					storeOp: "store"
+					storeOp: msaaScene ? "discard" as const : "store" as const
 				} ]
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && worldUiBundle ) {
+			if ( !bloom && !deferred && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ) {
 				pass.executeBundles( [ worldUiBundle ] );
 			}
-			if ( !bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+			if (
+				!bloom && !deferred && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && backgroundBundle
+			) {
 				pass.executeBundles( [ backgroundBundle ] );
 			}
 			if (
-				!bloom && !deferred && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle
+				!bloom && !deferred && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder &&
+				!preview.length && uiBundle
 			) {
 				pass.executeBundles( [ uiBundle ] );
 			}
 			pass.end();
+			// The multisampled depth cannot be resolved by the driver: write the
+			// four samples' minimum into the scene's single-sampled depth now,
+			// before the deferred tail, the flare probe and the labels read it.
+			// The render-scale stage upscales this depth as it always does.
+			if ( msaaScene && depth ) msaa!.resolveDepth( encoder, depth );
 			/*
 			================
 			previewPass
@@ -362,9 +377,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || ((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
-										"store" as const :
-										"discard" as const
+									depthStoreOp:
+										flares || ((bloom || hdrScene || sceneScale || msaaScene) && !!worldUiBundle) ?
+											"store" as const :
+											"discard" as const
 								}
 							} :
 							{})
@@ -383,11 +399,16 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							draw.baseVertex ?? 0
 						);
 					}
-					if ( !bloom && !hdrScene && !sceneScale && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+					if ( !bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ) {
+						tail.executeBundles( [ worldUiBundle ] );
+					}
+					if ( !bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && backgroundBundle ) {
 						tail.executeBundles( [ backgroundBundle ] );
 					}
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle ) {
+					if (
+						!bloom && !hdrScene && !sceneScale && !msaaScene && !flares && !thunder && !preview.length &&
+						uiBundle
+					) {
 						tail.executeBundles( [ uiBundle ] );
 					}
 					tail.end();
@@ -430,7 +451,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				// Port-only, not native: labels keep full-resolution pixels and
 				// scene occlusion after HDR or reduced-resolution scene rendering.
-				if ( (hdrScene || sceneScale) && worldUiBundle ) {
+				// The MSAA depth was already resolved right after the scene pass.
+				if ( (hdrScene || sceneScale || msaaScene) && worldUiBundle ) {
 					sceneScale?.resolveDepth( encoder );
 					const labels = encoder.beginRenderPass( {
 						label: "hdr-world-ui",
@@ -448,7 +470,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					labels.executeBundles( [ worldUiBundle ] );
 					labels.end();
 				}
-				if ( flares || thunder || bloom || hdrScene || sceneScale ) {
+				if ( flares || thunder || bloom || hdrScene || sceneScale || msaaScene ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
 						label: "hud-after-flares",
@@ -457,7 +479,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: uiDepth,
 									depthClearValue: 1,
-									depthLoadOp: bloom && !hdrScene && !sceneScale && worldUiBundle ?
+									depthLoadOp: bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ?
 										"load" as const :
 										"clear" as const,
 									depthStoreOp: "discard" as const
@@ -466,7 +488,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							{}),
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
-					if ( bloom && !hdrScene && !sceneScale && worldUiBundle ) hud.executeBundles( [ worldUiBundle ] );
+					if ( bloom && !hdrScene && !sceneScale && !msaaScene && worldUiBundle ) {
+						hud.executeBundles( [ worldUiBundle ] );
+					}
 					if ( backgroundBundle ) hud.executeBundles( [ backgroundBundle ] );
 					if ( !preview.length && uiBundle ) hud.executeBundles( [ uiBundle ] );
 					hud.end();

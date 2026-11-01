@@ -43,9 +43,10 @@ export function createCharacterShadows(
 	view: GPUBuffer,
 	texture: ( image: ImageDraw ) => GPUTexture,
 	binding: ( draw: GeometryDraw ) => ShadowBinding | undefined,
-	// The receiver draws land in the scene target; the getter follows the
-	// HDR stage's scene format.
+	// The receiver draws land in the scene target; the getters follow the
+	// HDR stage's scene format and the MSAA stage's sample count.
 	format: () => GPUTextureFormat,
+	samples: () => number,
 	// The frame that drew a slot may still be recording: the device destroys it.
 	retire: Retire = destroyNow
 ) {
@@ -106,7 +107,7 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 		fragment: { module: resample, entryPoint: "fs", targets: [ { format: "rgba8unorm" } ] },
 		primitive: { topology: "triangle-list" }
 	} );
-	const groundPipeline = ( target: GPUTextureFormat ) =>
+	const groundPipeline = ( target: GPUTextureFormat, sampleCount: number ) =>
 		device.createRenderPipeline( {
 			label: "character-shadow-ground",
 			layout: "auto",
@@ -140,9 +141,10 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 				depthCompare: "less-equal",
 				depthBias: -1,
 				depthBiasSlopeScale: -1
-			}
+			},
+			multisample: { count: sampleCount }
 		} );
-	let ground = groundPipeline( format() ), groundFormat = format();
+	let groundFormat = format(), groundSamples = samples(), ground = groundPipeline( groundFormat, groundSamples );
 	const sampler = device.createSampler( {
 		minFilter: "linear",
 		magFilter: "linear",
@@ -307,10 +309,11 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 					}
 				}
 				const groundTexture = r.blob ? texture( blob! ) : s.filtered;
-				const sceneFormat = format();
-				if ( sceneFormat !== groundFormat ) {
-					ground = groundPipeline( sceneFormat );
+				const sceneFormat = format(), sceneSamples = samples();
+				if ( sceneFormat !== groundFormat || sceneSamples !== groundSamples ) {
+					ground = groundPipeline( sceneFormat, sceneSamples );
 					groundFormat = sceneFormat;
+					groundSamples = sceneSamples;
 				}
 				if ( s.groundTexture !== groundTexture || s.groundPipeline !== ground ) {
 					s.groundTexture = groundTexture;

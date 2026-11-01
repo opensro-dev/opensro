@@ -288,6 +288,7 @@ test(
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					msaa: false,
 					renderScale: 100
 				}
 			);
@@ -329,6 +330,7 @@ test(
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					msaa: false,
 					renderScale: 100
 				}
 			);
