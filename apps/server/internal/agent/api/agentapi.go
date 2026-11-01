@@ -201,6 +201,8 @@ type API struct {
 	economyPath             string
 	settings                http.Handler
 	settingsPath            string
+	chatLog                 http.Handler
+	chatLogPath             string
 	operator                http.Handler
 	notices                 *noticePublisher
 	observatory             *observatoryReader
@@ -374,6 +376,9 @@ func (api *API) Handler() http.Handler {
 	}
 	if api.economy != nil {
 		mux.Handle(api.economyPath, api.economy)
+	}
+	if api.chatLog != nil {
+		mux.Handle(api.chatLogPath, api.chatLog)
 	}
 	if api.settings != nil {
 		mux.Handle(api.settingsPath, api.settings)

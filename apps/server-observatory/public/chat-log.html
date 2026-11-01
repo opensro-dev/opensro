@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- chat-log.html - staff-only moderation search: what a player said, and when. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3d0d09">
+<title>Chat log · Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/theme-boards.css">
+<link rel="stylesheet" href="/theme-fit.css">
+<link rel="stylesheet" href="/chat-log.css">
+<script type="module" src="/chat-log.js"></script>
+</head>
+<body>
+<aside class="rail">
+<a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
+<nav aria-label="Dashboard views">
+<a href="/#overview">Overview</a>
+<a href="/#players">Players</a>
+<a href="/#world">World census</a>
+<a href="/#health">Runtime</a>
+<a href="/#items">Items</a>
+<a href="/#recovery">Player recovery</a>
+<a href="/history.html">Session history</a>
+<a href="/chat-log.html" class="active" aria-current="page">Chat log</a>
+<a href="/economy.html">Economy</a>
+<a href="/settings.html">Shard rules</a>
+</nav>
+<div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
+</aside>
+<div class="shell">
+<main class="chat-log art-jangan">
+<div class="page-heading">
+<div>
+<div class="eyebrow">MODERATION</div>
+<h1>Chat log</h1>
+<p>Staff only. What players said in public chat, by account, character and time. Shadow-muted lines are marked.</p>
+</div>
+</div>
+<form id="chat-filters" class="panel chat-filters" aria-label="Search the chat log">
+<label>Shard<select name="source" id="chat-shard"></select></label>
+<label>Account<input name="account" maxlength="256" autocomplete="off"></label>
+<label>Character<input name="character" maxlength="256" autocomplete="off"></label>
+<label>From (local time)<input name="from" type="datetime-local"></label>
+<label>To (local time)<input name="to" type="datetime-local"></label>
+<button class="button primary">Search</button>
+</form>
+<p id="chat-status" class="chat-status" role="status" aria-live="polite">Loading shards…</p>
+<section class="panel chat-table-wrap">
+<table class="chat-table">
+<thead><tr><th scope="col">Time</th><th scope="col">Character</th><th scope="col">Account</th><th scope="col">Channel</th><th scope="col">Text</th></tr></thead>
+<tbody id="chat-rows"></tbody>
+</table>
+</section>
+<footer><span><span class="tiny-star">◆</span>SILKROAD OBSERVATORY / CHAT LOG</span></footer>
+</main>
+</div>
+</body>
+</html>
