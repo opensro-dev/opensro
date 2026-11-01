@@ -37,6 +37,10 @@ const (
 	// selectObjectNotFound is the reference server's code when the object lookup finds no
 	// object; v1.150's 7651F1 reads it as one byte and shows text only for 7.
 	selectObjectNotFound uint8 = 3
+	// npcFunctionNotOffered is the native code when the NPC does not offer
+	// the requested function. Category 13 has no text for code 5,
+	// so the client only retires the pending function request.
+	npcFunctionNotOffered uint8 = 5
 )
 
 /*
@@ -77,6 +81,22 @@ func (rt *Runtime) npcWithinHitRange(divisionID string, character *enterworld.Ch
 
 /*
 ================
+npcFunctionRefusal
+
+The native NPC function refusal: 0xB338 kind 2 with one reason code.
+The frame retires the client's pending function request; a code with
+no category-13 text shows nothing, as it does natively.
+================
+*/
+func npcFunctionRefusal(code uint8) []wire.Frame {
+	return []wire.Frame{{
+		Opcode:  wire.OpNpcInteractionAck,
+		Payload: wire.EncodeNpcInteractionRefusal(code),
+	}}
+}
+
+/*
+================
 npcFunctionTooFar
 
 The native NPC function refusal for an out-of-range request: 0xB338 kind 2
@@ -84,8 +104,5 @@ with code 4, which the client turns into the "too far" notice.
 ================
 */
 func npcFunctionTooFar() []wire.Frame {
-	return []wire.Frame{{
-		Opcode:  wire.OpNpcInteractionAck,
-		Payload: wire.EncodeNpcInteractionRefusal(hitRangeTooFar),
-	}}
+	return npcFunctionRefusal(hitRangeTooFar)
 }
