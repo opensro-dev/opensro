@@ -20,17 +20,66 @@ const FILTERS = new Set( [
 ] );
 /*
 ================
+requireLoopback
+
+Operator reads carry a token, so they go only to a literal loopback URL.
+================
+*/
+export function requireLoopback( serviceURL, owner ) {
+	const url = new URL( serviceURL );
+	if (
+		url.protocol !== "http:" || ![ "127.0.0.1", "[::1]" ].includes( url.hostname ) || url.username ||
+		url.password
+	) throw Error( owner + " requires loopback service URLs" );
+}
+
+/*
+================
+readService
+
+One bounded operator read: the answer's JSON, or a named failure that can
+never look like an empty result.
+================
+*/
+export async function readService( url, token, fetcher, owner ) {
+	try {
+		const response = await fetcher( url, {
+			headers: { Authorization: "Bearer " + token, "X-SRO-Local-Diagnostics": "1" },
+			signal: AbortSignal.timeout( 10000 ),
+			redirect: "error"
+		} );
+		const reader = response.body.getReader(), chunks = [];
+		let size = 0;
+		try {
+			for ( ;; ) {
+				const { done, value } = await reader.read();
+				if ( done ) break;
+				size += value.byteLength;
+				if ( size > MAX_RESPONSE_BYTES ) throw Error( owner + " response exceeded limit" );
+				chunks.push( value );
+			}
+		} finally {
+			await reader.cancel();
+		}
+		const text = Buffer.concat( chunks ).toString( "utf8" );
+		return {
+			status: response.status,
+			body: response.ok ?
+				JSON.parse( text ) :
+				{ error: owner + " unavailable: HTTP " + response.status + " " + text.slice( 0, 256 ) }
+		};
+	} catch ( error ) {
+		return { status: 503, body: { error: owner + " unavailable: " + error.message } };
+	}
+}
+
+/*
+================
 createHistory
 ================
 */
 export function createHistory( sources, fetcher = fetch ) {
-	for ( const source of sources ) {
-		const url = new URL( source.url );
-		if (
-			url.protocol !== "http:" || ![ "127.0.0.1", "[::1]" ].includes( url.hostname ) || url.username ||
-			url.password
-		) throw Error( "History requires loopback service URLs" );
-	}
+	for ( const source of sources ) requireLoopback( source.url, "History" );
 	return {
 		/*
 ================
@@ -47,35 +96,7 @@ request
 				if ( value.length > 256 ) return { status: 400, body: { error: "Filter exceeds 256 characters" } };
 				url.searchParams.set( key, value );
 			}
-			try {
-				const response = await fetcher( url, {
-					headers: { Authorization: "Bearer " + source.token, "X-SRO-Local-Diagnostics": "1" },
-					signal: AbortSignal.timeout( 10000 ),
-					redirect: "error"
-				} );
-				const reader = response.body.getReader(), chunks = [];
-				let size = 0;
-				try {
-					for ( ;; ) {
-						const { done, value } = await reader.read();
-						if ( done ) break;
-						size += value.byteLength;
-						if ( size > MAX_RESPONSE_BYTES ) throw Error( "History response exceeded limit" );
-						chunks.push( value );
-					}
-				} finally {
-					await reader.cancel();
-				}
-				const text = Buffer.concat( chunks ).toString( "utf8" );
-				return {
-					status: response.status,
-					body: response.ok ?
-						JSON.parse( text ) :
-						{ error: "History unavailable: HTTP " + response.status + " " + text.slice( 0, 256 ) }
-				};
-			} catch ( error ) {
-				return { status: 503, body: { error: "History unavailable: " + error.message } };
-			}
+			return readService( url, source.token, fetcher, "History" );
 		}
 	};
 }
