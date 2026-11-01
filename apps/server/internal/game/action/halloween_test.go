@@ -141,13 +141,13 @@ func TestHalloweenExchangeRefusesAndGrantsByTheTalkLines(t *testing.T) {
 		t.Fatal("granted exchange bag", c.MissionInventory)
 	}
 
-	// A roll into the grain band pays ten potions, not one.
+	// A roll into the grain band pays a stack of twenty, not one.
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 1)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	rt.DropRoll = func() (uint32, error) { return 22527, nil } // roll 55 of 80: the HP potion band (48, 61]
+	rt.DropRoll = func() (uint32, error) { return 19660, nil } // roll 60 of 100: the HP potion band (56, 63]
 	frames, err = rt.ExchangeHalloweenBox(c, halloweenSoOkCodename)
-	if err != nil || bagCount(c, "ITEM_ETC_HP_SPOTION_01") != 10 ||
+	if err != nil || bagCount(c, "ITEM_ETC_HP_SPOTION_01") != 20 ||
 		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("grain exchange", frames, err, c.MissionInventory)
 	}
