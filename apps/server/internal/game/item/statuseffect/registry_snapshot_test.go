@@ -290,6 +290,20 @@ func TestSnapshotSeesTheOtherWriters(t *testing.T) {
 		}
 		viewMatches(t, r, "d", "anna")
 	})
+	t.Run("an expiry flip marks the view", func(t *testing.T) {
+		r := NewRegistry()
+		timed := plain
+		timed.ExpiresAtMs = 2000
+		r.Apply(timed)
+		r.Snapshot("d", "anna")
+		// The flip is this owner's only movement this tick: no job clock
+		// runs, so the sweep's flip branch alone must mark it.
+		r.Expire(3000)
+		if rows := r.Snapshot("d", "anna"); len(rows) != 1 || !rows[0].StopRequested {
+			t.Fatal("the expiry flip left the published view stale", rows)
+		}
+		viewMatches(t, r, "d", "anna")
+	})
 	t.Run("link install", func(t *testing.T) {
 		r := NewRegistry()
 		r.Snapshot("d", "anna")
