@@ -3,8 +3,8 @@
 - **review** A PR needs two non-author approvals at its exact head and finished, green CI. A pushed change needs fresh
   approval of what changed.
 - **review** A skipped check is not a pass. Read every comment and review before merging.
-- **review** A review covers blast radius (search every caller), native evidence, edge cases, what was run, and a
-  verdict. Say what actually ran, and quote failures.
+- **review** A review opens with its verdict, then has five sections: blast radius (search every caller), native trace,
+  edge cases, unimplemented branches, and what ran. Say what actually ran, and quote failures.
 - **review** Never force-push a PR branch. Merge `main` into it.
 - **review** Contributor code from a fork is read first. It runs in CI, and runs locally only from a reviewed commit on
   a branch of this repository. Check whether a PR comes from a fork before running anything.
