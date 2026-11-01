@@ -17,6 +17,19 @@ import (
 // session-level idle logic handles the rest.
 const wsWriteTimeout = 10 * time.Second
 
+// wsCompressMinBytes is the frame size at which WriteFrame asks for
+// permessage-deflate on that one message (#2311). A browser delivers
+// a WebSocket message to the client only whole, so the ~930 KB
+// EnterWorld record is one silent atomic unit on the fallback no
+// matter how the write is paced; deflating it (snapshot JSON lands
+// roughly 10x smaller) cuts that silent stretch proportionally.
+// Small per-tick frames stay uncompressed: their flate cost would
+// buy nothing. Compression is negotiated at upgrade and toggled per
+// message, so Frame bytes, the resume ring and the WT path never see
+// it, and a peer that did not negotiate it is written to exactly as
+// before (EnableWriteCompression is then a no-op).
+const wsCompressMinBytes = 32 << 10
+
 // wsConn adapts a gorilla WebSocket connection to Conn. Frames map 1:1 to
 // binary WebSocket messages with no extra framing.
 type wsConn struct {
@@ -39,6 +52,9 @@ type wsConn struct {
 
 func newWSConn(c *websocket.Conn) *wsConn {
 	c.SetReadLimit(MaxInboundFrameBytes)
+	// Stay uncompressed until WriteFrame opts a large message in:
+	// negotiation alone would otherwise deflate every small frame.
+	c.EnableWriteCompression(false)
 	w := &wsConn{
 		c:        c,
 		frames:   make(chan Frame, 16),
@@ -125,9 +141,15 @@ func (w *wsConn) WriteFrame(f Frame) error {
 	}
 	// One message, written in pieces with the deadline re-armed on
 	// progress: the bytes on the wire are exactly f.Encode(), only
-	// the pacing changed (gorilla frames the pieces itself).
+	// the pacing changed (gorilla frames the pieces itself). A large
+	// message additionally rides permessage-deflate when the peer
+	// negotiated it (wsCompressMinBytes): the client still receives
+	// exactly f.Encode(), reassembled and inflated by its side of
+	// the socket, but the silent whole-message stretch on a slow
+	// fallback link shrinks with the compressed size.
 	arm := func() { _ = w.c.SetWriteDeadline(time.Now().Add(wsWriteTimeout)) }
 	arm()
+	w.c.EnableWriteCompression(f.EncodedLen() >= wsCompressMinBytes)
 	writer, err := w.c.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		return err
