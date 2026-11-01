@@ -88,9 +88,9 @@ drawFrame
 One frame with the world labels, no scene content and the given inputs.
 ================
 */
-function drawFrame( commands, { deferred, experimental } ) {
+function drawFrame( commands, { deferred = undefined, experimental } ) {
 	return createFrame( commands ).draw(
-		"view",
+		/** @type {any} */ ("view"),
 		undefined,
 		undefined,
 		"scene-depth",

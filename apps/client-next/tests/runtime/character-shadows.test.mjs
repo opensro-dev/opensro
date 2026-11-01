@@ -187,7 +187,8 @@ calls records pass labels, viewports and indexed draws, owned every
 resource the owner created. restore puts navigator back.
 ================
 */
-function shadowHarness() {
+function shadowHarness( samples = () => 1 ) {
+	const pipelines = [];
 	const previous = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
 	Object.defineProperty( globalThis, "navigator", {
 		configurable: true,
@@ -225,7 +226,15 @@ function shadowHarness() {
 	};
 	const gpu = {
 		createShaderModule: () => ({}),
-		createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }),
+		/*
+		================
+		createRenderPipeline
+		================
+		*/
+		createRenderPipeline( descriptor ) {
+			pipelines.push( descriptor );
+			return { getBindGroupLayout: () => ({}) };
+		},
 		createSampler: () => ({}),
 		/*
 		================
@@ -248,7 +257,8 @@ function shadowHarness() {
 			{},
 			image => image.texture,
 			d => d === draw ? borrowed : undefined,
-			() => "rgba8unorm"
+			() => "rgba8unorm",
+			samples
 		),
 		request = {
 			matrix: shadowProjection( [ 0, 0, 0 ], 20 ).matrix,
@@ -300,7 +310,20 @@ function shadowHarness() {
 		if ( previous ) Object.defineProperty( globalThis, "navigator", previous );
 		else delete globalThis.navigator;
 	};
-	return { owner, request, encoder, calls, owned, draw, borrowed, bindings, views, passDescriptors, restore };
+	return {
+		owner,
+		request,
+		encoder,
+		calls,
+		owned,
+		draw,
+		borrowed,
+		bindings,
+		views,
+		passDescriptors,
+		pipelines,
+		restore
+	};
 }
 
 test("shadow GPU lifecycle draws the selected batch instance, filters before receiving, and retires disabled resources", () => {
@@ -319,6 +342,24 @@ test("shadow GPU lifecycle draws the selected batch instance, filters before rec
 		assert.equal( calls.length, 0 );
 		owner.prepare( [] );
 		assert.ok( owned.every( r => r.destroyed ) );
+		owner.dispose();
+	} finally {
+		restore();
+	}
+});
+
+test("the ground pipeline follows the scene pass's sample count", () => {
+	let sampleCount = 1;
+	const { owner, request, pipelines, bindings, restore } = shadowHarness( () => sampleCount );
+	const lastGround = () => pipelines.findLast( pipeline => pipeline.multisample ).multisample.count;
+	try {
+		owner.prepare( [ request ] );
+		assert.equal( lastGround(), 1 );
+		sampleCount = 4;
+		const boundBefore = bindings.length;
+		owner.prepare( [ request ] );
+		assert.equal( lastGround(), 4, "a 4x scene pass rejects a single-sampled pipeline" );
+		assert.ok( bindings.length > boundBefore, "the slot rebinds against the new pipeline" );
 		owner.dispose();
 	} finally {
 		restore();
