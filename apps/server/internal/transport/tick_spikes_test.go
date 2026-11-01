@@ -201,6 +201,93 @@ func TestTickSpikeSlowestStepRecorded(t *testing.T) {
 
 /*
 ================
+TestTickSpikePhaseAndHookRecorded
+
+#2295: the burst's time is attributed to the phase and hook that took
+it, folded from the burst ticks' TickPhases, with the named step kept
+as finer detail. A later, quieter phase report in the same burst does
+not displace the maxima, and a slow division names itself as the hook.
+================
+*/
+func TestTickSpikePhaseAndHookRecorded(t *testing.T) {
+	journal, clock := newSpikeJournalForTest(t)
+	journal.observeTick(900*time.Millisecond, 100*time.Millisecond)
+	journal.observeStep("tickGateCut", 5*time.Millisecond)
+	journal.observePhases(TickPhases{
+		BeforeHooks: 40 * time.Millisecond,
+		Divisions:   30 * time.Millisecond,
+		Hooks:       820 * time.Millisecond,
+		Total:       900 * time.Millisecond,
+		SlowHooks:   []SlowHook{{Name: "actionTick", Elapsed: 489 * time.Millisecond}},
+	})
+	*clock = clock.Add(time.Second)
+	journal.observeTick(300*time.Millisecond, 100*time.Millisecond)
+	journal.observePhases(TickPhases{
+		Hooks: 120 * time.Millisecond,
+		Total: 300 * time.Millisecond,
+		SlowDivisions: []SlowHook{
+			{Name: "global-official", Elapsed: 120 * time.Millisecond},
+		},
+	})
+	*clock = clock.Add(6 * time.Second)
+	journal.observeTick(50*time.Millisecond, 100*time.Millisecond)
+	journal.Close()
+
+	lines := readSpikeLines(t, journal.path)
+	if len(lines) != 1 {
+		t.Fatalf("journal lines = %v", lines)
+	}
+	var spike TickSpike
+	if err := json.Unmarshal([]byte(lines[0]), &spike); err != nil {
+		t.Fatalf("decode burst: %v", err)
+	}
+	if spike.SlowestPhase != "hooks" || spike.SlowestPhaseMs != 820 {
+		t.Fatalf("slowest phase = %+v", spike)
+	}
+	if spike.SlowestHook != "actionTick" || spike.SlowestHookMs != 489 {
+		t.Fatalf("slowest hook = %+v", spike)
+	}
+	if spike.SlowestStep != "tickGateCut" || spike.SlowestStepMs != 5 {
+		t.Fatalf("slowest step = %+v", spike)
+	}
+}
+
+/*
+================
+TestTickSpikeUnattributedBurstStaysBlank
+
+A burst no phase report reached carries no phase or hook fields: the
+record stays unattributed rather than blaming the one step it saw.
+Phase reports outside a burst are ignored, like steps.
+================
+*/
+func TestTickSpikeUnattributedBurstStaysBlank(t *testing.T) {
+	journal, clock := newSpikeJournalForTest(t)
+	journal.observePhases(TickPhases{Hooks: time.Second, Total: time.Second})
+	journal.observeTick(300*time.Millisecond, 100*time.Millisecond)
+	journal.observeStep("tickGateCut", 5*time.Millisecond)
+	*clock = clock.Add(6 * time.Second)
+	journal.observeTick(50*time.Millisecond, 100*time.Millisecond)
+	journal.Close()
+
+	lines := readSpikeLines(t, journal.path)
+	if len(lines) != 1 {
+		t.Fatalf("journal lines = %v", lines)
+	}
+	var spike TickSpike
+	if err := json.Unmarshal([]byte(lines[0]), &spike); err != nil {
+		t.Fatalf("decode burst: %v", err)
+	}
+	if spike.SlowestPhase != "" || spike.SlowestHook != "" {
+		t.Fatalf("unattributed burst = %+v", spike)
+	}
+	if strings.Contains(lines[0], "slowest_phase") || strings.Contains(lines[0], "slowest_hook") {
+		t.Fatalf("unattributed burst line = %s", lines[0])
+	}
+}
+
+/*
+================
 TestTickSpikeMirrorKeepsLast32
 
 The live mirror keeps exactly the newest 32 bursts, oldest first.
