@@ -27,7 +27,7 @@ foundation/gameplay decoders, other server changes under internal/game,
 internal/transport or internal/agent) unless its squash commit carries
 "Old-tab: safe - <reason>". Put that trailer in a commit message of this
 branch and repeat it here, write "Protocol bump" when old tabs cannot cope,
-or "Not affected". See CONTRIBUTING.md section 6.
+or "Not affected". See .github/CONTRIBUTING.md section 6.
 -->
 
 ## Native claims

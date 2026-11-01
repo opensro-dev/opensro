@@ -625,7 +625,7 @@ are GM-allowlisted. Character data was backed up and reopened for verification;
 Agent and GameWorld readiness returned 200 after restart. These fixture grants
 do not alter normal character creation or native progression defaults.
 
-Upstream review preparation is recorded in `docs/CAP110_UPSTREAM_HANDOFF.md`.
+Upstream review preparation is in `docs/RETIRED.md`.
 The expansion remains optional; monster/drop progression and cave stability
 remain separate work before a complete cap-110 release.
 

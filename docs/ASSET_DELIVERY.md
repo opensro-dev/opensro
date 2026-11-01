@@ -4,7 +4,7 @@ How game data travels from the licensed client on a developer's disk to a
 player's browser, what each byte costs on the way, how the build keeps old
 output from shipping, and how a data release is staged.
 [ASSET_PIPELINE.md](ASSET_PIPELINE.md) covers the build commands;
-[RELEASE.md](../RELEASE.md) is the release checklist. This document explains
+[RELEASE.md](RELEASE.md) is the release checklist. This document explains
 why things are the way they are, so read it before changing a builder, a
 pack format, the asset worker or the release tools.
 

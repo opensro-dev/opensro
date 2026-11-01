@@ -75,7 +75,7 @@ Retail game media is never committed. The asset build reads an extraction of you
 
 ## 🤝 Contributing
 
-New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-first rule, how to put new ideas behind a flag, and what a good pull request looks like. Then pick an issue labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue) or say hi in #🛠️contributing on [Discord](https://discord.gg/RUua9HY657).
+New here? Start with **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**: setup, the native-first rule, how to put new ideas behind a flag, and what a good pull request looks like. Then pick an issue labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue) or say hi in #🛠️contributing on [Discord](https://discord.gg/RUua9HY657).
 
 - 🎨 **Code style:** id Software (Quake III Arena): file and function banners, plain data and functions, explicit lifecycles. dprint formats JavaScript/TypeScript and gofmt formats Go.
 - 🤖 **AI coding agents are welcome** and follow the same rules as humans: [AGENTS.md](AGENTS.md).
@@ -85,7 +85,7 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 ## 📚 More
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
-- 🚢 [RELEASE.md](RELEASE.md): the release checklist
-- 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
-- 💬 [SUPPORT.md](SUPPORT.md): getting help
+- 🚢 [RELEASE.md](docs/RELEASE.md): the release checklist
+- 🔒 [SECURITY.md](.github/SECURITY.md): how to report a vulnerability
+- 💬 [SUPPORT.md](.github/SUPPORT.md): getting help
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
