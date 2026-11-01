@@ -37,9 +37,11 @@ const (
 	// selectObjectNotFound is the reference server's code when the object lookup finds no
 	// object; v1.150's 7651F1 reads it as one byte and shows text only for 7.
 	selectObjectNotFound uint8 = 3
-	// npcFunctionNotOffered is the native code when the NPC does not offer
-	// the requested function. Category 13 has no text for code 5,
-	// so the client only retires the pending function request.
+	// npcFunctionNotOffered is the port's answer when the NPC does not offer
+	// the requested function, or no gameplay module owns it. Code 5 is
+	// inferred (these port-only branches have no native twin); category 13
+	// has no text for code 5, so the client only retires the pending
+	// function request.
 	npcFunctionNotOffered uint8 = 5
 )
 

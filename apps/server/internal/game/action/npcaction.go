@@ -57,17 +57,7 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 			log.Infof("npcaction: 0x7338 mask 0x%X from %s refused: the scene is loading", mask, character.Name)
 			return
 		}
-		var frames []wire.Frame
-		var refusal string
-		if mask == gacha.InteractionFlagGacha {
-			if rt.GachaCatalog == nil {
-				refusal = "Gacha catalogue is unavailable"
-			} else {
-				frames, refusal = rt.HandleGachaNpcAction(divisionID, character, payload)
-			}
-		} else {
-			frames, refusal = rt.HandleNpcAction(divisionID, character, payload)
-		}
+		frames, refusal := rt.routeNpcAction(divisionID, character, mask, payload)
 		if refusal != "" {
 			// The frames carry the refusal's 0xB338 kind-2 answer; the
 			// string is only logged.
@@ -75,6 +65,28 @@ func (rt *Runtime) registerNpcAction(hub *transport.Hub) {
 		}
 		sendFrames(session, frames)
 	})
+}
+
+/*
+================
+routeNpcAction
+
+Routes one decoded 0x7338 by its mask: the gacha flag to the Magic Pop
+machine, everything else to the ordinary function handler. With no
+gacha catalogue configured the machine cannot open; the click answers
+the generic invalid-request refusal like every other unconfigured
+service, so the client's pending function request retires instead of
+hanging on silence.
+================
+*/
+func (rt *Runtime) routeNpcAction(divisionID string, character *enterworld.Character, mask uint32, payload []byte) ([]wire.Frame, string) {
+	if mask == gacha.InteractionFlagGacha {
+		if rt.GachaCatalog == nil {
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "Gacha catalogue is unavailable"
+		}
+		return rt.HandleGachaNpcAction(divisionID, character, payload)
+	}
+	return rt.HandleNpcAction(divisionID, character, payload)
 }
 
 /*

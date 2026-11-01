@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -143,4 +144,20 @@ func TestNpcFunctionWithNoOwnerIsRefused(t *testing.T) {
 	rt.NpcRoster[0].TalkFlags = unownedMask
 	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, unownedMask))
 	assertNpcFunctionRefusal(t, frames, refusal, npcFunctionNotOffered)
+}
+
+/*
+================
+TestGachaRequestWithoutCatalogueIsRefused
+
+A Magic Pop click routed with no gacha catalogue configured answers the
+generic invalid-request refusal instead of leaving the client's pending
+function request hanging on silence.
+================
+*/
+func TestGachaRequestWithoutCatalogueIsRefused(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.GachaCatalog = nil
+	frames, refusal := rt.routeNpcAction(testDivision, c, gacha.InteractionFlagGacha, npcActionBody(17, gacha.InteractionFlagGacha))
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
 }
