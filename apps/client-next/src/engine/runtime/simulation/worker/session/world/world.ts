@@ -754,7 +754,11 @@ step
 			// count moving. A wire that still answers is not stalled, and its
 			// pings slide the window - up to the arm's ceiling, past which the
 			// entry is wedged, not slow, and fails the attempt (#1417, #1471).
-			const activity = network.received();
+			// The bytes count too: the EnterWorld answer is one ~1 MB record
+			// (0x0007) that yields no frame until its last byte lands, so a
+			// link still streaming it must slide the window exactly as a
+			// finished frame does (#2311).
+			const activity = network.received() + network.receivedBytes();
 			if ( activity !== inboundSeen ) {
 				inboundSeen = activity;
 				noteProgress();

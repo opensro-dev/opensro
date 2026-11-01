@@ -146,6 +146,10 @@ export function createNetwork(
 	let measuredPing: number | null = null;
 	// Frames received on any socket (received()); pings and pongs included.
 	let receivedFrames = 0;
+	// Inbound bytes received on any link (receivedBytes()), counted as
+	// they arrive: a frame still being reassembled moves this long
+	// before receivedFrames can.
+	let receivedByteCount = 0;
 	// The stream position (#1466): frames above the session-internal range
 	// the consumer has applied, counted at drain - never at receipt, so a
 	// frame lost with a dying socket's inbox is re-sent on resume. It
@@ -443,6 +447,7 @@ export function createNetwork(
 				fail( String( new Error( "Non-binary transport frame" ) ) );
 				return;
 			}
+			receivedByteCount += event.data.byteLength;
 			receiveBytes( new Uint8Array( event.data ) );
 		};
 		current.onerror = () => {
@@ -655,6 +660,13 @@ export function createNetwork(
 				const { done, value } = await reader.read();
 				if ( done ) break;
 				if ( !value?.byteLength ) continue;
+				// Bytes prove the link is delivering while a record is
+				// still being reassembled: the 0x0007 answer is one
+				// ~1 MB record, invisible to receivedFrames until its
+				// last byte lands (#2311).
+				if ( !disposed && generation === epoch && link === mine ) {
+					receivedByteCount += value.byteLength;
+				}
 				const merged = new Uint8Array( pending.byteLength + value.byteLength );
 				merged.set( pending );
 				merged.set( value, pending.byteLength );
@@ -771,6 +783,19 @@ export function createNetwork(
 		*/
 		received() {
 			return receivedFrames;
+		},
+		/*
+		================
+		receivedBytes
+
+		Every inbound byte so far, counted as it arrives: a record still
+		being reassembled (the ~1 MB 0x0007 answer) moves this long
+		before received() can, so the stall detector reads a link that
+		is still streaming as alive (#2311).
+		================
+		*/
+		receivedBytes() {
+			return receivedByteCount;
 		},
 		/*
 		================
