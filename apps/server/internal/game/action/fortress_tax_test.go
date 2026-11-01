@@ -110,7 +110,7 @@ TestFortressTaxCollectWireBalancesAndPersistence
 func TestFortressTaxCollectWireBalancesAndPersistence(t *testing.T) {
 	d := fortressTaxFixture(t)
 	gold, treasury := fortressTaxTestGold, fortressTaxTestTreasury
-	// docs/fortress-tax-native.md: the recovered SQL refuses a withdrawal
+	// docs/native/fortress-tax-native.md: the recovered SQL refuses a withdrawal
 	// above the treasury instead of partially paying the requested amount.
 	steps := []struct {
 		name                 string

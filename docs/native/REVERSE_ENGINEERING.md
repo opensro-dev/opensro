@@ -12,7 +12,7 @@ between builds without checking them.
 
 ## 1. Start an investigation
 
-Read [AGENTS.md](../AGENTS.md) and the applicable area instructions. Search the
+Read [AGENTS.md](../../AGENTS.md) and the applicable area instructions. Search the
 product and any available research for the feature, packet opcode, existing
 native address, callers and tests. Write down one question, such as "does this
 window restore its position before or after layout?"
@@ -232,7 +232,7 @@ Install only when the investigation needs emulation:
 On POSIX replace the interpreter path as above. Use the
 [Unicorn Python package](https://pypi.org/project/unicorn/2.1.4/).
 For a concrete repository example, read
-[`native-region-move-reference.py`](../apps/client-next/tools/native-region-move-reference.py)
+[`native-region-move-reference.py`](../../apps/client-next/tools/native-region-move-reference.py)
 before running it. It pins one client hash and constructs specific states; it is
 not a generic harness for another build or for `SR_GameServer.exe`.
 
@@ -256,7 +256,7 @@ An evidence-producing harness needs all of the following:
   finite test set is bounded evidence, not universal equivalence or a whole-game
   synchronization/performance result.
 
-Coordinate expensive runs using [AGENT-COORDINATION.md](AGENT-COORDINATION.md).
+Coordinate expensive runs using [AGENT-COORDINATION.md](../agents/AGENT-COORDINATION.md).
 Review contributed harness code, dependencies and hooks before local execution,
 as required by the root instructions.
 
@@ -280,7 +280,7 @@ tool names. Never overwrite the retail executable with an analysis export.
 
 Use this prompt with your real paths and question:
 
-> Read AGENTS.md, docs/REVERSE_ENGINEERING.md and docs/RESEARCH_PROGRESS.md.
+> Read AGENTS.md, docs/native/REVERSE_ENGINEERING.md and docs/native/RESEARCH_PROGRESS.md.
 > Investigate [specific native question] using [binary path] and the shared
 > research directory [absolute path]. Reuse hash-matched notes first. Set up
 > the documented isolated Python environment and install the pinned packages

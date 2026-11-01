@@ -3,7 +3,7 @@
 
 viewer-camera.ts - the 3D viewer's fixed three-quarter camera
 
-Port-only, not native (docs/VIEWER.md). Frames one model from its bounds:
+Port-only, not native (docs/guides/VIEWER.md). Frames one model from its bounds:
 the camera looks at the bounds' centre from VIEWER_YAW off the model's
 front and VIEWER_PITCH above it, at the nearest distance where all eight
 corners of the box fit the field of view with a margin, for the output's

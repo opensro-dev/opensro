@@ -5,7 +5,7 @@ Server flag `SRO_ATTACK_PET_EXPANSION=on`; deployment default is **off** (native
 
 ## The design lives in one JSON source
 
-[`apps/server/internal/game/companion/petdesign.json`](../apps/server/internal/game/companion/petdesign.json)
+[`apps/server/internal/game/companion/petdesign.json`](../../apps/server/internal/game/companion/petdesign.json)
 is the one source of every number: pets, skills, rows, cooldowns, gear degrees, affixes (blues),
 procs. Edit it, then run
 

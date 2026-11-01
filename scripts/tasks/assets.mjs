@@ -207,7 +207,7 @@ export const ASSET_TASKS = [
 	} ),
 	commandTask( {
 		name: "assets:ledger",
-		description: "Report packed assets no build owner claims (read-only; see docs/ASSET_DELIVERY.md)",
+		description: "Report packed assets no build owner claims (read-only; see docs/architecture/ASSET_DELIVERY.md)",
 		kind: "assets",
 		ci: false,
 		requires: [ "generated-assets" ],

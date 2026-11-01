@@ -212,7 +212,7 @@ and compare every upload and draw list frame by frame (or, where the change
 moves work to the GPU on purpose, what each frame shows inside the
 frustum). Add a unit test for each exactness claim and check that it fails
 when the claim is broken. Then run the gates listed in
-[AGENTS.md](../AGENTS.md#verification) and the browser tests for what you
+[AGENTS.md](../../AGENTS.md#verification) and the browser tests for what you
 touched.
 
 ## 5. Record the result

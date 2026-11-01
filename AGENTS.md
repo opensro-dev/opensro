@@ -9,7 +9,7 @@ Area rules live next to the code:
 - [`scripts/AGENTS.md`](scripts/AGENTS.md) - asset pipeline, checks, task runner
 
 Several agents working at once also follow
-[`docs/AGENT-COORDINATION.md`](docs/AGENT-COORDINATION.md): the shared log,
+[`docs/agents/AGENT-COORDINATION.md`](docs/agents/AGENT-COORDINATION.md): the shared log,
 reviews, merges and evidence for performance claims.
 
 When a rule here conflicts with habit or with a gate's letter, the rule wins.
@@ -40,8 +40,8 @@ both settings. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the contributor ve
 
 ## Reverse engineering without Binary Ninja
 
-For native investigations, read [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md)
-and [docs/RESEARCH_PROGRESS.md](docs/RESEARCH_PROGRESS.md). Binary Ninja is optional.
+For native investigations, read [docs/native/REVERSE_ENGINEERING.md](docs/native/REVERSE_ENGINEERING.md)
+and [docs/native/RESEARCH_PROGRESS.md](docs/native/RESEARCH_PROGRESS.md). Binary Ninja is optional.
 When the task requires RE, agents should set up the documented isolated Python
 environment and install its pinned packages, subject to the session's network
 and execution permissions. Do not install globally or download retail binaries.

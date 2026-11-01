@@ -58,7 +58,7 @@ parent, declared in `src/engine/ownership.json` and enforced by
 
 The client reaches the Agent through same-origin `/api` and each GameWorld
 through `/shards/<id>` edge routes (or directly, for WebTransport). Hosting
-requirements are in [HOSTING.md](../apps/client-next/docs/HOSTING.md).
+requirements are in [HOSTING.md](../../apps/client-next/docs/HOSTING.md).
 
 `apps/client-next/tests/` holds architecture tests (ownership, capabilities,
 execution), runtime unit tests and browser tests. Native reference captures

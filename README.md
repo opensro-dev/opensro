@@ -20,7 +20,7 @@ Behaviour is ported from the original game, not guessed: the v1.150 client defin
 
 ## 🚀 Quick start
 
-The full walkthrough, with the exact tool versions, is [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md). In short:
+The full walkthrough, with the exact tool versions, is [docs/guides/GETTING_STARTED.md](docs/guides/GETTING_STARTED.md). In short:
 
 1. **Install the tools:** Go, Node.js 24, pnpm (through Corepack), Python 3.12, and a WebGPU browser (current Chrome or Edge). Nomad is a pinned download.
 2. **Build the game data** from your own v1.150 client:
@@ -54,7 +54,7 @@ Only changing code, not game data? `corepack pnpm check source` runs the CI gate
 
 Local only and ignored: `.generated/` (all generated game data), `.state/` (caches and locks), `.tools/` (pinned binaries such as Nomad), `temp/` (scratch output) and `node_modules/`.
 
-Retail game media is never committed. The asset build reads an extraction of your own client next to the checkout; see [docs/ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md).
+Retail game media is never committed. The asset build reads an extraction of your own client next to the checkout; see [docs/architecture/ASSET_PIPELINE.md](docs/architecture/ASSET_PIPELINE.md).
 
 ---
 
@@ -85,7 +85,7 @@ New here? Start with **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**: setup, the 
 ## 📚 More
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
-- 🚢 [RELEASE.md](docs/RELEASE.md): the release checklist
+- 🚢 [RELEASE.md](docs/operations/RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](.github/SECURITY.md): how to report a vulnerability
 - 💬 [SUPPORT.md](.github/SUPPORT.md): getting help
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)

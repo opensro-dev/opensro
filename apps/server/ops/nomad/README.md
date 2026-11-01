@@ -1,6 +1,6 @@
 # Nomad operations
 
-Use [Getting started](../../../../docs/GETTING_STARTED.md) first for tool installation, the pinned
+Use [Getting started](../../../../docs/guides/GETTING_STARTED.md) first for tool installation, the pinned
 development binary, initial asset/account/shard provisioning, and the
 three-terminal startup sequence. This guide is the Nomad behavior and
 production-operations reference.
@@ -36,7 +36,7 @@ ports, or implement a second crash-loop state machine.
 ## Development
 
 The complete first-time setup sequence is in
-[Getting started](../../../../docs/GETTING_STARTED.md#3-server-cluster). The commands
+[Getting started](../../../../docs/guides/GETTING_STARTED.md#3-server-cluster). The commands
 below are the Nomad-specific summary, not an alternative setup path.
 
 Nomad 2.0.7 is pinned for the current checkout. Start one loopback development

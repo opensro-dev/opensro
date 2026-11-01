@@ -1,6 +1,6 @@
 # Deployment
 
-Use [Getting started](../../../../docs/GETTING_STARTED.md) for prerequisite
+Use [Getting started](../../../../docs/guides/GETTING_STARTED.md) for prerequisite
 installation, first local startup, the three-terminal development workflow,
 readiness checks and safe reset. This document defines deployment and state
 contracts; it is not a second first-time tutorial.
@@ -123,7 +123,7 @@ go run ./cmd/operations/sro-bootstrap-development
 ```
 
 That command is one step of the canonical
-[local setup sequence](../../../../docs/GETTING_STARTED.md#3-server-cluster). It is
+[local setup sequence](../../../../docs/guides/GETTING_STARTED.md#3-server-cluster). It is
 not a production account provisioner.
 
 Production creates credentials and accounts separately:

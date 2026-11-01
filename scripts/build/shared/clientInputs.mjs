@@ -40,7 +40,7 @@ export const PYTHON_BUILD_MODULES = [
 export const PYTHON_INSTALL_HINT = process.platform === "win32" ?
 	"py -3 -m pip install -r requirements-build.txt" :
 	"python3 -m venv .venv && .venv/bin/pip install -r requirements-build.txt && export SRO_PYTHON=$PWD/.venv/bin/python";
-const PREPARE_HINT = "run `pnpm assets prepare` (see docs/GETTING_STARTED.md)";
+const PREPARE_HINT = "run `pnpm assets prepare` (see docs/guides/GETTING_STARTED.md)";
 
 /*
 ================

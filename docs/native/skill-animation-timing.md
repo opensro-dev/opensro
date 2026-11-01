@@ -266,7 +266,7 @@ CodexProbe walked through Jangan's south gate using normal movement commands
 and selected living Mangyang through viewport clicks. The character had
 upgraded Anti Devil to 952; obsolete-rank requests are excluded.
 
-[The compact capture](evidence/skill-timing-20261006.json) retains both cast
+[The compact capture](../evidence/skill-timing-20261006.json) retains both cast
 identities, native protocol frames, receive/release times and one-shot layer
 samples. The full local capture is `.state/sox-visuals/cast-timing-final-verified.json`;
 its SHA-256 is recorded in the compact capture.
