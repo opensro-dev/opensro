@@ -108,7 +108,25 @@ test("native title statuses preserve packed argument order and every simple mess
 	}
 	for ( const subtype of [ 2, 3, 4 ] ) assert.ok( titleStatusMessage( 3, subtype, resolve ) );
 	for ( const subtype of [ 0, 5, 65536 ] ) assert.equal( titleStatusMessage( 3, subtype, resolve ), undefined );
-	for ( const status of [ undefined, 0, 1, 17, 255 ] ) {
+	// Native statuses 17-20 enter the same four cases as status 3's
+	// arguments 1-4 (dispatch table 0x74a0c8), so they resolve the same.
+	for ( const [status, subtype] of [ [ 17, 1 ], [ 18, 2 ], [ 19, 3 ], [ 20, 4 ] ] ) {
+		assert.equal( titleStatusKey( status, undefined ), titleStatusKey( 3, subtype ) );
+		assert.ok( titleStatusMessage( status, undefined, resolve ) );
+	}
+	// The retail web-address strings are never a title refusal here.
+	for ( let status = 0; status <= 32; status++ ) {
+		for ( const argument of [ undefined, 0, 1, 2, 3, 4, 5 ] ) {
+			const key = titleStatusKey( status, argument );
+			assert.ok(
+				key !== "UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE_1",
+				`status ${status} argument ${argument} resolved ${key}`
+			);
+		}
+	}
+	for ( const status of [ undefined, 0, 1, 21, 255 ] ) {
 		assert.equal( titleStatusMessage( status, 0, resolve ), undefined );
 	}
 	assert.equal(
