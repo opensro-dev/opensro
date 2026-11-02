@@ -555,7 +555,11 @@ async function acquireStateMutex( lockDir, deadline ) {
 		try {
 			await mkdir( mutexDir );
 		} catch ( error ) {
-			if ( isDeletePendingClaimError( error ) && Date.now() < spinUntil ) {
+			// ENOENT is the delete-pending race one step later: a release
+			// that emptied the state removed the lock dir after our
+			// ensure, before this claim. The retry's ensure re-creates
+			// it; past the spin, both still throw.
+			if ( (isDeletePendingClaimError( error ) || error?.code === "ENOENT") && Date.now() < spinUntil ) {
 				await sleep( MUTEX_SPIN_SLEEP_MS );
 				continue;
 			}

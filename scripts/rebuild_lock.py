@@ -187,7 +187,7 @@ def acquire_rebuild_lock(name: str, label: str, mode: str, lock_dir: Path,
 			if waiting_published:
 				my_waiting_path.unlink(missing_ok=True)
 			blocker = decision.get("blocker")
-			raise TimeoutError(f"[rebuild-lock] {label}: timed out waiting for {format_owner(blocker)}.")
+			raise TimeoutError(f"[rebuild-lock] {label}: timed out waiting for {format_owner(blocker) if blocker is not None else 'another rebuild'}.")
 
 		time.sleep(poll_ms / 1000)
 
@@ -358,6 +358,14 @@ def acquire_state_mutex(lock_dir: Path, deadline_ms: int | None) -> str | None:
 		lock_dir.mkdir(parents=True, exist_ok=True)
 		try:
 			mutex_dir.mkdir()
+		except FileNotFoundError:
+			# A release that emptied the state removed the lock dir
+			# between the ensure above and this claim; the next round
+			# re-creates it, still inside the spin deadline.
+			if int(time.time() * 1000) >= spin_until_ms:
+				return None
+			time.sleep(MUTEX_SPIN_SLEEP_S)
+			continue
 		except FileExistsError:
 			mtime_ms, owner = read_state_file(mutex_owner_path)
 			if owner is not None and is_stale_record(owner, mtime_ms, MUTEX_STALE_MS):
