@@ -644,6 +644,14 @@ cosCapeWarnsGrowthPet
 holds an attack-class entry (82EF30 sought with class 3) and no
 guild-class one (class 4). A dead attack pet is on its way out with the
 cleanup, so it no longer counts as summoned.
+
+Of 594980's remaining conditions, the empty target socket is judged at
+the equip command, where the socket rows live. The 0x40 gender leg of
+789C60 (the item's ReqGender against the wearer's sex, item value 2
+passing for everyone) is not judged on this lane: the worker's item
+catalogue carries no ReqGender column, so a wrong-gender cape warns
+here where the original stays silent. Judging it needs the published
+references widened by that one column.
 ================
 */
 export function cosCapeWarnsGrowthPet( records: readonly Pick<CosRecord, "band" | "dead">[] ): boolean {

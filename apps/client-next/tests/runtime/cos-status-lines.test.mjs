@@ -300,6 +300,31 @@ test("the HGP line follows the 0x33A6 satiety fall the same way", () => {
 	assert.equal( falls(), 2 );
 });
 
+test("the HGP line prints once when both satiety packets report one fall", () => {
+	const { game } = world( { companions: [ pet( 3, { satiety: 5000, status: 0 } ) ] } );
+	const satietyTo = value =>
+		game.receive( { opcode: 0x3508, payload: Uint8Array.from( [ ...u32( 7 ), 4, ...u16( value ) ] ) }, 1 );
+	const vitalsTo = value =>
+		game.receive(
+			{ opcode: 0x33a6, payload: Uint8Array.from( [ ...u32( 7 ), ...u16( 0x400 ), 8, ...u16( value ) ] ) },
+			1
+		);
+	const falls = () => noticeKeys( game ).filter( key => key === HGP_LOW ).length;
+	// The record is the one satiety store (the original's +0x10 word):
+	// the fall the vitals lane printed is already stored when the
+	// satiety packet lands lower still.
+	vitalsTo( 2500 );
+	assert.equal( falls(), 1 );
+	satietyTo( 2400 );
+	assert.equal( falls(), 1, "the second lane sees the same stored fall" );
+	satietyTo( 9000 );
+	assert.equal( falls(), 1, "the rise back prints nothing" );
+	vitalsTo( 2000 );
+	assert.equal( falls(), 2, "a fresh fall on either lane prints again" );
+	satietyTo( 1500 );
+	assert.equal( falls(), 2 );
+});
+
 test("equipping a free-battle cape warns while a growth pet is out, and still equips", () => {
 	const bagItems = [ { slot: 20, refObjId: 10, typeFlags: CAPE } ];
 	const withPet = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
@@ -327,4 +352,17 @@ test("the cape warning yields to a guild soldier and to non-cape moves", () => {
 	const pet4 = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
 	pet4.game.command( { kind: "inventory-move", source: 21, destination: 8, quantity: 0 }, 1 );
 	assert.deepEqual( noticeKeys( pet4.game ), [] );
+});
+
+test("swapping a cape onto a worn cape socket does not warn", () => {
+	// 594980 requires the target socket's record empty (+0x28 clear):
+	// the warning belongs to the fresh equip, not the swap.
+	const bagItems = [
+		{ slot: 20, refObjId: 10, typeFlags: CAPE },
+		{ slot: 8, refObjId: 10, typeFlags: CAPE }
+	];
+	const worn = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
+	const frame = worn.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
+	assert.equal( frame.opcode, 0x706d, "the swap itself still sends" );
+	assert.deepEqual( noticeKeys( worn.game ), [] );
 });
