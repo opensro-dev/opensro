@@ -88,6 +88,12 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
+	// sceneSnapshotBuilt marks the narrow window after the enter lane
+	// has built this scene's snapshot and before its bootstrap (or
+	// refusal) queues. Only in that window do later batches park
+	// behind the bootstrap; an ordinary loading scene whose answers a
+	// client is waiting on is not caught by it (#2294).
+	sceneSnapshotBuilt bool
 	// pendingReceipts are batches parked for this scene while its
 	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
 	// they join the queue behind the bootstrap batch, never ahead of
@@ -314,8 +320,9 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
 // callers may reuse their buffer immediately. A native game frame sent
-// while a scene bootstrap is still being built parks behind it (#2294);
-// transport-control frames are the machinery's own and stay immediate.
+// while a built scene snapshot awaits its bootstrap parks behind it
+// (#2294); transport-control frames are the machinery's own and stay
+// immediate.
 /*
 ================
 Send
@@ -349,9 +356,9 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
 	}
-	// A game frame that finds the scene still waiting for its bootstrap
-	// queues behind it, in issue order with the parked receipts.
-	if opcode > maxControlOpcode && s.sceneLoading && !s.sceneBootstrapEnqueued {
+	// A game frame that finds a built snapshot still waiting for its
+	// bootstrap queues behind it, in issue order with parked receipts.
+	if opcode > maxControlOpcode && s.bootstrapParkOpenLocked() {
 		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: []Frame{{Opcode: opcode, Payload: owned}}})
 		s.pendingFrames++
 		s.pendingBytes += frameBytes
@@ -639,6 +646,7 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
+	s.sceneSnapshotBuilt = false
 	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil

@@ -128,6 +128,7 @@ func (s *Session) BeginSceneAdmission() {
 	s.sceneLoading = true
 	s.sceneLoadingSince = time.Now()
 	s.sceneBootstrapEnqueued = false
+	s.sceneSnapshotBuilt = false
 	s.dropPendingReceiptsLocked()
 	s.clearObservedLocked()
 	revision := s.sceneRevision
@@ -285,7 +286,56 @@ func (s *Session) MarkSceneBootstrapEnqueued() {
 	// for parked receipts to follow; they belong to the refused scene.
 	s.dropPendingReceiptsLocked()
 	s.sceneBootstrapEnqueued = true
+	s.sceneSnapshotBuilt = false
 	s.mu.Unlock()
+}
+
+/*
+================
+MarkSceneSnapshotBuilt
+
+The enter lane calls this once Build has fixed the scene snapshot,
+just before it releases the publication gate for the encode. From
+here until the bootstrap queues, work committed against the snapshot
+parks behind it. An ordinary loading scene never gets this mark, so
+answers a client is waiting on during a load are not held for a
+bootstrap that is not coming through this lane.
+================
+*/
+func (s *Session) MarkSceneSnapshotBuilt() {
+	s.mu.Lock()
+	if s.sceneLoading && !s.closed {
+		s.sceneSnapshotBuilt = true
+	}
+	s.mu.Unlock()
+}
+
+/*
+================
+CloseSceneSnapshotBuilt
+
+Ends the snapshot-built window without an answer on the wire (the
+enter lane's safety net for a failed publish). Parked batches stay
+parked for the next admission to drop; no new batch joins them.
+================
+*/
+func (s *Session) CloseSceneSnapshotBuilt() {
+	s.mu.Lock()
+	s.sceneSnapshotBuilt = false
+	s.mu.Unlock()
+}
+
+/*
+================
+Session::bootstrapParkOpenLocked
+
+Whether a batch arriving now must wait behind this scene's bootstrap:
+the snapshot is built, the scene is still loading, and no bootstrap
+or refusal has queued yet. Caller holds s.mu.
+================
+*/
+func (s *Session) bootstrapParkOpenLocked() bool {
+	return s.sceneLoading && s.sceneSnapshotBuilt && !s.sceneBootstrapEnqueued
 }
 
 /*
@@ -318,6 +368,7 @@ func (s *Session) FinishSceneReentry() bool {
 		return false
 	}
 	s.sceneLoading = false
+	s.sceneSnapshotBuilt = false
 	hooks := s.sceneReadyHooks
 	s.sceneReadyHooks = nil
 	revision := s.sceneRevision
@@ -352,8 +403,8 @@ func (s *Session) OnSceneReady(fn func()) {
 //
 // The batch remains bounded by both configured frame and byte limits. Payloads
 // are copied before publication, exactly as in Send. A batch of native game
-// frames sent while a scene bootstrap is still being built parks behind
-// it (#2294); a batch carrying a transport-control frame (the admission
+// frames sent while a built scene snapshot awaits its bootstrap parks
+// behind it (#2294); a batch carrying a transport-control frame (the admission
 // answer itself, machinery traffic) stays immediate.
 /*
 ================
@@ -512,13 +563,15 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		// The reset batch is this scene's bootstrap: its enqueue below
 		// is the moment the scene has an answer on the wire.
 		s.sceneBootstrapEnqueued = true
+		s.sceneSnapshotBuilt = false
 	}
-	// A batch accepted while this scene's bootstrap is not queued yet
-	// waits behind it (#2294): the bootstrap is the snapshot, and work
-	// committed against it must follow it on the wire, never precede
-	// it. The entry handler releases the publication gate before
-	// encoding, so this window is real now.
-	if options.parkBehindBootstrap && s.sceneLoading && !s.sceneBootstrapEnqueued {
+	// A batch accepted while a built snapshot's bootstrap is not
+	// queued yet waits behind it (#2294): the bootstrap is the
+	// snapshot, and work committed against it must follow it on the
+	// wire, never precede it. The window opens when the enter lane
+	// marks the snapshot built, just before it releases the
+	// publication gate for the encode.
+	if options.parkBehindBootstrap && s.bootstrapParkOpenLocked() {
 		copied := make([]Frame, len(frames))
 		for i, frame := range frames {
 			copied[i] = Frame{Opcode: frame.Opcode, Payload: append([]byte(nil), frame.Payload...), Current: frame.Current}

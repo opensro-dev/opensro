@@ -192,6 +192,7 @@ func TestSceneReceiptParkedBehindItsBootstrap(t *testing.T) {
 	}
 
 	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
 	revision, valid := session.SceneReceiptRevision()
 	if !valid {
 		t.Fatal("receipt revision must be valid while loading")
@@ -205,6 +206,7 @@ func TestSceneReceiptParkedBehindItsBootstrap(t *testing.T) {
 
 	// A fresh admission drops whatever the previous scene parked.
 	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
 	revision, valid = session.SceneReceiptRevision()
 	if !valid {
 		t.Fatal("receipt revision must be valid while loading")

@@ -46,6 +46,7 @@ func TestDirectSendWaitsBehindTheBootstrap(t *testing.T) {
 	}
 
 	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
 	revision, valid := session.SceneReceiptRevision()
 	if !valid {
 		t.Fatal("receipt revision must be valid while loading")
@@ -98,6 +99,7 @@ func TestPrebootstrapMachineryAndAdmissionAnswerStayImmediate(t *testing.T) {
 	const game = 0x3417
 
 	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
 	if err := session.Send(game, []byte{1}); err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +119,63 @@ func TestPrebootstrapMachineryAndAdmissionAnswerStayImmediate(t *testing.T) {
 	want := []uint16{OpPong, OpEnterWorldResult, game}
 	if len(got) != len(want) || parked != 1 {
 		t.Fatalf("queue = %v parked = %d, want %v with 1 parked", got, parked, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}
+
+/*
+================
+TestDirectSendBeforeTheSnapshotStaysImmediate
+
+Scene loading alone does not open the park: a load whose bootstrap is
+not coming through the enter lane (a recall reset, a relocation) still
+answers at once. Only the enter lane's snapshot-built mark opens the
+window, and its bootstrap then precedes what parked inside it.
+================
+*/
+func TestDirectSendBeforeTheSnapshotStaysImmediate(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const reset, early, late = 0x366a, 0x3417, 0x3b29
+	queueOpcodes := func() []uint16 {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		out := make([]uint16, len(session.queue))
+		for i, frame := range session.queue {
+			out[i] = frame.Opcode
+		}
+		return out
+	}
+
+	session.BeginSceneAdmission()
+	if err := session.Send(early, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := queueOpcodes(); len(got) != 1 || got[0] != early {
+		t.Fatalf("unmarked loading scene held its answer: %v", got)
+	}
+	session.MarkSceneSnapshotBuilt()
+	if err := session.Send(late, []byte{2}); err != nil {
+		t.Fatal(err)
+	}
+	if got := queueOpcodes(); len(got) != 1 {
+		t.Fatalf("marked window did not park: %v", got)
+	}
+	if err := session.SendSceneReset([]Frame{{Opcode: reset, Payload: []byte{9}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []uint16{early, reset, late}
+	got := queueOpcodes()
+	if len(got) != len(want) {
+		t.Fatalf("queue = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {

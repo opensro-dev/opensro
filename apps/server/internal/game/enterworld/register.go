@@ -400,12 +400,15 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			s.BindCharacter(result.DivisionID, result.Character.Name, ObjectIDForCharacter(result.Character))
 		}
 		// The gate ordered this snapshot against tick commits; Build is
-		// the last read of live state. The encode and publish below read
-		// only the detached result, so the gate opens now (#2294): the
-		// marshal no longer queues every tick behind it. Wire order
-		// still holds — visibility stays fenced until the bootstrap
-		// lands, and receipts committed from now on park behind it in
-		// the transport until the bootstrap batch queues.
+		// the last read of live state. Mark the snapshot built while the
+		// gate still serializes producers, then open it: the encode and
+		// publish below read only the detached result, so the marshal no
+		// longer queues every tick behind it (#2294). Wire order still
+		// holds — visibility stays fenced until the bootstrap lands,
+		// and work committed from now on parks behind it in the
+		// transport until the bootstrap batch queues.
+		s.MarkSceneSnapshotBuilt()
+		defer s.CloseSceneSnapshotBuilt()
 		releaseGate()
 		var outcome EnterWorldOutcome
 		if !built {
