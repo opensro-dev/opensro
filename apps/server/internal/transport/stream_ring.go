@@ -27,7 +27,11 @@ writer outran apply-then-ack during entry bursts and crowd churn until
 91% of resumes presented positions the ring no longer covered. A client
 that never acknowledges now degrades into the outbound queue's own
 bound (the slow-consumer close) rather than a silently unresumable
-session.
+session. One case sits outside the bound by design: a single frame
+larger than the whole byte bound is held in the ring until the client
+acknowledges it - dropping it would strand every client still
+downloading it - and the writer waits behind it as behind any full
+ring.
 
 Positions are compared plainly, never wrap-aware (#1515 review): a session
 would need four billion counted frames to reach the 2^32 wrap, so a
@@ -104,12 +108,16 @@ func (s *Session) noteWrittenLocked(f Frame, ordered bool) uint32 {
 	}
 	s.ring = append(s.ring, ringFrame{pos: s.streamPos, f: f})
 	s.ringBytes += f.EncodedLen()
-	for len(s.ring) > streamRingMaxFrames || s.ringBytes > streamRingMaxBytes {
+	for len(s.ring) > 1 && (len(s.ring) > streamRingMaxFrames || s.ringBytes > streamRingMaxBytes) {
 		// The oldest unacknowledged frame falls out: a resume that still
 		// needs it is refused instead of silently skipping it. The
 		// writer's gate (ringGateLocked) keeps a live session from ever
 		// reaching this; what reaches it is a numbering caller that
-		// bypassed the writer, and the refusal stays honest there.
+		// bypassed the writer, and the refusal stays honest there. The
+		// newest frame never falls out here, however far past the bound
+		// it sits: it leaves only when the client acknowledges it, so a
+		// client still downloading it can always resume from the
+		// position before it (#2146).
 		s.ringFloor = s.ring[0].pos
 		s.ringBytes -= s.ring[0].f.EncodedLen()
 		s.ring[0] = ringFrame{}
@@ -186,11 +194,11 @@ slot. Caller holds s.mu.
 func (s *Session) ringGateLocked() bool {
 	if len(s.queue) == 0 || len(s.ring) == 0 {
 		// An empty ring always takes the frame: a single frame larger
-		// than the whole byte bound (the multi-megabyte EnterWorld
-		// result) could otherwise wait forever for room that can never
-		// exist. It is written and the trim in noteWrittenLocked drops
-		// it from the ring at once, as before; its delivery matters,
-		// and a client that applied it resumes past its position.
+		// than the whole byte bound could otherwise wait forever for
+		// room that can never exist. It is written and held until the
+		// client acknowledges it (noteWrittenLocked never drops the
+		// newest frame); the writer waits behind it, and a resume from
+		// before it re-sends it instead of refusing.
 		return false
 	}
 	head := s.queue[0]
