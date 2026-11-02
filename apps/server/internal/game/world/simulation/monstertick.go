@@ -85,6 +85,17 @@ type MonsterMoverOps struct {
 	// the helpers fall back to the plain commits of before.
 	stepBaseGen  uint64
 	stepGenArmed bool
+	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
+	// #2205): the zero value (everywhere but production wiring) runs
+	// the serial leg; >= 1 plans each batch on a pool - one worker
+	// included - and commits it in the serial order. Port-only
+	// concurrency, not native.
+	LegWorkers int
+	// plan is the running plan's sink while one batch actor is being
+	// planned on a pool worker (#2205): the commit funnels record
+	// into it instead of applying. Nil outside a pooled plan, where
+	// every funnel behaves exactly as before.
+	plan *legPlan
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -380,6 +391,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
+		if ops.pooledLeg() && len(batch.actors) > 1 {
+			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
+			continue
+		}
 		for _, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
 			// All dispatch decides is that the actor is still there: a
@@ -574,6 +589,14 @@ nothing.
 ================
 */
 func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+	if ops.plan != nil {
+		// Planning (#2205): record the transaction's result; the
+		// commit re-prepares the admission against the row then, the
+		// moment the serial call reads it, so the plan-time admission
+		// is deliberately not carried over.
+		ops.plan.recordNavigation(next, frames)
+		return frames
+	}
 	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
 	if ops.stepGenArmed {
 		if mover, gen, ok := ops.Monsters.MoverGeneration(divisionID, before.instance.Gid); ok && mover == next {

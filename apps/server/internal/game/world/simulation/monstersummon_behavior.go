@@ -96,12 +96,12 @@ func (ops *MonsterMoverOps) followSummoner(divisionID string, instance monster.I
 		return nil, true
 	}
 	if !plan.timers.CheckTimer(7, uint32(nowMs)) {
-		frames, accepted := ops.Monsters.commitFollow(plan, mover, nil)
+		frames, accepted := ops.commitSteppedFollow(plan, mover, nil)
 		return frames, !accepted
 	}
 	live, target := mover.LivePoseAt(nowMs, nil), plan.leader.LivePoseAt(nowMs, nil)
 	if !followLeaderCompatible(plan, live, target) {
-		frames, accepted := ops.Monsters.commitFollow(plan, mover, nil)
+		frames, accepted := ops.commitSteppedFollow(plan, mover, nil)
 		return frames, !accepted
 	}
 	return ops.planFollowSegment(plan, live, target, nowMs)
@@ -118,12 +118,12 @@ func (ops *MonsterMoverOps) planFollowSegment(plan monsterFollowPlan, live, targ
 	// its
 	// movement callback runs on Timer 0, not in the Timer 7 selector.
 	if !(distance >= float32(plan.instance.SummonerFollowRange)) {
-		frames, accepted := ops.Monsters.commitFollow(plan, plan.mover, nil)
+		frames, accepted := ops.commitSteppedFollow(plan, plan.mover, nil)
 		return frames, !accepted
 	}
 	mover := plan.mover
 	mustMoverTransition(&mover, monster.MoverEventFollowStarted, mover.ControllerGID())
-	frames, _ := ops.Monsters.commitFollow(plan, mover, nil)
+	frames, _ := ops.commitSteppedFollow(plan, mover, nil)
 	return frames, true
 }
 
@@ -142,7 +142,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 		mover.DepartMs, mover.ArriveMs = 0, 0
 		frames = append(frames, correctionFrame(instance.Gid, mover.Pose))
 		if mover.NoteMoveStopped(mover.Pose) {
-			frames, _ = ops.Monsters.commitFollow(plan, mover, frames)
+			frames, _ = ops.commitSteppedFollow(plan, mover, frames)
 			return frames, true
 		}
 		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
@@ -157,7 +157,7 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 			mover, movement = ops.planSegment(instance, mover, goal, speed, channel, nowMs)
 			frames = append(frames, movement...)
 		}
-		frames, _ = ops.Monsters.commitFollow(plan, mover, frames)
+		frames, _ = ops.commitSteppedFollow(plan, mover, frames)
 		return frames, true
 	}
 	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
@@ -187,6 +187,6 @@ func (ops *MonsterMoverOps) stopOrAdvanceFollow(divisionID string, instance mons
 		mover, movement = ops.planSegment(instance, mover, goal, speed, channel, nowMs)
 		frames = append(frames, movement...)
 	}
-	frames, _ = ops.Monsters.commitFollow(plan, mover, frames)
+	frames, _ = ops.commitSteppedFollow(plan, mover, frames)
 	return frames, true
 }
