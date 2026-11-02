@@ -268,6 +268,7 @@ publishWorld
 				restoringWorld: false,
 				character: undefined,
 				error: value.error,
+				entryFailure: value.entryFailure,
 				disconnectMessage: value.disconnectMessage,
 				incidentID: value.incidentID,
 				incidentDelivery: incidentDelivery.get( value.incidentID )
@@ -285,6 +286,7 @@ publishWorld
 			entityCount: value.entities,
 			pingMs: value.pingMs,
 			error: value.error,
+			entryFailure: value.entryFailure,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
