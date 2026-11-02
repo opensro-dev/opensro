@@ -143,7 +143,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 	// A rejected request for the device says the GPU is unavailable now, not
 	// that it never will be (#2337: requestDevice rejects after a GPU reset).
 	// Failures past that point are the device's own and stay permanent.
-	let retryable = recovering;
+	let retryable = true;
 	if ( !navigator.gpu ) {
 		fail( "WebGPU is unavailable" );
 	} else {
@@ -152,10 +152,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				return null;
 			}
 			if ( !adapter ) {
+				retryable = recovering;
 				throw new Error( "No WebGPU adapter" );
 			}
 			facts = gpuFacts( adapter );
-			retryable = true;
 			const requiredFeatures: GPUFeatureName[] = [];
 			if ( adapter.features.has( "texture-compression-bc" ) ) requiredFeatures.push( "texture-compression-bc" );
 			// The port-only variant formats (texture-variants.ts) a device without

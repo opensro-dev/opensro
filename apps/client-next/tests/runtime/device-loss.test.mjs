@@ -99,7 +99,10 @@ function installGpu( options = {} ) {
 	Object.defineProperty( globalThis.navigator, "gpu", {
 		configurable: true,
 		value: {
-			requestAdapter: async () => options.noAdapter ? null : adapter,
+			requestAdapter: async () => {
+				if ( options.rejectAdapter ) throw new Error( options.rejectAdapter );
+				return options.noAdapter ? null : adapter;
+			},
 			getPreferredCanvasFormat: () => "bgra8unorm"
 		}
 	} );
@@ -185,6 +188,15 @@ test("a requestDevice rejected on the first start can be tried again too", async
 	device.dispose();
 });
 
+test("a rejected requestAdapter can be tried again, even on a first start", async () => {
+	installGpu( { rejectAdapter: "OperationError: adapter unavailable" } );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), true );
+	device.dispose();
+});
+
 test("no adapter means no WebGPU on a first start, and a reset under way on a replacement", async () => {
 	installGpu( { noAdapter: true } );
 	const first = createDevice();
@@ -210,7 +222,8 @@ test("a device error after creation stays permanent", async () => {
 
 test("running out of GPU memory can be cured by a new device", async () => {
 	class OutOfMemory extends Error {}
-	globalThis.GPUOutOfMemoryError = OutOfMemory;
+	const scope = /** @type {any} */ (globalThis);
+	scope.GPUOutOfMemoryError = OutOfMemory;
 	try {
 		const gpu = installGpu();
 		const device = createDevice();
@@ -221,7 +234,7 @@ test("running out of GPU memory can be cured by a new device", async () => {
 		assert.equal( device.recoverable(), true );
 		device.dispose();
 	} finally {
-		delete globalThis.GPUOutOfMemoryError;
+		delete scope.GPUOutOfMemoryError;
 	}
 });
 
