@@ -150,12 +150,16 @@ reportClient
 
 A main-thread fault (client-report) as an incident: degraded reports file
 apart from failures; a refused entry files as a software failure with the
-stage it happened in. Each code reports once.
+stage it happened in. Each code reports once - except asset failures,
+which file once per terminal episode: the stream owners hand each out
+exactly once (#2337), so a code dedupe would eat a later episode whole.
 ================
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
-		if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
-		clientReports.add( command.code );
+		if ( command.incidentKind !== "asset" ) {
+			if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+			clientReports.add( command.code );
+		}
 		reportIncident( {
 			id: crypto.randomUUID().replaceAll( "-", "" ),
 			category: command.incidentKind === "degraded" ? "degraded" : "software",
@@ -264,6 +268,7 @@ publishWorld
 				restoringWorld: false,
 				character: undefined,
 				error: value.error,
+				entryFailure: value.entryFailure,
 				disconnectMessage: value.disconnectMessage,
 				incidentID: value.incidentID,
 				incidentDelivery: incidentDelivery.get( value.incidentID )
@@ -281,6 +286,7 @@ publishWorld
 			entityCount: value.entities,
 			pingMs: value.pingMs,
 			error: value.error,
+			entryFailure: value.entryFailure,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
