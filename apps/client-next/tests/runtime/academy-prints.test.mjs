@@ -6,8 +6,9 @@ academy-prints.test.mjs - the training-camp lines #2286 restores
 Four prints on flows that already exist: a camp member's log-on and
 log-off (0x3AC5 status 5 flag 1, 5C54F0 state kind 1 via 67A600
 type 0; the prints follow the announced latch, not the stored
-byte), the join answers (0xB592 detail 0 and 2, 769CA0 via 67A600
-type 4), the matching window's in-process label (62E540 mode 1;
+byte), the join answers (0xB592 details 0 and 2 via 67A600 type 4,
+detail 1 the matching-complete centre banner via 67D030, 769CA0),
+the matching window's in-process label (62E540 mode 1;
 mode 2's duplicate text is held), and
 the guild master-transfer name lookup (5D3EB0 via 67A600 type 0,
 guild lane). Channels and arms are ASM-verified against the client
@@ -120,12 +121,15 @@ test("a disconnect byte prints every time and clears the latch; other flags stay
 	assert.equal( academyStatusNotice( state, packetOf( state, level ), level ), null );
 });
 
-test("join answers print cancel and no-reply at type 4, and stay silent otherwise", () => {
+test("join answers print cancel and no-reply at type 4, and the completion banner on a match", () => {
 	const state = camp( [] );
 	const cases = [
 		{ payload: [ 1, 0 ], expected: { key: "UIIT_MSG_TC_JOIN_CANCEL", value: 0, nativeType: 4 } },
 		{ payload: [ 1, 2 ], expected: { key: "UIIT_MSG_TC_JOIN_NOREPLY", value: 0, nativeType: 4 } },
-		{ payload: [ 1, 1 ], expected: null },
+		{
+			payload: [ 1, 1 ],
+			expected: { key: "UIIT_STT_TC_MACHING_COMPLETE", value: 0, banner: true, bannerOnly: true }
+		},
 		{ payload: [ 2, 0 ], expected: null }
 	];
 	for ( const entry of cases ) {
