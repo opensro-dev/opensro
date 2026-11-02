@@ -4712,12 +4712,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
-				// 755E40: a subtype-4 item's success names the change it made.
+				// 755E40: a subtype-4 item's success names the change it made,
+				// on the notice window (67D030), not in chat.
 				if ( used && isStallChangeItem( used.typeFlags ) ) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_ITEMB_STSTALL_CHAINGE",
 						value: 0,
 						arguments: [ used.name ?? "" ],
+						notificationBanner: true,
+						bannerOnly: true,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;

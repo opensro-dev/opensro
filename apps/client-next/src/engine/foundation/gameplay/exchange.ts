@@ -71,8 +71,8 @@ export function emptyExchange(): ExchangeState {
 ExchangeOutcome
 
 The next state, a category-1 notice code the frame raised, the swap
-a 0x3272 asks the bag to apply, and the text notice a success raises
-(765260 shows it as the window closes).
+a 0x3272 asks the bag to apply, and the banner a success raises
+(765260 shows it in the notice window as the window closes).
 ================
 */
 export interface ExchangeOutcome {
@@ -144,7 +144,12 @@ export function exchangeFrame(
 		case OP_EXCHANGE_SUCCEEDED:
 			return {
 				state: emptyExchange(),
-				message: { key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED", value: 0 },
+				message: {
+					key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
+					value: 0,
+					notificationBanner: true,
+					bannerOnly: true
+				},
 				swap: {
 					receive: [ ...state.theirs ].sort( ( a, b ) => a.slot - b.slot ).map( row => row.item ),
 					give: state.own.flatMap( row => row.bagSlot === undefined ? [] : [ row.bagSlot ] )
