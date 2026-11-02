@@ -33,7 +33,7 @@ const entryAnswerBytes = streamRingMaxBytes + 731271
 // slowEntryParkBound stands in for RingParkBound. A loaded machine only
 // delays the watchdog past it, never fires it early, so three bounds of
 // quiet are a safe "still attached" window in the passing direction.
-const slowEntryParkBound = 500 * time.Millisecond
+const slowEntryParkBound = 200 * time.Millisecond
 
 /*
 ================
