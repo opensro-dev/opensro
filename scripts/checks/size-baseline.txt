@@ -18,6 +18,7 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/ent
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts # synchronous composition of gameplay owners; command admission, packet commits and snapshot publication share one frame transaction
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts # one owner of the slot map and the single pending item transaction that moves, uses, trades, buybacks and COS transfers share (native replies carry no transaction ID); alchemy and Magic Pop are already child owners
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts # one owner of the local walk: prediction, receipts, corrections and the cast hold read and write the same pose, segment and walk state
+apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts # one world-session owner: entry, the retry ladder, reference loading and the bind share each attempt's deadline, epoch and failure state; the #2311 failure evidence is read at the same attempt boundary, so no responsibility boundary runs inside the file
 apps/client-next/src/engine/runtime/ui/ui.ts # one closure holds state, input and rendering for every window; split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature
