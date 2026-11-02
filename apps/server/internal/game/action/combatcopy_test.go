@@ -5,7 +5,8 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
-pass and the attacking hawk's strike tick take the narrow combat copy:
+pass, the attacking hawk's strike tick and the heal-over-time pulse's
+retained caster view take the narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
 rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
@@ -501,6 +502,52 @@ func hawkTrace(t *testing.T, full bool) string {
 
 /*
 ================
+healOverTimeTrace
+
+One Healing Orbit cast on a loaded bag and its first pulse. The pulse
+root retains the caster's copy at release and reads the weapon term
+(the slot-6 staff's magical pair, scaled by the caster's intellect
+through the stats funnel) and HLRU from that copy on every pulse; the
+bag carries an attack pet's summon row, so a pulse that resolved the
+caster's companions or bag rows through its copy would diverge. The
+recipients' strength is raised so the pulse lands below their gauge
+maximum - at the fixture maximum the clamp would hide the weapon
+term the pulse reads through the copy.
+================
+*/
+func healOverTimeTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_CYCLE_B_01")
+	affordable(&skill)
+	p := newSupportParty(t, skill)
+	p.c.Strength, p.m.Strength = testInt64(3000), testInt64(3000)
+	loadCombatBag(p.c)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	p.clock.Advance(time.Duration(int64(skill.ActionCastingTimeMs)+1+int64(skill.Recovery.PulseMs)) * time.Millisecond)
+	trace += fmt.Sprintf("%+v\n", p.rt.advanceHealsOverTime(p.clock.NowMs()))
+	if len(p.rt.healsOverTime) == 0 {
+		t.Fatal("no heal over time installed; the trace would agree vacuously")
+	}
+	for _, heal := range p.rt.healsOverTime {
+		staff := false
+		for _, row := range heal.caster.MissionInventory {
+			staff = staff || row.Slot == 6
+		}
+		if !staff {
+			t.Fatal("the retained caster copy lost its slot-6 staff; the weapon term reads nothing")
+		}
+	}
+	if *p.m.CurrentHP <= 1 && *p.c.CurrentHP <= 40 {
+		t.Fatal("the heal-over-time pulse never healed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("casterhp=%d matehp=%d rows=%s", *p.c.CurrentHP, *p.m.CurrentHP, combatRowsView(p.c))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -508,7 +555,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
