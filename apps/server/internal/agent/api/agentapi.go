@@ -83,6 +83,24 @@ const (
 	EnvMaintenanceMessage = "SRO_MAINTENANCE_MESSAGE"
 )
 
+/*
+================
+MaintenanceMessageFromEnv
+
+The switch as both the Agent and the GameWorld read it. The job passes the
+shard setting's own "on"/"off"; "1" and "true" stay on as well, because a
+job file from before this reader rendered "1", and a jobs-only revert
+must keep meaning what it meant.
+================
+*/
+func MaintenanceMessageFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMaintenanceMessage))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
 // Native agent error codes (the client's data_cc9e5c table; see
 // client 72C0E0's recovered mapping). Only the codes this surface emits.
 const (

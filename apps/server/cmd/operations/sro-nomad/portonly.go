@@ -119,6 +119,20 @@ func (settings portOnlySettings) webTransportPublic() bool {
 
 /*
 ================
+maintenanceMessage
+
+The captured maintenance-message switch, which the Agent job takes as
+well (agentVariables): the Agent and the GameWorld must answer the same
+refusal code in one window, so both read this one value.
+================
+*/
+func (settings portOnlySettings) maintenanceMessage() string {
+	raw, _ := settings["maintenance_message"].(string)
+	return raw
+}
+
+/*
+================
 jobVariables
 
 Adds the settings to the GameWorld job's variables.

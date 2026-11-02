@@ -43,6 +43,13 @@ OWNER_PUBLICATION_GRACE_MS = 60000
 MUTEX_STALE_MS = 60000
 MUTEX_SPIN_MS = 10000
 MUTEX_SPIN_SLEEP_S = 0.015
+# How long a removal keeps retrying a path another process holds open. A
+# contender reads a record for well under a millisecond; a virus scanner
+# can hold a fresh file for longer, so the bound is generous.
+REMOVE_RETRY_MS = 10000
+# How long a read retries a record that is present but cannot be opened: a
+# contender's os.replace of that record holds it for a moment.
+READ_RETRY_MS = 1000
 
 
 # ================
@@ -145,7 +152,7 @@ def acquire_rebuild_lock(name: str, label: str, mode: str, lock_dir: Path,
 			if blocker:
 				decision["blocker"] = blocker
 				return
-			my_waiting_path.unlink(missing_ok=True)
+			remove_state_path(my_waiting_path)
 			write_state_file(writer_path, {**record, "mode": "write"})
 			write_state_file(owner_path, {**record, "mode": "write"})
 			decision["acquired"] = True
@@ -185,7 +192,7 @@ def acquire_rebuild_lock(name: str, label: str, mode: str, lock_dir: Path,
 
 		if deadline_ms is not None and now_ms >= deadline_ms:
 			if waiting_published:
-				my_waiting_path.unlink(missing_ok=True)
+				remove_state_path(my_waiting_path)
 			blocker = decision.get("blocker")
 			raise TimeoutError(f"[rebuild-lock] {label}: timed out waiting for {format_owner(blocker) if blocker is not None else 'another rebuild'}.")
 
@@ -205,34 +212,43 @@ def release_rebuild_lock(hold: dict, stale_ms: int) -> None:
 		mutex_token = acquire_state_mutex(lock_dir, None)
 		if mutex_token is None:
 			time.sleep(MUTEX_SPIN_SLEEP_S)
+	idle = False
 	try:
 		if hold["mode"] == "read":
-			hold["my_reader_path"].unlink(missing_ok=True)
+			remove_state_path(hold["my_reader_path"])
 		else:
 			_, writer = read_state_file(hold["writer_path"])
 			if writer is not None and writer.get("token") == hold["token"]:
-				hold["writer_path"].unlink(missing_ok=True)
+				remove_state_path(hold["writer_path"])
 			# The mirror goes before the inspection below: inspect_state
 			# treats a mirror without its claim file as a writer (the
 			# crashed-mid-release case), which would otherwise turn this
 			# live release into a phantom hold.
 			_, owner = read_state_file(hold["owner_path"])
 			if owner is not None and owner.get("token") == hold["token"]:
-				hold["owner_path"].unlink(missing_ok=True)
+				remove_state_path(hold["owner_path"])
 		state = inspect_state(lock_dir, stale_ms)
 		if not state["writer"] and state["readers"]:
 			write_state_file(hold["owner_path"], {**state["readers"][0], "mode": "read"})
 		elif not state["writer"]:
-			hold["owner_path"].unlink(missing_ok=True)
+			remove_state_path(hold["owner_path"])
 		if not state["writer"] and not state["readers"] and not state["waiting"]:
-			# Fully idle: remove the state directory itself, the
-			# pre-reader/writer observable. Contenders re-create it on
-			# demand; this release's own mutex claim goes with it.
-			shutil.rmtree(lock_dir, ignore_errors=True)
-			mutex_token = None
+			# Fully idle: clear the state directory, the pre-reader/writer
+			# observable. The mutex goes last, so no contender can claim
+			# it while the rest is still being removed.
+			for entry in list(lock_dir.iterdir()):
+				if entry.name != "mutex":
+					remove_state_path(entry)
+			idle = True
 	finally:
-		if mutex_token is not None:
-			release_state_mutex(lock_dir, mutex_token)
+		release_state_mutex(lock_dir, mutex_token)
+	if idle:
+		# Contenders re-create the directory on demand; one that already
+		# has leaves it non-empty, and then it stays.
+		try:
+			lock_dir.rmdir()
+		except OSError:
+			pass
 
 
 # ================
@@ -273,7 +289,7 @@ def inspect_state(lock_dir: Path, stale_ms: int, reap: bool = True) -> dict:
 	if mtime_ms is not None:
 		if is_stale_record(writer, mtime_ms, stale_ms):
 			if reap:
-				writer_path.unlink(missing_ok=True)
+				remove_state_path(writer_path)
 		elif writer is not None:
 			state["writer"] = writer
 
@@ -289,7 +305,7 @@ def inspect_state(lock_dir: Path, stale_ms: int, reap: bool = True) -> dict:
 			# file is gone: either way it excludes everyone while live.
 			if is_stale_record(owner, mtime_ms, stale_ms):
 				if reap:
-					owner_path.unlink(missing_ok=True)
+					remove_state_path(owner_path)
 			elif owner is not None:
 				state["writer"] = owner
 	return state
@@ -312,10 +328,26 @@ def inspect_claim_dir(directory: Path, stale_ms: int, reap: bool) -> list:
 			continue
 		if is_stale_record(record, mtime_ms, stale_ms):
 			if reap:
-				(directory / name).unlink(missing_ok=True)
+				remove_state_path(directory / name)
 		elif record is not None:
 			live.append(record)
+		else:
+			# Present, inside its publication grace, and still unreadable:
+			# a live claim. Dropping it let a release see an idle lock and
+			# clear a waiting writer's marker, and a new reader entered
+			# ahead of that writer.
+			live.append(unreadable_claim(directory / name))
 	return live
+
+
+# ================
+# unreadable_claim
+#
+# Stands in for a live claim whose record could not be read, so it still
+# blocks and still names its file in the waiting notice.
+# ================
+def unreadable_claim(file_path: Path) -> dict[str, object]:
+	return {"label": f"an unreadable claim ({file_path.name})", "token": "", "heartbeatAt": iso_now()}
 
 
 # ================
@@ -355,7 +387,16 @@ def acquire_state_mutex(lock_dir: Path, deadline_ms: int | None) -> str | None:
 		spin_until_ms = min(spin_until_ms, deadline_ms)
 
 	while True:
-		lock_dir.mkdir(parents=True, exist_ok=True)
+		try:
+			lock_dir.mkdir(parents=True, exist_ok=True)
+		except FileExistsError:
+			# Windows: an idle release's rmdir is still pending while a
+			# handle is open on the directory; the name exists but is not
+			# yet a directory again. The next round finds it gone.
+			if int(time.time() * 1000) >= spin_until_ms:
+				return None
+			time.sleep(MUTEX_SPIN_SLEEP_S)
+			continue
 		try:
 			mutex_dir.mkdir()
 		except FileNotFoundError:
@@ -395,12 +436,53 @@ def acquire_state_mutex(lock_dir: Path, deadline_ms: int | None) -> str | None:
 
 # ================
 # release_state_mutex
+#
+# Removes the mutex only while its record still names this token: a claim
+# reaped as stale and taken by someone else is theirs. The record is read
+# again while it is present but unreadable, because skipping the removal on
+# a failed read leaked the mutex to a live pid for MUTEX_STALE_MS.
 # ================
 def release_state_mutex(lock_dir: Path, token: str) -> None:
 	mutex_dir = lock_dir / "mutex"
-	_, owner = read_state_file(mutex_dir / "owner.json")
+	give_up_at_ms = int(time.time() * 1000) + REMOVE_RETRY_MS
+	while True:
+		mtime_ms, owner = read_state_file(mutex_dir / "owner.json")
+		if owner is not None or mtime_ms is None or int(time.time() * 1000) >= give_up_at_ms:
+			break
+		time.sleep(MUTEX_SPIN_SLEEP_S)
 	if owner is not None and owner.get("token") == token:
-		shutil.rmtree(mutex_dir, ignore_errors=True)
+		remove_state_path(mutex_dir)
+
+
+# ================
+# remove_state_path
+#
+# Windows refuses to delete a file another process has open, and Python's
+# open() never grants delete sharing, so a contender reading a record at
+# the moment of a release made the delete fail. rmtree(ignore_errors=True)
+# then left the state mutex held under a live pid until it went stale
+# (60 s); a plain unlink raised. Retry while the removal fails, and raise
+# after REMOVE_RETRY_MS so a removal never fails silently. A removal that
+# succeeds returns at once: the path may be re-created by its next owner.
+# ================
+def remove_state_path(path: Path) -> None:
+	give_up_at_ms = int(time.time() * 1000) + REMOVE_RETRY_MS
+	while True:
+		try:
+			if path.is_dir():
+				shutil.rmtree(path)
+			else:
+				path.unlink()
+			return
+		except FileNotFoundError:
+			# rmtree also raises this when an entry under it vanished;
+			# what is left, if anything, is tried again.
+			if not os.path.lexists(path):
+				return
+		except OSError:
+			if int(time.time() * 1000) >= give_up_at_ms:
+				raise
+		time.sleep(MUTEX_SPIN_SLEEP_S)
 
 
 # ================
@@ -455,7 +537,17 @@ def heartbeat_claims(targets: list, record: dict, mode: str, owner_path: Path, t
 # owner.json.
 # ================
 def write_state_file(file_path: Path, record: dict) -> None:
-	file_path.parent.mkdir(parents=True, exist_ok=True)
+	give_up_at_ms = int(time.time() * 1000) + READ_RETRY_MS
+	while True:
+		try:
+			file_path.parent.mkdir(parents=True, exist_ok=True)
+			break
+		except FileExistsError:
+			# The claim directory's removal by an idle release is still
+			# pending (see acquire_state_mutex).
+			if int(time.time() * 1000) >= give_up_at_ms:
+				raise
+			time.sleep(MUTEX_SPIN_SLEEP_S)
 	temporary = file_path.with_name(f"{file_path.name}.{record['token']}.{time.time_ns()}.tmp")
 	try:
 		temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
@@ -471,14 +563,25 @@ def write_state_file(file_path: Path, record: dict) -> None:
 # record is None when the file is absent or unparseable.
 # ================
 def read_state_file(file_path: Path) -> tuple[int | None, dict | None]:
-	try:
-		mtime_ms = int(file_path.stat().st_mtime * 1000)
-	except (FileNotFoundError, NotADirectoryError):
-		return None, None
-	try:
-		return mtime_ms, json.loads(file_path.read_text(encoding="utf-8"))
-	except (OSError, json.JSONDecodeError):
-		return mtime_ms, None
+	give_up_at_ms = int(time.time() * 1000) + READ_RETRY_MS
+	while True:
+		try:
+			mtime_ms = int(file_path.stat().st_mtime * 1000)
+		except (FileNotFoundError, NotADirectoryError):
+			return None, None
+		try:
+			return mtime_ms, json.loads(file_path.read_text(encoding="utf-8"))
+		except FileNotFoundError:
+			return None, None
+		except json.JSONDecodeError:
+			return mtime_ms, None
+		except OSError:
+			# Windows: a contender's os.replace of this record is in
+			# flight. Records are published whole, so reading again
+			# shortly finds the old or the new one.
+			if int(time.time() * 1000) >= give_up_at_ms:
+				return mtime_ms, None
+			time.sleep(MUTEX_SPIN_SLEEP_S)
 
 
 # ================
