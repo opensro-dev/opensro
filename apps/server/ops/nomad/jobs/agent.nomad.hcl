@@ -94,7 +94,8 @@ variable "identity_jwks_url" {
 # (port-only, not native): "off" answers SHARD_OFFLINE, which the client
 # shows as its generic admission failure - the player-visible refusal
 # today; "on" answers MAINTENANCE so the client can explain the refusal
-# during a release window. Set it with the GameWorld job's same variable.
+# during a release window. sro-nomad fills it from the one shard setting
+# SRO_MAINTENANCE_MESSAGE that also fills the GameWorld job's variable.
 variable "maintenance_message" {
   type    = string
   default = "off"
@@ -227,7 +228,7 @@ job "sro-agent" {
         SRO_NOMAD_JWKS_URL                = var.identity_jwks_url
         SRO_NOMAD_NAMESPACE               = var.nomad_namespace
         SRO_AGENT_SESSION_KEYRING_PATH    = "${NOMAD_SECRETS_DIR}/agent-session-keys.json"
-        SRO_MAINTENANCE_MESSAGE           = var.maintenance_message == "on" ? "1" : "0"
+        SRO_MAINTENANCE_MESSAGE           = var.maintenance_message
         SRO_RELEASE_ID                    = var.release_id
         SRO_BUG_REPORT_REPLAY_DEFAULT     = var.bug_report_replay_default
         SRO_BUG_REPORT_MAX_BYTES          = var.bug_report_max_bytes
