@@ -17,6 +17,8 @@ const {
 	createCountJobs,
 	commandOfType,
 	countJobFraction,
+	countJobHelpText,
+	countJobRemainingMs,
 	countJobUseRequest,
 	premiumCommand,
 	COUNT_JOB_ALIVE,
@@ -149,6 +151,71 @@ test("6AFB40: a package window button checks its own row", () => {
 	assert.equal( jobs.admitRow( PACKAGE + 1, RETURN, facts ), null );
 	jobs.receive( { opcode: 0x36fc, payload: Uint8Array.of( ...u32( PACKAGE ), ...u32( RETURN ) ) }, 0 );
 	assert.equal( jobs.admitRow( PACKAGE, RETURN, facts ), null );
+});
+
+/*
+================
+helpCopy
+
+The board help's words, resolved as the client's text lookup resolves
+them.
+================
+*/
+const helpCopy = symbol =>
+	({
+		PARAM_REMAINED_PERIOD: "Left service period",
+		PARAM_DAY: "Day",
+		PARAM_HOUR: "Hour",
+		PARAM_MINUTE: "Minute",
+		PARAM_SECOND: "Second",
+		UIIT_STT_UNIT: "Unit"
+	})[symbol] ?? symbol;
+
+test("the board rows name every limited item once its reference lands", () => {
+	assert.deepEqual( owner().state().map( row => row.itemName ), [ "Resurrection", "Instant return" ] );
+});
+
+test("the kind-5 help reads name, period and one line per limited row", () => {
+	const rows = owner().state(), left = (27 * 86400 + 23 * 3600 + 59 * 60) * 1000;
+	assert.equal(
+		countJobHelpText( "Gold Time", rows, left, helpCopy ),
+		"Gold Time\n \nLeft service period: 27Day 23Hour 59Minute\nResurrection: 1Unit\nInstant return: 3Unit"
+	);
+});
+
+test("under a minute the period line counts seconds", () => {
+	const rows = owner().state();
+	assert.equal(
+		countJobHelpText( "Gold Time", rows, 45000, helpCopy ).split( "\n" )[2],
+		"Left service period: 45Second"
+	);
+	assert.equal(
+		countJobHelpText( "Gold Time", rows, 59999, helpCopy ).split( "\n" )[2],
+		"Left service period: 59Second"
+	);
+	// A whole minute is the shortest day/hour/minute line.
+	assert.equal(
+		countJobHelpText( "Gold Time", rows, 60000, helpCopy ).split( "\n" )[2],
+		"Left service period: 0Day 0Hour 1Minute"
+	);
+});
+
+test("the board slot's hover help is the composed kind-5 text", async () => {
+	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+	// One minute in, the four-week package has 27 days 23:59 left.
+	const board = buffBoard( { localGid: 1, countJobs: owner().state() }, 60000, new Set(), undefined, true, helpCopy );
+	const slot = board.find( row => row.id === "count-job:" + PACKAGE );
+	assert.ok( slot );
+	assert.equal(
+		slot.helpText,
+		"Gold Time\n \nLeft service period: 27Day 23Hour 59Minute\nResurrection: 1Unit\nInstant return: 3Unit"
+	);
+});
+
+test("the remained period counts from the row's receipt", () => {
+	const [row] = owner().state();
+	assert.equal( countJobRemainingMs( row, 0 ), 2419200 * 1000 );
+	assert.equal( countJobRemainingMs( row, 60000 ), 2419200 * 1000 - 60000 );
 });
 
 test("the reverse return runs from its type word", () => {

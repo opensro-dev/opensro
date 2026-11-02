@@ -281,6 +281,23 @@ export function countJobUseRequest( row: CountJobRow, choice?: number ) {
 	return { opcode: OP_COUNT_JOB_USE, payload };
 }
 
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
+
+/*
+================
+countJobRemainingMs
+
+The milliseconds a count row has left: its remaining seconds counted
+down from the receipt, the same left the kind-5 bar drains.
+================
+*/
+export function countJobRemainingMs( row: CountJobRow, nowMs: number ): number {
+	return row.remainingSec * MS_PER_SECOND - Math.max( 0, nowMs - row.receivedAtMs );
+}
+
 /*
 ================
 countJobFraction
@@ -290,8 +307,48 @@ The kind-5 bar: the row's remaining time against the package's period.
 */
 export function countJobFraction( row: CountJobRow, periodSec: number, nowMs: number ): number {
 	if ( periodSec <= 0 ) return 0;
-	const left = row.remainingSec * 1000 - Math.max( 0, nowMs - row.receivedAtMs );
-	return Math.min( 1, Math.max( 0, left / (periodSec * 1000) ) );
+	const left = countJobRemainingMs( row, nowMs );
+	return Math.min( 1, Math.max( 0, left / (periodSec * MS_PER_SECOND) ) );
+}
+
+/*
+================
+countJobHelpText
+
+The kind-5 arm of the board help builder (6E2C90, kind byte 5 at
+0x6E4270): the package's name, a blank line, the remained period and one
+"<item>: <uses>" line per limited row. The period reads its label and
+units through the client text keys the builder itself looks up
+(PARAM_REMAINED_PERIOD pushed at 0x6E43E2, PARAM_DAY 0x6E43C6,
+PARAM_HOUR 0x6E43AA, PARAM_MINUTE 0x6E4381, UIIT_STT_UNIT 0x6E45C4): at
+a minute or more it prints whole days, hours and minutes of what is
+left; below that, seconds (PARAM_SECOND pushed at 0x6E4442). copy is the
+client text lookup, injected the way premiumCommand takes it.
+================
+*/
+export function countJobHelpText(
+	name: string,
+	rows: readonly { readonly itemName?: string; readonly uses: number; }[],
+	remainingMs: number,
+	copy: ( key: string ) => string
+): string {
+	const lines = [ name, " " ];
+	if ( remainingMs >= MS_PER_MINUTE ) {
+		const days = Math.trunc( remainingMs / MS_PER_DAY ), afterDays = remainingMs - days * MS_PER_DAY;
+		const hours = Math.trunc( afterDays / MS_PER_HOUR );
+		const minutes = Math.trunc( (afterDays - hours * MS_PER_HOUR) / MS_PER_MINUTE );
+		lines.push(
+			`${copy( "PARAM_REMAINED_PERIOD" )}: ${days}${copy( "PARAM_DAY" )} ${hours}${
+				copy( "PARAM_HOUR" )
+			} ${minutes}${copy( "PARAM_MINUTE" )}`
+		);
+	} else {
+		lines.push(
+			`${copy( "PARAM_REMAINED_PERIOD" )}: ${Math.trunc( remainingMs / MS_PER_SECOND )}${copy( "PARAM_SECOND" )}`
+		);
+	}
+	for ( const row of rows ) lines.push( `${row.itemName ?? ""}: ${row.uses}${copy( "UIIT_STT_UNIT" )}` );
+	return lines.join( "\n" );
 }
 
 /*
