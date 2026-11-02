@@ -300,7 +300,9 @@ mallQuestionLayout
 
 528920 configures reservation and bulk confirmations. 52859D creates worn
 name/cost pairs at y=100 with a 16-pixel pitch; the sentinel row anchors the
-native total, points, buttons and final height.
+native total, points, buttons and final height. On the two boxes that draw
+a total row (worn 529846, basket 529BE7) the total control (+0x89C) is
+captioned UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL.
 ================
 */
 export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "basket", count: number ) {
@@ -332,6 +334,9 @@ export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "baske
 		rowStart: ROW_START,
 		rowPitch: ROW_PITCH,
 		totalY: kind === "basket" ? 74 : totalY + 4,
-		pointY: kind === "basket" ? 92 : totalY + 22
+		pointY: kind === "basket" ? 92 : totalY + 22,
+		totalCaption: kind === "worn" || kind === "basket" ?
+			"UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" :
+			undefined
 	};
 }

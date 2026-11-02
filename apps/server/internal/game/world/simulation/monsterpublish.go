@@ -62,6 +62,13 @@ the row's new generation, so the step's own commits chain.
 ================
 */
 func (ops *MonsterMoverOps) commitSteppedMover(divisionID string, gid uint32, mover monster.MoverState) bool {
+	if ops.plan != nil {
+		// Planning (#2205): record the commit for the ordered commit
+		// and answer as if it landed; a replay that drops drops the
+		// whole plan, so the optimism is never observable.
+		ops.plan.recordMover(mover)
+		return true
+	}
 	if !ops.stepGenArmed {
 		return ops.Monsters.CommitMover(divisionID, gid, mover)
 	}
@@ -81,10 +88,120 @@ only when the commit landed on its base generation.
 ================
 */
 func (ops *MonsterMoverOps) commitSteppedMoverFrames(divisionID string, gid uint32, mover monster.MoverState, frames []Frame) []Frame {
+	if ops.plan != nil {
+		// Planning (#2205): as commitSteppedMover - the frames ride
+		// the plan's output and publish only if the replay lands.
+		ops.plan.recordMover(mover)
+		return frames
+	}
 	if !ops.stepGenArmed {
 		return ops.Monsters.CommitMoverFrames(divisionID, gid, mover, frames)
 	}
 	return ops.Monsters.CommitMoverFramesGen(divisionID, gid, mover, ops.stepBaseGen, frames)
+}
+
+/*
+================
+commitSteppedActivity
+
+The activity gate's commit routed through the step's funnel
+(monsteractivity.go's runActivityGate): applied at once outside a
+plan, recorded for the ordered commit inside one (#2205).
+================
+*/
+func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
+	if ops.plan != nil {
+		ops.plan.recordActivity(before, after)
+		return true
+	}
+	return ops.Monsters.commitActivity(division, gid, before, after, now)
+}
+
+/*
+================
+commitSteppedFollow
+
+The follow transaction's commit routed through the step's funnel
+(monstersummon_behavior.go): applied at once outside a plan,
+recorded for the ordered commit inside one (#2205). The
+transaction's own validation - instance, mover, timers, leader
+facts - is the replay's revalidation, and a rejection there drops
+the whole plan like any stale commit.
+================
+*/
+func (ops *MonsterMoverOps) commitSteppedFollow(follow monsterFollowPlan, mover monster.MoverState, frames []Frame) ([]Frame, bool) {
+	if ops.plan != nil {
+		// Planning (#2205): record the transaction for the ordered
+		// commit and answer as if it landed; a replay that drops
+		// drops the whole plan, so the optimism is never observable.
+		ops.plan.recordFollow(follow, mover, frames)
+		return frames, true
+	}
+	return ops.Monsters.commitFollow(follow, mover, frames)
+}
+
+/*
+================
+takeStepAIEvents
+
+The step's tactics-event drain (monsterbehavior.go's
+applyTacticsEvents): a real drain outside a plan. Inside one the
+drain is a consumption, so the step only reads the queue and
+records it - the events leave the queue at commit, and a dropped
+plan leaves them queued for the actor's next due. A second take
+in the same step sees the drain, exactly as outside a plan.
+================
+*/
+func (ops *MonsterMoverOps) takeStepAIEvents(divisionID string, gid uint32) []monsterAIEvent {
+	if ops.plan == nil {
+		return ops.Monsters.takeAIEvents(divisionID, gid)
+	}
+	if ops.plan.aiEventsTaken {
+		return nil
+	}
+	ops.plan.aiEventsTaken = true
+	ops.plan.aiEvents = ops.Monsters.peekAIEvents(divisionID, gid)
+	return ops.plan.aiEvents
+}
+
+/*
+================
+stepMoverGeneration
+
+The running step's re-read of its own actor's row (monsterbehavior.go
+re-reads after the idle-entry and gate commits): the live row outside
+a plan; inside one, the plan's shadow - the value the recorded
+commits will leave - because the row itself still holds the
+leg-start value until the ordered commit. The generation answered
+with the shadow is the snapshot's: only the value is load-bearing,
+the commit chains off the row's real generation at replay.
+================
+*/
+func (ops *MonsterMoverOps) stepMoverGeneration(divisionID string, gid uint32) (monster.MoverState, uint64, bool) {
+	if ops.plan != nil && ops.plan.shadowed {
+		return ops.plan.shadow, ops.plan.actor.moverGen, true
+	}
+	return ops.Monsters.MoverGeneration(divisionID, gid)
+}
+
+/*
+================
+rebaseStepBase
+
+Chain the running step's later generation-guarded commits off a
+generation it just re-read: the armed assignment outside a plan, a
+recorded marker inside one (#2205) that the commit honours by
+adopting the row's generation at the same point in the replay.
+================
+*/
+func (ops *MonsterMoverOps) rebaseStepBase(gen uint64) {
+	if ops.plan != nil {
+		ops.plan.recordRebase()
+		return
+	}
+	if ops.stepGenArmed {
+		ops.stepBaseGen = gen
+	}
 }
 
 /*

@@ -8,14 +8,19 @@ cosground_test.go - pet inventory ownership, pickup arrival and gold routing
 package action
 
 import (
+	"reflect"
+	"testing"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	testhook "github.com/sirupsen/logrus/hooks/test"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/world/simulation"
-	"reflect"
-	"testing"
-	"time"
 )
 
 /*
@@ -167,6 +172,110 @@ func TestCOSGroundManualPickupFullPetBagAnswersNativeDisable(t *testing.T) {
 	}
 	if len(rt.Ground.All(testDivision)) != 1 || len(c.ActiveCOS.Container.Rows) != 1 {
 		t.Fatalf("refused pickup consumed state: ground=%v rows=%v", rt.Ground.All(testDivision), c.ActiveCOS.Container.Rows)
+	}
+}
+
+/*
+================
+TestCOSGroundFullPetBagFaultLogsItsCause
+
+#2298: the grant fault behind the full pet container keeps its
+warning, and the warning names the fault (grant-fault/inventoryFull),
+so the one refusal that should not happen in play says why it did.
+================
+*/
+func TestCOSGroundFullPetBagFaultLogsItsCause(t *testing.T) {
+	hook := testhook.NewGlobal()
+	defer hook.Reset()
+	c := testCharacter()
+	refs := testCosSource(testItems())
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	row := c.MissionInventory[0]
+	row.Slot = 0
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 1, Rows: []domain.InventoryRow{row}}}
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: row.RefObjID, Codename: row.Codename, TypeFlags: row.TypeFlags,
+		StackCount: 1, OwnerJID: enterworld.ObjectIDForCharacter(c),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}, Y: float32(pose.Y)})
+	p, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.HandleItemMove(testDivision, c, p)
+	causes := []string{}
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "cos ground refused" && entry.Level <= log.WarnLevel {
+			causes = append(causes, entry.Data["cause"].(string))
+		}
+	}
+	if len(causes) != 1 || causes[0] != "grant-fault/inventoryFull" {
+		t.Fatalf("warned refusal causes = %v, want [grant-fault/inventoryFull]", causes)
+	}
+}
+
+/*
+================
+TestCOSGroundApproachRetiresWhenShareIsRevoked
+
+#2298: the pet is walking to a party member's drop when the item
+share goes away (the party dissolves). The arrival could only refuse
+it as reserved, so the approach retires the target on the next tick -
+same refusal answer, no walk, no warning - instead of arriving first.
+================
+*/
+func TestCOSGroundApproachRetiresWhenShareIsRevoked(t *testing.T) {
+	c := testCharacter()
+	refs := testCosSource(testItems())
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _ := newTestRuntime(c, refs)
+	rt.CanPickupOwnedDrop = itemSharePartyWith(t, c, 100099).CanPickupOwnedDrop
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	row := c.MissionInventory[0]
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 2}}
+	rt.ConstrainMovement = func(_ string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.BindPetSession(testDivision, c, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{RefObjID: row.RefObjID, Codename: row.Codename, TypeFlags: row.TypeFlags,
+		StackCount: 1, OwnerJID: 100099, DroppedAt: rt.Now(),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X) + 100, Z: float32(pose.Z)}, Y: float32(pose.Y)})
+	p, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: drop.Gid}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := rt.HandleItemMove(testDivision, c, p); len(r.Frames) != 0 {
+		t.Fatalf("far shared pickup answered %v, want a silent approach", r.Frames)
+	}
+	pending := func() bool {
+		rt.petMu.Lock()
+		defer rt.petMu.Unlock()
+		for _, state := range rt.petSessions {
+			if state.pickup != nil {
+				return true
+			}
+		}
+		return false
+	}
+	if !pending() {
+		t.Fatal("the far shared pickup never armed an approach")
+	}
+	rt.CanPickupOwnedDrop = party.NewRegistry().CanPickupOwnedDrop
+	rt.TickHook()(1100)
+	if pending() {
+		t.Fatal("the approach kept a target the revoked share made ungrantable")
+	}
+	rt.TickHook()(3000)
+	if len(rt.Ground.All(testDivision)) != 1 || len(c.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("the retired approach still granted: ground=%v rows=%v", rt.Ground.All(testDivision), c.ActiveCOS.Container.Rows)
 	}
 }
 

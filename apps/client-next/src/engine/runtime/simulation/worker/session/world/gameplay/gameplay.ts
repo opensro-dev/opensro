@@ -285,12 +285,14 @@ import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
+	cosCapeGenderPasses,
 	cosCapeWarnsGrowthPet,
 	cosSatietyDroppedLow,
 	cosShopTradeRefused,
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
+import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
@@ -1154,6 +1156,20 @@ attack can arrive in the same batch as the previous close and starve the walk.
 			playerModels = { country: localCountry, models: worldReferences.playerModels( localCountry ) };
 		}
 		return playerModels.models;
+	}
+	/*
+	================
+	localPlayerSex
+
+	The local player's sex selector (+0x1AC of its model reference): the
+	wearer value 789C60's gender leg compares an item's ReqGender
+	against. Unknown until the local actor and its model are known.
+	================
+	*/
+	function localPlayerSex(): number | undefined {
+		const local = readEntity( localGid );
+		if ( !local ) return undefined;
+		return localPlayerModels().find( model => model.refObjId === local.refObjId )?.sex;
 	}
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
@@ -2649,10 +2665,83 @@ state here before a command can claim a native wire conversation.
 					}
 					return null;
 				}
-				return inventory.process(
-					command as import("@/engine/contracts/item-process").ItemProcessCommand,
-					now
-				);
+				const processCommand = command as import("@/engine/contracts/item-process").ItemProcessCommand;
+				if ( processCommand.kind === "alchemy-start" ) {
+					// 6220A0: a compound or advanced staging holding only
+					// its target prints the no-dissolvable line and sends
+					// nothing; 621D00 refuses a dissolve whose products
+					// would not fit the bag. Both judge the staged window
+					// before anything is sent, so they stand here, beside
+					// the other client-side refusals.
+					const state = inventory.state(), alchemyState = state.alchemy;
+					if ( alchemyState.visible && !alchemyState.pending && !alchemyState.locked ) {
+						if (
+							(processCommand.mode === "compound" || processCommand.mode === "advanced") &&
+							processCommand.slots.length === 1
+						) {
+							notices = [ ...notices.slice( -99 ), {
+								key: "UIIT_MSG_ENCHANTERR_HAVE_NO_DISSOLVABLE_ITEM",
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+							dirty = true;
+							return null;
+						}
+						if ( processCommand.mode === "dissolve" && processCommand.slots.length === 2 ) {
+							const equipment = processCommand.slots
+									.map( slot => state.inventory.find( row => row.slot === slot ) )
+									.find( row => row !== undefined && isAlchemyEquipment( row.typeFlags ) ),
+								needed = equipment ?
+									dissolveNeededSlots(
+										equipment.tooltip?.fields.price,
+										equipment.tooltip?.fields.itemClass,
+										equipment.magic.length
+									) :
+									null;
+							if (
+								needed !== null && state.inventorySlotCount !== undefined &&
+								state.equipmentSlotCount !== undefined
+							) {
+								const bagRows = state.inventory.filter( row =>
+									row.slot >= state.equipmentSlotCount! && row.slot < state.inventorySlotCount!
+								).length;
+								if ( state.inventorySlotCount - state.equipmentSlotCount - bagRows < needed ) {
+									notices = [ ...notices.slice( -99 ), {
+										key: "UIIT_MSG_ALCHEMY_NOT_ENOUGH_SLOT",
+										value: needed,
+										sequence: ++noticeSequence
+									} ];
+									dirty = true;
+									return null;
+								}
+							}
+						}
+					}
+				}
+				if ( processCommand.kind === "alchemy-close" || processCommand.kind === "alchemy-cancel" ) {
+					// 624060 prints the cancelled line when the compound
+					// tab (mode 1) is cancelled busy, and 625550 when the
+					// window closes on a reinforce operation in flight;
+					// the other modes cancel silently.
+					const before = inventory.state().alchemy,
+						frame = inventory.process( processCommand, now );
+					if (
+						before.pending &&
+						(before.mode === "compound" ||
+							(processCommand.kind === "alchemy-close" &&
+								(before.mode === "reinforce" || before.mode === "attribute" ||
+									before.mode === "magic")))
+					) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_ALCHEMY_CANCELED_COMPOUND",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+					}
+					return frame;
+				}
+				return inventory.process( processCommand, now );
 			}
 			if (
 				[
@@ -3247,21 +3336,28 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "inventory-move" ) {
 				// 594980: wearing a free-battle cape while a growth pet is
-				// summoned prints the warning; the equip itself proceeds
-				// and the pet's unsummon is the server's answer. 594980
-				// also requires the target socket's record empty (+0x28
-				// clear), so a swap onto a worn cape stays silent.
+				// summoned prints the warning on the guide lane (67A600
+				// type 5 at 594AE5) and the centre banner (67D030 at
+				// 594B00); the equip itself proceeds and the pet's
+				// unsummon is the server's answer. 594980 also requires
+				// the target socket's record empty (+0x28 clear), so a
+				// swap onto a worn cape stays silent, and its 789C60
+				// gender leg (mask 0x40) stays silent for a cape cut for
+				// the other sex.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
+					cosCapeGenderPasses( item.tooltip?.fields.reqGender, localPlayerSex() ) &&
 					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
 					cosCapeWarnsGrowthPet( [ ...cosRecords.values() ] )
 				) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 5,
+						notificationBanner: true
 					} ];
 					dirty = true;
 				}
