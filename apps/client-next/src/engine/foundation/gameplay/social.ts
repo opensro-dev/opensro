@@ -28,6 +28,17 @@ export const MUTATION_PROPOSAL = 8;
 export const INSTANCE_PROPOSAL = 7;
 // 7644E0 case 6: a guild master proposes a union (confirm box 0x1D).
 export const UNION_PROPOSAL = 6;
+// The fortress position title a 0xB65F role bit carries, by bit.
+// overhead-layout.ts keeps its own inline copy of this map for
+// member titles; the values agree, and a rename moves both by hand.
+const POSITION_TITLES: Record<number, string> = {
+	1: "UIIT_STT_FORT_GUILD_COMMANDER",
+	2: "UIIT_STT_FORT_GUILD_SUBCOMMANDER",
+	4: "UIIT_STT_FORT_GUILD_BATTLEMANAGER",
+	8: "UIIT_STT_FORT_GUILD_PRODUCTMANAGER",
+	16: "UIIT_STT_FORT_GUILD_TRAINERMANAGER",
+	32: "UIIT_STT_FORT_GUILD_ENGINEER"
+};
 export { socialRequest, type SocialCommand } from "./social-request";
 
 /*
@@ -938,16 +949,67 @@ export function socialPacket(
 					nativeType: 0
 				}
 			};
-		} else if ( op === 0xb2bc || op === 0xb65f ) {
+		} else if ( op === 0xb2bc ) {
 			u32();
 			const id = u32();
-			const value = op === 0xb2bc ? { grant: str() } : { role: u8() };
+			const value = { grant: str() };
 			if ( next.guild ) {
 				next = {
 					...next,
 					guild: {
 						...next.guild,
 						members: next.guild.members.map( m => m.id === id ? { ...m, ...value } : m )
+					}
+				};
+			}
+		} else if ( op === 0xb65f ) {
+			u32();
+			const id = u32();
+			const role = u8();
+			// 7689A0 raises a Confirm-titled box on this answer (6888C0,
+			// title UIIT_STT_CONFIRM_BOX): the formatted body names the
+			// member and, for a grant, the position title; the title's
+			// length selects grant (non-empty) over remove (empty).
+			// A refusal never reaches here; it routes through the
+			// category-0x10 arm above. Two safe-side divergences: an
+			// untitled non-zero role keeps the member's previous title
+			// natively and prints the grant with it, where the port
+			// stays silent (the server only ever writes single-bit
+			// roles, so the byte is unsendable); and a member the
+			// roster does not hold faults natively on the unchecked
+			// record, where the port stays silent.
+			const target = next.guild?.members.find( m => m.id === id );
+			if ( next.guild ) {
+				next = {
+					...next,
+					guild: {
+						...next.guild,
+						members: next.guild.members.map( m => m.id === id ? { ...m, role } : m )
+					}
+				};
+			}
+			const title = POSITION_TITLES[role];
+			if ( target && role === 0 ) {
+				next = {
+					...next,
+					notice: {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: { title: "UIIT_STT_CONFIRM_BOX", lines: [ "UIIT_MSG_FORT_POSITION_REMOVE_COMPLETE" ] },
+						arguments: [ target.name ]
+					}
+				};
+			} else if ( target && title ) {
+				next = {
+					...next,
+					notice: {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: { title: "UIIT_STT_CONFIRM_BOX", lines: [ "UIIT_MSG_FORT_POSITION_GRANT_COMPLETE" ] },
+						arguments: [ target.name, "" ],
+						localizedArguments: [ null, title ]
 					}
 				};
 			}
