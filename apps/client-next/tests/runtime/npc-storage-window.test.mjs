@@ -92,9 +92,54 @@ function storageFixture( guild = false ) {
 		game.receive( { opcode: 0x321a, payload: Uint8Array.of( 150, 0 ) }, ++now );
 		game.receive( { opcode: 0xb338, payload: Uint8Array.of( 1, PERSONAL_STORAGE, 0, 0, 0 ) }, ++now );
 	}
+	/*
+	================
+	receive
+	================
+	*/
+	function receive( frame ) {
+		game.receive( frame, ++now );
+	}
 	select();
 	read();
-	return { game, frames, requests, command, select, read, openPersonalRoom };
+	return { game, frames, requests, command, select, read, receive, openPersonalRoom };
+}
+
+/*
+================
+guildBlockPayload
+
+A 0xB663 create body for a guild of the given level, master Echo (id 1).
+================
+*/
+function guildBlockPayload( level ) {
+	const payload = [];
+	const u32 = value => payload.push( value & 255, value >>> 8 & 255, value >>> 16 & 255, value >>> 24 );
+	const str = value => {
+		const raw = Buffer.from( value );
+		payload.push( raw.length & 255, raw.length >>> 8, ...raw );
+	};
+	payload.push( 1 );
+	u32( 7 );
+	str( "Alpha" );
+	payload.push( level );
+	u32( 0 );
+	str( "" );
+	str( "" );
+	u32( 0 );
+	payload.push( 0, 1 );
+	u32( 1 );
+	str( "Echo" );
+	payload.push( 0, 1 );
+	u32( 0 );
+	u32( 0 );
+	u32( 0 );
+	u32( 0 );
+	u32( 0 );
+	str( "" );
+	u32( 1907 );
+	payload.push( 0, 0, 0 );
+	return Uint8Array.from( payload );
 }
 
 test("personal storage hides the NPC window before both uncached and cached requests without releasing it", () => {
@@ -136,6 +181,37 @@ test("guild storage hides the NPC window before its function request", () => {
 		assert.equal( request.state.target, NPC.gid );
 		assert.equal( request.state.npcConversation.phase, "menu" );
 		assert.equal( f.frames.filter( frame => frame.opcode === NPC_RELEASE ).length, 0 );
+	} finally {
+		f.game.dispose();
+	}
+});
+
+test("a guild under level 3 gets the limit line and no function request (5DA1B0)", () => {
+	const f = storageFixture( true );
+	try {
+		f.receive( { opcode: 0xb663, payload: guildBlockPayload( 2 ) } );
+		f.command( { kind: "storage-open-guild", gid: NPC.gid } );
+		assert.equal( f.requests.length, 0 );
+		const state = f.read();
+		assert.equal( state.npcWindow.hidden, false, "the refusal restores the talk window" );
+		const notice = state.notices?.find( n => n.key === "UIIT_MSG_GUILD_STORE_LIMIT" );
+		assert.ok( notice, "the limit line is queued" );
+		assert.equal( notice.nativeType, 0 );
+		assert.equal( notice.notificationBanner, true );
+		assert.equal( notice.bannerOnly, undefined );
+	} finally {
+		f.game.dispose();
+	}
+});
+
+test("a level 3 guild passes the warehouse gate", () => {
+	const f = storageFixture( true );
+	try {
+		f.receive( { opcode: 0xb663, payload: guildBlockPayload( 3 ) } );
+		f.command( { kind: "storage-open-guild", gid: NPC.gid } );
+		const request = defined( f.requests[0] );
+		assert.equal( request.frame.opcode, NPC_ACTION );
+		assert.ok( !f.read().notices?.some( n => n.key === "UIIT_MSG_GUILD_STORE_LIMIT" ) );
 	} finally {
 		f.game.dispose();
 	}

@@ -65,12 +65,15 @@ const OpTCInviteRequest uint16 = 0x76B1
 // client fold CNetProcess_OnNotification0x3AC5, the
 // CPSMission_RegisterSecondaryPacketHandlers row 29; the one-wire
 // gateway relies on the client's T50 ownership
-// demux to route it to the third host). This lane composes THREE of its
+// demux to route it to the third host). This lane composes these of its
 // thirteen status legs:
 //
 //	status 2       one joining-member row -> the sitting members
 //	               (case 1 -> the real member add
 //	               CCharacterDependentData_InsertAcademyMemberRecord);
+//	status 5       one member-field update -> the camp (case 4):
+//	               flag 1 the connect/disconnect byte, flag 2 the
+//	               level, flag 3 the honor balance;
 //	status 10/1    the joiner's own reset + local-membership +
 //	               roster seed (case 9 sub 1:
 //	               CPSMission_Calls_PartyManager_Shutdown reset then
@@ -421,6 +424,29 @@ compulsory graduation by the master.
 */
 func EncodeCampMemberGraduate3AC5(memberID uint32, flag uint8) []byte {
 	return wire.NewWriter(6).U8(4).U32(memberID).U8(flag).Payload()
+}
+
+/*
+================
+EncodeCampMemberOnlineUpdate3AC5
+
+EncodeCampMemberOnlineUpdate3AC5 renders the status-5 flag-1
+connect/disconnect push (client CNetProcess_OnNotification0x3AC5
+case 4 flag 1 - the member record's offline byte, the state its
+connect/disconnect latch prints from): {u8 5}{u32 memberID}{u8 1}
+{u8 offline}, offline 1 when the member's session has ended, 0
+when it has entered the world. The frame and byte are the client's
+own; the emission points (the world-bound and session-closed
+hooks, invite.go) are the port's inference - no native server
+rule for them has been located.
+================
+*/
+func EncodeCampMemberOnlineUpdate3AC5(memberID uint32, offline bool) []byte {
+	offlineByte := uint8(0)
+	if offline {
+		offlineByte = 1
+	}
+	return wire.NewWriter(7).U8(5).U32(memberID).U8(1).U8(offlineByte).Payload()
 }
 
 /*

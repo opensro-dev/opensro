@@ -140,7 +140,7 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyRank } from "@/engine/foundation/gameplay/academy";
+import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -387,6 +387,7 @@ import {
 	REVERSE_RETURN_LAST_RECALL
 } from "@/engine/foundation/gameplay/count-job";
 import { partyChatCommand, partyChatOrder } from "@/engine/foundation/gameplay/party-chat-command";
+import { cosChatCommand, cosChatStance, type CosChatCommand } from "@/engine/foundation/gameplay/cos-chat-command";
 import {
 	AVATAR_MAGIC_OPTION_FUNCTION,
 	avatarMagicOptionCount,
@@ -399,6 +400,7 @@ import {
 	guildLevelUpPrice,
 	guildManagerRows,
 	guildTransferRefusal,
+	guildTransferTargetMissing,
 	guildSoldierRows,
 	guildSoldierPrompt,
 	MASTER_RELEASE_VOTE
@@ -519,7 +521,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
-import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
+import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
@@ -812,7 +814,7 @@ import {
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
-import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
+import { noticeDialog, noticeDialogLines } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
 import {
 	createResurrectionPrompt,
@@ -1578,7 +1580,12 @@ export function createUi(
 		invitePosition: readonly [number, number] | null = null,
 		disconnectPosition: readonly [number, number] | null = null;
 	let noticeDialogSequence = 0,
-		activeNoticeDialog: import("@/engine/foundation/gameplay/system-notices").SystemNotice["dialog"],
+		activeNoticeDialog: {
+			readonly title: string;
+			readonly lines: readonly string[];
+			readonly arguments?: readonly string[];
+			readonly localizedArguments?: readonly (string | null)[];
+		} | undefined,
 		noticeDialogPosition: readonly [number, number] | null = null,
 		noticeDialogFrame: UiRect | null = null;
 	let systemX: number | null = null, systemY: number | null = null;
@@ -3443,6 +3450,44 @@ export function createUi(
 	}
 	/*
 	================
+	runCosChatCommand
+
+	A pet chat command (6AD990) on the COS the command bar would use.
+	The shared modes ride executeCosCommand; stance is explicit here
+	(6A2350 case 6 sends only on a change), and charm is the quickslot
+	action 5000 (695420), never a command-bar mode.
+	================
+	*/
+	function runCosChatCommand( kind: CosChatCommand["kind"] ) {
+		switch ( kind ) {
+			case "attack":
+				executeCosCommand( COS_COMMAND_ATTACK );
+				return;
+			case "return":
+				executeCosCommand( COS_COMMAND_CANCEL );
+				return;
+			case "ride":
+				executeCosCommand( COS_COMMAND_RIDE );
+				return;
+			case "clean":
+				executeCosCommand( COS_COMMAND_CLEAN );
+				return;
+			case "follow":
+				executeCosCommand( COS_COMMAND_FOLLOW );
+				return;
+			case "charm":
+				sendGameplay( { kind: "action-command", id: 5000 } );
+				return;
+			case "aggressive":
+			case "defensive": {
+				const order = cosChatStance( kind, cosCommandContext() );
+				if ( order ) sendGameplay( order );
+				return;
+			}
+		}
+	}
+	/*
+	================
 	activate
 	================
 	*/
@@ -3454,6 +3499,9 @@ export function createUi(
 		// A party chat command (6AD990), parsed once from the line being sent.
 		const partyLine = id === "chat-send" ?
 			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
+			null;
+		const cosLine = id === "chat-send" ?
+			cosChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
 			null;
 		if ( id.startsWith( "gm-helper-row:" ) ) {
 			gmHelper.select( Number( id.slice( "gm-helper-row:".length ) ) );
@@ -5079,6 +5127,17 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
+		} else if ( cosLine ) {
+			// 6AD990: the pet commands act on the active COS; they are
+			// never sent as chat. Each route gates itself the way
+			// 6F2520 does: no pet, no answer, no line.
+			runCosChatCommand( cosLine.kind );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
 		} else if ( id.startsWith( "premium-reverse:" ) ) {
 			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
 		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
@@ -6509,6 +6568,15 @@ export function createUi(
 					} else if ( entry?.member ) {
 						// 5F1D60 opens 5D3EB0's named confirmation before sending.
 						const guild = view.gameplay?.social?.guild;
+						if ( guildTransferTargetMissing( guild ?? null, entry.member ) ) {
+							// 5D3EB0: the named successor is not in the roster;
+							// the line prints and nothing is sent.
+							sendGameplay( {
+								kind: "local-notice",
+								notice: { key: "UIIT_MSG_MLEAVEERR_USERNOTEXIST", value: 0, nativeType: 0 }
+							} );
+							return;
+						}
 						const member = guild?.members.find( m => m.id === entry.member );
 						const master = guildSelf( view.gameplay?.social )?.grade === 0;
 						if ( member && member.grade !== 0 && master ) {
@@ -9567,7 +9635,11 @@ export function createUi(
 						noticeDialogSequence = notice.sequence;
 						if ( notice.dialog ) {
 							dirty = true;
-							activeNoticeDialog = notice.dialog;
+							activeNoticeDialog = {
+								...notice.dialog,
+								arguments: notice.arguments,
+								localizedArguments: notice.localizedArguments
+							};
 							noticeDialogPosition = null;
 							focus = null;
 							composing = false;
@@ -21623,6 +21695,30 @@ export function createUi(
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
+					const joinLabel = academyJoinLabel( academy );
+					const progressNode = joinLabel ? guideData.mentor.GDR_MENTORMATCH_JOIN_PROGRESS : undefined;
+					if ( joinLabel && progressNode ) {
+						// 62E540 mode 1: while the join application runs,
+						// the matching window's status label (the
+						// JOIN_PROGRESS surface) formats the progress
+						// text with the applicant and camp names, the
+						// party window's substitution.
+						const r = authoredRect( progressNode, ax, ay ),
+							copy = hudCopy( joinLabel.key ).replace(
+								"%s",
+								next.session?.character ?? ""
+							).replace( "%s", joinLabel.campName ),
+							out = text.guide( guideTokens( copy ), r, r, white, resources.size, {
+								align: progressNode.hAlign === 1 ?
+									"center" :
+									progressNode.hAlign === 2 ?
+									"right" :
+									"left",
+								vAlign: progressNode.vAlign
+							} );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					}
 					endWindow( admission );
 				}
 			}
@@ -25034,7 +25130,7 @@ export function createUi(
 				const layout = noticeDialog(
 					w,
 					h,
-					activeNoticeDialog.lines.map( key => hudCopy( key ) ).join( "\n" ),
+					noticeDialogLines( hudCopy, activeNoticeDialog ),
 					value => text.run( value ).width,
 					noticeDialogPosition
 				);
@@ -26422,7 +26518,12 @@ export function createUi(
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
-								...tooltipDescription( lookup( offer.description ) )
+								...tooltipDescription( lookup( offer.description ) ),
+								...mallTooltipRows( offer, {
+									rollOfCloth: lookup( "UIIT_STT_ROLL_OF_CLOTH" ),
+									silk: lookup( "UIIT_STT_SILKMALL_SILK" ),
+									giftSilk: lookup( "UIIT_CTL_SILK_INQUIRY_GET_SILK" )
+								} )
 							];
 						}
 					}
