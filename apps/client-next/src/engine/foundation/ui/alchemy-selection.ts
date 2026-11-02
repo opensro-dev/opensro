@@ -166,3 +166,50 @@ export function alchemySelection(
 	const capacity = alchemySlotCapacity( mode );
 	return slots.length >= capacity ? null : { mode, slots: [ ...slots, item.slot ] };
 }
+
+// 621D00's per-degree stone divisors, indexed by (class - 1) / 3.
+const DISSOLVE_STONE_DIVISORS = [
+	18750,
+	34950,
+	53668,
+	72372,
+	91150,
+	114248,
+	137882,
+	164830,
+	193862,
+	225016,
+	258436,
+	294386
+];
+
+/*
+================
+dissolveNeededSlots
+
+621D00's bag-space estimate for a dissolve start, or null when the
+published reference cannot supply it. The products take four element
+stacks plus up to two attribute and two magic stones; each stone term
+is its maximum draw - the item's price (type data +0xB0) scaled by
+its magic-option count (instance +0xAC) for the magic term - over ten
+times the degree's divisor, clamped to two. Price and divisor pass
+through the original's float32 stores; the rest is double math with
+the truncating cast 9C2660 makes. A class past the table has no
+estimate (the original reads past its stack table); the start then
+proceeds without the check.
+================
+*/
+export function dissolveNeededSlots(
+	price: number | undefined,
+	itemClass: number | undefined,
+	magicCount: number
+): number | null {
+	if ( price === undefined || itemClass === undefined ) return null;
+	const degreeIndex = Math.trunc( (itemClass - 1) / 3 );
+	if ( degreeIndex < 0 || degreeIndex >= DISSOLVE_STONE_DIVISORS.length ) return null;
+	const divisor = Math.fround( DISSOLVE_STONE_DIVISORS[degreeIndex]! ),
+		scaled = Math.fround( price ) * 10 / 100;
+	return 4 +
+		Math.min( Math.trunc( scaled / divisor ), 2 ) +
+		Math.min( Math.trunc( scaled * magicCount / divisor ), 2 );
+}
