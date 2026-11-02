@@ -645,6 +645,30 @@ is endPrediction); the next server walk reconciles from here.
 	}
 	/*
 ================
+predictedApproachSegment
+
+The one build of a predicted approach leg (an attack chase, a skill
+run-up), shared by retargetPrediction's re-aim and correct()'s re-aim
+from a corrected pose. Null off navigation coverage, as predictApproach
+refuses there; the goal is taken as admitted (the callers admit it), so
+no clip is re-run. owners is never set: the prediction's spans were
+never bound (bindOwners binds them when the server's walk adopts).
+================
+	*/
+	function predictedApproachSegment( current: Pose, to: Pose, now: number ): NonNullable<typeof segment> | null {
+		if ( !navigation.available( current ) ) return null;
+		return {
+			from: current,
+			to: { ...to, angle: movementHeading( current, to ) },
+			start: now,
+			timing: "speed",
+			lead: "client",
+			duration: movementDuration( poseDistance( current, to ), speed ),
+			admitted: true
+		};
+	}
+	/*
+================
 bindOwners
 ================
 	*/
@@ -1356,6 +1380,13 @@ correct
 				} );
 				retainCorrectionHistory( previousHistory, before, pose );
 			}
+			// A predicted approach (an attack chase, a skill run-up) survives
+			// the correction and re-aims from the corrected pose below: the
+			// native B2F5 handler (775B50) only reseeds the walker
+			// (86C9C0, 86D9D0) and writes no target or action state, so the
+			// pending cast's approach is still owed. Dropping it here left
+			// the player standing with the target held (#2368).
+			const keptApproach = predicted?.approach ? predicted : null;
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
@@ -1386,6 +1417,19 @@ correct
 						admitted: true,
 						history: transition.walkingPath
 					};
+				}
+			}
+			// No pending request resumed the walk: re-aim the kept approach
+			// from the corrected pose (predictedApproachSegment). Off
+			// navigation coverage the approach is dropped, as a refused
+			// re-aim drops nothing else. The rebuilt leg carries the
+			// correction's walking history, as the pending resume above
+			// does, so the display keeps the proven return edges.
+			if ( keptApproach && !segment && now !== undefined ) {
+				const rebuilt = predictedApproachSegment( pose, keptApproach.to, now );
+				if ( rebuilt ) {
+					predicted = keptApproach;
+					segment = { ...rebuilt, history: transition.walkingPath };
 				}
 			}
 		},
@@ -1533,25 +1577,12 @@ coverage, like predictApproach; the caller then keeps the old leg.
 			advanceTo( now );
 			const current = pose,
 				to = admitPose( value ),
-				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
-					slide: false,
-					sourceOwner: owner
-				};
-			const clipped = navigation.available( current ) ? to : null;
-			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
+				rebuilt = predictedApproachSegment( current, to, now );
+			if ( !rebuilt ) return false;
 			beginTransition( "input" );
 			predicted = { ...predicted, to };
 			pose = current;
-			segment = {
-				from: current,
-				to: { ...clipped, angle: movementHeading( current, clipped ) },
-				start: now,
-				timing: "speed",
-				lead: "client",
-				duration: movementDuration( poseDistance( current, clipped ), speed ),
-				owners: query.owners,
-				admitted: true
-			};
+			segment = rebuilt;
 			return true;
 		},
 		/*
