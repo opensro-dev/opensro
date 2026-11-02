@@ -30,6 +30,21 @@ export function isReturnScroll( word: number ) {
 
 /*
 ================
+isStallChangeItem
+
+755E40's answer switch over the same consumable family: subtype 4 is
+the stall-change item, whose success prints
+UIIT_MSG_ITEMB_STSTALL_CHAINGE with the used item's name, where the
+return scroll's subtypes start their cast instead.
+================
+*/
+export function isStallChangeItem( word: number ) {
+	return !(word & 2) && (word & 0x1c) === 12 && (word & 0x60) === 0x60 && (word & 0x780) === 0x180 &&
+		(word >>> 11) === 4;
+}
+
+/*
+================
 travelMode
 
 777B60: only the local life-state death branch sets rebirth mode.

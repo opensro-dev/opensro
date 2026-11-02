@@ -4098,6 +4098,8 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 		} else if ( id === "friend-accept" || id === "friend-refuse" ) {
 			sendGameplay( { kind: "friend-answer", accept: id === "friend-accept" } );
+		} else if ( id === "friend-conclusion-confirm" ) {
+			sendGameplay( { kind: "friend-conclusion-close" } );
 		} else if ( id.startsWith( "letter-" ) ) {
 			letterActivate( id );
 		} else if ( id.startsWith( "blocking-tab:" ) ) {
@@ -22071,6 +22073,25 @@ export function createUi(
 					false,
 					6
 				);
+			}
+			const friendConclusion = game?.friends?.conclusion;
+			if ( friendConclusion && worldVisible && !game?.social?.invitation ) {
+				// 760FB0 case 2 opens confirm box 0x22 (52F460): "[friend] and
+				// [local]'s" over the acceptance line, with one Confirm.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [
+						hudCopy( "UIIT_MSG_FRIEND_CONCLUSION" )
+							.replace( "%s", friendConclusion )
+							.replace( "%s", game?.social?.localName ?? "" ),
+						hudCopy( "UIIT_MSG_YOUNME" )
+					],
+					yes: "friend-conclusion-confirm",
+					no: "",
+					single: "confirm"
+				} );
 			}
 			const partyJoining = game?.partyMatching?.joining,
 				joinElapsed = partyJoining ? Math.max( 0, (next.simulationTimeMs ?? now) - partyJoining.since ) : 10000;
