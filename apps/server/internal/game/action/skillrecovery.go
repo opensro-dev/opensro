@@ -640,7 +640,11 @@ the targeted row, the heal block is the revival vitals and heals nobody now
 func (rt *Runtime) proposePartyResurrection(division string, caster *enterworld.Character, skill enterworld.SkillRow, party []uint32, now int64) []RecipientFrames {
 	var out []RecipientFrames
 	for _, gid := range party {
-		member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid))
+		// The combat copy suffices for a member: the proposal reads
+		// its death and pending facts, its level against the resu
+		// word and its vitals through the stats funnel; no reader
+		// walks a member's bag rows (#2209).
+		member := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, gid))
 		if member == nil || member.ID == caster.ID {
 			continue
 		}
