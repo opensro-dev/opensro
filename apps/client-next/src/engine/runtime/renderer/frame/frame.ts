@@ -417,7 +417,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				// Port-only, not native: the rays march the stored scene depth and
 				// composite into the scene before the resolve chains, flares and UI.
-				if ( godRays && depth ) godRays.encode( encoder, depth, sceneView );
+				// The composite must carry the scene view's own format: the
+				// float target under HDR or bloom, the canvas format otherwise
+				// (god-rays.ts's compositeFor).
+				if ( godRays && depth ) godRays.encode( encoder, depth, sceneView, hdrScene || !!bloom );
 				bloom?.encode( encoder, view );
 				if ( bloom ) blendFactor = bloomBlendFactor;
 				// Without bloom the HDR stage owns its tone-map pass; with it,

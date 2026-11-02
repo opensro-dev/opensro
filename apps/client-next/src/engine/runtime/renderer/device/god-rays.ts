@@ -38,6 +38,12 @@ createGodRays
 ================
 */
 export function createGodRays( device: GPUDevice, format: GPUTextureFormat, retire: Retire = destroyNow ) {
+	// The composite lands in the scene view, whose format follows the
+	// stages above it (rgba16float under HDR or bloom, the canvas format
+	// otherwise) - one pipeline per format, built lazily.
+	const composites = new Map<GPUTextureFormat, GPURenderPipeline>();
+	let compositeBindingFor: GPURenderPipeline | null = null;
+	let shader: GPUShaderModule | null = null;
 	let depth: GPUTexture | null = null,
 		rays: GPUTexture | null = null,
 		depthView: GPUTextureView | null = null,
@@ -67,8 +73,42 @@ export function createGodRays( device: GPUDevice, format: GPUTextureFormat, reti
 		depth = rays = null;
 		depthView = raysView = null;
 		depthBinding = marchBinding = compositeBinding = null;
+		compositeBindingFor = null;
 		boundDepthSource = null;
 		width = height = 0;
+	}
+	/*
+	================
+	compositeFor
+
+	The scene view's format follows the stages above the rays: the float
+	target under HDR or bloom, the canvas format otherwise. A canvas-format
+	pipeline drawing into a float attachment is a validation error, so one
+	composite per format, built lazily and kept for the device's life.
+	================
+	*/
+	function compositeFor( target: GPUTextureFormat ) {
+		let pipeline = composites.get( target );
+		if ( pipeline ) return pipeline;
+		pipeline = device.createRenderPipeline( {
+			label: "god-rays-composite-" + target,
+			layout: "auto",
+			vertex: { module: shader!, entryPoint: "vs" },
+			fragment: {
+				module: shader!,
+				entryPoint: "compositePass",
+				targets: [ {
+					format: target,
+					blend: {
+						color: { srcFactor: "one", dstFactor: "one", operation: "add" },
+						alpha: { srcFactor: "zero", dstFactor: "one", operation: "add" }
+					}
+				} ]
+			},
+			primitive: { topology: "triangle-list" }
+		} );
+		composites.set( target, pipeline );
+		return pipeline;
 	}
 	function ensurePipelines() {
 		if ( convert && march && composite ) return;
@@ -127,6 +167,7 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
  return vec4f(textureSampleLevel(raysMap,linear,v.uv,0).rgb,0.0);
 }`
 		} );
+		shader = module;
 		convert = device.createRenderPipeline( {
 			label: "god-rays-convert",
 			layout: "auto",
@@ -149,23 +190,7 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 			fragment: { module, entryPoint: "marchPass", targets: [ { format: "rgba8unorm" } ] },
 			primitive: { topology: "triangle-list" }
 		} );
-		composite = device.createRenderPipeline( {
-			label: "god-rays-composite",
-			layout: "auto",
-			vertex: { module, entryPoint: "vs" },
-			fragment: {
-				module,
-				entryPoint: "compositePass",
-				targets: [ {
-					format,
-					blend: {
-						color: { srcFactor: "one", dstFactor: "one", operation: "add" },
-						alpha: { srcFactor: "zero", dstFactor: "one", operation: "add" }
-					}
-				} ]
-			},
-			primitive: { topology: "triangle-list" }
-		} );
+		composite = compositeFor( format );
 	}
 	// The stage's uniform: the sun's screen state, written per frame by the
 	// renderer.
@@ -215,10 +240,9 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 					layout: march!.getBindGroupLayout( 0 ),
 					entries: [ { binding: 1, resource: depthView }, { binding: 2, resource: { buffer: sunUniform } } ]
 				} );
-				compositeBinding = device.createBindGroup( {
-					layout: composite!.getBindGroupLayout( 0 ),
-					entries: [ { binding: 3, resource: raysView }, { binding: 4, resource: sampler! } ]
-				} );
+				// The composite's own bind group follows its pipeline, which
+				// now varies with the scene view's format.
+				compositeBindingFor = null;
 			}
 			const epoch = depth;
 			return {
@@ -248,7 +272,7 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 				the stage, so its binding follows the view it last recorded.
 				================
 				*/
-				encode( encoder, frameDepth: GPUTextureView, target: GPUTextureView ) {
+				encode( encoder, frameDepth: GPUTextureView, target: GPUTextureView, floatScene = false ) {
 					if ( disposed || epoch !== depth || !depthView || !raysView || !convert || !march || !composite ) {
 						throw Error( "Stale god rays targets" );
 					}
@@ -275,11 +299,19 @@ struct V {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 					marchPass.setBindGroup( 0, marchBinding );
 					marchPass.draw( 3 );
 					marchPass.end();
+					const sceneComposite = compositeFor( floatScene ? "rgba16float" : format );
 					const compositePass = encoder.beginRenderPass( {
 						label: "god-rays-composite",
 						colorAttachments: [ { view: target, loadOp: "load", storeOp: "store" } ]
 					} );
-					compositePass.setPipeline( composite );
+					compositePass.setPipeline( sceneComposite );
+					if ( compositeBindingFor !== sceneComposite ) {
+						compositeBindingFor = sceneComposite;
+						compositeBinding = device.createBindGroup( {
+							layout: sceneComposite.getBindGroupLayout( 0 ),
+							entries: [ { binding: 3, resource: raysView }, { binding: 4, resource: sampler! } ]
+						} );
+					}
 					compositePass.setBindGroup( 0, compositeBinding );
 					compositePass.draw( 3 );
 					compositePass.end();

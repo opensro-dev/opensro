@@ -127,7 +127,13 @@ target before the resolve chains, flares and UI.
 export interface GodRaysDraw {
 	/** The sun's screen position (uv), its clip w and the strength; before encode. */
 	sun( u: number, v: number, w: number, strength: number ): void;
-	encode( encoder: GPUCommandEncoder, frameDepth: GPUTextureView, target: GPUTextureView ): void;
+	encode(
+		encoder: GPUCommandEncoder,
+		frameDepth: GPUTextureView,
+		target: GPUTextureView,
+		/** True while the scene view is a float target (HDR or bloom). */
+		floatScene?: boolean
+	): void;
 }
 /*
 ================

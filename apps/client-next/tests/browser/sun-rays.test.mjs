@@ -165,8 +165,8 @@ test( "sun rays scatter toward the sun and off stays byte-exact", { timeout: 900
 				between the submits and the read.
 				================
 				*/
-				const capture = async sunRays => {
-					renderer.experimentalVideo( { ...options, sunRays } );
+				const capture = async ( sunRays, hdrToneMap = false ) => {
+					renderer.experimentalVideo( { ...options, sunRays, hdrToneMap } );
 					for ( let frame = 0; frame < 5; frame++ ) await renderer.frame( { width, height }, .16 );
 					await new Promise( requestAnimationFrame );
 					if ( renderer.error() ) throw Error( renderer.error() );
@@ -177,7 +177,8 @@ test( "sun rays scatter toward the sun and off stays byte-exact", { timeout: 900
 				};
 				const off = await capture( false ),
 					on = await capture( true ),
-					offAgain = await capture( false );
+					offAgain = await capture( false ),
+					hdr = await capture( true, true );
 				// A sun behind the eye marches nothing: the composite adds zero.
 				// The behind light also shades the scene differently, so its zero
 				// is proven against the same light with the row off.
@@ -263,6 +264,7 @@ test( "sun rays scatter toward the sun and off stays byte-exact", { timeout: 900
 					smallOn,
 					occludedOff,
 					occludedOn,
+					hdr,
 					error: null
 				};
 			} finally {
@@ -291,6 +293,27 @@ test( "sun rays scatter toward the sun and off stays byte-exact", { timeout: 900
 			quadrants.ur > quadrants.ul && quadrants.ur > quadrants.lr && quadrants.ur > quadrants.ll,
 			JSON.stringify( quadrants )
 		);
+		// Under HDR the composite draws into the float scene target - the
+		// combination the shipped modes never drew. The frame carries the
+		// rays through the tone map: the gain pools toward the sun's
+		// quadrant there too, and the device stays error-free (a format
+		// mismatch would have been a terminal validation error).
+		{
+			const hdrQuadrants = { ul: 0, ur: 0, ll: 0, lr: 0 };
+			let hdrChanged = 0;
+			for ( let i = 0; i < result.hdr.length; i += 4 ) {
+				const pixel = i / 4, x = pixel % 192, y = (pixel / 192) | 0;
+				const gain = (result.hdr[i] - result.off[i]) + (result.hdr[i + 1] - result.off[i + 1]) +
+					(result.hdr[i + 2] - result.off[i + 2]);
+				if ( gain > 0 ) hdrChanged++;
+				hdrQuadrants[(y < 60 ? "u" : "l") + (x < 96 ? "l" : "r")] += gain;
+			}
+			assert.ok( hdrChanged > 200, `the HDR frame draws the rays (${hdrChanged} pixels)` );
+			assert.ok(
+				hdrQuadrants.ur > hdrQuadrants.ul && hdrQuadrants.ur > hdrQuadrants.lr,
+				JSON.stringify( hdrQuadrants )
+			);
+		}
 		// A resized frame rebuilds the half-res targets and keeps the rays.
 		let smallGain = 0;
 		for ( let i = 0; i < result.smallOff.length; i += 4 ) {
