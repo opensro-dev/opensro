@@ -26,6 +26,10 @@ export interface FitUiGroupOptions {
 	readonly blocks?: UiRect[];
 	readonly firstBlock?: number;
 	readonly disableDrag?: boolean | (( control: UiControl ) => boolean);
+	// Skip the transform - and the drag disabling - when the group already
+	// fits the bounds: the caller places fitted groups itself, and a window
+	// the player dragged must not snap back to the bounds' center.
+	readonly leaveWhenFits?: boolean;
 }
 
 /*
@@ -49,6 +53,14 @@ export function fitUiGroup(
 	screen: UiRect,
 	options: FitUiGroupOptions = {}
 ): void {
+	const group = quads.slice( firstQuad );
+	if ( !group.length && !options.sourceBounds ) return;
+	const source = options.sourceBounds,
+		left = source ? source[0] : Math.min( ...group.map( q => q.rect[0] ) ),
+		top = source ? source[1] : Math.min( ...group.map( q => q.rect[1] ) ),
+		right = source ? source[0] + source[2] : Math.max( ...group.map( q => q.rect[0] + q.rect[2] ) ),
+		bottom = source ? source[1] + source[3] : Math.max( ...group.map( q => q.rect[1] + q.rect[3] ) );
+	if ( options.leaveWhenFits && right - left <= bounds[2] && bottom - top <= bounds[3] ) return;
 	if ( options.disableDrag ) {
 		for ( let i = firstControl; i < controls.length; i++ ) {
 			const control = controls[i]!;
@@ -57,13 +69,6 @@ export function fitUiGroup(
 			}
 		}
 	}
-	const group = quads.slice( firstQuad );
-	if ( !group.length && !options.sourceBounds ) return;
-	const source = options.sourceBounds,
-		left = source ? source[0] : Math.min( ...group.map( q => q.rect[0] ) ),
-		top = source ? source[1] : Math.min( ...group.map( q => q.rect[1] ) ),
-		right = source ? source[0] + source[2] : Math.max( ...group.map( q => q.rect[0] + q.rect[2] ) ),
-		bottom = source ? source[1] + source[3] : Math.max( ...group.map( q => q.rect[1] + q.rect[3] ) );
 	// Insets can exceed a transient viewport. Keep a positive fitting area so
 	// the shared transform cannot invert artwork, glyphs or semantic hit targets.
 	const scale = Math.min(

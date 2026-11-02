@@ -316,3 +316,48 @@ test("compactHudLayout reserves a progression strip between quickslots and tools
 	assert.ok( tiny );
 	assert.equal( tiny.exp, null );
 });
+
+test("the compact HUD is the touch layout: a fine pointer keeps the desktop HUD at any window size", () => {
+	assert.equal( compactHudLayout( 800, 600, true ), null, "desktop size stays desktop on touch" );
+	assert.equal( compactHudLayout( 854, 393, false ), null, "fine pointer, short landscape window" );
+	assert.equal( compactHudLayout( 640, 480, false ), null, "fine pointer, narrow window" );
+	assert.ok( compactHudLayout( 854, 393, true ), "touch below desktop size keeps the compact layout" );
+	assert.ok( compactHudLayout( 393, 854 ), "no pointer class reads as touch for legacy callers" );
+});
+
+test("fitUiGroup leaves an already-fitting group exactly where the caller placed it", () => {
+	const screen = /** @type {UiRect} */ ([ 0, 0, 1024, 600 ]);
+	const local = /** @type {UiRect} */ ([ 100, 120, 200, 150 ]);
+	const quads = [ quad( local, screen ) ];
+	/** @type {UiControl[]} */
+	const controls = [ {
+		id: "window-drag:Inventory",
+		kind: "region",
+		label: "Inventory",
+		rect: local,
+		draggable: true
+	} ];
+	const blocks = [ local ];
+	fitUiGroup( quads, controls, 0, 0, screen, screen, { blocks, leaveWhenFits: true } );
+	assert.deepEqual( quads[0].rect, local );
+	assert.deepEqual( controls[0].rect, local );
+	assert.equal( controls[0].draggable, true, "a fitting window keeps its drag" );
+	assert.deepEqual( blocks[0], local );
+	// An oversized group still scales into the bounds (0.75 keeps the expected
+	// geometry exact in binary floating point).
+	const tall = /** @type {UiRect} */ ([ 0, 0, 700, 800 ]);
+	const over = [ quad( tall, screen ) ];
+	/** @type {UiControl[]} */
+	const overControls = [ {
+		id: "window-drag:Inventory",
+		kind: "region",
+		label: "Inventory",
+		rect: tall,
+		draggable: true
+	} ];
+	fitUiGroup( over, overControls, 0, 0, screen, screen, { leaveWhenFits: true } );
+	const scale = 0.75;
+	assert.deepEqual( over[0].rect, [ 87.5, 0, 525, 600 ] );
+	assert.equal( overControls[0].rect[3], 600 );
+	assert.equal( overControls[0].draggable, true );
+});

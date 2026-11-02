@@ -36,6 +36,14 @@ type PartyShadePosition = Pick<Pose, "regionId" | "x" | "y" | "z">;
 // independent of the buff preference. Each slot's CIFBuffViewer (5BAD30 /
 // 5BA840) is owned by the UI runtime, which keeps its one-second diff state
 // across frames.
+// The wrap's bottom reserve (73px row + 230px chat zone) never shrinks with
+// the viewport, so below ~440 UI pixels the native test wraps after every
+// row and the board marches one member per column across the screen. Small
+// viewports instead place the board in a bounded left band (partyColumns)
+// and let the UI runtime scale the whole group into it - port-only.
+const PARTY_ROW_PITCH = 56;
+const PARTY_COLUMN_PITCH = 133;
+const PARTY_ROW_PITCH_WITH_BUFFS = 73;
 /*
 ================
 partyMembers
@@ -49,7 +57,35 @@ export function partyMembers( game: GameplayState ) {
 }
 /*
 ================
+partyColumns
+
+The column count whose board best fits a band `bandWidth` x `bandHeight`
+without the buff rows: the uniform scale the UI runtime would apply,
+min(width fit, height fit), is maximized. Keeping the whole board inside
+the band is what stops the roster from walking toward the screen center.
+================
+*/
+export function partyColumns( count: number, bandWidth: number, bandHeight: number ): number {
+	if ( count <= 1 ) return 1;
+	const widest = Math.max( 1, Math.floor( bandWidth / PARTY_COLUMN_PITCH ) );
+	const fit = ( columns: number ) =>
+		Math.min(
+			bandWidth / (columns * PARTY_COLUMN_PITCH),
+			bandHeight / (Math.ceil( count / columns ) * PARTY_ROW_PITCH)
+		);
+	let best = 1;
+	for ( let columns = 2; columns <= Math.min( count, widest ); columns++ ) {
+		if ( fit( columns ) > fit( best ) ) best = columns;
+	}
+	return best;
+}
+/*
+================
 partyOverlay
+
+`columns` fixes the grid (port-only, small viewports); without it the native
+wrap runs: one column while the next row's bottom stays 230px above the
+viewport floor, then the next 133px column, as 5BCBB0 places the board.
 ================
 */
 export function partyOverlay(
@@ -58,17 +94,18 @@ export function partyOverlay(
 	height: number,
 	x: number,
 	y: number,
-	buffs: boolean
+	buffs: boolean,
+	columns?: number
 ) {
-	let column = 0, rowY = 0;
-	return partyMembers( game ).map( member => {
-		if ( height - y - rowY - 73 < 230 ) {
-			column += 133;
-			rowY = 0;
-		}
-		const entity = entities.find( e => e.kind === "player" && e.name === member.name ),
+	const members = partyMembers( game ), pitch = buffs ? PARTY_ROW_PITCH_WITH_BUFFS : PARTY_ROW_PITCH;
+	const rowsPerColumn = columns ?
+		Math.max( 1, Math.ceil( members.length / columns ) ) :
+		Math.max( 1, Math.floor( (height - y - PARTY_ROW_PITCH_WITH_BUFFS - 230) / pitch ) + 1 );
+	return members.map( ( member, index ) => {
+		const column = Math.floor( index / rowsPerColumn ) * PARTY_COLUMN_PITCH,
+			rowY = index % rowsPerColumn * pitch,
+			entity = entities.find( e => e.kind === "player" && e.name === member.name ),
 			position = [ x + column + 13, y + rowY ] as const;
-		rowY += buffs ? 73 : 56;
 		// An untrained slot is 0 and stays empty; a roster without the pair
 		// (switch off) yields nothing.
 		const masteries = [ member.primaryMastery, member.secondaryMastery ].flatMap( ( id, slot ) => {

@@ -1,11 +1,17 @@
 /*
 ===========================================================================
 
-compact-hud.ts - fitting the original HUD controls on small browser screens
+compact-hud.ts - the touch HUD for small browser screens
 
 Port-only, not native. The owner approved automatic adaptation when the
 desktop's 800-pixel underbar or 600-pixel canvas no longer fits. Secondary
 panels start collapsed without changing saved desktop preferences.
+
+The compact layout is the touch layout: it exists to give a finger 40-pixel
+targets and one overlay at a time. A fine pointer never gets it - a small
+desktop window keeps the native HUD, with the underbar scaled to the window
+by the UI runtime - because swapping the familiar bar for bigger controls
+there only traded information for space.
 
 ===========================================================================
 */
@@ -25,9 +31,13 @@ const CLOSE_TOUCH_SIZE = 40;
 /*
 ================
 compactHudLayout
+
+`touch` defaults true so the layout still reads as the small-screen layout
+for callers that have no pointer class; the UI runtime passes the real one.
 ================
 */
-export function compactHudLayout( width: number, height: number ) {
+export function compactHudLayout( width: number, height: number, touch = true ) {
+	if ( !touch ) return null;
 	if ( width >= DESKTOP_WIDTH && height >= DESKTOP_HEIGHT ) return null;
 	const capacity = Math.max( 1, Math.floor( (width - MARGIN * 2) / SLOT_PITCH ) );
 	const rows = Math.ceil( SLOT_COUNT / capacity ), columns = Math.ceil( SLOT_COUNT / rows );
@@ -75,8 +85,8 @@ export function createCompactHud() {
 		layout
 		================
 		*/
-		layout( width: number, height: number ) {
-			const layout = compactHudLayout( width, height );
+		layout( width: number, height: number, touch = true ) {
+			const layout = compactHudLayout( width, height, touch );
 			if ( !!layout !== active ) overlay = "";
 			active = !!layout;
 			return layout ? { ...layout, overlay } : null;

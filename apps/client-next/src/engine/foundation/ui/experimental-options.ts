@@ -303,6 +303,26 @@ export function phoneDisplay( display: DisplayClass ): boolean {
 
 /*
 ================
+browserDisplayClass
+
+What this window reports about its display, read once per call: the primary
+pointer's coarseness and the screen's short side in CSS pixels. Every browser
+reports a pointer class; a host without matchMedia (the UI tests) reads as
+touch, so the compact HUD keeps covering small viewports there exactly as it
+did before the pointer class existed, and the fine-pointer path is chosen by
+stubbing a fine matchMedia. The renderer builds the same record inline.
+================
+*/
+export function browserDisplayClass(): DisplayClass {
+	const query = globalThis.matchMedia?.( "(pointer: coarse)" ),
+		screen = globalThis.screen,
+		width = screen?.width ?? 0,
+		height = screen?.height ?? 0;
+	return { coarsePointer: query ? query.matches : true, shortSide: Math.min( width, height ) };
+}
+
+/*
+================
 sceneRenderScale
 
 The render scale the scene is drawn at this frame. Only the phone cap

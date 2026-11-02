@@ -26,11 +26,18 @@ async function load( path, name ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
 const { overheadLayout } = await load( "foundation/ui/overhead-layout.ts", "overhead" );
-const { partyDistanceShade, partyLocalPose, partyOverlay, partyRosterPose, partyShadeImage, partyShadeImages } =
-	await load(
-		"foundation/ui/party-overlay.ts",
-		"party"
-	);
+const {
+	partyColumns,
+	partyDistanceShade,
+	partyLocalPose,
+	partyOverlay,
+	partyRosterPose,
+	partyShadeImage,
+	partyShadeImages
+} = await load(
+	"foundation/ui/party-overlay.ts",
+	"party"
+);
 const { buffViewerIcons, collectActiveBuffs, partyBuffViewer, rebuildBuffViewer, skillLookup } = await load(
 	"foundation/ui/buff-viewer.ts",
 	"buff-viewer"
@@ -140,6 +147,37 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 		[ 283, 137 ]
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
+});
+test("a small viewport fills a bounded column grid instead of marching one member per column", () => {
+	const state = {
+		...game,
+		social: {
+			...game.social,
+			members: [
+				game.social.members[0],
+				...Array.from( { length: 7 }, ( _, i ) => ({ id: i + 20, name: "P" + i, status: 0xaa }) )
+			]
+		}
+	};
+	// The phone-landscape band (476 wide, 120 tall under the compact chat line):
+	// three columns of three rows give every member its full row.
+	assert.equal( partyColumns( 8, 476, 120 ), 3 );
+	const rows = partyOverlay( state, [], 393, 4, 140, false, 3 );
+	assert.deepEqual( rows.map( r => r.position ), [
+		[ 17, 140 ],
+		[ 17, 196 ],
+		[ 17, 252 ],
+		[ 150, 140 ],
+		[ 150, 196 ],
+		[ 150, 252 ],
+		[ 283, 140 ]
+	] );
+	assert.ok( rows.every( r => r.position[0] + 122 <= 480 ), "the board stays inside its left band" );
+	// A band narrower than two columns stays one column; a lone member too.
+	assert.equal( partyColumns( 8, 139, 500 ), 1 );
+	assert.equal( partyColumns( 1, 400, 200 ), 1 );
+	// A tall narrow band prefers rows over columns.
+	assert.equal( partyColumns( 8, 476, 900 ), 1 );
 });
 test("party rows list the member's trained masteries left of the buff row", () => {
 	const member = ( id, primaryMastery, secondaryMastery ) => ({

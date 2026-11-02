@@ -17,6 +17,7 @@ const experimentalModule = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
 const {
+	browserDisplayClass,
 	experimentalGameplay,
 	experimentalOptions,
 	experimentalVideo,
@@ -371,6 +372,30 @@ test("a phone is a coarse pointer on a short screen; touch laptops and tablets a
 	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 768 } ), false, "tablet" );
 	assert.equal( phoneDisplay( { coarsePointer: false, shortSide: 402 } ), false, "fine pointer" );
 	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 0 } ), false, "no screen reported" );
+});
+
+test("the browser display class reports the pointer, and a host without matchMedia reads as touch", () => {
+	// Node has no matchMedia: the compact HUD must keep its small-screen
+	// contract there, so the missing query reads as a coarse pointer.
+	// The stubs answer the one question the source asks (`.matches`).
+	assert.equal( browserDisplayClass().coarsePointer, true );
+	const media = globalThis.matchMedia, screen = globalThis.screen;
+	const stub = /** @param {boolean} matches */ ( matches ) => /** @type {typeof globalThis.matchMedia} */ (
+		/** @type {unknown} */ (() => ({ matches, media: "(pointer: coarse)" }))
+	);
+	try {
+		globalThis.matchMedia = stub( false );
+		globalThis.screen = /** @type {typeof globalThis.screen} */ ({ width: 1920, height: 1080 });
+		const fine = browserDisplayClass();
+		assert.deepEqual( fine, { coarsePointer: false, shortSide: 1080 } );
+		globalThis.matchMedia = stub( true );
+		globalThis.screen = /** @type {typeof globalThis.screen} */ ({ width: 854, height: 393 });
+		assert.deepEqual( browserDisplayClass(), { coarsePointer: true, shortSide: 393 } );
+	} finally {
+		globalThis.matchMedia = media;
+		globalThis.screen = screen;
+	}
+	assert.equal( browserDisplayClass().coarsePointer, true, "the stub is gone again" );
 });
 
 test("phone resolution defaults on and only an explicit false turns it off", () => {
