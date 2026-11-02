@@ -399,3 +399,24 @@ test("a child keeps following a moving holder after its followed parent expires 
 		assert.equal( offset, offsets[0], "the child rode the holder: " + offsets.join( "," ) );
 	}
 });
+test("the monotonic tick contract throws on a poisoned or regressed time", () => {
+	const graph = [ emitter( {
+		frames: 400,
+		program: { vectors: [ vector( "SetVelocity", [ 1, 0, 0 ] ) ] }
+	} ) ];
+	const state = createParticleGraph( graph, 0 ), transform = identity();
+	// The renderer's owner holds each actor's last valid animation time before
+	// its frame consumers (characters.ts sampleFrameActors); these throws are
+	// the tripwire that stays for engine-side monotonicity bugs.
+	advanceParticleGraph( state, graph, 0.5, transform, table );
+	assert.equal( state.frame, 10 );
+	assert.throws( () => advanceParticleGraph( state, graph, 0.4, transform, table ), /Invalid particle graph time/ );
+	assert.throws(
+		() => advanceParticleGraph( state, graph, Number.NaN, transform, table ),
+		/Invalid particle graph time/
+	);
+	assert.throws( () => advanceParticleGraph( state, graph, -1, transform, table ), /Invalid particle graph time/ );
+	// The rejected calls advanced nothing.
+	advanceParticleGraph( state, graph, 0.6, transform, table );
+	assert.equal( state.frame, 12 );
+});

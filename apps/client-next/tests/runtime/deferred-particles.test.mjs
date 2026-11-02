@@ -199,6 +199,100 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 	}
 });
 
+test("a poisoned actor time freezes the emission instead of failing the renderer", async () => {
+	const { createCharacters } = await import(
+		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
+	);
+	const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
+	// One velocity unit per tick, as the freeze test above: SetVelocity [1,0,0].
+	const graph = [ {
+		parent: -1,
+		parents: [ 0 ],
+		births: [ 0 ],
+		frames: 400,
+		keepMatrix: true,
+		keepOrigin: true,
+		positionDepth: 0,
+		matrixDepth: 0,
+		velocityDepth: 0,
+		followDepth: 0,
+		scales: [],
+		positions: [],
+		rotations: [],
+		program: { vectors: [ { name: "SetVelocity", value: [ 1, 0, 0 ], flags: 0, frames: [ 0 ] } ] }
+	} ];
+	const model = {
+		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		images: [],
+		clips: [ { name: "effect", duration: 20, channels: [] } ],
+		particleGraph: graph,
+		primitives: [ {
+			name: "particle",
+			node: 0,
+			joints: [ 0 ],
+			inverseBind: identity(),
+			image: -1,
+			particleEmitter: 0,
+			emission: { births: [ 0 ], lifetime: 20, capacity: 1 },
+			geometry: {
+				positions: new Float32Array( 9 ),
+				indices: Uint32Array.of( 0, 1, 2 ),
+				transform: identity(),
+				material: { color: [ 1, 1, 1, 1 ], alphaCutoff: 0, blend: true, doubleSided: true }
+			}
+		} ]
+	};
+	const { createParticleReference } = await import( "../helpers/particle-reference.mjs" );
+	const owner = createCharacters(), reference = createParticleReference();
+	owner.model( "effect", model, [] );
+	const gpu = {
+		upload( g ) {
+			return { instances: [ ...g.instances ] };
+		},
+		release( d ) {
+			reference.release( d );
+		},
+		updateInstances( d, v ) {
+			d.instances = [ ...v ];
+			return d;
+		},
+		presentParticles( d, particles ) {
+			d.instances = [ ...reference.present( d, particles ).matrices ];
+		},
+		updateBones() {}
+	};
+	// The frame clock stays monotone; only the actor's animation time is
+	// poisoned, as a bad producer clock or clip duration would produce. The
+	// emission keeps its last drawn state and resumes from the retained graph
+	// once the producer's time is valid again - "Renderer failed: Invalid
+	// particle graph time" ended the session here before.
+	function frame( time, seconds ) {
+		owner.actors( [ {
+			gid: 1,
+			model: "effect",
+			pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+			clip: "effect",
+			time,
+			loop: true,
+			scale: 1
+		} ] );
+		const draws = owner.prepare( gpu, {}, 257, undefined, false, seconds );
+		const drawn = draws.map( d => d.instances[12] );
+		assert.equal( drawn.length, 1, "the emission stays admitted and drawn" );
+		return drawn[0];
+	}
+	const atTick = ( value, ticks ) => assert.ok( value >= ticks - 1e-4 && value < ticks + 1, `${value} vs ${ticks}` );
+	try {
+		atTick( frame( .5, .5 ), 10 );
+		atTick( frame( .601, .601 ), 12 );
+		atTick( frame( Number.NaN, .7 ), 12 );
+		atTick( frame( -1, .8 ), 12 );
+		atTick( frame( .701, .9 ), 14 );
+	} finally {
+		owner.dispose( gpu, null );
+	}
+});
+
 test("the deferred continuation never releases a draw the frame's first pass returned", async () => {
 	const { createCharacters } = await import(
 		sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href

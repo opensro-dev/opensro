@@ -379,6 +379,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// releases them through the geometry commands.
 	let retiredDraws: GeometryDraw[] = [];
 	let actors: readonly CharacterActor[] = [], disposed = false;
+	// The last valid animation time each frame actor published. A producer's
+	// poisoned time (sampleFrameActors) reads its entry here, and rebuilding
+	// the map each frame retires the actors the frame no longer lists.
+	let heldAnimationTimes = new Map<number, number>();
 	const portraitSnapshots = createActorSnapshots();
 	let portraits: readonly CharacterActor[] = [];
 	let gpuAnimation: GeometryCommands["gpuAnimationStats"], deferPoses = false;
@@ -1083,7 +1087,21 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					source;
 			} ) :
 			actors;
+		const held = new Map<number, number>();
 		const frameActors = sampledActors.map( actor => {
+			// A producer's poisoned animation time (NaN, or negative before its
+			// start) must not reach a frame consumer: the particle graphs'
+			// monotonic tick contract ends the session for it ("Invalid particle
+			// graph time") and the pose evaluator fails its layer validation one
+			// guard later. The actor holds its last valid time - frozen, not
+			// gone - and resumes where it stopped once its producer's clock is
+			// valid again.
+			if ( Number.isFinite( actor.time ) && actor.time >= 0 ) held.set( actor.gid, actor.time );
+			else {
+				const time = heldAnimationTimes.get( actor.gid ) ?? 0;
+				held.set( actor.gid, time );
+				actor = { ...actor, time };
+			}
 			const plan = models.get( actor.model )?.plan;
 			if ( plan?.sharedPalette && !plan.clocked ) return actor;
 			const duration = plan?.continuousGraph ? undefined : plan?.clips.get( actor.clip )?.duration;
@@ -1095,6 +1113,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			}
 			return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
 		} );
+		heldAnimationTimes = held;
 		return { frameActors, cycles };
 	}
 	/*
