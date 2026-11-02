@@ -400,11 +400,11 @@ grantPeerCosPickup
 The reference server's pet pickup recipient selection and pet ground pickup:
 when the rotated party member's player bag is full,
 redirect the pickup to that member's summoned pickup pet. The v1.188
-selection (0x4D5510) probes the recipient's first free bag slot
-(0x4B8260 probe 0x0D); on 0xFF it looks the recipient's pickup pet up
-(0x4FC320 on the recipient's COS list) and returns 0x1807 when there is
-none, which the executor's answer tail (0x4D52A5) remaps to 0x18B4 -
-the bag-full class - for the picker's owner. If the member's pickup pet
+recipient selection probes the recipient's first free bag slot; when
+there is none it looks the recipient's pickup pet up on their COS list
+and returns 0x1807 when there is no pet, which the executor's answer
+tail remaps to 0x18B4 - the bag-full class - for the picker's owner
+(addresses in the #2378 evidence note). If the member's pickup pet
 bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
 to the member and 0x9C for the picker pet to the picker's owner: that
 spill can still land later, so it keeps the 3 s retry.
