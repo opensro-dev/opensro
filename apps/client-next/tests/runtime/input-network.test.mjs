@@ -928,6 +928,14 @@ test("when the socket fallback also dies before the welcome, the failure is repo
 });
 
 test("webtransport pins only a short-lived certificate's hash", async t => {
+	// The connect and welcome deadlines are real timers: freeze them so
+	// a loaded machine cannot fire one mid-test and report a failure the
+	// quiet stop below never raises (the handshake test above freezes
+	// for the same reason). The socket harness keeps the stopped
+	// attempt's fallback off the real network, whose loopback error
+	// would race dispose() to the same report.
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const sockets = socketHarness( t );
 	const pinned = {
 		sha256Base64: Buffer.from( Array.from( { length: 32 }, ( _v, i ) => i ) ).toString( "base64" ),
 		notBefore: "2026-10-20T00:00:00.000Z",
@@ -947,6 +955,7 @@ test("webtransport pins only a short-lived certificate's hash", async t => {
 	} );
 	transports[0].readyReject( new Error( "stop here" ) );
 	await flush();
+	assert.equal( sockets.length, 1, "the stopped attempt fell back to the fake socket" );
 	network.dispose();
 	assert.deepEqual( failures, [] );
 });
