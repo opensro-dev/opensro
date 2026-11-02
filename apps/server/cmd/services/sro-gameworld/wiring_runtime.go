@@ -166,6 +166,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
 		}
+		// Port-only, not native: the monster leg's worker pool
+		// (#2205). Unset keeps the serial leg; the pool only changes
+		// which goroutine plans, never what commits.
+		ticker.Monsters.LegWorkers = simulation.MonsterLegWorkersFromEnv()
+		if ticker.Monsters.LegWorkers >= 1 {
+			log.Infof(
+				"simulation: monster leg worker pool ON, up to %d workers (%s)",
+				ticker.Monsters.LegWorkers, simulation.EnvMonsterLegWorkers,
+			)
+		}
 		log.Infof(
 			"simulation: monster mover wired with %d template nest row(s)",
 			game.deps.MonsterState.TemplateSize(),
