@@ -271,9 +271,13 @@ export function createFrontend(
 					kind: "client-report",
 					incidentKind: "runtime",
 					code: "world_entry_rejected",
-					message: `Entry rejected (S2) at ${flow.snapshot().phase}/${
-						entryPending ? "pending" : entering ? "entering" : "loading"
-					}: ${session.error}`
+					message:
+						`Entry rejected (S2) at ${flow.snapshot().phase}/${
+							entryPending ? "pending" : entering ? "entering" : "loading"
+						}: ${session.error}` +
+						(session.entryFailure ?
+							` (stage ${session.entryFailure.stage}; ${session.entryFailure.bytesReceived} bytes in ${session.entryFailure.framesReceived} frames received)` :
+							"")
 				} );
 				entryPending = false;
 				entering = false;
