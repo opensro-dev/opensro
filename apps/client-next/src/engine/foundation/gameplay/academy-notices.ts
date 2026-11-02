@@ -60,8 +60,19 @@ export function academyStatusNotice(
 	next: AcademyState,
 	frame: WireFrame
 ): SystemNotice | null {
-	if ( frame.opcode !== 0x3ac5 ) return null;
 	const p = frame.payload;
+	// 769CA0: a join answer (outer 1) of detail 0 prints the cancel
+	// line and detail 2 the no-reply line, both system chat type 4
+	// (67A600). Detail 1 is the matching-complete banner, which is
+	// not this projection, and an outer-2 refusal goes through
+	// category 0x1D in gameplay.
+	if ( frame.opcode === 0xb592 ) {
+		if ( p[0] !== 1 || p.length !== 2 ) return null;
+		if ( p[1] === 0 ) return { key: "UIIT_MSG_TC_JOIN_CANCEL", value: 0, nativeType: 4 };
+		if ( p[1] === 2 ) return { key: "UIIT_MSG_TC_JOIN_NOREPLY", value: 0, nativeType: 4 };
+		return null;
+	}
+	if ( frame.opcode !== 0x3ac5 ) return null;
 	// 773FA5: dissolution shows the child-23 notice banner.
 	if ( p[0] === 1 ) {
 		return {
@@ -122,6 +133,30 @@ export function academyStatusNotice(
 			};
 		}
 		return member ? { key: "UIIT_STT_TC_GRADUATION_ANNOUNCE", value: 0, arguments: [ member.name ] } : null;
+	}
+	// 5C54F0 state kind 1: the flag-1 byte is stored (record +0x74)
+	// either way; the prints follow the announced latch (+0x4d8,
+	// sibling roster copy +0x4b8), NOT the stored byte. A disconnect
+	// byte clears the latch and prints UIIT_MSG_TC_DISCONNECT
+	// (67A600 type 0) every time; a connect byte prints
+	// UIIT_MSG_TC_CONNECT only while the latch is clear, and
+	// academyPacket sets it with the leg. So a member the seed
+	// already showed online still announces their first connect
+	// byte, and a repeated disconnect byte prints again. The member
+	// must be in the roster (academyPacket throws otherwise), as
+	// the native lookup fails there too. Live: the server emits
+	// flag 1 from the mentor lane's world-bound / session-closed
+	// hooks.
+	if ( p[0] === 5 && p[5] === 1 ) {
+		const id = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+		const member = state.members?.find( m => m.id === id );
+		const after = next.members?.find( m => m.id === id );
+		if ( !member || !after ) return null;
+		if ( after.offline ) {
+			return { key: "UIIT_MSG_TC_DISCONNECT", value: 0, nativeType: 0, arguments: [ member.name ] };
+		}
+		if ( member.announced ) return null;
+		return { key: "UIIT_MSG_TC_CONNECT", value: 0, nativeType: 0, arguments: [ member.name ] };
 	}
 	// 774C64/69: an authoritative notice update also shows child 23.
 	if ( p[0] === 7 ) {
