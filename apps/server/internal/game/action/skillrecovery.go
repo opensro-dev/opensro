@@ -125,7 +125,12 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 
 		recipient = rt.findCharacterByGid(division, cast.TargetGid)
-		recipientView = rt.characterSnapshot(division, recipient)
+		// The combat copy suffices for the view: every reader below
+		// (the spacing seat, the admission checks, the chain pick's
+		// identity, the resurrection proposal's facts and vitals)
+		// reads record facts, the whole avatar or the equipment band;
+		// the heal amounts themselves run on the live recipient (#2209).
+		recipientView = rt.characterSnapshotCombat(division, recipient)
 		if recipientView == nil {
 			return offensiveRefusal(0x3006), skillCastRefused
 		}

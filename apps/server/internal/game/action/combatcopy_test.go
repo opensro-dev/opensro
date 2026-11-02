@@ -5,8 +5,9 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
-pass, the attacking hawk's strike tick and the heal-over-time pulse's
-retained caster view take the narrow combat copy:
+pass, the attacking hawk's strike tick, the heal-over-time pulse's
+retained caster view and the targeted recovery cast's recipient view
+take the narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
 rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
@@ -548,6 +549,36 @@ func healOverTimeTrace(t *testing.T, full bool) string {
 
 /*
 ================
+targetedHealTrace
+
+One targeted Healing cast on a bag-loaded party mate and the heal it
+lands. The admission root detaches the recipient's view for the cast
+and reads its facts (the spacing seat, the admission checks, the
+chain pick's identity) from that view; the heal amounts themselves
+run on the live mate in its door. The loaded bag rides the RECIPIENT
+here, not the caster as in the other rows: a root that read the
+mate's bag rows or resolved the mate's companions through its view
+would diverge.
+================
+*/
+func targetedHealTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
+	affordable(&skill)
+	p := newSupportPair(t, skill)
+	loadCombatBag(p.m)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.m)})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	if *p.m.CurrentHP <= 1 {
+		t.Fatal("the targeted heal never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("matehp=%d matemp=%d rows=%s", *p.m.CurrentHP, *p.m.CurrentMP, combatRowsView(p.m))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -555,7 +586,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
