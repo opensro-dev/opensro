@@ -15460,7 +15460,11 @@ export function createUi(
 				// The level-up quest notice (#2310): the blinking icon at
 				// its native spot, then the centred QuestInfo window.
 				if ( hudData && questInfo.iconVisible() ) {
-					const iconPath = questInfo.iconPath(), iconSize = resources.size( iconPath );
+					const iconPath = questInfo.iconPath();
+					// Demanded before the size gate, not inside it: an image
+					// nothing asks for never becomes drawable (#2333).
+					paths.push( iconPath );
+					const iconSize = resources.size( iconPath );
 					if ( iconSize ) {
 						const iconRect: UiRect = [
 							w - QUEST_INFO_ICON_X_INSET,
@@ -15468,7 +15472,6 @@ export function createUi(
 							iconSize[0],
 							iconSize[1]
 						];
-						paths.push( iconPath );
 						rect( iconRect, white, iconPath );
 						controls.push( {
 							id: "quest-info-icon",

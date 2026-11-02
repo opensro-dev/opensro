@@ -372,7 +372,16 @@ export function createUiAssets(
 			residentLists.set( paths, evictions );
 			return true;
 		},
-		size: ( path: string ) => loaded.get( path ),
+		// A mapped icon's size is its own rect in the sheet, drawable once
+		// the sheet is resident: its path never enters `loaded` (the sheet
+		// is the residency entry), so `loaded.get( path )` answered
+		// undefined forever and the quest-info icon never drew (#2333).
+		// has() and residentAll() translate through target() the same way.
+		size: ( path: string ) => {
+			const entry = atlas?.entry( path );
+			if ( entry ) return loaded.has( entry.sheet ) ? entry.size : undefined;
+			return loaded.get( path );
+		},
 		error: () => {
 			const failure = failures.entries().next().value;
 			return failure ? `UI image unavailable; retrying: ${failure[0]}: ${failure[1].message}` : null;
