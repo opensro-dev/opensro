@@ -108,11 +108,11 @@ test("native title statuses preserve packed argument order and every simple mess
 	}
 	for ( const subtype of [ 2, 3, 4 ] ) assert.ok( titleStatusMessage( 3, subtype, resolve ) );
 	for ( const subtype of [ 0, 5, 65536 ] ) assert.equal( titleStatusMessage( 3, subtype, resolve ), undefined );
-	// Native statuses 17-20 enter the same four cases as status 3's
-	// arguments 1-4 (dispatch table 0x74a0c8), so they resolve the same.
-	for ( const [status, subtype] of [ [ 17, 1 ], [ 18, 2 ], [ 19, 3 ], [ 20, 4 ] ] ) {
-		assert.equal( titleStatusKey( status, undefined ), titleStatusKey( 3, subtype ) );
-		assert.ok( titleStatusMessage( status, undefined, resolve ) );
+	// Dispatch table 0x74a0c8 entries 17-20 exist but the cmp 0xF guard
+	// at 0x749635 makes them unreachable: statuses 17-20 have no message.
+	for ( const status of [ 17, 18, 19, 20 ] ) {
+		assert.equal( titleStatusKey( status, undefined ), undefined );
+		assert.equal( titleStatusMessage( status, undefined, resolve ), undefined );
 	}
 	// The retail web-address strings are never a title refusal here.
 	for ( let status = 0; status <= 32; status++ ) {
@@ -126,7 +126,7 @@ test("native title statuses preserve packed argument order and every simple mess
 			);
 		}
 	}
-	for ( const status of [ undefined, 0, 1, 21, 255 ] ) {
+	for ( const status of [ undefined, 0, 1, 17, 18, 19, 20, 21, 255 ] ) {
 		assert.equal( titleStatusMessage( status, 0, resolve ), undefined );
 	}
 	assert.equal(

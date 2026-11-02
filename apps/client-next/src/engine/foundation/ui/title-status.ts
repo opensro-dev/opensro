@@ -11,7 +11,7 @@ is no invented retry count.
 Recorded beside the table (#2271): native strings this flow cannot show.
 
 - UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME: the native blocked
-case (status 3 argument 1, and status 17) reads two packet strings
+case (status 3 argument 1) reads two packet strings
 after the argument - a block reason (fields split on '#') and a
 block-end datetime it parses and converts - and appends both to the
 ACCOUNT_STOP line ("%s\n%s%s\n%s%s", 0x749a33). Our login answer
@@ -48,9 +48,10 @@ client-start content failures; our start failures surface as statuses
 titleStatusKey
 
 The text key for one login refusal (status, argument), or undefined when
-the native table has no message for it. Statuses 17-20 enter the same
-four cases as status 3's arguments 1-4 (dispatch table 0x74a0c8 entries
-17-20: 0x7496ce, 0x749a96, 0x749aa7, 0x749b3d).
+the native table has no message for it. Dispatch table 0x74a0c8 entries
+17-20 exist (0x7496ce, 0x749a96, 0x749aa7, 0x749b3d) but the cmp 0xF
+guard at 0x749635 makes them unreachable: only statuses 1-16 reach the
+table, so 17-20 have no message.
 ================
 */
 export function titleStatusKey( status: number | undefined, argument?: number ): string | undefined {
@@ -89,20 +90,10 @@ export function titleStatusKey( status: number | undefined, argument?: number ):
 			return "UIIO_SMERR_TEENOVER_ONLY_SERVER";
 		case 16:
 			return "UITT_TEENSERVER_ERRMGS_ADULT";
-		// Statuses 17-20 enter the same four cases as status 3's arguments
-		// 1-4 (dispatch table 0x74a0c8 entries 17-20: 0x7496ce, 0x749a96,
-		// 0x749aa7, 0x749b3d), so they carry the same messages; the native
-		// blocked detail (reason, block time) needs the packet strings
-		// recorded above and is not reachable here.
-		case 17:
-			return "UIO_MSG_ERROR_ACCOUNT_STOP";
-		case 18:
-			return "UIO_MSG_ERROR_ACCOUNT_CONNECT_IMPOSSIBILE";
-		case 19:
-			return "UIO_MSG_ERROR_THERE_IS_NO_ACCOUNT_INFO";
-		case 20:
-			return "UIO_MSG_ERROR_GRATIS_USER_BLOCKED";
 	}
+	// Entries 17-20 exist in the dispatch table 0x74a0c8 but the cmp 0xF
+	// guard at 0x749635 makes them unreachable; statuses 17-20 fall
+	// through with no message.
 }
 /*
 ================
