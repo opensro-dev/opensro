@@ -466,6 +466,19 @@ test("inventory refusal family routes native text, country split and conditional
 	}
 });
 
+test("a mall purchase refused with the generic code stays silent", () => {
+	// 75AA1D prints a result-2 refusal through the category-1 printer
+	// with no mall branch and no code-2 case, and category 1 code 2
+	// has no row: nothing prints, purchase outstanding or not.
+	// TRADE_FAILURE belongs to 75D330 (answer 0x37E5, the silk billing
+	// channel), never to this opcode; do not re-add it here.
+	assert.equal( inventoryNotice( 0xb06d, Uint8Array.of( 2, 2 ), 0, true ), null );
+	assert.equal( inventoryNotice( 0xb06d, Uint8Array.of( 2, 2 ), 0 ), null );
+	assert.equal( inventoryNotice( 0xb5bd, Uint8Array.of( 2, 2 ), 0, true ), null );
+	// A specific refusal keeps its own line with a purchase outstanding.
+	assert.equal( defined( inventoryNotice( 0xb06d, Uint8Array.of( 2, 7 ), 0, true ) ).banner, true );
+});
+
 test("item-use rejection publishes through production gameplay", () => {
 	const g = createGameplay( () => {} );
 	g.bootstrap( {} );

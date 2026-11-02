@@ -64,6 +64,9 @@ const NAVIGATION_REJECT = WALK_NAVIGATION_REJECT;
 // A skill run-up's server goal lies within this heading of the predicted
 // one, seen from the predicted start (sameApproachWalk).
 const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
+// Cast displacement kind 2: B245 result bit 2, a teleport that lands at once
+// (combat.ts routes it; cast-displacement.ts gives it no duration).
+const CAST_TELEPORT = 2;
 const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
 // The hard backstop: even with the stream still flowing, a receipt this
 // late is lost - answers are ordered, so it can only be missing (#1978).
@@ -944,7 +947,16 @@ displace
 			// one after the displacement, and its receipt owns the outcome.
 			surfaceCursor = {};
 			walk = null;
-			pose = authoritative = navigation.surface( next.from, from, owner );
+			if ( command.kind !== CAST_TELEPORT ) pose = authoritative = navigation.surface( next.from, from, owner );
+			else {
+				// A teleport (kind 2) does not walk: the server seats the point by
+				// FindNavCell at the point itself (nearest |deltaY|, terrain wins
+				// ties; 0x98B1D0 -> 0x99FD90), as a correction's RESOLVE_CELL
+				// does. Resolving it against the old height and owner put a
+				// Wizard who teleported from the ground onto stairs under them.
+				owner = undefined;
+				pose = authoritative = navigation.surface( next.from );
+			}
 			poseAtMs = now;
 			segment = next.duration ?
 				bindOwners( {

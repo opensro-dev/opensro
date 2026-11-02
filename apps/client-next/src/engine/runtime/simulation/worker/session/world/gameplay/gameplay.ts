@@ -285,6 +285,7 @@ import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
+	cosCapeGenderPasses,
 	cosCapeWarnsGrowthPet,
 	cosSatietyDroppedLow,
 	cosShopTradeRefused,
@@ -1154,6 +1155,20 @@ attack can arrive in the same batch as the previous close and starve the walk.
 			playerModels = { country: localCountry, models: worldReferences.playerModels( localCountry ) };
 		}
 		return playerModels.models;
+	}
+	/*
+	================
+	localPlayerSex
+
+	The local player's sex selector (+0x1AC of its model reference): the
+	wearer value 789C60's gender leg compares an item's ReqGender
+	against. Unknown until the local actor and its model are known.
+	================
+	*/
+	function localPlayerSex(): number | undefined {
+		const local = readEntity( localGid );
+		if ( !local ) return undefined;
+		return localPlayerModels().find( model => model.refObjId === local.refObjId )?.sex;
 	}
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
@@ -2946,8 +2961,11 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				if ( command.kind === "instance-consent" && !social.instance ) return null;
 				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
-				// while dead prints UIIT_MSG_QUEST_INS_DEATH and swallows the
-				// submit - the box stays open and nothing is sent.
+				// while dead prints UIIT_MSG_QUEST_INS_DEATH on the centre
+				// banner only and swallows the submit - the box stays open
+				// and nothing is sent. ASM (capstone on the pinned client):
+				// the body 52EDD0-52EF01 calls 67D030 once at 52EE9A and
+				// 67A600 never, so there is no guide-line leg.
 				if (
 					command.kind === "instance-consent" && command.accept &&
 					local?.appearanceState?.[0] === 2
@@ -2955,8 +2973,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_QUEST_INS_DEATH",
 						value: 0,
-						nativeType: 0,
 						banner: true,
+						bannerOnly: true,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;
@@ -3244,21 +3262,28 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "inventory-move" ) {
 				// 594980: wearing a free-battle cape while a growth pet is
-				// summoned prints the warning; the equip itself proceeds
-				// and the pet's unsummon is the server's answer. 594980
-				// also requires the target socket's record empty (+0x28
-				// clear), so a swap onto a worn cape stays silent.
+				// summoned prints the warning on the guide lane (67A600
+				// type 5 at 594AE5) and the centre banner (67D030 at
+				// 594B00); the equip itself proceeds and the pet's
+				// unsummon is the server's answer. 594980 also requires
+				// the target socket's record empty (+0x28 clear), so a
+				// swap onto a worn cape stays silent, and its 789C60
+				// gender leg (mask 0x40) stays silent for a cape cut for
+				// the other sex.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
+					cosCapeGenderPasses( item.tooltip?.fields.reqGender, localPlayerSex() ) &&
 					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
 					cosCapeWarnsGrowthPet( [ ...cosRecords.values() ] )
 				) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 5,
+						notificationBanner: true
 					} ];
 					dirty = true;
 				}

@@ -296,7 +296,14 @@ test("confirming the instance invitation while dead prints the death line and se
 	game.command( { kind: "instance-consent", accept: true }, 2, undefined, dead );
 	assert.equal( frames.length, 0, "a dead confirm is swallowed" );
 	const batch = defined( game.take() );
-	assert.equal( defined( defined( batch.notices ).at( -1 ) ).key, "UIIT_MSG_QUEST_INS_DEATH" );
+	const notice = defined( defined( batch.notices ).at( -1 ) );
+	assert.equal( notice.key, "UIIT_MSG_QUEST_INS_DEATH" );
+	// 52EDD0 (capstone-confirmed): the line's only native print is
+	// the centre banner (67D030 once, 67A600 never), so the notice
+	// carries no guide/log leg - bannerOnly, no nativeType.
+	assert.equal( notice.banner, true );
+	assert.equal( notice.bannerOnly, true );
+	assert.equal( notice.nativeType, undefined );
 	assert.deepEqual( defined( batch.social ).instance, { gid: 0x12a }, "the box stays open" );
 	// The refusal is on the confirm only: declining still answers.
 	game.command( { kind: "instance-consent", accept: false }, 3, undefined, dead );

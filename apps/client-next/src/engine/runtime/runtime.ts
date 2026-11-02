@@ -728,6 +728,7 @@ export function startRuntime(
 				pose: game?.pose ?? null,
 				poseAtMs: game?.poseAtMs,
 				revision: game?.movementRevision ?? 0,
+				relocation: game?.movementTransition?.relocation ?? 0,
 				moving: game?.moving ?? false,
 				aim,
 				speedFactor: game?.movementSpeedFactor ?? 1,
