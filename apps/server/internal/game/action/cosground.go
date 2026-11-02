@@ -399,10 +399,15 @@ grantPeerCosPickup
 
 The reference server's pet pickup recipient selection and pet ground pickup:
 when the rotated party member's player bag is full,
-redirect the pickup to that member's summoned pickup pet. If the
-member has no pickup pet, answer the picker's owner with 0x9C; if the member's
-pickup pet bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
-to the member and 0x9C for the picker pet to the picker's owner.
+redirect the pickup to that member's summoned pickup pet. The v1.188
+selection (0x4D5510) probes the recipient's first free bag slot
+(0x4B8260 probe 0x0D); on 0xFF it looks the recipient's pickup pet up
+(0x4FC320 on the recipient's COS list) and returns 0x1807 when there is
+none, which the executor's answer tail (0x4D52A5) remaps to 0x18B4 -
+the bag-full class - for the picker's owner. If the member's pickup pet
+bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
+to the member and 0x9C for the picker pet to the picker's owner: that
+spill can still land later, so it keeps the 3 s retry.
 ================
 */
 func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterworld.Character, item grounditem.Item, anim wire.PickupAnim, p petPickupAt) OpResult {
@@ -411,13 +416,16 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 	var picked grounditem.Item
 	var peerPetGID uint32
 	var peerBagFull bool
+	var peerPetMissing bool
 	p.doors.update(recipient, "cos-ground-item", func() bool {
 		peerPetGID = rt.findPickupPetGID(recipient)
 		if peerPetGID == 0 {
+			peerPetMissing = true
 			return false
 		}
 		bag, inv, valid := rt.ownedCOSContainer(recipient, peerPetGID)
 		if !valid {
+			peerPetMissing = true
 			return false
 		}
 		current, found := rt.characterGround(division, picker, item.Gid)
@@ -489,6 +497,14 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 	if len(result.Broadcast) > 0 {
 		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked)...)
 		return result
+	}
+	if peerPetMissing {
+		// The spill has nowhere to land: with no live pickup pet (or no
+		// container behind it) this drop can never be granted, so the
+		// retry byte would re-propose it every 3 s for its whole ground
+		// life. The native selection returns 0x1807 here and the answer
+		// tail remaps it to 0x18B4, the bag-full class.
+		result = failureResult(cosPickupBagFull)
 	}
 	if peerBagFull && peerPetGID != 0 {
 		result.Recipients = append(result.Recipients, RecipientFrames{
