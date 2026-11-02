@@ -32,6 +32,17 @@ const TRADER = 1, THIEF = 2, HUNTER = 3;
 
 /*
 ================
+isPvpCapeItem
+
+RefObj_IsPvpCape (593310): the item is a free-battle cape, TID 3/1/7/5.
+================
+*/
+export function isPvpCapeItem( typeFlags: number ): boolean {
+	return jobItemType( typeFlags ) === PVP_CAPE_ITEM;
+}
+
+/*
+================
 PlayerInteraction
 ================
 */

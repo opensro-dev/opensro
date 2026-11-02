@@ -5103,14 +5103,26 @@ export function createUi(
 					chatText
 			);
 			if ( draft ) {
-				const key = draft.channel === 4 && !view.gameplay?.social?.members.length ?
-					"UIIT_MSG_PARTYERR_CANT_FIND_PARTY" :
-					draft.channel === 5 && !view.gameplay?.social?.guild ?
-					"UIIT_MSG_GUILD_NON_EXISTING" :
-					null;
-				if ( key ) hudMessages.append( hud.data()?.strings[key] ?? "" );
-				else sendGameplay( { kind: "chat", ...draft } );
-				chatText = key ? "" : chatTabPrefix( chatTab ) || (draft.channel === 2 ? "$" + draft.target + " " : "");
+				// 545EF0: a composed line the chat column of the abuse
+				// filter refuses (790C70) prints the filter line in red
+				// and is never sent; the draft is given up like the
+				// membership refusals below.
+				const chatRules = hud.data()?.chatRules;
+				if ( chatRules && !textAllowed( draft.text, chatRules ) ) {
+					hudMessages.append( hud.data()?.strings["UIIT_MSG_CHATWND_MESSAGE_FILTER"] ?? "", 0xffff0000 );
+					chatText = "";
+				} else {
+					const key = draft.channel === 4 && !view.gameplay?.social?.members.length ?
+						"UIIT_MSG_PARTYERR_CANT_FIND_PARTY" :
+						draft.channel === 5 && !view.gameplay?.social?.guild ?
+						"UIIT_MSG_GUILD_NON_EXISTING" :
+						null;
+					if ( key ) hudMessages.append( hud.data()?.strings[key] ?? "" );
+					else sendGameplay( { kind: "chat", ...draft } );
+					chatText = key ?
+						"" :
+						chatTabPrefix( chatTab ) || (draft.channel === 2 ? "$" + draft.target + " " : "");
+				}
 			} else {
 				focus = null;
 				focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
