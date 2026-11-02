@@ -519,7 +519,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
-import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
+import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
@@ -26422,7 +26422,12 @@ export function createUi(
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
-								...tooltipDescription( lookup( offer.description ) )
+								...tooltipDescription( lookup( offer.description ) ),
+								...mallTooltipRows( offer, {
+									rollOfCloth: lookup( "UIIT_STT_ROLL_OF_CLOTH" ),
+									silk: lookup( "UIIT_STT_SILKMALL_SILK" ),
+									giftSilk: lookup( "UIIT_CTL_SILK_INQUIRY_GET_SILK" )
+								} )
 							];
 						}
 					}

@@ -11,6 +11,7 @@ and buyback entries do not inherit a cached or guessed price.
 */
 
 import type { GameplayState } from "@/engine/contracts/gameplay";
+import type { MallOffer } from "@/engine/contracts/item-mall";
 import { SHOP_CURRENCY_GUILD_POINT, SHOP_CURRENCY_HONOR, type ShopPrice } from "@/engine/foundation/gameplay/commerce";
 import type { TooltipRow } from "./tooltip-rows";
 
@@ -83,4 +84,44 @@ function priceLine(
 		return `${labels.guildPoint} : ${row.amount}${labels.guildPointUnit}`;
 	}
 	return `${labels.price} : ${row.amount} ${labels.gold}`;
+}
+
+/*
+================
+MallLabels
+
+The localized words of a mall price line.
+================
+*/
+export interface MallLabels {
+	readonly rollOfCloth: string;
+	readonly silk: string;
+	readonly giftSilk: string;
+}
+
+/*
+================
+mallTooltipRows
+
+The item-mall leg of 5592B0 (pane 0xf): the package price object's silk
+rows, "%s : %I64d%s" under the ROLL_OF_CLOTH caption - charged silk
+(+0x8, SILKMALL_SILK) and received gift silk (+0xC,
+SILK_INQUIRY_GET_SILK) - each only where its currency bit is authored,
+at zero as elsewhere (mallCurrencyRows). The object's gold, guild,
+war and honor rows cannot occur here: the mall catalogue admits mask
+bits 2/4/16 only (item-mall-catalog.ts).
+================
+*/
+export function mallTooltipRows(
+	offer: MallOffer,
+	labels: MallLabels
+): readonly TooltipRow[] {
+	const lines: string[] = [];
+	if ( offer.currencyMask & 2 ) lines.push( `${labels.rollOfCloth} : ${offer.silk}${labels.silk}` );
+	if ( offer.currencyMask & 4 ) lines.push( `${labels.rollOfCloth} : ${offer.giftSilk}${labels.giftSilk}` );
+	if ( !lines.length ) return [];
+	return [
+		{ value: " ", color: 0 },
+		...lines.map( value => ({ value, color: PRICE_COLOR }) )
+	];
 }
