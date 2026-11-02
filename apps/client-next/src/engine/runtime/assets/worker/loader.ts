@@ -77,6 +77,27 @@ function listedFileGone( error: unknown ) {
 
 /*
 ================
+transientAssetFault
+
+Whether a failure's shape is a transient transport or device fault
+rather than a verdict on the content: an error already marked
+transient, an allocation the engine refused (a RangeError naming
+memory, or the bare "out of memory" string the #2299 incident threw -
+the same two shapes the simulation lane names in
+isOutOfMemoryFailure), or an I/O DOMException (NetworkError).
+Decode-shaped DOMExceptions (InvalidStateError) and cancellation
+(AbortError) stay out: those are content and caller facts, not
+transport (#2337).
+================
+*/
+export function transientAssetFault( error: unknown ): boolean {
+	if ( transientAssetFailure( error ) ) return true;
+	if ( error instanceof DOMException ) return error.name === "NetworkError";
+	return /^(RangeError: )?(out of memory|array buffer allocation failed)/i.test( String( error ) );
+}
+
+/*
+================
 createLoader
 
 Own decoders, foreground requests and the background installation scheduler.
@@ -255,6 +276,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					return await downloadAttempt( url, limit, signal, range );
 				} catch ( error ) {
 					const transient = error instanceof TypeError || error instanceof NoProgressError ||
+						transientAssetFault( error ) ||
 						(error instanceof Error && "status" in error &&
 							TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
 					const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
@@ -371,7 +393,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				response.headers.get( "content-range" ) !== `bytes ${range.start}-${range.end}/${range.total}`)
 		) {
 			void response.body.cancel().catch( () => {} );
-			throw Error( "Invalid asset range response" );
+			// A middlebox that ignores Range - answering 200 with the whole
+			// object, or a 206 naming some other range - is a transport
+			// fact: the read retries, then enters the bounded recovery
+			// marked transient (#2337).
+			throw assetFailure( "Invalid asset range response", true );
 		}
 		const bytes = await readBytes( response.body, limit, {
 			received: size => {
@@ -473,14 +499,19 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	) {
 		const job = { id: request.id, bytes: 0, sent: 0, primaryDone: false, decoding: false };
 		jobProgress.set( request.id, job );
+		// Whether the primary bytes carry the pack reader's length-and-digest
+		// guarantee. A decoder refusal means broken content only when they do;
+		// on unverified bytes it means the body arrived wrong (#2337).
+		let primaryVerified = true;
 		try {
 			const url = new URL( request.url );
 			if ( ![ "http:", "https:" ].includes( url.protocol ) || url.username || url.password ) {
 				throw new Error( "Invalid asset URL" );
 			}
+			primaryVerified = url.pathname.startsWith( "/assets/" );
 			let bytes = request.decode === "effect" && effectCatalogParsed ?
 				PARSED_EFFECT_CATALOG :
-				url.pathname.startsWith( "/assets/" ) ?
+				primaryVerified ?
 				await packs.read( url, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
 			job.primaryDone = true;
@@ -801,11 +832,17 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		} catch ( error ) {
 			if ( !disposed && pending.get( request.id ) === controller ) {
 				pending.delete( request.id );
+				// A refusal past the primary bytes on a read no digest vouches
+				// for is a transport verdict (the body arrived cut or
+				// substituted), never a content verdict; AssetAbsentError
+				// keeps its own meaning either way (#2337).
+				const unverifiedRefusal = !primaryVerified && job.primaryDone &&
+					!(error instanceof AssetAbsentError);
 				send( {
 					kind: "error",
 					id: request.id,
 					error: String( error ),
-					...(transientAssetFailure( error ) ? { transient: true as const } : {}),
+					...(transientAssetFault( error ) || unverifiedRefusal ? { transient: true as const } : {}),
 					...(error instanceof AssetAbsentError ? { absent: true as const } : {}),
 					// The live-page check is not a manifest file; its own 404 is no news.
 					...(request.decode !== "release" && listedFileGone( error ) ? { stale: true as const } : {})

@@ -3245,11 +3245,14 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "inventory-move" ) {
 				// 594980: wearing a free-battle cape while a growth pet is
 				// summoned prints the warning; the equip itself proceeds
-				// and the pet's unsummon is the server's answer.
+				// and the pet's unsummon is the server's answer. 594980
+				// also requires the target socket's record empty (+0x28
+				// clear), so a swap onto a worn cape stays silent.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
+					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
 					cosCapeWarnsGrowthPet( [ ...cosRecords.values() ] )
 				) {
 					notices = [ ...notices.slice( -99 ), {
@@ -4743,9 +4746,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				// A growth pet's satiety fall across 30% on this packet, if
-				// any: the value before the combat lane applies the update,
-				// watched against the packet's own (see cosSatietyDroppedLow).
-				let satietyDrop: { readonly before: number | undefined; readonly next: number; } | undefined;
+				// any, judged against the pet record's stored satiety: the
+				// record is the one satiety store both satiety packets
+				// write (the original's single +0x10 word), so a fall one
+				// lane already printed cannot print again on the other
+				// (see cosSatietyDroppedLow).
+				let satietyDrop:
+					| { readonly gid: number; readonly before: number | undefined; readonly next: number; }
+					| undefined;
 				if ( frame.opcode === 0x33a6 ) {
 					const update = vitalsUpdate( frame.payload ), gid = update.gid;
 					// CPSMission_OnVitalsUpdate0x33A6 (0x0077a080): resolves gid via
@@ -4760,11 +4768,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					const watched = cosRecords.get( gid );
 					if ( update.satiety !== undefined && watched?.band === 3 ) {
-						satietyDrop = {
-							before: combat.state().vitals.find( row => row.gid === gid )?.satiety ??
-								watched.satiety,
-							next: update.satiety
-						};
+						satietyDrop = { gid, before: watched.satiety, next: update.satiety };
 					}
 				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
@@ -4780,13 +4784,19 @@ Packet handling must not depend on which HUD panel is currently open.
 					// own chat lines with; the dedupe name follows it.
 					chat.equipment( inventory.state().inventory );
 				}
-				if ( satietyDrop && cosSatietyDroppedLow( satietyDrop.before, satietyDrop.next ) ) {
-					notices = [ ...notices.slice( -99 ), {
-						key: "UIIT_MSG_COSPETERR_HGP_30LOW",
-						value: 0,
-						sequence: ++noticeSequence
-					} ];
-					dirty = true;
+				if ( satietyDrop ) {
+					if ( cosSatietyDroppedLow( satietyDrop.before, satietyDrop.next ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COSPETERR_HGP_30LOW",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+					}
+					const record = cosRecords.get( satietyDrop.gid );
+					if ( record ) {
+						cosRecords.set( satietyDrop.gid, { ...record, satiety: satietyDrop.next } );
+						dirty = true;
+					}
 				}
 				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
 					// 775B50 (0x775BDE): a halt naming an owned pet that holds
