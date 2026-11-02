@@ -55,6 +55,21 @@ export function guildBanRefused( guild: Pick<Guild, "members"> | null, localName
 	return !!member && (member.grade === 0 || member.name === localName);
 }
 
+/*
+================
+guildTransferTargetMissing
+
+5D3EB0 looks the named successor up in the guild roster when the
+transfer is confirmed; absent, it prints
+UIIT_MSG_MLEAVEERR_USERNOTEXIST and sends nothing. The port picks
+the successor from the roster (5F2390), so this is the picked
+member leaving the roster before the confirmation lands.
+================
+*/
+export function guildTransferTargetMissing( guild: Pick<Guild, "members"> | null, memberId: number ): boolean {
+	return !guild?.members.some( m => m.id === memberId );
+}
+
 export type GuildManagerRow =
 	| "create"
 	| "level-up"
