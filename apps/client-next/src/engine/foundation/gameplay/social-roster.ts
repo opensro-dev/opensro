@@ -240,6 +240,23 @@ export interface SocialState {
 
 /*
 ================
+assertUniqueRosterRows
+
+Every roster the wire publishes is keyed by id: a repeated id, or a
+roster past the budget its native reader allows, is a corrupt frame,
+and the decode throws rather than guess which row the native client
+would keep. Shared by the party and guild lanes (social,
+social-guild-union).
+================
+*/
+export function assertUniqueRosterRows<T extends { id: number; }>( rows: readonly T[], max: number ): void {
+	if ( rows.length > max || new Set( rows.map( r => r.id ) ).size !== rows.length ) {
+		throw Error( "Invalid social roster" );
+	}
+}
+
+/*
+================
 guildSelf
 
 The local player's guild member row, by name: the guild roster carries no

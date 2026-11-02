@@ -184,10 +184,11 @@ function memberRow( w, id, name, offline ) {
 		.str( "" ).u32( 1907 ).u8( 0 ).u8( offline );
 }
 
+/** @type {import("../../src/engine/foundation/gameplay/social.ts").SocialState} */
 const rosterState = {
 	...guildState,
 	guild: {
-		...guildState.guild,
+		...defined( guildState.guild, "seed guild" ),
 		members: [
 			{
 				id: 1,
@@ -229,6 +230,9 @@ const rosterState = {
 	}
 };
 
+/** @type {import("../../src/engine/foundation/gameplay/social.ts").Guild} */
+const rosterGuild = defined( rosterState.guild, "roster guild" );
+
 test("sub-op 6 mask legs follow 5E9D20: &1 is level, &2 is offline", () => {
 	const leveled = socialPacketOf(
 		rosterState,
@@ -258,7 +262,7 @@ test("member delta flips print connect, disconnect and the self notice (5F3340)"
 	assert.equal( connected.guild?.members.find( m => m.id === 2 )?.offline, 0 );
 	const noticed = {
 		...rosterState,
-		guild: { ...rosterState.guild, subject: "Hello guild" }
+		guild: { ...rosterGuild, subject: "Hello guild" }
 	};
 	const selfConnected = socialPacketOf(
 		noticed,
@@ -285,8 +289,8 @@ test("member delta flips print connect, disconnect and the self notice (5F3340)"
 		{
 			...rosterState,
 			guild: {
-				...rosterState.guild,
-				members: rosterState.guild.members.map( m => m.id === 1 ? { ...m, offline: 0 } : m )
+				...rosterGuild,
+				members: rosterGuild.members.map( m => m.id === 1 ? { ...m, offline: 0 } : m )
 			}
 		},
 		writer().u8( 6 ).u32( 1 ).u8( 2 ).u8( 1 ).frame( 0x3b29 )
@@ -314,8 +318,8 @@ test("the 0x16 batch prints one line per flipped member", () => {
 	const both = {
 		...rosterState,
 		guild: {
-			...rosterState.guild,
-			members: rosterState.guild.members.map( m => m.id === 1 ? { ...m, name: "Other" } : m )
+			...rosterGuild,
+			members: rosterGuild.members.map( m => m.id === 1 ? { ...m, name: "Other" } : m )
 		},
 		localName: "Echo"
 	};
