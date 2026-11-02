@@ -14,6 +14,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const cos = await import( "../../src/engine/foundation/ui/cos-command.ts" );
+const { isPvpCapeItem } = await import( "../../src/engine/foundation/gameplay/player-attack.ts" );
 
 const HORSE = { gid: 7, refObjId: 2191, band: 1, hp: 500, mp: 0, status: 0, dead: false };
 const HORSE_REF = {
@@ -238,4 +239,56 @@ test("8301A0 derives the attack pet's abilities from its reference", () => {
 	assert.deepEqual( physicalOnly.physical, [ 49, 49 ], "a later block of the same kind overwrites" );
 	assert.equal( cos.cosAttackText( [ 0, 0 ] ), "0" );
 	assert.equal( cos.cosAttackText( [ 40, 61 ] ), "40 ~ 61" );
+});
+
+test("specialty goods enter only a transport COS's bag (550300 with 830410)", () => {
+	const TRADE_GOODS = 0x46c, POTION = 0x86c;
+	// (typeFlags & 0x7FE) === 0x46C is the trade-goods class wherever the
+	// port tests the type word; band 2 is the transport, band 4 a pickup
+	// pet, band 3 a growth pet.
+	assert.equal( cos.cosSpecialtyMoveRefused( TRADE_GOODS, 4 ), true );
+	assert.equal( cos.cosSpecialtyMoveRefused( TRADE_GOODS, 3 ), true );
+	assert.equal( cos.cosSpecialtyMoveRefused( TRADE_GOODS, 2 ), false );
+	assert.equal( cos.cosSpecialtyMoveRefused( POTION, 4 ), false );
+	assert.equal( cos.cosSpecialtyMoveRefused( POTION, 2 ), false );
+});
+
+test("only a transport COS may trade at a shop (5B2630/5B6CA0)", () => {
+	// Record classes: transport is class 1; riding 0, pickup 2, attack 3,
+	// guild 4 and the quest default 0 all refuse with CANT_TRADE_SHOP.
+	assert.equal( cos.cosShopTradeRefused( 2 ), false );
+	assert.deepEqual( [ 1, 3, 4, 5, 6 ].map( band => cos.cosShopTradeRefused( band ) ), [
+		true,
+		true,
+		true,
+		true,
+		true
+	] );
+});
+
+test("the HGP line fires only on the fall below 3000 (8304F0)", () => {
+	assert.equal( cos.cosSatietyDroppedLow( 5000, 2999 ), true );
+	assert.equal( cos.cosSatietyDroppedLow( 3000, 2999 ), true );
+	// Landing exactly on 3000 is the halved state but not the printed fall.
+	assert.equal( cos.cosSatietyDroppedLow( 5000, 3000 ), false );
+	assert.equal( cos.cosSatietyDroppedLow( 2999, 2000 ), false );
+	assert.equal( cos.cosSatietyDroppedLow( 2000, 9000 ), false );
+	assert.equal( cos.cosSatietyDroppedLow( undefined, 2000 ), false );
+});
+
+test("only TID 3/1/7/5 is a free-battle cape (593310)", () => {
+	const cape = 3 << 2 | 1 << 5 | 7 << 7 | 5 << 11;
+	assert.equal( isPvpCapeItem( cape ), true );
+	// The same job fields with another fourth field are a job suit, not a cape.
+	assert.equal( isPvpCapeItem( 3 << 2 | 1 << 5 | 7 << 7 | 1 << 11 ), false );
+	assert.equal( isPvpCapeItem( 0x86c ), false );
+});
+
+test("the cape warning needs a live growth pet and no guild soldier (594980)", () => {
+	const attack = { band: 3, dead: false }, guild = { band: 5, dead: false };
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack ] ), true );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack, guild ] ), false );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ guild ] ), false );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ { band: 3, dead: true } ] ), false );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [] ), false );
 });
