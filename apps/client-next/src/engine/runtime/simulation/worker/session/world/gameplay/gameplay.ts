@@ -26,7 +26,8 @@ import {
 import {
 	autoPotionTarget,
 	autoPotionTargetNotice,
-	createCosSelection
+	createCosSelection,
+	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
@@ -93,6 +94,7 @@ import {
 } from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
+import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
@@ -3051,6 +3053,11 @@ state here before a command can claim a native wire conversation.
 				friends.remove( command.jid );
 				return null;
 			}
+			if ( command.kind === "friend-conclusion-close" ) {
+				friends.closeConclusion();
+				dirty = true;
+				return null;
+			}
 			if ( command.kind === "letter-send" ) {
 				for ( const notice of letters.send( command.receiver, command.body ) ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
@@ -3333,6 +3340,13 @@ state here before a command can claim a native wire conversation.
 					reverseMapPoint: command.reverseMapPoint,
 					renameName: command.renameName
 				};
+				// 5608B0: the ride-state refusal prints instead of using.
+				const usedSlot = command.slot;
+				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
+				if ( local?.mountedOn && usedItem && isRideStateRefusedItem( usedItem.typeFlags ) ) {
+					api.notice( { key: "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE", value: 0 } );
+					return null;
+				}
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
 					api.notice( refusal );
@@ -4193,6 +4207,12 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
+					// A 0x3272 success raises its own text line (765260); the
+					// frame returns below, so drain the pending line here.
+					const exchangedLine = inventory.takeExchangeNotice();
+					if ( exchangedLine ) {
+						notices = [ ...notices.slice( -99 ), { ...exchangedLine, sequence: ++noticeSequence } ];
+					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
 				const nextSocial = socialPacket( social, frame, {
@@ -4689,6 +4709,16 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// 755E40: a subtype-4 item's success names the change it made.
+				if ( used && isStallChangeItem( used.typeFlags ) ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_ITEMB_STSTALL_CHAINGE",
+						value: 0,
+						arguments: [ used.name ?? "" ],
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup
 				// (types 6 and 0x1C) or server grant (type 0xE).
 				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;

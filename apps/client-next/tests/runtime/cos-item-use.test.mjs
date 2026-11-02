@@ -15,7 +15,8 @@ const {
 	armsItemTargetCursor,
 	autoPotionTarget,
 	autoPotionTargetNotice,
-	createCosSelection
+	createCosSelection,
+	isRideStateRefusedItem
 } = await import(
 	"../../src/engine/foundation/gameplay/cos-item-use.ts"
 );
@@ -593,6 +594,79 @@ test("automatic companion refusal feedback distinguishes absent, incompatible, r
 	);
 	assert.equal( autoPotionTargetNotice( flags( 1, 9 ), [ { ...pet, satiety: 9899 } ], pet.gid ), null );
 	assert.equal( autoPotionTargetNotice( flags( 1, 1 ), [], 0 ), null );
+});
+
+test("the ride-state refusal class is EtcGroup6 subtype 2 only (5608B0, 550200)", () => {
+	assert.equal( isRideStateRefusedItem( flags( 6, 2 ) ), true );
+	assert.equal( isRideStateRefusedItem( flags( 6, 3 ) ), false );
+	assert.equal( isRideStateRefusedItem( flags( 3, 2 ) ), false );
+	assert.equal( isRideStateRefusedItem( flags( 6, 2 ) | 2 ), false );
+});
+
+test("a rider activating a ride-refused item is refused at the press (5608B0)", () => {
+	for ( const mounted of [ true, false ] ) {
+		const sent = [];
+		const gameplay = createGameplay( frame => sent.push( frame ) );
+		const typeFlags = flags( 6, 2 );
+		gameplay.bootstrap( {
+			refItemSnapshot: [ { refObjId: 7553, typeFlags } ],
+			equipItems: [ { refObjId: 7553, slot: 21, body: [ 129, 29, 0, 0, 1, 0 ] } ]
+		} );
+		const local = {
+			gid: 1,
+			refObjId: 1,
+			kind: "local-player",
+			regionId: 257,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0,
+			name: "Owner",
+			...(mounted ? { mountedOn: 77 } : {})
+		};
+		gameplay.seed( local );
+		gameplay.command( { kind: "item-use", slot: 21 }, 1, undefined, local );
+		const keys = (gameplay.take()?.notices ?? []).map( n => n.key );
+		if ( mounted ) {
+			assert.equal( sent.filter( f => f.opcode === 0x75bd ).length, 0, "a rider's refused use was sent" );
+			assert.ok( keys.includes( "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE" ) );
+		} else {
+			assert.equal( sent.filter( f => f.opcode === 0x75bd ).length, 1, "an on-foot use was refused" );
+			assert.ok( !keys.includes( "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE" ) );
+		}
+		gameplay.dispose();
+	}
+});
+
+test("a stall-change item's answer names the change it made (755E40)", () => {
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	const typeFlags = flags( 3, 4 );
+	gameplay.bootstrap( {
+		refItemSnapshot: [ { refObjId: 7553, typeFlags, name: "Stall Bell" } ],
+		equipItems: [ { refObjId: 7553, slot: 21, body: [ 129, 29, 0, 0, 1, 0 ] } ]
+	} );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Owner"
+	} );
+	gameplay.command( { kind: "item-use", slot: 21 }, 1, undefined );
+	assert.equal( sent.filter( f => f.opcode === 0x75bd ).length, 1 );
+	gameplay.receive(
+		{ opcode: 0xb5bd, payload: Uint8Array.of( 1, 21, 0, 0, typeFlags & 255, typeFlags >>> 8 ) },
+		2
+	);
+	const notice = (gameplay.take()?.notices ?? []).find( n => n.key === "UIIT_MSG_ITEMB_STSTALL_CHAINGE" );
+	assert.ok( notice, "the stall-change line was not printed" );
+	assert.deepEqual( notice.arguments, [ "Stall Bell" ] );
+	gameplay.dispose();
 });
 
 test("the reverse return scroll carries its chosen point as one byte (6971B0 case 0x1E)", () => {

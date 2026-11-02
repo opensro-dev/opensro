@@ -640,7 +640,7 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 ================
 takeExchangeNotice
 
-The exchange line the last 0x3645 raised, once.
+The exchange line the last 0x3645 or 0x3272 raised, once.
 ================
 		*/
 		takeExchangeNotice(): SystemNotice | null {
@@ -849,6 +849,7 @@ exchange's, else the category-1 notice code it raised (0 for none).
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
 				published = null;
 			}
+			if ( outcome.message ) exchangeNotice = outcome.message;
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
 		},

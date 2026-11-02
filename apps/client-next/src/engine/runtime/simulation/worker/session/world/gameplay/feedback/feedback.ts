@@ -19,7 +19,12 @@ export function createFeedback(){
     // never checks the frame length: an update whose crossing the frame
     // carries no tail for (a replay onto kept state after a resume) still
     // applies, keeping the previous stat points.
-    const statPoints=next.level>level&&p.length>=end?v.getUint16(end-2,true):undefined;level=next.level;experience=next.experience;skillExperience=((skillExperience+skill)>>>0)%400;const messages=[...(delta!==0?[{key:delta>0?'UIIT_MSG_STATE_GAIN_EXP_NEW':'UIIT_MSG_STATE_LOSE_EXP_NEW',value:Math.abs(delta)}]:[]),...(skill>0?[{key:'UIIT_MSG_STATE_GET_SKILL_EXP',value:skill}]:[])];return {events,level,experience:experience.toString(),skillExperience,statPoints,messages};
+    const statPoints=next.level>level&&p.length>=end?v.getUint16(end-2,true):undefined,crossed=next.level>level;level=next.level;experience=next.experience;skillExperience=((skillExperience+skill)>>>0)%400;const messages=[...(delta!==0?[{key:delta>0?'UIIT_MSG_STATE_GAIN_EXP_NEW':'UIIT_MSG_STATE_LOSE_EXP_NEW',value:Math.abs(delta)}]:[]),...(crossed?[{key:'UIIT_MSG_STRGERR_LEVEL',value:next.level}]:[]),...(skill>0?[{key:'UIIT_MSG_STATE_GET_SKILL_EXP',value:skill}]:[])];return {events,level,experience:experience.toString(),skillExperience,statPoints,messages};
+   }
+   if(op===0x3514){
+    // 75D1E0: a strip cancel for the local player prints its line; the
+    // entities owner clears the action bar itself.
+    if(p.length!==4)return null;const gid=v.getUint32(0,true);return {events,messages:gid===local?[{key:'UIIT_MSG_STRIP_CANCEL',value:0}]:[]};
    }
    if(op===0x3508&&p[4]===3){
     if(p.length!==13)throw Error('Invalid COS experience update');if(!cos||cos.level===undefined||!cos.experience)return {events};

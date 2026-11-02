@@ -225,6 +225,7 @@ export type GameplayCommand =
 	| { readonly kind: "friend-request"; readonly name: string; }
 	| { readonly kind: "friend-answer"; readonly accept: boolean; }
 	| { readonly kind: "friend-delete"; readonly jid: number; }
+	| { readonly kind: "friend-conclusion-close"; }
 	| { readonly kind: "letter-send"; readonly receiver: string; readonly body: string; }
 	| { readonly kind: "letter-read"; readonly index: number; }
 	| { readonly kind: "letter-close"; }
