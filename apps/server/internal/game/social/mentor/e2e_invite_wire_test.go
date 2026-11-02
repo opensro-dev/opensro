@@ -278,6 +278,7 @@ func campNextFrame(t *testing.T, c *websocket.Conn, what string) transport.Frame
 		if f.Opcode == transport.OpPing || f.Opcode == transport.OpPong {
 			continue
 		}
+		wiretest.AckRead(t, c, f)
 		return f
 	}
 }
