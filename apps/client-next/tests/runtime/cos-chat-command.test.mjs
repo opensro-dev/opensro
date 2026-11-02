@@ -80,18 +80,21 @@ function context( fields = {} ) {
 	return { record, reference: undefined, ownerDead: false, mounted: false };
 }
 
-test("a stance word orders the change on bands 3 and 4", () => {
+test("a stance word orders the change on the attack class", () => {
 	assert.deepEqual( cosChatStance( "aggressive", context() ), { kind: "cos-behavior", gid: 77, mode: 1 } );
 	assert.deepEqual(
-		cosChatStance( "defensive", context( { band: 4, commandMode: 1 } ) ),
+		cosChatStance( "defensive", context( { commandMode: 1 } ) ),
 		{ kind: "cos-behavior", gid: 77, mode: 0 }
 	);
 });
 
 test("a stance word sends nothing where 6A2350 would not", () => {
-	// Already in the stance, mode unknown, or a band without one.
+	// Already in the stance, mode unknown, or a class without one:
+	// 82D330 admits band 3 only, so a pickup pet (band 4) whose
+	// stance would change still gets no order.
 	assert.equal( cosChatStance( "aggressive", context( { commandMode: 1 } ) ), null );
-	assert.equal( cosChatStance( "defensive", context( { band: 4 } ) ), null );
+	assert.equal( cosChatStance( "defensive", context( { band: 4, commandMode: 1 } ) ), null );
+	assert.equal( cosChatStance( "aggressive", context( { band: 4, commandMode: 0 } ) ), null );
 	assert.equal( cosChatStance( "aggressive", context( { commandMode: undefined } ) ), null );
 	assert.equal( cosChatStance( "aggressive", context( { band: 2 } ) ), null );
 	// No pet, a dead pet, or a dead owner.

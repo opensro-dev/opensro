@@ -14,7 +14,7 @@ uses, with stance explicit and charm on the quickslot's action 5000.
 ===========================================================================
 */
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
-import type { CosCommandContext } from "../ui/cos-command";
+import { COS_CLASS_ATTACK, type CosCommandContext } from "../ui/cos-command";
 
 export type CosChatCommand =
 	| { readonly kind: "attack"; }
@@ -66,11 +66,13 @@ export function cosChatCommand( text: string, copy: ( symbol: string ) => string
 cosChatStance
 
 The order a stance word makes, or null where 6A2350 case 6 sends
-nothing: the pet alive under a living owner, a band that takes a
-stance (82D330 admits bands 3 and 4; the command bar's own stance
-gate admits band 3 only), the mode known, and the stance actually
-changing (+0xAB08 is written only on a change). The worker throws on
-the states refused here, so the refusal belongs on this side.
+nothing: the pet alive under a living owner, the attack class only
+(the gate at 6A2887 calls 82D330: cmp byte [ecx+0x14], 3 / sete -
+a pickup pet gets no stance order; the command bar's stance rule
+agrees, cls === COS_CLASS_ATTACK), the mode known, and the stance
+actually changing (+0xAB08 is written only on a change). The worker
+throws on the states refused here, so the refusal belongs on this
+side.
 ================
 */
 export function cosChatStance(
@@ -79,7 +81,7 @@ export function cosChatStance(
 ): GameplayCommand | null {
 	const record = context.record, mode = kind === "aggressive" ? 1 : 0;
 	if ( !record || context.ownerDead || record.dead || record.hp <= 0 ) return null;
-	if ( record.band !== 3 && record.band !== 4 ) return null;
+	if ( record.band !== COS_CLASS_ATTACK ) return null;
 	if ( record.commandMode === undefined || record.commandMode === mode ) return null;
 	return { kind: "cos-behavior", gid: record.gid, mode };
 }
