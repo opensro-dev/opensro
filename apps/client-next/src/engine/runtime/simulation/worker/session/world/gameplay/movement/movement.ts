@@ -1870,10 +1870,13 @@ step
 				const silent = now - lastInboundAt > MOVEMENT_RECEIPT_TIMEOUT_MS;
 				const overdue = now - oldest[1].sent > MOVEMENT_RECEIPT_MAX_WAIT_MS;
 				if ( silent || overdue ) {
+					// The incident's socket suffix is fed by keepalive pings,
+					// so this lane's own silence rides here beside it: the
+					// two clocks must not be conflated (#2148).
 					throw new Error(
 						`Movement receipt timed out: command ${oldest[0]}, age ${
 							now - oldest[1].sent
-						} ms, pending ${pending.size}`,
+						} ms, pending ${pending.size}, gameplay silence ${Math.round( now - lastInboundAt )} ms`,
 						{ cause: MOVEMENT_RECEIPT_TIMEOUT }
 					);
 				}

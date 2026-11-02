@@ -652,7 +652,7 @@ test("unrelated pickup cannot acknowledge a move and timed-out transactions cann
 	assert.equal( inv.state().inventoryPending, false );
 	inv.use( 14, 12000 );
 	// The report names the request that went unanswered (an item use, 0xB5BD).
-	assert.throws( () => inv.step( 22000 ), /timed out \(0xB5BD\); reconnect/ );
+	assert.throws( () => inv.step( 22000 ), /timed out \(0xB5BD\); held=0; reconnect/ );
 	assert.equal( inv.state().inventoryPending, true );
 	// A late answer is set aside, never applied: it could settle the wrong request.
 	assert.equal( inv.receive( 0xb5bd, Uint8Array.of( 1, 14, 8, 0, 0x6c, 0 ) ), false );
@@ -671,7 +671,7 @@ test("a timed-out inventory recovers on the resumed transport's EnterWorld boots
 	};
 	inv.bootstrap( snapshot );
 	inv.move( 13, 14, 10, 100 );
-	assert.throws( () => inv.step( 10101 ), /timed out \(0xB06D move 0\)/ );
+	assert.throws( () => inv.step( 10101 ), /timed out \(0xB06D move 0\); held=0; reconnect/ );
 	// Queued frames before EnterWorld are set aside, not thrown.
 	assert.doesNotThrow( () => inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) ) );
 	// The resume's bootstrap resynchronizes: requests and steps work again.
@@ -728,7 +728,7 @@ test("an inventory answer is lost once the stream falls silent", () => {
 		inv.noteInboundProgress( now );
 		inv.step( now );
 	}
-	assert.throws( () => inv.step( 15001 ), /timed out \(0xB06D move 0\); reconnect/ );
+	assert.throws( () => inv.step( 15001 ), /timed out \(0xB06D move 0\); held=1 firstHoldAgeMs=14001; reconnect/ );
 });
 
 /*
@@ -751,7 +751,7 @@ test("the inventory backstop ends the wait even while the stream keeps flowing",
 		inv.step( now );
 	}
 	assert.equal( inv.state().inventoryPending, true );
-	assert.throws( () => inv.step( 91001 ), /timed out \(0xB06D move 0\)/ );
+	assert.throws( () => inv.step( 91001 ), /timed out \(0xB06D move 0\); held=1 firstHoldAgeMs=90001; reconnect/ );
 });
 
 /*
@@ -770,7 +770,7 @@ test("inbound progress holds an open mall request with the bag's answers", () =>
 		inv.step( now );
 	}
 	// The last frame (30000) holds the catalog request to 40000.
-	assert.throws( () => inv.step( 40001 ), /Mall request timed out/ );
+	assert.throws( () => inv.step( 40001 ), /Mall request timed out; held=1 firstHoldAgeMs=39001; reconnect/ );
 });
 test("an item use answer sets the stack the server reports, as 755E40, even after another change", () => {
 	// Production incident: 0xB5BD 01 19 1f00 ec10 (slot 25, 31 left, an HP
