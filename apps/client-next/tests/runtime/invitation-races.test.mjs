@@ -279,7 +279,19 @@ test("confirming the instance invitation while dead prints the death line and se
 	const { game, frames } = fixture();
 	// The local player, dead: appearanceState channel 0 at value 2, the
 	// snapshot command() gates on (the rebirth pin drives it the same way).
-	const dead = { gid: 1, appearanceState: [ 2, 0, 0 ] };
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const dead = {
+		gid: 1,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "Owner",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		appearanceState: [ 2, 0, 0 ]
+	};
 	game.receive( instanceFrame(), 0 );
 	game.command( { kind: "instance-consent", accept: true }, 2, undefined, dead );
 	assert.equal( frames.length, 0, "a dead confirm is swallowed" );
