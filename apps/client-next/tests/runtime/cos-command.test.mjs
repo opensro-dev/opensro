@@ -284,11 +284,28 @@ test("only TID 3/1/7/5 is a free-battle cape (593310)", () => {
 	assert.equal( isPvpCapeItem( 0x86c ), false );
 });
 
-test("the cape warning needs a live growth pet and no guild soldier (594980)", () => {
+test("the cape warning needs a growth pet out and no guild soldier (594980)", () => {
 	const attack = { band: 3, dead: false }, guild = { band: 5, dead: false };
 	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack ] ), true );
 	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack, guild ] ), false );
 	assert.equal( cos.cosCapeWarnsGrowthPet( [ guild ] ), false );
-	assert.equal( cos.cosCapeWarnsGrowthPet( [ { band: 3, dead: true } ] ), false );
+	// 82EF30 matches the class byte only: a dead pet of either class is
+	// still in the manager, so it counts the same dead or alive.
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ { band: 3, dead: true } ] ), true );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack, { band: 5, dead: true } ] ), false );
 	assert.equal( cos.cosCapeWarnsGrowthPet( [] ), false );
+});
+
+test("the cape warning's gender leg passes on a match or a both-sex item (789C60)", () => {
+	// ReqGender (+0x1AC) against the wearer's selector: equal passes,
+	// item value 2 passes for everyone, anything else stays silent.
+	assert.equal( cos.cosCapeGenderPasses( 0, 0 ), true );
+	assert.equal( cos.cosCapeGenderPasses( 1, 1 ), true );
+	assert.equal( cos.cosCapeGenderPasses( 2, 0 ), true );
+	assert.equal( cos.cosCapeGenderPasses( 2, 1 ), true );
+	assert.equal( cos.cosCapeGenderPasses( 0, 1 ), false );
+	assert.equal( cos.cosCapeGenderPasses( 1, 0 ), false );
+	// A lane that cannot supply a value does not suppress the warning.
+	assert.equal( cos.cosCapeGenderPasses( undefined, 1 ), true );
+	assert.equal( cos.cosCapeGenderPasses( 0, undefined ), true );
 });
