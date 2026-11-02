@@ -344,6 +344,32 @@ test("the transport bag beside a shop closes the trade through its own control",
 	);
 });
 
+for ( const panel of [ "Storage", "Shop" ] ) {
+	test(`Escape on the ${panel} window ends the NPC interaction, as its close control does`, t => {
+		const sent = [], f = uiFixture( command => sent.push( command ) );
+		t.after( () => f.dispose() );
+		let now = 0;
+		const step = () => {
+			for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+		};
+		step();
+		if ( panel === "Shop" ) tradeWithTransport( f );
+		else OPENERS.Storage( f, step );
+		step();
+		assert.equal( f.ui.stats().panel, panel, `the ${panel} window opened` );
+		sent.length = 0;
+		f.ui.event( { kind: "key", code: "Escape" } );
+		step();
+		assert.equal( f.ui.stats().panel, "", "Escape closed the window" );
+		// Without the release the worker keeps the NPC held and the player
+		// cannot move (a player report: closing the warehouse by Escape).
+		assert.ok(
+			sent.some( command => command.kind === "gameplay" && command.command.kind === "npc-close" ),
+			"Escape released the NPC"
+		);
+	});
+}
+
 /*
 ================
 OVERLAYS

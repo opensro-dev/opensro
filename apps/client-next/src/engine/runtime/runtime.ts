@@ -420,7 +420,6 @@ export function startRuntime(
 				value => platform.saveQuickslotOptions( value ),
 				{
 					bugReport,
-					installIconAtlas: mapping => renderer.setUiAtlas( mapping ),
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),
@@ -729,6 +728,7 @@ export function startRuntime(
 				pose: game?.pose ?? null,
 				poseAtMs: game?.poseAtMs,
 				revision: game?.movementRevision ?? 0,
+				relocation: game?.movementTransition?.relocation ?? 0,
 				moving: game?.moving ?? false,
 				aim,
 				speedFactor: game?.movementSpeedFactor ?? 1,

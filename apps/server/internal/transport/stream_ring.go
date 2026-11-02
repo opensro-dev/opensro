@@ -31,7 +31,19 @@ session. One case sits outside the bound by design: a single frame
 larger than the whole byte bound is held in the ring until the client
 acknowledges it - dropping it would strand every client still
 downloading it - and the writer waits behind it as behind any full
-ring.
+ring. The EnterWorld answer, the one frame that size live, is ringed
+as a marker instead (below).
+
+An unapplied EnterWorld answer is never re-sent. The browser asks for a
+new entry on every resume, so a replayed answer was a second answer the
+client refused, and the refusal itself kept it unacked for the next
+resume (a reconnect loop). A resume drops it and everything behind it,
+and the new entry's snapshot rebuilds that state (supersededEntryLocked).
+Because it is never re-sent, the ring keeps the answer as a payload-free
+marker at its position: the answer of a busy division is bigger than the
+whole byte bound, and holding its bytes parked the writer, and the scene
+behind it, until a slow client had downloaded all of it, past
+RingParkBound into a detach and a fresh entry that parked again.
 
 Positions are compared plainly, never wrap-aware (#1515 review): a session
 would need four billion counted frames to reach the 2^32 wrap, so a
@@ -106,8 +118,17 @@ func (s *Session) noteWrittenLocked(f Frame, ordered bool) uint32 {
 	if !ordered {
 		return pos
 	}
-	s.ring = append(s.ring, ringFrame{pos: s.streamPos, f: f})
-	s.ringBytes += f.EncodedLen()
+	kept := f
+	if f.Opcode == OpEnterWorldResult {
+		// An EnterWorld answer is never re-sent (supersededEntryLocked),
+		// so its slot keeps only the opcode that marks it: the
+		// multi-megabyte payload held here parked the writer and every
+		// frame behind it until the client had downloaded it all, and a
+		// download slower than RingParkBound was detached as wedged.
+		kept = Frame{Opcode: f.Opcode}
+	}
+	s.ring = append(s.ring, ringFrame{pos: s.streamPos, f: kept})
+	s.ringBytes += kept.EncodedLen()
 	for len(s.ring) > 1 && (len(s.ring) > streamRingMaxFrames || s.ringBytes > streamRingMaxBytes) {
 		// The oldest unacknowledged frame falls out: a resume that still
 		// needs it is refused instead of silently skipping it. The
@@ -232,6 +253,10 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 		return false
 	}
 	s.ackLocked(lastApplied)
+	cut := supersededEntryLocked(s.ring)
+	if cut < len(s.ring) {
+		s.dropSupersededEntryLocked(cut)
+	}
 	resendBytes := 0
 	for _, r := range s.ring {
 		resendBytes += r.f.EncodedLen()
@@ -252,6 +277,73 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 	s.resendFrames += resendCount
 	s.resendBytes += resendBytes
 	return true
+}
+
+/*
+================
+supersededEntryLocked
+
+The index of the first EnterWorld answer the client has not applied, or
+len(ring) when the ring holds none. A resumed browser asks for a new
+entry on every resumed WELCOME (world.ts), so an unapplied answer is
+already superseded: re-sending it hands the client two answers, and it
+refuses the second with "Unexpected EnterWorld result" before acking it,
+so every later resume replays it again (the post-#2338 reconnect loop).
+The ring holds the answer as a payload-free marker (noteWrittenLocked);
+this is the only reader that needs it, and it reads only the opcode.
+Caller holds s.mu.
+================
+*/
+func supersededEntryLocked(ring []ringFrame) int {
+	for i, r := range ring {
+		if r.f.Opcode == OpEnterWorldResult {
+			return i
+		}
+	}
+	return len(ring)
+}
+
+/*
+================
+dropSupersededEntryLocked
+
+Drops the unapplied EnterWorld answer at ring[cut], every ring frame
+after it, and every counted frame still queued or coalesced behind it:
+all of it is that answer's scene or later state, and the new entry's
+snapshot rebuilds it whole. Sending it without its answer would reach a
+client that has no world yet as world packets before EnterWorld, which
+it refuses. Positions stay consistent: the re-sent frames are numbered
+again as they are rewritten (resumeFromLocked), and nothing dropped is
+ever numbered on the new stream. Transport-control frames in the queue
+stay. Caller holds s.mu.
+================
+*/
+func (s *Session) dropSupersededEntryLocked(cut int) {
+	for i := cut; i < len(s.ring); i++ {
+		s.ringBytes -= s.ring[i].f.EncodedLen()
+		s.ring[i] = ringFrame{}
+	}
+	s.ring = s.ring[:cut]
+	kept := s.queue[:0]
+	for _, f := range s.queue {
+		if CountsOnStream(f.Opcode) {
+			s.queueBytes -= f.EncodedLen()
+			continue
+		}
+		kept = append(kept, f)
+	}
+	for i := len(kept); i < len(s.queue); i++ {
+		s.queue[i] = Frame{}
+	}
+	s.queue = kept
+	for _, slot := range s.lossyKeys {
+		delete(s.lossy, slot)
+	}
+	s.lossyKeys = nil
+	s.lossyBytes = 0
+	// Every counted queued frame is gone, an earlier resume's
+	// still-unwritten re-send block included.
+	s.resendFrames, s.resendBytes = 0, 0
 }
 
 /*

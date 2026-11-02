@@ -76,13 +76,14 @@ the publications it makes.
 ================
 */
 function createWorker( origin, outLatencyMs = OUT_LATENCY_MS ) {
-	/** @type {{ pose: Pose, goal: Pose | undefined, speed: number, inputSeq: number, revision: number, atMs: number }} */
+	/** @type {{ pose: Pose, goal: Pose | undefined, speed: number, inputSeq: number, revision: number, relocation: number, atMs: number }} */
 	const state = {
 		pose: { ...START },
 		goal: undefined,
 		speed: SPEED,
 		inputSeq: 0,
 		revision: 0,
+		relocation: 0,
 		atMs: 0
 	};
 	const inbox = [], published = [];
@@ -128,6 +129,7 @@ function createWorker( origin, outLatencyMs = OUT_LATENCY_MS ) {
 							pose: { ...state.pose, angle: HEADING },
 							poseAtMs: state.atMs,
 							revision: state.revision,
+							relocation: state.relocation,
 							moving: !!state.goal,
 							goal: state.goal && { ...state.goal },
 							speed: state.speed,
@@ -179,6 +181,7 @@ function play( { clicks, events = [], origin = () => 0, endMs = 8000, outLatency
 			pose: p ? p.pose : { ...START },
 			poseAtMs: p?.poseAtMs,
 			revision: p?.revision ?? 0,
+			relocation: p?.relocation ?? 0,
 			moving: p?.moving ?? false,
 			aim: p?.goal && { kind: "goal", destination: p.goal },
 			speedFactor: 1,
@@ -327,6 +330,39 @@ test("a teleport snaps on one frame and the rest stays within the cap", () => {
 	assert.ok( endsAt( result ) < 1e-2 );
 });
 
+test("a teleport inside the smoothing bound still lands on one frame", () => {
+	// A Wizard's teleport cast mid-walk (a player report): the landing is
+	// nearer the drawn body than MAX_SMOOTHED_CORRECTION, so measured by
+	// distance alone it read as a correction and walked there at running
+	// speed, camera and all. Native 86D5C0 seats the caster at the point and
+	// snaps (owner vtable+0x94); the worker says so with a new relocation.
+	const result = play( {
+		clicks: [ { atMs: 100, to: { ...START, x: 1200 } } ],
+		events: [ {
+			atMs: 640,
+			apply: s => (s.pose = { ...s.pose, x: s.pose.x + 60 }, s.goal = undefined, s.revision++, s.relocation++)
+		} ]
+	} );
+	const jump = result.drawn.findIndex( ( f, i ) => i > 0 && f.pose.x - result.drawn[i - 1].pose.x > 40 );
+	assert.ok( jump > 0, "the body glided to the landing instead of snapping" );
+	assert.ok( peakRatio( result.drawn, f => f === result.drawn[jump] ) <= CAP + 1e-6 );
+	assert.ok( endsAt( result ) < 1e-2 );
+});
+
+test("a correction of the same size that the worker lets glide is still given back within the cap", () => {
+	// The same 60 units without a new relocation: a correction navigation
+	// admits (movement.ts admitCorrection) stays a glide.
+	const result = play( {
+		clicks: [ { atMs: 100, to: { ...START, x: 1200 } } ],
+		events: [ {
+			atMs: 640,
+			apply: s => (s.pose = { ...s.pose, x: s.pose.x + 60 }, s.goal = undefined, s.revision++)
+		} ]
+	} );
+	assert.ok( peakRatio( result.drawn ) <= CAP + 1e-6, `peak ${peakRatio( result.drawn )}` );
+	assert.ok( endsAt( result ) < 1e-2 );
+});
+
 test("a speed change mid-leg is followed: the body slows with the worker", () => {
 	const result = play( {
 		clicks: [ { atMs: 100, to: { ...START, x: 1200 } } ],
@@ -448,6 +484,7 @@ function playMoves( { moves, endMs = 8000 } ) {
 			pose: p ? p.pose : { ...START },
 			poseAtMs: p?.poseAtMs,
 			revision: p?.revision ?? 0,
+			relocation: p?.relocation ?? 0,
 			moving: p?.moving ?? false,
 			aim: p?.goal && { kind: "goal", destination: p.goal },
 			speedFactor: 1,

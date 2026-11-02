@@ -666,6 +666,13 @@ import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubb
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
+import { createQuestInfo } from "./hud/quest-info";
+import {
+	QUEST_INFO_ICON_X_INSET,
+	QUEST_INFO_ICON_Y,
+	QUEST_INFO_WINDOW_WIDTH,
+	questInfoWindowHeight
+} from "@/engine/foundation/ui/quest-info";
 import { automaticGuide } from "@/engine/foundation/gameplay/guide";
 import {
 	loadingArtDemand,
@@ -1033,9 +1040,6 @@ export interface UiExtensions {
 	// and the build's stamped revision are used.
 	mallNoticeStorage?: Pick<Storage, "getItem" | "setItem"> | null;
 	clientRevision?: string;
-	// Port-only, not native: the icon atlas installs through the renderer's
-	// quad packer (foundation/ui/icon-atlas.ts).
-	installIconAtlas?: ( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ) => void;
 }
 
 /*
@@ -1439,6 +1443,8 @@ export function createUi(
 	const mapHud = createWorldMapHud( { assets, base, experimental, saveExperimental: extensions.saveExperimental } );
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
+	// The level-up quest notice (hud/quest-info.ts): icon, then window.
+	const questInfo = createQuestInfo();
 	const hudMessages = createHudMessages( chooseTip );
 	const speech = createSpeech();
 	let academyWasVisible = false;
@@ -1502,7 +1508,7 @@ export function createUi(
 		hover: string | null = null,
 		pressed: string | null = null;
 	const text = createUiText( assets, base ),
-		resources = createUiAssets( assets, texture, base, undefined, extensions.installIconAtlas );
+		resources = createUiAssets( assets, texture, base );
 	let diagnosticError: string | null = null;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;
@@ -1909,6 +1915,24 @@ export function createUi(
 	*/
 	function canLeavePanel() {
 		return panel !== "Magic Pang" || ![ "rolling", "waiting" ].includes( view?.gameplay?.gacha?.phase ?? "" );
+	}
+	/*
+	================
+	closePanelByPlayer
+
+	The player closes the drawn window, by its close control or by Escape.
+	Closing the shop or the warehouse, or the inventory or transport bag
+	beside either, ends the NPC interaction: CIFMainFrame_OnCloseButton
+	(5B0D20) and the close every window shares (CGInterface_CloseWindowByClass,
+	53D480, reached by Escape too) call CGInterface_SetNpcShopVisible( 0 ),
+	which hides the talk menus and releases the NPC target (69FB95). Escape
+	once closed the panel without that release and left the player held by
+	the NPC, unable to move.
+	================
+	*/
+	function closePanelByPlayer() {
+		if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
+		setPanel( "" );
 	}
 	/*
 	================
@@ -4796,6 +4820,8 @@ export function createUi(
 			}
 			practice = null;
 		} else if ( id === "quest-details-close" ) questDetails = false;
+		else if ( id === "quest-info-icon" ) questInfo.openWindow();
+		else if ( id === "quest-info-close" ) questInfo.closeWindow();
 		else if ( id === "quest-detail-up" || id === "quest-detail-down" ) {
 			questDetailScroll = Math.max(
 				0,
@@ -5194,12 +5220,7 @@ export function createUi(
 		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
-			// Closing the shop or the warehouse, or the inventory or transport bag
-			// beside either, ends the NPC interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
-			// store's own close (53D4BC) call CGInterface_SetNpcShopVisible( 0 ),
-			// which hides the talk menus and releases the NPC target (69FB95).
-			if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
-			setPanel( "" );
+			closePanelByPlayer();
 			inventorySlot = -1;
 		} else if ( id === "select-window:Character-stats" ) setPanel( "Character", "select" );
 		// Window ids carry the panel name as text; only registered panels open.
@@ -8806,7 +8827,8 @@ export function createUi(
 					confirmDrop = "";
 					closeServer();
 					confirmAbandon = false;
-					setPanel( panel ? "" : view?.session?.phase === "world" ? "System" : "" );
+					if ( panel ) closePanelByPlayer();
+					else if ( view?.session?.phase === "world" ) setPanel( "System" );
 					inventorySlot = -1;
 					dirty = true;
 				} else if (
@@ -9426,6 +9448,17 @@ export function createUi(
 						hudCopy
 					)
 				) dirty = true;
+				// The level-up quest notice (#2310): the 0x30D2 handler's
+				// Guide(1) call, fed from the same progression view.
+				if (
+					questInfo.observe(
+						next.gameplay?.progression?.level,
+						next.entities?.find( e => e.gid === next.gameplay?.localGid )?.countryByte9c,
+						(next.gameplay?.quests ?? []).map( q => q.refId ),
+						guideResources.data()?.questPresentation.records,
+						now
+					)
+				) dirty = true;
 			}
 			const regionArt = hud.data()?.root.GDR_REGION_INFO_VIEW;
 			const regionReady = !!regionArt?.texture && resources.has( regionArt.texture ) &&
@@ -9714,6 +9747,7 @@ export function createUi(
 					uniqueBanner.reset();
 					questBanner.reset();
 					questTimers.reset();
+					questInfo.reset();
 				}
 				pending = false;
 				message = "";
@@ -15472,6 +15506,53 @@ export function createUi(
 						} );
 					}
 					endWindow( admission, "quest-details" );
+				}
+				if ( hudData && questInfo.windowOpen() ) {
+					const infoEntries = questInfo.entries(),
+						infoHeight = questInfoWindowHeight( infoEntries.length ),
+						infoPage = hudData.windows.ifquestinfo!,
+						infoSlot = hudData.windows.ifquestinfoslot!,
+						px = Math.floor( (w - QUEST_INFO_WINDOW_WIDTH) / 2 ),
+						py = Math.floor( (h - infoHeight) / 2 ),
+						infoAdmission = beginWindow();
+					blocks.push( [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ] );
+					controls.push( {
+						id: "quest-info-drag",
+						label: "Move quest info",
+						kind: "button",
+						draggable: true,
+						rect: [ px, py, QUEST_INFO_WINDOW_WIDTH, infoHeight ]
+					} );
+					for ( const node of authoredPaintOrder( infoPage ) ) authoredChrome( node, px, py );
+					const slotHeight = infoSlot.GDR_QUESTINFO_SLOT!.rect[3],
+						visibleSlots = Math.max(
+							1,
+							Math.floor( (infoHeight - infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1]) / slotHeight )
+						);
+					for ( const [index, entry] of infoEntries.slice( 0, visibleSlots ).entries() ) {
+						const ox = px + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[0],
+							oy = py + infoPage.GDR_QUESTINFO_SCROLLMGR!.rect[1] + index * slotHeight;
+						if ( infoSlot.GDR_QUESTINFO_SLOT!.texture ) {
+							authoredImage( infoSlot.GDR_QUESTINFO_SLOT!, ox, oy );
+						}
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_TITLE!, ox, oy, entry.title );
+						authoredText(
+							infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!,
+							ox,
+							oy,
+							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_NPC_STATIC!.text )
+						);
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_NPC!, ox, oy, entry.notify );
+						authoredText(
+							infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!,
+							ox,
+							oy,
+							hudCopy( infoSlot.GDR_QUESTINFO_SLOT_CONDITION_STATIC!.text )
+						);
+						authoredText( infoSlot.GDR_QUESTINFO_SLOT_CONDITION!, ox, oy, entry.condition );
+					}
+					closeButton( px + QUEST_INFO_WINDOW_WIDTH - 22, py + 6, "quest-info-close" );
+					endWindow( infoAdmission, "quest-info" );
 				}
 				if ( practice && panel === "Skills" && hudData ) {
 					const mastery = practice.mode === PRACTICE_MASTERY,
@@ -26451,6 +26532,34 @@ export function createUi(
 							);
 						}
 					}
+				}
+			}
+			const hudData = hud.data();
+			// The level-up quest notice (#2310): the blinking icon at its
+			// native spot, painted in the topmost group because 69CCA0
+			// brings its own window to the front (69C150), over the
+			// minimap plate that covers the spot. Its QuestInfo window
+			// draws with the other windows.
+			if ( hudData && questInfo.iconVisible() ) {
+				const iconPath = questInfo.iconPath();
+				// Demanded before the size gate, not inside it: an image
+				// nothing asks for never becomes drawable (#2333).
+				paths.push( iconPath );
+				const iconSize = resources.size( iconPath );
+				if ( iconSize ) {
+					const iconRect: UiRect = [
+						w - QUEST_INFO_ICON_X_INSET,
+						QUEST_INFO_ICON_Y,
+						iconSize[0],
+						iconSize[1]
+					];
+					rect( iconRect, white, iconPath );
+					controls.push( {
+						id: "quest-info-icon",
+						label: "New quests",
+						kind: "button",
+						rect: iconRect
+					} );
 				}
 			}
 			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
