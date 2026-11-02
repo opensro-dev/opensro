@@ -35,6 +35,7 @@ u64, so a 10,000,000,000 price fits. Absent, the fields stay native u32.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { groupedNumber } from "@/engine/foundation/ui/guide-content";
 import { decodeInventoryItem } from "./inventory-item";
 
 export const STALL_SLOTS = 10;
@@ -64,6 +65,11 @@ const EVENT_CAME = 2;
 const EVENT_SOLD = 3;
 const EVENT_NETWORK_SOLD = 4;
 const NETWORK_REGISTERED = 1;
+// 755960 kind 4: the network's commission on a sale, one percent of the
+// price floored and clamped into this range; the server deducts the
+// same fee, the client only prints it.
+const NETWORK_COMMISSION_MIN_GOLD = 1;
+const NETWORK_COMMISSION_MAX_GOLD = 100_000;
 
 /*
 ================
@@ -152,9 +158,9 @@ export function emptyStall( namingSequence = 0 ): StallState {
 ================
 StallOutcome
 
-The next state, a notice (category and code), and the bag changes the
-frame makes: items to place in the first empty bag slots, bag slots to
-reduce by a count.
+The next state, a notice (category and code), the bag changes the
+frame makes (items to place in the first empty bag slots, bag slots
+to reduce by a count), and the chat lines the frame prints, in order.
 ================
 */
 export interface StallOutcome {
@@ -162,7 +168,7 @@ export interface StallOutcome {
 	readonly notice?: { readonly category: number; readonly code: number; };
 	readonly receive?: readonly InventoryItem[];
 	readonly give?: readonly { readonly bagSlot: number; readonly quantity: number; }[];
-	readonly message?: { readonly key: string; readonly args: readonly string[]; };
+	readonly messages?: readonly { readonly key: string; readonly args: readonly string[]; }[];
 }
 
 /*
@@ -177,6 +183,19 @@ export interface StallContext {
 	// Port-only, not native: SRO_RAISED_GOLD_CAPS writes the offer price as
 	// u64, so a ten-billion price fits. Absent is the native u32 field.
 	readonly widePrice?: boolean;
+}
+
+/*
+================
+networkCommission
+
+755960 kind 4: one percent of the sold price, floored, clamped to
+[1, 100000] gold. The server takes this fee out of the sale; the
+number here only feeds the commission chat line.
+================
+*/
+function networkCommission( price: number ): number {
+	return Math.min( Math.max( Math.floor( price / 100 ), NETWORK_COMMISSION_MIN_GOLD ), NETWORK_COMMISSION_MAX_GOLD );
 }
 
 /*
@@ -296,7 +315,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
 			const kind = u8();
-			let next = state, notice: StallOutcome["notice"];
+			let next = state, notice: StallOutcome["notice"], messages: StallOutcome["messages"];
 			if ( kind === EDIT_MODIFY ) {
 				const slot = u8(), quantity = u16(), price = ctx.widePrice ? u64Price() : u32(), code = u8();
 				next = {
@@ -316,11 +335,16 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			else if ( kind === EDIT_OPEN ) {
 				const open = u8() === 1, code = u8();
 				next = { ...state, open, networkRegistered: open && code === NETWORK_REGISTERED };
+				// 751A60 sub-op 5: a stall that just registered on the
+				// network says so in chat; leaving the network is silent.
+				if ( open && code === NETWORK_REGISTERED ) {
+					messages = [ { key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] } ];
+				}
 				if ( code !== 0 && code !== NETWORK_REGISTERED && code !== 2 && code !== 3 ) {
 					notice = { category: STALL_NOTICE_CATEGORY, code };
 				}
 			} else if ( kind === EDIT_GREETING ) next = { ...state, greeting: wstr() };
-			return done( { state: next, ...(notice ? { notice } : {}) } );
+			return done( { state: next, ...(notice ? { notice } : {}), ...(messages ? { messages } : {}) } );
 		}
 		case 0x3260: {
 			if ( state.phase === "none" ) return null;
@@ -346,19 +370,27 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 				...state.soldPending.filter( row => !removed.some( gone => gone.slot === row.slot ) ),
 				...removed
 			];
+			let messages: StallOutcome["messages"];
+			if ( mine && sold ) {
+				messages = [ {
+					key: kind === EVENT_SOLD ?
+						"UIIT_MSG_STREET_STORE_SELL_COMMODITY" :
+						"UIIT_MSG_WARENETWORK_BUY_SUCCESS",
+					args: [ buyer, sold.item.name ?? "" ]
+				} ];
+				// 755960 kind 4: under the sale line, the network's
+				// commission on a price above zero, digits grouped.
+				if ( kind === EVENT_NETWORK_SOLD && sold.price > 0 ) {
+					messages = [ ...messages, {
+						key: "UIIT_MSG_WARENETWORK_CHARGE",
+						args: [ groupedNumber( networkCommission( sold.price ) ) ]
+					} ];
+				}
+			}
 			return done( {
 				state: { ...state, offers: rows, soldPending },
 				...(mine && sold ? { give: [ { bagSlot: sold.bagSlot, quantity: sold.quantity } ] } : {}),
-				...(mine && sold ?
-					{
-						message: {
-							key: kind === EVENT_SOLD ?
-								"UIIT_MSG_STREET_STORE_SELL_COMMODITY" :
-								"UIIT_MSG_WARENETWORK_BUY_SUCCESS",
-							args: [ buyer, sold.item.name ?? "" ]
-						}
-					} :
-					{})
+				...(messages ? { messages } : {})
 			} );
 		}
 		case 0x33d1: {

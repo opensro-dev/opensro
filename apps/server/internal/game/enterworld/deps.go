@@ -101,6 +101,12 @@ type Deps struct {
 	// slow-entry log. Zero means the production default; tests set it
 	// so a held gate trips the abandonment without waiting it out.
 	GateWaitBound time.Duration
+	// EncodeEntryPayload renders the browser entry payload for one
+	// built bootstrap result (browserEntryPayload); nil uses it with
+	// BrowserReferences. A test seam: the entry handler now encodes
+	// after releasing the publication gate, and a test proves the
+	// gate is free while the encoder runs.
+	EncodeEntryPayload func(result *BootstrapResult) ([]byte, error)
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -681,6 +687,21 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 
 /*
 ================
+entryPayload
+
+The one browser-entry-payload encode, shared by the enter handler and
+the re-entry prepares; EncodeEntryPayload replaces it in tests.
+================
+*/
+func (d *Deps) entryPayload(result *BootstrapResult) ([]byte, error) {
+	if d != nil && d.EncodeEntryPayload != nil {
+		return d.EncodeEntryPayload(result)
+	}
+	return browserEntryPayload(result, d.BrowserReferences)
+}
+
+/*
+================
 encodeReentry
 ================
 */
@@ -691,7 +712,7 @@ func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 	if len(result.Packets) == 0 || result.Packets[0].NativeOpcode != OpcodeResetClient {
 		return nil, false
 	}
-	payload, err := browserEntryPayload(result, d.BrowserReferences)
+	payload, err := d.entryPayload(result)
 	if err != nil {
 		return nil, false
 	}
