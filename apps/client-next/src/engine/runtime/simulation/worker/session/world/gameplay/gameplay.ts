@@ -104,6 +104,7 @@ import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change"
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
+	partyMatchAckNotice,
 	partyMatchPacket,
 	partyMatchRequest,
 	partyActiveJob,
@@ -3930,33 +3931,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				} );
 				if ( matched ) {
 					const flag = frame.payload[0],
-						detail = frame.payload[1],
-						key = flag === 2 ?
-							null :
-							frame.opcode === 0xb5bf ?
-							detail === 1 ?
-								"UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER" :
-								detail === 0 ?
-								"UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED" :
-								"UIIT_MSG_PARTYMATCH_JOIN_NOREPLY" :
-							null;
+						detail = frame.payload[1];
 					if ( flag === 2 ) {
 						const notice = constantNativeNotice( 2, detail! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					} else if ( key ) {
-						// 75EC23: a completed match (detail 1) raises the
-						// centre banner (67D030), not a guide line; the
-						// refused and no-reply details stay guide lines.
-						const complete = frame.opcode === 0xb5bf && detail === 1;
-						notices = [
-							...notices.slice( -99 ),
-							{
-								sequence: ++noticeSequence,
-								key,
-								value: 0,
-								...(complete ? { banner: true, bannerOnly: true } : {})
-							}
-						];
+					} else {
+						const answer = partyMatchAckNotice( frame.opcode, detail );
+						if ( answer ) notices = [ ...notices.slice( -99 ), { ...answer, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
