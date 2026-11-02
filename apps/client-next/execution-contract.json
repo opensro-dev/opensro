@@ -1815,6 +1815,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/cos-chat-command.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/avatar-magic-option.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
