@@ -102,3 +102,44 @@ test("an admission rejection hands out no asset failure", () => {
 	assert.equal( stream.terminalFailure(), undefined, "the worker's refusal is not an asset failure" );
 	stream.dispose();
 });
+
+test("an admission timeout does not hand out the failure a retry already recovered from", () => {
+	const pending = new Map();
+	let id = 0;
+	const assets = {
+		available: () => 4,
+		request: () => ++id,
+		cancel: () => {},
+		take: i => {
+			const r = pending.get( i );
+			pending.delete( i );
+			return r;
+		}
+	};
+	const stream = createNavigationStream( assets, () => {}, "https://fixture.test" );
+	let now = 0;
+	const step = () => stream.step( pose, undefined, undefined, undefined, now );
+	step();
+	pending.set( id, { kind: "error", id, error: "network down", transient: true } );
+	step();
+	assert.equal( stream.phase(), "failed" );
+	now += 30000;
+	step();
+	step();
+	pending.set( id, {
+		kind: "bytes",
+		buffer: Buffer.from(
+			JSON.stringify( { regionsById: { "0x0101": [ { bundlePublicPath: "/assets/a.json" } ] } } )
+		)
+	} );
+	step();
+	step();
+	pending.set( id, { kind: "navigation", product: product() } );
+	step();
+	now += 16000;
+	step();
+	assert.equal( stream.phase(), "failed" );
+	assert.match( stream.error(), /admitting timed out/ );
+	assert.equal( stream.terminalFailure(), undefined, "the worker's silence is not an asset failure" );
+	stream.dispose();
+});

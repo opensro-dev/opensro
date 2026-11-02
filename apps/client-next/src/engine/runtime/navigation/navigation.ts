@@ -89,6 +89,18 @@ export function createNavigationStream(
 	}
 	/*
 	================
+	forgetFailure
+
+	Drops the facts of the last asset failure, so a later admission
+	timeout or an unrelated refusal can't report them (#2337).
+	================
+	*/
+	function forgetFailure() {
+		lastFailure = undefined;
+		loadPath = undefined;
+	}
+	/*
+	================
 	cancel
 	================
 	*/
@@ -113,11 +125,13 @@ export function createNavigationStream(
 			if ( !pose ) {
 				cancel();
 				recovery.reset();
+				forgetFailure();
 				return;
 			}
 			if ( state.phase !== "idle" && state.region !== pose.regionId ) {
 				cancel();
 				recovery.reset();
+				forgetFailure();
 			}
 			if ( state.phase === "failed" && recovery.due( now ) ) state = { phase: "idle" };
 			if ( state.phase === "admitting" && failure?.region === state.region && failure.requestId === requestId ) {
@@ -131,6 +145,7 @@ export function createNavigationStream(
 			if ( state.phase === "admitting" && admittedRegion === state.region && admittedRequestId === requestId ) {
 				state = { phase: "ready", region: state.region };
 				recovery.reset();
+				forgetFailure();
 			}
 			try {
 				if ( state.phase === "admitting" && now >= deadline ) {
@@ -181,6 +196,7 @@ export function createNavigationStream(
 					}
 				}
 				if ( state.phase !== "idle" || !assets.available() ) return;
+				loadPath = undefined;
 				const dungeon = !featuresAt( pose.regionId ).regionCatalog, isCatalog = !dungeon && !catalog;
 				const path = dungeon ?
 					"/assets/world/dungeon/dungeon-resources.json" :
@@ -208,9 +224,9 @@ export function createNavigationStream(
 			} catch ( error ) {
 				// The admitting deadline is the worker's silence, not an
 				// asset failure: it files no asset incident (#2337).
-				if ( state.phase !== "admitting" ) {
-					lastFailure = { error: String( error ), path: assetFailurePath( error ) ?? loadPath };
-				}
+				lastFailure = state.phase === "admitting" ?
+					undefined :
+					{ error: String( error ), path: assetFailurePath( error ) ?? loadPath };
 				cancel();
 				state = { phase: "failed", region: pose.regionId, error: String( error ) };
 				recovery.failed( error, now );
@@ -271,6 +287,7 @@ export function createNavigationStream(
 		retryTransient() {
 			if ( !disposed && state.phase === "failed" && recovery.transient() ) {
 				recovery.reset();
+				forgetFailure();
 				state = { phase: "idle" };
 			}
 		},
@@ -282,6 +299,7 @@ export function createNavigationStream(
 		retry() {
 			if ( disposed || state.phase !== "failed" ) return;
 			recovery.reset();
+			forgetFailure();
 			state = { phase: "idle" };
 		},
 		/*
@@ -304,6 +322,7 @@ export function createNavigationStream(
 		reset() {
 			cancel();
 			recovery.reset();
+			forgetFailure();
 		},
 		/*
 		================
@@ -314,6 +333,7 @@ export function createNavigationStream(
 			if ( disposed ) return;
 			cancel();
 			recovery.reset();
+			forgetFailure();
 			catalog = null;
 			clipper.clear();
 			viewRequestId = 0;
