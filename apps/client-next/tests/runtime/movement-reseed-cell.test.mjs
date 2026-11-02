@@ -96,3 +96,36 @@ test("a server correction off the deck still moves the walker there", () => {
 	const after = defined( m.state().pose );
 	assert.ok( Math.abs( after.x - 150 ) < 0.5 && after.y === 0, `moved (${JSON.stringify( after )})` );
 });
+
+/*
+================
+teleport
+
+The player's own kind-2 cast travel (a Wizard teleport): it lands at once.
+================
+*/
+function teleport( m, destination ) {
+	m.displace(
+		{ gid: GID, token: 9, kind: 2, self: true, destination: { regionId: 257, z: 50, ...destination } },
+		STEP_MS
+	);
+	return defined( m.state().pose );
+}
+
+test("a teleport from the ground onto the deck lands on the deck, not on the terrain under it", () => {
+	// A player report: standing on the ground and teleporting onto stairs
+	// put the character under them. The server seats the point at its own
+	// height; the terrain under the deck is 10 units further from it.
+	const m = standing( false );
+	m.correct( { regionId: 257, x: 150, y: 0, z: 50, angle: 0 }, STEP_MS );
+	assert.equal( defined( m.state().pose ).y, 0, "starts on the ground" );
+	const landed = teleport( m, { x: 30, y: DECK_Y } );
+	assert.ok( landed.x === 30 && landed.y === DECK_Y, `landed on the deck (${JSON.stringify( landed )})` );
+});
+
+test("a teleport from the deck to the ground under it leaves the deck", () => {
+	// The deck the caster stood on is no owner at the destination.
+	const m = standing( false );
+	const landed = teleport( m, { x: 30, y: 0 } );
+	assert.ok( landed.x === 30 && landed.y === 0, `landed on the ground (${JSON.stringify( landed )})` );
+});

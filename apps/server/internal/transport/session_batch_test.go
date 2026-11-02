@@ -2,13 +2,10 @@ package transport
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"sync"
 	"testing"
 	"time"
-
-	"opensro.online/server/internal/testsupport/wait"
 )
 
 // TestSendBatchCarriesAdmissionBurstPastFormerFrameCap reproduces the live S2
@@ -52,20 +49,17 @@ func TestSendBatchCarriesAdmissionBurstPastFormerFrameCap(t *testing.T) {
 	}
 
 	connection.openGate()
-	// The client applies the multi-megabyte result and acknowledges it;
-	// only then does the writer drain the object rows behind it. The
-	// result sits in the resume ring until that ack (#2146): a writer
-	// that outran an unacknowledged oversized frame would have to drop
-	// it, and every resume during its download would be refused.
-	wait.Eventually(t, 3*time.Second, "entry result written and ringed", func() bool {
-		session.mu.Lock()
-		defer session.mu.Unlock()
-		return session.streamPos == 1 && len(session.ring) == 1
-	})
-	ack := make([]byte, 4)
-	binary.LittleEndian.PutUint32(ack, 1)
-	connection.inbound <- Frame{Opcode: OpStreamAck, Payload: ack}
+	// The object rows drain behind the multi-megabyte result without
+	// waiting for the client to acknowledge it: the result is never
+	// re-sent (supersededEntryLocked), so the ring holds it as a
+	// payload-free marker and its bytes never fill the ring's bound.
 	written := waitWritten(t, connection, 1+len(frames)+1)
+	session.mu.Lock()
+	ringed, ringBytes := len(session.ring), session.ringBytes
+	session.mu.Unlock()
+	if ringed != len(frames)+1 || ringBytes >= 1<<20 {
+		t.Fatalf("ring = %d frames/%d bytes, want %d frames with the result held as a marker", ringed, ringBytes, len(frames)+1)
+	}
 	if written[0].Opcode != OpWelcome || written[1].Opcode != OpEnterWorldResult {
 		t.Fatalf("admission prefix = 0x%04X,0x%04X, want WELCOME,ENTERWORLDRESULT", written[0].Opcode, written[1].Opcode)
 	}

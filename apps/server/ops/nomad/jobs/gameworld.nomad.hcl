@@ -294,8 +294,8 @@ variable "maintenance_gate_path" {
 # maps, so players keep today's player-visible result (the generic
 # admission failure) even though the wire code differs from the
 # MAINTENANCE the gate answered before this switch existed; "on" answers
-# MAINTENANCE so the client can explain the refusal instead. Set it with
-# the Agent job's same variable.
+# MAINTENANCE so the client can explain the refusal instead. The shard
+# setting SRO_MAINTENANCE_MESSAGE fills this and the Agent job's variable.
 variable "maintenance_message" {
   type    = string
   default = "off"
@@ -1284,7 +1284,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
-        SRO_MAINTENANCE_MESSAGE                 = var.maintenance_message == "on" ? "1" : "0"
+        SRO_MAINTENANCE_MESSAGE                 = var.maintenance_message
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
