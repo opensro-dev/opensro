@@ -225,9 +225,13 @@ test("a send refuses empty fields with the write window's notices and confirms w
 	g.command( { kind: "letter-send", receiver: "Berk", body: "" }, 0, undefined );
 	assert.equal( lastNotice( g.take() ).key, "UIIT_MSG_LETTERERR_MESSAGEWRITE" );
 	assert.equal( sent.length, 0 );
-	// 704730: a job alias (its leading '*') is refused and never sent.
+	// 704730: a job alias (its leading '*') is refused and never sent;
+	// the refusal is a guide line, not the write window's banner.
 	g.command( { kind: "letter-send", receiver: "*Thief", body: "Hi" }, 0, undefined );
-	assert.equal( lastNotice( g.take() ).key, "UIIT_MSG_MEMO_NOTUSE_JOB" );
+	const aliasNotice = lastNotice( g.take() );
+	assert.equal( aliasNotice.key, "UIIT_MSG_MEMO_NOTUSE_JOB" );
+	assert.equal( aliasNotice.notificationBanner, undefined );
+	assert.equal( aliasNotice.bannerOnly, undefined );
 	assert.equal( sent.length, 0, "a letter to a job alias leaves the client" );
 	g.command( { kind: "letter-send", receiver: "Berk", body: "Hi" }, 0, undefined );
 	assert.deepEqual( sent.at( -1 ), { opcode: 0x7261, payload: bytes( "Berk", "Hi" ) } );

@@ -635,8 +635,9 @@ function wtHarness( t, fetchDoc = null ) {
 				this.readyResolve = resolve;
 				this.readyReject = reject;
 			} );
-			this.closed = new Promise( resolve => {
+			this.closed = new Promise( ( resolve, reject ) => {
 				this.closedResolve = resolve;
+				this.closedReject = reject;
 			} );
 			transports.push( this );
 		}
@@ -675,7 +676,19 @@ function wtHarness( t, fetchDoc = null ) {
 		*/
 		close() {
 			this.closedFlag = true;
-			this.closedResolve();
+			// A browser settles closed with the close info, here
+			// the clean application code 0; an abrupt end rejects
+			// instead (abort below). It never resolves with nothing.
+			this.closedResolve( { closeCode: 0, reason: "" } );
+		}
+		/*
+		================
+		abort
+		================
+		*/
+		abort( error ) {
+			this.closedFlag = true;
+			this.closedReject( error );
 		}
 		/*
 		================
@@ -825,6 +838,29 @@ test("a webtransport session that closes before the welcome hands the connect to
 	await flush();
 	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
 	transports[0].close();
+	await flush();
+	assert.equal( sockets.length, 1, "the socket takes the same admission over" );
+	assert.deepEqual( failures, [] );
+	sockets[0].onopen();
+	assert.deepEqual( [ ...sockets[0].sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	sockets[0].receive( welcome() );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+});
+
+test("a webtransport session that drops before the welcome hands the connect to the socket", async t => {
+	// The other real settlement shape: closed rejects instead of
+	// resolving with close info. Same handover, no failure reported.
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	transports[0].readyResolve();
+	await flush();
+	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
+	transports[0].abort( new Error( "connection dropped" ) );
 	await flush();
 	assert.equal( sockets.length, 1, "the socket takes the same admission over" );
 	assert.deepEqual( failures, [] );

@@ -117,8 +117,9 @@ export function createLetters( send: ( frame: WireFrame ) => void ) {
 		send( receiver: string, body: string ): readonly SystemNotice[] {
 			if ( !receiver.trim() ) return [ windowNotice( "UIIT_MSG_LETTERERR_IDWRITE" ) ];
 			if ( !body ) return [ windowNotice( "UIIT_MSG_LETTERERR_MESSAGEWRITE" ) ];
-			// 704730: a job alias (its leading '*') is refused, unsent.
-			if ( receiver.startsWith( "*" ) ) return [ windowNotice( "UIIT_MSG_MEMO_NOTUSE_JOB" ) ];
+			// 704730: a job alias (its leading '*') is refused, unsent,
+			// with a guide line (67A600), not the window's banner.
+			if ( receiver.startsWith( "*" ) ) return [ { key: "UIIT_MSG_MEMO_NOTUSE_JOB", value: 0 } ];
 			const frame = letterSend( receiver, body );
 			if ( frame ) send( frame );
 			return [];

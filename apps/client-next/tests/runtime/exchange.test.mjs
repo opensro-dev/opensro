@@ -54,7 +54,12 @@ test("the window opens, fills both sides and swaps in slot order", () => {
 
 	const swapped = defined( exchange.exchangeFrame( state, frame( 0x3272, [] ), refs ) );
 	assert.equal( swapped.state.open, false );
-	assert.deepEqual( swapped.message, { key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED", value: 0 } );
+	assert.deepEqual( swapped.message, {
+		key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
 	const bag = new Map( [ [ 13, { slot: 13 } ], [ 20, { slot: 20 } ] ] );
 	const next = exchange.applyExchangeSwap( /** @type {any} */ (bag), defined( swapped.swap ), 13, 45 );
 	// Slot 1's item lands first (slot 14), slot 3's next (15), then 20 empties.
@@ -69,7 +74,9 @@ test("a successful exchange raises its line once, through the inventory owner (7
 	assert.equal( inventory.exchangeReceive( frame( 0x3272, [] ) ), 0 );
 	assert.deepEqual( inventory.takeExchangeNotice(), {
 		key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
-		value: 0
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
 	} );
 	assert.equal( inventory.takeExchangeNotice(), null );
 });
