@@ -26,12 +26,12 @@ const EVENT_NOTICE_CATEGORY = 0x11;
 // The badge byte's key (750FF7/751018/75105B/7510A0 via the table at
 // 7511A4): the 2005-10-21 event lines. No live server sends kind 7;
 // the arm lands dark and prints the day one does.
-const BADGE_KEYS: Record<number, string> = {
+const BADGE_KEYS: Readonly<Record<number, string>> = {
 	1: "UIIT_MSG_EVENT_051021_BADGEGAIN_BLUEDRAGON",
 	2: "UIIT_MSG_EVENT_051021_BADGEGAIN_PHOENIX",
 	3: "UIIT_MSG_EVENT_051021_BADGEGAIN_WHITETIGER",
 	4: "UIIT_MSG_EVENT_051021_BADGEGAIN_TURTLE"
-};
+} as const;
 
 /*
 ================
