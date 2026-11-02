@@ -7,6 +7,9 @@ Loads the TypeScript sources directly through the shared native loader
 (tests/helpers/native-source-loader.mjs), so the tests exercise the same
 modules the client ships, not a per-test bundle.
 
+The transient-failure class (#2337) is pinned in packs-recovery.test.mjs;
+both suites share tests/helpers/packs-fixture.mjs.
+
 ===========================================================================
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
@@ -14,49 +17,17 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import fs from "node:fs";
 import path from "node:path";
 import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { fixture, sha } from "../helpers/packs-fixture.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
 const { createPackIndex } = await load( "src/engine/runtime/assets/worker/packs/index/index.ts" );
 const { createPacks } = await load( "src/engine/runtime/assets/worker/packs/packs.ts" );
-const { transientAssetFailure } = await load( "src/engine/foundation/assets/asset-recovery.ts" );
-const sha = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
-function fixture( assetPath = "/assets/a.bin" ) {
-	const a = Uint8Array.of( 1, 2, 3 ), b = gzipSync( Buffer.from( '{"fixture":true}' ) );
-	const entries = [ {
-		path: assetPath,
-		offset: 0,
-		length: a.length,
-		mime: "application/octet-stream",
-		sha256: sha( a )
-	}, {
-		path: "/assets/b.json.gz",
-		offset: a.length,
-		length: b.length,
-		mime: "application/octet-stream",
-		sha256: sha( b )
-	} ];
-	const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: entries } ) );
-	const bytes = new Uint8Array( 12 + header.length + a.length + b.length );
-	bytes.set( Buffer.from( "SROPACK2" ) );
-	new DataView( bytes.buffer ).setUint32( 8, header.length, true );
-	bytes.set( header, 12 );
-	bytes.set( a, 12 + header.length );
-	bytes.set( b, 12 + header.length + a.length );
-	const pack = { path: "/assets/packs/fixture.bin", bytes: bytes.length, sha256: sha( bytes ), assetCount: 2 };
-	const manifest = {
-		version: 2,
-		groups: [ { name: "test", assetCount: 2, packs: [ pack ] } ],
-		assets: entries.map( e => ({ ...e, packPath: pack.path }) )
-	};
-	return { bytes, manifest, pack };
-}
 test("published manifest is admitted without importing the old runtime", () => {
 	const manifest = JSON.parse(
 		fs.readFileSync( CLIENT_PUBLIC_ROOT + "/assets/packs/manifest.json", "utf8" )
@@ -990,81 +961,5 @@ test("native texture reads wait for the variant decision", async () => {
 	assert.equal( done, false, "no texture resolves before the decision" );
 	decide( "etc2" );
 	assert.deepEqual( [ ...await texture ], [ 7, 8, 9 ] );
-	packs.dispose();
-});
-
-test("pack bytes that fail SHA-256 are a transient failure, not corrupt content", async () => {
-	// A body cut and re-framed by a middlebox ends cleanly with the wrong
-	// bytes: the digest is how the read finds out. The persistent path
-	// treats that same fact as wrong bytes and refetches (packs.ts), so
-	// the network path marks it for the bounded recovery too (#2337).
-	const f = fixture(), corrupt = f.bytes.slice();
-	corrupt[corrupt.length - 1] ^= 1;
-	const packs = createPacks( async url =>
-		url.endsWith( "manifest.json" ) ? new TextEncoder().encode( JSON.stringify( f.manifest ) ) : corrupt
-	);
-	await assert.rejects(
-		packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal ),
-		error => {
-			assert.ok( error instanceof Error );
-			assert.match( error.message, /Pack SHA-256 mismatch/ );
-			assert.equal( transientAssetFailure( error ), true );
-			return true;
-		}
-	);
-	packs.dispose();
-});
-
-test("a garbled partial pack header is a transient failure, not corrupt content", async () => {
-	// The prefix read passes, then the header read itself arrives garbled:
-	// both are unverified ranged bytes, so the header parse refuses the
-	// body, not the content - the same class as the prefix identity
-	// check before it (#2337).
-	const f = fixture(), padded = new Uint8Array( 5 << 20 );
-	padded.set( f.bytes );
-	f.pack.bytes = padded.length;
-	f.pack.sha256 = sha( padded );
-	f.manifest.groups[0].packs[0].bytes = padded.length;
-	f.manifest.groups[0].packs[0].sha256 = f.pack.sha256;
-	const packs = createPacks( async ( url, limit, signal, range ) => {
-		if ( url.endsWith( "manifest.json" ) ) return new TextEncoder().encode( JSON.stringify( f.manifest ) );
-		const bytes = padded.slice( range.start, range.end + 1 );
-		// Only the header download (the prefix read ends at 11) is garbled.
-		if ( range.start === 0 && range.end > 11 ) bytes[0] = 0;
-		return bytes;
-	} );
-	await assert.rejects(
-		packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal ),
-		error => {
-			assert.ok( error instanceof Error );
-			assert.match( error.message, /Invalid pack identity/ );
-			assert.equal( transientAssetFailure( error ), true );
-			return true;
-		}
-	);
-	packs.dispose();
-});
-
-test("member bytes that fail the manifest SHA-256 are a transient failure", async () => {
-	// Header and manifest agree on the member's digest; only the delivered
-	// bytes are wrong (one flipped in transit), and the pack digest is
-	// recomputed so the container itself verifies. What remains is the
-	// cut-or-substituted body the digest exists to catch (#2337).
-	const f = fixture(), corrupt = f.bytes.slice();
-	const headerLength = new DataView( corrupt.buffer ).getUint32( 8, true );
-	corrupt[12 + headerLength] ^= 1;
-	f.manifest.groups[0].packs[0].sha256 = sha( corrupt );
-	const packs = createPacks( async url =>
-		url.endsWith( "manifest.json" ) ? new TextEncoder().encode( JSON.stringify( f.manifest ) ) : corrupt
-	);
-	await assert.rejects(
-		packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal ),
-		error => {
-			assert.ok( error instanceof Error );
-			assert.match( error.message, /Asset SHA-256 mismatch/ );
-			assert.equal( transientAssetFailure( error ), true );
-			return true;
-		}
-	);
 	packs.dispose();
 });
