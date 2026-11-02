@@ -145,15 +145,27 @@ test("a visitor sees the offers, buys one into the bag, and the owner gives it u
 	assert.equal( state.phase, "none" );
 });
 
-test("registering on the stall network prints its success line", () => {
+test("the stall open/close lines print ahead of the registration line (751A60)", () => {
 	const owner = { ...stall.emptyStall(), phase: /** @type {const} */ ("owner"), owner: LOCAL };
 	const registered = defined( stall.stallFrame( owner, frame( 0xb1a8, [ 1, 5, 1, 1 ] ), ctx ) );
 	assert.equal( registered.state.open, true );
 	assert.equal( registered.state.networkRegistered, true );
-	assert.deepEqual( registered.messages, [ { key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] } ] );
-	// Leaving the network, and the unregistered answers, stay silent.
-	for ( const edit of [ [ 1, 5, 0, 1 ], [ 1, 5, 1, 0 ], [ 1, 5, 1, 2 ] ] ) {
-		assert.equal( defined( stall.stallFrame( owner, frame( 0xb1a8, edit ), ctx ) ).messages, undefined );
+	assert.deepEqual( registered.messages, [
+		{ key: "UIIT_STT_STALL_CONDITION_START", args: [] },
+		{ key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] }
+	] );
+	// Opening without registering prints only the state line; closing
+	// prints the END line; other ware codes add no register line.
+	for (
+		const c of [
+			{ edit: [ 1, 5, 1, 0 ], key: "UIIT_STT_STALL_CONDITION_START" },
+			{ edit: [ 1, 5, 1, 2 ], key: "UIIT_STT_STALL_CONDITION_START" },
+			{ edit: [ 1, 5, 0, 1 ], key: "UIIT_STT_STALL_CONDITION_END" }
+		]
+	) {
+		assert.deepEqual( defined( stall.stallFrame( owner, frame( 0xb1a8, c.edit ), ctx ) ).messages, [
+			{ key: c.key, args: [] }
+		] );
 	}
 });
 

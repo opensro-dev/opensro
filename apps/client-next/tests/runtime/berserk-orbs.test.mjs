@@ -61,7 +61,7 @@ test("a level crossing prints the promotion line after the gain line (779620)", 
 	assert.equal( defined( r ).level, 2 );
 	assert.deepEqual( defined( r ).messages, [
 		{ key: "UIIT_MSG_STATE_GAIN_EXP_NEW", value: 50 },
-		{ key: "UIIT_MSG_STRGERR_LEVEL", value: 2 }
+		{ key: "UIIT_MSG_STRGERR_LEVEL", value: 2, notificationBanner: true, bannerOnly: true }
 	] );
 	// No crossing, no promotion line.
 	const q = Buffer.alloc( 13 );

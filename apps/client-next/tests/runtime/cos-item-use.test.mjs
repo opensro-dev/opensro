@@ -666,6 +666,9 @@ test("a stall-change item's answer names the change it made (755E40)", () => {
 	const notice = (gameplay.take()?.notices ?? []).find( n => n.key === "UIIT_MSG_ITEMB_STSTALL_CHAINGE" );
 	assert.ok( notice, "the stall-change line was not printed" );
 	assert.deepEqual( notice.arguments, [ "Stall Bell" ] );
+	// 755E40: the line belongs to the notice window (67D030), not chat.
+	assert.equal( notice.notificationBanner, true );
+	assert.equal( notice.bannerOnly, true );
 	gameplay.dispose();
 });
 
