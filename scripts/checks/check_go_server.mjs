@@ -73,7 +73,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
-import { failureSummary, printFailureReports, writeFailureReports } from "./failureReport.mjs";
+import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -446,10 +446,12 @@ async function wave( name, steps ) {
 		// Persisted before anything can lose them: a captured log that
 		// truncates keeps no step name to attribute, the artifact does.
 		const artifactDir = path.join( rebuildRoot, ".state", "gate-failures", name );
-		await writeFailureReports( failed, artifactDir );
+		const written = await persistFailureReports( failed, artifactDir );
 		// Drained before the throw, or a pipe keeps only the report's head.
 		await printFailureReports( failed );
-		process.stderr.write( `failure reports also written to ${artifactDir}\n` );
+		if ( written.length > 0 ) {
+			process.stderr.write( `failure reports also written to ${artifactDir}\n` );
+		}
 		throw new Error(
 			`server ${name}: ${failed.map( ( result ) => failureSummary( result ) ).join( ", " )}`
 		);

@@ -128,7 +128,9 @@ export function printFailureReports( failed, stream = process.stderr ) {
 writeFailureReports
 
 Persist every failed step's report under dir, one file per step named
-by its label slug, and return the written paths. The printed reports
+by its label slug, and return the written paths. Labels that slug to
+the same name take a numeric suffix (-2, -3), so no failed step's
+report overwrites another's. The printed reports
 above live only in the log that captures them - a truncated capture
 keeps no step to attribute (the load-flakes investigation lost exactly
 that). The artifact survives the gate run, so the next flake can be
@@ -138,10 +140,37 @@ attributed to a step by name.
 export async function writeFailureReports( failed, dir ) {
 	await mkdir( dir, { recursive: true } );
 	const written = [];
+	const used = new Set();
 	for ( const result of failed ) {
-		const file = path.join( dir, `${result.label.replace( /[^a-z0-9]+/gi, "-" )}.log` );
+		const slug = result.label.replace( /[^a-z0-9]+/gi, "-" );
+		let name = `${slug}.log`;
+		for ( let suffix = 2; used.has( name ); suffix++ ) {
+			name = `${slug}-${suffix}.log`;
+		}
+		used.add( name );
+		const file = path.join( dir, name );
 		await writeFile( file, failureReport( result ) );
 		written.push( file );
 	}
 	return written;
+}
+
+/*
+================
+persistFailureReports
+
+writeFailureReports for a caller that must not lose the real failure
+to an artifact error (a read-only .state, a full disk): on any throw,
+one line to stream says the artifact failed and the caller carries on
+to print the reports and throw its own error. Returns the written
+paths, empty on failure.
+================
+*/
+export async function persistFailureReports( failed, dir, stream = process.stderr ) {
+	try {
+		return await writeFailureReports( failed, dir );
+	} catch ( error ) {
+		stream.write( `failure reports could not be written to ${dir}: ${error.message}\n` );
+		return [];
+	}
 }
