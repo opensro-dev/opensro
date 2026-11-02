@@ -469,10 +469,21 @@ export function socialPacket(
 			next = { ...next, members };
 		}
 	} else if ( op === 0x3e58 ) {
+		// 761870 prints each membership change as a type-4 guide line
+		// alongside the roster mutation. Each arm resolves its name
+		// before it mutates: the row itself on a join, the pre-update
+		// roster on a leave or a delegation.
 		const type = u8();
 		if ( type === 1 ) {
 			u8();
-			next = { ...next, self: 0, leader: 0, options: 0, members: [] };
+			next = {
+				...next,
+				self: 0,
+				leader: 0,
+				options: 0,
+				members: [],
+				notice: { key: "UIIT_MSG_PARTY_BROKEN", value: 0, nativeType: 4 }
+			};
 		} else if ( type === 2 ) {
 			// 761870 appends the row unconditionally, so a JOIN for a
 			// member the roster already holds reaches this client only
@@ -480,8 +491,14 @@ export function socialPacket(
 			// member from the row instead of doubling it, and drop a
 			// stranger's row when the roster is full, the way type 6
 			// drops a row for a member the roster does not hold.
+			// The JOIN line names the row itself and prints on every
+			// row, appended, refreshed or dropped.
 			const start = o;
 			const row = partyMember();
+			next = {
+				...next,
+				notice: { key: "UIIT_MSG_PARTY_JOIN", value: 0, nativeType: 4, arguments: [ row.name ] }
+			};
 			const old = next.members.find( m => m.id === row.id );
 			if ( old ) {
 				o = start;
@@ -492,12 +509,36 @@ export function socialPacket(
 			}
 		} else if ( type === 3 ) {
 			const id = u32();
-			u8();
+			// Reason 3 (SERVER_MIGRATION) is a debug-only print and any
+			// other reason carries no line; only 1, 2 and 4 print.
+			const reason = u8();
+			const name = id === next.self ? next.localName : next.members.find( m => m.id === id )?.name;
+			const key = reason === 1 ?
+				"UIIT_MSG_PARTY_LOGOUT" :
+				reason === 2 ?
+				"UIIT_MSG_PARTY_SECEDE" :
+				reason === 4 ?
+				"UIIT_MSG_PARTY_BOOTED" :
+				null;
+			if ( key !== null && name ) {
+				next = { ...next, notice: { key, value: 0, nativeType: 4, arguments: [ name ] } };
+			}
 			next = id === next.self ?
 				{ ...next, self: 0, leader: 0, options: 0, members: [] } :
 				{ ...next, members: next.members.filter( m => m.id !== id ) };
 		} else if ( type === 9 ) {
-			next = { ...next, leader: u32() };
+			// This arm lands dark: the server has no party delegation
+			// feature and never emits type 9, so the print below starts
+			// surfacing unchanged the day delegation does.
+			const id = u32();
+			const name = next.members.find( m => m.id === id )?.name;
+			next = { ...next, leader: id };
+			if ( name ) {
+				next = {
+					...next,
+					notice: { key: "UIIT_MSG_PARTY_HOST_ROLE_DELEGATED", value: 0, nativeType: 4, arguments: [ name ] }
+				};
+			}
 		} else if ( type === 6 ) {
 			// 761870 type 6 reads the whole masked row (75DB30), then applies
 			// only its level (2, 821F60), status (4, 821FD0), position (0x20,
