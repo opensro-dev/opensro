@@ -13,8 +13,17 @@ not be read as a package - or swallow the name that follows it.
 */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
-import { failingPackages, failureReport, failureSummary, runsGoTest } from "../../checks/failureReport.mjs";
+import {
+	failingPackages,
+	failureReport,
+	failureSummary,
+	runsGoTest,
+	writeFailureReports
+} from "../../checks/failureReport.mjs";
 
 // The report under test, as the child below imports it.
 const FAILURE_REPORT_URL = new URL( "../../checks/failureReport.mjs", import.meta.url ).href;
@@ -146,6 +155,22 @@ function stderrOfThrowingGate() {
 		proc.on( "close", ( code ) => resolve( { code, stderr } ) );
 	} );
 }
+
+test("writeFailureReports persists one file per failed step, named by its label slug", async ( t ) => {
+	const dir = await mkdtemp( path.join( os.tmpdir(), "failure-reports-" ) );
+	t.after( () => rm( dir, { recursive: true, force: true } ) );
+	const failed = [
+		{ label: "tests (long tier)", code: 1, signal: null, output: TEST_FAILURE_OUTPUT },
+		{ label: "gofmt", code: 0, signal: null, output: "internal/game/action/monsterunique.go\n" }
+	];
+	const written = await writeFailureReports( failed, dir );
+	assert.equal( written.length, failed.length );
+	for ( const [index, result] of failed.entries() ) {
+		assert.equal( await readFile( written[index], "utf8" ), failureReport( result ) );
+	}
+	assert.equal( path.basename( written[0] ), "tests-long-tier-.log" );
+	assert.equal( path.basename( written[1] ), "gofmt.log" );
+});
 
 test("a gate that throws after its report still delivers the report's FAIL line through a pipe", async () => {
 	const { code, stderr } = await stderrOfThrowingGate();

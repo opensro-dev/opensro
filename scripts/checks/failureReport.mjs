@@ -12,6 +12,8 @@ without running a gate.
 
 ===========================================================================
 */
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 /*
 ================
@@ -119,4 +121,27 @@ export function printFailureReports( failed, stream = process.stderr ) {
 	return new Promise( ( resolve, reject ) => {
 		stream.write( text, ( error ) => error ? reject( error ) : resolve() );
 	} );
+}
+
+/*
+================
+writeFailureReports
+
+Persist every failed step's report under dir, one file per step named
+by its label slug, and return the written paths. The printed reports
+above live only in the log that captures them - a truncated capture
+keeps no step to attribute (the load-flakes investigation lost exactly
+that). The artifact survives the gate run, so the next flake can be
+attributed to a step by name.
+================
+*/
+export async function writeFailureReports( failed, dir ) {
+	await mkdir( dir, { recursive: true } );
+	const written = [];
+	for ( const result of failed ) {
+		const file = path.join( dir, `${result.label.replace( /[^a-z0-9]+/gi, "-" )}.log` );
+		await writeFile( file, failureReport( result ) );
+		written.push( file );
+	}
+	return written;
 }
