@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -180,7 +181,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 					// the drop until the ownership window lapses.
 					code = cosPickupBagFull
 				}
-				rt.logCosRefusal(c, q, code, "grant-fault")
+				rt.logCosRefusal(c, q, code, "grant-fault/"+fault.Reason)
 				result = failureResult(code)
 				return false
 			}
@@ -528,16 +529,48 @@ type cosRefusalWindow struct {
 
 /*
 ================
+cosRefusalExpected
+
+Whether a refusal cause is ordinary play rather than a fault. A drop
+another client took first (not-found) and one still reserved for its
+owner (reserved) are the steady state of any busy spot (#2298: 1,318
+of 1,335 refusals in the live read); the rest name a broken grant or
+container.
+================
+*/
+func cosRefusalExpected(cause string) bool {
+	return cause == "not-found" || cause == "reserved"
+}
+
+/*
+================
+countCosRefusal
+
+The metric half of the refusal split: a running total per cause, so
+the expected refusals stay countable after they stop warning. The
+cause set is the closed literal set at the refusal gates (grant
+faults append their one fault reason), so the map stays bounded.
+================
+*/
+func (rt *Runtime) countCosRefusal(cause string) {
+	entry, _ := rt.cosRefusalTotals.LoadOrStore(cause, &atomic.Uint64{})
+	entry.(*atomic.Uint64).Add(1)
+}
+
+/*
+================
 logCosRefusal
 
-One refusal retires the target client-side (77DD10), so repeats are a stuck
-loop, not news: count them and log at most once a minute with the rolled-up
-count, the frameLimiter clamp-log shape (transport/ratelimit.go). The
-reported ground is the refusal that opened the window. Returns whether a
-line was written.
+Every refusal counts into the per-cause totals (countCosRefusal).
+Expected causes (cosRefusalExpected) log at debug and the rest keep
+the warning, both at most once a minute per character and cause with
+the rolled-up count, the frameLimiter clamp-log shape
+(transport/ratelimit.go). The reported ground is the refusal that
+opened the window. Returns whether a line was written.
 ================
 */
 func (rt *Runtime) logCosRefusal(c *enterworld.Character, q wire.ItemMoveRequest, code byte, cause string) bool {
+	rt.countCosRefusal(cause)
 	key := cosRefusalKey{character: strings.ToLower(c.Name), cause: cause}
 	entry, _ := rt.cosRefusalLog.LoadOrStore(key, &cosRefusalWindow{})
 	window := entry.(*cosRefusalWindow)
@@ -554,13 +587,43 @@ func (rt *Runtime) logCosRefusal(c *enterworld.Character, q wire.ItemMoveRequest
 	if !due {
 		return false
 	}
-	log.WithField("character", c.Name).
+	line := log.WithField("character", c.Name).
 		WithField("cos", q.CosGID).
 		WithField("ground", q.GroundGID).
 		WithField("move", q.MovementType).
 		WithField("code", code).
 		WithField("cause", cause).
-		WithField("refusals", count).
-		Warn("cos ground refused")
+		WithField("refusals", count)
+	if cosRefusalExpected(cause) {
+		line.Debug("cos ground refused")
+	} else {
+		line.Warn("cos ground refused")
+	}
 	return true
+}
+
+/*
+================
+cosPickupTargetRetired
+
+Whether an approached drop can never be granted at arrival: reserved
+for a character the party does not share with, or lying on another
+plane. The approach retires it silently, exactly like a drop that
+vanished mid-approach: the same refusal answer, without the walk to
+the drop and without a log line. A party dissolving mid-approach is
+the ordinary way here.
+
+Inferred, BN owed (#2298): the native staged pickup revalidates at
+arrival (the arrival gates in applyCosGroundAt mirror it); that the
+native pet also re-evaluates mid-approach is not yet proven in the
+v1.188 server ASM (post-cut/2298-cos-asm.md).
+================
+*/
+func (rt *Runtime) cosPickupTargetRetired(division string, owner *enterworld.Character, pose simulation.Spawn, item grounditem.Item) bool {
+	if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(owner) &&
+		(rt.CanPickupOwnedDrop == nil || !rt.CanPickupOwnedDrop(division, owner.Name, item.OwnerJID)) {
+		return true
+	}
+	from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
+	return !grounditem.SameWorld(from, item.Position)
 }
