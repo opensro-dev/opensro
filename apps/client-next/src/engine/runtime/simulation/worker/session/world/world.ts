@@ -233,10 +233,14 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
-	// The last entry failure's evidence for the world_entry_rejected
+	// The last failure's evidence for the world_entry_rejected
 	// incident (#2311 item 4): the phase that failed and how much wire
-	// had arrived by then, read off the network owner before cancel()
-	// tears the link down. Without the bytes, the next slow-entry
+	// arrived on that attempt. The network counters are lifetime
+	// totals that survive disconnect(), so connect() baselines them
+	// (attemptBytesBase / attemptFramesBase) and the failure reports
+	// only what arrived past its attempt's baseline - a retry the
+	// server never answered must show a silent wire, not the bytes an
+	// earlier attempt received. Without the bytes, the next slow-entry
 	// report cannot tell a wire that never answered from one that was
 	// still streaming its answer when the deadline fired.
 	let lastFailureEvidence: {
@@ -244,6 +248,7 @@ onNetworkFailure
 		bytesReceived: number;
 		framesReceived: number;
 	} | undefined;
+	let attemptBytesBase = 0, attemptFramesBase = 0;
 	// The stall watch: the oldest outstanding request's send time (step
 	// clock), the event-clock moment that request was first seen
 	// outstanding, and when the current stall was first seen. The world
@@ -433,6 +438,10 @@ connect
 		incidentID = "";
 		lastError = undefined;
 		lastFailureEvidence = undefined;
+		// Every attempt - fresh entry, resume, retry - passes through
+		// here, so this baseline is the attempt's alone (#2311 item 4).
+		attemptBytesBase = network.receivedBytes();
+		attemptFramesBase = network.received();
 		transition( hasWorld ? "reconnecting" : "connecting" );
 		request( "transport" );
 	}
@@ -885,13 +894,14 @@ step
 			}
 			if ( failure ) {
 				const error = failure;
-				// The incident's evidence must be read before cancel()
-				// tears the link down: stage, bytes and frames as they
-				// stand at the failure (#2311 item 4).
+				// The incident's evidence, as deltas from this attempt's
+				// baseline: stage, bytes and frames that arrived on the
+				// attempt that failed, never the session's whole history
+				// (#2311 item 4).
 				lastFailureEvidence = {
 					stage: phase,
-					bytesReceived: network.receivedBytes(),
-					framesReceived: network.received()
+					bytesReceived: network.receivedBytes() - attemptBytesBase,
+					framesReceived: network.received() - attemptFramesBase
 				};
 				cancel();
 				deadline = 0;
