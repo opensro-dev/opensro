@@ -233,6 +233,17 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
+	// The last entry failure's evidence for the world_entry_rejected
+	// incident (#2311 item 4): the phase that failed and how much wire
+	// had arrived by then, read off the network owner before cancel()
+	// tears the link down. Without the bytes, the next slow-entry
+	// report cannot tell a wire that never answered from one that was
+	// still streaming its answer when the deadline fired.
+	let lastFailureEvidence: {
+		stage: string;
+		bytesReceived: number;
+		framesReceived: number;
+	} | undefined;
 	// The stall watch: the oldest outstanding request's send time (step
 	// clock), the event-clock moment that request was first seen
 	// outstanding, and when the current stall was first seen. The world
@@ -421,6 +432,7 @@ connect
 		disconnectMessage = "";
 		incidentID = "";
 		lastError = undefined;
+		lastFailureEvidence = undefined;
 		transition( hasWorld ? "reconnecting" : "connecting" );
 		request( "transport" );
 	}
@@ -866,12 +878,21 @@ step
 				entryAttempt = false;
 				deadline = 0;
 				attempt = 0;
+				lastFailureEvidence = undefined;
 			}
 			if ( deadline && now >= deadline ) {
 				failure = "World connection timed out";
 			}
 			if ( failure ) {
 				const error = failure;
+				// The incident's evidence must be read before cancel()
+				// tears the link down: stage, bytes and frames as they
+				// stand at the failure (#2311 item 4).
+				lastFailureEvidence = {
+					stage: phase,
+					bytesReceived: network.receivedBytes(),
+					framesReceived: network.received()
+				};
 				cancel();
 				deadline = 0;
 				// A bound session retries as a resume; an entry that never
@@ -939,6 +960,7 @@ status
 				admitted: hasWorld,
 				revision,
 				error: lastError,
+				entryFailure: lastFailureEvidence,
 				disconnectMessage,
 				incidentID,
 				character,

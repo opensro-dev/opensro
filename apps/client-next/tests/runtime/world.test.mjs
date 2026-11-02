@@ -3653,6 +3653,40 @@ test("a silent socket still times out", async t => {
 
 /*
 ================
+a timed-out entry records the bytes and stage it died with
+
+The world_entry_rejected incident names what the wire had done by
+the failure (#2311 item 4): a report that shows bytes arriving
+exonerates the server, and one that shows none convicts the link.
+================
+*/
+test("a timed-out entry records the bytes and stage it died with", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
+	world.step( 10010 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const evidence = world.status().entryFailure;
+	assert.equal( evidence?.stage, "entering-world" );
+	assert.equal( evidence?.framesReceived, 1, "only the WELCOME had landed" );
+	assert.ok( (evidence?.bytesReceived ?? 0) > 0, "the WELCOME's bytes are counted" );
+	world.dispose();
+});
+
+/*
+================
 a record that stops streaming still times out
 
 Bytes buy time only while they keep coming: one third of the answer
