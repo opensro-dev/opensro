@@ -2946,8 +2946,11 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				if ( command.kind === "instance-consent" && !social.instance ) return null;
 				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
-				// while dead prints UIIT_MSG_QUEST_INS_DEATH and swallows the
-				// submit - the box stays open and nothing is sent.
+				// while dead prints UIIT_MSG_QUEST_INS_DEATH on the centre
+				// banner only and swallows the submit - the box stays open
+				// and nothing is sent. ASM (capstone on the pinned client):
+				// the body 52EDD0-52EF01 calls 67D030 once at 52EE9A and
+				// 67A600 never, so there is no guide-line leg.
 				if (
 					command.kind === "instance-consent" && command.accept &&
 					local?.appearanceState?.[0] === 2
@@ -2955,8 +2958,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_QUEST_INS_DEATH",
 						value: 0,
-						nativeType: 0,
 						banner: true,
+						bannerOnly: true,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;

@@ -65,7 +65,12 @@ class RebuildLockModesTest(unittest.TestCase):
 				child.stdout.close()
 		shutil.rmtree(self.lock_dir, ignore_errors=True)
 
-	def start(self, mode: str, hold: bool = False, timeout_ms: int = 800) -> subprocess.Popen:
+	# A child expected to enter gets only a wedged-child bound: on a loaded
+	# machine a correct lock can legitimately take seconds (a killed
+	# contender's unpublished mutex claim has a 5 s grace), and an 800 ms
+	# expiry turned that into a failure. Only the expiry test passes a short
+	# timeout, because the expiry is what it tries.
+	def start(self, mode: str, hold: bool = False, timeout_ms: int = 600000) -> subprocess.Popen:
 		env = {key: value for key, value in os.environ.items() if key not in LOCK_ENV}
 		env.update({
 			"SRO_TEST_SCRIPTS_DIR": str(SCRIPTS_DIR),
@@ -286,6 +291,55 @@ class RebuildLockMutexRaceTest(unittest.TestCase):
 			owner = json.loads((mutex_dir / "owner.json").read_text(encoding="utf-8"))
 			self.assertEqual(owner["token"], token)
 			rebuild_lock.release_state_mutex(lock_dir, str(token))
+
+	def test_state_mutex_release_outlasts_a_contender_reading_its_record(self) -> None:
+		# A contender reads the mutex record at the moment of release. On
+		# Windows that open handle refuses the delete; the release used to
+		# swallow the failure and leave the mutex held under a live pid
+		# for its 60 s staleness, stalling every contender. The release
+		# must outlast the read and leave no mutex behind. Ordering is by
+		# the child's own "open" line, not a timing guess.
+		with tempfile.TemporaryDirectory() as tmp:
+			lock_dir = Path(tmp) / "mutex-reader.lock"
+			token = rebuild_lock.acquire_state_mutex(lock_dir, None)
+			self.assertIsNotNone(token)
+			reader = subprocess.Popen(
+				[sys.executable, "-B", "-c",
+					"import sys, time\n"
+					"handle = open(sys.argv[1], encoding='utf-8')\n"
+					"print('open', flush=True)\n"
+					"time.sleep(0.5)\n"
+					"handle.close()\n",
+					str(lock_dir / "mutex" / "owner.json")],
+				stdout=subprocess.PIPE, text=True,
+			)
+			try:
+				self.assertEqual(reader.stdout.readline().strip(), "open")
+				rebuild_lock.release_state_mutex(lock_dir, str(token))
+			finally:
+				reader.wait(timeout=30)
+				reader.stdout.close()
+			self.assertFalse((lock_dir / "mutex").exists(), "the released mutex is gone")
+			# And it is free: the next claim succeeds at once.
+			again = rebuild_lock.acquire_state_mutex(lock_dir, int(time.time() * 1000))
+			self.assertIsNotNone(again)
+			rebuild_lock.release_state_mutex(lock_dir, str(again))
+
+	def test_an_unreadable_fresh_claim_still_counts_as_live(self) -> None:
+		# A waiting writer's marker that cannot be read for a moment (its
+		# owner is replacing it) is still a claim. Counted as absent, it
+		# let a release see an idle lock and a new reader enter ahead of
+		# the writer. The read failure is injected, not timed.
+		with tempfile.TemporaryDirectory() as tmp:
+			waiting = Path(tmp) / "unreadable.lock" / "waiting"
+			waiting.mkdir(parents=True)
+			(waiting / "writer-token.json").write_text("{}", encoding="utf-8")
+			now_ms = int(time.time() * 1000)
+			with unittest.mock.patch.object(rebuild_lock, "read_state_file", return_value=(now_ms, None)):
+				live = rebuild_lock.inspect_claim_dir(waiting, 60000, reap=True)
+			self.assertEqual(len(live), 1, "the unreadable claim blocks")
+			self.assertIn("writer-token.json", str(live[0]["label"]))
+			self.assertTrue((waiting / "writer-token.json").exists(), "a live claim is never reaped")
 
 
 if __name__ == "__main__":
