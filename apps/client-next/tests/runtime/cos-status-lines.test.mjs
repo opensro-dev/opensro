@@ -3,11 +3,12 @@
 
 cos-status-lines.test.mjs - the COS status lines' worker behaviour
 
-#2290: the specialty refusal at the COS move commands, the merchant
-refusal for a non-transport COS bag, the HGP 30%-fall line on both
-satiety packets, and the free-battle cape warning on the equip move.
-Each refusal prints its key into the notice queue and sends nothing;
-the warning prints and the equip still sends.
+#2290: the specialty refusal at the COS move commands and at bag
+activation, the merchant refusal for a non-transport COS bag, the
+HGP 30%-fall line on both satiety packets, and the free-battle cape
+warning on the equip move. Each refusal prints its key into the
+notice queue and sends nothing; the warning prints and the equip
+still sends.
 
 ===========================================================================
 */
@@ -191,7 +192,8 @@ test("rearranging a specialty good inside a non-transport bag is refused the sam
 		null
 	);
 	assert.equal( pickup.sent.length, 0 );
-	assert.deepEqual( noticeKeys( pickup.game ), [ SPECIALTY ] );
+	const pickupNotices = pickup.game.take()?.notices ?? [];
+	assert.deepEqual( pickupNotices.map( notice => notice.key ), [ SPECIALTY ] );
 	const transport = world( { companions: [ pet( 2, { items: goods } ) ] } );
 	const frame = transport.game.command(
 		{ kind: "cos-inventory-move", gid: 7, source: 0, destination: 1, quantity: 5 },
@@ -200,6 +202,48 @@ test("rearranging a specialty good inside a non-transport bag is refused the sam
 	);
 	assert.equal( frame.opcode, 0x706d );
 	assert.deepEqual( noticeKeys( transport.game ), [] );
+	// The refusal is a plain system line: 67A600 type 0 at every site
+	// (56762F/570222/59B39B/6A87D2), never the centre banner.
+	assert.equal( pickupNotices[0].nativeType, 0 );
+	assert.equal( pickupNotices[0].notificationBanner, undefined );
+});
+
+test("activating a specialty good moves it into the active transport's bag", () => {
+	// 567290's kind-0xF arm: 550300 tests the item, 830410 compares
+	// the active record's class byte against 1; a transport means
+	// the activation composes the COS-bag move (kind 0x7A, move
+	// type 0xF) instead of a use.
+	const { game, sent } = world( {
+		companions: [ pet( 2 ) ],
+		bagItems: [ { slot: 20, refObjId: 8, typeFlags: TRADE_GOODS } ]
+	} );
+	const frame = game.command( { kind: "item-use", slot: 20 }, 1 );
+	assert.equal( frame.opcode, 0x706d );
+	assert.equal( sent.length, 1 );
+	assert.deepEqual( noticeKeys( game ), [] );
+});
+
+test("activating a specialty good with no transport active prints the line and sends nothing", () => {
+	const bagItems = [ { slot: 20, refObjId: 8, typeFlags: TRADE_GOODS } ];
+	const pickup = world( { companions: [ pet( 4 ) ], bagItems } );
+	assert.equal( pickup.game.command( { kind: "item-use", slot: 20 }, 1 ), null );
+	assert.equal( pickup.sent.length, 0 );
+	const notices = pickup.game.take()?.notices ?? [];
+	assert.deepEqual( notices.map( notice => notice.key ), [ SPECIALTY ] );
+	assert.equal( notices[0].nativeType, 0 );
+	const alone = world( { bagItems } );
+	assert.equal( alone.game.command( { kind: "item-use", slot: 20 }, 1 ), null );
+	assert.equal( alone.sent.length, 0 );
+	assert.deepEqual( noticeKeys( alone.game ), [ SPECIALTY ] );
+});
+
+test("activating an ordinary item still uses it, with no specialty line", () => {
+	const { game } = world( {
+		companions: [ pet( 2 ) ],
+		bagItems: [ { slot: 21, refObjId: 9, typeFlags: POTION } ]
+	} );
+	game.command( { kind: "item-use", slot: 21 }, 1 );
+	assert.deepEqual( noticeKeys( game ), [] );
 });
 
 /*
@@ -282,7 +326,12 @@ test("selling from a pickup pet at a shop prints the trade-shop line and sends n
 	// only the specialty good above keeps its own line.
 	assert.equal( game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 1, quantity: 1 }, 6, cosEntity ), null );
 	assert.equal( sent.length, before );
-	assert.deepEqual( noticeKeys( game ), [ TRADE_SHOP, TRADE_SHOP ] );
+	const notices = game.take()?.notices ?? [];
+	assert.deepEqual( notices.map( notice => notice.key ), [ TRADE_SHOP, TRADE_SHOP ] );
+	// 5B2630/5B6CA0 print on system type 0 (67A600 at 5B2772) and
+	// raise the centre banner with the same text (67D030 at 5B278D).
+	assert.equal( notices[0].nativeType, 0 );
+	assert.equal( notices[0].notificationBanner, true );
 });
 
 test("selling from a transport at a shop sends the sale", () => {
