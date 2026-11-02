@@ -172,6 +172,54 @@ func TestRingOverflowRefusesTheResume(t *testing.T) {
 	}
 }
 
+/*
+================
+TestRingOversizedFrameIsHeldUntilAcked
+
+The other #2146 shape: one counted frame larger than the whole byte
+bound, noted into an empty ring while the client is still downloading
+it. The ring must hold it until the client acknowledges it. Dropping
+it at note time moves ringFloor onto the frame's own position, and
+the resume the client then makes from the position before it -
+nothing applied yet, nothing wrong with the link - is refused
+behind-floor with floor == reported+1 for the rest of the session.
+================
+*/
+func TestRingOversizedFrameIsHeldUntilAcked(t *testing.T) {
+	_, sess, _ := attachedSession(t, false)
+	big := Frame{Opcode: ringTestOp, Payload: make([]byte, streamRingMaxBytes)}
+	sess.mu.Lock()
+	sess.noteWrittenLocked(Frame{Opcode: ringTestOp, Payload: []byte{1}}, true)
+	sess.ackLocked(1)
+	if pos := sess.noteWrittenLocked(big, true); pos != 2 {
+		t.Fatalf("oversized frame took position %d, want 2", pos)
+	}
+	floor, held := sess.ringFloor, len(sess.ring)
+	sess.mu.Unlock()
+	if floor != 0 || held != 1 {
+		t.Fatalf("after noting one oversized frame: floor %d ring %d, want 0/1 (held until acked)", floor, held)
+	}
+
+	sess.mu.Lock()
+	before := len(sess.queue)
+	ok := sess.resumeFromLocked(1)
+	queued, resends := len(sess.queue)-before, sess.resendFrames
+	sess.mu.Unlock()
+	if !ok || queued != 1 || resends != 1 {
+		t.Fatalf("resume from 1 with the oversized frame held: ok %v queued %d resends %d, want true/1/1",
+			ok, queued, resends)
+	}
+
+	sess.mu.Lock()
+	sess.noteWrittenLocked(big, true)
+	sess.ackLocked(2)
+	held = len(sess.ring)
+	sess.mu.Unlock()
+	if held != 0 {
+		t.Fatalf("after the ack the oversized frame still sits in the ring (%d frames)", held)
+	}
+}
+
 func TestRingLossyFramesAdvanceThePositionButAreNeverResent(t *testing.T) {
 	_, sess, _ := attachedSession(t, false)
 	sess.mu.Lock()
