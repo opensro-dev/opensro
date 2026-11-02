@@ -131,6 +131,19 @@ func NewTicker(
 	ticker.Hooks = append(ticker.Hooks, hooks...)
 	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "tick-duration", Hook: tickDurationHook(hub, ticker)})
 	ticker.PhaseObserver = tickPhaseObserver(hub)
+	// Slow-tick zone timelines (#2301): armed only by SRO_TICK_TRACE,
+	// otherwise every zone point answers the shared no-op and the
+	// tick pays the nil checks. The sink hands each slow tick's
+	// rendered trace to the hub's writer (directory enabled at boot
+	// in wiring.go, beside the spike journal).
+	if transport.TickTraceEnabled() {
+		ticker.Trace = simulation.NewTickTracer()
+		ticker.TraceSink = func(trace simulation.TickTrace) {
+			if hub != nil {
+				hub.RecordTickTrace(trace.JSON)
+			}
+		}
+	}
 	return ticker
 }
 
