@@ -26088,7 +26088,7 @@ export function createUi(
 								},
 								mx,
 								my,
-								hudCopy( "UIIT_STT_PRICE" )
+								hudCopy( layout.totalCaption! )
 							);
 							authoredText(
 								{
