@@ -647,6 +647,7 @@ func (deployment *deployment) agentVariables() map[string]any {
 			10,
 		),
 		"bug_report_directory": deployment.BugReports.Directory,
+		"maintenance_message":  deployment.PortOnly.maintenanceMessage(),
 	})
 }
 
