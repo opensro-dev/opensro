@@ -135,6 +135,11 @@ function welcome() {
 	bytes[12] = 16;
 	return bytes;
 }
+function streamAckPositions( socket ) {
+	return socket.sent
+		.filter( bytes => bytes[0] === 11 && bytes[1] === 0 )
+		.map( bytes => new DataView( bytes.buffer, bytes.byteOffset + 2 ).getUint32( 0, true ) );
+}
 test("network handshake, ordered tick ingress, ping and disposal have one owner", t => {
 	const sockets = socketHarness( t ), failures = [], frames = [];
 	const network = createNetwork( e => failures.push( e ) );
@@ -156,6 +161,32 @@ test("network handshake, ordered tick ingress, ping and disposal have one owner"
 	stale( { data: Uint8Array.of( 0, 1 ).buffer } );
 	network.drain( () => assert.fail( "late packet" ) );
 	assert.ok( socket.closed );
+	assert.deepEqual( failures, [] );
+});
+test("a large applied frame is acknowledged on the same drain, inside the ack interval", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	network.drain( () => {} );
+	// A small counted frame: a connect's first ack is never throttled.
+	socket.receive( Uint8Array.of( 0, 1, 11 ) );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1 ] );
+	// A large counted frame inside the interval is acked on this same
+	// drain (#2338): the server's writer is parked behind it, so the
+	// ack must not wait out the rest of the second.
+	const large = new Uint8Array( 2 + (1 << 20) );
+	large[1] = 1;
+	socket.receive( large );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1, 2 ] );
+	// A small frame after it keeps the one-second cadence.
+	socket.receive( Uint8Array.of( 0, 1, 12 ) );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1, 2 ] );
 	assert.deepEqual( failures, [] );
 });
 test("network rejects oversized ingress and send backpressure instead of silently dropping commands", t => {

@@ -67,6 +67,16 @@ interface Link {
 // The stream position is acknowledged at most this often (#1466): the
 // server keeps every unacknowledged ordered frame for a resume.
 const STREAM_ACK_INTERVAL_MS = 1000;
+// A counted frame at least this large is acknowledged at once, without
+// the interval above (port-only transport choice, not native
+// behaviour): a quarter of the server's 4 MiB unacknowledged window
+// (streamRingMaxBytes in the server's stream ring). A frame that big -
+// the EnterWorld result is the one that matters - leaves so little of
+// the window that the burst queued behind it parks the server's writer
+// until the frame is acked, so its ack must not wait out the rest of
+// the interval plus a round trip (#2338). Frames this large do not
+// occur in normal play, so the one-second cadence there is unchanged.
+const STREAM_ACK_LARGE_FRAME_BYTES = 1 << 20;
 // A server close reason is free text; the report keeps a short, plain copy.
 const CLOSE_REASON_LENGTH = 64;
 // The WebSocket normal-closure code: with a clean close it is the one
@@ -199,6 +209,9 @@ export function createNetwork(
 	// frame lost with a dying socket's inbox is re-sent on resume. It
 	// survives a resume and restarts on a fresh WELCOME.
 	let streamPosition = 0, ackedPosition = 0, ackSentAt = -Infinity;
+	// A large counted frame (STREAM_ACK_LARGE_FRAME_BYTES) was applied
+	// since the last ack: the next acknowledge() skips the interval.
+	let largeFrameUnacked = false;
 	// Why this connect is not on the fastest transport (#1449), reported
 	// once after each WELCOME (codec.transportReport). 0 = no fallback on
 	// this connect. The WebTransport-first connect path sets it before
@@ -265,6 +278,7 @@ export function createNetwork(
 		clearWelcomeDeadline();
 		ackedPosition = 0;
 		ackSentAt = -Infinity;
+		largeFrameUnacked = false;
 		const previous = link;
 		link = null;
 		previous?.close();
@@ -285,15 +299,20 @@ export function createNetwork(
 	acknowledge
 
 	Tells the server how far the stream has been applied, about once a
-	second and only when it moved.
+	second and only when it moved. A large applied frame
+	(STREAM_ACK_LARGE_FRAME_BYTES) is told at once: the server's writer
+	is parked behind it, so waiting out the interval would stall the
+	burst that follows it.
 	================
 	*/
 	function acknowledge() {
 		if ( !welcomed || !link || link.state !== "open" ) return;
 		const now = performance.now();
-		if ( streamPosition === ackedPosition || now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
+		if ( streamPosition === ackedPosition ) return;
+		if ( !largeFrameUnacked && now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
 		ackedPosition = streamPosition;
 		ackSentAt = now;
+		largeFrameUnacked = false;
 		send( codec.streamAck( streamPosition ) );
 	}
 	/*
@@ -400,7 +419,10 @@ export function createNetwork(
 				if ( frame.opcode !== 2 ) {
 					throw new Error( "Expected transport welcome" );
 				}
-				if ( !codec.welcome( frame.payload ).resumed ) streamPosition = 0;
+				if ( !codec.welcome( frame.payload ).resumed ) {
+					streamPosition = 0;
+					largeFrameUnacked = false;
+				}
 				welcomed = true;
 				clearWelcomeDeadline();
 				send( codec.transportReport( transportFallback ) );
@@ -972,7 +994,10 @@ export function createNetwork(
 					current = inbox[index]!;
 					if ( consume( current ) === false ) break;
 					consumed++;
-					if ( current.opcode > MAX_RESERVED_OPCODE ) streamPosition = (streamPosition + 1) >>> 0;
+					if ( current.opcode > MAX_RESERVED_OPCODE ) {
+						streamPosition = (streamPosition + 1) >>> 0;
+						if ( current.payload.byteLength >= STREAM_ACK_LARGE_FRAME_BYTES ) largeFrameUnacked = true;
+					}
 					if ( epoch !== generation ) {
 						return;
 					}
