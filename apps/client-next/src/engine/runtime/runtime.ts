@@ -420,7 +420,6 @@ export function startRuntime(
 				value => platform.saveQuickslotOptions( value ),
 				{
 					bugReport,
-					installIconAtlas: mapping => renderer.setUiAtlas( mapping ),
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
 					setCameraZoomRail: capped => input.zoomRail( capped ),

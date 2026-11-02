@@ -454,18 +454,6 @@ export function createRenderer(
 			else uiTextures.delete( id );
 			dirtyUi.add( id );
 		},
-		/*
-		================
-		setUiAtlas
-
-		Port-only, not native: the icon atlas mapping the interface's image
-		owner installed (foundation/ui/icon-atlas.ts); the UI device's quad
-		packer reads it every prepare.
-		================
-		*/
-		setUiAtlas( mapping ) {
-			device.uiAtlas( mapping );
-		},
 		characterParticleSnapshot: characters.particleSnapshot,
 		characterParticleTime: characters.particleTime,
 		presentationNight: () => world.night(),
