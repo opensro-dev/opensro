@@ -226,6 +226,9 @@ export interface SocialState {
 	// Native war-proposal replies reach the same system-message board as the
 	// fortress announcements. The gameplay owner drains this each frame.
 	readonly notice?: import("./system-notices").SystemNotice;
+	// The member-delta arm can announce several members in one frame
+	// (5F3340 prints per flipped row); drained alongside notice.
+	readonly notices?: readonly import("./system-notices").SystemNotice[];
 	// Diagnostic state, not player-facing invented text. These native bodies
 	// require a formatted message/modal owner beyond the constant dispatcher.
 	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };
@@ -233,6 +236,23 @@ export interface SocialState {
 	// claim box (5D4050) asks before 0x73F7 collects it.
 	readonly compensation?: number;
 	readonly error: string | null;
+}
+
+/*
+================
+assertUniqueRosterRows
+
+Every roster the wire publishes is keyed by id: a repeated id, or a
+roster past the budget its native reader allows, is a corrupt frame,
+and the decode throws rather than guess which row the native client
+would keep. Shared by the party and guild lanes (social,
+social-guild-union).
+================
+*/
+export function assertUniqueRosterRows<T extends { id: number; }>( rows: readonly T[], max: number ): void {
+	if ( rows.length > max || new Set( rows.map( r => r.id ) ).size !== rows.length ) {
+		throw Error( "Invalid social roster" );
+	}
 }
 
 /*

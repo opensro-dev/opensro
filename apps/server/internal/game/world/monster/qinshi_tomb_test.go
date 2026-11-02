@@ -68,8 +68,14 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 		if !nest.RetailEvidence || !nest.PolicyPinned || !nest.HasControls || len(nest.HiveKey) != 64 {
 			t.Fatalf("tomb nest %+v missing evidence/controls/hive", nest)
 		}
-		if nest.InstanceLimit() <= 0 {
+		// Chain-owned nests (Floor 5, #2372) keep the native limit 0:
+		// the TombChain spawns them, the nest lifecycle never does.
+		chainOwned := qinshiTombChainFloor5[withTomb.Refs[nest.RefObjID].Codename]
+		if !chainOwned && nest.InstanceLimit() <= 0 {
 			t.Fatalf("tomb nest %+v has non-positive instance limit %d", nest, nest.InstanceLimit())
+		}
+		if chainOwned && nest.InstanceLimit() != 0 {
+			t.Fatalf("chain nest %+v has instance limit %d, want 0", nest, nest.InstanceLimit())
 		}
 		regionCounts[nest.RegionID]++
 	}
@@ -117,6 +123,49 @@ func TestQinShiTombEmbeddedOverlay(t *testing.T) {
 	}
 	if whitesnake.Level != 100 || whitesnake.MaxHP != 250008449 || whitesnake.ExpToGive != 81063918 {
 		t.Fatalf("MOB_TQ_WHITESNAKE stats = Lvl %d HP %d Exp %d, want Lvl 100 HP 250008449 Exp 81063918", whitesnake.Level, whitesnake.MaxHP, whitesnake.ExpToGive)
+	}
+}
+
+/*
+================
+TestWithQinShiTombFloor5ChainNestsStayZeroed
+
+Slice A of #2362 (#2372): on Floor 5 the four guardians and the Flame
+Master are chain-owned. Their nest rows keep the native max count 0 so
+the nest lifecycle never spawns them; the TombChain spawns them. Floor 6
+rows keep their restored counts until slice B (#2373).
+================
+*/
+func TestWithQinShiTombFloor5ChainNestsStayZeroed(t *testing.T) {
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
+	base := LoadTemplate(dir)
+	withTomb, err := base.WithQinShiTomb(dir)
+	if err != nil {
+		t.Fatalf("WithQinShiTomb failed: %v", err)
+	}
+	chainOwned := map[string]bool{
+		"MOB_TQ_EASTGUARDIAN":  true,
+		"MOB_TQ_SOUTHGUARDIAN": true,
+		"MOB_TQ_WESTGUARDIAN":  true,
+		"MOB_TQ_NORTHGUARDIAN": true,
+		"MOB_TQ_FLAMEMASTER":   true,
+	}
+	found := map[string]int{}
+	for _, nest := range withTomb.Nests {
+		ref, ok := withTomb.Refs[nest.RefObjID]
+		if !ok || !chainOwned[ref.Codename] {
+			continue
+		}
+		found[ref.Codename] = nest.MaxCount
+	}
+	if len(found) != len(chainOwned) {
+		t.Fatalf("chain nests found = %v, want all %d Floor 5 chain codenames", found, len(chainOwned))
+	}
+	for codename, maxCount := range found {
+		if maxCount != 0 {
+			t.Fatalf("%s nest maxCount = %d, want 0 (chain-owned, #2372)", codename, maxCount)
+		}
 	}
 }
 

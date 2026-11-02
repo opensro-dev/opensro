@@ -91,16 +91,19 @@ func (server *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 ================
 serverRows
 
-The public server list rows of a directory snapshot: the enabled shards.
-A disabled shard can never hold a lease or admit a login, so it is not a
-row. An enabled shard with no live GameWorld stays listed, and the title
-shows it as Check.
+The public server list rows of a directory snapshot: the enabled,
+public shards. A disabled shard can never hold a lease or admit a
+login, so it is not a row, and a test shard is never public either:
+the development catalog carries one for its fixtures, and no catalog
+a host hands the Agent may leak it onto the title screen. An enabled
+shard with no live GameWorld stays listed, and the title shows it as
+Check.
 ================
 */
 func serverRows(statuses []shard.Status) []serverInfo {
 	rows := make([]serverInfo, 0, len(statuses))
 	for _, status := range statuses {
-		if !status.Enabled {
+		if !status.Enabled || status.Test {
 			continue
 		}
 		rows = append(rows, serverInfo{
