@@ -14,10 +14,12 @@ rows onto the monster Template.
 On Floors 5-6 (regions 0x8003 and 0x8002), the later server's nest rows
 23716..23721, 23723 and 23724 zeroed their max-count column when the
 floors' trigger setup took over spawning 1 live instance ("Count" = "1")
-of each guardian/boss via MobShower.
-In the persistent INS_DEFAULT world, those 8 unique nests restore maxCount=1
-and the Floor 1-3 Tomb unique respawn window (1800..3600s from nests 23055..23061,
-23077).
+of each guardian/boss via MobShower. The TombChain
+(simulation/tomb_chain.go, #2362) owns those spawns: Floor 5's five
+chain nests keep max count 0 below (slice A, #2372); Floor 6's four
+still restore maxCount=1 and the Floor 1-3 Tomb unique respawn window
+(1800..3600s from nests 23055..23061, 23077) until slice B (#2373)
+moves them onto the chain.
 
 ===========================================================================
 */
@@ -47,6 +49,18 @@ var qinshiTombHivesTSV string
 
 //go:embed data/qinshi_tomb_tactics.json
 var qinshiTombTacticsJSON []byte
+
+// qinshiTombChainFloor5 names the Floor 5 chain-owned codenames: the
+// four guardians and the Flame Master. The later server's trigger
+// setup spawns them natively (evidence: post-cut/2362-tomb-asm.md);
+// the TombChain spawns them here (#2372).
+var qinshiTombChainFloor5 = map[string]bool{
+	"MOB_TQ_EASTGUARDIAN":  true,
+	"MOB_TQ_SOUTHGUARDIAN": true,
+	"MOB_TQ_WESTGUARDIAN":  true,
+	"MOB_TQ_NORTHGUARDIAN": true,
+	"MOB_TQ_FLAMEMASTER":   true,
+}
 
 /*
 ================
@@ -196,6 +210,12 @@ func (t Template) WithQinShiTomb(textdataDir string) (Template, error) {
 		if nest.HasChampionTactics && controls.HasChampion {
 			nest.ChampionTactics.Controls = controls.Champion
 			nest.ChampionTactics.HasControls = true
+		}
+		// The Floor 5 chain nests (the four guardians and the Flame
+		// Master) are spawned by the TombChain, never by the nest
+		// lifecycle: keep the native max count 0 (#2372).
+		if qinshiTombChainFloor5[ref.Codename] {
+			nest.MaxCount = 0
 		}
 		if capRow, ok := hiveCaps[key]; ok {
 			nest.HiveKey = capRow.Key

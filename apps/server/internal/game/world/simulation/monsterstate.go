@@ -130,6 +130,9 @@ type MonsterState struct {
 	// bandits is built once from the immutable template (BanditTables).
 	banditsOnce sync.Once
 	bandits     *monster.BanditTables
+	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
+	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
+	tombChain *TombChain
 }
 
 /*
@@ -449,6 +452,9 @@ func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity b
 		s.sampleHiveDensity(state, snapshot, nowMs)
 	}
 	s.runDueHiveTicks(state, nowMs)
+	if s.tombChain != nil {
+		s.tombChain.tickLocked(s, state, nowMs)
+	}
 	state.populationTicked = true
 }
 
