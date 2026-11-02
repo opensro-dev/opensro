@@ -102,9 +102,9 @@ mintWorldToken
 					// answered with a code - rides out as the error message, so
 					// the world hop can tell an answered refusal from a failure
 					// that never got an answer. It shows the maintenance text
-					// for MAINTENANCE and makes every coded refusal definitive
-					// (a refused ticket cannot succeed on retry); a refusal
-					// with no code keeps the generic error and its old path.
+					// for MAINTENANCE, and the retry rule ends on the codes in
+					// DEFINITIVE_REFUSALS (world.ts); a refusal with no code
+					// keeps the generic error and its old path.
 					throw new Error(
 						typeof value?.code === "string" && value.code ? value.code : "Admission rejected"
 					);
