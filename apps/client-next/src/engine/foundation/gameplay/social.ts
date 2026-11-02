@@ -14,6 +14,7 @@ import { GUILD_WAR_PROPOSAL, guildWarProposalReply } from "./guild-war";
 import { withVoteBallot, withVoteCandidates } from "./guild-vote";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
+import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
@@ -292,7 +293,7 @@ export function socialPacket(
 		unique( result, 255 );
 		return result;
 	}
-	let next: SocialState = { ...state, error: null, notice: undefined };
+	let next: SocialState = { ...state, error: null, notice: undefined, notices: undefined };
 	if ( op === 0x37d4 ) {
 		u32();
 		const name = str(),
@@ -580,8 +581,18 @@ export function socialPacket(
 			next = guildWarProposalReply( next, result, result === 0 || result === 2 ? str() : "" );
 			// Every other reply, including the suggestion dialog, reads no body.
 		} else if ( type === 1 ) {
+			// 762040 case 1: the break prints the guild name on the guide
+			// (67a600 @76213a) and the announcement plate (67a140 @762168)
+			// before the block drops, so both channels ride one notice.
 			next = {
 				...next,
+				notice: {
+					key: "UIIT_MSG_GUILD_BREAK_RESULT",
+					value: 0,
+					nativeType: 0,
+					notificationBanner: true,
+					arguments: [ next.guild?.name ?? "" ]
+				},
 				guild: null,
 				alliances: [],
 				allianceMaster: 0,
@@ -604,7 +615,18 @@ export function socialPacket(
 				const row = { id: u32(), name: str(), level: u8(), master: str(), model: u32(), flags: u8() };
 				const alliances = [ ...(next.alliances ?? []).filter( a => a.id !== row.id ), row ];
 				unique( alliances, 255 );
-				next = { ...next, alliances };
+				// 5FAFF0 @5fb075: a joined ally announces itself on the guide
+				// (67a600 @5fb0a8) with its guild name.
+				next = {
+					...next,
+					alliances,
+					notice: {
+						key: "UIIT_MSG_GUILD_ALLY_JOIN_RESULT",
+						value: 0,
+						nativeType: 0,
+						arguments: [ row.name ]
+					}
+				};
 			} else if ( type === 0x0e ) {
 				const mask = u8(), id = u32();
 				if ( mask & ~15 ) throw Error( "Unsupported alliance mask" );
@@ -633,11 +655,39 @@ export function socialPacket(
 					if ( at < 0 ) crestUpdates.push( patch );
 					else crestUpdates[at] = patch;
 				}
+				// 762040 slot 8 (@762cb5): mode 1 prints the exit line and
+				// mode 2 the expel line, each with the removed guild's name
+				// (guide 67a600 @762de4/@762efb); mode 3 prints the breakup
+				// line (@762f47, a guide line, not a box) as the alliance
+				// clears. An id the roster cannot name prints nothing -
+				// the native resolves the name from its ally record.
+				const named = (next.alliances ?? []).find( a => a.id === id )?.name ??
+					(id === guild.id ? guild.name : undefined);
 				next = {
 					...next,
 					crestUpdates,
 					alliances: clear ? [] : next.alliances?.filter( a => a.id !== id ),
-					...(clear ? { allianceCrests: undefined, allianceMaster: 0 } : {})
+					...(clear ? { allianceCrests: undefined, allianceMaster: 0 } : {}),
+					...(mode === 3 ?
+						{
+							notice: {
+								key: "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_BREAKUP",
+								value: 0,
+								nativeType: 0
+							}
+						} :
+						named !== undefined ?
+						{
+							notice: {
+								key: mode === 1 ?
+									"UIIT_MSG_GUILD_ALLY_EXIT_RESULT" :
+									"UIIT_MSG_GUILD_RESPECT_ALLY_EXPEL_RESULT",
+								value: 0,
+								nativeType: 0,
+								arguments: [ named ]
+							}
+						} :
+						{})
 				};
 			} else if ( type === 0x19 ) {
 				const row = readWar();
@@ -700,7 +750,8 @@ export function socialPacket(
 				};
 			} else if ( type === 0x1d ) {
 				const mode = u8(), id = u32(), delta = u32(), memberId = u32();
-				if ( !str() ) str();
+				const victim = str() || str();
+				const killer = guild.members.find( m => m.id === memberId );
 				guild = {
 					...guild,
 					members: guild.members.map( m =>
@@ -727,7 +778,22 @@ export function socialPacket(
 							mode === 2 ?
 							{ ...w, enemyScore: (w.enemyScore + delta) >>> 0 } :
 							w
-					)
+					),
+					// 61A500 @61a6f3: modes 1 and 2 raise the kill on the
+					// centre banner (67d030 @61a773) - the member the roster
+					// resolves by jid, then the victim the wire names,
+					// passed again for the belonging slot (@61a710).
+					...((mode === 1 || mode === 2) && killer ?
+						{
+							notice: {
+								key: "UIIT_MSG_GUILDWAR_KILLNEWS",
+								value: 0,
+								notificationBanner: true,
+								bannerOnly: true,
+								arguments: [ killer.name, victim, victim ]
+							}
+						} :
+						{})
 				};
 			} else if ( type === 0x1f ) {
 				const id = u32(), word3c = u32();
@@ -743,10 +809,52 @@ export function socialPacket(
 				const members = [ ...guild.members, row ];
 				unique( members, 250 );
 				guild = { ...guild, members };
+				// 5F3340 @5f34ce: a member first seen online prints the join
+				// line (guide 67a600 @5f353a). Native discriminates through
+				// its seen-names set (832330/8323f0) on the repaint path;
+				// the port's append is the same player-visible event
+				// (2281-plan section 4).
+				if ( row.offline === 0 ) {
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_JOIN_RESULT",
+							value: 0,
+							nativeType: 0,
+							arguments: [ row.name ]
+						}
+					};
+				}
 			} else if ( type === 3 ) {
-				const id = u32();
-				u8();
-				if ( guild.members.find( m => m.id === id )?.name === next.localName ) {
+				const id = u32(), kind = u8();
+				const removed = guild.members.find( m => m.id === id );
+				// 762040 slot 3 (@76251d): kind 1 prints the exit line only
+				// on the leaver's own client, formatted with the guild name;
+				// kind 2 prints the expulsion line with the member name for
+				// every recipient (guide 67a600 @7626b7); other kinds are
+				// silent. The self test is the native name compare (516aa0).
+				if ( kind === 1 && removed?.name === next.localName ) {
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_EXIT_RESULT",
+							value: 0,
+							nativeType: 0,
+							arguments: [ guild.name ]
+						}
+					};
+				} else if ( kind === 2 && removed ) {
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_EXPULSION_RESULT",
+							value: 0,
+							nativeType: 0,
+							arguments: [ removed.name ]
+						}
+					};
+				}
+				if ( removed?.name === next.localName ) {
 					next = {
 						...next,
 						guild: null,
@@ -783,6 +891,17 @@ export function socialPacket(
 				}
 				if ( mask & 16 ) {
 					guild = { ...guild, subject: str(), contents: str() };
+					// 5E4710 @5e4a33: a broadcast notice update also raises
+					// the centre banner (67d030).
+					next = {
+						...next,
+						notice: {
+							key: "UIIT_MSG_GUILD_COMMON_KNOW_REMIND_UPDATE",
+							value: 0,
+							notificationBanner: true,
+							bannerOnly: true
+						}
+					};
 				}
 				if ( mask & 64 ) {
 					const flags = u8();
@@ -803,20 +922,67 @@ export function socialPacket(
 				};
 			} else if ( type === 6 || type === 0x16 ) {
 				const count = type === 6 ? 1 : u8(), commonMask = type === 6 ? undefined : u8();
+				const flips: SystemNotice[] = [];
 				for ( let i = 0; i < count; i++ ) {
 					const id = u32(), mask = commonMask ?? u8(), old = guild.members.find( m => m.id === id );
 					if ( !old || mask & ~0x7f ) throw Error( "Unsupported guild member delta" );
+					// 5E9D20 @5e9d90: the applicator order is &1 level (+0x24),
+					// &2 offline (+0x26), &4 grade (+0x25), then donated,
+					// permissions, name, role. (The &1/&2 legs stood swapped
+					// here until #2281; both are u8 reads, so only the field
+					// assignment was wrong.)
 					const patch = {
-						...(mask & 1 ? { offline: u8() } : {}),
-						...(mask & 2 ? { level: u8() } : {}),
+						...(mask & 1 ? { level: u8() } : {}),
+						...(mask & 2 ? { offline: u8() } : {}),
 						...(mask & 4 ? { grade: u8() } : {}),
 						...(mask & 8 ? { donated: u32() } : {}),
 						...(mask & 16 ? { permissions: u32() } : {}),
 						...(mask & 32 ? { name: str() } : {}),
 						...(mask & 64 ? { role: u8() } : {})
 					};
+					// 5F3340: the announcement block is gated on the offline
+					// leg (mask &2 @5f3392) and prints only on an actual
+					// flip; the native row latch (+0x374, set @5f36d1 and
+					// cleared by the disconnect arm @5f38e0) collapses to
+					// the transition itself in this state model.
+					if ( (mask & 2) && patch.offline !== undefined && patch.offline !== old.offline ) {
+						const self = old.name === next.localName;
+						if ( patch.offline === 0 ) {
+							if ( self ) {
+								// @5f3687: the self leg prints the guild notice
+								// text when one exists - the object at record
+								// +0x50 (buffer +0x54, size +0x64), which the
+								// 5E4710 write arm fills from wire string #1
+								// @5e4a64: the port's subject. Contents is
+								// wire string #2, the window body.
+								if ( guild.subject ) {
+									flips.push( {
+										key: "UIIT_MSG_GUILD_CONNECT_NOTICE",
+										value: 0,
+										nativeType: 0,
+										arguments: [ guild.subject ]
+									} );
+								}
+							} else {
+								flips.push( {
+									key: "UIIT_MSG_GUILD_CONNECT",
+									value: 0,
+									nativeType: 0,
+									arguments: [ old.name ]
+								} );
+							}
+						} else if ( !self ) {
+							flips.push( {
+								key: "UIIT_MSG_GUILD_DISCONNECT",
+								value: 0,
+								nativeType: 0,
+								arguments: [ old.name ]
+							} );
+						}
+					}
 					guild = { ...guild, members: guild.members.map( m => m.id === id ? { ...m, ...patch } : m ) };
 				}
+				if ( flips.length ) next = { ...next, notices: flips };
 			} else {
 				throw Error( "Unsupported guild update" );
 			}
@@ -914,7 +1080,31 @@ export function socialPacket(
 		} else if ( op === 0xb3f7 ) {
 			next = { ...next, compensation: undefined };
 		} else if ( op === 0xb663 ) {
-			next = { ...next, guild: guildBlock() };
+			// 75F9B0 @75fa7f: a created guild announces itself on the guide
+			// (67a600 @75fab1) with its name.
+			const created = guildBlock();
+			next = {
+				...next,
+				guild: created,
+				notice: {
+					key: "UIIT_MSG_GUILD_CREATE_RESULT",
+					value: 0,
+					nativeType: 0,
+					arguments: [ created.name ]
+				}
+			};
+		} else if ( op === 0xb77a ) {
+			// 75C950 @75c96b: the notice-edit ack raises the centre banner
+			// (tail-jmp 67d030), like the sub-op 5 broadcast.
+			next = {
+				...next,
+				notice: {
+					key: "UIIT_MSG_GUILD_COMMON_KNOW_REMIND_UPDATE",
+					value: 0,
+					notificationBanner: true,
+					bannerOnly: true
+				}
+			};
 		} else if ( op === 0xb56e || op === 0xb66e ) {
 			next = {
 				...next,
