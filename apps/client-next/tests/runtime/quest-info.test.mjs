@@ -13,6 +13,7 @@ matches, window on click, notice retired on close.
 */
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -24,6 +25,8 @@ const { questInfoEntries, questInfoWindowHeight, questInfoIconFrame, QUEST_INFO_
 );
 const { decodeQuestPresentation } = await load( "src/engine/foundation/ui/quest-presentation.ts" );
 const { createQuestInfo } = await load( "src/engine/runtime/ui/hud/quest-info.ts" );
+const { uiFixture, fontAtlas } = await import( "../helpers/ui-fixture.mjs" );
+const { CLIENT_PUBLIC_ROOT } = await import( "../../../../scripts/lib/generatedRoot.mjs" );
 
 const record = ( level, country, title = "Quest" ) => ({
 	level,
@@ -175,4 +178,61 @@ test("reset forgets the baseline so re-entry starts clean", () => {
 	assert.equal( info.iconVisible(), false );
 	info.observe( 10, 0, [], catalog, 32 );
 	assert.equal( info.iconVisible(), false );
+});
+
+/*
+================
+quest icon paint order
+
+Native creates the guide as its own window and brings it to front
+(69CCA0), so the minimap plate under its spot (w-0x57, 0xB3) never
+covers it. The port draws the icon with the frame's topmost group:
+in a rendered frame its quad comes after the minimap plate's, and no
+panel quad paints after it (glyph quads of a tooltip may).
+================
+*/
+test("the armed quest icon paints in the topmost group, after the minimap plate", () => {
+	const served = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf-8" ) );
+	served.rows.push( "999001\t11\tSN_Q999\tSN_R999\tSN_B999\tSN_NN999\tSN_NC999" );
+	served.countryBytes.push( 3 );
+	served.giveupWarnBytes.push( 0 );
+	served.progressClearBytes.push( 0 );
+	Object.assign( served.textEntries, {
+		SN_Q999: "Name",
+		SN_R999: "Reward",
+		SN_B999: "Body",
+		SN_NN999: "The NPC",
+		SN_NC999: "The condition"
+	} );
+	const f = uiFixture(
+		() => {},
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ "/assets/data/questData.json": new TextEncoder().encode( JSON.stringify( served ) ) }
+	);
+	f.state.entities = f.state.entities.map( e => ({ ...e, countryByte9c: 0 }) );
+	const step = ( level, now ) => {
+		f.state.gameplay = { ...f.state.gameplay, progression: { level, masteries: [] } };
+		f.ui.step( f.state, now );
+	};
+	for ( let i = 0; i < 80; i++ ) step( 10, 1000 + i * 100 );
+	let scene;
+	for ( let i = 0; i < 40 && !scene; i++ ) {
+		step( 11, 10000 + i * 100 );
+		const candidate = f.scenes.at( -1 );
+		if ( candidate?.quads.some( q => q.texture?.includes( "qstinfoic_" ) ) ) scene = candidate;
+	}
+	assert.ok( scene, "the level gain never armed the quest icon" );
+	const quads = scene.quads,
+		iconIndex = quads.findIndex( q => q.texture?.includes( "qstinfoic_" ) ),
+		plateIndex = quads.findIndex( q => q.texture?.endsWith( "/minimap/mm_window.png" ) );
+	assert.ok( plateIndex >= 0, "the minimap plate is not in the frame" );
+	assert.ok( iconIndex > plateIndex, "the quest icon paints under the minimap plate" );
+	const covered = quads.slice( iconIndex + 1 ).find( q => q.texture && q.texture !== fontAtlas.image );
+	assert.ok( !covered, "a panel quad paints after the quest icon: " + covered?.texture );
 });

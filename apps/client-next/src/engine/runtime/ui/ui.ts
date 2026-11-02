@@ -15496,30 +15496,6 @@ export function createUi(
 					}
 					endWindow( admission, "quest-details" );
 				}
-				// The level-up quest notice (#2310): the blinking icon at
-				// its native spot, then the centred QuestInfo window.
-				if ( hudData && questInfo.iconVisible() ) {
-					const iconPath = questInfo.iconPath();
-					// Demanded before the size gate, not inside it: an image
-					// nothing asks for never becomes drawable (#2333).
-					paths.push( iconPath );
-					const iconSize = resources.size( iconPath );
-					if ( iconSize ) {
-						const iconRect: UiRect = [
-							w - QUEST_INFO_ICON_X_INSET,
-							QUEST_INFO_ICON_Y,
-							iconSize[0],
-							iconSize[1]
-						];
-						rect( iconRect, white, iconPath );
-						controls.push( {
-							id: "quest-info-icon",
-							label: "New quests",
-							kind: "button",
-							rect: iconRect
-						} );
-					}
-				}
 				if ( hudData && questInfo.windowOpen() ) {
 					const infoEntries = questInfo.entries(),
 						infoHeight = questInfoWindowHeight( infoEntries.length ),
@@ -26545,6 +26521,31 @@ export function createUi(
 							);
 						}
 					}
+				}
+			}
+			const hudData = hud.data();
+			// The level-up quest notice (#2310): the blinking icon at
+			// its native spot, then the centred QuestInfo window.
+			if ( hudData && questInfo.iconVisible() ) {
+				const iconPath = questInfo.iconPath();
+				// Demanded before the size gate, not inside it: an image
+				// nothing asks for never becomes drawable (#2333).
+				paths.push( iconPath );
+				const iconSize = resources.size( iconPath );
+				if ( iconSize ) {
+					const iconRect: UiRect = [
+						w - QUEST_INFO_ICON_X_INSET,
+						QUEST_INFO_ICON_Y,
+						iconSize[0],
+						iconSize[1]
+					];
+					rect( iconRect, white, iconPath );
+					controls.push( {
+						id: "quest-info-icon",
+						label: "New quests",
+						kind: "button",
+						rect: iconRect
+					} );
 				}
 			}
 			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
