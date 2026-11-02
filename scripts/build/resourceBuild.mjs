@@ -18,7 +18,6 @@ summary it prints from formatResourceBuildSummary.
 
 import { produceAllFamilies } from "./families/looseFamilies.mjs";
 import { buildTextureVariants } from "./textures/buildTextureVariants.mjs";
-import { buildUiIconAtlas } from "./uiIconAtlas.mjs";
 import { buildAudioResources } from "./audio.mjs";
 import { buildCifResources } from "./cif.mjs";
 import { buildConfigResources } from "./config.mjs";
@@ -185,7 +184,6 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	extractRetailCursors,
 	produceAllFamilies,
 	buildTextureVariants,
-	buildUiIconAtlas,
 	packTree: packPublicTree
 } );
 
@@ -545,9 +543,6 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// devices without BC is encoded now, before the packs are listed
 	// (textures/buildTextureVariants.mjs; cached by source digest).
 	const textureVariants = await timed( "textureVariants", () => steps.buildTextureVariants() );
-	// Port-only: the icon family's atlas sheet and manifest, after every
-	// producer has published the icons (uiIconAtlas.mjs).
-	const uiIconAtlas = await timed( "uiIconAtlas", () => steps.buildUiIconAtlas() );
 	// Refresh the native-interface preload sweep over assets/images/** after
 	// every producer, the families included, has published (their code-selected UI
 	// art belongs in the startup set).
@@ -623,7 +618,6 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		backgroundInstall,
 		families,
 		textureVariants,
-		uiIconAtlas,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

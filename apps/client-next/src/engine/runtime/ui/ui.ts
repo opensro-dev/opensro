@@ -1040,9 +1040,6 @@ export interface UiExtensions {
 	// and the build's stamped revision are used.
 	mallNoticeStorage?: Pick<Storage, "getItem" | "setItem"> | null;
 	clientRevision?: string;
-	// Port-only, not native: the icon atlas installs through the renderer's
-	// quad packer (foundation/ui/icon-atlas.ts).
-	installIconAtlas?: ( mapping: import("@/engine/foundation/ui/icon-atlas").IconAtlas | null ) => void;
 }
 
 /*
@@ -1511,7 +1508,7 @@ export function createUi(
 		hover: string | null = null,
 		pressed: string | null = null;
 	const text = createUiText( assets, base ),
-		resources = createUiAssets( assets, texture, base, undefined, extensions.installIconAtlas );
+		resources = createUiAssets( assets, texture, base );
 	let diagnosticError: string | null = null;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;

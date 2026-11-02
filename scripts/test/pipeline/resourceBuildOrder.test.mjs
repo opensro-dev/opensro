@@ -212,7 +212,6 @@ test("a failed source-image conversion stops the build before any lane", async (
 // The texture variants re-encode every native texture, the families' included.
 const AFTER_FAMILIES = [
 	"buildTextureVariants",
-	"buildUiIconAtlas",
 	"buildUiImagePreloadManifest",
 	"buildBackgroundInstallAsset",
 	"packTree"
