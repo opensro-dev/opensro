@@ -30,6 +30,11 @@ import (
 // whole byte bound, inside MaxFrameBytes.
 const entryAnswerBytes = streamRingMaxBytes + 731271
 
+// slowEntryParkBound stands in for RingParkBound. A loaded machine only
+// delays the watchdog past it, never fires it early, so three bounds of
+// quiet are a safe "still attached" window in the passing direction.
+const slowEntryParkBound = 500 * time.Millisecond
+
 /*
 ================
 enterSlowly
@@ -73,11 +78,12 @@ behind it as it was before #2338.
 ================
 */
 func TestSlowEntryDownloadIsNotParkDetached(t *testing.T) {
-	hub, sess, fc := enterSlowly(t, time.Second)
+	t.Parallel()
+	hub, sess, fc := enterSlowly(t, slowEntryParkBound)
 	wait.Eventually(t, 5*time.Second, "the scene behind the answer is written", func() bool {
 		return len(dataFrames(fc.written())) == 1+1+3
 	})
-	wait.Consistently(t, 3*time.Second, "a downloading client stays attached", func() bool {
+	wait.Consistently(t, 3*slowEntryParkBound, "a downloading client stays attached", func() bool {
 		sess.mu.Lock()
 		defer sess.mu.Unlock()
 		return sess.attached
@@ -98,6 +104,7 @@ for a new entry on every resume, supersededEntryLocked).
 ================
 */
 func TestResumeBeforeAnUnappliedEntryIsServed(t *testing.T) {
+	t.Parallel()
 	_, sess, fc := enterSlowly(t, time.Hour)
 	wait.Eventually(t, 5*time.Second, "the scene behind the answer is written", func() bool {
 		return len(dataFrames(fc.written())) == 1+1+3
