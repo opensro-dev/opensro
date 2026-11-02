@@ -291,8 +291,9 @@ test("the cape warning needs a growth pet out and no guild soldier (594980)", ()
 	assert.equal( cos.cosCapeWarnsGrowthPet( [ guild ] ), false );
 	// 82EF30 matches the class byte only: a dead pet of either class is
 	// still in the manager, so it counts the same dead or alive.
-	assert.equal( cos.cosCapeWarnsGrowthPet( [ { band: 3, dead: true } ] ), true );
-	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack, { band: 5, dead: true } ] ), false );
+	const deadAttack = { band: 3, dead: true }, deadGuild = { band: 5, dead: true };
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ deadAttack ] ), true );
+	assert.equal( cos.cosCapeWarnsGrowthPet( [ attack, deadGuild ] ), false );
 	assert.equal( cos.cosCapeWarnsGrowthPet( [] ), false );
 });
 
