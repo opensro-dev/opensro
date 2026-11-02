@@ -74,6 +74,8 @@ function sourceGates() {
 	const tests = [
 		"tools/run-tests.mjs",
 		...architecture,
+		"tests/runtime/lifecycle.test.mjs",
+		"tests/runtime/renderer-diagnostics.test.mjs",
 		"tests/runtime/beta-release.test.mjs",
 		"tests/runtime/runtime-text-admission.test.mjs",
 		"tests/runtime/persistent-recovery.test.mjs",

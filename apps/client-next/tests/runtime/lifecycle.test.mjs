@@ -332,6 +332,37 @@ test("a device failure reports its cause, not the errors that follow it (BUG-022
 });
 
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
+const { createDeviceRecovery } = await load( "src/engine/foundation/rendering/device-recovery.ts" );
+test("device recovery paces eight attempts and renews after a stable minute", () => {
+	const recovery = createDeviceRecovery();
+	// The first attempt is due at once; each later one waits out its
+	// rung of the ladder, counted from the frame that saw the failure.
+	assert.equal( recovery.due( 1000 ), true );
+	recovery.began();
+	assert.equal( recovery.due( 2000 ), false, "the second attempt waits 1 s" );
+	assert.equal( recovery.due( 2999 ), false );
+	assert.equal( recovery.due( 3000 ), true );
+	recovery.began();
+	for ( const wait of [ 2000, 5000, 10000, 30000, 30000, 30000 ] ) {
+		const failedAt = 100000;
+		assert.equal( recovery.due( failedAt ), false );
+		assert.equal( recovery.due( failedAt + wait - 1 ), false );
+		assert.equal( recovery.due( failedAt + wait ), true );
+		recovery.began();
+	}
+	assert.equal( recovery.pending(), false, "eight attempts bound the budget" );
+	assert.equal( recovery.due( 999999 ), false );
+
+	const renewed = createDeviceRecovery();
+	assert.equal( renewed.due( 0 ), true );
+	renewed.began();
+	renewed.running( 10000 );
+	renewed.running( 69999 );
+	assert.equal( renewed.due( 70000 ), false, "59.999 s stable has not renewed the budget yet" );
+	renewed.running( 70001 );
+	renewed.running( 130001 );
+	assert.equal( renewed.due( 140000 ), true, "a stable minute restores the immediate attempt" );
+});
 test("device loss rebuilds only renderer resources and bounds repeated recovery", async t => {
 	mockGlobal( t, "GPUShaderStage", { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 } );
 	mockGlobal( t, "GPUBufferUsage", { UNIFORM: 64, COPY_DST: 8, STORAGE: 128 } );
@@ -489,39 +520,66 @@ test("device loss rebuilds only renderer resources and bounds repeated recovery"
 				imageDisposals++;
 			}
 		} );
+		// The recovery budget is paced by frame time (performance.now at
+		// the frame), so the test owns the clock the renderer reads: time
+		// only moves when a step below advances it.
+		let nowMs = 0;
+		mockGlobal( t, "performance", { now: () => nowMs } );
 		const settle = () => new Promise( resolve => setImmediate( resolve ) );
 		await settle();
 		renderer.frame( { width: 100, height: 100 } );
 		assert.equal( renderer.phase(), "running", renderer.error() );
 		assert.equal( submissions, 1 );
-		for ( let attempt = 0; attempt < 3; attempt++ ) {
+		// Lose the current device and drive the paced replacement: one
+		// frame stamps the failure, the clock crosses every wait in the
+		// budget (30 s is the longest), and the next frame replaces.
+		const loseAndRecover = async ( attempt ) => {
 			devices[attempt].lose( { reason: "unknown", message: "fixture loss" } );
 			await settle();
+			renderer.frame( { width: 100, height: 100 } );
+			nowMs += 30000;
 			renderer.frame( { width: 100, height: 100 } );
 			assert.ok( devices[attempt].device.destroyed );
 			await settle();
 			renderer.frame( { width: 100, height: 100 } );
 			assert.equal( renderer.phase(), "running" );
+		};
+		await loseAndRecover( 0 );
+		await loseAndRecover( 1 );
+		// A device that then holds for a minute earns a fresh budget:
+		// the next loss is replaced on the first frame, not after the
+		// long wait the spent budget had reached.
+		nowMs += 60000;
+		renderer.frame( { width: 100, height: 100 } );
+		devices[2].lose( { reason: "unknown", message: "fixture loss" } );
+		await settle();
+		renderer.frame( { width: 100, height: 100 } );
+		assert.ok( devices[2].device.destroyed, "a stable device renews the recovery budget" );
+		await settle();
+		renderer.frame( { width: 100, height: 100 } );
+		assert.equal( renderer.phase(), "running" );
+		for ( let attempt = 3; attempt < 10; attempt++ ) {
+			await loseAndRecover( attempt );
 		}
-		assert.equal( configured, 4 );
-		assert.equal( unconfigured, 3 );
-		assert.equal( submissions, 4 );
-		assert.equal( mipSubmissions, 4 );
-		devices[3].lose( { reason: "unknown", message: "repeated loss" } );
+		assert.equal( configured, 11 );
+		assert.equal( unconfigured, 10 );
+		assert.equal( submissions, 12 );
+		assert.equal( mipSubmissions, 11 );
+		devices[10].lose( { reason: "unknown", message: "repeated loss" } );
 		await settle();
 		renderer.frame( { width: 100, height: 100 } );
 		assert.equal( renderer.phase(), "failed" );
-		assert.equal( devices.length, 4 );
-		assert.equal( uploads, 4 );
+		assert.equal( devices.length, 11 );
+		assert.equal( uploads, 11 );
 		assert.equal( imageDisposals, 0 );
 		renderer.dispose();
 		assert.equal( imageDisposals, 1 );
 		// The sun cascade's 1x1 dummy depth view (bindings 13/14) is one
 		// more texture a generation; the cascade itself stays unbuilt while
 		// the stage is off.
-		assert.equal( textureDisposals, 20 );
+		assert.equal( textureDisposals, 55 );
 		renderer.dispose();
-		assert.equal( textureDisposals, 20 );
+		assert.equal( textureDisposals, 55 );
 		assert.equal( imageDisposals, 1 );
 	} finally {
 		if ( old ) Object.defineProperty( globalThis, "navigator", old );
