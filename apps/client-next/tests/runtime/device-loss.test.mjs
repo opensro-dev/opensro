@@ -17,6 +17,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { createDevice } = await import( sourceFileUrl( "src/engine/runtime/renderer/device/device.ts" ).href );
+const { createDeviceRecovery } = await import(
+	sourceFileUrl( "src/engine/foundation/rendering/device-recovery.ts" ).href
+);
 
 /*
 ================
@@ -83,7 +86,10 @@ function installGpu( options = {} ) {
 		features: new Set(),
 		info: options.info,
 		limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
-		requestDevice: async () => device
+		requestDevice: async () => {
+			if ( options.rejectDevice ) throw new Error( options.rejectDevice );
+			return device;
+		}
 	};
 	// The WebGPU flag namespaces the owner reads while building resources.
 	for ( const name of [ "GPUBufferUsage", "GPUTextureUsage", "GPUShaderStage", "GPUMapMode", "GPUColorWrite" ] ) {
@@ -92,11 +98,17 @@ function installGpu( options = {} ) {
 	globalThis.navigator ??= /** @type {any} */ ({});
 	Object.defineProperty( globalThis.navigator, "gpu", {
 		configurable: true,
-		value: { requestAdapter: async () => adapter, getPreferredCanvasFormat: () => "bgra8unorm" }
+		value: {
+			requestAdapter: async () => {
+				if ( options.rejectAdapter ) throw new Error( options.rejectAdapter );
+				return options.noAdapter ? null : adapter;
+			},
+			getPreferredCanvasFormat: () => "bgra8unorm"
+		}
 	} );
 	return {
 		lose: info => lose( info ),
-		uncaptured: message => listeners.get( "uncapturederror" )?.( { error: { message } } )
+		uncaptured: ( message, error = { message } ) => listeners.get( "uncapturederror" )?.( { error } )
 	};
 }
 
@@ -156,4 +168,113 @@ test("optional compute pipeline failures degrade without killing the device and 
 		undefined
 	);
 	device.dispose();
+});
+
+test("a requestDevice rejected after a GPU reset can be tried again", async () => {
+	installGpu( { rejectDevice: "OperationError: ID3D12Device::CreateCommandQueue failed" } );
+	const device = createDevice( false, true, true );
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), true );
+	assert.match( device.error(), /ID3D12Device/ );
+	device.dispose();
+});
+
+test("a requestDevice rejected on the first start can be tried again too", async () => {
+	installGpu( { rejectDevice: "OperationError: ID3D12Device::CreateCommandQueue failed" } );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.recoverable(), true );
+	device.dispose();
+});
+
+test("a rejected requestAdapter can be tried again, even on a first start", async () => {
+	installGpu( { rejectAdapter: "OperationError: adapter unavailable" } );
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "failed"; i++ ) await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), true );
+	device.dispose();
+});
+
+test("no adapter means no WebGPU on a first start, and a reset under way on a replacement", async () => {
+	installGpu( { noAdapter: true } );
+	const first = createDevice();
+	for ( let i = 0; i < 20 && first.phase() !== "failed"; i++ ) await settle();
+	assert.equal( first.recoverable(), false );
+	first.dispose();
+	const replacement = createDevice( false, true, true );
+	for ( let i = 0; i < 20 && replacement.phase() !== "failed"; i++ ) await settle();
+	assert.equal( replacement.recoverable(), true );
+	replacement.dispose();
+});
+
+test("a device error after creation stays permanent", async () => {
+	const gpu = installGpu();
+	const device = createDevice();
+	for ( let i = 0; i < 20 && device.phase() !== "running"; i++ ) await settle();
+	gpu.uncaptured( "createView: texture is not valid" );
+	await settle();
+	assert.equal( device.phase(), "failed" );
+	assert.equal( device.recoverable(), false );
+	device.dispose();
+});
+
+test("running out of GPU memory can be cured by a new device", async () => {
+	class OutOfMemory extends Error {}
+	const scope = /** @type {any} */ (globalThis);
+	scope.GPUOutOfMemoryError = OutOfMemory;
+	try {
+		const gpu = installGpu();
+		const device = createDevice();
+		for ( let i = 0; i < 20 && device.phase() !== "running"; i++ ) await settle();
+		gpu.uncaptured( "Out of memory", new OutOfMemory( "Out of memory" ) );
+		await settle();
+		assert.equal( device.phase(), "failed" );
+		assert.equal( device.recoverable(), true );
+		device.dispose();
+	} finally {
+		delete scope.GPUOutOfMemoryError;
+	}
+});
+
+test("recovery waits longer each time and gives up in under two minutes", () => {
+	const recovery = createDeviceRecovery();
+	let now = 0, tries = 0;
+	while ( recovery.pending() && now < 600000 ) {
+		if ( recovery.due( now ) ) {
+			recovery.began();
+			tries++;
+		} else now += 100;
+	}
+	assert.equal( tries, 8 );
+	assert.ok( now < 120000, `spent ${now} ms` );
+	assert.equal( recovery.due( now + 600000 ), false );
+});
+
+test("the first attempt is immediate and the second waits", () => {
+	const recovery = createDeviceRecovery();
+	assert.equal( recovery.due( 5000 ), true );
+	recovery.began();
+	assert.equal( recovery.due( 5001 ), false );
+	assert.equal( recovery.due( 6001 ), true );
+});
+
+test("a device that stays up earns a fresh budget, a brief one does not", () => {
+	const recovery = createDeviceRecovery();
+	const spend = () => {
+		let now = 0;
+		while ( recovery.pending() ) {
+			if ( recovery.due( now ) ) recovery.began();
+			now += 1000;
+		}
+		return now;
+	};
+	const at = spend();
+	assert.equal( recovery.pending(), false );
+	recovery.running( at );
+	recovery.running( at + 59999 );
+	assert.equal( recovery.pending(), false );
+	recovery.running( at + 60000 );
+	assert.equal( recovery.pending(), true );
 });
