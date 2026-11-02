@@ -221,7 +221,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		area := skill.Abnormal.EffectArea
 		var set []*enterworld.Character
 		for _, gid := range rt.partyCureTargets(division, snapshot, area.Radius, area.Select&1 != 0, false, now) {
-			if member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid)); member != nil {
+			// The combat copy suffices for a candidate: the pick reads
+			// its HP ratio through the stats funnel (equipment band,
+			// whole avatar, skills) and the winner's name and identity;
+			// no reader walks a candidate's bag rows (#2209).
+			if member := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, gid)); member != nil {
 				set = append(set, member)
 			}
 		}

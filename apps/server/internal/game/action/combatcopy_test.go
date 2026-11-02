@@ -6,7 +6,8 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
 pass, the attacking hawk's strike tick, the heal-over-time pulse's
-retained caster view and the targeted recovery cast's recipient view
+retained caster view, the targeted recovery cast's recipient view
+and the lowest-party-heal candidate copies
 take the narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
@@ -579,6 +580,52 @@ func targetedHealTrace(t *testing.T, full bool) string {
 
 /*
 ================
+lowestHealTrace
+
+One Healing Division cast over a party whose lowest-ratio member is
+decided by its equipment: the candidate copies feed the pick's HP
+ratio through the stats funnel, so matea - dressed with a +900 HP
+option that lifts its maximum to 1100 - is the lowest at 100 HP,
+where undressed it would tie the plain mate and lose to mateb. The
+winner takes the whole heal, the rest the reduction's share. Both
+candidates carry the loaded bag: a pick that read a candidate's bag
+rows or resolved its companions through the copy would diverge.
+The caster stands at 190 HP so it is never the pick itself.
+================
+*/
+func lowestHealTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01")
+	affordable(&skill)
+	p := newSupportParty(t, skill, 50, 80)
+	p.c.CurrentHP = testInt64(190)
+	m, a, b := p.mates[0], p.mates[1], p.mates[2]
+	m.CurrentHP, a.CurrentHP, b.CurrentHP = testInt64(100), testInt64(100), testInt64(90)
+
+	armor := &enterworld.ItemRef{RefObjID: 9, Codename: "TEST_HP_ARMOR", TypeIDs: [4]int64{3, 1, 1, 1}, Combat: &enterworld.ItemCombatRef{}}
+	items := p.rt.deps.ItemReferences().(staticItemSource)
+	items[armor.Codename] = armor
+	p.rt.deps.(*enterworld.Deps).Items = items
+	p.rt.deps.(*enterworld.Deps).MagicOptions = gaugeOptions{140: {ParamID: 140, OptionName: "MATTR_HP", Tag: hpTag()}}
+	a.MissionInventory = append(a.MissionInventory, enterworld.InventoryRow{
+		Slot: 1, RefObjID: armor.RefObjID, Codename: armor.Codename, TypeFlags: armor.TypeFlags(),
+		VarianceBits: "0", Durability: 1, StackCount: 1, MagicOptions: []uint64{uint64(900)<<32 | 140},
+	})
+	loadCombatBag(a)
+	loadCombatBag(b)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	if *a.CurrentHP <= 100 || *a.CurrentHP < *b.CurrentHP {
+		t.Fatalf("the dressed member did not take the whole heal (a %d, b %d); the trace would agree vacuously", *a.CurrentHP, *b.CurrentHP)
+	}
+	return trace + fmt.Sprintf("c=%d m=%d a=%d b=%d rows=%s|%s",
+		*p.c.CurrentHP, *m.CurrentHP, *a.CurrentHP, *b.CurrentHP, combatRowsView(a), combatRowsView(b))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -586,7 +633,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
