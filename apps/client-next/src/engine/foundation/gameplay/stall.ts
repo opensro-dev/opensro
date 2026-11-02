@@ -335,10 +335,15 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			else if ( kind === EDIT_OPEN ) {
 				const open = u8() === 1, code = u8();
 				next = { ...state, open, networkRegistered: open && code === NETWORK_REGISTERED };
-				// 751A60 sub-op 5: a stall that just registered on the
-				// network says so in chat; leaving the network is silent.
+				// 751A60 sub-op 5: the state line leads ("The stall is
+				// open." on opening, the END line on closing); a fresh
+				// registration adds its own line after it.
+				messages = [ {
+					key: open ? "UIIT_STT_STALL_CONDITION_START" : "UIIT_STT_STALL_CONDITION_END",
+					args: []
+				} ];
 				if ( open && code === NETWORK_REGISTERED ) {
-					messages = [ { key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] } ];
+					messages = [ ...messages, { key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] } ];
 				}
 				if ( code !== 0 && code !== NETWORK_REGISTERED && code !== 2 && code !== 3 ) {
 					notice = { category: STALL_NOTICE_CATEGORY, code };
