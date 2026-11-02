@@ -26,6 +26,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"opensro.online/server/internal/game/enterworld"
+	wiretest "opensro.online/server/internal/game/internal"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -186,6 +187,7 @@ func (c *wireClient) readFrame(t *testing.T) transport.Frame {
 		if frame.Opcode == transport.OpPing || frame.Opcode == transport.OpPong {
 			continue
 		}
+		wiretest.AckRead(t, c.conn, frame)
 		return frame
 	}
 }
