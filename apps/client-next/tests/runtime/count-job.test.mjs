@@ -203,7 +203,14 @@ test("under a minute the period line counts seconds", () => {
 test("the board slot's hover help is the composed kind-5 text", async () => {
 	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
 	// One minute in, the four-week package has 27 days 23:59 left.
-	const board = buffBoard( { localGid: 1, countJobs: owner().state() }, 60000, new Set(), undefined, true, helpCopy );
+	const board = buffBoard(
+		/** @type {any} */ ({ localGid: 1, countJobs: owner().state() }),
+		60000,
+		new Set(),
+		undefined,
+		true,
+		helpCopy
+	);
 	const slot = board.find( row => row.id === "count-job:" + PACKAGE );
 	assert.ok( slot );
 	assert.equal(
