@@ -163,6 +163,17 @@ func newGameWorldApplication(
 			log.WithField("path", spikePath).Info("tick spike journal: appending burst records")
 		}
 	}
+	// Diagnostics only, and off unless SRO_TICK_TRACE arms it: the
+	// slow-tick Perfetto traces (transport tick_trace.go, #2301)
+	// rotate beside the journal. A failure here never stops the boot.
+	if transport.TickTraceEnabled() {
+		traceDir := store.DirForShardFromEnv(ownedShard.ID)
+		if err := ts.Hub.EnableTickTrace(traceDir); err != nil {
+			log.WithError(err).WithField("dir", traceDir).Warn("tick trace: running without it")
+		} else {
+			log.WithField("dir", traceDir).Info("tick trace: armed, one Perfetto file per slow tick")
+		}
+	}
 	dataPaths, err := gamedata.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("game data: %w", err)

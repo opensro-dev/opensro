@@ -66,6 +66,10 @@ and reports nothing. Written and read only on the tick goroutine.
 type StepTimer struct {
 	Now  func() time.Time
 	Slow func(name string, elapsed time.Duration)
+	// Zone, when set, records each step as a zone on the tick's
+	// timeline (ticktrace.go, #2301); nil - the default - records
+	// none and costs one nil check per step.
+	Zone func(name string) func()
 }
 
 /*
@@ -77,6 +81,9 @@ it panics (the hook's recover boundary is the ticker's).
 ================
 */
 func (s *StepTimer) Time(name string, run func()) {
+	if s.Zone != nil {
+		defer s.Zone(name)()
+	}
 	if s.Slow == nil {
 		run()
 		return
@@ -243,7 +250,9 @@ Ticker.observePhases
 ================
 */
 func (t *Ticker) observePhases() {
+	timing := t.clock.timing(t.timingNow())
 	if t.PhaseObserver != nil {
-		t.PhaseObserver(t.clock.timing(t.timingNow()))
+		t.PhaseObserver(timing)
 	}
+	t.traceFinish(timing)
 }

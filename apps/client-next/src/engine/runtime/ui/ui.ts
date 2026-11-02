@@ -140,7 +140,7 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyRank } from "@/engine/foundation/gameplay/academy";
+import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -400,6 +400,7 @@ import {
 	guildLevelUpPrice,
 	guildManagerRows,
 	guildTransferRefusal,
+	guildTransferTargetMissing,
 	guildSoldierRows,
 	guildSoldierPrompt,
 	MASTER_RELEASE_VOTE
@@ -6567,6 +6568,15 @@ export function createUi(
 					} else if ( entry?.member ) {
 						// 5F1D60 opens 5D3EB0's named confirmation before sending.
 						const guild = view.gameplay?.social?.guild;
+						if ( guildTransferTargetMissing( guild ?? null, entry.member ) ) {
+							// 5D3EB0: the named successor is not in the roster;
+							// the line prints and nothing is sent.
+							sendGameplay( {
+								kind: "local-notice",
+								notice: { key: "UIIT_MSG_MLEAVEERR_USERNOTEXIST", value: 0, nativeType: 0 }
+							} );
+							return;
+						}
 						const member = guild?.members.find( m => m.id === entry.member );
 						const master = guildSelf( view.gameplay?.social )?.grade === 0;
 						if ( member && member.grade !== 0 && master ) {
@@ -21685,6 +21695,30 @@ export function createUi(
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
+					const joinLabel = academyJoinLabel( academy );
+					const progressNode = joinLabel ? guideData.mentor.GDR_MENTORMATCH_JOIN_PROGRESS : undefined;
+					if ( joinLabel && progressNode ) {
+						// 62E540 mode 1: while the join application runs,
+						// the matching window's status label (the
+						// JOIN_PROGRESS surface) formats the progress
+						// text with the applicant and camp names, the
+						// party window's substitution.
+						const r = authoredRect( progressNode, ax, ay ),
+							copy = hudCopy( joinLabel.key ).replace(
+								"%s",
+								next.session?.character ?? ""
+							).replace( "%s", joinLabel.campName ),
+							out = text.guide( guideTokens( copy ), r, r, white, resources.size, {
+								align: progressNode.hAlign === 1 ?
+									"center" :
+									progressNode.hAlign === 2 ?
+									"right" :
+									"left",
+								vAlign: progressNode.vAlign
+							} );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					}
 					endWindow( admission );
 				}
 			}

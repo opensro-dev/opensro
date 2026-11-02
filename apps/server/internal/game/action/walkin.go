@@ -149,6 +149,18 @@ var tombFloor5ExitZones = map[string]bool{
 	"GATE_JINSI_05X01-3": true,
 }
 
+// tombFloor6ArenaZones maps each Floor 6 walk-in zone to the tomb chain
+// gate that creates its portal: the four arena entries open only with
+// their compass stage, and the centre exit only with any of them (the
+// native chain raises that portal with each stage's portal, #2373).
+var tombFloor6ArenaZones = map[string]string{
+	"GATE_JINSI_06X03_09": simulation.TombGateFloor6Portal1,
+	"GATE_JINSI_06X04_12": simulation.TombGateFloor6Portal2,
+	"GATE_JINSI_06X05_03": simulation.TombGateFloor6Portal3,
+	"GATE_JINSI_06X02_06": simulation.TombGateFloor6Portal5,
+	"GATE_JINSI_06X01_06": simulation.TombGateFloor6Portal4,
+}
+
 /*
 ================
 walkInZoneAt
@@ -283,6 +295,11 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	if tombFloor5ExitZones[zone] && (rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, simulation.TombGateFloor6Entry)) {
 		// The Floor 6 portal does not exist until the Flame Master
 		// dies: walking through its zone does nothing (#2372).
+		return OpResult{}
+	}
+	if gate, gated := tombFloor6ArenaZones[zone]; gated && (rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, gate)) {
+		// The arena portal does not exist until its compass stage
+		// falls: walking through its zone does nothing (#2373).
 		return OpResult{}
 	}
 	out, arrived := rt.enterWalkIn(owner.division, c, link, moving)
