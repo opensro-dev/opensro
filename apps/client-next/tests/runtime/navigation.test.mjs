@@ -412,6 +412,66 @@ test("an unanswered navigation load retries, an unanswered admission does not", 
 	stream.dispose();
 });
 
+test("a navigation admission slept through gets a fresh window when the page returns", () => {
+	let id = 0;
+	const sent = [], answers = new Map();
+	const assets = {
+		available: () => 4,
+		request: () => ++id,
+		cancel() {},
+		take: key => answers.get( key ) ?? null
+	};
+	const stream = createNavigationStream( assets, command => sent.push( command ), "https://fixture.test" );
+	const dungeon = { ...pose, regionId: 0x8001 },
+		step = ( now, visibilityReturned = false ) =>
+			stream.step( dungeon, undefined, undefined, undefined, now, visibilityReturned );
+	step( 0 );
+	answers.set( 1, { kind: "navigation", id: 1, product: product( dungeon.regionId ) } );
+	step( 100 );
+	assert.equal( stream.phase(), "admitting" );
+	// The page sleeps far past the 15 s admission window: no step runs,
+	// and neither does the simulation. The returning step re-arms the
+	// window instead of stranding the admission as a permanent failure.
+	step( 1000000, true );
+	assert.equal( stream.phase(), "admitting" );
+	assert.equal( stream.error(), null );
+	assert.equal( stream.reconnecting(), false );
+	// The simulation, awake again, answers inside the fresh window.
+	stream.step( dungeon, dungeon.regionId, undefined, sent[0].requestId, 1001000 );
+	assert.equal( stream.phase(), "ready" );
+	assert.equal( stream.error(), null );
+	stream.dispose();
+});
+
+test("a re-armed navigation admission still expires when its fresh window is attended", () => {
+	let id = 0;
+	const sent = [], answers = new Map();
+	const assets = {
+		available: () => 4,
+		request: () => ++id,
+		cancel() {},
+		take: key => answers.get( key ) ?? null
+	};
+	const stream = createNavigationStream( assets, command => sent.push( command ), "https://fixture.test" );
+	const dungeon = { ...pose, regionId: 0x8001 },
+		step = ( now, visibilityReturned = false ) =>
+			stream.step( dungeon, undefined, undefined, undefined, now, visibilityReturned );
+	step( 0 );
+	answers.set( 1, { kind: "navigation", id: 1, product: product( dungeon.regionId ) } );
+	step( 100 );
+	assert.equal( stream.phase(), "admitting" );
+	// One return, one fresh window: when that window also passes with
+	// the page present, the refusal is real and permanent again.
+	step( 1000000, true );
+	step( 1015000 );
+	assert.match( stream.error(), /admitting timed out/ );
+	assert.equal( stream.reconnecting(), false );
+	stream.retryTransient();
+	step( 2000000 );
+	assert.equal( id, 1, "an attended admission timeout never retries by itself" );
+	stream.dispose();
+});
+
 test("a navigation load that keeps delivering bytes is slow, not timed out", () => {
 	let id = 0, bytesRead = 0;
 	const sent = [], answers = new Map();

@@ -101,7 +101,8 @@ export function createNavigationStream(
 			admittedRegion?: number,
 			failure?: { region: number; requestId?: number; error: string; },
 			admittedRequestId?: number,
-			now = performance.now()
+			now = performance.now(),
+			visibilityReturned = false
 		) {
 			if ( disposed ) return;
 			if ( !pose ) {
@@ -123,6 +124,12 @@ export function createNavigationStream(
 				state = { phase: "ready", region: state.region };
 				recovery.reset();
 			}
+			// A page that slept or was frozen could not step at all, and
+			// neither could the simulation it waits on: the admission
+			// window never really ran. The frame that returns visibility
+			// re-arms it instead of failing a wait nobody attended
+			// (#2337). An attended window still expires below.
+			if ( visibilityReturned && state.phase === "admitting" ) deadline = now + ADMISSION_TIMEOUT_MS;
 			try {
 				if ( state.phase === "admitting" && now >= deadline ) {
 					throw Error( "Navigation admitting timed out for region " + state.region );

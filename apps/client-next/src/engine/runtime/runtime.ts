@@ -1169,13 +1169,19 @@ export function startRuntime(
 				// Dungeon visibility depends on admitted navigation ownership. Waiting
 				// for the first visible draw here deadlocks first entry into a dungeon.
 				// Retain admitted navigation while offline, but do not emit a late
-				// navigation command into the disconnected simulation.
+				// navigation command into the disconnected simulation. A page
+				// returning to view hands its return to the step: a slept or
+				// frozen page never ran the admission window it would
+				// otherwise be failed for (#2337).
+				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( sessionState?.phase === "world" || !worldPresented ) {
 					navigation.step(
 						worldPresented ? presentation.gameplay()?.pose ?? null : null,
 						presentation.gameplay()?.navigationRegion,
 						presentation.gameplay()?.navigationFailure,
-						presentation.gameplay()?.navigationRequestId
+						presentation.gameplay()?.navigationRequestId,
+						now,
+						visibleAgain
 					);
 				}
 
@@ -1257,7 +1263,6 @@ export function startRuntime(
 					phase === "connecting" || phase === "entering-world" || phase === "world" ||
 						phase === "reconnecting"
 				);
-				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( visibleAgain || onlineAgain ) {
 					world.retryTransient();
 					navigation.retryTransient();
