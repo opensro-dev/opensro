@@ -741,6 +741,9 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	if attached {
 		s.nestDeath(state, index, at.UnixMilli())
 	}
+	if s.tombChain != nil {
+		s.tombChain.onInstanceDefeated(s, state, gid, at.UnixMilli())
+	}
 	return true
 }
 

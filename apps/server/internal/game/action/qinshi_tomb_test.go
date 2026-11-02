@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -495,5 +496,174 @@ func TestWalkingIntoTheTombDoorLevels(t *testing.T) {
 	}
 	if *c.Gold != gold {
 		t.Fatal("the tomb door charged a fee")
+	}
+}
+
+/*
+================
+placeTombFloor5Walker
+
+Stands the player at x on Qin-Shi Floor 5 (region 0x8003).
+================
+*/
+func placeTombFloor5Walker(rt *Runtime, c *enterworld.Character, x float64) {
+	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) },
+		func(w *simulation.WorldState) {
+			w.Spawn = simulation.Spawn{RegionID: 0x8003, X: x, Y: -50, Z: 100}
+			w.SpawnSet = true
+			w.MoveSegment = nil
+		})
+}
+
+/*
+================
+tombGateChainState
+
+A Floor 5 tomb chain state on a pinned clock (the chain itself is
+covered in world/simulation; here it is only driven to its open gate).
+================
+*/
+func tombGateChainState(t *testing.T) (*simulation.MonsterState, time.Time) {
+	t.Helper()
+	base := time.UnixMilli(1_784_100_000_000)
+	ref := func(id uint32, codename string) monster.MonsterRef {
+		return monster.MonsterRef{RefObjID: id, Codename: codename, TidWord: 0x00C6, MaxHP: 100, MonsterType: 3}
+	}
+	nest := func(id uint32, x float64) monster.NestRow {
+		return monster.NestRow{
+			SpawnPoint:     monster.SpawnPoint{RefObjID: id, RegionID: 0x8003, X: x, Y: -50, Z: 100},
+			MaxCount:       0,
+			PolicyPinned:   true,
+			RetailEvidence: true,
+		}
+	}
+	chain := simulation.NewMonsterState(monster.TemplateFromParts(
+		map[uint32]monster.MonsterRef{
+			11: ref(11, "MOB_TQ_EASTGUARDIAN"),
+			12: ref(12, "MOB_TQ_SOUTHGUARDIAN"),
+			13: ref(13, "MOB_TQ_WESTGUARDIAN"),
+			14: ref(14, "MOB_TQ_NORTHGUARDIAN"),
+			15: ref(15, "MOB_TQ_FLAMEMASTER"),
+		},
+		[]monster.NestRow{nest(11, 100), nest(12, 200), nest(13, 300), nest(14, 400), nest(15, 500)},
+	))
+	chain.SetTimeSource(func() time.Time { return base })
+	chain.SetRandomSource(func() float64 { return 0.5 })
+	if err := chain.InstallTombChain(); err != nil {
+		t.Fatalf("InstallTombChain: %v", err)
+	}
+	chain.StartDivision(testDivision)
+	return chain, base
+}
+
+/*
+================
+tombGateAdvance
+
+Steps the chain one second at a time up to the offset and returns the
+live Floor 5 instances.
+================
+*/
+func tombGateAdvance(chain *simulation.MonsterState, base time.Time, fromMs, toMs int64) []monster.Instance {
+	for step := fromMs + 1000; step <= toMs; step += 1000 {
+		chain.AdvancePopulation(base.UnixMilli() + step)
+	}
+	return chain.InstancesInRegions(testDivision, []uint16{0x8003})
+}
+
+/*
+================
+tombGateLiveGid
+
+The live gid of a chain codename on Floor 5.
+================
+*/
+func tombGateLiveGid(t *testing.T, live []monster.Instance, codename string) uint32 {
+	t.Helper()
+	for _, in := range live {
+		if in.Ref.Codename == codename {
+			return in.Gid
+		}
+	}
+	t.Fatalf("no live %s on Floor 5", codename)
+	return 0
+}
+
+/*
+================
+TestFloor6WalkInWaitsForTheFlameMaster
+
+The Floor 6 entry exists only once the tomb chain opens it (#2372):
+walking into a Floor 5 exit zone while the Flame Master still lives
+does nothing; after the four guardians and the Flame Master die, the
+same walk teleports to Floor 6.
+================
+*/
+func TestFloor6WalkInWaitsForTheFlameMaster(t *testing.T) {
+	clientdata.RequireGameData(t)
+	t.Setenv(monster.EnvQinShiTomb, "on")
+	rt, c, _, _ := returnFixture(t, 30000)
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	chain, base := tombGateChainState(t)
+	rt.Monsters = chain
+	rt.WalkInZoneAt = func(at simulation.Spawn) string {
+		if at.RegionID == 0x8003 && at.X > 500 {
+			return "GATE_JINSI_05X01-1"
+		}
+		return ""
+	}
+	pushed := &[][]wire.Frame{}
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { *pushed = append(*pushed, frames) }
+	level := int64(100)
+	c.Level = &level
+	placeTombFloor5Walker(rt, c, 100)
+	if err := rt.AdmitCharacterSession(testDivision, c.Name, 1); err != nil {
+		t.Fatal(err)
+	}
+	rt.advanceWalkIns(1000)
+	if len(*pushed) != 0 {
+		t.Fatalf("outside the zone pushed %+v", *pushed)
+	}
+
+	placeTombFloor5Walker(rt, c, 600)
+	rt.advanceWalkIns(1100)
+	if len(*pushed) != 0 {
+		t.Fatalf("walking into the shut portal answered %+v", *pushed)
+	}
+	// The persisted spawn only changes when a teleport commits; the
+	// live pose is what proves the player never left Floor 5.
+	pose := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, c.Name),
+		func() simulation.WorldState { return simulation.SeedWorldState(c) }).LiveSpawnAt(1100)
+	if pose.RegionID != 0x8003 {
+		t.Fatalf("walking into the shut portal left Floor 5: pose region %#x", pose.RegionID)
+	}
+
+	// Run the chain: four guardians, then the Flame Master.
+	live := tombGateAdvance(chain, base, 0, 5000)
+	for _, codename := range []string{"MOB_TQ_EASTGUARDIAN", "MOB_TQ_SOUTHGUARDIAN", "MOB_TQ_WESTGUARDIAN", "MOB_TQ_NORTHGUARDIAN"} {
+		if !chain.Defeat(testDivision, tombGateLiveGid(t, live, codename), base.Add(6*time.Second)) {
+			t.Fatalf("defeat %s rejected", codename)
+		}
+	}
+	live = tombGateAdvance(chain, base, 5000, 10000)
+	if !chain.Defeat(testDivision, tombGateLiveGid(t, live, "MOB_TQ_FLAMEMASTER"), base.Add(11*time.Second)) {
+		t.Fatal("defeat Flame Master rejected")
+	}
+	if !chain.TombGateOpen(testDivision, simulation.TombGateFloor6Entry) {
+		t.Fatal("chain gate still shut after the Flame Master died")
+	}
+
+	// Walk out and back in: now the portal exists.
+	placeTombFloor5Walker(rt, c, 100)
+	rt.advanceWalkIns(1200)
+	placeTombFloor5Walker(rt, c, 600)
+	rt.advanceWalkIns(1300)
+	if len(*pushed) != 1 || (*pushed)[0][0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("walking into the open portal answered %+v, want the teleport reset", *pushed)
+	}
+	if got := *c.World.Spawn.RegionID; got != 0x8002 {
+		t.Fatalf("arrived in region %#x, want Floor 6 (0x8002)", got)
 	}
 }
