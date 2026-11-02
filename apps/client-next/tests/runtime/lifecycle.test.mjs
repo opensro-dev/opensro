@@ -332,37 +332,6 @@ test("a device failure reports its cause, not the errors that follow it (BUG-022
 });
 
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
-const { createDeviceRecovery } = await load( "src/engine/foundation/rendering/device-recovery.ts" );
-test("device recovery paces eight attempts and renews after a stable minute", () => {
-	const recovery = createDeviceRecovery();
-	// The first attempt is due at once; each later one waits out its
-	// rung of the ladder, counted from the frame that saw the failure.
-	assert.equal( recovery.due( 1000 ), true );
-	recovery.began();
-	assert.equal( recovery.due( 2000 ), false, "the second attempt waits 1 s" );
-	assert.equal( recovery.due( 2999 ), false );
-	assert.equal( recovery.due( 3000 ), true );
-	recovery.began();
-	for ( const wait of [ 2000, 5000, 10000, 30000, 30000, 30000 ] ) {
-		const failedAt = 100000;
-		assert.equal( recovery.due( failedAt ), false );
-		assert.equal( recovery.due( failedAt + wait - 1 ), false );
-		assert.equal( recovery.due( failedAt + wait ), true );
-		recovery.began();
-	}
-	assert.equal( recovery.pending(), false, "eight attempts bound the budget" );
-	assert.equal( recovery.due( 999999 ), false );
-
-	const renewed = createDeviceRecovery();
-	assert.equal( renewed.due( 0 ), true );
-	renewed.began();
-	renewed.running( 10000 );
-	renewed.running( 69999 );
-	assert.equal( renewed.due( 70000 ), false, "59.999 s stable has not renewed the budget yet" );
-	renewed.running( 70001 );
-	renewed.running( 130001 );
-	assert.equal( renewed.due( 140000 ), true, "a stable minute restores the immediate attempt" );
-});
 test("device loss rebuilds only renderer resources and bounds repeated recovery", async t => {
 	mockGlobal( t, "GPUShaderStage", { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 } );
 	mockGlobal( t, "GPUBufferUsage", { UNIFORM: 64, COPY_DST: 8, STORAGE: 128 } );

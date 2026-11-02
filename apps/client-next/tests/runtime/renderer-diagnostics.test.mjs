@@ -111,7 +111,7 @@ function fakeClock( t ) {
 	} );
 	t.after( () => {
 		if ( original ) Object.defineProperty( globalThis, "performance", original );
-		else delete globalThis.performance;
+		else Reflect.deleteProperty( globalThis, "performance" );
 	} );
 	return {
 		advancePastBudget: () => {
