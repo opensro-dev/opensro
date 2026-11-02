@@ -814,7 +814,7 @@ import {
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
-import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
+import { noticeDialog, noticeDialogLines } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
 import {
 	createResurrectionPrompt,
@@ -1580,7 +1580,12 @@ export function createUi(
 		invitePosition: readonly [number, number] | null = null,
 		disconnectPosition: readonly [number, number] | null = null;
 	let noticeDialogSequence = 0,
-		activeNoticeDialog: import("@/engine/foundation/gameplay/system-notices").SystemNotice["dialog"],
+		activeNoticeDialog: {
+			readonly title: string;
+			readonly lines: readonly string[];
+			readonly arguments?: readonly string[];
+			readonly localizedArguments?: readonly (string | null)[];
+		} | undefined,
 		noticeDialogPosition: readonly [number, number] | null = null,
 		noticeDialogFrame: UiRect | null = null;
 	let systemX: number | null = null, systemY: number | null = null;
@@ -9630,7 +9635,11 @@ export function createUi(
 						noticeDialogSequence = notice.sequence;
 						if ( notice.dialog ) {
 							dirty = true;
-							activeNoticeDialog = notice.dialog;
+							activeNoticeDialog = {
+								...notice.dialog,
+								arguments: notice.arguments,
+								localizedArguments: notice.localizedArguments
+							};
 							noticeDialogPosition = null;
 							focus = null;
 							composing = false;
@@ -25121,7 +25130,7 @@ export function createUi(
 				const layout = noticeDialog(
 					w,
 					h,
-					activeNoticeDialog.lines.map( key => hudCopy( key ) ).join( "\n" ),
+					noticeDialogLines( hudCopy, activeNoticeDialog ),
 					value => text.run( value ).width,
 					noticeDialogPosition
 				);
