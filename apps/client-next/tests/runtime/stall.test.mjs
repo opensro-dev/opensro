@@ -137,12 +137,59 @@ test("a visitor sees the offers, buys one into the bag, and the owner gives it u
 	const owner = { ...stall.emptyStall(), phase: /** @type {const} */ ("owner"), owner: LOCAL, offers: state.offers };
 	const sold = defined( stall.stallFrame( owner, frame( 0x3260, [ 3, 2, ...u16( 3 ), 66, 111, 98, 0xff ] ), ctx ) );
 	assert.deepEqual( sold.give, [ { bagSlot: 20, quantity: 5 } ] );
-	assert.equal( sold.message?.key, "UIIT_MSG_STREET_STORE_SELL_COMMODITY" );
-	assert.equal( sold.message?.args[0], "Bob" );
+	assert.deepEqual( sold.messages?.map( m => m.key ), [ "UIIT_MSG_STREET_STORE_SELL_COMMODITY" ] );
+	assert.equal( sold.messages?.[0]?.args[0], "Bob" );
 	assert.equal( sold.state.offers.length, 0 );
 	// 74F8F0: the stall closing under a visitor closes the window.
 	state = defined( stall.stallFrame( state, frame( 0x33d1, [ ...u32( OWNER ), 0 ] ), ctx ) ).state;
 	assert.equal( state.phase, "none" );
+});
+
+test("registering on the stall network prints its success line", () => {
+	const owner = { ...stall.emptyStall(), phase: /** @type {const} */ ("owner"), owner: LOCAL };
+	const registered = defined( stall.stallFrame( owner, frame( 0xb1a8, [ 1, 5, 1, 1 ] ), ctx ) );
+	assert.equal( registered.state.open, true );
+	assert.equal( registered.state.networkRegistered, true );
+	assert.deepEqual( registered.messages, [ { key: "UIIT_MSG_WARENETWORK_REGIST_SUCCESS", args: [] } ] );
+	// Leaving the network, and the unregistered answers, stay silent.
+	for ( const edit of [ [ 1, 5, 0, 1 ], [ 1, 5, 1, 0 ], [ 1, 5, 1, 2 ] ] ) {
+		assert.equal( defined( stall.stallFrame( owner, frame( 0xb1a8, edit ), ctx ) ).messages, undefined );
+	}
+});
+
+test("a network sale prints the commission under the sale line", () => {
+	const soldAt = ( /** @type {number} */ price ) => {
+		const visit = frame( 0xb61f, [
+			1,
+			...u32( OWNER ),
+			...wstr( "Welcome" ),
+			1,
+			0,
+			...offer( 2, 20, 5, price ),
+			0xff,
+			1,
+			...u32( 7 )
+		] );
+		const seen = defined( stall.stallFrame( stall.emptyStall(), visit, ctx ) ).state;
+		const owner = {
+			...stall.emptyStall(),
+			phase: /** @type {const} */ ("owner"),
+			owner: LOCAL,
+			offers: seen.offers
+		};
+		return defined( stall.stallFrame( owner, frame( 0x3260, [ 4, 2, ...u16( 3 ), 66, 111, 98, 0xff ] ), ctx ) );
+	};
+	const sold = soldAt( 250_000 );
+	assert.deepEqual( sold.messages?.map( m => m.key ), [
+		"UIIT_MSG_WARENETWORK_BUY_SUCCESS",
+		"UIIT_MSG_WARENETWORK_CHARGE"
+	] );
+	assert.equal( sold.messages?.[1]?.args[0], "2,500" );
+	// One percent floored, clamped to [1, 100000].
+	assert.equal( soldAt( 50 ).messages?.[1]?.args[0], "1" );
+	assert.equal( soldAt( 20_000_000 ).messages?.[1]?.args[0], "100,000" );
+	// A free network sale prints no commission line.
+	assert.deepEqual( soldAt( 0 ).messages?.map( m => m.key ), [ "UIIT_MSG_WARENETWORK_BUY_SUCCESS" ] );
 });
 
 test("a visitor still receives the purchase when the sold notice lands first", () => {

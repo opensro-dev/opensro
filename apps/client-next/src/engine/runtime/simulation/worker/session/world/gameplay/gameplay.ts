@@ -4052,12 +4052,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
-					// 755960: the owner's sale line, [buyer] bought item [name].
-					if ( stallOutcome.message ) {
+					// 755960: the owner's sale line, [buyer] bought item
+					// [name]; a network sale's commission line follows.
+					for ( const message of stallOutcome.messages ?? [] ) {
 						notices = [ ...notices.slice( -99 ), {
-							key: stallOutcome.message.key,
+							key: message.key,
 							value: 0,
-							arguments: stallOutcome.message.args,
+							arguments: message.args,
 							nativeType: 0,
 							sequence: ++noticeSequence
 						} ];
