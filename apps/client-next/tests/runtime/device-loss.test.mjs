@@ -105,7 +105,7 @@ function installGpu( options = {} ) {
 	} );
 	return {
 		lose: info => lose( info ),
-		uncaptured: message => listeners.get( "uncapturederror" )?.( { error: { message } } )
+		uncaptured: ( message, error = { message } ) => listeners.get( "uncapturederror" )?.( { error } )
 	};
 }
 
@@ -206,6 +206,23 @@ test("a device error after creation stays permanent", async () => {
 	assert.equal( device.phase(), "failed" );
 	assert.equal( device.recoverable(), false );
 	device.dispose();
+});
+
+test("running out of GPU memory can be cured by a new device", async () => {
+	class OutOfMemory extends Error {}
+	globalThis.GPUOutOfMemoryError = OutOfMemory;
+	try {
+		const gpu = installGpu();
+		const device = createDevice();
+		for ( let i = 0; i < 20 && device.phase() !== "running"; i++ ) await settle();
+		gpu.uncaptured( "Out of memory", new OutOfMemory( "Out of memory" ) );
+		await settle();
+		assert.equal( device.phase(), "failed" );
+		assert.equal( device.recoverable(), true );
+		device.dispose();
+	} finally {
+		delete globalThis.GPUOutOfMemoryError;
+	}
 });
 
 test("recovery waits longer each time and gives up in under two minutes", () => {

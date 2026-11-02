@@ -201,7 +201,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 					degradedPipelines.add( label.startsWith( "flare-" ) ? "flare-visibility" : label );
 					return;
 				}
-				fail( message );
+				// Out of GPU memory is the one uncaptured error a new device can
+				// cure: it starts empty. Validation errors would only repeat.
+				fail(
+					message,
+					typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError
+				);
 			} );
 
 			/*
