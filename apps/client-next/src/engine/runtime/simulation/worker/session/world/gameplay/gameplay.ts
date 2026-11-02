@@ -292,6 +292,7 @@ import {
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
+import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
@@ -2330,6 +2331,24 @@ state here before a command can claim a native wire conversation.
 					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
+				// 5DA1B0 @5da261: with the 0x4000 capability proven by the
+				// row above, a guild under level 3 prints the limit on the
+				// guide and the centre banner (67a600 @5db134, 67d030
+				// @5da2ae) and sends nothing.
+				if ( social.guild && social.guild.level < 3 ) {
+					npcConversation.showWindow();
+					notices = [
+						...notices.slice( -99 ),
+						{
+							key: "UIIT_MSG_GUILD_STORE_LIMIT",
+							value: 0,
+							nativeType: 0,
+							notificationBanner: true,
+							sequence: ++noticeSequence
+						}
+					];
+					return null;
+				}
 				npcConversation.hideWindow();
 				dirty = true;
 				storage.openGuild( command.gid );
@@ -2664,10 +2683,83 @@ state here before a command can claim a native wire conversation.
 					}
 					return null;
 				}
-				return inventory.process(
-					command as import("@/engine/contracts/item-process").ItemProcessCommand,
-					now
-				);
+				const processCommand = command as import("@/engine/contracts/item-process").ItemProcessCommand;
+				if ( processCommand.kind === "alchemy-start" ) {
+					// 6220A0: a compound or advanced staging holding only
+					// its target prints the no-dissolvable line and sends
+					// nothing; 621D00 refuses a dissolve whose products
+					// would not fit the bag. Both judge the staged window
+					// before anything is sent, so they stand here, beside
+					// the other client-side refusals.
+					const state = inventory.state(), alchemyState = state.alchemy;
+					if ( alchemyState.visible && !alchemyState.pending && !alchemyState.locked ) {
+						if (
+							(processCommand.mode === "compound" || processCommand.mode === "advanced") &&
+							processCommand.slots.length === 1
+						) {
+							notices = [ ...notices.slice( -99 ), {
+								key: "UIIT_MSG_ENCHANTERR_HAVE_NO_DISSOLVABLE_ITEM",
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+							dirty = true;
+							return null;
+						}
+						if ( processCommand.mode === "dissolve" && processCommand.slots.length === 2 ) {
+							const equipment = processCommand.slots
+									.map( slot => state.inventory.find( row => row.slot === slot ) )
+									.find( row => row !== undefined && isAlchemyEquipment( row.typeFlags ) ),
+								needed = equipment ?
+									dissolveNeededSlots(
+										equipment.tooltip?.fields.price,
+										equipment.tooltip?.fields.itemClass,
+										equipment.magic.length
+									) :
+									null;
+							if (
+								needed !== null && state.inventorySlotCount !== undefined &&
+								state.equipmentSlotCount !== undefined
+							) {
+								const bagRows = state.inventory.filter( row =>
+									row.slot >= state.equipmentSlotCount! && row.slot < state.inventorySlotCount!
+								).length;
+								if ( state.inventorySlotCount - state.equipmentSlotCount - bagRows < needed ) {
+									notices = [ ...notices.slice( -99 ), {
+										key: "UIIT_MSG_ALCHEMY_NOT_ENOUGH_SLOT",
+										value: needed,
+										sequence: ++noticeSequence
+									} ];
+									dirty = true;
+									return null;
+								}
+							}
+						}
+					}
+				}
+				if ( processCommand.kind === "alchemy-close" || processCommand.kind === "alchemy-cancel" ) {
+					// 624060 prints the cancelled line when the compound
+					// tab (mode 1) is cancelled busy, and 625550 when the
+					// window closes on a reinforce operation in flight;
+					// the other modes cancel silently.
+					const before = inventory.state().alchemy,
+						frame = inventory.process( processCommand, now );
+					if (
+						before.pending &&
+						(before.mode === "compound" ||
+							(processCommand.kind === "alchemy-close" &&
+								(before.mode === "reinforce" || before.mode === "attribute" ||
+									before.mode === "magic")))
+					) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_ALCHEMY_CANCELED_COMPOUND",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+					}
+					return frame;
+				}
+				return inventory.process( processCommand, now );
 			}
 			if (
 				[
@@ -4253,8 +4345,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( nextSocial.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...nextSocial.notice, sequence: ++noticeSequence } ];
 					}
+					for ( const flip of nextSocial.notices ?? [] ) {
+						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
+					}
 					social = withMemberCountries(
-						nextSocial.notice ? { ...nextSocial, notice: undefined } : nextSocial
+						nextSocial.notice || nextSocial.notices ?
+							{ ...nextSocial, notice: undefined, notices: undefined } :
+							nextSocial
 					);
 					if (
 						social.invitation &&

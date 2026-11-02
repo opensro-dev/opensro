@@ -139,6 +139,16 @@ const (
 	tombFloor6NorthZoneName         = "GATE_JINSI_06X01_06"
 )
 
+// tombFloor5ExitZones are the Floor 5 walk-in exits down to Floor 6.
+// The native chain creates that portal (Chins_Floor5_Portal) only when
+// the Flame Master dies, so the zones stay inert until the tomb chain
+// opens the gate (#2372).
+var tombFloor5ExitZones = map[string]bool{
+	"GATE_JINSI_05X01-1": true,
+	"GATE_JINSI_05X01-2": true,
+	"GATE_JINSI_05X01-3": true,
+}
+
 /*
 ================
 walkInZoneAt
@@ -268,6 +278,11 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 	}
 	link, ok := rt.portals.walkIns[zone]
 	if !ok {
+		return OpResult{}
+	}
+	if tombFloor5ExitZones[zone] && (rt.Monsters == nil || !rt.Monsters.TombGateOpen(owner.division, simulation.TombGateFloor6Entry)) {
+		// The Floor 6 portal does not exist until the Flame Master
+		// dies: walking through its zone does nothing (#2372).
 		return OpResult{}
 	}
 	out, arrived := rt.enterWalkIn(owner.division, c, link, moving)

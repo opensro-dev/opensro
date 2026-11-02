@@ -387,6 +387,7 @@ import {
 	REVERSE_RETURN_LAST_RECALL
 } from "@/engine/foundation/gameplay/count-job";
 import { partyChatCommand, partyChatOrder } from "@/engine/foundation/gameplay/party-chat-command";
+import { cosChatCommand, cosChatStance, type CosChatCommand } from "@/engine/foundation/gameplay/cos-chat-command";
 import {
 	AVATAR_MAGIC_OPTION_FUNCTION,
 	avatarMagicOptionCount,
@@ -519,7 +520,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
-import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
+import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
@@ -3448,6 +3449,44 @@ export function createUi(
 	}
 	/*
 	================
+	runCosChatCommand
+
+	A pet chat command (6AD990) on the COS the command bar would use.
+	The shared modes ride executeCosCommand; stance is explicit here
+	(6A2350 case 6 sends only on a change), and charm is the quickslot
+	action 5000 (695420), never a command-bar mode.
+	================
+	*/
+	function runCosChatCommand( kind: CosChatCommand["kind"] ) {
+		switch ( kind ) {
+			case "attack":
+				executeCosCommand( COS_COMMAND_ATTACK );
+				return;
+			case "return":
+				executeCosCommand( COS_COMMAND_CANCEL );
+				return;
+			case "ride":
+				executeCosCommand( COS_COMMAND_RIDE );
+				return;
+			case "clean":
+				executeCosCommand( COS_COMMAND_CLEAN );
+				return;
+			case "follow":
+				executeCosCommand( COS_COMMAND_FOLLOW );
+				return;
+			case "charm":
+				sendGameplay( { kind: "action-command", id: 5000 } );
+				return;
+			case "aggressive":
+			case "defensive": {
+				const order = cosChatStance( kind, cosCommandContext() );
+				if ( order ) sendGameplay( order );
+				return;
+			}
+		}
+	}
+	/*
+	================
 	activate
 	================
 	*/
@@ -3459,6 +3498,9 @@ export function createUi(
 		// A party chat command (6AD990), parsed once from the line being sent.
 		const partyLine = id === "chat-send" ?
 			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
+			null;
+		const cosLine = id === "chat-send" ?
+			cosChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
 			null;
 		if ( id.startsWith( "gm-helper-row:" ) ) {
 			gmHelper.select( Number( id.slice( "gm-helper-row:".length ) ) );
@@ -5078,6 +5120,17 @@ export function createUi(
 			// 6AD990: the party commands act on the party; they are never sent as chat.
 			const order = partyChatOrder( partyLine, view.gameplay?.social, partyOptions );
 			if ( order ) sendGameplay( order );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if ( cosLine ) {
+			// 6AD990: the pet commands act on the active COS; they are
+			// never sent as chat. Each route gates itself the way
+			// 6F2520 does: no pet, no answer, no line.
+			runCosChatCommand( cosLine.kind );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
 			focus = null;
@@ -26431,7 +26484,12 @@ export function createUi(
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
-								...tooltipDescription( lookup( offer.description ) )
+								...tooltipDescription( lookup( offer.description ) ),
+								...mallTooltipRows( offer, {
+									rollOfCloth: lookup( "UIIT_STT_ROLL_OF_CLOTH" ),
+									silk: lookup( "UIIT_STT_SILKMALL_SILK" ),
+									giftSilk: lookup( "UIIT_CTL_SILK_INQUIRY_GET_SILK" )
+								} )
 							];
 						}
 					}

@@ -137,7 +137,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 			m.BehaviorDeadlineMs = 0
 			pending = true
 		}
-		if !ops.Monsters.commitActivity(division, actor.Gid, before, m, now) {
+		if !ops.commitSteppedActivity(division, actor.Gid, before, m, now) {
 			return nil, m, true
 		}
 	}
