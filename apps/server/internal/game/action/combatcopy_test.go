@@ -5,8 +5,11 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
-pass, the attacking hawk's strike tick and the heal-over-time pulse's
-retained caster view take the narrow combat copy:
+pass, the attacking hawk's strike tick, the heal-over-time pulse's
+retained caster view, the targeted recovery cast's recipient view,
+the lowest-party-heal candidate copies and the party-resurrection
+member copies
+take the narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
 rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
@@ -548,6 +551,214 @@ func healOverTimeTrace(t *testing.T, full bool) string {
 
 /*
 ================
+targetedHealTrace
+
+One targeted Healing cast on a bag-loaded party mate and the heal it
+lands. The admission root detaches the recipient's view for the cast
+and reads its facts (the spacing seat, the admission checks, the
+chain pick's identity) from that view; the heal amounts themselves
+run on the live mate in its door. The loaded bag rides the RECIPIENT
+here, not the caster as in the other rows: a root that read the
+mate's bag rows or resolved the mate's companions through its view
+would diverge.
+================
+*/
+func targetedHealTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
+	affordable(&skill)
+	p := newSupportPair(t, skill)
+	loadCombatBag(p.m)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.m)})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	if *p.m.CurrentHP <= 1 {
+		t.Fatal("the targeted heal never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("matehp=%d matemp=%d rows=%s", *p.m.CurrentHP, *p.m.CurrentMP, combatRowsView(p.m))
+}
+
+/*
+================
+lowestHealTrace
+
+One Healing Division cast over a party whose lowest-ratio member is
+decided by its equipment: the candidate copies feed the pick's HP
+ratio through the stats funnel, so matea - dressed with a +900 HP
+option that lifts its maximum to 1100 - is the lowest at 100 HP,
+where undressed it would tie the plain mate and lose to mateb. The
+winner takes the whole heal, the rest the reduction's share. Both
+candidates carry the loaded bag: a pick that read a candidate's bag
+rows or resolved its companions through the copy would diverge.
+The caster stands at 190 HP so it is never the pick itself.
+================
+*/
+func lowestHealTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01")
+	affordable(&skill)
+	p := newSupportParty(t, skill, 50, 80)
+	p.c.CurrentHP = testInt64(190)
+	m, a, b := p.mates[0], p.mates[1], p.mates[2]
+	m.CurrentHP, a.CurrentHP, b.CurrentHP = testInt64(100), testInt64(100), testInt64(90)
+
+	armor := &enterworld.ItemRef{RefObjID: 9, Codename: "TEST_HP_ARMOR", TypeIDs: [4]int64{3, 1, 1, 1}, Combat: &enterworld.ItemCombatRef{}}
+	items := p.rt.deps.ItemReferences().(staticItemSource)
+	items[armor.Codename] = armor
+	p.rt.deps.(*enterworld.Deps).Items = items
+	p.rt.deps.(*enterworld.Deps).MagicOptions = gaugeOptions{140: {ParamID: 140, OptionName: "MATTR_HP", Tag: hpTag()}}
+	a.MissionInventory = append(a.MissionInventory, enterworld.InventoryRow{
+		Slot: 1, RefObjID: armor.RefObjID, Codename: armor.Codename, TypeFlags: armor.TypeFlags(),
+		VarianceBits: "0", Durability: 1, StackCount: 1, MagicOptions: []uint64{uint64(900)<<32 | 140},
+	})
+	loadCombatBag(a)
+	loadCombatBag(b)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	if *a.CurrentHP <= 100 || *a.CurrentHP < *b.CurrentHP {
+		t.Fatalf("the dressed member did not take the whole heal (a %d, b %d); the trace would agree vacuously", *a.CurrentHP, *b.CurrentHP)
+	}
+	return trace + fmt.Sprintf("c=%d m=%d a=%d b=%d rows=%s|%s",
+		*p.c.CurrentHP, *m.CurrentHP, *a.CurrentHP, *b.CurrentHP, combatRowsView(a), combatRowsView(b))
+}
+
+/*
+================
+partyResurrectionTrace
+
+One Group Reverse cast over a party with one dead, bag-loaded member.
+The proposal arm detaches a copy per member and reads its death and
+pending facts, its level against the resu word and its vitals through
+the stats funnel; the shipped party rows are flat-only, so the
+stored offer is the row's flat 763 here and what the trace holds the
+copies to is the proposal itself. A member the copies misread - one
+whose bag rows or companions the arm resolved through its copy -
+would diverge.
+================
+*/
+func partyResurrectionTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_REBIRTHA_GROUP_A_01")
+	affordable(&skill)
+	p := newSupportParty(t, skill, 50)
+	a := p.mates[1]
+	*a.CurrentHP = 0
+	loadCombatBag(a)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	offer, ok := p.rt.resurrections.take(testDivision, a.Name, p.clock.NowMs())
+	if !ok || offer.hp <= 0 {
+		t.Fatal("no revival offer stored for the dead member; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("offer hp=%d mp=%d rows=%s", offer.hp, offer.mp, combatRowsView(a))
+}
+
+/*
+================
+resuCopyKind
+
+Which copy targetedResurrectionRun's proposal takes: the production
+combat copy, the full copy through the seam, or the combat copy with
+its equipment band stripped.
+================
+*/
+const (
+	resuCopyNarrow = iota
+	resuCopyFull
+	resuCopyPoisoned
+)
+
+/*
+================
+targetedResurrectionRun
+
+One Reverse Oblation (REBIRTHA_SPECIAL_A_01) cast on a dead mate
+dressed with a +900 HP option and the loaded bag, and the revival
+offer the proposal stores. The row heals 100 percent of the
+recipient's maximum, so the offer is the derived maximum the stats
+funnel computes over the recipient view's equipment band: 1100
+dressed, 200 with the band stripped.
+================
+*/
+func targetedResurrectionRun(t *testing.T, copyKind int) (string, int64) {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_REBIRTHA_SPECIAL_A_01")
+	affordable(&skill)
+	p := newSupportPair(t, skill)
+	a := p.m
+	*a.CurrentHP = 0
+	armor := &enterworld.ItemRef{RefObjID: 9, Codename: "TEST_HP_ARMOR", TypeIDs: [4]int64{3, 1, 1, 1}, Combat: &enterworld.ItemCombatRef{}}
+	items := p.rt.deps.ItemReferences().(staticItemSource)
+	items[armor.Codename] = armor
+	p.rt.deps.(*enterworld.Deps).Items = items
+	p.rt.deps.(*enterworld.Deps).MagicOptions = gaugeOptions{140: {ParamID: 140, OptionName: "MATTR_HP", Tag: hpTag()}}
+	a.MissionInventory = append(a.MissionInventory, enterworld.InventoryRow{
+		Slot: 1, RefObjID: armor.RefObjID, Codename: armor.Codename, TypeFlags: armor.TypeFlags(),
+		VarianceBits: "0", Durability: 1, StackCount: 1, MagicOptions: []uint64{uint64(900)<<32 | 140},
+	})
+	loadCombatBag(a)
+	switch copyKind {
+	case resuCopyFull:
+		forceFullCombatCopy(p.rt)
+	case resuCopyPoisoned:
+		p.rt.combatCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+			view := character.SnapshotCombat()
+			view.MissionInventory = nil
+			return view
+		}
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(a)})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	offer, ok := p.rt.resurrections.take(testDivision, a.Name, p.clock.NowMs())
+	if !ok || offer.hp <= 0 {
+		t.Fatal("no revival offer stored for the dead mate; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("offer hp=%d mp=%d rows=%s", offer.hp, offer.mp, combatRowsView(a)), offer.hp
+}
+
+/*
+================
+targetedResurrectionTrace
+
+The table's adapter for targetedResurrectionRun: the recipient view
+on the narrow copy must propose exactly what the full copy proposes,
+frame for frame and vital for vital.
+================
+*/
+func targetedResurrectionTrace(t *testing.T, full bool) string {
+	if full {
+		trace, _ := targetedResurrectionRun(t, resuCopyFull)
+		return trace
+	}
+	trace, _ := targetedResurrectionRun(t, resuCopyNarrow)
+	return trace
+}
+
+/*
+================
+TestTargetedResurrectionOfferReadsTheEquipmentBand
+
+The seeing-eye for the recipient view's resurrection leg, shipped:
+stripping the view's equipment band drops the stored offer by
+exactly the dressed option (1100 to 200). A root that sized the
+offer from anything but the copy's band - or lost the band on the
+way - fails here even though the differential above still agrees.
+================
+*/
+func TestTargetedResurrectionOfferReadsTheEquipmentBand(t *testing.T) {
+	_, armed := targetedResurrectionRun(t, resuCopyNarrow)
+	_, poisoned := targetedResurrectionRun(t, resuCopyPoisoned)
+	if armed-poisoned != 900 {
+		t.Fatalf("offer hp armed %d, band-stripped %d: the revival vitals do not read the view's equipment band", armed, poisoned)
+	}
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -555,7 +766,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
