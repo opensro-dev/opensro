@@ -116,6 +116,15 @@ export type SessionState = Readonly<{
 	huntingGuide?: import("./hunting-guide").HuntingGuideSource;
 	divisionId?: string;
 	error?: string;
+	// The last world failure's evidence, for the
+	// world_entry_rejected incident (#2311 item 4): the world phase
+	// that failed (a mid-world drop reports "world") and how much wire
+	// arrived on the attempt that failed.
+	entryFailure?: {
+		readonly stage: string;
+		readonly bytesReceived: number;
+		readonly framesReceived: number;
+	};
 	code?: string;
 	nativeTitleStatus?: number;
 	nativeTitleArgument?: number;

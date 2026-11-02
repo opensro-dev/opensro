@@ -3653,6 +3653,82 @@ test("a silent socket still times out", async t => {
 
 /*
 ================
+a timed-out entry records the bytes and stage it died with
+
+The world_entry_rejected incident names what the wire had done by
+the failure (#2311 item 4): a report that shows bytes arriving
+exonerates the server, and one that shows none convicts the link.
+The counts are the failed attempt's own: the network counters are
+lifetime, so a retry the server never answered must still show a
+silent wire, and the next attempt starts with no evidence at all.
+================
+*/
+test("a timed-out entry records the bytes and stage it died with", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
+	world.step( 10010 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const evidence = world.status().entryFailure;
+	assert.equal( evidence?.stage, "entering-world" );
+	assert.equal( evidence?.framesReceived, 1, "only the WELCOME had landed" );
+	assert.ok( (evidence?.bytesReceived ?? 0) > 0, "the WELCOME's bytes are counted" );
+	// The scheduled retry receives nothing at all. The network counters
+	// are lifetime, so without the per-attempt baseline this attempt
+	// would inherit the first WELCOME and report a streaming wire for a
+	// server that never answered.
+	assert.equal( world.status().phase, "reconnecting" );
+	world.step( 10300 );
+	await settle();
+	world.step( 10301 );
+	await settle();
+	assert.equal( world.status().phase, "connecting", "the retry is under way" );
+	assert.equal( sockets.length, 2, "the retry opened its own socket" );
+	world.step( 21000 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const silent = world.status().entryFailure;
+	assert.equal( silent?.stage, "connecting" );
+	assert.equal( silent?.framesReceived, 0, "nothing arrived on the retry" );
+	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
+	// The next attempt starts clean, and a world that binds keeps no
+	// failure evidence.
+	world.step( 21600 );
+	await settle();
+	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
+	world.step( 21601 );
+	await settle();
+	const third = sockets[2];
+	third.onopen();
+	third.receive( 2, welcome() );
+	world.step( 21602 );
+	await settle();
+	world.step( 21603 );
+	await settle();
+	third.receive( 7, entered() );
+	for ( const row of rows ) third.receive( row.opcode, row.payload );
+	world.step( 21604 );
+	const batch = world.take();
+	world.ack( batch.sequence );
+	world.step( 21605 );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
+	world.dispose();
+});
+
+/*
+================
 a record that stops streaming still times out
 
 Bytes buy time only while they keep coming: one third of the answer

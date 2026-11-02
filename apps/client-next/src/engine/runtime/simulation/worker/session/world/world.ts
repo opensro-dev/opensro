@@ -233,6 +233,22 @@ onNetworkFailure
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
+	// The last failure's evidence for the world_entry_rejected
+	// incident (#2311 item 4): the phase that failed and how much wire
+	// arrived on that attempt. The network counters are lifetime
+	// totals that survive disconnect(), so connect() baselines them
+	// (attemptBytesBase / attemptFramesBase) and the failure reports
+	// only what arrived past its attempt's baseline - a retry the
+	// server never answered must show a silent wire, not the bytes an
+	// earlier attempt received. Without the bytes, the next slow-entry
+	// report cannot tell a wire that never answered from one that was
+	// still streaming its answer when the deadline fired.
+	let lastFailureEvidence: {
+		stage: string;
+		bytesReceived: number;
+		framesReceived: number;
+	} | undefined;
+	let attemptBytesBase = 0, attemptFramesBase = 0;
 	// The stall watch: the oldest outstanding request's send time (step
 	// clock), the event-clock moment that request was first seen
 	// outstanding, and when the current stall was first seen. The world
@@ -421,6 +437,11 @@ connect
 		disconnectMessage = "";
 		incidentID = "";
 		lastError = undefined;
+		lastFailureEvidence = undefined;
+		// Every attempt - fresh entry, resume, retry - passes through
+		// here, so this baseline is the attempt's alone (#2311 item 4).
+		attemptBytesBase = network.receivedBytes();
+		attemptFramesBase = network.received();
 		transition( hasWorld ? "reconnecting" : "connecting" );
 		request( "transport" );
 	}
@@ -866,12 +887,22 @@ step
 				entryAttempt = false;
 				deadline = 0;
 				attempt = 0;
+				lastFailureEvidence = undefined;
 			}
 			if ( deadline && now >= deadline ) {
 				failure = "World connection timed out";
 			}
 			if ( failure ) {
 				const error = failure;
+				// The incident's evidence, as deltas from this attempt's
+				// baseline: stage, bytes and frames that arrived on the
+				// attempt that failed, never the session's whole history
+				// (#2311 item 4).
+				lastFailureEvidence = {
+					stage: phase,
+					bytesReceived: network.receivedBytes() - attemptBytesBase,
+					framesReceived: network.received() - attemptFramesBase
+				};
 				cancel();
 				deadline = 0;
 				// A bound session retries as a resume; an entry that never
@@ -939,6 +970,7 @@ status
 				admitted: hasWorld,
 				revision,
 				error: lastError,
+				entryFailure: lastFailureEvidence,
 				disconnectMessage,
 				incidentID,
 				character,
