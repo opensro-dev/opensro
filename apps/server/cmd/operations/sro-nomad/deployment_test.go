@@ -258,6 +258,32 @@ func TestNomadJobVariablesAlwaysCarryAllowedOrigins(t *testing.T) {
 	}
 }
 
+/*
+================
+TestNomadJobsShareOneMaintenanceMessage
+
+The Agent and the GameWorld must answer the same refusal code in one
+window (#2331), so the one shard setting fills both jobs, at its native
+default when the deployer names nothing.
+================
+*/
+func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
+	for _, value := range []string{"on", ""} {
+		t.Setenv("SRO_MAINTENANCE_MESSAGE", value)
+		want := value
+		if want == "" {
+			want = "off"
+		}
+		deployment := &deployment{PortOnly: portOnlySettingsFromEnv()}
+		if got := deployment.agentVariables()["maintenance_message"]; got != want {
+			t.Fatalf("SRO_MAINTENANCE_MESSAGE=%q: Agent maintenance_message = %#v, want %q", value, got, want)
+		}
+		if got := deployment.gameVariables(shardDeployment{})["maintenance_message"]; got != want {
+			t.Fatalf("SRO_MAINTENANCE_MESSAGE=%q: GameWorld maintenance_message = %#v, want %q", value, got, want)
+		}
+	}
+}
+
 func TestNomadGameWorldVariablesCarryGMAllowlist(t *testing.T) {
 	const allowlist = "global-official:asd2"
 	deployment := &deployment{GMCharacters: allowlist}
