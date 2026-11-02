@@ -181,7 +181,7 @@ const DISSOLVE_STONE_DIVISORS = [
 	225016,
 	258436,
 	294386
-];
+] as const;
 
 /*
 ================

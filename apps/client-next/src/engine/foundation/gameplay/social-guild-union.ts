@@ -22,14 +22,14 @@ import { assertUniqueRosterRows, type Guild, type GuildMember, type GuildWar, ty
 // The fortress position title a 0xB65F role bit carries, by bit.
 // overhead-layout.ts keeps its own inline copy of this map for
 // member titles; the values agree, and a rename moves both by hand.
-const POSITION_TITLES: Record<number, string> = {
+const POSITION_TITLES: Readonly<Record<number, string>> = {
 	1: "UIIT_STT_FORT_GUILD_COMMANDER",
 	2: "UIIT_STT_FORT_GUILD_SUBCOMMANDER",
 	4: "UIIT_STT_FORT_GUILD_BATTLEMANAGER",
 	8: "UIIT_STT_FORT_GUILD_PRODUCTMANAGER",
 	16: "UIIT_STT_FORT_GUILD_TRAINERMANAGER",
 	32: "UIIT_STT_FORT_GUILD_ENGINEER"
-};
+} as const;
 
 /*
 ================
