@@ -16,6 +16,7 @@
 | [Asset pipeline](architecture/ASSET_PIPELINE.md) | Building and packaging game data |
 | [Asset delivery](architecture/ASSET_DELIVERY.md) | How game data reaches the browser: sizes, packs, caching |
 | [Profiling](guides/PROFILING.md) | Measuring frame rate and allocations, finding the cost, proving a fix |
+| [Tick tracing](guides/TICK_TRACING.md) | One slow tick as a nested timeline: capturing and opening a Perfetto trace |
 | [3D viewer](guides/VIEWER.md) | The embeddable viewer page |
 | [Server commands](../apps/server/cmd/README.md) | Server command catalog |
 

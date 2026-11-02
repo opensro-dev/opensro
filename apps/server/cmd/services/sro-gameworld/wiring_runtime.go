@@ -52,6 +52,15 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
 		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
 	}
+	// Each action step is also a zone on the tick's timeline (#2301);
+	// the ticker is composed below, so the seam resolves it per step.
+	// Unarmed, Ticker.TraceZone answers the shared no-op.
+	game.items.Steps.Zone = func(name string) func() {
+		if ticker == nil {
+			return func() {}
+		}
+		return ticker.TraceZone(name)
+	}
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold

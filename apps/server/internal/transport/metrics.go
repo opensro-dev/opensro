@@ -66,6 +66,9 @@ type hubMetrics struct {
 	// spikes is the tick-overrun spike journal (tick_spikes.go); nil
 	// until Hub.EnableTickSpikeJournal installs one.
 	spikes *tickSpikeJournal
+	// traces is the slow-tick Perfetto trace writer (tick_trace.go);
+	// nil until Hub.EnableTickTrace installs one.
+	traces *tickTraceWriter
 }
 
 // Metrics is a point-in-time snapshot of the hub's transport counters.
@@ -153,6 +156,11 @@ type Metrics struct {
 	TickSpikes           []TickSpike `json:"tick_spikes,omitempty"`
 	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
 	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
+	// TickTraces mirrors the slow-tick trace writer's counters
+	// (tick_trace.go, #2301); zero while the capture is off.
+	TickTracesWritten    uint64 `json:"tick_traces_written"`
+	TickTraceDropped     uint64 `json:"tick_trace_dropped"`
+	TickTraceWriteErrors uint64 `json:"tick_trace_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
 	HandlerMs map[string]Histogram `json:"handler_ms"`
 	// UnhandledOpcodes splits unhandled_opcode_frames by opcode, up to
@@ -332,6 +340,9 @@ func (h *Hub) Metrics() Metrics {
 	h.metrics.timing.snapshotInto(&metrics)
 	if journal := h.metrics.spikes; journal != nil {
 		metrics.TickSpikes, metrics.TickSpikeDropped, metrics.TickSpikeWriteErrors = journal.snapshot()
+	}
+	if writer := h.metrics.traces; writer != nil {
+		metrics.TickTracesWritten, metrics.TickTraceDropped, metrics.TickTraceWriteErrors = writer.snapshot()
 	}
 	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
 		metrics.MonsterNavigation = (*read)()

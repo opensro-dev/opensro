@@ -91,6 +91,11 @@ func newTombChainWorld(t *testing.T, install bool) *MonsterState {
 		tombChainNest(tombRefNorth, 400),
 		tombChainNest(tombRefFlame, 500),
 	}
+	// The default chain def also carries Floor 6 (#2373), which resolves
+	// by codename and explicit point: its refs must exist here too.
+	for codename, id := range tombFloor6Refs() {
+		refs[id] = tombChainRef(id, codename)
+	}
 	s := NewMonsterState(monster.TemplateFromParts(refs, nests))
 	now := tombChainBase
 	s.SetTimeSource(func() time.Time { return now })
@@ -316,5 +321,313 @@ func TestTombChainNotInstalledSpawnsNothing(t *testing.T) {
 	}
 	if s.TombGateOpen("division", TombGateFloor6Entry) {
 		t.Fatal("gate open without a chain")
+	}
+}
+
+// Floor 6 chain codenames and their test ref ids (region 0x8002).
+const (
+	tombRefBlackSnake = uint32(31)
+	tombRefWhiteSnake = uint32(32)
+)
+
+var tombSouthCodenames = []string{
+	"MOB_TQ_SNAKEGENERAL", "MOB_TQ_SNAKEGENERAL_CLON",
+	"MOB_TQ_SNAKEGENERAL_CLON2", "MOB_TQ_SNAKEGENERAL_CLON3",
+}
+
+/*
+================
+tombFloor6Refs
+
+Every Floor 6 chain codename with a stable ref id for the scripted
+templates.
+================
+*/
+func tombFloor6Refs() map[string]uint32 {
+	refs := map[string]uint32{
+		"MOB_TQ_BLACKSNAKE": tombRefBlackSnake,
+		"MOB_TQ_WHITESNAKE": tombRefWhiteSnake,
+	}
+	next := uint32(41)
+	for _, codename := range tombSouthCodenames {
+		refs[codename] = next
+		next++
+	}
+	for _, codename := range tombWestCodenames {
+		refs[codename] = next
+		next++
+	}
+	return refs
+}
+
+var tombWestCodenames = []string{
+	"MOB_TQ_TOMBBUGGHOST_CLON2", "MOB_TQ_SNAKESLAVE_CLON2",
+	"MOB_TQ_TOMBBUGGHOST_CLON", "MOB_TQ_SNAKEWOMAN_CLON2",
+	"MOB_TQ_TOMBBUGGHOST", "MOB_TQ_SNAKESLAVE_CLON",
+	"MOB_TQ_SNAKEWOMAN_CLON", "MOB_TQ_SNAKEDEMON_CLON2",
+	"MOB_TQ_SNAKESLAVE", "MOB_TQ_SNAKEDEMON_CLON",
+	"MOB_TQ_SNAKEMAN_CLON2", "MOB_TQ_SNAKEWOMAN",
+	"MOB_TQ_SNAKEMAN_CLON", "MOB_TQ_SNAKEDEMON", "MOB_TQ_SNAKEMAN",
+}
+
+const tombFloor6Region = uint16(0x8002)
+
+/*
+================
+newTombFloor6World
+
+A MonsterState carrying the Floor 5 harness template plus every Floor 6
+chain codename as a ref (the Floor 6 spawners resolve to their native
+stage points, so they need no nests), with the default chain installed.
+================
+*/
+func newTombFloor6World(t *testing.T) *MonsterState {
+	t.Helper()
+	refs := map[uint32]monster.MonsterRef{
+		tombRefEast:       tombChainRef(tombRefEast, "MOB_TQ_EASTGUARDIAN"),
+		tombRefSouth:      tombChainRef(tombRefSouth, "MOB_TQ_SOUTHGUARDIAN"),
+		tombRefWest:       tombChainRef(tombRefWest, "MOB_TQ_WESTGUARDIAN"),
+		tombRefNorth:      tombChainRef(tombRefNorth, "MOB_TQ_NORTHGUARDIAN"),
+		tombRefFlame:      tombChainRef(tombRefFlame, "MOB_TQ_FLAMEMASTER"),
+		tombRefBlackSnake: tombChainRef(tombRefBlackSnake, "MOB_TQ_BLACKSNAKE"),
+		tombRefWhiteSnake: tombChainRef(tombRefWhiteSnake, "MOB_TQ_WHITESNAKE"),
+	}
+	nests := []monster.NestRow{
+		tombChainNest(tombRefEast, 100),
+		tombChainNest(tombRefSouth, 200),
+		tombChainNest(tombRefWest, 300),
+		tombChainNest(tombRefNorth, 400),
+		tombChainNest(tombRefFlame, 500),
+	}
+	next := uint32(41)
+	for _, codename := range append(append([]string{}, tombSouthCodenames...), tombWestCodenames...) {
+		refs[next] = tombChainRef(next, codename)
+		next++
+	}
+	s := NewMonsterState(monster.TemplateFromParts(refs, nests))
+	now := tombChainBase
+	s.SetTimeSource(func() time.Time { return now })
+	s.SetRandomSource(constantWord(16384))
+	if err := s.InstallTombChain(); err != nil {
+		t.Fatalf("InstallTombChain: %v", err)
+	}
+	s.StartDivision("division")
+	return s
+}
+
+/*
+================
+tombAdvanceFloor6
+
+Advances the population in one-second steps to the offset and returns
+the live Floor 6 instances.
+================
+*/
+func tombAdvanceFloor6(s *MonsterState, offsetMs int64) []monster.Instance {
+	target := tombChainBase.Add(time.Duration(offsetMs) * time.Millisecond)
+	for step := tombChainBase.Add(time.Second); !step.After(target); step = step.Add(time.Second) {
+		s.AdvancePopulation(step.UnixMilli())
+	}
+	return s.InstancesInRegions("division", []uint16{tombFloor6Region})
+}
+
+/*
+================
+countCodename
+================
+*/
+func countCodename(live []monster.Instance, codename string) int {
+	n := 0
+	for _, in := range live {
+		if in.Ref.Codename == codename {
+			n++
+		}
+	}
+	return n
+}
+
+/*
+================
+liveGidsByCodename
+================
+*/
+func liveGidsByCodename(live []monster.Instance, codename string) []uint32 {
+	var gids []uint32
+	for _, in := range live {
+		if in.Ref.Codename == codename {
+			gids = append(gids, in.Gid)
+		}
+	}
+	return gids
+}
+
+/*
+================
+TestTombChainGateWaitsForTheWholeStage
+
+A Floor 6 stage is several codename spawners under one trigger
+(Chins_Floor6_South: the SNAKEGENERAL and its three clones). The
+stage's portal opens only when every spawner of the stage is fully
+dead, never when the first one empties (#2373).
+================
+*/
+func TestTombChainGateWaitsForTheWholeStage(t *testing.T) {
+	refs := map[uint32]monster.MonsterRef{}
+	var nests []monster.NestRow
+	for i, codename := range tombSouthCodenames {
+		id := uint32(41 + i)
+		refs[id] = tombChainRef(id, codename)
+		nests = append(nests, monster.NestRow{
+			SpawnPoint:     monster.SpawnPoint{RefObjID: id, RegionID: tombFloor6Region, X: float64(i * 10), Y: 132, Z: -8213},
+			PolicyPinned:   true,
+			RetailEvidence: true,
+		})
+	}
+	s := NewMonsterState(monster.TemplateFromParts(refs, nests))
+	now := tombChainBase
+	s.SetTimeSource(func() time.Time { return now })
+	s.SetRandomSource(constantWord(16384))
+	def := TombChainDef{Floors: []TombFloorDef{{Spawners: []TombSpawnerDef{
+		{Name: "Test_South_A", Codename: tombSouthCodenames[0], Count: 1, Initialize: true, Trigger: "Chins_Floor6_Portal2"},
+		{Name: "Test_South_B", Codename: tombSouthCodenames[1], Count: 1, Initialize: true, Trigger: "Chins_Floor6_Portal2"},
+		{Name: "Test_South_C", Codename: tombSouthCodenames[2], Count: 1, Initialize: true, Trigger: "Chins_Floor6_Portal2"},
+		{Name: "Test_South_D", Codename: tombSouthCodenames[3], Count: 1, Initialize: true, Trigger: "Chins_Floor6_Portal2"},
+	}}}}
+	if err := s.InstallTombChainDef(def); err != nil {
+		t.Fatalf("InstallTombChainDef: %v", err)
+	}
+	s.StartDivision("division")
+	live := tombAdvanceFloor6(s, 5000)
+	if len(live) != 4 {
+		t.Fatalf("south stage live = %d, want 4", len(live))
+	}
+	for i, codename := range tombSouthCodenames[:3] {
+		gid := liveGidsByCodename(live, codename)[0]
+		if !s.Defeat("division", gid, tombChainBase.Add(time.Duration(6+i)*time.Second)) {
+			t.Fatalf("defeat %s rejected", codename)
+		}
+		if s.TombGateOpen("division", "Chins_Floor6_Portal2") {
+			t.Fatalf("Portal2 open after %d of 4 stage spawners died", i+1)
+		}
+	}
+	gid := liveGidsByCodename(live, tombSouthCodenames[3])[0]
+	if !s.Defeat("division", gid, tombChainBase.Add(9*time.Second)) {
+		t.Fatal("defeat last south spawner rejected")
+	}
+	if !s.TombGateOpen("division", "Chins_Floor6_Portal2") {
+		t.Fatal("Portal2 still shut after the whole stage died")
+	}
+}
+
+/*
+================
+TestTombChainFloor6StagesArmFireAndRearm
+
+The default chain's Floor 6 (#2373): the four stages arm together -
+East and North one snake each (the Medusa pair), South four, West
+fifteen codenames five each. Every stage's portal stays shut until its
+whole wave is dead; the arena exit follows the first entry portal; the
+whole floor comes back on the rearm window.
+================
+*/
+func TestTombChainFloor6StagesArmFireAndRearm(t *testing.T) {
+	s := newTombFloor6World(t)
+	live := tombAdvanceFloor6(s, 5000)
+	for codename, want := range map[string]int{
+		"MOB_TQ_BLACKSNAKE": 1,
+		"MOB_TQ_WHITESNAKE": 1,
+	} {
+		if got := countCodename(live, codename); got != want {
+			t.Fatalf("%s live = %d at arm, want %d", codename, got, want)
+		}
+	}
+	for _, codename := range tombSouthCodenames {
+		if got := countCodename(live, codename); got != 1 {
+			t.Fatalf("south %s live = %d at arm, want 1", codename, got)
+		}
+	}
+	for _, codename := range tombWestCodenames {
+		if got := countCodename(live, codename); got != 5 {
+			t.Fatalf("west %s live = %d at arm, want 5", codename, got)
+		}
+	}
+	if len(live) != 81 {
+		t.Fatalf("Floor 6 live = %d at arm, want 81 (1+1+4+75)", len(live))
+	}
+	for _, gate := range []string{"Chins_Floor6_Portal1", "Chins_Floor6_Portal2", "Chins_Floor6_Portal3", "Chins_Floor6_Portal5", "Chins_Floor6_Portal4"} {
+		if s.TombGateOpen("division", gate) {
+			t.Fatalf("%s open before any stage died", gate)
+		}
+	}
+
+	kill := func(live []monster.Instance, codename string, atSec int64) {
+		t.Helper()
+		for _, gid := range liveGidsByCodename(live, codename) {
+			if !s.Defeat("division", gid, tombChainBase.Add(time.Duration(atSec)*time.Second)) {
+				t.Fatalf("defeat %s rejected", codename)
+			}
+		}
+	}
+
+	// East (the black snake): its portal and, through it, the exit open.
+	kill(live, "MOB_TQ_BLACKSNAKE", 6)
+	if !s.TombGateOpen("division", "Chins_Floor6_Portal1") {
+		t.Fatal("Portal1 shut after the East stage died")
+	}
+	if !s.TombGateOpen("division", "Chins_Floor6_Portal4") {
+		t.Fatal("arena exit (Portal4) shut after an entry portal opened")
+	}
+	for _, gate := range []string{"Chins_Floor6_Portal2", "Chins_Floor6_Portal3", "Chins_Floor6_Portal5"} {
+		if s.TombGateOpen("division", gate) {
+			t.Fatalf("%s open before its stage died", gate)
+		}
+	}
+
+	// West: 74 of 75 dead still holds the portal; the 75th opens it.
+	live = tombAdvanceFloor6(s, 10000)
+	var westGids []uint32
+	for _, codename := range tombWestCodenames {
+		westGids = append(westGids, liveGidsByCodename(live, codename)...)
+	}
+	if len(westGids) != 75 {
+		t.Fatalf("west wave live = %d, want 75", len(westGids))
+	}
+	for _, gid := range westGids[:74] {
+		if !s.Defeat("division", gid, tombChainBase.Add(11*time.Second)) {
+			t.Fatalf("defeat west gid %d rejected", gid)
+		}
+	}
+	if s.TombGateOpen("division", "Chins_Floor6_Portal3") {
+		t.Fatal("Portal3 open with one west instance left")
+	}
+	if !s.Defeat("division", westGids[74], tombChainBase.Add(12*time.Second)) {
+		t.Fatal("defeat last west instance rejected")
+	}
+	if !s.TombGateOpen("division", "Chins_Floor6_Portal3") {
+		t.Fatal("Portal3 shut after the west wave died")
+	}
+
+	// South and North.
+	live = tombAdvanceFloor6(s, 14000)
+	for _, codename := range tombSouthCodenames {
+		kill(live, codename, 15)
+	}
+	kill(live, "MOB_TQ_WHITESNAKE", 16)
+	for _, gate := range []string{"Chins_Floor6_Portal2", "Chins_Floor6_Portal5"} {
+		if !s.TombGateOpen("division", gate) {
+			t.Fatalf("%s shut after its stage died", gate)
+		}
+	}
+
+	// Rearm: past the last death plus the outer window, every stage is
+	// back and every portal shut again.
+	live = tombAdvanceFloor6(s, 16_000+3601_000)
+	if len(live) != 81 {
+		t.Fatalf("Floor 6 live after rearm = %d, want 81 (1+1+4+75)", len(live))
+	}
+	for _, gate := range []string{"Chins_Floor6_Portal1", "Chins_Floor6_Portal2", "Chins_Floor6_Portal3", "Chins_Floor6_Portal5", "Chins_Floor6_Portal4"} {
+		if s.TombGateOpen("division", gate) {
+			t.Fatalf("%s still open after the rearm", gate)
+		}
 	}
 }
