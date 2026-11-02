@@ -3944,7 +3944,19 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = constantNativeNotice( 2, detail! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					} else if ( key ) {
-						notices = [ ...notices.slice( -99 ), { sequence: ++noticeSequence, key, value: 0 } ];
+						// 75EC23: a completed match (detail 1) raises the
+						// centre banner (67D030), not a guide line; the
+						// refused and no-reply details stay guide lines.
+						const complete = frame.opcode === 0xb5bf && detail === 1;
+						notices = [
+							...notices.slice( -99 ),
+							{
+								sequence: ++noticeSequence,
+								key,
+								value: 0,
+								...(complete ? { banner: true, bannerOnly: true } : {})
+							}
+						];
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;

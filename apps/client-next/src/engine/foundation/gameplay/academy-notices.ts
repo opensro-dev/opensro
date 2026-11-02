@@ -61,13 +61,14 @@ export function academyStatusNotice(
 	frame: WireFrame
 ): SystemNotice | null {
 	const p = frame.payload;
-	// 769CA0: a join answer (outer 1) of detail 0 prints the cancel
-	// line and detail 2 the no-reply line, both system chat type 4
-	// (67A600). Detail 1 is the matching-complete banner, which is
-	// not this projection, and an outer-2 refusal goes through
-	// category 0x1D in gameplay.
+	// 769CA0: a join answer (outer 1) of detail 1 raises the
+	// matching-complete centre banner (67D030, the resolved text
+	// alone, so no arguments); detail 0 prints the cancel line and
+	// detail 2 the no-reply line, both system chat type 4 (67A600).
+	// An outer-2 refusal goes through category 0x1D in gameplay.
 	if ( frame.opcode === 0xb592 ) {
 		if ( p[0] !== 1 || p.length !== 2 ) return null;
+		if ( p[1] === 1 ) return { key: "UIIT_STT_TC_MACHING_COMPLETE", value: 0, banner: true, bannerOnly: true };
 		if ( p[1] === 0 ) return { key: "UIIT_MSG_TC_JOIN_CANCEL", value: 0, nativeType: 4 };
 		if ( p[1] === 2 ) return { key: "UIIT_MSG_TC_JOIN_NOREPLY", value: 0, nativeType: 4 };
 		return null;
