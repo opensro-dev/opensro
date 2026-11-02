@@ -19,7 +19,8 @@ The notice for an inventory (0xB06D), item-use (0xB5BD) or Magic Pang
 exchange answer (0xB1BE) with flag 2 always shows the fixed category-1
 notice 2. Purely the native mapper: 0xB5BD and 0xB06D route identically
 for every byte (the port-only rename scroll's lines ride on top in
-gameplay.ts, #1689).
+gameplay.ts, #1689). With a mall purchase outstanding, the generic
+0xB06D refusal is instead the mall failure line (75D330's 0xFF arm).
 ================
 */
 export function inventoryNotice(
@@ -51,6 +52,11 @@ export function inventoryNotice(
 	}
 	if ( (opcode !== 0xb06d && opcode !== 0xb5bd) || payload[0] !== 2 ) return null;
 	if ( payload.length !== 2 ) throw Error( "Invalid inventory rejection" );
+	// 75AA1D: a result-2 answer reads its code byte and prints through
+	// the category-1 printer (push 1, code -> 689420) with no mall
+	// branch and no code-2 case; category 1 code 2 is silent there.
+	// TRADE_FAILURE prints only from 75D330 (answer 0x37E5, the silk
+	// billing channel this port does not have), never on this opcode.
 	const result = resolveNativeNotice( 1, payload[1]!, { country, itemMallOpen } );
 	return result.kind === "notice" ? result.notice : null;
 }

@@ -9,9 +9,10 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
-const { mallCurrencyRows, mallPageLayout, mallPageNumberPresentation, compactMallBagLayout } = await import(
-	"../../src/engine/foundation/ui/item-mall-layout.ts"
-);
+const { mallCurrencyRows, mallPageLayout, mallPageNumberPresentation, compactMallBagLayout, mallQuestionLayout } =
+	await import(
+		"../../src/engine/foundation/ui/item-mall-layout.ts"
+	);
 
 /*
 ================
@@ -352,4 +353,20 @@ test("rejection and closing cancel unsent purchases without retrying the in-flig
 		assert.equal( mall.takeNextPurchase( state ), null );
 		assert.equal( mall.read().batchPending, false );
 	}
+});
+
+test("the lump-buy boxes caption their total row with the total-price line", () => {
+	// 528920 sets the total control's text on both boxes that draw a
+	// total row: UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL
+	// ("Total price"), at 529846 for the worn box and 529BE7 for the
+	// basket, on the rect the layouts already draw.
+	const basket = mallQuestionLayout( "basket", 3 );
+	assert.equal( basket.totalCaption, "UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" );
+	assert.equal( basket.totalY, 74 );
+	const worn = mallQuestionLayout( "worn", 3 );
+	assert.equal( worn.totalCaption, "UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" );
+	assert.equal( worn.totalY, 152 );
+	// The reservation and removal boxes draw no total row.
+	assert.equal( mallQuestionLayout( "reserve", 1 ).totalCaption, undefined );
+	assert.equal( mallQuestionLayout( "remove", 1 ).totalCaption, undefined );
 });

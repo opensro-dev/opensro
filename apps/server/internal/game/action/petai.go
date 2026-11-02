@@ -510,7 +510,11 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	if state.pickup != nil {
 		q := *state.pickup
 		item, found := rt.characterGround(key.division, snapshot, q.GroundGID)
-		if !found || nowMs >= state.pickupDeadline {
+		pose := state.follower.Position(nowMs)
+		// A target that vanished, timed out, or can never be granted
+		// at arrival (cosPickupTargetRetired) retires the same way:
+		// the refusal answer, no walk, no warning.
+		if !found || nowMs >= state.pickupDeadline || rt.cosPickupTargetRetired(key.division, snapshot, pose, item) {
 			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			frames := state.follower.Stop(nowMs)
 			for _, f := range result.Frames {
@@ -518,7 +522,6 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			}
 			return frames
 		}
-		pose := state.follower.Position(nowMs)
 		target := simulation.Spawn{RegionID: item.Position.RegionID, X: float64(item.Position.X), Y: float64(item.Y), Z: float64(item.Position.Z)}
 		from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
