@@ -172,6 +172,7 @@
     "src/engine/runtime/ui/hud/messages.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/unique-banner.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/quest-banner.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/quest-info.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/scroll.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/speech.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/characters/damage-feedback.ts": "src/engine/runtime/characters/characters.ts",

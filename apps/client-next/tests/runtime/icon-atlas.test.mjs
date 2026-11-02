@@ -33,11 +33,13 @@ test("a manifest maps each icon to its sheet and uv rect", () => {
 	assert.deepEqual( atlas.sheets, [ sheet ] );
 	assert.deepEqual( atlas.entry( "/assets/images/Media_extracted/icon/a.png" ), {
 		sheet,
-		uv: [ 2 / 2048, 2 / 2047, 32 / 2048, 32 / 2047 ]
+		uv: [ 2 / 2048, 2 / 2047, 32 / 2048, 32 / 2047 ],
+		size: [ 32, 32 ]
 	} );
 	assert.deepEqual( atlas.entry( "/assets/images/Media_extracted/icon/b.png" ), {
 		sheet,
-		uv: [ 40 / 2048, 2 / 2047, 64 / 2048, 128 / 2047 ]
+		uv: [ 40 / 2048, 2 / 2047, 64 / 2048, 128 / 2047 ],
+		size: [ 64, 128 ]
 	} );
 	assert.equal( atlas.entry( "/assets/images/Media_extracted/icon/absent.png" ), null );
 	assert.equal( atlas.entry( "/assets/images/Media_extracted/interface/frame.png" ), null );

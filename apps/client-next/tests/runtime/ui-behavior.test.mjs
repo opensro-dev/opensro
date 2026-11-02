@@ -373,11 +373,16 @@ test("an installed atlas serves the icon family from its sheet", () => {
 	assert.equal( installed, 1, "the mapping reaches the renderer once" );
 	assert.deepEqual( f.cancelled.sort(), [ 2, 3 ], "the per-icon requests cancel" );
 	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet, "one sheet request for both icons" );
+	assert.equal( resources.size( a ), undefined, "a mapped icon is not drawable before its sheet" );
 	const image = { width: 2048, height: 2047 };
 	f.results.set( 4, { kind: "image", image } );
 	resources.step( [ a, b ], 2 );
 	assert.deepEqual( f.published, [ [ sheet, image ] ], "the sheet publishes once under its own path" );
-	assert.equal( resources.size( a ), undefined, "an icon holds no residency of its own" );
+	assert.deepEqual(
+		resources.size( a ),
+		[ 32, 32 ],
+		"a mapped icon's size is its own rect once the sheet is resident (#2333)"
+	);
 	assert.equal( resources.size( sheet )[0], 2048 );
 	for ( let now = 3; now < 60_000; now += 1000 ) resources.step( [ a, b ], now );
 	assert.equal( f.requests.length, 4, "the family never re-requests" );

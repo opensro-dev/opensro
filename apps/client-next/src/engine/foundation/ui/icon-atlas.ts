@@ -24,13 +24,16 @@ export const UI_ATLAS_MANIFEST_PATH = "/assets/ui-atlas/manifest.json";
 ================
 IconAtlasEntry
 
-One icon's place in its sheet: the sheet's public path and the icon's uv
-rect (x, y, width, height) inside it.
+One icon's place in its sheet: the sheet's public path, the icon's uv
+rect (x, y, width, height) inside it, and the icon's own pixel size -
+which is not the sheet's size, so a consumer asking how big the icon is
+(the quest-info notice, #2333) needs it carried separately.
 ================
 */
 export interface IconAtlasEntry {
 	readonly sheet: string;
 	readonly uv: readonly [number, number, number, number];
+	readonly size: readonly [number, number];
 }
 
 /*
@@ -95,7 +98,8 @@ export function iconAtlas( manifest: unknown ): IconAtlas | null {
 		if ( x + width > sheetWidth || y + height > sheetHeight ) return null;
 		entries.set( path, {
 			sheet: parsedSheets[index]!,
-			uv: [ x / sheetWidth, y / sheetHeight, width / sheetWidth, height / sheetHeight ]
+			uv: [ x / sheetWidth, y / sheetHeight, width / sheetWidth, height / sheetHeight ],
+			size: [ width, height ]
 		} );
 	}
 	if ( entries.size === 0 ) return null;
