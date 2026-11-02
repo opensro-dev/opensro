@@ -252,6 +252,7 @@ import {
 	emptySocial,
 	socialPacket,
 	socialRequest,
+	withoutInstance,
 	withoutResurrection,
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
@@ -2323,14 +2324,18 @@ state here before a command can claim a native wire conversation.
 				if ( !room ) throw Error( "Storage room is not open" );
 				return inventory.storageMove( room, command.move, now, cosItemCaps );
 			}
-			if ( command.kind === "npc-talk" || command.kind === "npc-choice" ) {
+			if ( command.kind === "npc-talk" || command.kind === "npc-withdraw" || command.kind === "npc-choice" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
 				try {
+					// The withdrawal row asks for its own capability (0x200,
+					// row 0x16); talk and choice ride the talk bit (2).
+					const capability = command.kind === "npc-withdraw" ? 0x200 : 2;
 					if (
 						!localGid || target.targetPending || conversation.phase === "closed" ||
-						conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 2)
+						conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & capability)
 					) throw Error( "Select an available talking NPC" );
 					if ( command.kind === "npc-talk" ) npcConversation.talk( now );
+					else if ( command.kind === "npc-withdraw" ) npcConversation.withdraw( now );
 					else npcConversation.choose( command.choice, now );
 				} catch ( error ) {
 					// A click that fails before sending leaves no frame
@@ -2847,7 +2852,8 @@ state here before a command can claim a native wire conversation.
 			}
 			if (
 				command.kind.startsWith( "party-" ) || command.kind.startsWith( "guild-" ) ||
-				command.kind === "social-consent" || command.kind === "resurrection-consent"
+				command.kind === "social-consent" || command.kind === "resurrection-consent" ||
+				command.kind === "instance-consent"
 			) {
 				// CIFCommunityNotice_SubmitText 5F46F0 checks subject first,
 				// then contents, before composing the guild notice request.
@@ -2868,6 +2874,24 @@ state here before a command can claim a native wire conversation.
 				// The worker may retire a prompt before its queued UI click arrives.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
+				if ( command.kind === "instance-consent" && !social.instance ) return null;
+				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
+				// while dead prints UIIT_MSG_QUEST_INS_DEATH and swallows the
+				// submit - the box stays open and nothing is sent.
+				if (
+					command.kind === "instance-consent" && command.accept &&
+					local?.appearanceState?.[0] === 2
+				) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_QUEST_INS_DEATH",
+						value: 0,
+						nativeType: 0,
+						banner: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
 				if ( command.kind === "guild-soldier-attribute" ) {
 					const key = guildSoldierRefusal( social.guild?.flags ?? 0, command.attribute );
 					if ( key ) {
@@ -2887,6 +2911,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "guild-war-declare" ) social = { ...social, warPending: 1 };
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
+				if ( command.kind === "instance-consent" ) social = withoutInstance( social );
 				return request;
 			}
 			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {

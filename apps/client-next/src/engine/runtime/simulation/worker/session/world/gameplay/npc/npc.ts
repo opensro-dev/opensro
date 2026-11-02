@@ -22,6 +22,9 @@ const RESUSCITATION_OPEN = 0x3230;
 const NPC_DIALOG = 0x3773;
 const NPC_ACTION = 0x7338;
 const TALK_MASK = 2;
+// Row 0x16's click (5DA1B0 case 0x16): the withdrawal capability bit
+// sent back as the 0x7338 mask.
+const WITHDRAW_MASK = 0x200;
 
 /*
 ================
@@ -85,6 +88,24 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 			const payload = new Uint8Array( 8 ), view = new DataView( payload.buffer );
 			view.setUint32( 0, next.gid, true );
 			view.setUint32( 4, TALK_MASK, true );
+			send( { opcode: NPC_ACTION, payload } );
+			state = next;
+		},
+		/*
+		================
+		withdraw
+
+		Row 0x16 asks the bound herbalist for the withdrawal service; the
+		answer is the 0x3230 receipt receive() opens from, or the owner's
+		line in the dialog.
+		================
+		*/
+		withdraw( now: number ) {
+			const next = npcConversationTransition( state, { type: "request", now } );
+			if ( next.phase !== "waiting" ) throw Error( "NPC transition" );
+			const payload = new Uint8Array( 8 ), view = new DataView( payload.buffer );
+			view.setUint32( 0, next.gid, true );
+			view.setUint32( 4, WITHDRAW_MASK, true );
 			send( { opcode: NPC_ACTION, payload } );
 			state = next;
 		},
