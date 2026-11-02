@@ -216,7 +216,7 @@ function wtHarness( t ) {
 			const framed = new Uint8Array( bytes.byteLength + 4 );
 			new DataView( framed.buffer ).setUint32( 0, bytes.byteLength, true );
 			framed.set( bytes, 4 );
-			this.controller.enqueue( framed );
+			/** @type {ReadableStreamDefaultController} */ (this.controller).enqueue( framed );
 		}
 	}
 	const original = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
