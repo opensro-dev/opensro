@@ -820,6 +820,7 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
+import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
@@ -1462,6 +1463,7 @@ export function createUi(
 	// The warehouse window's page (storage-panel.ts).
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
+	const instancePrompt = createInstancePrompt();
 	const itemMall = createItemMall();
 	// CIFMallNotifyWnd (mall-notify.ts): "pending" until the session's first
 	// world entry decides it, as 683B40's +0x6FC latch; then shown or closed.
@@ -3851,10 +3853,15 @@ export function createUi(
 			}
 			return;
 		}
-		if ( id === "npc-talk" || id === "npc-close" || id === "npc-talkend" || id.startsWith( "npc-choice:" ) ) {
+		if (
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
+			id.startsWith( "npc-choice:" )
+		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
+					id === "npc-withdraw" ?
+					{ kind: "npc-withdraw" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -4107,6 +4114,8 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 		} else if ( id === "friend-accept" || id === "friend-refuse" ) {
 			sendGameplay( { kind: "friend-answer", accept: id === "friend-accept" } );
+		} else if ( id === "friend-conclusion-confirm" ) {
+			sendGameplay( { kind: "friend-conclusion-close" } );
 		} else if ( id.startsWith( "letter-" ) ) {
 			letterActivate( id );
 		} else if ( id.startsWith( "blocking-tab:" ) ) {
@@ -4366,6 +4375,8 @@ export function createUi(
 			sendGameplay( { kind: "social-consent", accept: id === "invite-accept" } );
 		} else if ( id === "resurrection-accept" || id === "resurrection-refuse" ) {
 			sendGameplay( { kind: "resurrection-consent", accept: id === "resurrection-accept" } );
+		} else if ( id === "instance-accept" || id === "instance-refuse" ) {
+			sendGameplay( { kind: "instance-consent", accept: id === "instance-accept" } );
 		} else if ( id === "party-invite" && view.gameplay?.target ) {
 			sendGameplay( {
 				kind: "party-invite",
@@ -5114,14 +5125,28 @@ export function createUi(
 					chatText
 			);
 			if ( draft ) {
+				// 6AEBD0: the membership refusals print before the abuse
+				// filter is consulted - party (6AEFF4), then guild
+				// (6AF03E), and only then 790C70 (6AF0B9).
 				const key = draft.channel === 4 && !view.gameplay?.social?.members.length ?
 					"UIIT_MSG_PARTYERR_CANT_FIND_PARTY" :
 					draft.channel === 5 && !view.gameplay?.social?.guild ?
 					"UIIT_MSG_GUILD_NON_EXISTING" :
 					null;
-				if ( key ) hudMessages.append( hud.data()?.strings[key] ?? "" );
-				else sendGameplay( { kind: "chat", ...draft } );
-				chatText = key ? "" : chatTabPrefix( chatTab ) || (draft.channel === 2 ? "$" + draft.target + " " : "");
+				// 545EF0: a composed line the chat column of the abuse
+				// filter refuses (790C70) prints the filter line in red
+				// and is never sent; the draft is given up either way.
+				const chatRules = hud.data()?.chatRules;
+				if ( key ) {
+					hudMessages.append( hud.data()?.strings[key] ?? "" );
+					chatText = "";
+				} else if ( chatRules && !textAllowed( draft.text, chatRules ) ) {
+					hudMessages.append( hud.data()?.strings["UIIT_MSG_CHATWND_MESSAGE_FILTER"] ?? "", 0xffff0000 );
+					chatText = "";
+				} else {
+					sendGameplay( { kind: "chat", ...draft } );
+					chatText = chatTabPrefix( chatTab ) || (draft.channel === 2 ? "$" + draft.target + " " : "");
+				}
 			} else {
 				focus = null;
 				focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
@@ -8100,6 +8125,16 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "drag" && event.id === "instance-drag" && view ) {
+				const layout = instanceBoxLayout( view.width, view.height, instancePrompt.position() ),
+					next = instanceBoxLayout( view.width, view.height, [
+						layout.frame[0] + event.dx,
+						layout.frame[1] + event.dy
+					] );
+				instancePrompt.place( [ next.frame[0], next.frame[1] ] );
+				dirty = true;
+				return;
+			}
 			if ( event.kind === "drag" && event.id === "invite-drag" && view ) {
 				const type = view.gameplay?.social?.invitation?.type,
 					layout = proposalLayout( type, view.width, view.height, undefined, invitePosition ),
@@ -8168,7 +8203,9 @@ export function createUi(
 				return;
 			}
 			// A proposal box (an invitation or the resurrection question) is modal.
-			const proposalOpen = controls.some( c => c.id === "invite-drag" || c.id === "resurrection-drag" );
+			const proposalOpen = controls.some( c =>
+				c.id === "invite-drag" || c.id === "resurrection-drag" || c.id === "instance-drag"
+			);
 			if ( (event.kind === "drag" || event.kind === "scroll") && proposalOpen ) {
 				return;
 			}
@@ -9585,7 +9622,7 @@ export function createUi(
 			}
 			if (
 				phase !== "world" || next.gameplay?.inventoryPending || next.gameplay?.social?.invitation ||
-				next.gameplay?.social?.resurrection
+				next.gameplay?.social?.resurrection || next.gameplay?.social?.instance
 			) {
 				carriedItem = null;
 			}
@@ -9604,6 +9641,8 @@ export function createUi(
 				deathRequested = false;
 			}
 			resurrectionPrompt.sync( proposer );
+			const instanceLeader = phase === "world" || retainedWorld ? next.gameplay?.social?.instance?.gid ?? 0 : 0;
+			instancePrompt.sync( instanceLeader );
 			if ( phase !== "disconnected" ) disconnectPosition = null;
 			const gachaVisible = phase === "world" && !!next.gameplay?.gacha?.visible;
 			if ( gachaVisible && !gachaWasVisible ) {
@@ -16347,7 +16386,7 @@ export function createUi(
 						pressed,
 						top: npcPanel.top(),
 						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport,
-						// 0x20000000 reverse return.
+						// 0x200 skill withdrawal, 0x20000000 reverse return.
 						canShop: !!(capabilities & 0x801),
 						branches: target?.merchantBranches,
 						choiceColor: symbol =>
@@ -16425,6 +16464,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
 							...guildManagerRows( capabilities, game.social?.guild, game.social?.localName ?? "" ).map(
@@ -22166,6 +22206,25 @@ export function createUi(
 					6
 				);
 			}
+			const friendConclusion = game?.friends?.conclusion;
+			if ( friendConclusion && worldVisible && !game?.social?.invitation ) {
+				// 760FB0 case 2 opens confirm box 0x22 (52F460): "[friend] and
+				// [local]'s" over the acceptance line, with one Confirm.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [
+						hudCopy( "UIIT_MSG_YOUNME" )
+							.replace( "%s", friendConclusion )
+							.replace( "%s", game?.social?.localName ?? "" ),
+						hudCopy( "UIIT_MSG_FRIEND_CONCLUSION" )
+					],
+					yes: "friend-conclusion-confirm",
+					no: "",
+					single: "confirm"
+				} );
+			}
 			const partyJoining = game?.partyMatching?.joining,
 				joinElapsed = partyJoining ? Math.max( 0, (next.simulationTimeMs ?? now) - partyJoining.since ) : 10000;
 			if ( worldVisible && partyJoining && joinElapsed < 10000 && hud.data() && !game?.partyMatching?.request ) {
@@ -24864,6 +24923,54 @@ export function createUi(
 				);
 				button( "resurrection-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
 				button( "resurrection-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+			}
+			// The quest instance invitation (0x3393 type 7) is the same kind of
+			// modal question: it keeps the death box, a pending invitation box,
+			// the resurrection question and itself, and every other open dialog
+			// loses its controls until it is answered. Unlike the resurrection
+			// question it can be up while the player is alive or dead; a dead
+			// confirm is refused in the gameplay lane (0x52EDD0), not here.
+			if ( game?.social?.instance && worldVisible ) {
+				const kept = ( id: string | null ) =>
+					!!id &&
+					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
+						id.startsWith( "instance-" ));
+				controls = controls.filter( c => kept( c.id ) );
+				blocks = [ full ];
+				if ( !kept( focus ) ) {
+					focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const layout = instanceBoxLayout( w, h, instancePrompt.position() );
+				controls.push( {
+					id: "instance-body",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					rect: layout.frame
+				}, {
+					id: "instance-drag",
+					label: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					kind: "region",
+					draggable: true,
+					rect: layout.drag
+				} );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads( hudCopy( instanceQuestion()[0]! ), layout.question, full, white, { vAlign: 0 } )
+				);
+				button( "instance-accept", hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76 );
+				button( "instance-refuse", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
 			}
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??

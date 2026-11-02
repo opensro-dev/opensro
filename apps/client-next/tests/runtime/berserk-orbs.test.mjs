@@ -50,6 +50,36 @@ test("native pet EXP loss never demotes and both reward signs publish their noti
 	} ] );
 	assert.throws( () => owner.receive( 0x3508, p.subarray( 0, 12 ), 1, { gid: 9, level: 1, experience: [ 0, 0 ] } ) );
 });
+test("a level crossing prints the promotion line after the gain line (779620)", () => {
+	const owner = createFeedback();
+	owner.bootstrap( { character: { level: 1, experience: 100 } } );
+	// [u32 source][i32 delta][i32 skill][u8 flags][u16 stat points on a crossing]
+	const p = Buffer.alloc( 15 );
+	p.writeUInt32LE( 7, 0 );
+	p.writeInt32LE( 50, 4 );
+	const r = owner.receive( 0x30d2, p, 42 );
+	assert.equal( defined( r ).level, 2 );
+	assert.deepEqual( defined( r ).messages, [
+		{ key: "UIIT_MSG_STATE_GAIN_EXP_NEW", value: 50 },
+		{ key: "UIIT_MSG_STRGERR_LEVEL", value: 2 }
+	] );
+	// No crossing, no promotion line.
+	const q = Buffer.alloc( 13 );
+	q.writeInt32LE( 10, 4 );
+	assert.deepEqual( defined( owner.receive( 0x30d2, q, 42 ) ).messages, [
+		{ key: "UIIT_MSG_STATE_GAIN_EXP_NEW", value: 10 }
+	] );
+});
+test("a strip cancel for the local player prints its line (75D1E0)", () => {
+	const owner = createFeedback(), p = Buffer.alloc( 4 );
+	p.writeUInt32LE( 42, 0 );
+	assert.deepEqual( defined( owner.receive( 0x3514, p, 42 ) ).messages, [
+		{ key: "UIIT_MSG_STRIP_CANCEL", value: 0 }
+	] );
+	p.writeUInt32LE( 9, 0 );
+	assert.deepEqual( defined( owner.receive( 0x3514, p, 42 ) ).messages, [] );
+	assert.equal( owner.receive( 0x3514, p.subarray( 0, 3 ), 42 ), null );
+});
 /*
 ================
 mover

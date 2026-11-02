@@ -26,7 +26,8 @@ import {
 import {
 	autoPotionTarget,
 	autoPotionTargetNotice,
-	createCosSelection
+	createCosSelection,
+	isRideStateRefusedItem
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { createParamJobs } from "@/engine/foundation/gameplay/param-job";
 import { createCountJobs, countJobUseRequest } from "@/engine/foundation/gameplay/count-job";
@@ -93,6 +94,7 @@ import {
 } from "@/engine/foundation/gameplay/avatar-magic-option";
 import { skillNotice } from "@/engine/foundation/gameplay/skill-notices";
 import { returnScrollCast, type ReturnScrollCast } from "@/engine/foundation/gameplay/return-scroll";
+import { isStallChangeItem } from "@/engine/foundation/gameplay/travel";
 import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
@@ -252,6 +254,7 @@ import {
 	emptySocial,
 	socialPacket,
 	socialRequest,
+	withoutInstance,
 	withoutResurrection,
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
@@ -281,6 +284,13 @@ import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/qui
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
+import {
+	cosCapeWarnsGrowthPet,
+	cosSatietyDroppedLow,
+	cosShopTradeRefused,
+	cosSpecialtyMoveRefused
+} from "@/engine/foundation/ui/cos-command";
+import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
@@ -376,6 +386,8 @@ const SKILL_RUN_UP_MARGIN = 20;
 // native field for action range carries the same reach the server fights
 // with (the item tooltip renders it as metres; the fight reads it raw).
 const WEAPON_SOCKET = 6;
+// The equipment socket a free-battle cape sits in (594980's drop target).
+const CAPE_SOCKET = 8;
 // Bare-handed, the server's reach is 6.
 const UNARMED_REACH = 6;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
@@ -2323,14 +2335,18 @@ state here before a command can claim a native wire conversation.
 				if ( !room ) throw Error( "Storage room is not open" );
 				return inventory.storageMove( room, command.move, now, cosItemCaps );
 			}
-			if ( command.kind === "npc-talk" || command.kind === "npc-choice" ) {
+			if ( command.kind === "npc-talk" || command.kind === "npc-withdraw" || command.kind === "npc-choice" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
 				try {
+					// The withdrawal row asks for its own capability (0x200,
+					// row 0x16); talk and choice ride the talk bit (2).
+					const capability = command.kind === "npc-withdraw" ? 0x200 : 2;
 					if (
 						!localGid || target.targetPending || conversation.phase === "closed" ||
-						conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 2)
+						conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & capability)
 					) throw Error( "Select an available talking NPC" );
 					if ( command.kind === "npc-talk" ) npcConversation.talk( now );
+					else if ( command.kind === "npc-withdraw" ) npcConversation.withdraw( now );
 					else npcConversation.choose( command.choice, now );
 				} catch ( error ) {
 					// A click that fails before sending leaves no frame
@@ -2686,6 +2702,37 @@ state here before a command can claim a native wire conversation.
 				if ( inventory.state().shop?.npc !== targeting.state().target ) {
 					throw Error( "Merchant selection changed" );
 				}
+				// 570120: a specialty good bought into a non-transport COS
+				// prints the line and sends nothing; the package slot is
+				// judged by its first item, as there.
+				if ( command.kind === "cos-shop-buy" ) {
+					const tab = command.tab, slot = command.slot;
+					const offer = inventory.state().shop?.offers.find(
+						row => row.tab === tab && row.slot === slot
+					);
+					const bought = offer?.items?.[0] ?? offer?.previews?.[0];
+					if ( bought && cosSpecialtyMoveRefused( bought.typeFlags, record.band ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+						return null;
+					}
+				}
+				// 5B2630/5B6CA0: a COS bag that is not the transport's cannot
+				// trade at a shop at all and sends nothing; a trade good
+				// bought into one keeps the specialty line above.
+				if ( cosShopTradeRefused( record.band ) ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_COSPETERR_CANT_TRADE_SHOP",
+						value: 0,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
 				return inventory.cosTrade(
 					record,
 					command.kind === "cos-shop-buy",
@@ -2701,6 +2748,21 @@ state here before a command can claim a native wire conversation.
 					!record || entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS container authority" );
+				// 567290/59B1D0: a specialty good moved into a non-transport
+				// COS prints the line and sends nothing.
+				if ( command.toCos ) {
+					const source = command.source;
+					const item = inventory.state().inventory.find( row => row.slot === source );
+					if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+						return null;
+					}
+				}
 				return inventory.transferCos(
 					record,
 					command.toCos,
@@ -2731,6 +2793,19 @@ state here before a command can claim a native wire conversation.
 					!record || entity?.gid !== record.gid || entity.kind !== "cos" || entity.ownerGid !== localGid ||
 					entity.refObjId !== record.refObjId
 				) throw Error( "No owned COS container authority" );
+				// 6A8740: rearranging a specialty good inside a non-transport
+				// COS prints the line and sends nothing.
+				const source = command.source;
+				const item = record.inventory?.find( row => row.slot === source );
+				if ( item && cosSpecialtyMoveRefused( item.typeFlags, record.band ) ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+						value: 0,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
 				const frame = cosContainerRequest( record, command.source, command.destination, command.quantity );
 				return inventory.cosMove( frame, now );
 			}
@@ -2847,7 +2922,8 @@ state here before a command can claim a native wire conversation.
 			}
 			if (
 				command.kind.startsWith( "party-" ) || command.kind.startsWith( "guild-" ) ||
-				command.kind === "social-consent" || command.kind === "resurrection-consent"
+				command.kind === "social-consent" || command.kind === "resurrection-consent" ||
+				command.kind === "instance-consent"
 			) {
 				// CIFCommunityNotice_SubmitText 5F46F0 checks subject first,
 				// then contents, before composing the guild notice request.
@@ -2868,6 +2944,24 @@ state here before a command can claim a native wire conversation.
 				// The worker may retire a prompt before its queued UI click arrives.
 				if ( command.kind === "social-consent" && !social.invitation ) return null;
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
+				if ( command.kind === "instance-consent" && !social.instance ) return null;
+				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
+				// while dead prints UIIT_MSG_QUEST_INS_DEATH and swallows the
+				// submit - the box stays open and nothing is sent.
+				if (
+					command.kind === "instance-consent" && command.accept &&
+					local?.appearanceState?.[0] === 2
+				) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_QUEST_INS_DEATH",
+						value: 0,
+						nativeType: 0,
+						banner: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return null;
+				}
 				if ( command.kind === "guild-soldier-attribute" ) {
 					const key = guildSoldierRefusal( social.guild?.flags ?? 0, command.attribute );
 					if ( key ) {
@@ -2887,6 +2981,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "guild-war-declare" ) social = { ...social, warPending: 1 };
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
+				if ( command.kind === "instance-consent" ) social = withoutInstance( social );
 				return request;
 			}
 			if ( command.kind === "skill-withdraw" || command.kind === "mastery-withdraw" ) {
@@ -2956,6 +3051,11 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "friend-delete" ) {
 				friends.remove( command.jid );
+				return null;
+			}
+			if ( command.kind === "friend-conclusion-close" ) {
+				friends.closeConclusion();
+				dirty = true;
 				return null;
 			}
 			if ( command.kind === "letter-send" ) {
@@ -3143,6 +3243,25 @@ state here before a command can claim a native wire conversation.
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
 			}
 			if ( command.kind === "inventory-move" ) {
+				// 594980: wearing a free-battle cape while a growth pet is
+				// summoned prints the warning; the equip itself proceeds
+				// and the pet's unsummon is the server's answer. 594980
+				// also requires the target socket's record empty (+0x28
+				// clear), so a swap onto a worn cape stays silent.
+				const source = command.source;
+				const item = inventory.state().inventory.find( row => row.slot === source );
+				if (
+					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
+					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
+					cosCapeWarnsGrowthPet( [ ...cosRecords.values() ] )
+				) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE",
+						value: 0,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				return inventory.move( command.source, command.destination, command.quantity, now );
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
@@ -3224,6 +3343,13 @@ state here before a command can claim a native wire conversation.
 					reverseMapPoint: command.reverseMapPoint,
 					renameName: command.renameName
 				};
+				// 5608B0: the ride-state refusal prints instead of using.
+				const usedSlot = command.slot;
+				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
+				if ( local?.mountedOn && usedItem && isRideStateRefusedItem( usedItem.typeFlags ) ) {
+					api.notice( { key: "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE", value: 0 } );
+					return null;
+				}
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
 					api.notice( refusal );
@@ -3499,7 +3625,7 @@ the references again (#2148).
 		*/
 		referenceProgress( now: number ) {
 			movement.noteInboundProgress( now );
-			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
+			inventory.holdForReferences( now, now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
 		},
 		/*
 ================
@@ -3928,6 +4054,16 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( !gid || satiety > 10000 ) throw Error( "Invalid COS satiety value" );
 					const record = cosRecords.get( gid );
 					if ( record?.band === 3 ) {
+						// The fall below 30% prints the HGP line once per
+						// crossing (8304F0's drain in the original; here
+						// the value lands by packet, so it is watched here).
+						if ( cosSatietyDroppedLow( record.satiety, satiety ) ) {
+							notices = [ ...notices.slice( -99 ), {
+								key: "UIIT_MSG_COSPETERR_HGP_30LOW",
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+						}
 						cosRecords.set( gid, { ...record, satiety } );
 						dirty = true;
 					}
@@ -4052,12 +4188,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
-					// 755960: the owner's sale line, [buyer] bought item [name].
-					if ( stallOutcome.message ) {
+					// 755960: the owner's sale line, [buyer] bought item
+					// [name]; a network sale's commission line follows.
+					for ( const message of stallOutcome.messages ?? [] ) {
 						notices = [ ...notices.slice( -99 ), {
-							key: stallOutcome.message.key,
+							key: message.key,
 							value: 0,
-							arguments: stallOutcome.message.args,
+							arguments: message.args,
 							nativeType: 0,
 							sequence: ++noticeSequence
 						} ];
@@ -4072,6 +4209,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( exchangeNotice ) {
 						const notice = inventoryNotice( 0xb06d, Uint8Array.of( 2, exchangeNotice ), localCountry );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+					// A 0x3272 success raises its own text line (765260); the
+					// frame returns below, so drain the pending line here.
+					const exchangedLine = inventory.takeExchangeNotice();
+					if ( exchangedLine ) {
+						notices = [ ...notices.slice( -99 ), { ...exchangedLine, sequence: ++noticeSequence } ];
 					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
@@ -4569,6 +4712,16 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// 755E40: a subtype-4 item's success names the change it made.
+				if ( used && isStallChangeItem( used.typeFlags ) ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_ITEMB_STSTALL_CHAINGE",
+						value: 0,
+						arguments: [ used.name ?? "" ],
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup
 				// (types 6 and 0x1C) or server grant (type 0xE).
 				const pickupGrant = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 14;
@@ -4592,8 +4745,17 @@ Packet handling must not depend on which HUD panel is currently open.
 						return true;
 					}
 				}
+				// A growth pet's satiety fall across 30% on this packet, if
+				// any, judged against the pet record's stored satiety: the
+				// record is the one satiety store both satiety packets
+				// write (the original's single +0x10 word), so a fall one
+				// lane already printed cannot print again on the other
+				// (see cosSatietyDroppedLow).
+				let satietyDrop:
+					| { readonly gid: number; readonly before: number | undefined; readonly next: number; }
+					| undefined;
 				if ( frame.opcode === 0x33a6 ) {
-					const { gid } = vitalsUpdate( frame.payload );
+					const update = vitalsUpdate( frame.payload ), gid = update.gid;
 					// CPSMission_OnVitalsUpdate0x33A6 (0x0077a080): resolves gid via
 					// GidObjectRegistry_FindEntityByGid (0x0077a0d7) or the local
 					// player's CCosDataManager_FindCharData (0x0077a0f7); if neither
@@ -4603,6 +4765,10 @@ Packet handling must not depend on which HUD panel is currently open.
 						!combat.state().vitals.some( row => row.gid === gid )
 					) {
 						return false;
+					}
+					const watched = cosRecords.get( gid );
+					if ( update.satiety !== undefined && watched?.band === 3 ) {
+						satietyDrop = { gid, before: watched.satiety, next: update.satiety };
 					}
 				}
 				const item = inventory.receive( frame.opcode, frame.payload, now, {
@@ -4617,6 +4783,20 @@ Packet handling must not depend on which HUD panel is currently open.
 					// A settled move can change the suit the server stamps
 					// own chat lines with; the dedupe name follows it.
 					chat.equipment( inventory.state().inventory );
+				}
+				if ( satietyDrop ) {
+					if ( cosSatietyDroppedLow( satietyDrop.before, satietyDrop.next ) ) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_COSPETERR_HGP_30LOW",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+					}
+					const record = cosRecords.get( satietyDrop.gid );
+					if ( record ) {
+						cosRecords.set( satietyDrop.gid, { ...record, satiety: satietyDrop.next } );
+						dirty = true;
+					}
 				}
 				if ( frame.opcode === 0xb2f5 && frame.payload.length >= 4 ) {
 					// 775B50 (0x775BDE): a halt naming an owned pet that holds

@@ -182,6 +182,126 @@ test("an error event waits for the close, which reports the failure with its cod
 	network.dispose();
 });
 
+/*
+================
+wtHarness
+
+A WebTransport stand-in: a controllable control stream and a closed
+promise the test settles the way the server would - resolved with a
+close code for a polite end, rejected for an abrupt one.
+================
+*/
+function wtHarness( t ) {
+	const transports = [];
+	class Transport {
+		ready = Promise.resolve();
+		constructor() {
+			this.closed = new Promise( ( resolve, reject ) => {
+				this.settle = resolve;
+				this.abort = reject;
+			} );
+			transports.push( this );
+		}
+		async createBidirectionalStream() {
+			this.readable = new ReadableStream( {
+				start: controller => {
+					this.controller = controller;
+				}
+			} );
+			this.writable = new WritableStream( { write() {} } );
+			return { readable: this.readable, writable: this.writable };
+		}
+		close() {}
+		receive( bytes ) {
+			const framed = new Uint8Array( bytes.byteLength + 4 );
+			new DataView( framed.buffer ).setUint32( 0, bytes.byteLength, true );
+			framed.set( bytes, 4 );
+			/** @type {ReadableStreamDefaultController} */ (this.controller).enqueue( framed );
+		}
+	}
+	const original = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
+	Object.defineProperty( globalThis, "WebTransport", { value: Transport, configurable: true, writable: true } );
+	t.after( () => {
+		if ( original ) Object.defineProperty( globalThis, "WebTransport", original );
+		else Reflect.deleteProperty( globalThis, "WebTransport" );
+	} );
+	return transports;
+}
+
+/*
+================
+flushMicrotasks
+================
+*/
+async function flushMicrotasks() {
+	await new Promise( resolve => setTimeout( resolve, 10 ) );
+	await new Promise( resolve => setTimeout( resolve, 10 ) );
+}
+
+/*
+================
+openWtSession
+
+A welcomed WebTransport session and the failures it reports.
+================
+*/
+async function openWtSession( t ) {
+	const transports = wtHarness( t );
+	/** @type {{ error: string, frame: any, reason: any }[]} */
+	const failures = [];
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "ticket" );
+	for ( let i = 0; i < 100 && !transports[0]?.controller; i++ ) {
+		await new Promise( resolve => setTimeout( resolve, 5 ) );
+	}
+	const transport = transports[0];
+	transport.receive( welcome() );
+	await flushMicrotasks();
+	return { network, transport, failures };
+}
+
+test("a WebTransport close with the server's polite code is an expected goodbye", async t => {
+	const { network, transport, failures } = await openWtSession( t );
+	transport.settle( { closeCode: 0, reason: "" } );
+	await flushMicrotasks();
+	network.drain( () => {} );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].error, "Transport connection closed" );
+	assert.equal( failures[0].reason.category, "expected", "a clean WT goodbye files no incident" );
+	assert.equal( failures[0].reason.code, "connection_closed" );
+	assert.equal( failures[0].reason.message, "Your session ended." );
+	network.dispose();
+});
+
+test("a WebTransport close with any other code, or an abrupt end, stays unknown", async t => {
+	for ( const end of [ "code", "abrupt" ] ) {
+		const { network, transport, failures } = await openWtSession( t );
+		if ( end === "code" ) transport.settle( { closeCode: 1000, reason: "" } );
+		else transport.abort( new Error( "connection dropped" ) );
+		await flushMicrotasks();
+		network.drain( () => {} );
+		assert.equal( failures.length, 1 );
+		assert.equal( failures[0].reason.category, "unknown", `${end} is not the proven goodbye` );
+		assert.equal( failures[0].reason.message, "Connection lost. The cause is unknown." );
+		network.dispose();
+	}
+});
+
+test("a WebTransport stream that ends before the close settles waits for its code", async t => {
+	const { network, transport, failures } = await openWtSession( t );
+	transport.controller.close();
+	await flushMicrotasks();
+	network.drain( () => {} );
+	assert.equal( failures.length, 0, "the stream alone does not classify the end" );
+	transport.settle( { closeCode: 0, reason: "" } );
+	await flushMicrotasks();
+	network.drain( () => {} );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].reason.category, "expected" );
+	network.dispose();
+});
+
 test("a socket closed before it opened reports that it was never open", t => {
 	const sockets = socketHarness( t );
 	/** @type {{ error: string, reason: any }[]} */

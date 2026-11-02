@@ -73,6 +73,11 @@ const CLOSE_REASON_LENGTH = 64;
 // goodbye the browser proves (GH #2148) - the peer closed politely and
 // said so, as opposed to a drop the client only notices by silence.
 const WS_NORMAL_CLOSE_CODE = 1000;
+// The WebTransport application close code the server ends a session
+// with (conn_wt.go CloseWithError(0, ...)): the QUIC link's polite
+// goodbye, the WT counterpart of the socket's clean 1000 above. The
+// session's closed promise resolves with it; an abrupt end rejects.
+const WT_CLEAN_CLOSE_CODE = 0;
 
 /*
 ================
@@ -649,13 +654,23 @@ export function createNetwork(
 	fresh admission; the ticket is never presented a third time.
 	================
 	*/
-	function wtClosed( generation: number, mine: Link ) {
+	function wtClosed( generation: number, mine: Link, closeCode?: number ) {
 		if ( disposed || generation !== epoch || link !== mine ) return;
 		if ( welcomed ) {
+			// Only the session's closed settlement knows how the link
+			// ended; a stream or write trigger that beats it here waits
+			// for that call (the promise always settles, and its handler
+			// calls back in with the code). A resolved code 0 is the
+			// server's polite close - a goodbye, not a loss, exactly as
+			// the socket's clean 1000 (GH #2148). A rejection arrives as
+			// -1 and stays unknown, as does any other code.
+			if ( closeCode === undefined ) return;
+			const goodbye = closeCode === WT_CLEAN_CLOSE_CODE;
 			end( "Transport connection closed", {
-				category: "unknown",
+				category: goodbye ? "expected" : "unknown",
 				code: "connection_closed",
-				message: "Connection lost. The cause is unknown."
+				message: goodbye ? "Your session ended." : "Connection lost. The cause is unknown.",
+				detail: `WebTransport close ${closeCode}${goodbye ? ", clean" : ""}`
 			} );
 			return;
 		}
@@ -782,7 +797,9 @@ export function createNetwork(
 						},
 						() => {
 							bufferedBytes -= framed.byteLength;
-							wtClosed( generation, mine );
+							// A write the stream refuses is a broken
+							// link, not an ending still to classify.
+							wtClosed( generation, mine, -1 );
 						}
 					);
 				},
@@ -795,8 +812,8 @@ export function createNetwork(
 			};
 			link = mine;
 			session.closed.then(
-				() => wtClosed( generation, mine ),
-				() => wtClosed( generation, mine )
+				info => wtClosed( generation, mine, info.closeCode ),
+				() => wtClosed( generation, mine, -1 )
 			);
 			void wtPump( reader, generation, mine );
 			send( hello );

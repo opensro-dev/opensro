@@ -2936,7 +2936,10 @@ test("a move unanswered on a live link times out as the movement lane's loss", a
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
 	// The inbound age reads the real event clock (#1474), so a loaded machine
 	// sees a few milliseconds between the last frame and the step.
-	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound \d{1,2} ms ago/ );
+	assert.match(
+		incidents[0].message,
+		/command 1, age 11001 ms, pending 1, gameplay silence 11002 ms; last inbound \d{1,2} ms ago/
+	);
 });
 
 /*
@@ -3139,7 +3142,7 @@ test("an unanswered inventory transaction resumes the session without replaying 
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
 	assert.equal( incidents[0].category, "unknown" );
-	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\)/ );
+	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\); held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -3175,7 +3178,7 @@ test("an unanswered mall request resumes the session without replaying it", asyn
 	assert.equal( world.status().phase, "reconnecting", "a lost answer resumes, it does not disconnect" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
-	assert.match( incidents[0].message, /Mall request timed out/ );
+	assert.match( incidents[0].message, /Mall request timed out; held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -3372,6 +3375,7 @@ test("an answer queued behind scene references is not lost while they arrive", a
 	world.step( 35001 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=26001/ );
 });
 
 test("a movement receipt queued behind scene references is not lost while they arrive", async t => {
@@ -3388,6 +3392,7 @@ test("a movement receipt queued behind scene references is not lost while they a
 	world.step( 35100 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 10100 ms/ );
 });
 
 /*
@@ -3414,6 +3419,7 @@ test("a movement receipt behind scene references still trips the ninety-second b
 	world.step( 93000 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 0 ms/ );
 });
 
 /*
@@ -3443,6 +3449,7 @@ test("an answer behind endless scene references still reaches its limit", async 
 	}
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=92000/ );
 });
 
 /*
@@ -3648,6 +3655,82 @@ test("a silent socket still times out", async t => {
 	assert.equal( world.status().phase, "entering-world", "inside the window" );
 	world.step( 10010 );
 	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
+	world.dispose();
+});
+
+/*
+================
+a timed-out entry records the bytes and stage it died with
+
+The world_entry_rejected incident names what the wire had done by
+the failure (#2311 item 4): a report that shows bytes arriving
+exonerates the server, and one that shows none convicts the link.
+The counts are the failed attempt's own: the network counters are
+lifetime, so a retry the server never answered must still show a
+silent wire, and the next attempt starts with no evidence at all.
+================
+*/
+test("a timed-out entry records the bytes and stage it died with", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
+	world.step( 10010 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const evidence = world.status().entryFailure;
+	assert.equal( evidence?.stage, "entering-world" );
+	assert.equal( evidence?.framesReceived, 1, "only the WELCOME had landed" );
+	assert.ok( (evidence?.bytesReceived ?? 0) > 0, "the WELCOME's bytes are counted" );
+	// The scheduled retry receives nothing at all. The network counters
+	// are lifetime, so without the per-attempt baseline this attempt
+	// would inherit the first WELCOME and report a streaming wire for a
+	// server that never answered.
+	assert.equal( world.status().phase, "reconnecting" );
+	world.step( 10300 );
+	await settle();
+	world.step( 10301 );
+	await settle();
+	assert.equal( world.status().phase, "connecting", "the retry is under way" );
+	assert.equal( sockets.length, 2, "the retry opened its own socket" );
+	world.step( 21000 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const silent = world.status().entryFailure;
+	assert.equal( silent?.stage, "connecting" );
+	assert.equal( silent?.framesReceived, 0, "nothing arrived on the retry" );
+	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
+	// The next attempt starts clean, and a world that binds keeps no
+	// failure evidence.
+	world.step( 21600 );
+	await settle();
+	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
+	world.step( 21601 );
+	await settle();
+	const third = sockets[2];
+	third.onopen();
+	third.receive( 2, welcome() );
+	world.step( 21602 );
+	await settle();
+	world.step( 21603 );
+	await settle();
+	third.receive( 7, entered() );
+	for ( const row of rows ) third.receive( row.opcode, row.payload );
+	world.step( 21604 );
+	const batch = world.take();
+	world.ack( batch.sequence );
+	world.step( 21605 );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
 	world.dispose();
 });
 

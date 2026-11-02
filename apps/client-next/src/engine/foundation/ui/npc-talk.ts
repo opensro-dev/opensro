@@ -133,6 +133,9 @@ export interface NpcTalkInput {
 	readonly canGacha?: boolean;
 	// canGachaOperator is row 0x28 (5D9750, mask 0x20000): Gori's voucher exchange.
 	readonly canGachaOperator?: boolean;
+	// canWithdrawSkill is row 0x16 (5D9100, capability 0x200): the
+	// herbalist's skill-withdrawal row; the click sends mask 0x200.
+	readonly canWithdrawSkill?: boolean;
 	readonly canReverseReturn?: boolean;
 	// gateRows are a quest exit gate's rows (capability 0x8000000):
 	// 5D9100 appends them after every service row, each action 0x2A.
@@ -291,6 +294,10 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						[]),
 					...(input.canFortressTrainer ?
 						[ { id: "npc-fortress-production:trainer", label: copy( "UIIT_STT_FORT_ETC_TRAINING" ) } ] :
+						[]),
+					// 5D9100 appends row 0x16 after the job rows, before 0x27.
+					...(input.canWithdrawSkill ?
+						[ { id: "npc-withdraw", label: copy( "UIIT_MSG_CIRCULATION_WITHDRAW_SKILL" ) } ] :
 						[]),
 					// 5D9100 adds row 0x27 after the fortress rows; 5D6E92 labels it.
 					...(input.canGacha ?

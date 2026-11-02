@@ -22,6 +22,10 @@ import { readPartyMember, unknownPartyMember } from "./party-member";
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
 export const MUTATION_PROPOSAL = 8;
+// The 0x3393 type inviting a party member into a quest instance
+// (0x7644E0's type-7 arm, the box at 0x75C160). NOTE: the handler's jump
+// table is indexed from 0, so in table-case terms this is case 6.
+export const INSTANCE_PROPOSAL = 7;
 // 7644E0 case 6: a guild master proposes a union (confirm box 0x1D).
 export const UNION_PROPOSAL = 6;
 export { socialRequest, type SocialCommand } from "./social-request";
@@ -49,6 +53,22 @@ export function withoutResurrection( state: SocialState ): SocialState {
 		return state;
 	}
 	const { resurrection: _closed, ...rest } = state;
+	return rest;
+}
+
+/*
+================
+withoutInstance
+
+The state with the quest instance invitation closed; the slot is dropped
+rather than nulled, as withoutResurrection.
+================
+*/
+export function withoutInstance( state: SocialState ): SocialState {
+	if ( !state.instance ) {
+		return state;
+	}
+	const { instance: _closed, ...rest } = state;
 	return rest;
 }
 
@@ -333,7 +353,8 @@ export function socialPacket(
 		const type = u8();
 		if (
 			type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 &&
-			type !== UNION_PROPOSAL && type !== MUTATION_PROPOSAL && type !== GUILD_WAR_PROPOSAL
+			type !== UNION_PROPOSAL && type !== INSTANCE_PROPOSAL && type !== MUTATION_PROPOSAL &&
+			type !== GUILD_WAR_PROPOSAL
 		) {
 			return null;
 		}
@@ -346,7 +367,26 @@ export function socialPacket(
 		}
 		// 7644E0 types 4 and 8 carry only the caster: {u8 type, u32 casterGid}.
 		// They fill their own slot and leave a pending invitation untouched.
-		next = type === RESURRECTION_PROPOSAL || type === MUTATION_PROPOSAL ?
+		// Type 7 carries the whole invite struct (0x764380): past the leader
+		// gid, u32, u8, u32, u8, u8, u32, u32, a u16 member count and that
+		// many member gids. The client acts on no field past the leader, but
+		// the frame is still walked whole, as the native reader walks it.
+		if ( type === INSTANCE_PROPOSAL ) {
+			u32();
+			u8();
+			u32();
+			u8();
+			u8();
+			u32();
+			u32();
+			const members = u16();
+			for ( let i = 0; i < members; i++ ) {
+				u32();
+			}
+		}
+		next = type === INSTANCE_PROPOSAL ?
+			{ ...next, instance: { gid } } :
+			type === RESURRECTION_PROPOSAL || type === MUTATION_PROPOSAL ?
 			{ ...next, resurrection: { gid, ...(type === MUTATION_PROPOSAL ? { mutation: true } : {}) } } :
 			{
 				...next,

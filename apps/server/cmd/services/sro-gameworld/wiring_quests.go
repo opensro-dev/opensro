@@ -123,6 +123,10 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			result, err := quests.RefuseQuestOffer(character, codename)
 			return result.Frames, err
 		},
+		OpenResuscitation: func(character *enterworld.Character, npcCodename string) ([]wire.Frame, error) {
+			result, err := quests.OpenResuscitation(character, npcCodename)
+			return result.Frames, err
+		},
 	}
 	game.items.GMQuests = gmQuestHooks(quests)
 }

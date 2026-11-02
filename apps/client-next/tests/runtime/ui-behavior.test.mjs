@@ -2058,6 +2058,118 @@ test("chat tabs focus their prefixed draft; missing membership emits native stat
 	}
 });
 
+test("a chat line the chat column bans prints the filter line in red and sends nothing", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		"chatword\t0\t1\t0\t0",
+		"namebad\t2\t0\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		const say = ( text, now ) => {
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: text,
+				start: text.length,
+				end: text.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, now );
+		};
+		// The substring row (type 2 in the chat column) refuses the send
+		// and leaves the filter line in the chat pane (790C70 via 545EF0).
+		say( "you chatbad here", 1100 );
+		assert.equal( chatCommands(), 0 );
+		assert.ok( f.hasText( "Some words or expressions" ) );
+		// The whole-word row (type 1) fires on the word alone...
+		say( "a chatword here", 1200 );
+		assert.equal( chatCommands(), 0 );
+		// ...but not inside a longer word.
+		say( "chatwordx is fine", 1300 );
+		assert.equal( chatCommands(), 1 );
+		// The character-name column is a different list: its row does not
+		// block chat.
+		say( "say namebad now", 1400 );
+		assert.equal( chatCommands(), 2 );
+		// And an ordinary line goes out untouched.
+		say( "a clean line", 1500 );
+		assert.equal( chatCommands(), 3 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a banned line in a missing party or guild prints the membership refusal, not the filter line", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 6AEBD0 refuses on membership (party 6AEFF4, guild 6AF03E)
+		// before the abuse filter is consulted (790C70 at 6AF0B9), so
+		// the banned word in the line never reaches the filter here.
+		for (
+			const [tab, line, refusal] of [ [ 1, "#you chatbad here", "Cannot find the relevant" ], [
+				2,
+				"@you chatbad here",
+				"Cannot carry this function"
+			] ]
+		) {
+			f.ui.event( { kind: "activate", id: "chat-tab:" + tab } );
+			f.ui.step( { ...f.state }, 1100 );
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, 1200 );
+			assert.ok( f.hasText( refusal ) );
+			assert.equal( f.hasText( "Some words or expressions" ), false );
+			assert.equal( chatCommands(), 0 );
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
 test("guild-war notice modal owns input, dismisses locally and reopens only for a new notice", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -2095,6 +2207,31 @@ test("guild-war notice modal owns input, dismisses locally and reopens only for 
 		f.state.gameplay = { ...f.state.gameplay, notices: [ notice, { ...notice, sequence: 2 } ] };
 		scene = f.rawStep( { ...f.state }, 1150 );
 		assert.deepEqual( confirm().rect, original );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the friend-conclusion box formats the two-name line and leaves the acceptance plain", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 52F460 case 0x21: "[%s]and [%s]'s" (UIIT_MSG_YOUNME) takes the
+		// friend's name, then the local player's; the acceptance line
+		// (UIIT_MSG_FRIEND_CONCLUSION) carries no placeholder.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			friends: { conclusion: "Cale" },
+			social: { invitation: null, localName: "Player", members: [] }
+		};
+		const scene = f.ui.step( { ...f.state }, 1100 );
+		assert.ok( scene?.controls.some( c => c.id === "friend-conclusion-confirm" ) );
+		assert.ok( f.hasText( "[Cale]and [Player]'s" ) );
+		assert.ok( f.hasText( "The proposal to make friends is accepted." ) );
+		assert.equal( f.hasText( "%s" ), false, "no raw placeholder reaches the pane" );
+		f.ui.event( { kind: "activate", id: "friend-conclusion-confirm" } );
+		f.ui.step( f.state, 1200 );
+		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "friend-conclusion-close" } } ] );
 	} finally {
 		f.dispose();
 	}
