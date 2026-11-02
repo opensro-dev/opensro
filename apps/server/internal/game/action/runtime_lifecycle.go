@@ -35,8 +35,16 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		// Monster casts and skill finalizes commit deaths and EXP; their
 		// private tails are captured under the gate (sealTickPrivate).
-		unlock := rt.lockTickPublication()
-		defer unlock()
+		// The wait is the tick gate's bounded wait (#2294): a cut hook
+		// settles nothing this tick — summons release on an absolute
+		// ReleaseAtMs, self-effects retire on expiry, casts release on
+		// releaseAtMs and finalizes on dueAtMs, so the next served pass
+		// settles the same work before that tick's division AI. Only
+		// completion shifts by a tick while the gate is held.
+		if !rt.acquireTickGate() {
+			return nil
+		}
+		defer rt.releaseTickGate()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 		}

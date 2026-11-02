@@ -88,7 +88,22 @@ type Session struct {
 	// BeginSceneAdmission; set by the reset-batch enqueue and by the
 	// enter lane's explicit mark after a published refusal.
 	sceneBootstrapEnqueued bool
-	observedObjects        map[uint32]struct{}
+	// sceneSnapshotBuilt marks the narrow window after the enter lane
+	// has built this scene's snapshot and before its bootstrap (or
+	// refusal) queues. Only in that window do later batches park
+	// behind the bootstrap; an ordinary loading scene whose answers a
+	// client is waiting on is not caught by it (#2294).
+	sceneSnapshotBuilt bool
+	// pendingReceipts are batches parked for this scene while its
+	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
+	// they join the queue behind the bootstrap batch, never ahead of
+	// it, and are dropped when the scene is replaced or answered with
+	// a refusal. pendingBytes is their EncodedLen sum, carried in
+	// queueBytes from acceptance until the frames drain (#2294).
+	pendingReceipts []pendingReceipt
+	pendingFrames   int
+	pendingBytes    int
+	observedObjects map[uint32]struct{}
 	// publishedSorted is observedObjects in ascending order, rebuilt into a
 	// fresh array on the first PublishedObjects read after any change marks
 	// it stale. Readers share it, so it is never written once built.
@@ -304,7 +319,10 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // Send queues a frame on the reliable, ordered channel. It never blocks on
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
-// callers may reuse their buffer immediately.
+// callers may reuse their buffer immediately. A native game frame sent
+// while a built scene snapshot awaits its bootstrap parks behind it
+// (#2294); transport-control frames are the machinery's own and stay
+// immediate.
 /*
 ================
 Send
@@ -332,11 +350,21 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 	// resume ring is still draining (resendFrames) is retained state
 	// the producer did not create, and closing here would kill the
 	// resumed session the ring just served (#2146).
-	if len(s.queue)-s.resendFrames >= s.hub.cfg.OutboundQueue ||
+	if len(s.queue)+s.pendingFrames-s.resendFrames >= s.hub.cfg.OutboundQueue ||
 		s.queueBytes-s.resendBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
+	}
+	// A game frame that finds a built snapshot still waiting for its
+	// bootstrap queues behind it, in issue order with parked receipts.
+	if opcode > maxControlOpcode && s.bootstrapParkOpenLocked() {
+		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: []Frame{{Opcode: opcode, Payload: owned}}})
+		s.pendingFrames++
+		s.pendingBytes += frameBytes
+		s.queueBytes += frameBytes
+		s.mu.Unlock()
+		return nil
 	}
 	s.queue = append(s.queue, Frame{Opcode: opcode, Payload: owned})
 	s.queueBytes += frameBytes
@@ -618,6 +646,8 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
+	s.sceneSnapshotBuilt = false
+	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil
 	s.lossyBytes = 0
