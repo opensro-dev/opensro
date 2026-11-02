@@ -128,6 +128,12 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
+	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
+	// passes it to the Agent too (agentVariables), so the two can never
+	// answer different codes in the same window. Both read it with
+	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
+	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -382,7 +388,6 @@ var NotSettings = map[string]string{
 	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",
 	"SRO_MOVE_CLIENT_CLIP":                 "movement enforcement mode, operational",
 	"SRO_MAINTENANCE_GATE_PATH":            "release path: the maintenance gate file",
-	"SRO_MAINTENANCE_MESSAGE":              "operational: names the maintenance refusal (world-entry gate and Agent admission)",
 	"SRO_PUBLIC_API_ADDR":                  "the public API listener, per shard",
 	"SRO_TRANSPORT_TLS_ID":                 "transport certificate identity",
 	"SRO_RELEASE_ID":                       "release identity",

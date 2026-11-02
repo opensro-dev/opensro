@@ -100,3 +100,24 @@ func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
 		t.Fatalf("ungated mint = %v", minted)
 	}
 }
+
+/*
+================
+TestMaintenanceMessageReadsTheSwitchSpellings
+
+sro-nomad passes the shard setting through raw to both jobs, so the
+binaries own the spelling: on, 1 or true (any case, trimmed) answers
+MAINTENANCE; off, unset and anything else keep SHARD_OFFLINE.
+================
+*/
+func TestMaintenanceMessageReadsTheSwitchSpellings(t *testing.T) {
+	for value, want := range map[string]bool{
+		"on": true, " ON ": true, "1": true, "true": true,
+		"off": false, "": false, "0": false, "yes": false,
+	} {
+		t.Setenv(EnvMaintenanceMessage, value)
+		if got := MaintenanceMessageFromEnv(); got != want {
+			t.Errorf("%s=%q: got %v, want %v", EnvMaintenanceMessage, value, got, want)
+		}
+	}
+}
