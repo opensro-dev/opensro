@@ -17,6 +17,7 @@ const source = "src/engine/foundation/gameplay/party-matching.ts";
 
 const {
 	emptyPartyMatching,
+	partyMatchAckNotice,
 	partyMatchRequest,
 	partyMatchPacket,
 	partyMatchRows,
@@ -383,4 +384,30 @@ test("current party stays ahead of sorting and search without changing other row
 	assert.deepEqual( partyMatchRows( rows, filtered ).map( row => row.id ), [ 1, 3 ] );
 	assert.deepEqual( partyMatchRows( rows, search, "id", true, "Missing" ).map( row => row.id ), [ 20, 3, 1 ] );
 	assert.deepEqual( rows.map( row => row.id ), [ 1, 20, 3 ] );
+});
+
+test("a join answer raises its native surface per detail (75EBD0)", () => {
+	// Detail 1 completes the match: the centre banner (67D030),
+	// never the guide log.
+	assert.deepEqual( partyMatchAckNotice( 0xb5bf, 1 ), {
+		key: "UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER",
+		value: 0,
+		banner: true,
+		bannerOnly: true
+	} );
+	// Details 0 and 2 are guide lines at the system type (push 4).
+	assert.deepEqual( partyMatchAckNotice( 0xb5bf, 0 ), {
+		key: "UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED",
+		value: 0,
+		nativeType: 4
+	} );
+	assert.deepEqual( partyMatchAckNotice( 0xb5bf, 2 ), {
+		key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY",
+		value: 0,
+		nativeType: 4
+	} );
+	// An unlisted detail keeps the no-reply key as before, untyped,
+	// and no other opcode raises a line here.
+	assert.deepEqual( partyMatchAckNotice( 0xb5bf, 3 ), { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 } );
+	assert.equal( partyMatchAckNotice( 0xb588, 1 ), null );
 });
