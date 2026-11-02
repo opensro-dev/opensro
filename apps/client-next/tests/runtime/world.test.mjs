@@ -2936,7 +2936,10 @@ test("a move unanswered on a live link times out as the movement lane's loss", a
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
 	// The inbound age reads the real event clock (#1474), so a loaded machine
 	// sees a few milliseconds between the last frame and the step.
-	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound \d{1,2} ms ago/ );
+	assert.match(
+		incidents[0].message,
+		/command 1, age 11001 ms, pending 1, gameplay silence 11002 ms; last inbound \d{1,2} ms ago/
+	);
 });
 
 /*
@@ -3139,7 +3142,7 @@ test("an unanswered inventory transaction resumes the session without replaying 
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
 	assert.equal( incidents[0].category, "unknown" );
-	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\)/ );
+	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\); held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -3175,7 +3178,7 @@ test("an unanswered mall request resumes the session without replaying it", asyn
 	assert.equal( world.status().phase, "reconnecting", "a lost answer resumes, it does not disconnect" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
-	assert.match( incidents[0].message, /Mall request timed out/ );
+	assert.match( incidents[0].message, /Mall request timed out; held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -3372,6 +3375,7 @@ test("an answer queued behind scene references is not lost while they arrive", a
 	world.step( 35001 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=26001/ );
 });
 
 test("a movement receipt queued behind scene references is not lost while they arrive", async t => {
@@ -3388,6 +3392,7 @@ test("a movement receipt queued behind scene references is not lost while they a
 	world.step( 35100 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 10100 ms/ );
 });
 
 /*
@@ -3414,6 +3419,7 @@ test("a movement receipt behind scene references still trips the ninety-second b
 	world.step( 93000 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 0 ms/ );
 });
 
 /*
@@ -3443,6 +3449,7 @@ test("an answer behind endless scene references still reaches its limit", async 
 	}
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=92000/ );
 });
 
 /*

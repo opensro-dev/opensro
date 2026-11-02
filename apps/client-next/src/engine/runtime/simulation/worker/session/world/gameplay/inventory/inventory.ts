@@ -141,6 +141,9 @@ export function createInventory(
 			deadline: number;
 			// The latest deadline an inbound hold may reach, fixed by the first hold.
 			answerLimit?: number;
+			// When the first reference hold reached this request (#2148): the
+			// timeout report stamps how long before the deadline it landed.
+			firstHeldAt?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -156,7 +159,7 @@ export function createInventory(
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
-	let timedOut = false, timedOutRequest = "";
+	let timedOut = false, timedOutRequest = "", timedOutDetail = "";
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
 	let shopCompletionRevision = 0;
@@ -437,7 +440,8 @@ timeoutMessage
 	*/
 	function timeoutMessage(): string {
 		const request = timedOutRequest ? " (" + timedOutRequest + ")" : "";
-		return "Inventory transaction timed out" + request + "; reconnect to resynchronize";
+		const detail = timedOutDetail ? "; " + timedOutDetail : "";
+		return "Inventory transaction timed out" + request + detail + "; reconnect to resynchronize";
 	}
 	/*
 ================
@@ -449,13 +453,13 @@ first hold fixed - a stream that never ends must not keep an answer open
 forever. The mall's open request rides the same stream and holds with it.
 ================
 	*/
-	function holdAnswer( until: number, limit: number ) {
+	function holdAnswer( now: number, until: number, limit: number ) {
 		if ( pending ) {
 			const answerLimit = pending.answerLimit ?? limit;
 			const deadline = Math.max( pending.deadline, Math.min( until, answerLimit ) );
-			pending = { ...pending, deadline, answerLimit };
+			pending = { ...pending, deadline, answerLimit, firstHeldAt: pending.firstHeldAt ?? now };
 		}
-		mall.holdUntil( until, limit );
+		mall.holdUntil( now, until, limit );
 	}
 	/*
 ================
@@ -781,6 +785,7 @@ bootstrap
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			error = null;
 			for ( const r of b.refItemSnapshot ?? [] ) {
 				const tooltip = itemTooltipReference( r.nativeFields, r.descriptionSymbol );
@@ -1577,8 +1582,8 @@ fixes limit, and later frames cannot move it: a stream that never ends must
 not keep an answer open forever.
 ================
 		*/
-		holdForReferences( until: number, limit: number ) {
-			holdAnswer( until, limit );
+		holdForReferences( now: number, until: number, limit: number ) {
+			holdAnswer( now, until, limit );
 		},
 		/*
 ================
@@ -1591,7 +1596,7 @@ full window after the stream falls silent, or at the hard limit.
 ================
 		*/
 		noteInboundProgress( now: number ) {
-			holdAnswer( now + INBOUND_HOLD_MS, now + INBOUND_LIMIT_MS );
+			holdAnswer( now, now + INBOUND_HOLD_MS, now + INBOUND_LIMIT_MS );
 		},
 		/*
 ================
@@ -2309,7 +2314,15 @@ step
 			// Native replies have no transaction ID. After timeout a late response
 			// could acknowledge a new request, so reconnect instead of reopening it.
 			if ( timedOut || pending && now >= pending.deadline ) {
-				if ( !timedOut && pending ) timedOutRequest = describeRequest( pending );
+				if ( !timedOut && pending ) {
+					timedOutRequest = describeRequest( pending );
+					// Was the reference stream holding this answer open, and
+					// since when (#2148)? A held-past-cap timeout and a
+					// never-held one read identically without the stamp.
+					timedOutDetail = pending.firstHeldAt === undefined ?
+						"held=0" :
+						`held=1 firstHoldAgeMs=${Math.round( now - pending.firstHeldAt )}`;
+				}
 				timedOut = true;
 				throw Error( timeoutMessage(), { cause: INVENTORY_TRANSACTION_TIMEOUT } );
 			}
@@ -2379,6 +2392,7 @@ clear
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			objRefs.clear();
 			names.clear();
 			icons.clear();

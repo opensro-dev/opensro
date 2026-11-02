@@ -3524,7 +3524,7 @@ the references again (#2148).
 		*/
 		referenceProgress( now: number ) {
 			movement.noteInboundProgress( now );
-			inventory.holdForReferences( now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
+			inventory.holdForReferences( now, now + REFERENCE_ANSWER_HOLD_MS, now + REFERENCE_ANSWER_LIMIT_MS );
 		},
 		/*
 ================
