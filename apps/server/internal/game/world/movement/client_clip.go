@@ -272,7 +272,16 @@ func (c *ClientClip) processOwnedStep(characterName string, from simulation.Spaw
 	// NativeResult 0, and its Rest.Y is the floor the step reached - dropping
 	// it kept the server at the ramp-top height while the client descended,
 	// so every later dungeon clip started over 2 m off its floor.
-	if c.Mode == ClipApply && report.Outcome == ClipArrived && (report.NativeResult&nativeContinueResult != 0 || arrivalKeepsRestOnPlane(report.Rest.RegionID)) {
+	// A step that changes surface (terrain into a placed object, or back)
+	// stands where the leg reached too (#2368): the entered surface's
+	// height is the clip's Rest, and the step's endpoint carries the
+	// walker's old Y by design (advanceGroundWalk's zero-Y clamp), so
+	// returning the requested point would hand every caller a pose on
+	// the old floor under the surface it just entered, with no owner.
+	// Same-surface steps keep returning the requested point bit-for-bit.
+	surfaceChanged := fromOwner.Resolved() && report.RestOwner.Resolved() &&
+		report.RestOwner.Kind != fromOwner.Kind
+	if c.Mode == ClipApply && report.Outcome == ClipArrived && (report.NativeResult&nativeContinueResult != 0 || arrivalKeepsRestOnPlane(report.Rest.RegionID) || surfaceChanged) {
 		return report.Rest, report.RestOwner, false
 	}
 	return to, simulation.NavOwner{}, false
