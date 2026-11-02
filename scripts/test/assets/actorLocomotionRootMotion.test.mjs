@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { avatarToGlb } from "../../build/char/exportGlb.mjs";
 import { npcManifestModels } from "../../build/shared/npcManifest.mjs";
+import { qinshiTombEnabled } from "../../build/shared/qinshiTomb.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
 const publicRoot = CLIENT_PUBLIC_ROOT;
@@ -280,6 +281,37 @@ test("published Baroi locomotion is horizontally in-place", () => {
 const COS_LOCOMOTION_RESOURCES = 43;
 const COS_LOCOMOTION_ROLES = 85;
 
+// Re-pinned 2026-11-02. The counts above are the shipped v1.150 data. The
+// Qin-Shi tomb bake adds its own resources on top: SRO_QINSHI_TOMB defaults
+// on (2026-10-21, #1013) and the bake follows that posture since #2043, so
+// the 79 committed overlay rows (apps/server qinshi_tomb_characterdata.tsv)
+// publish these GLBs, each with walk and run. They are counted apart, named
+// one by one, so a drift in the overlay says which model moved. The tomb
+// quest thief's COS row (MOB_QT_TQ_THIEF_01_COS) puts thief_01 in the COS
+// bucket; every other tomb-only GLB is an actor resource.
+const TOMB_LOCOMOTION_RESOURCES = [
+	"/assets/npc/char/china/shinmu.glb",
+	"/assets/npc/mob/qinshi/blacksnake.glb",
+	"/assets/npc/mob/qinshi/bombstoneghost.glb",
+	"/assets/npc/mob/qinshi/eastguardian.glb",
+	"/assets/npc/mob/qinshi/northguardian.glb",
+	"/assets/npc/mob/qinshi/qinshitombstone.glb",
+	"/assets/npc/mob/qinshi/royalsoldier.glb",
+	"/assets/npc/mob/qinshi/snakedemon.glb",
+	"/assets/npc/mob/qinshi/snakegeneral.glb",
+	"/assets/npc/mob/qinshi/snakeman.glb",
+	"/assets/npc/mob/qinshi/snakeslave.glb",
+	"/assets/npc/mob/qinshi/snakewoman.glb",
+	"/assets/npc/mob/qinshi/southguardian.glb",
+	"/assets/npc/mob/qinshi/tombarcher.glb",
+	"/assets/npc/mob/qinshi/tombbugghost.glb",
+	"/assets/npc/mob/qinshi/tombgeneral.glb",
+	"/assets/npc/mob/qinshi/tombsoldier.glb",
+	"/assets/npc/mob/qinshi/tombstoneghost.glb",
+	"/assets/npc/mob/qinshi/westguardian.glb"
+];
+const TOMB_COS_LOCOMOTION_RESOURCES = [ "/assets/npc/mob/qinshi/thief_01.glb" ];
+
 test("every holder-driven actor resource exports in-place locomotion", () => {
 	const npcManifest = JSON.parse(
 		fs.readFileSync( path.join( publicRoot, "assets", "npc", "manifest.json" ), "utf8" )
@@ -290,28 +322,46 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 	// COS (growth pets, transports) are counted apart from NPCs, monsters and
 	// avatars, so each census still flags a new or removed resource.
 	const resources = new Map();
-	for ( const entry of Object.values( npcManifestModels( npcManifest ) ) ) {
+	for ( const [codename, entry] of Object.entries( npcManifestModels( npcManifest ) ) ) {
 		if ( !entry.glb ) continue;
 		const known = resources.get( entry.glb );
 		if ( known ) {
 			known.cos ||= entry.kind === "cos";
+			known.codenames.push( codename );
 			continue;
 		}
-		resources.set( entry.glb, { label: `NPC resource ${entry.glb}`, cos: entry.kind === "cos" } );
+		resources.set( entry.glb, {
+			label: `NPC resource ${entry.glb}`,
+			cos: entry.kind === "cos",
+			codenames: [ codename ]
+		} );
 	}
 	for ( const entry of avatarRoster.models ) {
-		if ( entry.glb ) resources.set( entry.glb, { label: `avatar resource ${entry.glb}`, cos: false } );
+		if ( entry.glb ) {
+			resources.set( entry.glb, { label: `avatar resource ${entry.glb}`, cos: false, codenames: [] } );
+		}
 	}
 
+	// A resource only the tomb overlay rows use (MOB_TQ_*/MOB_QT_TQ_*
+	// codenames and nothing else; the MOB_QT_01_* quest companions are
+	// shipped v1.150 rows) belongs to the tomb term, not the shipped census.
 	const census = { actor: { resources: 0, roles: 0 }, cos: { resources: 0, roles: 0 } };
-	for ( const [publicPath, { label, cos }] of resources ) {
+	const tombCensus = { actor: { resources: 0, roles: 0 }, cos: { resources: 0, roles: 0 } };
+	const tombResources = { actor: [], cos: [] };
+	for ( const [publicPath, { label, cos, codenames }] of resources ) {
 		const roleCount = assertHorizontalLocomotionInPlace(
 			fs.readFileSync( publicAssetPath( publicPath ) ),
 			label
 		);
-		const bucket = cos ? census.cos : census.actor;
-		if ( roleCount > 0 ) bucket.resources += 1;
-		bucket.roles += roleCount;
+		const bucket = cos ? "cos" : "actor";
+		const tombOnly = codenames.length > 0 &&
+			codenames.every( ( codename ) => /^(?:MOB_TQ_|MOB_QT_TQ_)/.test( codename ) );
+		const target = tombOnly ? tombCensus[bucket] : census[bucket];
+		if ( roleCount > 0 ) {
+			target.resources += 1;
+			if ( tombOnly ) tombResources[bucket].push( publicPath );
+		}
+		target.roles += roleCount;
 	}
 	assert.deepEqual(
 		census.actor,
@@ -322,6 +372,30 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 		census.cos,
 		{ resources: COS_LOCOMOTION_RESOURCES, roles: COS_LOCOMOTION_ROLES },
 		"the COS locomotion census changed; review every new or removed pet or transport resource"
+	);
+	// The tomb term follows the posture both ways, but this census reads the
+	// published tree: the off branch is exercised only by an off bake
+	// (SRO_QINSHI_TOMB must match between the bake and this run), never by
+	// setting the variable against an on bake.
+	const expectedTombActor = qinshiTombEnabled() ? TOMB_LOCOMOTION_RESOURCES : [];
+	const expectedTombCos = qinshiTombEnabled() ? TOMB_COS_LOCOMOTION_RESOURCES : [];
+	assert.deepEqual(
+		tombResources.actor.sort(),
+		expectedTombActor,
+		"the tomb-bake actor resources changed; review the SRO_QINSHI_TOMB overlay rows"
+	);
+	assert.deepEqual(
+		tombResources.cos.sort(),
+		expectedTombCos,
+		"the tomb-bake COS resources changed; review the SRO_QINSHI_TOMB overlay rows"
+	);
+	assert.deepEqual(
+		tombCensus,
+		{
+			actor: { resources: expectedTombActor.length, roles: 2 * expectedTombActor.length },
+			cos: { resources: expectedTombCos.length, roles: 2 * expectedTombCos.length }
+		},
+		"every tomb-bake locomotion resource exports walk and run"
 	);
 });
 
