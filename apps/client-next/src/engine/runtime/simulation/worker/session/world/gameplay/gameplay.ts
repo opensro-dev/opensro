@@ -293,6 +293,7 @@ import {
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
+import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
@@ -2823,7 +2824,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2836,7 +2838,9 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_CANT_TRADE_SHOP",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0,
+						notificationBanner: true
 					} ];
 					dirty = true;
 					return null;
@@ -2865,7 +2869,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2909,7 +2914,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0
 					} ];
 					dirty = true;
 					return null;
@@ -3461,9 +3467,29 @@ state here before a command can claim a native wire conversation.
 					reverseMapPoint: command.reverseMapPoint,
 					renameName: command.renameName
 				};
-				// 5608B0: the ride-state refusal prints instead of using.
 				const usedSlot = command.slot;
 				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
+				// 567290 (kind-0xF arm): activating a trade good never
+				// uses it. 550300 tests the item and 830410 compares
+				// the active record's class byte against 1: with a
+				// transport active the activation composes the COS-bag
+				// move (kind 0x7A, move type 0xF), otherwise the line
+				// prints (67A600 type 0 at 56762F) and nothing is sent.
+				// The selection is this port's active record: it follows
+				// the last summoned or window-selected companion.
+				if ( usedItem && isTradeGoods( usedItem.typeFlags ) ) {
+					const record = context.selectedGid ? cosRecords.get( context.selectedGid ) : undefined;
+					if ( record && !cosSpecialtyMoveRefused( usedItem.typeFlags, record.band ) ) {
+						return inventory.transferCos( record, true, usedSlot, undefined, now, cosItemCaps );
+					}
+					api.notice( {
+						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+						value: 0,
+						nativeType: 0
+					} );
+					return null;
+				}
+				// 5608B0: the ride-state refusal prints instead of using.
 				if ( local?.mountedOn && usedItem && isRideStateRefusedItem( usedItem.typeFlags ) ) {
 					api.notice( { key: "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE", value: 0 } );
 					return null;
