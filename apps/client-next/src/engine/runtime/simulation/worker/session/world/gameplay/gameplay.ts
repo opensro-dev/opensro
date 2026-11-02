@@ -2331,6 +2331,24 @@ state here before a command can claim a native wire conversation.
 					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
+				// 5DA1B0 @5da261: with the 0x4000 capability proven by the
+				// row above, a guild under level 3 prints the limit on the
+				// guide and the centre banner (67a600 @5db134, 67d030
+				// @5da2ae) and sends nothing.
+				if ( social.guild && social.guild.level < 3 ) {
+					npcConversation.showWindow();
+					notices = [
+						...notices.slice( -99 ),
+						{
+							key: "UIIT_MSG_GUILD_STORE_LIMIT",
+							value: 0,
+							nativeType: 0,
+							notificationBanner: true,
+							sequence: ++noticeSequence
+						}
+					];
+					return null;
+				}
 				npcConversation.hideWindow();
 				dirty = true;
 				storage.openGuild( command.gid );
@@ -4327,8 +4345,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( nextSocial.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...nextSocial.notice, sequence: ++noticeSequence } ];
 					}
+					for ( const flip of nextSocial.notices ?? [] ) {
+						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
+					}
 					social = withMemberCountries(
-						nextSocial.notice ? { ...nextSocial, notice: undefined } : nextSocial
+						nextSocial.notice || nextSocial.notices ?
+							{ ...nextSocial, notice: undefined, notices: undefined } :
+							nextSocial
 					);
 					if (
 						social.invitation &&
