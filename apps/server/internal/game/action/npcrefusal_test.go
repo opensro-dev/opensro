@@ -12,6 +12,7 @@ A refused 0x7338 must retire the client's pending function request with
 package action
 
 import (
+	"errors"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -128,6 +129,65 @@ func TestNpcMagicOptionWithoutAlchemyIsRefused(t *testing.T) {
 	rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagMagicOption
 	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, simulation.NpcTalkFlagMagicOption))
 	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestNpcWithdrawalWithoutServiceIsRefused
+
+The NPC grants the withdrawal row but no quest owner is wired: the
+generic invalid-request code retires the request.
+================
+*/
+func TestNpcWithdrawalWithoutServiceIsRefused(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagWithdrawSkill
+	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, simulation.NpcTalkFlagWithdrawSkill))
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestNpcWithdrawalRefusedByOwnerIsRefused
+
+The quest owner refuses the player (under its level gate, say): the
+generic invalid-request code retires the request.
+================
+*/
+func TestNpcWithdrawalRefusedByOwnerIsRefused(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagWithdrawSkill
+	rt.NpcQuests = NpcQuestHooks{
+		OpenResuscitation: func(*enterworld.Character, string) ([]wire.Frame, error) {
+			return nil, errors.New("resuscitation service unavailable")
+		},
+	}
+	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, simulation.NpcTalkFlagWithdrawSkill))
+	assertNpcFunctionRefusal(t, frames, refusal, wire.ErrCodeInvalidRequest)
+}
+
+/*
+================
+TestNpcWithdrawalOpensThroughTheQuestOwner
+
+The row's click reaches the quest owner for the bound NPC and returns
+its frames unchanged: the native 0x3230 open.
+================
+*/
+func TestNpcWithdrawalOpensThroughTheQuestOwner(t *testing.T) {
+	rt, c := merchantFixture(t)
+	rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagWithdrawSkill
+	opened := ""
+	rt.NpcQuests = NpcQuestHooks{
+		OpenResuscitation: func(_ *enterworld.Character, npcCodename string) ([]wire.Frame, error) {
+			opened = npcCodename
+			return []wire.Frame{{Opcode: 0x3230}}, nil
+		},
+	}
+	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, simulation.NpcTalkFlagWithdrawSkill))
+	if refusal != "" || opened != rt.NpcRoster[0].Codename || len(frames) != 1 || frames[0].Opcode != 0x3230 {
+		t.Fatalf("withdrawal open = %+v / %q (npc %q)", frames, refusal, opened)
+	}
 }
 
 /*

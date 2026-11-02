@@ -219,6 +219,10 @@ export interface SocialState {
 	// the caster. It has its own slot so it never displaces an invitation
 	// and no invitation displaces it.
 	readonly resurrection?: { readonly gid: number; readonly mutation?: boolean; };
+	// The open quest instance invitation (0x3393 type 7, 0x7644E0's type-7
+	// arm); its gid is the party leader. Its own slot for the same reason:
+	// the native prompt lives in its own invite struct beside the others.
+	readonly instance?: { readonly gid: number; };
 	// Native war-proposal replies reach the same system-message board as the
 	// fortress announcements. The gameplay owner drains this each frame.
 	readonly notice?: import("./system-notices").SystemNotice;

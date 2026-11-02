@@ -95,6 +95,10 @@ type NpcQuestHooks struct {
 	Accept  func(character *enterworld.Character, codename string) ([]wire.Frame, error)
 	Finish  func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error)
 	Refuse  func(character *enterworld.Character, codename string) ([]wire.Frame, error)
+	// OpenResuscitation answers the herbalist's withdrawal row (talk
+	// mask 0x200) with no dialog stage: the native 0x3230 open, or the
+	// owner's line for a player it refuses. Nil refuses the row.
+	OpenResuscitation func(character *enterworld.Character, npcCodename string) ([]wire.Frame, error)
 }
 
 /*

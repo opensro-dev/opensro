@@ -221,6 +221,88 @@ test("an rmut revival (type 8) fills the same slot as a mutation and answers the
 	game.dispose();
 });
 
+/*
+================
+instanceFrame
+
+The S->C 0x3393 type-7 prompt as the server composes it: the type, the
+leader gid, the rest of the invite struct zeroed (u32, u8, u32, u8, u8,
+u32, u32), a u16 member count and that many member gids.
+================
+*/
+function instanceFrame( leader = 0x12a, members = [ 1, 7 ] ) {
+	const payload = new Uint8Array( 26 + members.length * 4 );
+	const view = new DataView( payload.buffer );
+	payload[0] = 7;
+	view.setUint32( 1, leader, true );
+	view.setUint16( 24, members.length, true );
+	members.forEach( ( gid, i ) => view.setUint32( 26 + i * 4, gid, true ) );
+	return { opcode: 0x3393, payload };
+}
+
+test("a quest instance invitation is held in its own slot until the player answers it", () => {
+	for ( const [accept, answer] of [ [ true, [ 1, 1 ] ], [ false, [ 1, 2 ] ] ] ) {
+		const { game, frames } = fixture();
+		assert.equal( game.receive( instanceFrame(), 0 ), true );
+		const social = defined( defined( game.take() ).social );
+		assert.deepEqual( social.instance, { gid: 0x12a } );
+		assert.equal( social.invitation, null, "the invitation is not an invitation" );
+		assert.doesNotThrow( () => game.command( { kind: "social-consent", accept: true }, 1, undefined ) );
+		assert.equal( frames.length, 0, "the invitation consent does not answer the invitation" );
+		game.command( { kind: "instance-consent", accept: Boolean( accept ) }, 2, undefined );
+		assert.equal( frames.length, 1 );
+		assert.equal( frames[0].opcode, 0x3393 );
+		assert.deepEqual( [ ...frames[0].payload ], answer );
+		assert.equal( defined( defined( game.take() ).social ).instance, undefined );
+		game.command( { kind: "instance-consent", accept: true }, 3, undefined );
+		assert.equal( frames.length, 1, "the answered invitation accepts no second reply" );
+		game.dispose();
+	}
+});
+
+test("an instance invitation arriving over a pending invitation leaves both answerable", () => {
+	const { game, frames } = fixture();
+	game.receive( invitationFrame( 2 ), 0 );
+	game.receive( instanceFrame(), 1 );
+	const pending = defined( defined( game.take() ).social );
+	assert.deepEqual( pending.instance, { gid: 0x12a } );
+	assert.equal( pending.invitation?.type, 2, "the party invitation keeps its slot" );
+	game.command( { kind: "instance-consent", accept: true }, 2, undefined );
+	assert.deepEqual( [ ...frames[0].payload ], [ 1, 1 ] );
+	assert.equal( defined( defined( game.take() ).social ).invitation?.type, 2 );
+	game.command( { kind: "social-consent", accept: true }, 3, undefined );
+	assert.deepEqual( [ ...frames[1].payload ], [ 1, 1 ] );
+	game.dispose();
+});
+
+test("confirming the instance invitation while dead prints the death line and sends nothing", () => {
+	const { game, frames } = fixture();
+	// The local player, dead: appearanceState channel 0 at value 2, the
+	// snapshot command() gates on (the rebirth pin drives it the same way).
+	const dead = { gid: 1, appearanceState: [ 2, 0, 0 ] };
+	game.receive( instanceFrame(), 0 );
+	game.command( { kind: "instance-consent", accept: true }, 2, undefined, dead );
+	assert.equal( frames.length, 0, "a dead confirm is swallowed" );
+	const batch = defined( game.take() );
+	assert.equal( defined( defined( batch.notices ).at( -1 ) ).key, "UIIT_MSG_QUEST_INS_DEATH" );
+	assert.deepEqual( defined( batch.social ).instance, { gid: 0x12a }, "the box stays open" );
+	// The refusal is on the confirm only: declining still answers.
+	game.command( { kind: "instance-consent", accept: false }, 3, undefined, dead );
+	assert.equal( frames.length, 1 );
+	assert.deepEqual( [ ...frames[0].payload ], [ 1, 2 ] );
+	assert.equal( defined( defined( game.take() ).social ).instance, undefined );
+	game.dispose();
+});
+
+test("instance invitations reject a missing leader and a truncated struct", () => {
+	for ( const payload of [ [ 7, 0, 0, 0, 0 ], [ 7, 0x2a, 1, 0, 0, 0, 0 ], [ 7, 0x2a, 1, 0, 0 ] ] ) {
+		const { game, frames } = fixture();
+		assert.throws( () => game.receive( { opcode: 0x3393, payload: Uint8Array.from( payload ) }, 0 ) );
+		assert.equal( frames.length, 0 );
+		game.dispose();
+	}
+});
+
 test("resurrection proposals reject a missing caster and a truncated or padded body", () => {
 	for ( const payload of [ [ 4, 0, 0, 0, 0 ], [ 4, 7, 0, 0 ], [ 4, 7, 0, 0, 0, 0 ] ] ) {
 		const { game, frames } = fixture();

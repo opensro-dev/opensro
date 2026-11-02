@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 const {
 	canAttackCos,
 	canAttackPlayer,
+	capturedMonsterCos,
 	cosInteraction,
 	hoverAttack,
 	petCosAttack,
@@ -203,6 +204,29 @@ test("6875F0: the hover verdict judges both Alt states; party members and own pe
 	assert.equal( hoverAttack( pet( { ownerGid: 1 } ), context(), none ), 0, "the local player's own pet" );
 	assert.equal( hoverAttack( pet( { tidWord: cosWord( 4 ) } ), context(), lookup( [ player() ] ) ), 0 );
 	assert.equal( hoverAttack( { ...player(), kind: "monster" }, context(), none ), 0 );
+});
+
+test("693E50: band 6 names the captured monster the click refusal answers for", () => {
+	const captured = pet( { tidWord: cosWord( 6 ) } );
+	assert.equal( capturedMonsterCos( captured ), true );
+	assert.equal( capturedMonsterCos( pet() ), false, "an attack pet is not a captured monster" );
+	assert.equal( capturedMonsterCos( pet( { tidWord: cosWord( 4 ) } ) ), false, "a pickup pet is not one either" );
+	assert.equal( capturedMonsterCos( player() ), false, "not a pet" );
+	assert.equal(
+		capturedMonsterCos( { ...captured, tidWord: 0x1c4 | 6 << 11 } ),
+		false,
+		"not a COS type word"
+	);
+	// The refusal the print hangs on: band 6 is refused at every gate, with
+	// or without Alt, the owner's or a stranger's.
+	assert.equal( canAttackCos( captured, context(), true, lookup( [ player() ] ) ), false );
+	assert.equal( cosInteraction( captured, context(), true, lookup( [ player() ] ) ), false );
+	const social = { leader: 1, members: [ { name: "other" } ] };
+	assert.equal(
+		cosInteraction( captured, context( { social } ), true, lookup( [ player() ] ) ),
+		false,
+		"a party member's captured monster is refused the same way"
+	);
 });
 
 test("6935F0: a double click attacks another player's transport unless it is ours, a party member's, refused or too low", () => {

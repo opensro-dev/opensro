@@ -209,6 +209,19 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 		}
 		rt.Selected.OpenFunction(divisionID, character.Name, gid)
 		return []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: wire.EncodeNpcInteractionAck(mask)}}, ""
+	case simulation.NpcTalkFlagWithdrawSkill:
+		// Row 0x16: the herbalist's withdrawal service. The quest owner
+		// answers with the native 0x3230 open or its own line for a
+		// player without a potion; a player under its level gate gets
+		// the typed refusal that retires the click.
+		if rt.NpcQuests.OpenResuscitation == nil {
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "withdrawal service is not configured"
+		}
+		frames, err := rt.NpcQuests.OpenResuscitation(character, npc.Codename)
+		if err != nil {
+			return npcFunctionRefusal(wire.ErrCodeInvalidRequest), err.Error()
+		}
+		return frames, ""
 	case guildStorageFunction:
 		// B338 lock 0x4000 makes the client ask for the guild warehouse
 		// (0x7515, npcguildstorage.go); the admission runs there.
