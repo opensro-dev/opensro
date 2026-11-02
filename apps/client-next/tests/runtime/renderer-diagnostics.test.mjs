@@ -89,13 +89,47 @@ function diagnosticDevices( t, features = () => Promise.resolve( [] ) ) {
 	return devices;
 }
 
+/*
+================
+fakeClock
+
+The recovery budget is paced by frame time (performance.now at the
+frame), so a test that fails devices back to back must own the clock:
+time only moves when advance() says so, across every wait in the
+budget (30 s is the longest).
+================
+*/
+/**
+ * @param {import("node:test").TestContext} t
+ */
+function fakeClock( t ) {
+	let now = 0;
+	const original = Object.getOwnPropertyDescriptor( globalThis, "performance" );
+	Object.defineProperty( globalThis, "performance", {
+		configurable: true,
+		value: { now: () => now }
+	} );
+	t.after( () => {
+		if ( original ) Object.defineProperty( globalThis, "performance", original );
+		else Reflect.deleteProperty( globalThis, "performance" );
+	} );
+	return {
+		advancePastBudget: () => {
+			now += 30000;
+		}
+	};
+}
+
 test("diagnostic selection reaches initial and replacement device owners", t => {
 	for ( const enabled of [ false, true ] ) {
 		const devices = diagnosticDevices( t );
+		const clock = fakeClock( t );
 		const renderer = createRenderer( {}, undefined, undefined, { gpuTiming: enabled } );
 		assert.equal( renderer.gpuTiming().enabled, enabled );
 		for ( let i = 0; i < 3; i++ ) {
 			devices[i].phase = "failed";
+			renderer.frame( { width: 1024, height: 768 } );
+			clock.advancePastBudget();
 			renderer.frame( { width: 1024, height: 768 } );
 			assert.equal( devices[i].disposed, true );
 			assert.equal( devices.length, i + 2 );
@@ -124,12 +158,18 @@ test("texture features come from the replacement of a device lost before it lear
 
 test("texture features are empty once no device will learn them, so texture reads never wait", async t => {
 	const devices = diagnosticDevices( t, () => new Promise( () => {} ) );
+	const clock = fakeClock( t );
 	const renderer = createRenderer( {}, undefined, undefined, {} );
-	for ( let i = 0; i < 4; i++ ) {
+	for ( let i = 0; i < 8; i++ ) {
 		devices[i].phase = "failed";
 		renderer.frame( { width: 1024, height: 768 } );
+		clock.advancePastBudget();
+		renderer.frame( { width: 1024, height: 768 } );
 	}
-	assert.equal( devices.length, 4, "three recoveries, then the renderer gives up" );
+	assert.equal( devices.length, 9, "eight recoveries are attempted" );
+	devices[8].phase = "failed";
+	renderer.frame( { width: 1024, height: 768 } );
+	assert.equal( devices.length, 9, "then the renderer gives up" );
 	assert.deepEqual( await renderer.textureFeatures(), [] );
 	renderer.dispose();
 });

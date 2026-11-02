@@ -188,7 +188,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				// running first: a loss seen while running was the browser's, even
 				// with reason "destroyed" (Chrome destroys a page's device after a
 				// GPU-process or driver reset). The renderer recreates the device
-				// (renderer.ts, at most three times) instead of ending the session.
+				// (device-recovery.ts paces eight attempts, renewed after a
+				// stable minute) instead of ending the session.
 				if ( phase === "running" || phase === "starting" ) {
 					fail( `Device lost (${info.reason}): ${info.message}`, true );
 				}
