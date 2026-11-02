@@ -18,7 +18,7 @@ worker-side clear or failure then retires it without a guess here.
 */
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
-import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
+import { assetFailure, assetFailurePath, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { createNavigation, type NavigationView } from "@/engine/foundation/navigation/clipper";
 
@@ -45,6 +45,12 @@ export function createNavigationStream(
 		| { phase: "failed"; region: number; error: string; } = { phase: "idle" };
 	let disposed = false, requestId = 0, deadline = 0, progressBytes = -1;
 	const recovery = createAssetRecovery();
+	// The asset the open request is loading, and the latest failure's
+	// facts for the incident its terminal state files (#2337).
+	// terminalFailure hands each terminal episode out exactly once.
+	let loadPath: string | undefined;
+	let lastFailure: { error: string; path?: string; } | undefined;
+	let reportedFailure: { error: string; path?: string; } | undefined;
 	// The main thread's clipper and the request id of the product it holds
 	// (0: none). The same product goes to the worker under that id.
 	const clipper = createNavigation();
@@ -116,6 +122,9 @@ export function createNavigationStream(
 			if ( state.phase === "failed" && recovery.due( now ) ) state = { phase: "idle" };
 			if ( state.phase === "admitting" && failure?.region === state.region && failure.requestId === requestId ) {
 				state = { phase: "failed", region: state.region, error: failure.error };
+				// The worker's admission answer is not an asset failure:
+				// it files no asset incident (#2337).
+				lastFailure = undefined;
 				recovery.reset();
 				return;
 			}
@@ -183,6 +192,7 @@ export function createNavigationStream(
 				}
 				const url = new URL( path, origin );
 				if ( !isCatalog ) url.hash = String( pose.regionId );
+				loadPath = path;
 				progressBytes = loadProgressBytes();
 				deadline = now + LOAD_TIMEOUT_MS;
 				state = {
@@ -196,6 +206,11 @@ export function createNavigationStream(
 					)
 				};
 			} catch ( error ) {
+				// The admitting deadline is the worker's silence, not an
+				// asset failure: it files no asset incident (#2337).
+				if ( state.phase !== "admitting" ) {
+					lastFailure = { error: String( error ), path: assetFailurePath( error ) ?? loadPath };
+				}
 				cancel();
 				state = { phase: "failed", region: pose.regionId, error: String( error ) };
 				recovery.failed( error, now );
@@ -224,6 +239,29 @@ export function createNavigationStream(
 		*/
 		reconnecting() {
 			return state.phase === "failed" && recovery.reconnecting();
+		},
+		/*
+		================
+		terminalFailure
+
+		The failure that ended this stream's retries, once per episode:
+		a permanent failure at once, a transient one only when its
+		automatic retries are used up. The runtime files it as a client
+		incident (#2337); a later failure is a new episode and reports
+		again under its own facts.
+		================
+		*/
+		terminalFailure() {
+			if ( state.phase !== "failed" || recovery.reconnecting() ) return undefined;
+			const failure = lastFailure;
+			if ( !failure || failure === reportedFailure ) return undefined;
+			reportedFailure = failure;
+			return {
+				error: failure.error,
+				path: failure.path,
+				transient: recovery.transient(),
+				attempts: recovery.attempts()
+			};
 		},
 		/*
 		================

@@ -36,6 +36,21 @@ test("recovery backs off and stops after eight attempts", () => {
 	assert.equal( recovery.due( now + 2000 ), true );
 });
 
+test("the recovery counts the retries a failure sequence has used", () => {
+	const recovery = createAssetRecovery();
+	assert.equal( recovery.attempts(), 0 );
+	recovery.failed( assetFailure( "network", true ), 0 );
+	assert.equal( recovery.attempts(), 1 );
+	recovery.failed( assetFailure( "network", true ), 2000 );
+	assert.equal( recovery.attempts(), 2 );
+	// A permanent failure schedules nothing: the count stays where the
+	// sequence left it, and a reset starts the next sequence from zero.
+	recovery.failed( assetFailure( "hash mismatch" ), 7000 );
+	assert.equal( recovery.attempts(), 2 );
+	recovery.reset();
+	assert.equal( recovery.attempts(), 0 );
+});
+
 test("permanent validation and untagged failures never opt into recovery", () => {
 	for (
 		const error of [

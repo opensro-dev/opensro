@@ -171,12 +171,22 @@ presentUpdate
 			at: 900
 		} ]
 	} );
-	owners.world.step = () => {};
+	Object.assign( owners.world, {
+		error: () => null,
+		reconnecting: () => false,
+		terminalFailure: () => undefined,
+		step: () => {},
+		pumpCameraScripts: () => {}
+	} );
 	owners.renderer.setWorldClock = () => {};
 	owners.renderer.setWeather = () => {};
-	owners.world.pumpCameraScripts = () => {};
 	owners.frontend.step = () => ({ phase: "loading-title" });
-	owners.navigation.step = () => {};
+	Object.assign( owners.navigation, {
+		error: () => null,
+		reconnecting: () => false,
+		terminalFailure: () => undefined,
+		step: () => {}
+	} );
 	owners.characters.previewReady = () => false;
 	owners.characters.dockReady = () => false;
 	owners.characters.entryReady = () => false;

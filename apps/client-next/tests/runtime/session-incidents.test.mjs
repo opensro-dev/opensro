@@ -133,6 +133,62 @@ test("a failure before login is reported to the listing Agent without a bearer",
 	assert.equal( report.body.kind, "runtime" );
 });
 
+test("asset failures file once per episode, beside the once-per-code client reports", async t => {
+	/** @type {{ url: string; body: any; headers: Record<string, string>; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { url, body, headers: options.headers } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	// The stream owner hands each terminal episode out once; the
+	// session files what it is given, so the same failure arriving
+	// again is a second episode, not a duplicate (#2337).
+	const asset = {
+		kind: "client-report",
+		incidentKind: "asset",
+		code: "world_asset_failed",
+		message: "asset=/assets/a.json transient=true attempts=8 error=Error: /assets/a.json: Load failed"
+	};
+	session.command( asset );
+	session.step();
+	await settle();
+	session.command( asset );
+	session.step();
+	await settle();
+	const filed = reports.filter( r => r.body.code === "world_asset_failed" );
+	assert.equal( filed.length, 2, "one incident per episode: asset reports skip the code dedupe" );
+	for ( const report of filed ) {
+		assert.equal( report.body.kind, "asset" );
+		assert.equal( report.body.category, "software" );
+		assert.equal( report.body.message, asset.message );
+		assert.equal( typeof report.body.phase, "string", "the incident carries the session phase" );
+		assert.ok( report.body.phase.length > 0 );
+	}
+	// A runtime fault still reports once per code beside them.
+	const fault = {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "title_fault",
+		message: "Runtime failed"
+	};
+	session.command( fault );
+	session.step();
+	await settle();
+	session.command( fault );
+	session.step();
+	await settle();
+	assert.equal( reports.filter( r => r.body.code === "title_fault" ).length, 1 );
+});
+
 test("world incidents carry the admitted region and a 401 transport-token refusal stops reconnect retries", async t => {
 	/** @type {any} */
 	let socket;
