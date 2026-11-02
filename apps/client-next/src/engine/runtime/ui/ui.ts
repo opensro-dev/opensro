@@ -26524,8 +26524,11 @@ export function createUi(
 				}
 			}
 			const hudData = hud.data();
-			// The level-up quest notice (#2310): the blinking icon at
-			// its native spot, then the centred QuestInfo window.
+			// The level-up quest notice (#2310): the blinking icon at its
+			// native spot, painted in the topmost group because 69CCA0
+			// brings its own window to the front (69C150), over the
+			// minimap plate that covers the spot. Its QuestInfo window
+			// draws with the other windows.
 			if ( hudData && questInfo.iconVisible() ) {
 				const iconPath = questInfo.iconPath();
 				// Demanded before the size gate, not inside it: an image
