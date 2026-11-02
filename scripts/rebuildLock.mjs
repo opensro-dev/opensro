@@ -59,6 +59,11 @@ const OWNER_PUBLICATION_GRACE_MS = 60000;
 const MUTEX_STALE_MS = 60000;
 const MUTEX_SPIN_MS = 10000;
 const MUTEX_SPIN_SLEEP_MS = 15;
+// A Python contender's open() never grants delete sharing on Windows, so a
+// removal that lands while it reads a record fails with EPERM or EBUSY.
+// The mutex release retries those with a linear backoff (15 ms, 30 ms, ...):
+// 30 tries bound it near 7 s, far past any read.
+const REMOVE_RETRIES = 30;
 const persistentLocks = new Map();
 
 export const GENERATED_ASSETS_LOCK_NAME = "generated-assets";
@@ -604,7 +609,12 @@ async function acquireStateMutex( lockDir, deadline ) {
 			async release() {
 				const current = await readStateFile( mutexOwnerPath );
 				if ( current?.record?.token === token ) {
-					await rm( mutexDir, { recursive: true, force: true } );
+					await rm( mutexDir, {
+						recursive: true,
+						force: true,
+						maxRetries: REMOVE_RETRIES,
+						retryDelay: MUTEX_SPIN_SLEEP_MS
+					} );
 				}
 			}
 		};
