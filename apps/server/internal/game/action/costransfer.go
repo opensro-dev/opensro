@@ -22,6 +22,7 @@ applyCosTransfer
 */
 func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	var questFrames []wire.Frame
+	refusalCode := wire.ErrCodeInvalidRequest
 	committed := rt.deps.Update(c, "player-cos-transfer", func() bool {
 		bag, cos, ok := rt.ownedCOSContainer(c, q.CosGID)
 		if !ok {
@@ -39,6 +40,16 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		// Port-only, not native (halloween.go): a sealed event helmet
 		// never leaves for a companion's bag; bringing one back is fine.
 		if q.MovementType == wire.MoveTypePlayerToCos && rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+			return false
+		}
+		// A quest item never enters a companion's bag: the native
+		// transfer refuses it on its TypeID class alone (3/3/9), with
+		// no codename exemption, and answers with the client's
+		// cannot-move-to-summon-item banner. The pickup share policy
+		// keeps its own alchemy exemption (isPersonalQuestPickupItem);
+		// this guard does not borrow it.
+		if q.MovementType == wire.MoveTypePlayerToCos && isQuestItemTypeID(item.TypeFlags) {
+			refusalCode = wire.ErrCodeCannotEnterCosBag
 			return false
 		}
 		if fault := source.TransferWholeTo(dest, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
@@ -70,7 +81,7 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		return true
 	})
 	if !committed {
-		return failureResult(wire.ErrCodeInvalidRequest)
+		return failureResult(refusalCode)
 	}
 	return OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.NewWriter(8).U8(1).U8(q.MovementType).U32(q.CosGID).U8(q.SourceSlot).U8(q.DestSlot).Payload()}}, questFrames...)}
 }
