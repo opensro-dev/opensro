@@ -430,6 +430,10 @@ export type GameplayCommand =
 		readonly source: number;
 		readonly destination: number;
 		readonly quantity: number;
+		// An item activation (567290, double-click) composes the same
+		// equip move directly; only an equipment drop passes the
+		// drop-action gate (594980) that owns the free-battle warning.
+		readonly activation?: boolean;
 	}
 	| {
 		readonly kind: "item-use";

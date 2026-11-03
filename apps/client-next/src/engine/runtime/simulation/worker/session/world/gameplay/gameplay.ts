@@ -235,7 +235,8 @@ import {
 	cosContainerResult,
 	cosGrantResult,
 	cosGroundRequest,
-	cosGroundResult
+	cosGroundResult,
+	cosRemovalResult
 } from "@/engine/foundation/gameplay/cos-container";
 import {
 	advancedPetAssistCountdowns,
@@ -3360,18 +3361,26 @@ state here before a command can claim a native wire conversation.
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
 			}
 			if ( command.kind === "inventory-move" ) {
-				// 594980: wearing a free-battle cape while a growth pet is
-				// summoned prints the warning on the guide lane (67A600
-				// type 5 at 594AE5) and the centre banner (67D030 at
-				// 594B00); the equip itself proceeds and the pet's
-				// unsummon is the server's answer. 594980 also requires
-				// the target socket's record empty (+0x28 clear), so a
-				// swap onto a worn cape stays silent, and its 789C60
-				// gender leg (mask 0x40) stays silent for a cape cut for
-				// the other sex.
+				// 594980 is the equipment drop action: the key is pushed
+				// nowhere else in the client (594AA9) and the handler is
+				// reached only through the equipment window's vtable, so
+				// the warning belongs to the drop. A double-click
+				// activation (567290) composes the same equip move with
+				// destination kind 0x46 at 5678B0 without passing the
+				// gate and prints nothing. When the gate passes, wearing
+				// the cape prints on the guide lane (67A600 type 5 at
+				// 594AE5) and the centre banner (67D030 at 594B00); the
+				// equip itself proceeds and the summoned growth pet's
+				// unsummon is the server's part of the committed equip
+				// (the inference recorded in itemmove.go). 594980 also
+				// requires the target socket's record empty (+0x28
+				// clear), so a swap onto a worn cape stays silent, and
+				// its 789C60 gender leg (mask 0x40) stays silent for a
+				// cape cut for the other sex.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
+					!command.activation &&
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
 					cosCapeGenderPasses( item.tooltip?.fields.reqGender, localPlayerSex() ) &&
 					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
@@ -4790,10 +4799,37 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
-					// only, and a grant is source 3 (#2258).
 					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					// 756CF0's print case (756EEC) is shared by ground (0) and
+					// quest (3) sources and dispatches on the destination: a
+					// grant into the pet bag (0x7A) prints with grant rules -
+					// a new row names itself (75741B), a merge stays silent
+					// (7570DD) - and the gold slot has no line (#2258).
+					if ( frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name },
+								true
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
+					dirty = true;
+					return true;
+				}
+				if (
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
+				) {
+					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 2, true ),
+						record = cosRecords.get( gid );
+					if ( !record ) throw Error( "Absent COS removal owner" );
+					// The quest sink (758C13) prints nothing for a removal.
+					cosRecords.set( gid, cosRemovalResult( record, frame.payload ) );
 					cosPickup.spaceChanged( gid );
 					dirty = true;
 					return true;

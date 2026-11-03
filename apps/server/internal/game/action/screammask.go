@@ -68,7 +68,9 @@ func (rt *Runtime) screamMaskSource(division string, member *enterworld.Characte
 	if float64(monster.NativeActorDistance(from, to)) >= float64(link.ScreamRange) {
 		return nil, enterworld.SkillRow{}, false
 	}
-	snapshot := rt.characterSnapshot(division, member)
+	// The roll reads the member's level, getv modifiers and identity
+	// off the copy - nothing from the bag (#2209).
+	snapshot := rt.characterSnapshotCombat(division, member)
 	if snapshot == nil {
 		return nil, enterworld.SkillRow{}, false
 	}
@@ -121,7 +123,10 @@ func (rt *Runtime) screamMaskPlayer(division string, member, attacker *enterworl
 	// The attacker's record feeds its defender stats and the status
 	// roll, but only while it lives: a dead attacker never pays for
 	// its detached copy (#1943).
-	view := rt.characterSnapshotAdmitted(division, attacker, func(live *enterworld.Character) bool {
+	// The admitted view feeds the attacker's spawn lookup, defender
+	// stats and the victim side of the status roll - the bag stays
+	// behind (#2209).
+	view := rt.characterSnapshotCombatAdmitted(division, attacker, func(live *enterworld.Character) bool {
 		return enterworld.CharacterAlive(live)
 	})
 	if view == nil {
