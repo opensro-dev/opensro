@@ -19,14 +19,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 // fakeProvisioning is the Agent's provisioning API: bearer-gated
-// account create/verify with the real status vocabulary.
+// account create/verify with the real status vocabulary. provisionRun
+// works the accounts concurrently, so the handlers take mu around
+// accounts; a test may write it directly only before the run starts.
 type fakeProvisioning struct {
 	token    string
+	mu       sync.Mutex
 	accounts map[string]string
 }
 
@@ -43,13 +47,18 @@ func (f *fakeProvisioning) handler() http.Handler {
 			Password string `json:"password"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if _, exists := f.accounts[body.ID]; exists {
+		f.mu.Lock()
+		_, exists := f.accounts[body.ID]
+		if !exists {
+			f.accounts[body.ID] = body.Password
+		}
+		f.mu.Unlock()
+		if exists {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]string{"code": "ACCOUNT_EXISTS", "message": "exists"})
 			return
 		}
-		f.accounts[body.ID] = body.Password
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{"id": body.ID})
@@ -59,8 +68,11 @@ func (f *fakeProvisioning) handler() http.Handler {
 			Password string `json:"password"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		valid := f.accounts[r.PathValue("id")] == body.Password
+		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"valid": f.accounts[r.PathValue("id")] == body.Password})
+		_ = json.NewEncoder(w).Encode(map[string]bool{"valid": valid})
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+f.token {
