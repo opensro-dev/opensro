@@ -104,6 +104,7 @@ import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change"
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
+	partyMatchAckNotice,
 	partyMatchPacket,
 	partyMatchRequest,
 	partyActiveJob,
@@ -234,7 +235,8 @@ import {
 	cosContainerResult,
 	cosGrantResult,
 	cosGroundRequest,
-	cosGroundResult
+	cosGroundResult,
+	cosRemovalResult
 } from "@/engine/foundation/gameplay/cos-container";
 import {
 	advancedPetAssistCountdowns,
@@ -292,6 +294,7 @@ import {
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
+import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
@@ -2822,7 +2825,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2835,7 +2839,9 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_CANT_TRADE_SHOP",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0,
+						notificationBanner: true
 					} ];
 					dirty = true;
 					return null;
@@ -2864,7 +2870,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2908,7 +2915,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0
 					} ];
 					dirty = true;
 					return null;
@@ -3468,9 +3476,29 @@ state here before a command can claim a native wire conversation.
 					reverseMapPoint: command.reverseMapPoint,
 					renameName: command.renameName
 				};
-				// 5608B0: the ride-state refusal prints instead of using.
 				const usedSlot = command.slot;
 				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
+				// 567290 (kind-0xF arm): activating a trade good never
+				// uses it. 550300 tests the item and 830410 compares
+				// the active record's class byte against 1: with a
+				// transport active the activation composes the COS-bag
+				// move (kind 0x7A, move type 0xF), otherwise the line
+				// prints (67A600 type 0 at 56762F) and nothing is sent.
+				// The selection is this port's active record: it follows
+				// the last summoned or window-selected companion.
+				if ( usedItem && isTradeGoods( usedItem.typeFlags ) ) {
+					const record = context.selectedGid ? cosRecords.get( context.selectedGid ) : undefined;
+					if ( record && !cosSpecialtyMoveRefused( usedItem.typeFlags, record.band ) ) {
+						return inventory.transferCos( record, true, usedSlot, undefined, now, cosItemCaps );
+					}
+					api.notice( {
+						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+						value: 0,
+						nativeType: 0
+					} );
+					return null;
+				}
+				// 5608B0: the ride-state refusal prints instead of using.
 				if ( local?.mountedOn && usedItem && isRideStateRefusedItem( usedItem.typeFlags ) ) {
 					api.notice( { key: "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE", value: 0 } );
 					return null;
@@ -3938,33 +3966,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				} );
 				if ( matched ) {
 					const flag = frame.payload[0],
-						detail = frame.payload[1],
-						key = flag === 2 ?
-							null :
-							frame.opcode === 0xb5bf ?
-							detail === 1 ?
-								"UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER" :
-								detail === 0 ?
-								"UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED" :
-								"UIIT_MSG_PARTYMATCH_JOIN_NOREPLY" :
-							null;
+						detail = frame.payload[1];
 					if ( flag === 2 ) {
 						const notice = constantNativeNotice( 2, detail! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					} else if ( key ) {
-						// 75EC23: a completed match (detail 1) raises the
-						// centre banner (67D030), not a guide line; the
-						// refused and no-reply details stay guide lines.
-						const complete = frame.opcode === 0xb5bf && detail === 1;
-						notices = [
-							...notices.slice( -99 ),
-							{
-								sequence: ++noticeSequence,
-								key,
-								value: 0,
-								...(complete ? { banner: true, bannerOnly: true } : {})
-							}
-						];
+					} else {
+						const answer = partyMatchAckNotice( frame.opcode, detail );
+						if ( answer ) notices = [ ...notices.slice( -99 ), { ...answer, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
@@ -4771,10 +4779,37 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
-					// only, and a grant is source 3 (#2258).
 					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					// 756CF0's print case (756EEC) is shared by ground (0) and
+					// quest (3) sources and dispatches on the destination: a
+					// grant into the pet bag (0x7A) prints with grant rules -
+					// a new row names itself (75741B), a merge stays silent
+					// (7570DD) - and the gold slot has no line (#2258).
+					if ( frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name },
+								true
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
+					dirty = true;
+					return true;
+				}
+				if (
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
+				) {
+					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 2, true ),
+						record = cosRecords.get( gid );
+					if ( !record ) throw Error( "Absent COS removal owner" );
+					// The quest sink (758C13) prints nothing for a removal.
+					cosRecords.set( gid, cosRemovalResult( record, frame.payload ) );
 					cosPickup.spaceChanged( gid );
 					dirty = true;
 					return true;

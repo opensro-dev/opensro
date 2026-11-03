@@ -471,6 +471,52 @@ func TestStallCreateStopsAWalkingHost(t *testing.T) {
 
 /*
 ================
+TestStallFullRefusalNamesTheMarketFullRow
+
+#2357: an offer added to a stall whose slots are all taken is refused
+with the client's market-full notice row (byte 0x18). The byte the port
+used before (0x30) names no row of the client's stall notice category,
+so the refusal printed nothing.
+================
+*/
+func TestStallFullRefusalNamesTheMarketFullRow(t *testing.T) {
+	rt, owner, _, _ := stallFixture(t)
+	if wire.StallErrStallFull != 0x18 {
+		t.Fatalf("stall-full refusal byte %#x, want 0x18 (the client's market-full row)", wire.StallErrStallFull)
+	}
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	// Eleven offerable stacks: the fixture's slot 13 plus slots 21..30
+	// (slot 20 holds the fixture's sword); the stall takes ten.
+	for slot := uint8(21); slot <= 30; slot++ {
+		owner.MissionInventory = append(owner.MissionInventory, enterworld.InventoryRow{
+			Slot: int64(slot), RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 20,
+		})
+	}
+	for _, bag := range append([]uint8{13}, 21, 22, 23, 24, 25, 26, 27, 28, 29) {
+		out := rt.HandleStallEdit(testDivision, owner, stallAddOfferAt(0, bag, 5, false))
+		if p := out.Frames[0].Payload; len(p) == 0 || p[0] != 1 {
+			t.Fatalf("add from bag %d answered % X, want success", bag, p)
+		}
+	}
+	s, _ := rt.Stalls.Get(testDivision, owner.Name)
+	stored := 0
+	for _, offer := range s.Slots {
+		if offer != nil {
+			stored++
+		}
+	}
+	if stored != 10 {
+		t.Fatalf("stall holds %d offers, want 10", stored)
+	}
+	out := rt.HandleStallEdit(testDivision, owner, stallAddOfferAt(0, 30, 5, false))
+	p := out.Frames[0].Payload
+	if len(p) != 2 || p[0] != 2 || p[1] != 0x18 {
+		t.Fatalf("eleventh offer answered % X, want the market-full refusal [2 0x18]", p)
+	}
+}
+
+/*
+================
 TestStallCreateLeavesAStandingHostAlone
 
 A standing host gets no stop frame: the create answer comes first, as

@@ -8726,7 +8726,15 @@ export function createUi(
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const cancel = buffBoard( view.gameplay, view.simulationTimeMs ?? 0 ).find( row => row.id === event.id )
+				const cancel = buffBoard(
+					view.gameplay,
+					view.simulationTimeMs ?? 0,
+					undefined,
+					undefined,
+					undefined,
+					hudCopy
+				)
+					.find( row => row.id === event.id )
 					?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
@@ -12030,7 +12038,8 @@ export function createUi(
 							next.simulationTimeMs ?? 0,
 							boardSuppressed,
 							ownerPet,
-							experimental.state().saved.attackPetTraining
+							experimental.state().saved.attackPetTraining,
+							hudCopy
 						)
 					) {
 						if ( !icon.path ) continue;

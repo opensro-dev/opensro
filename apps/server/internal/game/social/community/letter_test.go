@@ -69,6 +69,12 @@ func TestLetterAnswerEncoders(t *testing.T) {
 	if got := EncodeLetterSendAckB261(); !bytes.Equal(got, []byte{0x01}) {
 		t.Errorf("0xB261 ack = % X", got)
 	}
+	if got := EncodeLetterSendRefusalB261(LetterSendRefusalUnknownUser); !bytes.Equal(got, []byte{0x02, 0x0d}) {
+		t.Errorf("0xB261 unknown-user refusal = % X", got)
+	}
+	if got := EncodeLetterSendRefusalB261(LetterSendRefusalMailboxFull); !bytes.Equal(got, []byte{0x02, 0x14}) {
+		t.Errorf("0xB261 mailbox-full refusal = % X", got)
+	}
 	if got := EncodeLetterDeleteAckB0CC(3); !bytes.Equal(got, []byte{0x01, 0x03}) {
 		t.Errorf("0xB0CC ack = % X", got)
 	}
@@ -91,6 +97,9 @@ func TestLetterAnswerEncoders(t *testing.T) {
 type fakeLetterStore struct {
 	boxes  map[string]map[int64][]enterworld.LetterRecord
 	labels []string
+	// refuseDeliveries makes the door refuse every delivery the way an
+	// unavailable character does under the real door's lock.
+	refuseDeliveries bool
 }
 
 func newFakeLetterStore() *fakeLetterStore {
@@ -104,13 +113,19 @@ func (f *fakeLetterStore) Mailbox(divisionID string, characterID int64) []enterw
 	return out
 }
 
-func (f *fakeLetterStore) DeliverLetter(divisionID string, _, receiverID int64, maxCount int, letter enterworld.LetterRecord) bool {
-	if len(f.Mailbox(divisionID, receiverID)) >= maxCount {
-		return false
+func (f *fakeLetterStore) DeliverLetter(divisionID string, _, receiverID int64, maxCount int, letter enterworld.LetterRecord) enterworld.LetterDelivery {
+	if f.refuseDeliveries {
+		return enterworld.LetterDeliveryRefused
 	}
-	return f.UpdateMailbox(divisionID, receiverID, "letter-send", func(mailbox []enterworld.LetterRecord) ([]enterworld.LetterRecord, bool) {
+	if len(f.Mailbox(divisionID, receiverID)) >= maxCount {
+		return enterworld.LetterDeliveryMailboxFull
+	}
+	if !f.UpdateMailbox(divisionID, receiverID, "letter-send", func(mailbox []enterworld.LetterRecord) ([]enterworld.LetterRecord, bool) {
 		return append(mailbox, letter), true
-	})
+	}) {
+		return enterworld.LetterDeliveryRefused
+	}
+	return enterworld.LetterDeliveryDone
 }
 
 func (f *fakeLetterStore) UpdateMailbox(divisionID string, characterID int64, label string, fn func(mailbox []enterworld.LetterRecord) ([]enterworld.LetterRecord, bool)) bool {
@@ -229,7 +244,6 @@ func TestHandleLetterSendRefusals(t *testing.T) {
 		{"job alias", letterSendPayload("*Trader", "hello")},
 		{"receiver over cap", letterSendPayload(receiverAtCap, "hello")},
 		{"body over cap", letterSendPayload("Berk", bodyAtCap)},
-		{"unknown receiver", letterSendPayload("Cale", "hello")},
 	}
 	for _, tc := range cases {
 		letters := newFakeLetterStore()
@@ -257,8 +271,8 @@ func TestHandleLetterSendMailboxCap(t *testing.T) {
 	letters.boxes[letterTestDivision] = map[int64][]enterworld.LetterRecord{receiver.ID: full}
 
 	outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Berk", "one too many"), time.Now())
-	if outcome.Refusal == "" || outcome.AckPayload != nil {
-		t.Fatalf("outcome = %+v, want the mailbox-full refusal", outcome)
+	if outcome.Refusal == "" || !bytes.Equal(outcome.AckPayload, []byte{0x02, 0x14}) {
+		t.Fatalf("outcome = %+v, want the answered mailbox-full refusal", outcome)
 	}
 	if got := letters.Mailbox(letterTestDivision, receiver.ID); len(got) != LetterMailboxMaxCount {
 		t.Fatalf("mailbox = %d letter(s), want the cap %d", len(got), LetterMailboxMaxCount)
@@ -269,8 +283,79 @@ func TestHandleLetterSendNilStore(t *testing.T) {
 	sender := letterTestSender()
 	deps := letterTestDeps(nil, sender, letterTestReceiver())
 	outcome := HandleLetterSend(deps, letterTestDivision, sender, letterSendPayload("Berk", "hello"), time.Now())
-	if outcome.Refusal == "" {
-		t.Fatal("nil letter store accepted")
+	if outcome.Refusal == "" || outcome.AckPayload != nil {
+		t.Fatalf("outcome = %+v, want a silent refusal", outcome)
+	}
+}
+
+/*
+================
+TestHandleLetterSendRefusalAnswers
+
+The server-side truths answer their 0xB261 result-2 codes: unknown or
+delete-pending receiver 0x0d, full mailbox 0x14, the rest 0x10. Before
+the fix every one of them left the wire silent (Refusal set, no
+payload).
+================
+*/
+func TestHandleLetterSendRefusalAnswers(t *testing.T) {
+	deletePendingReceiver := letterTestReceiver()
+	deletePendingReceiver.DeletePending = true
+	deletePendingSender := letterTestSender()
+	deletePendingSender.DeletePending = true
+	refusingStore := newFakeLetterStore()
+	refusingStore.refuseDeliveries = true
+
+	cases := []struct {
+		name    string
+		letters *fakeLetterStore
+		sender  *enterworld.Character
+		roster  []*enterworld.Character
+		payload []byte
+		want    []byte
+	}{
+		{
+			name:    "unknown receiver",
+			letters: newFakeLetterStore(),
+			sender:  letterTestSender(),
+			roster:  []*enterworld.Character{letterTestSender(), letterTestReceiver()},
+			payload: letterSendPayload("Cale", "hello"),
+			want:    []byte{0x02, 0x0d},
+		},
+		{
+			name:    "delete-pending receiver",
+			letters: newFakeLetterStore(),
+			sender:  letterTestSender(),
+			roster:  []*enterworld.Character{letterTestSender(), deletePendingReceiver},
+			payload: letterSendPayload("Berk", "hello"),
+			want:    []byte{0x02, 0x0d},
+		},
+		{
+			name:    "delete-pending sender",
+			letters: newFakeLetterStore(),
+			sender:  deletePendingSender,
+			roster:  []*enterworld.Character{deletePendingSender, letterTestReceiver()},
+			payload: letterSendPayload("Berk", "hello"),
+			want:    []byte{0x02, 0x10},
+		},
+		{
+			name:    "delivery refused at the door",
+			letters: refusingStore,
+			sender:  letterTestSender(),
+			roster:  []*enterworld.Character{letterTestSender(), letterTestReceiver()},
+			payload: letterSendPayload("Berk", "hello"),
+			want:    []byte{0x02, 0x10},
+		},
+	}
+	for _, tc := range cases {
+		deps := letterTestDeps(tc.letters, tc.roster...)
+		outcome := HandleLetterSend(deps, letterTestDivision, tc.sender, tc.payload, time.Now())
+		if outcome.Refusal == "" || !bytes.Equal(outcome.AckPayload, tc.want) {
+			t.Errorf("%s: outcome = %+v, want refusal answered % X", tc.name, outcome, tc.want)
+		}
+		if got := tc.letters.Mailbox(letterTestDivision, 2); len(got) != 0 {
+			t.Errorf("%s: mailbox mutated to %d letter(s)", tc.name, len(got))
+		}
 	}
 }
 
