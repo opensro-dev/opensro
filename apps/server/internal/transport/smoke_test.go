@@ -486,16 +486,20 @@ func TestSingleBindEviction(t *testing.T) {
 	}
 	waitSessionGone(t, srv, wA.SessionID)
 
-	// Reconnect suppression: A's resume token must NOT reattach — it gets a
-	// fresh session instead.
+	// Reconnect suppression: A's resume token neither reattaches nor gets a
+	// fresh session (which would evict B in turn, #2146). It hears the same
+	// BYE(Replaced) again, which its client treats as final.
 	cA2 := dialWS(t, srv)
 	defer cA2.Close()
-	wA2 := helloWS(t, cA2, wA.ResumeToken)
-	if wA2.Resumed {
-		t.Fatal("evicted session resumed — reconnect suppression failed")
-	}
-	if wA2.SessionID == wA.SessionID {
-		t.Fatal("evicted session ID reused on reconnect")
+	writeWSFrame(t, cA2, transport.Frame{
+		Opcode: transport.OpHello,
+		Payload: transport.EncodeHello(transport.Hello{
+			ResumeToken: wA.ResumeToken, AdmissionToken: []byte(testAdmissionTicket), HasPosition: true,
+		}),
+	})
+	if again := readWSFrame(t, cA2); again.Opcode != transport.OpBye || len(again.Payload) != 1 ||
+		again.Payload[0] != transport.ByeReasonReplaced {
+		t.Fatalf("evicted resume got op 0x%04X payload % X, want BYE(Replaced)", again.Opcode, again.Payload)
 	}
 
 	// The winner stays bound and fully functional.
