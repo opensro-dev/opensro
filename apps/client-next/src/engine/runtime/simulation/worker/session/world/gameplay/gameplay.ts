@@ -3361,18 +3361,26 @@ state here before a command can claim a native wire conversation.
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
 			}
 			if ( command.kind === "inventory-move" ) {
-				// 594980: wearing a free-battle cape while a growth pet is
-				// summoned prints the warning on the guide lane (67A600
-				// type 5 at 594AE5) and the centre banner (67D030 at
-				// 594B00); the equip itself proceeds and the pet's
-				// unsummon is the server's answer. 594980 also requires
-				// the target socket's record empty (+0x28 clear), so a
-				// swap onto a worn cape stays silent, and its 789C60
-				// gender leg (mask 0x40) stays silent for a cape cut for
-				// the other sex.
+				// 594980 is the equipment drop action: the key is pushed
+				// nowhere else in the client (594AA9) and the handler is
+				// reached only through the equipment window's vtable, so
+				// the warning belongs to the drop. A double-click
+				// activation (567290) composes the same equip move with
+				// destination kind 0x46 at 5678B0 without passing the
+				// gate and prints nothing. When the gate passes, wearing
+				// the cape prints on the guide lane (67A600 type 5 at
+				// 594AE5) and the centre banner (67D030 at 594B00); the
+				// equip itself proceeds and the summoned growth pet's
+				// unsummon is the server's part of the committed equip
+				// (the inference recorded in itemmove.go). 594980 also
+				// requires the target socket's record empty (+0x28
+				// clear), so a swap onto a worn cape stays silent, and
+				// its 789C60 gender leg (mask 0x40) stays silent for a
+				// cape cut for the other sex.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
+					!command.activation &&
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
 					cosCapeGenderPasses( item.tooltip?.fields.reqGender, localPlayerSex() ) &&
 					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
