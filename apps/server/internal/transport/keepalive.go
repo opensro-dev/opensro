@@ -31,6 +31,15 @@ import (
 // game handlers, and counts it as the liveness it is.
 const sceneLoadingPingInterval = 2 * time.Second
 
+// Config.WireProofInterval is how long the wire may stay silent
+// outbound before the keepalive proves it with a PING on a live session.
+// The client's stall watchdog names the link after seconds of inbound
+// silence, and its lane watchdogs follow soon after; a live world in a
+// quiet place sends nothing for far longer than that, so without this
+// proof a healthy silent session reads as a stalled link and resumes for
+// nothing (#2148). The default four seconds lands the proof inside the
+// client's window on the loop's two-second tick, with slack.
+
 /*
 ================
 keepalivePingDue
@@ -62,6 +71,10 @@ func (s *Session) keepaliveLoop() {
 	if tick > sceneLoadingPingInterval {
 		tick = sceneLoadingPingInterval
 	}
+	wireProof := s.hub.cfg.WireProofInterval
+	if tick > wireProof {
+		tick = wireProof
+	}
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	var lastPing time.Time
@@ -81,6 +94,8 @@ func (s *Session) keepaliveLoop() {
 				continue
 			}
 			idle := now.Sub(s.lastRecv)
+			sentQuiet := now.Sub(s.lastSent)
+			sentYet := !s.lastSent.IsZero()
 			gen := s.gen
 			loading := s.sceneLoading
 			// A scene whose bootstrap (or refusal) never reached the
@@ -134,7 +149,16 @@ func (s *Session) keepaliveLoop() {
 			if loading {
 				cadence = sceneLoadingPingInterval
 			} else if idle < interval {
-				continue
+				// The plain rule waits for the client's own silence,
+				// which can run far past the client's stall window
+				// while the server has an answer outstanding: prove
+				// the wire on outbound silence alone (#2148). A
+				// session that has written nothing yet is still
+				// attaching; its WELCOME is the first proof.
+				if !sentYet || sentQuiet < wireProof {
+					continue
+				}
+				cadence = wireProof
 			}
 			if !keepalivePingDue(now.Sub(lastPing), cadence, tick) {
 				continue
