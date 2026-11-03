@@ -369,6 +369,22 @@ test("equipping a free-battle cape warns while a growth pet is out, and still eq
 	assert.deepEqual( noticeKeys( alone.game ), [] );
 });
 
+test("activating a free-battle cape by double-click equips it without the warning", () => {
+	// 594980 is the equipment drop action alone: the key is pushed
+	// nowhere else (594AA9) and a double-click activation (567290)
+	// composes the same equip straight into the socket (destination
+	// kind 0x46 at 5678B0), so the activation stays silent while the
+	// move still sends.
+	const bagItems = [ { slot: 20, refObjId: 10, typeFlags: CAPE } ];
+	const clicked = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
+	const frame = clicked.game.command(
+		{ kind: "inventory-move", source: 20, destination: 8, quantity: 0, activation: true },
+		1
+	);
+	assert.equal( frame.opcode, 0x706d, "the activation equip still sends" );
+	assert.deepEqual( noticeKeys( clicked.game ), [] );
+});
+
 test("the cape warning yields to a guild soldier and to non-cape moves", () => {
 	const bagItems = [
 		{ slot: 20, refObjId: 10, typeFlags: CAPE },
