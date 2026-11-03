@@ -463,6 +463,23 @@ export function createRenderer(
 		retainCharacterModels: characters.retain,
 		setCharacterAssembly: characters.assembly,
 		characterStats: characters.stats,
+		/*
+		================
+		takeDegradations
+
+		Every character snapshot owner's held-clock reports since the last
+		take: the world's rows and each portrait preview's.
+		================
+		*/
+		takeDegradations() {
+			return [
+				...characters.takeDegradations(),
+				...portrait.takeDegradations(),
+				...partyPortraits.flatMap( child => child.takeDegradations() ),
+				...doll.takeDegradations(),
+				...doll2.takeDegradations()
+			];
+		},
 		presentationCamera: () => presentationCamera,
 		audioListener: () => soundListener,
 		setWeather: value => world.weather( value ),
