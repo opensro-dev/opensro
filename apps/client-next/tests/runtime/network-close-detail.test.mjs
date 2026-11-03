@@ -315,7 +315,7 @@ test("a WebTransport server close carries its reason", async t => {
 	network.drain( () => {} );
 	assert.equal( failures.length, 1 );
 	assert.equal( failures[0].reason.category, "unknown" );
-	assert.match( failures[0].reason.detail, /^WebTransport 1000 "server restarting", not clean, / );
+	assert.match( failures[0].reason.detail, /^WebTransport 1000 "server restarting", clean, / );
 	network.dispose();
 });
 

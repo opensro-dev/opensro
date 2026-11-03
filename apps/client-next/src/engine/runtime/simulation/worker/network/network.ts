@@ -704,7 +704,9 @@ export function createNetwork(
 					transport: "WebTransport",
 					code: closeCode,
 					reason: closeReason ?? "",
-					wasClean: goodbye,
+					// A settled close is the peer's close capsule, clean whatever
+					// its code; only the rejection (-1) is an abrupt end.
+					wasClean: closeCode !== -1,
 					errored: closeCode === -1,
 					sinceLastFrameMs: Number.isFinite( receivedAt ) ? now - receivedAt : null,
 					openForMs: Number.isFinite( openedAt ) ? now - openedAt : null,
