@@ -331,7 +331,15 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	// the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "waterRefraction", "softParticles", "enchantSparks", "dungeonCharacterPvs" ]
+		[
+			"sunShadow",
+			"dynamicSun",
+			"perPixelLighting",
+			"waterRefraction",
+			"softParticles",
+			"enchantSparks",
+			"dungeonCharacterPvs"
+		]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
