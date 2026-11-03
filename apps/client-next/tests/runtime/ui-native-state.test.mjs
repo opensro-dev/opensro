@@ -108,7 +108,25 @@ test("native title statuses preserve packed argument order and every simple mess
 	}
 	for ( const subtype of [ 2, 3, 4 ] ) assert.ok( titleStatusMessage( 3, subtype, resolve ) );
 	for ( const subtype of [ 0, 5, 65536 ] ) assert.equal( titleStatusMessage( 3, subtype, resolve ), undefined );
-	for ( const status of [ undefined, 0, 1, 17, 255 ] ) {
+	// Dispatch table 0x74a0c8 entries 17-20 exist but the cmp 0xF guard
+	// at 0x749635 makes them unreachable: statuses 17-20 have no message.
+	for ( const status of [ 17, 18, 19, 20 ] ) {
+		assert.equal( titleStatusKey( status, undefined ), undefined );
+		assert.equal( titleStatusMessage( status, undefined, resolve ), undefined );
+	}
+	// The retail web-address strings are never a title refusal here.
+	for ( let status = 0; status <= 32; status++ ) {
+		for ( const argument of [ undefined, 0, 1, 2, 3, 4, 5 ] ) {
+			const key = titleStatusKey( status, argument );
+			assert.ok(
+				key !== "UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE_1",
+				`status ${status} argument ${argument} resolved ${key}`
+			);
+		}
+	}
+	for ( const status of [ undefined, 0, 1, 17, 18, 19, 20, 21, 255 ] ) {
 		assert.equal( titleStatusMessage( status, 0, resolve ), undefined );
 	}
 	assert.equal(
