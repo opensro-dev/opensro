@@ -25,6 +25,8 @@ import {
 	pullURL,
 	seatsText,
 	since,
+	pageChanged,
+	splitNeeds,
 	splitPrs,
 	stepTone,
 	sortThreads,
@@ -140,8 +142,47 @@ paintRelease
 function paintRelease( body ) {
 	const r = body.release;
 	byID( "release-freeze" ).textContent = r?.freeze ? "freeze " + r.freeze.slice( 0, 9 ) : "";
+	byID( "release-title" ).textContent = r?.live ? "No release in flight" : "Release in flight";
 	if ( !r ) {
 		byID( "release-body" ).replaceChildren( el( "p", { class: "board-empty" }, "No release in flight." ) );
+		return;
+	}
+	if ( r.live ) {
+		// A shipped release is history: one line, its steps folded away, and
+		// the next list (the owner's call) in front.
+		byID( "release-body" ).replaceChildren(
+			el(
+				"p",
+				{},
+				pill( "live", "ok" ),
+				" Last release: ",
+				el( "strong", {}, r.name ),
+				", live at ",
+				el( "code", {}, r.freeze.slice( 0, 9 ) ),
+				"."
+			),
+			r.next ?
+				el(
+					"p",
+					{ class: "board-help" },
+					r.next.name + ". Candidates: ",
+					numberLinks( r.next.candidates, pullURL )
+				) :
+				null,
+			el(
+				"details",
+				{},
+				el( "summary", {}, "How the last release went" ),
+				el( "p", { class: "board-help" }, r.why ),
+				el( "p", {}, el( "strong", {}, "Contained: " ), numberLinks( r.contains, pullURL ) ),
+				el(
+					"ol",
+					{ class: "board-steps" },
+					...r.steps.map( s => el( "li", {}, pill( s.state, stepTone( s.state ) ), " ", s.step ) )
+				)
+			),
+			r.rules.length ? el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) : null
+		);
 		return;
 	}
 	byID( "release-body" ).replaceChildren(
@@ -171,11 +212,17 @@ paintNeeds
 ================
 */
 function paintNeeds( body ) {
-	byID( "needs-count" ).textContent = String( body.needs.length );
+	const { owner, coordinator } = splitNeeds( body.needs );
+	const item = n => el( "li", {}, el( "strong", {}, n.what ), el( "span", {}, n.detail ) );
+	byID( "needs-count" ).textContent = String( owner.length );
 	byID( "needs-body" ).replaceChildren(
-		...(body.needs.length ?
-			body.needs.map( n => el( "li", {}, el( "strong", {}, n.what ), el( "span", {}, n.detail ) ) ) :
-			[ el( "li", { class: "board-empty" }, "Nothing waits on the owner." ) ])
+		...(owner.length ? owner.map( item ) : [ el( "li", { class: "board-empty" }, "Nothing waits on the owner." ) ])
+	);
+	byID( "coordinator-count" ).textContent = String( coordinator.length );
+	byID( "coordinator-body" ).replaceChildren(
+		...(coordinator.length ?
+			coordinator.map( item ) :
+			[ el( "li", { class: "board-empty" }, "Nothing waits on the coordinator." ) ])
 	);
 }
 
@@ -366,6 +413,11 @@ async function load() {
 	try {
 		state.body = await requestJSON( "/api/board" );
 		state.answeredAt = Date.now();
+		if ( pageChanged( state.page, state.body.page ) ) {
+			location.reload();
+			return;
+		}
+		state.page ??= state.body.page;
 		status.textContent = "";
 		paint();
 	} catch ( failure ) {

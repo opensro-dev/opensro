@@ -32,7 +32,8 @@ const SHA = /^[0-9a-f]{7,40}$/;
 const THREAD = /^\d{1,24}$/;
 const STEP_STATES = new Set( [ "done", "running", "waiting", "failed" ] );
 const CI_STATES = new Set( [ "green", "red", "running", "none" ] );
-const THREAD_ACTIONS = new Set( [ "fixed", "close", "reply" ] );
+// live: a live release carries the fix; fixed: the release in flight will.
+const THREAD_ACTIONS = new Set( [ "live", "fixed", "close", "reply" ] );
 const EVIDENCE_STATES = new Set( [ "done", "na", "working", "missing" ] );
 const MAX_SEATS = 4;
 const MAX_EVIDENCE = 12;
@@ -117,6 +118,8 @@ function releaseRow( r ) {
 		name: text( r.name ),
 		freeze: typeof r.freeze === "string" && SHA.test( r.freeze ) ? r.freeze : "",
 		why: text( r.why ),
+		// live: the host serves the freeze on every component (the collector reads it).
+		live: r.live === true,
 		steps: rows( r.steps, s =>
 			object( s ) && typeof s.step === "string" ?
 				{ step: text( s.step ), state: STEP_STATES.has( s.state ) ? s.state : "waiting" } :
@@ -134,7 +137,10 @@ needRow
 ================
 */
 function needRow( n ) {
-	return object( n ) && typeof n.what === "string" ? { what: text( n.what ), detail: text( n.detail ) } : null;
+	if ( !object( n ) || typeof n.what !== "string" ) return null;
+	// who: the owner unless the collector names the coordinator (a dead or
+	// late coordinator session must show on the board, not hide in a log).
+	return { what: text( n.what ), detail: text( n.detail ), who: n.who === "coordinator" ? "coordinator" : "owner" };
 }
 
 /*

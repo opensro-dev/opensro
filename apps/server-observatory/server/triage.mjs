@@ -31,7 +31,7 @@ const MAX_NOTE = 500;
 const MAX_ISSUES = 20;
 const THREAD = /^\d{6,24}$/;
 const PRIORITIES = new Set( [ "Critical", "High", "Medium", "Low" ] );
-const ACTIONS = new Set( [ "reply", "close", "fixed" ] );
+const ACTIONS = new Set( [ "reply", "close", "fixed", "live" ] );
 const STATES = new Set( [ "pending", "approved", "rejected" ] );
 const DECISIONS = new Map( [ [ "approve", "approved" ], [ "reject", "rejected" ] ] );
 

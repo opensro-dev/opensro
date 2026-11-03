@@ -17,8 +17,10 @@ import {
 	priorityTone,
 	prTone,
 	pullURL,
+	pageChanged,
 	since,
 	sortThreads,
+	splitNeeds,
 	splitPrs,
 	stepTone,
 	summary,
@@ -46,16 +48,17 @@ test("seats read per reviewer kind, evidence as worded chips", () => {
 	assert.deepEqual( evidenceMarks( {} ), [] );
 });
 
-test("threads sort fixed first, then close, then reply, most urgent first in each", () => {
+test("threads sort live fixes first, then fixes in flight, close, reply, most urgent first in each", () => {
 	const threads = [
 		{ thread: "1", action: "reply", priority: "Low" },
 		{ thread: "2", action: "reply", priority: "High" },
 		{ thread: "3", action: "fixed", priority: "Medium" },
 		{ thread: "4", action: "close", priority: "Low" },
 		{ thread: "5", action: "fixed", priority: "High" },
-		{ thread: "6", action: "reply", priority: "High" }
+		{ thread: "6", action: "reply", priority: "High" },
+		{ thread: "7", action: "live", priority: "Low" }
 	];
-	assert.deepEqual( sortThreads( threads ).map( t => t.thread ), [ "5", "3", "4", "2", "6", "1" ] );
+	assert.deepEqual( sortThreads( threads ).map( t => t.thread ), [ "7", "5", "3", "4", "2", "6", "1" ] );
 	assert.equal( threads[0].thread, "1", "the snapshot's own list is left as it was" );
 });
 
@@ -118,7 +121,8 @@ test("tones: CI, PR blockers, agents, steps, priorities and thread actions", () 
 		"idle",
 		"idle"
 	] );
-	assert.equal( threadAction( "fixed" ).text, "Fixed by this release" );
+	assert.equal( threadAction( "live" ).text, "Fixed and live: reply, close" );
+	assert.equal( threadAction( "fixed" ).text, "Fixed by the release in flight" );
 	assert.equal( threadAction( "anything" ).text, "Reply only" );
 });
 
@@ -134,4 +138,26 @@ test("PRs split into agent and fork, by number, and the plaques count them", () 
 	const tiles = summary( { prs, needs: [ {} ], threads: [], issues: { open: 7 } } );
 	assert.deepEqual( tiles.map( t => t.value ), [ 1, "1 / 2", 1, 0, 7 ] );
 	assert.equal( tiles[0].tone, "warn", "anything waiting on the owner is amber" );
+});
+
+test("needs split by who they wait on, and only the owner's count on the plaque", () => {
+	const needs = [
+		{ what: "Fork PRs", detail: "", who: "owner" },
+		{ what: "Coordinator", detail: "", who: "coordinator" },
+		{ what: "Next release", detail: "", who: "owner" }
+	];
+	const { owner, coordinator } = splitNeeds( needs );
+	assert.deepEqual( [ owner.map( n => n.what ), coordinator.map( n => n.what ) ], [
+		[ "Fork PRs", "Next release" ],
+		[ "Coordinator" ]
+	] );
+	const body = { needs, prs: [], threads: [], issues: { open: 0 } };
+	assert.equal( summary( body )[0].value, 2 );
+});
+
+test("an open tab reloads only when the served page code differs from what it loaded", () => {
+	assert.equal( pageChanged( "100", "200" ), true );
+	assert.equal( pageChanged( "100", "100" ), false );
+	assert.equal( pageChanged( undefined, "100" ), false, "the first read only learns the version" );
+	assert.equal( pageChanged( "100", "" ), false, "an unreadable version never reloads" );
 });

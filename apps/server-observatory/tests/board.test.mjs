@@ -77,6 +77,28 @@ test("a good snapshot passes with its age and the repository", async () => {
 	} );
 });
 
+test("a release reads live only from a literal true, and a live thread action passes", () => {
+	assert.equal( boardBody( SNAPSHOT, NOW ).release.live, false );
+	assert.equal(
+		boardBody( { ...SNAPSHOT, release: { ...SNAPSHOT.release, live: "yes" } }, NOW ).release.live,
+		false
+	);
+	assert.equal( boardBody( { ...SNAPSHOT, release: { ...SNAPSHOT.release, live: true } }, NOW ).release.live, true );
+	const threads = [ { ...SNAPSHOT.threads[0], action: "live" } ];
+	assert.equal( boardBody( { ...SNAPSHOT, threads }, NOW ).threads[0].action, "live" );
+});
+
+test("a need waits on the owner unless it names the coordinator", () => {
+	const needs = [ { what: "a", detail: "", who: "coordinator" }, { what: "b", detail: "", who: "anyone" }, {
+		what: "c"
+	} ];
+	assert.deepEqual( boardBody( { ...SNAPSHOT, needs }, NOW ).needs.map( n => n.who ), [
+		"coordinator",
+		"owner",
+		"owner"
+	] );
+});
+
 test("a snapshot older than twice its interval is stale", () => {
 	const old = boardBody( { ...SNAPSHOT, generatedAt: "2026-11-03T03:25:00Z" }, NOW );
 	assert.equal( old.ageSeconds, 300 );

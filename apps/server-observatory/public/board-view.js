@@ -191,7 +191,8 @@ export function stepTone( state ) {
 
 // What each bug-report thread action says.
 const THREAD_ACTIONS = Object.freeze( {
-	fixed: { tone: "ok", text: "Fixed by this release" },
+	live: { tone: "ok", text: "Fixed and live: reply, close" },
+	fixed: { tone: "warn", text: "Fixed by the release in flight" },
 	close: { tone: "ok", text: "Close thread" },
 	reply: { tone: "idle", text: "Reply only" }
 } );
@@ -217,9 +218,9 @@ export function priorityTone( priority ) {
 	return "idle";
 }
 
-// Thread order: what this release fixes, then what to close, then the rest;
-// within each, the most urgent first.
-const ACTION_RANK = Object.freeze( { fixed: 0, close: 1, reply: 2 } );
+// Thread order: fixes already live (reply now), then fixes in flight, then
+// what to close, then the rest; within each, the most urgent first.
+const ACTION_RANK = Object.freeze( { live: 0, fixed: 1, close: 2, reply: 3 } );
 const PRIORITY_RANK = Object.freeze( { bad: 0, warn: 1, idle: 2 } );
 
 /*
@@ -231,7 +232,7 @@ snapshot's order.
 ================
 */
 export function sortThreads( threads ) {
-	const rank = t => (ACTION_RANK[t.action] ?? 2) * 3 + PRIORITY_RANK[priorityTone( t.priority )];
+	const rank = t => (ACTION_RANK[t.action] ?? ACTION_RANK.reply) * 3 + PRIORITY_RANK[priorityTone( t.priority )];
 	return threads.map( ( t, i ) => [ rank( t ), i, t ] ).sort( ( a, b ) => a[0] - b[0] || a[1] - b[1] ).map( r =>
 		r[2]
 	);
@@ -252,6 +253,35 @@ export function splitPrs( prs ) {
 
 /*
 ================
+splitNeeds
+
+The needs that wait on the owner and those that wait on the coordinator
+session, each in the snapshot's order.
+================
+*/
+export function splitNeeds( needs ) {
+	return {
+		owner: needs.filter( n => n.who !== "coordinator" ),
+		coordinator: needs.filter( n => n.who === "coordinator" )
+	};
+}
+
+/*
+================
+pageChanged
+
+True when the console serves page code other than what this tab loaded:
+an open tab otherwise keeps painting new data with old code, which is how
+a fixed card still read "Release in flight" on 11-03. Unknown either side
+is never a change.
+================
+*/
+export function pageChanged( loaded, served ) {
+	return Boolean( loaded && served && loaded !== served );
+}
+
+/*
+================
 summary
 
 The plaques across the top, in the order a reader acts on them.
@@ -259,8 +289,9 @@ The plaques across the top, in the order a reader acts on them.
 */
 export function summary( body ) {
 	const { agent, fork } = splitPrs( body.prs );
+	const { owner } = splitNeeds( body.needs );
 	return [
-		{ value: body.needs.length, label: "need the owner", tone: body.needs.length ? "warn" : "" },
+		{ value: owner.length, label: "need the owner", tone: owner.length ? "warn" : "" },
 		{ value: agent.filter( pr => pr.ready ).length + " / " + agent.length, label: "agent PRs ready", tone: "" },
 		{ value: fork.length, label: "fork PRs open", tone: "" },
 		{ value: body.threads.length, label: "bug-report threads", tone: "" },

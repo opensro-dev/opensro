@@ -66,11 +66,19 @@ export function priorityTone( priority ) {
 ================
 actionText
 
-What posting the reply does to the thread.
+What posting the reply does to the thread: live means a live release
+already carries the fix, fixed that the release in flight will.
 ================
 */
+const ACTION_TEXT = Object.freeze( {
+	live: "fixed and live: reply and close",
+	fixed: "fixed by the release in flight",
+	close: "reply and close",
+	reply: "reply only"
+} );
+
 export function actionText( action ) {
-	return action === "fixed" ? "fixed by the release" : action === "close" ? "reply and close" : "reply only";
+	return ACTION_TEXT[action] ?? ACTION_TEXT.reply;
 }
 
 /*

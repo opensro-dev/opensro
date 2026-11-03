@@ -38,7 +38,7 @@
 <div>
 <div class="eyebrow">THE WORK</div>
 <h1>Work board</h1>
-<p>The release in flight, what needs the owner, and where every PR, agent and bug report stands. It updates by itself.</p>
+<p>The release in flight, what waits on the owner or the coordinator, and where every PR, agent and bug report stands. It updates by itself, and reloads itself when its own code changes.</p>
 </div>
 <div class="heading-actions board-actions">
 <span id="board-fresh" class="pill idle">Loading…</span>
@@ -59,6 +59,8 @@
 <section class="panel board-panel" aria-labelledby="needs-title">
 <div class="panel-heading"><h2 id="needs-title">Needs the owner</h2><span id="needs-count" class="tag">0</span></div>
 <ul id="needs-body" class="board-needs"></ul>
+<div class="panel-heading"><h3 id="coordinator-title">Waiting on the coordinator</h3><span id="coordinator-count" class="tag">0</span></div>
+<ul id="coordinator-body" class="board-needs"></ul>
 </section>
 
 <section class="panel board-panel" aria-labelledby="agents-title">

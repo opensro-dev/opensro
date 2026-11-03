@@ -4,7 +4,7 @@ main.mjs - loopback observatory, authenticated player recovery, invite keys, eco
 ===========================================================================
 */
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
@@ -63,6 +63,27 @@ const inviteKeys = createInviteKeys( siteAdmin ? siteAdminURL( siteAdmin.url ) :
 const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
 const INVITE_REVEAL = /^\/api\/invites\/([0-9a-f-]{36})\/reveal$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
+// The board page's own files: their modification times name the page code
+// a tab runs, so an open tab reloads itself when they change (board.js).
+const BOARD_PAGE_FILES = [ "board.html", "board.js", "board-view.js", "board.css", "request.js" ];
+
+/*
+================
+boardPageVersion
+
+The newest modification time of the board page's files, in milliseconds
+as text; empty when one cannot be read (the page then never reloads).
+================
+*/
+async function boardPageVersion() {
+	try {
+		const times = await Promise.all( BOARD_PAGE_FILES.map( f => stat( new URL( f, publicRoot ) ) ) );
+		return String( Math.max( ...times.map( s => Math.trunc( s.mtimeMs ) ) ) );
+	} catch {
+		return "";
+	}
+}
+
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
 // Fixed paths only; a checkout without built client assets answers 404 and
 // theme.css paints its gradient fallback.
@@ -325,7 +346,11 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/board" ) {
 			const result = await board.request();
-			respondJSON( res, result.status, result.body );
+			respondJSON(
+				res,
+				result.status,
+				result.status === 200 ? { ...result.body, page: await boardPageVersion() } : result.body
+			);
 			return;
 		}
 		if ( url.pathname === "/api/triage" ) {
