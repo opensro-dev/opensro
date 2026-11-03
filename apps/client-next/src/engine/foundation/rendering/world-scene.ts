@@ -26,7 +26,9 @@ export const WORLD_SCENE_BYTES = 201326592;
 // Reserve both maximum-size scene products plus their shared decoded texture
 // working set. The former 512 MiB total left only 128 MiB for textures at peak;
 // a measured native region crossing needs over 155 MiB without reducing quality.
-// Admission still enforces this aggregate bound, including retired products.
+// Admission treats the aggregate as a target, not a limit: past it, the
+// renderer sheds the displaced scenes farthest from the incoming one and
+// admits anyway, rather than failing the load.
 export const WORLD_RESIDENCY_BYTES = 671088640; // 2 * WORLD_SCENE_BYTES + 256 MiB
 export const WORLD_DECODE_BYTES = 536870912;
 /*
