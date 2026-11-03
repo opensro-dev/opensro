@@ -31,15 +31,14 @@ import (
 // game handlers, and counts it as the liveness it is.
 const sceneLoadingPingInterval = 2 * time.Second
 
-// wireProofInterval is how long the wire may stay silent outbound
-// before the keepalive proves it with a PING on a live session. The
-// client's stall watchdog names the link after seconds of inbound
-// silence, and its lane watchdogs follow soon after; a live world in
-// a quiet place sends nothing for far longer than that, so without
-// this proof a healthy silent session reads as a stalled link and
-// resumes for nothing (#2148). Four seconds lands the proof inside
-// the client's window on the loop's two-second tick, with slack.
-const wireProofInterval = 4 * time.Second
+// Config.WireProofInterval is how long the wire may stay silent
+// outbound before the keepalive proves it with a PING on a live session.
+// The client's stall watchdog names the link after seconds of inbound
+// silence, and its lane watchdogs follow soon after; a live world in a
+// quiet place sends nothing for far longer than that, so without this
+// proof a healthy silent session reads as a stalled link and resumes for
+// nothing (#2148). The default four seconds lands the proof inside the
+// client's window on the loop's two-second tick, with slack.
 
 /*
 ================
@@ -71,6 +70,10 @@ func (s *Session) keepaliveLoop() {
 	tick := interval
 	if tick > sceneLoadingPingInterval {
 		tick = sceneLoadingPingInterval
+	}
+	wireProof := s.hub.cfg.WireProofInterval
+	if tick > wireProof {
+		tick = wireProof
 	}
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
@@ -152,10 +155,10 @@ func (s *Session) keepaliveLoop() {
 				// the wire on outbound silence alone (#2148). A
 				// session that has written nothing yet is still
 				// attaching; its WELCOME is the first proof.
-				if !sentYet || sentQuiet < wireProofInterval {
+				if !sentYet || sentQuiet < wireProof {
 					continue
 				}
-				cadence = wireProofInterval
+				cadence = wireProof
 			}
 			if !keepalivePingDue(now.Sub(lastPing), cadence, tick) {
 				continue

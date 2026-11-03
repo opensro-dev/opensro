@@ -27,15 +27,47 @@ TestKeepaliveProvesLiveWireOnOutboundSilence
 
 The keepalive interval is an hour and the client says nothing, so the
 idle rule alone would never ping: only the outbound-silence proof can.
-The proof repeats while the silence lasts.
+The proof repeats while the silence lasts. The proof interval is scaled
+down (testProofInterval) so the test fits the package's time budget; the
+production default is pinned separately.
 ================
 */
 func TestKeepaliveProvesLiveWireOnOutboundSilence(t *testing.T) {
-	_, _, fc := attachedSession(t, false)
-	wait.Eventually(t, 7*time.Second, "a liveness PING on a live outbound-silent wire", func() bool {
+	cfg := testCfg()
+	cfg.WireProofInterval = testProofInterval
+	hub := newHub(cfg)
+	sess, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := newFakeConn(false)
+	if err := sess.attach(fc, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(sess, nil) })
+	wait.Eventually(t, 3*time.Second, "a liveness PING on a live outbound-silent wire", func() bool {
 		return countPings(fc) >= 1
 	})
-	wait.Eventually(t, 9*time.Second, "a second liveness PING while the silence lasts", func() bool {
+	wait.Eventually(t, 3*time.Second, "a second liveness PING while the silence lasts", func() bool {
 		return countPings(fc) >= 2
 	})
+}
+
+// testProofInterval is the scaled-down wire proof interval of the test above.
+const testProofInterval = 50 * time.Millisecond
+
+/*
+================
+TestWireProofDefaultFitsTheClientStallWindow
+
+The default proof interval must land a PING inside the client's stall
+window (TRANSPORT_STALL_MS 7 s + TRANSPORT_STALL_CONFIRM_MS 1 s) even when
+the keepalive's two-second tick rounds it up.
+================
+*/
+func TestWireProofDefaultFitsTheClientStallWindow(t *testing.T) {
+	const clientStallWindow = 8 * time.Second
+	if got := DefaultConfig().WireProofInterval; got <= 0 || got+sceneLoadingPingInterval >= clientStallWindow {
+		t.Fatalf("WireProofInterval = %v: a proof could land after the client's %v stall window", got, clientStallWindow)
+	}
 }
