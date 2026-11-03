@@ -1,5 +1,59 @@
-// Internal title opcode 0xff3, CPSTitle_OnPacketReceived. Transport failures stay distinct
-// from native credential failures; there is no invented retry count.
+/*
+===========================================================================
+
+title-status.ts - the title login refusal messages
+
+The refusal table for the internal title opcode 0xff3,
+CPSTitle_OnPacketReceived (0x749550; status dispatch table 0x74a0c8).
+Transport failures stay distinct from native credential failures; there
+is no invented retry count.
+
+Recorded beside the table (#2271): native strings this flow cannot show.
+
+- UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME: the native blocked
+case (status 3 argument 1) reads two packet strings
+after the argument - a block reason (fields split on '#') and a
+block-end datetime it parses and converts - and appends both to the
+ACCOUNT_STOP line ("%s\n%s%s\n%s%s", 0x749a33). Our login answer
+carries only a status and a uint32 argument (session.ts admits no
+string field), and the Agent has no blocked-account refusal to send
+(handlers.go never emits status 3; the account authority exposes only
+id + password hash), so there is no reason or time to append. The
+v1.188 Agent fills these fields from its account-block record;
+adopting that is a server feature (block state + refusal), not a
+client mapping, and is out of this issue's scope.
+- UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK and
+UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE / _1: retail web
+addresses. Never shown, here or natively in this flow (status 3
+argument 3 shows THERE_IS_NO_ACCOUNT_INFO, 0x749aa7).
+- UIO_MSG_ERROR_VERSION: no version refusal exists in our login/title
+flow (the login request carries no client version and the Agent has
+no version gate); version skew surfaces as asset-generation load
+failures, not a title message.
+- UIO_MSG_ERROR_NOT_SERVICE_TIME / _TIME2: maintenance here is the
+server list's per-shard state plus status 5 refusals (C5); the native
+service-time answer has no producer in the Agent.
+- UIO_MSG_ERROR_CITATION_ID: the citation wait shows
+UIO_MSG_ERROR_CITATION (ui.ts); the session contract carries no
+citation id to key the _ID variant on.
+- UIIO_CLIENT_START_CONTENT_FAIL_ACCOUNT_ERR / _CONNECT_ERR: native
+client-start content failures; our start failures surface as statuses
+11-13 or as transport failures. No producer here.
+
+===========================================================================
+*/
+
+/*
+================
+titleStatusKey
+
+The text key for one login refusal (status, argument), or undefined when
+the native table has no message for it. Dispatch table 0x74a0c8 entries
+17-20 exist (0x7496ce, 0x749a96, 0x749aa7, 0x749b3d) but the cmp 0xF
+guard at 0x749635 makes them unreachable: only statuses 1-16 reach the
+table, so 17-20 have no message.
+================
+*/
 export function titleStatusKey( status: number | undefined, argument?: number ): string | undefined {
 	switch ( status ) {
 		case 2:
@@ -37,7 +91,19 @@ export function titleStatusKey( status: number | undefined, argument?: number ):
 		case 16:
 			return "UITT_TEENSERVER_ERRMGS_ADULT";
 	}
+	// Entries 17-20 exist in the dispatch table 0x74a0c8 but the cmp 0xF
+	// guard at 0x749635 makes them unreachable; statuses 17-20 fall
+	// through with no message.
 }
+/*
+================
+titleStatusMessage
+
+The resolved refusal message: status 2 packs the failed/total password
+counters into the argument's two halves (native order), and the connect
+failures carry their native (C<status>) suffix.
+================
+*/
 export function titleStatusMessage(
 	status: number | undefined,
 	argument: number | undefined,
