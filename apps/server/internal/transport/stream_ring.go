@@ -256,6 +256,8 @@ func (s *Session) resumeFromLocked(lastApplied uint32) bool {
 	cut := supersededEntryLocked(s.ring)
 	if cut < len(s.ring) {
 		s.dropSupersededEntryLocked(cut)
+	} else if queued := queuedEntryLocked(s.queue); queued < len(s.queue) {
+		s.dropQueuedEntryLocked(queued)
 	}
 	resendBytes := 0
 	for _, r := range s.ring {
@@ -344,6 +346,73 @@ func (s *Session) dropSupersededEntryLocked(cut int) {
 	// Every counted queued frame is gone, an earlier resume's
 	// still-unwritten re-send block included.
 	s.resendFrames, s.resendBytes = 0, 0
+}
+
+/*
+================
+queuedEntryLocked
+
+The index of the first EnterWorld answer still queued (never written),
+or len(queue). An answer the writer had not reached when the link
+dropped is as superseded as an unapplied one in the ring: the resumed
+browser asks for a new entry, and re-sent, the stale answer is applied
+in its place while the new one lands on a client already in the world
+and is refused ("Unexpected EnterWorld result", #2443: a teleport's
+re-entry queued behind a writer parked on a slow link). Caller holds
+s.mu.
+================
+*/
+func queuedEntryLocked(queue []Frame) int {
+	for i, f := range queue {
+		if f.Opcode == OpEnterWorldResult {
+			return i
+		}
+	}
+	return len(queue)
+}
+
+/*
+================
+dropQueuedEntryLocked
+
+Drops the queued EnterWorld answer at queue[cut] and every counted
+frame behind it, with the coalesced lane: all of it is that answer's
+scene or later state, which the new entry's snapshot rebuilds whole.
+Counted frames ahead of it (a re-entry's reset) and transport-control
+frames stay, in order. Caller holds s.mu.
+================
+*/
+func (s *Session) dropQueuedEntryLocked(cut int) {
+	kept := s.queue[:cut]
+	for _, f := range s.queue[cut:] {
+		if CountsOnStream(f.Opcode) {
+			s.queueBytes -= f.EncodedLen()
+			continue
+		}
+		kept = append(kept, f)
+	}
+	for i := len(kept); i < len(s.queue); i++ {
+		s.queue[i] = Frame{}
+	}
+	s.queue = kept
+	for _, slot := range s.lossyKeys {
+		delete(s.lossy, slot)
+	}
+	s.lossyKeys = nil
+	s.lossyBytes = 0
+	// An earlier resume's unwritten re-send block leads the queue; the
+	// cut may fall inside it, so recount what is left of it.
+	counted, bytes := 0, 0
+	for _, f := range kept {
+		if counted == s.resendFrames {
+			break
+		}
+		if CountsOnStream(f.Opcode) {
+			counted++
+			bytes += f.EncodedLen()
+		}
+	}
+	s.resendFrames, s.resendBytes = counted, bytes
 }
 
 /*
