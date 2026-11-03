@@ -140,10 +140,14 @@ test("a waiting proposal and a queued restart value pass through, typed", () => 
 			{ ...ROW, pending: { ...PROPOSAL, script: "dropped" }, restartQueued: "12" },
 			{ ...ROW, pending: { ...PROPOSAL, to: 8 }, restartQueued: 12 },
 			{ ...ROW, pending: "p1", restartQueued: null },
-			ROW
+			ROW,
+			{ ...ROW, pending: { ...PROPOSAL, at: 1e300 } },
+			{ ...ROW, pending: { ...PROPOSAL, at: -5 } }
 		],
 		flags: []
 	} );
+	assert.equal( body.settings[4].pending.at, 0, "a time past a Date's range reads as unknown" );
+	assert.equal( body.settings[5].pending.at, 0, "a time before 1970 reads as unknown" );
 	assert.deepEqual( body.settings[0].pending, {
 		id: "p1",
 		from: "6",

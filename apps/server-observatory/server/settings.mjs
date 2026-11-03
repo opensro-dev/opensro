@@ -26,6 +26,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_ROWS = 512;
 const MAX_TEXT = 512;
+// The last second a proposal time may name (year 9999), well inside a Date.
+const MAX_UNIX_SECONDS = 253402300799;
 const KINDS = new Set( [ "int", "factor" ] );
 // live: the next action; entry: each player's next world entry; restart:
 // the next restart (game/tunables Class).
@@ -109,13 +111,16 @@ malformed. Read-only: the page shows it, nothing here acts on it.
 */
 function proposalRow( p ) {
 	if ( !p || typeof p !== "object" || typeof p.id !== "string" || typeof p.to !== "string" ) return null;
+	// at is Unix seconds; one outside a Date's range would throw where the
+	// page formats it, so it reads as unknown (0) instead.
+	const at = number( p.at );
 	return {
 		id: text( p.id ),
 		from: text( p.from ),
 		to: text( p.to ),
 		by: text( p.by ),
 		byName: text( p.byName ),
-		at: number( p.at ) ?? 0,
+		at: at !== null && at >= 0 && at <= MAX_UNIX_SECONDS ? Math.floor( at ) : 0,
 		reason: text( p.reason )
 	};
 }

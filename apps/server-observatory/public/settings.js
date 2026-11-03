@@ -341,6 +341,7 @@ async function init() {
 	// A linked shard the console does not know falls back to the first one.
 	if ( !config.shards.some( shard => shard.id === state.shard ) ) state.shard = config.shards[0]?.id ?? "";
 	select.value = state.shard;
+	saveFilters();
 	if ( !config.settings ) {
 		byID( "rules-status" ).textContent = "Shard rules are not configured on this console (operatorTokenFile).";
 		return;
