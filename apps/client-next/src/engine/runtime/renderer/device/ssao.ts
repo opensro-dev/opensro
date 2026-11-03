@@ -40,6 +40,9 @@ export function createSSAO( device: GPUDevice, retire: Retire = destroyNow ) {
 	let depth: GPUTexture | null = null,
 		occlusion: GPUTexture | null = null,
 		blurred: GPUTexture | null = null,
+		depthView: GPUTextureView | null = null,
+		occlusionTextureView: GPUTextureView | null = null,
+		blurredView: GPUTextureView | null = null,
 		convert: GPURenderPipeline | null = null,
 		trace: GPURenderPipeline | null = null,
 		blur: GPURenderPipeline | null = null,
@@ -55,6 +58,7 @@ export function createSSAO( device: GPUDevice, retire: Retire = destroyNow ) {
 		if ( occlusion ) retire( occlusion );
 		if ( blurred ) retire( blurred );
 		depth = occlusion = blurred = null;
+		depthView = occlusionTextureView = blurredView = null;
 		convert = trace = blur = null;
 		depthBinding = traceBinding = blurBinding = null;
 		width = height = 0;
@@ -96,11 +100,10 @@ fn viewZ(d:f32)->f32{
  let size=vec2f(textureDimensions(source));
  let at=clamp(vec2i(v.uv*size),vec2i(0),vec2i(size)-vec2i(1));
  let z=viewZ(textureLoad(source,at,0).r);
- // The surface's slope in view space, from the depth's neighbours.
- let step=vec2i(2,2);
- let rightZ=viewZ(textureLoad(source,clamp(at+vec2i(step.x,0),vec2i(0),vec2i(size)-vec2i(1)),0).r);
- let downZ=viewZ(textureLoad(source,clamp(at+vec2i(0,step.y),vec2i(0),vec2i(size)-vec2i(1)),0).r);
- let normal=normalize(vec3f(-(rightZ-z),-(downZ-z),4.0));
+ // The tap test is a pure depth difference; no normal is reconstructed
+ // (the banner's documented approximation - a hemisphere test over the
+ // reconstructed gradient is the follow-up if the owner wants slopes
+ // rejected).
  var occluded=0.0;
  let golden=2.399963;
  for(var tap=0;tap<${TAPS};tap=tap+1){
@@ -219,10 +222,16 @@ fn viewZ(d:f32)->f32{
 					format: "r8unorm",
 					usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 				} );
+				// One view per texture, cached at creation like the water lane: a
+				// fresh view per frame defeats the geometry bindings' identity
+				// check and rebuilds every draw's bind group every frame.
+				depthView = depth.createView();
+				occlusionTextureView = occlusion.createView();
+				blurredView = blurred.createView();
 			}
 			ensurePipelines();
 			return {
-				occlusionView: blurred!.createView(),
+				occlusionView: blurredView!,
 				/*
 				================
 				encode
@@ -239,10 +248,17 @@ fn viewZ(d:f32)->f32{
 					near: number,
 					far: number
 				) {
-					if ( disposed || !depth || !occlusion || !blurred || !convert || !trace || !blur || !sampler ) {
-						cameraValues[0] = near;
-						cameraValues[1] = far;
-						device.queue.writeBuffer( cameraUniform, 0, cameraValues );
+					// Written before the stale guard: the success path needs the
+					// camera as much as the throw's diagnostics do. The original
+					// placement inside the guard never wrote them, so every trace
+					// linearised its depths with the clamped 0.1/1.1 pair.
+					cameraValues[0] = near;
+					cameraValues[1] = far;
+					device.queue.writeBuffer( cameraUniform, 0, cameraValues );
+					if (
+						disposed || !depth || !occlusion || !blurred || !depthView || !occlusionTextureView ||
+						!blurredView || !convert || !trace || !blur || !sampler
+					) {
 						throw Error( "Stale SSAO targets" );
 					}
 					if ( !depthBinding ) {
@@ -258,7 +274,7 @@ fn viewZ(d:f32)->f32{
 						traceBinding = device.createBindGroup( {
 							layout: trace.getBindGroupLayout( 0 ),
 							entries: [
-								{ binding: 0, resource: depth.createView() },
+								{ binding: 0, resource: depthView },
 								{ binding: 3, resource: { buffer: cameraUniform } }
 							]
 						} );
@@ -267,14 +283,14 @@ fn viewZ(d:f32)->f32{
 						blurBinding = device.createBindGroup( {
 							layout: blur.getBindGroupLayout( 0 ),
 							entries: [
-								{ binding: 0, resource: occlusion.createView() },
+								{ binding: 0, resource: occlusionTextureView },
 								{ binding: 1, resource: sampler }
 							]
 						} );
 					}
 					const convertPass = encoder.beginRenderPass( {
 						label: "ssao-convert",
-						colorAttachments: [ { view: depth.createView(), loadOp: "clear", storeOp: "store" } ]
+						colorAttachments: [ { view: depthView, loadOp: "clear", storeOp: "store" } ]
 					} );
 					convertPass.setPipeline( convert );
 					convertPass.setBindGroup( 0, depthBinding );
@@ -282,7 +298,7 @@ fn viewZ(d:f32)->f32{
 					convertPass.end();
 					const tracePass = encoder.beginRenderPass( {
 						label: "ssao-trace",
-						colorAttachments: [ { view: occlusion.createView(), loadOp: "clear", storeOp: "store" } ]
+						colorAttachments: [ { view: occlusionTextureView, loadOp: "clear", storeOp: "store" } ]
 					} );
 					tracePass.setPipeline( trace );
 					tracePass.setBindGroup( 0, traceBinding );
@@ -290,7 +306,7 @@ fn viewZ(d:f32)->f32{
 					tracePass.end();
 					const blurPass = encoder.beginRenderPass( {
 						label: "ssao-blur",
-						colorAttachments: [ { view: blurred.createView(), loadOp: "clear", storeOp: "store" } ]
+						colorAttachments: [ { view: blurredView, loadOp: "clear", storeOp: "store" } ]
 					} );
 					blurPass.setPipeline( blur );
 					blurPass.setBindGroup( 0, blurBinding );

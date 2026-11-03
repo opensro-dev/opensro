@@ -583,6 +583,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 		*/
 		ambientOcclusion( width, height, enabled ) {
 			if ( phase !== "running" || !ssaoStage ) throw Error( "SSAO device is not ready" );
+			// The frame's pixel size rides the row's own uniform word: the
+			// surfaces position their occlusion sample in frame space, not in
+			// the half-resolution texture's (pipelines.ts).
+			stages3[1] = width;
+			stages3[2] = height;
 			return ssaoStage.prepare( width, height, enabled );
 		},
 		/*

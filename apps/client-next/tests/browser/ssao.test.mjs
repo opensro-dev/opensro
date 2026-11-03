@@ -25,6 +25,7 @@ test(
 	async () => {
 		const { browser, page } = await launchProbeBrowser();
 		const errors = [];
+		const width = 192, height = 120;
 		page.on( "pageerror", error => errors.push( error.message ) );
 		try {
 			await page.route(
@@ -56,6 +57,7 @@ test(
 				const trace = /** @type {any} */ (globalThis);
 				const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 				const { createPresentationRandom } = await import( "/src/engine/runtime/random/random.ts" );
+				const { viewProjection } = await import( "/src/engine/foundation/rendering/world-math.ts" );
 				const width = 192, height = 120;
 				const canvas = document.createElement( "canvas" );
 				const output = document.createElement( "canvas" );
@@ -202,7 +204,22 @@ test(
 					} );
 				}
 				renderer.dispose();
-				return { shots, gpuErrors: trace.__gpuErrors };
+				// Screen positions for the placement pins: the contact ring just
+				// west of the box's foot, and open ground well clear of it, both
+				// projected with the frame's own camera math.
+				const camera = { eye: [ 6, 26, -52 ], target: [ 4, 0, 4 ], fov: 1.1, near: 1, far: 500 };
+				const vp = viewProjection( camera, width / height );
+				const project = point => {
+					const x = vp[0] * point[0] + vp[4] * point[1] + vp[8] * point[2] + vp[12];
+					const y = vp[1] * point[0] + vp[5] * point[1] + vp[9] * point[2] + vp[13];
+					const w = vp[3] * point[0] + vp[7] * point[1] + vp[11] * point[2] + vp[15];
+					return [ (x / w * .5 + .5) * width, (.5 - y / w * .5) * height ];
+				};
+				return {
+					shots,
+					gpuErrors: trace.__gpuErrors,
+					pins: { contact: project( [ 8.5, .1, 2 ] ), open: project( [ 40, .1, 30 ] ) }
+				};
 			} );
 			const [before, during, after] = result.shots;
 			// A-B-A: the row off restores the native bytes exactly.
@@ -216,16 +233,71 @@ test(
 				assert.equal( off.passes.indexOf( "ssao-trace" ), -1, "No SSAO pass off" );
 			}
 			// The contact darkens: pixels changed, and the change is a
-			// darkening (the ambient term only shades down).
-			let darkened = 0, brightened = 0;
-			for ( let i = 0; i < before.rgba.length; i += 4 ) {
+			// darkening (the ambient term only shades down). Placement, not
+			// only counts: the ring at the box's foot darkens, and a named
+			// patch of open ground far from the box does not - a map sampled
+			// at the wrong scale would put the darkening somewhere else.
+			const { contact, open } = result.pins;
+			for ( const [label, [x, y]] of [ [ "contact", contact ], [ "open ground", open ] ] ) {
+				assert.ok(
+					x >= 8 && x <= width - 8 && y >= 8 && y <= height - 8,
+					`The ${label} patch projects inside the frame (${x.toFixed( 1 )}, ${y.toFixed( 1 )})`
+				);
+			}
+			const inDisk = ( x, y, [cx, cy], radius ) => (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
+			const DISK = 7;
+			let darkened = 0, brightened = 0, contactSum = 0, contactPixels = 0, openSum = 0, openPixels = 0;
+			for ( let i = 0, x = 0, y = 0; i < before.rgba.length; i += 4 ) {
 				const was = before.rgba[i] + before.rgba[i + 1] + before.rgba[i + 2];
 				const now = during.rgba[i] + during.rgba[i + 1] + during.rgba[i + 2];
-				if ( now < was - 12 ) darkened++;
+				const delta = was - now;
+				if ( delta > 12 ) darkened++;
 				if ( now > was + 12 ) brightened++;
+				if ( inDisk( x, y, contact, DISK ) ) {
+					contactSum += delta;
+					contactPixels++;
+				}
+				if ( inDisk( x, y, open, DISK ) ) {
+					openSum += delta;
+					openPixels++;
+				}
+				x++;
+				if ( x === width ) {
+					x = 0;
+					y++;
+				}
 			}
+			const contactMean = contactSum / contactPixels, openMean = openSum / openPixels;
 			assert.ok( darkened > 30, `The contact shadows darken (${darkened} pixels)` );
 			assert.ok( brightened < darkened / 4, `The row only shades down (${brightened} brightened)` );
+			// The on frame must stay a visible scene: the row shades the
+			// ambient term, it does not blank the frame. Found while acting on
+			// the review: at this head the on frames present pure black (see
+			// the PR discussion), and every count-only assertion above passes
+			// on a black frame. This guard makes that visible.
+			let beforeSum = 0, duringSum = 0;
+			for ( let i = 0; i < before.rgba.length; i += 4 ) {
+				beforeSum += before.rgba[i] + before.rgba[i + 1] + before.rgba[i + 2];
+				duringSum += during.rgba[i] + during.rgba[i + 1] + during.rgba[i + 2];
+			}
+			assert.ok(
+				duringSum >= beforeSum * .4,
+				`The on frame stays a visible scene (${duringSum} of ${beforeSum})`
+			);
+			// Placement: the darkening at the box's foot must dominate the
+			// ambient's uniform shade on open ground far from the box. A map
+			// sampled at the wrong scale would put the strong darkening
+			// somewhere else entirely.
+			assert.ok(
+				contactMean >= 24,
+				`The darkening lands at the box's foot (mean delta ${
+					contactMean.toFixed( 1 )
+				} over ${contactPixels} pixels)`
+			);
+			assert.ok(
+				contactMean >= openMean * 8,
+				`The contact ring dominates the far patch (${contactMean.toFixed( 1 )} vs ${openMean.toFixed( 1 )})`
+			);
 			assert.deepEqual( result.gpuErrors, [], "No uncaptured GPU errors in any mode" );
 			assert.deepEqual( errors, [] );
 		} finally {

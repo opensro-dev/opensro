@@ -464,10 +464,10 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  // previous frame's blurred half-res occlusion shades the ambient term;
  // the diffuse keeps its direction. The frame's own pixels position it.
  if(env.stages3.x>0.5&&material.options.y<0.5){
-  let frameSize=vec2f(textureDimensions(occlusionMap));
+  let frameSize=vec2f(env.stages3.y,env.stages3.z);
   let occlusion=textureSampleLevel(occlusionMap,textureSampler,vec2f(input.position.xy)/frameSize,0).r;
   let ambient=env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x;
-  surfaceLight=surfaceLight-ambient*(1.0-occlusion);
+  surfaceLight=max(surfaceLight-ambient*(1.0-occlusion),vec3f(0));
  }
  // Per-pixel character lighting (experimental): the retail vs_1_1 path
  // saturates each vertex's lighting before interpolation (o.objectLighting,
