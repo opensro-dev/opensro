@@ -16,6 +16,14 @@ creation anchor (ginterface GDR_TIMER_WND) and the digit-texture
 mapping are pinned in foundation/ui/flagwar-timer-plate.ts. The
 carrier's interaction-state-5 model waits on the entity lane.
 
+#2279: UIIT_MSG_FLAGWAR_GO_TO_REVIVAL (the death box's first-button
+label for an entered participant, 52ff1b) rides this snapshot's
+entered flag. UIIT_MSG_FLAGWAR_GO_TO_ZONE is not printed: natively it
+follows accepting a type-3 go-to-zone confirm, whose accept sends
+request 0x7538 (5260de/526107); the port enters by server teleport
+instead, so the confirm, the request and the line are one feature,
+tracked as its own issue (#2426).
+
 ===========================================================================
 */
 import type { SystemNotice } from "./system-notices";

@@ -5710,7 +5710,11 @@ The published plane when something changed since the last take, else null.
 				inventoryJournal,
 				...c,
 				...targeting.state(),
-				flagWar: { timerEndsAt: flagWarTimerEndsAt, carrierGid: flagWarCarrierGid },
+				flagWar: {
+					timerEndsAt: flagWarTimerEndsAt,
+					carrierGid: flagWarCarrierGid,
+					entered: flagWarTeam !== null
+				},
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				uniqueDamageRank: uniqueRank.current(),
