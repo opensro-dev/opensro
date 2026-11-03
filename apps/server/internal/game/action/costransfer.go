@@ -10,6 +10,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -39,6 +40,18 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		// Port-only, not native (halloween.go): a sealed event helmet
 		// never leaves for a companion's bag; bringing one back is fine.
 		if q.MovementType == wire.MoveTypePlayerToCos && rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+			return false
+		}
+		// INFERENCE, not native-verified: a personal quest item never
+		// enters a companion's bag. The ported pickup policy
+		// (sharePetPickup / isPersonalQuestPickupItem in party_pickup.go)
+		// already routes quest items to the owner's bag instead of the
+		// pet container on every grant; a manual bag-to-COS drag gets
+		// the same refusal until the native 0x1B executor branch is
+		// read. The generic refusal below stays silent client-side:
+		// the client's notice category for move results has no row for
+		// code 0x02.
+		if q.MovementType == wire.MoveTypePlayerToCos && isPersonalQuestPickupItem(grounditem.Item{Codename: item.Codename, TypeFlags: item.TypeFlags}) {
 			return false
 		}
 		if fault := source.TransferWholeTo(dest, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
