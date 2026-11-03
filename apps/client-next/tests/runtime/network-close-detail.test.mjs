@@ -89,6 +89,7 @@ function openSession( t ) {
 test("the detail names the close code, reason, cleanliness, silence and online state", () => {
 	assert.equal(
 		closeDetail( {
+			transport: "WebSocket",
 			code: 1006,
 			reason: "",
 			wasClean: false,
@@ -101,6 +102,7 @@ test("the detail names the close code, reason, cleanliness, silence and online s
 	);
 	assert.equal(
 		closeDetail( {
+			transport: "WebSocket",
 			code: 1001,
 			reason: "going\naway é",
 			wasClean: true,
@@ -113,6 +115,7 @@ test("the detail names the close code, reason, cleanliness, silence and online s
 	);
 	// A long server reason is cut, not passed through whole.
 	const long = closeDetail( {
+		transport: "WebSocket",
 		code: 4000,
 		reason: "x".repeat( 300 ),
 		wasClean: true,
@@ -263,7 +266,7 @@ async function openWtSession( t ) {
 
 test("a WebTransport close with the server's polite code is an expected goodbye", async t => {
 	const { network, transport, failures } = await openWtSession( t );
-	transport.settle( { closeCode: 0, reason: "" } );
+	transport.settle( { closeCode: 0, closeReason: "" } );
 	await flushMicrotasks();
 	network.drain( () => {} );
 	assert.equal( failures.length, 1 );
@@ -277,7 +280,7 @@ test("a WebTransport close with the server's polite code is an expected goodbye"
 test("a WebTransport close with any other code, or an abrupt end, stays unknown", async t => {
 	for ( const end of [ "code", "abrupt" ] ) {
 		const { network, transport, failures } = await openWtSession( t );
-		if ( end === "code" ) transport.settle( { closeCode: 1000, reason: "" } );
+		if ( end === "code" ) transport.settle( { closeCode: 1000, closeReason: "" } );
 		else transport.abort( new Error( "connection dropped" ) );
 		await flushMicrotasks();
 		network.drain( () => {} );
@@ -288,13 +291,41 @@ test("a WebTransport close with any other code, or an abrupt end, stays unknown"
 	}
 });
 
+test("a dropped WebTransport names its cause like a dropped socket", async t => {
+	const { network, transport, failures } = await openWtSession( t );
+	transport.abort( new Error( "connection dropped" ) );
+	await flushMicrotasks();
+	network.drain( () => {} );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].error, "Transport connection closed" );
+	assert.equal( failures[0].reason.code, "connection_closed" );
+	// The one fact line both links file (GH #2148): a rejection is code
+	// -1, its error event, with the silence and the link's age beside it.
+	assert.match(
+		failures[0].reason.detail,
+		/^WebTransport -1, not clean, after an error event, last frame \d+\.\d s ago, open \d+\.\d s, (online|offline)$/
+	);
+	network.dispose();
+});
+
+test("a WebTransport server close carries its reason", async t => {
+	const { network, transport, failures } = await openWtSession( t );
+	transport.settle( { closeCode: 1000, closeReason: "server restarting" } );
+	await flushMicrotasks();
+	network.drain( () => {} );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].reason.category, "unknown" );
+	assert.match( failures[0].reason.detail, /^WebTransport 1000 "server restarting", clean, / );
+	network.dispose();
+});
+
 test("a WebTransport stream that ends before the close settles waits for its code", async t => {
 	const { network, transport, failures } = await openWtSession( t );
 	transport.controller.close();
 	await flushMicrotasks();
 	network.drain( () => {} );
 	assert.equal( failures.length, 0, "the stream alone does not classify the end" );
-	transport.settle( { closeCode: 0, reason: "" } );
+	transport.settle( { closeCode: 0, closeReason: "" } );
 	await flushMicrotasks();
 	network.drain( () => {} );
 	assert.equal( failures.length, 1 );
