@@ -37,6 +37,8 @@ const THREAD_ACTIONS = new Set( [ "live", "fixed", "close", "reply" ] );
 const EVIDENCE_STATES = new Set( [ "done", "na", "working", "missing" ] );
 const MAX_SEATS = 4;
 const MAX_EVIDENCE = 12;
+const SCOPE_PRIORITIES = new Set( [ "critical", "high", "medium", "low" ] );
+const TASK_STATES = new Set( [ "queued", "claimed", "submitted" ] );
 
 /*
 ================
@@ -118,6 +120,11 @@ function releaseRow( r ) {
 		name: text( r.name ),
 		freeze: typeof r.freeze === "string" && SHA.test( r.freeze ) ? r.freeze : "",
 		why: text( r.why ),
+		// A scoped release (critical and high, owner 11-03): the collector
+		// computes its one-line summary and open issues every snapshot.
+		summary: text( r.summary ),
+		issues: numbers( r.issues ),
+		scope: rows( r.scope, p => (SCOPE_PRIORITIES.has( p ) ? p : null), 4 ),
 		// live: the host serves the freeze on every component (the collector reads it).
 		live: r.live === true,
 		// assembling: the list is decided, nothing is frozen; waiting is the part still open.
@@ -249,6 +256,32 @@ function issuesRow( i ) {
 
 /*
 ================
+scopeRow
+
+One critical or high issue of the release scope (owner 11-03: all of
+them ship in the next release): the agent task that holds it, if any,
+and the open PR that cites it, if any.
+================
+*/
+function scopeRow( r ) {
+	if ( !object( r ) || !count( r.number ) || !SCOPE_PRIORITIES.has( r.priority ) ) return null;
+	const t = r.task;
+	const task = object( t ) && count( t.id ) && TASK_STATES.has( t.state ) ?
+		{ id: t.id, assignee: text( t.assignee ), state: t.state, step: text( t.step ) } :
+		null;
+	return {
+		number: r.number,
+		title: text( r.title ),
+		priority: r.priority,
+		epic: r.epic === true,
+		carried: r.carried === true,
+		pr: count( r.pr ) || null,
+		task
+	};
+}
+
+/*
+================
 mergedRow
 ================
 */
@@ -283,6 +316,7 @@ export function boardBody( body, now ) {
 		agents: rows( body.agents, agentRow, MAX_LIST ),
 		prs: rows( body.prs, prRow ),
 		threads: rows( body.threads, threadRow ),
+		scope: rows( body.scope, scopeRow ),
 		issues: issuesRow( body.issues ),
 		merged: rows( body.merged, mergedRow, MAX_LIST )
 	};

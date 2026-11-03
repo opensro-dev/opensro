@@ -18,6 +18,7 @@ import {
 	prTone,
 	pullURL,
 	pageChanged,
+	scopeStage,
 	since,
 	sortThreads,
 	splitNeeds,
@@ -135,8 +136,8 @@ test("PRs split into agent and fork, by number, and the plaques count them", () 
 	const { agent, fork } = splitPrs( prs );
 	assert.deepEqual( agent.map( p => p.number ), [ 3, 5 ] );
 	assert.deepEqual( fork.map( p => p.number ), [ 9 ] );
-	const tiles = summary( { prs, needs: [ {} ], threads: [], issues: { open: 7 } } );
-	assert.deepEqual( tiles.map( t => t.value ), [ 1, "1 / 2", 1, 0, 7 ] );
+	const tiles = summary( { prs, needs: [ {} ], threads: [], issues: { open: 7 }, scope: [] } );
+	assert.deepEqual( tiles.map( t => t.value ), [ 1, "0 / 0", "1 / 2", 1, 0, 7 ] );
 	assert.equal( tiles[0].tone, "warn", "anything waiting on the owner is amber" );
 });
 
@@ -193,4 +194,32 @@ test("the Bug reports page says what approving posts, or what was posted", async
 		postText( { reply: "x", posted: { closed: true }, decision: pending } ).text,
 		"posted, tagged Closed, archived"
 	);
+});
+
+test("a release-scope issue reads where it stands, from the PR it cites back to nobody", () => {
+	const prs = [ { number: 40, ready: true }, { number: 41, ready: false, blocker: "CI red" } ];
+	const row = over => ({ number: 1, epic: false, carried: false, pr: null, task: null, ...over });
+	assert.equal( scopeStage( row( { pr: 40 } ), prs ).label, "ready" );
+	assert.deepEqual( [ scopeStage( row( { pr: 41 } ), prs ).label, scopeStage( row( { pr: 41 } ), prs ).detail ], [
+		"in review",
+		"CI red"
+	] );
+	const task = { id: 57, assignee: "opensro1", state: "claimed", step: "investigate" };
+	assert.equal( scopeStage( row( { task } ), prs ).detail, "T57 opensro1, investigate" );
+	assert.equal(
+		scopeStage( row( { task: { ...task, state: "queued" } } ), prs ).detail,
+		"T57 opensro1, not claimed yet"
+	);
+	assert.equal( scopeStage( row( { carried: true } ), prs ).label, "in release" );
+	assert.equal( scopeStage( row( { epic: true } ), prs ).label, "epic" );
+	assert.equal( scopeStage( row(), prs ).tone, "bad", "nobody holds it" );
+	const tiles = summary( {
+		prs: [],
+		needs: [],
+		threads: [],
+		issues: { open: 3 },
+		scope: [ row( { pr: 40 } ), row( {} ), row( { epic: true } ), row( { carried: true } ) ]
+	} );
+	assert.equal( tiles[1].value, "1 / 2", "epics and carried issues are not work" );
+	assert.equal( tiles[1].tone, "warn", "an unowned issue is amber" );
 });

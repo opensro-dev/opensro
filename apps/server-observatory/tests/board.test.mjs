@@ -205,3 +205,24 @@ test("a PR's review seats and evidence lines pass typed; bad rows drop", () => {
 	] );
 	assert.deepEqual( boardBody( SNAPSHOT, NOW ).prs[0].seats, [], "an older snapshot without seats still reads" );
 });
+
+test("release-scope rows and a scoped release pass typed; bad rows drop", () => {
+	const body = boardBody( {
+		...SNAPSHOT,
+		release: { ...SNAPSHOT.release, summary: "2 left", issues: [ 2146, "x" ], scope: [ "critical", "urgent" ] },
+		scope: [
+			{ number: 2146, title: "t", priority: "critical", epic: false, carried: false, pr: 2440, task: null },
+			{ number: 2124, title: "t", priority: "critical", carried: true, task: { id: 1, state: "done" } },
+			{ number: 9, priority: "urgent" },
+			{ number: 2299, title: "t", priority: "high", task: { id: 59, assignee: "a", state: "claimed", step: "s" } }
+		]
+	}, NOW );
+	assert.deepEqual( [ body.release.summary, body.release.issues, body.release.scope ], [ "2 left", [ 2146 ], [
+		"critical"
+	] ] );
+	assert.deepEqual( body.scope.map( r => [ r.number, r.pr, r.carried, r.task && r.task.id ] ), [
+		[ 2146, 2440, false, null ],
+		[ 2124, null, true, null ],
+		[ 2299, null, false, 59 ]
+	] );
+});

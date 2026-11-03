@@ -23,6 +23,7 @@ import {
 	priorityTone,
 	prTone,
 	pullURL,
+	scopeStage,
 	seatsText,
 	since,
 	pageChanged,
@@ -105,13 +106,27 @@ function cell( ...children ) {
 
 /*
 ================
+show
+
+Replace one element's children. Optional parts arrive as null or false
+and are dropped here: replaceChildren itself would print them as the
+text "null" (the 11-03 release card did).
+================
+*/
+function show( id, ...children ) {
+	byID( id ).replaceChildren( ...children.flat().filter( c => c !== null && c !== undefined && c !== false ) );
+}
+
+/*
+================
 fill
 
 One table body, or a single row saying it is empty.
 ================
 */
 function fill( id, rows, columns, empty ) {
-	byID( id ).replaceChildren(
+	show(
+		id,
 		...(rows.length ? rows : [ el( "tr", {}, el( "td", { colspan: columns, class: "board-empty" }, empty ) ) ])
 	);
 }
@@ -122,7 +137,8 @@ paintSummary
 ================
 */
 function paintSummary( body ) {
-	byID( "board-summary" ).replaceChildren(
+	show(
+		"board-summary",
 		...summary( body ).map( tile =>
 			el(
 				"div",
@@ -141,20 +157,51 @@ paintRelease
 */
 function paintRelease( body ) {
 	const r = body.release;
-	byID( "release-freeze" ).textContent = r?.freeze ? "freeze " + r.freeze.slice( 0, 9 ) : "";
+	const freeze = byID( "release-freeze" );
+	freeze.textContent = r?.freeze ? "freeze " + r.freeze.slice( 0, 9 ) : "";
+	freeze.hidden = !r?.freeze;
 	byID( "release-title" ).textContent = r?.live ?
 		"No release in flight" :
 		r?.assembling ?
 		"Release being assembled" :
 		"Release in flight";
 	if ( !r ) {
-		byID( "release-body" ).replaceChildren( el( "p", { class: "board-empty" }, "No release in flight." ) );
+		show( "release-body", el( "p", { class: "board-empty" }, "No release in flight." ) );
+		return;
+	}
+	if ( r.assembling && r.scope.length ) {
+		// A scoped release types no list: the collector's line, its steps,
+		// the PRs that fix its issues, and the table below for the rest.
+		show(
+			"release-body",
+			el( "h3", { class: "board-release" }, r.name ),
+			el(
+				"p",
+				{},
+				pill( r.issues.length ? r.issues.length + " left" : "all merged", r.issues.length ? "warn" : "ok" ),
+				" ",
+				r.summary
+			),
+			r.why ? el( "p", { class: "board-help" }, r.why ) : null,
+			el(
+				"ol",
+				{ class: "board-steps" },
+				...r.steps.map( s => el( "li", {}, pill( s.state, stepTone( s.state ) ), " ", s.step ) )
+			),
+			r.contains.length ?
+				el( "p", {}, el( "strong", {}, "Open fix PRs: " ), numberLinks( r.contains, pullURL ) ) :
+				null,
+			r.next && r.next.candidates.length ?
+				el( "p", { class: "board-help" }, r.next.name + ": ", numberLinks( r.next.candidates, pullURL ) ) :
+				null
+		);
 		return;
 	}
 	if ( r.assembling ) {
 		// Decided, not frozen: merges flow; the card counts what is still open.
 		const merged = r.contains.length - r.waiting.length;
-		byID( "release-body" ).replaceChildren(
+		show(
+			"release-body",
 			el( "h3", { class: "board-release" }, r.name ),
 			r.why ? el( "p", { class: "board-help" }, r.why ) : null,
 			el(
@@ -168,14 +215,17 @@ function paintRelease( body ) {
 			r.waiting.length ?
 				el( "p", {}, el( "strong", {}, "Still open: " ), numberLinks( r.waiting, pullURL ) ) :
 				el( "p", {}, "Every listed PR is merged: freeze it next." ),
-			r.rules.length ? el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) : null
+			r.rules.length ?
+				el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) :
+				null
 		);
 		return;
 	}
 	if ( r.live ) {
 		// A shipped release is history: one line, its steps folded away, and
 		// the next list (the owner's call) in front.
-		byID( "release-body" ).replaceChildren(
+		show(
+			"release-body",
 			el(
 				"p",
 				{},
@@ -206,11 +256,14 @@ function paintRelease( body ) {
 					...r.steps.map( s => el( "li", {}, pill( s.state, stepTone( s.state ) ), " ", s.step ) )
 				)
 			),
-			r.rules.length ? el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) : null
+			r.rules.length ?
+				el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) :
+				null
 		);
 		return;
 	}
-	byID( "release-body" ).replaceChildren(
+	show(
+		"release-body",
 		el( "h3", { class: "board-release" }, r.name ),
 		r.why ? el( "p", { class: "board-help" }, r.why ) : null,
 		el( "p", {}, el( "strong", {}, "Contains: " ), numberLinks( r.contains, pullURL ) ),
@@ -240,11 +293,13 @@ function paintNeeds( body ) {
 	const { owner, coordinator } = splitNeeds( body.needs );
 	const item = n => el( "li", {}, el( "strong", {}, n.what ), el( "span", {}, n.detail ) );
 	byID( "needs-count" ).textContent = String( owner.length );
-	byID( "needs-body" ).replaceChildren(
+	show(
+		"needs-body",
 		...(owner.length ? owner.map( item ) : [ el( "li", { class: "board-empty" }, "Nothing waits on the owner." ) ])
 	);
 	byID( "coordinator-count" ).textContent = String( coordinator.length );
-	byID( "coordinator-body" ).replaceChildren(
+	show(
+		"coordinator-body",
 		...(coordinator.length ?
 			coordinator.map( item ) :
 			[ el( "li", { class: "board-empty" }, "Nothing waits on the coordinator." ) ])
@@ -361,12 +416,44 @@ function paintThreads( body ) {
 
 /*
 ================
+paintScope
+
+The release scope: every open critical and high issue, critical first,
+with who holds it and how far it got. Owner 11-03: all of them ship in
+the next release and nothing else is worked on.
+================
+*/
+function paintScope( body ) {
+	const work = body.scope.filter( r => !r.epic && !r.carried );
+	byID( "scope-count" ).textContent = work.filter( r => r.pr ).length + " / " + work.length + " with a PR";
+	fill(
+		"scope-body",
+		body.scope.map( r => {
+			const stage = scopeStage( r, body.prs );
+			return el(
+				"tr",
+				{ class: r.epic || r.carried ? "board-dim" : null },
+				cell( link( issueURL( body.repo, r.number ), "#" + r.number ) ),
+				cell( pill( r.priority, r.priority === "critical" ? "bad" : "warn" ) ),
+				cell( r.title ),
+				cell( r.pr ? link( pullURL( body.repo, r.pr ), "#" + r.pr ) : "" ),
+				cell( pill( stage.label, stage.tone ), " ", el( "span", { class: "board-detail" }, stage.detail ) )
+			);
+		} ),
+		5,
+		"No critical or high issue is open."
+	);
+}
+
+/*
+================
 paintIssues
 ================
 */
 function paintIssues( body ) {
 	const i = body.issues;
-	byID( "issues-body" ).replaceChildren(
+	show(
+		"issues-body",
 		el( "p", {}, el( "strong", {}, i.open + " open" ), ", " + i.withoutPr + " without an open PR." ),
 		i.labels.length ?
 			el(
@@ -412,6 +499,7 @@ function paint() {
 	paintSummary( body );
 	paintRelease( body );
 	paintNeeds( body );
+	paintScope( body );
 	paintAgents( body, now );
 	paintPrs( body, now );
 	paintThreads( body );

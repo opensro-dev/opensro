@@ -240,6 +240,36 @@ export function sortThreads( threads ) {
 
 /*
 ================
+scopeStage
+
+How far one release-scope issue got, for its row: a ready PR, an open
+PR and what blocks it, an agent's task and step, an epic that closes
+through its children, or nobody at all (the coordinator's to assign).
+prs: the snapshot's PR rows, to read the cited PR's state.
+================
+*/
+export function scopeStage( row, prs ) {
+	if ( row.pr ) {
+		const pr = prs.find( p => p.number === row.pr );
+		if ( pr && pr.ready ) return { label: "ready", detail: "merges once the release allows", tone: "ok" };
+		return { label: "in review", detail: pr && pr.blocker ? pr.blocker : "", tone: "warn" };
+	}
+	if ( row.task ) {
+		const t = row.task;
+		const step = t.state === "queued" ?
+			"not claimed yet" :
+			t.state === "submitted" ?
+			"submitted" :
+			t.step || "claimed";
+		return { label: "fixing", detail: "T" + t.id + " " + t.assignee + ", " + step, tone: "warn" };
+	}
+	if ( row.carried ) return { label: "in release", detail: "code merged; live read after the release", tone: "ok" };
+	if ( row.epic ) return { label: "epic", detail: "closes through its child issues", tone: "idle" };
+	return { label: "no owner", detail: "the coordinator assigns it next", tone: "bad" };
+}
+
+/*
+================
 splitPrs
 
 Agent PRs (from the repository's own branches) and fork PRs, each by
@@ -290,8 +320,15 @@ The plaques across the top, in the order a reader acts on them.
 export function summary( body ) {
 	const { agent, fork } = splitPrs( body.prs );
 	const { owner } = splitNeeds( body.needs );
+	const scope = (body.scope || []).filter( r => !r.epic && !r.carried );
+	const loose = scope.filter( r => !r.pr && !r.task ).length;
 	return [
 		{ value: owner.length, label: "need the owner", tone: owner.length ? "warn" : "" },
+		{
+			value: scope.filter( r => r.pr ).length + " / " + scope.length,
+			label: "critical and high with a PR",
+			tone: loose ? "warn" : ""
+		},
 		{ value: agent.filter( pr => pr.ready ).length + " / " + agent.length, label: "agent PRs ready", tone: "" },
 		{ value: fork.length, label: "fork PRs open", tone: "" },
 		{ value: body.threads.length, label: "bug-report threads", tone: "" },
