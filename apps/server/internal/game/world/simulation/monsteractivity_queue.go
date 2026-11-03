@@ -152,6 +152,8 @@ behaviorQueue.set
 Schedules gid at at: revive (or take) its slot, stamp the due, place
 a copy. One byGID read for a known actor; the map is written only for
 an actor entering the queue. Copies of earlier dues go stale in place.
+A live slot already holding at keeps the copy it placed: re-placing
+would only stack a duplicate for the next drain to drop (#2136).
 ================
 */
 func (q *behaviorQueue) set(gid uint32, at int64) {
@@ -168,6 +170,8 @@ func (q *behaviorQueue) set(gid uint32, at int64) {
 			q.slots = append(q.slots, behaviorSlot{})
 		}
 		q.byGID[gid] = slot
+	} else if held := q.slots[slot]; held.live && held.at == at {
+		return
 	}
 	q.slots[slot] = behaviorSlot{gid: gid, at: at, live: true}
 	q.place(slot, at)
