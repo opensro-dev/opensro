@@ -10,18 +10,27 @@ is no invented retry count.
 
 Recorded beside the table (#2271): native strings this flow cannot show.
 
-- UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME: the native blocked
-case (status 3 argument 1) reads two packet strings
-after the argument - a block reason (fields split on '#') and a
-block-end datetime it parses and converts - and appends both to the
-ACCOUNT_STOP line ("%s\n%s%s\n%s%s", 0x749a33). Our login answer
-carries only a status and a uint32 argument (session.ts admits no
-string field), and the Agent has no blocked-account refusal to send
-(handlers.go never emits status 3; the account authority exposes only
-id + password hash), so there is no reason or time to append. The
-v1.188 Agent fills these fields from its account-block record;
-adopting that is a server feature (block state + refusal), not a
-client mapping, and is out of this issue's scope.
+- UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME (#2271 PR-A,
+verified on the pinned client): the blocked case is this table's
+status 3, argument 1 (handler 0x749550, status table 0x74a0c8,
+argument table 0x74a108). After the status/argument pair the answer
+carries two length-prefixed packet strings (reader 0x4b6870): the
+block reason, then the block-end text. A reason containing '#' is
+split into structured fields and its datetime is parsed and
+converted before display (0x74979d); a plain reason and the end
+text append raw. The box heads the ACCOUNT_STOP line with a
+"[Block Detail]" caption and formats it "%s\n%s%s\n%s%s"
+(0x749a33): ACCOUNT_STOP, STOP_BLOCK + reason, BLOCK_TIME + end.
+Our login answer carries only a status and a uint32 argument
+(session.ts admits no string field) and the Agent has no
+blocked-account refusal to send (handlers.go never emits status 3;
+the account authority exposes only id + password hash), so there
+is no reason or time to append. Adoption is the #2271 split, not a
+client mapping: PR-D stores the block (account scope; reason as
+free text; until optional, blank is permanent), PR-B answers
+status 3 argument 1 with the two strings only after the password
+verifies (wrong-password and unknown-id answers stay identical),
+PR-C renders the appended lines here.
 - UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK and
 UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE / _1: retail web
 addresses. Never shown, here or natively in this flow (status 3
