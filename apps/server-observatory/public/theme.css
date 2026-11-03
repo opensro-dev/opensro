@@ -236,6 +236,12 @@ body {
 	content: none;
 }
 
+/* A rail entry without its own --icon inherits this small diamond, never the
+   solid square an empty mask leaves. */
+.rail nav {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 8l4 4-4 4-4-4z'/></svg>");
+}
+
 .rail nav button::before,
 .rail nav a::before {
 	content: "";
@@ -287,6 +293,26 @@ body {
 
 [href="/history.html"] {
 	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M3 5c3.5-1.5 6-1.5 9 .5v15c-3-2-5.5-2-9-.5zM21 5c-3.5-1.5-6-1.5-9 .5v15c3-2 5.5-2 9-.5z'/><path d='M6 9h3M6 12h3M15 9h3M15 12h3' stroke-linecap='round'/></svg>");
+}
+
+/* Work board: a sheet with ticked rows. */
+[href="/board.html"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M7.5 8l1.5 1.5 2.5-2.5M7.5 14l1.5 1.5 2.5-2.5M14 8.5h3M14 14.5h3'/></svg>");
+}
+
+/* Bug reports: a beetle. */
+[href="/triage.html"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='14' rx='5' ry='6'/><path d='M12 8v12M9 5l1.5 2M15 5l-1.5 2M7 11H3M7 15H3M7.5 18.5L5 21M17 11h4M17 15h4M16.5 18.5L19 21'/></svg>");
+}
+
+/* Chat log: two speech bubbles. */
+[href="/chat-log.html"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M3 5h12v8H8l-3 3v-3H3z'/><path d='M15 9h6v8h-2v3l-3-3h-5v-4'/></svg>");
+}
+
+/* Shard rules: a balance. */
+[href="/settings.html"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v17M8 20h8M5 6h14M5 6l-3 7c0 1.7 1.3 3 3 3s3-1.3 3-3zM19 6l-3 7c0 1.7 1.3 3 3 3s3-1.3 3-3z'/></svg>");
 }
 
 [href="/economy.html"] {

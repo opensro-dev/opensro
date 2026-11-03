@@ -65,11 +65,34 @@ export function requestOperator( req, edge ) {
 
 /*
 ================
+topLevelPage
+
+A browser opening one of the console's pages as the whole tab: a GET
+navigation for a document. Following a link from Discord or a bookmark
+manager sends it as cross-site, and refusing it showed the owner a bare
+"Operator access only" for a page that changes nothing. Everything the
+page then loads (scripts, the API) is same-origin, and frame-ancestors
+'none' keeps the page out of other sites' frames.
+================
+*/
+function topLevelPage( req ) {
+	return (req.method ?? "GET") === "GET" &&
+		req.headers["sec-fetch-mode"] === "navigate" &&
+		req.headers["sec-fetch-dest"] === "document" &&
+		!(req.url ?? "/").startsWith( "/api/" );
+}
+
+/*
+================
 allowedRequest
+
+A cross-site request is refused unless it is a top-level page open
+(topLevelPage); the host, origin and forwarding checks below apply to
+every request either way.
 ================
 */
 export function allowedRequest( req, port, edge = null ) {
-	if ( req.headers["sec-fetch-site"] === "cross-site" ) return false;
+	if ( req.headers["sec-fetch-site"] === "cross-site" && !topLevelPage( req ) ) return false;
 	if ( edge ) {
 		return [ "127.0.0.1", "::1", "::ffff:127.0.0.1" ].includes( req.socket?.remoteAddress ) &&
 			req.headers.host === new URL( edge.origin ).host &&

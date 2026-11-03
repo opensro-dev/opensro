@@ -18,6 +18,7 @@
 <a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
 <nav aria-label="Dashboard views">
 <a href="/board.html" class="active" aria-current="page">Work board</a>
+<a href="/triage.html">Bug reports</a>
 <a href="/#overview">Overview</a>
 <a href="/#players">Players</a>
 <a href="/#world">World census</a>
@@ -37,7 +38,7 @@
 <div>
 <div class="eyebrow">THE WORK</div>
 <h1>Work board</h1>
-<p>The release in flight, what needs the owner, and where every PR, agent and bug report stands. It updates by itself.</p>
+<p>The release in flight, what waits on the owner or the coordinator, and where every PR, agent and bug report stands. It updates by itself, and reloads itself when its own code changes.</p>
 </div>
 <div class="heading-actions board-actions">
 <span id="board-fresh" class="pill idle">Loading…</span>
@@ -55,9 +56,17 @@
 <div id="release-body" class="board-body"></div>
 </section>
 
+<section class="panel board-panel" aria-labelledby="scope-title">
+<div class="panel-heading"><h2 id="scope-title">Release scope: critical and high</h2><span id="scope-count" class="tag">0</span></div>
+<p class="board-help">Every open critical and high issue ships in the next release, and nothing else is worked on until they do. An issue is held by an agent's fix task until its PR is open; epics close through their child issues.</p>
+<div class="board-wrap"><table class="board-table"><thead><tr><th>Issue</th><th>Priority</th><th>Title</th><th>PR</th><th>Where it stands</th></tr></thead><tbody id="scope-body"></tbody></table></div>
+</section>
+
 <section class="panel board-panel" aria-labelledby="needs-title">
 <div class="panel-heading"><h2 id="needs-title">Needs the owner</h2><span id="needs-count" class="tag">0</span></div>
 <ul id="needs-body" class="board-needs"></ul>
+<div class="panel-heading"><h3 id="coordinator-title">Waiting on the coordinator</h3><span id="coordinator-count" class="tag">0</span></div>
+<ul id="coordinator-body" class="board-needs"></ul>
 </section>
 
 <section class="panel board-panel" aria-labelledby="agents-title">
@@ -67,7 +76,7 @@
 
 <section class="panel board-panel" aria-labelledby="prs-title">
 <div class="panel-heading"><h2 id="prs-title">Agent PRs</h2><span id="prs-count" class="tag">0</span></div>
-<p class="board-help">A merge needs three approvals at the current head (two Cursor agents and one Claude session, author or not), green CI, and every Evidence line ticked or marked n/a in the PR body: rg blast radius, callers, edge cases, native client and server traces, no unlabelled subs.</p>
+<p class="board-help">A merge needs three approvals at the current head (two Cursor agents and one Claude session, author or not), green CI, and every planned kind of evidence accepted at that head or recorded as not applicable. ✓ accepted, … an agent holds the task, ✗ no task yet. While a release is in flight every merge waits for it to go live.</p>
 <div class="board-wrap"><table class="board-table"><thead><tr><th>PR</th><th>Title</th><th>Approvals</th><th>Evidence</th><th>CI</th><th>Blocker</th><th>Age</th></tr></thead><tbody id="prs-body"></tbody></table></div>
 </section>
 
