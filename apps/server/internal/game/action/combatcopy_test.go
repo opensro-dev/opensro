@@ -7,9 +7,9 @@ The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
 pass, the attacking hawk's strike tick, the heal-over-time pulse's
 retained caster view, the targeted recovery cast's recipient view,
-the lowest-party-heal candidate copies and the party-resurrection
-member copies
-take the narrow combat copy:
+the lowest-party-heal candidate copies, the party-resurrection
+member copies and the Scream Mask's member snapshot and attacker
+view take the narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
 rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
@@ -766,7 +766,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}, {"scream mask (monster attacker)", screamMaskMonsterTrace}, {"scream mask (player attacker)", screamMaskPlayerTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {
