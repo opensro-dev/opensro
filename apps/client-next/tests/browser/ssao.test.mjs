@@ -238,13 +238,20 @@ test(
 			// patch of open ground far from the box does not - a map sampled
 			// at the wrong scale would put the darkening somewhere else.
 			const { contact, open } = result.pins;
-			for ( const [label, [x, y]] of [ [ "contact", contact ], [ "open ground", open ] ] ) {
+			const pinPatches = /** @type {[string, [number, number]][]} */ ([
+				[ "contact", contact ],
+				[ "open ground", open ]
+			]);
+			for ( const [label, [x, y]] of pinPatches ) {
 				assert.ok(
 					x >= 8 && x <= width - 8 && y >= 8 && y <= height - 8,
 					`The ${label} patch projects inside the frame (${x.toFixed( 1 )}, ${y.toFixed( 1 )})`
 				);
 			}
-			const inDisk = ( x, y, [cx, cy], radius ) => (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
+			const inDisk = ( x, y, centre, radius ) => {
+				const [cx, cy] = centre;
+				return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
+			};
 			const DISK = 7;
 			let darkened = 0, brightened = 0, contactSum = 0, contactPixels = 0, openSum = 0, openPixels = 0;
 			for ( let i = 0, x = 0, y = 0; i < before.rgba.length; i += 4 ) {
@@ -272,9 +279,10 @@ test(
 			assert.ok( brightened < darkened / 4, `The row only shades down (${brightened} brightened)` );
 			// The on frame must stay a visible scene: the row shades the
 			// ambient term, it does not blank the frame. Found while acting on
-			// the review: at this head the on frames present pure black (see
-			// the PR discussion), and every count-only assertion above passes
-			// on a black frame. This guard makes that visible.
+			// the review: two bind-group layout mistakes made every on frame
+			// present pure black (see the PR discussion), and every count-only
+			// assertion above passed on that black frame. This guard keeps
+			// that class of failure visible.
 			let beforeSum = 0, duringSum = 0;
 			for ( let i = 0; i < before.rgba.length; i += 4 ) {
 				beforeSum += before.rgba[i] + before.rgba[i + 1] + before.rgba[i + 2];

@@ -116,7 +116,14 @@ prepares it per frame; the frame owner encodes it after the scene pass.
 */
 export interface SSAODraw {
 	readonly occlusionView: GPUTextureView;
-	encode( encoder: GPUCommandEncoder, frameDepth: GPUTextureView, near: number, far: number ): void;
+	encode(
+		encoder: GPUCommandEncoder,
+		frameDepth: GPUTextureView,
+		near: number,
+		far: number,
+		tanX: number,
+		tanY: number
+	): void;
 }
 
 /*
@@ -155,6 +162,10 @@ export interface ExperimentalFrame {
 		readonly stage: SSAODraw;
 		readonly near: number;
 		readonly far: number;
+		// The projection's half-angles, so the trace reconstructs view-space
+		// positions and the receiving surface's own slope.
+		readonly tanX: number;
+		readonly tanY: number;
 	};
 }
 /*

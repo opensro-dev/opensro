@@ -301,7 +301,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			// Port-only ambient occlusion: the completed frame's depth feeds
 			// the half-res occlusion the next frame's ambient term samples.
 			if ( ssao && depth ) {
-				ssao.stage.encode( encoder, depth, ssao.near, ssao.far );
+				ssao.stage.encode( encoder, depth, ssao.near, ssao.far, ssao.tanX, ssao.tanY );
 			}
 			/*
 			================

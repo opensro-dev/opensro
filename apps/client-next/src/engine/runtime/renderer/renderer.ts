@@ -989,7 +989,15 @@ export function createRenderer(
 					{
 						hdr: device.hdr( sceneWidth, sceneHeight, experimental.hdrToneMap ),
 						ambientOcclusion: occlusion ?
-							{ stage: occlusion, near: scene.camera.near, far: scene.camera.far } :
+							{
+								stage: occlusion,
+								near: scene.camera.near,
+								far: scene.camera.far,
+								// The trace reconstructs view-space positions from the
+								// half-angles, so the surface's own slope can be rejected.
+								tanX: Math.tan( scene.camera.fov / 2 ) * (sceneWidth / sceneHeight),
+								tanY: Math.tan( scene.camera.fov / 2 )
+							} :
 							undefined,
 						sceneScale: scaled ?
 							{
