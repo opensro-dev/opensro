@@ -11,8 +11,10 @@ one read, adds the token server-side (the browser never sees it), bounds
 the answer and passes on only the fields the contract names, each checked
 for its type, so a GameWorld can never hand the page markup or extra data.
 
-Proposals, the second approval and the audit come with the contract's
-second part and the console's staff sign-in; there is no write route here.
+A row's waiting proposal (pending) and its approved restart value
+(restartQueued) pass through for the page to show. Proposing, approving
+and the audit wait for the console's staff sign-in; there is no write
+route here.
 
 ===========================================================================
 */
@@ -91,7 +93,30 @@ function settingRow( row ) {
 		allowed,
 		step: step ?? 1,
 		class: row.class,
-		source: SOURCES.has( row.source ) ? row.source : "default"
+		source: SOURCES.has( row.source ) ? row.source : "default",
+		pending: proposalRow( row.pending ),
+		restartQueued: typeof row.restartQueued === "string" ? text( row.restartQueued ) : null
+	};
+}
+
+/*
+================
+proposalRow
+
+A row's waiting proposal (settingsapi Proposal), or null when absent or
+malformed. Read-only: the page shows it, nothing here acts on it.
+================
+*/
+function proposalRow( p ) {
+	if ( !p || typeof p !== "object" || typeof p.id !== "string" || typeof p.to !== "string" ) return null;
+	return {
+		id: text( p.id ),
+		from: text( p.from ),
+		to: text( p.to ),
+		by: text( p.by ),
+		byName: text( p.byName ),
+		at: number( p.at ) ?? 0,
+		reason: text( p.reason )
 	};
 }
 

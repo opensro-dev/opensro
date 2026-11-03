@@ -26,7 +26,9 @@ const ROW = {
 	allowed: null,
 	step: 1,
 	class: "live",
-	source: "env"
+	source: "env",
+	pending: null,
+	restartQueued: null
 };
 const BODY = { schemaVersion: 1, settings: [ ROW ], flags: [ { env: "SRO_MOST_WANTED", value: "on", on: true } ] };
 
@@ -119,6 +121,44 @@ test("only the contract's fields pass, each of its type", () => {
 	assert.deepEqual( body.settings[1].allowed, [ 1, 5 ] );
 	assert.equal( body.settings[1].source, "default" );
 	assert.deepEqual( body.flags, [ { env: "SRO_X", value: "", on: null } ], "only SRO_ variables, typed" );
+});
+
+test("a waiting proposal and a queued restart value pass through, typed", () => {
+	const PROPOSAL = {
+		id: "p1",
+		key: ROW.key,
+		from: "6",
+		to: "8",
+		by: "s1",
+		byName: "Staff A",
+		at: 1793675000,
+		reason: "weekend"
+	};
+	const body = settingsBody( {
+		schemaVersion: 1,
+		settings: [
+			{ ...ROW, pending: { ...PROPOSAL, script: "dropped" }, restartQueued: "12" },
+			{ ...ROW, pending: { ...PROPOSAL, to: 8 }, restartQueued: 12 },
+			{ ...ROW, pending: "p1", restartQueued: null },
+			ROW
+		],
+		flags: []
+	} );
+	assert.deepEqual( body.settings[0].pending, {
+		id: "p1",
+		from: "6",
+		to: "8",
+		by: "s1",
+		byName: "Staff A",
+		at: 1793675000,
+		reason: "weekend"
+	} );
+	assert.equal( body.settings[0].restartQueued, "12" );
+	assert.equal( body.settings[1].pending, null, "a proposal whose to is not a string is dropped" );
+	assert.equal( body.settings[1].restartQueued, null, "a queued value that is not a string is dropped" );
+	assert.equal( body.settings[2].pending, null );
+	assert.equal( body.settings[3].pending, null, "a row with nothing waiting carries null" );
+	assert.equal( body.settings[3].restartQueued, null );
 });
 
 test("no staff identity from the browser ever reaches a GameWorld", async () => {
