@@ -8,10 +8,29 @@ import "opensro.online/server/internal/game/world/monster"
 // This is a Go simulation adapter to the bounded retail-server timer model, not an
 // activation of a native C++ replacement or a claim of v1.150 equivalence.
 func (s *MonsterState) checkAITimer(divisionID string, gid uint32, id monster.AITimerID, nowMs int64) bool {
+	return s.checkAITimerAt(divisionID, gid, behaviorNoMonsterSlot, id, nowMs)
+}
+
+/*
+================
+checkAITimerAt
+
+checkAITimer through the monster slot the behaviour batch carried
+for the actor (#2133): the instance read goes through the verified
+hint and falls back to the gid resolve when the hint no longer
+names the gid, so the timer verdict is checkAITimer's either way.
+The timer bank itself is keyed by gid as before - only the
+instance locate changes.
+================
+*/
+func (s *MonsterState) checkAITimerAt(divisionID string, gid uint32, monsterSlot uint32, id monster.AITimerID, nowMs int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(divisionID, gid)
-	instance, exists := state.instances.lookup(gid)
+	instance, exists := state.instances.lookupAt(monsterSlot, gid)
+	if !exists {
+		instance, exists = state.instances.lookup(gid)
+	}
 	if !exists || instance.CurrentHP == 0 {
 		return false
 	}
@@ -66,6 +85,13 @@ func (s *MonsterState) aiTimersLocked(state *divisionMonsterState, instance mons
 }
 
 func (ops *MonsterMoverOps) acquisitionReady(divisionID string, instance monster.Instance, nowMs int64) bool {
+	// Inside the actor's step the batch's monster slot is armed on
+	// the ops (#2133): read the instance through it. The hint is
+	// verified against the gid before use, so an actor other than
+	// the step's own still resolves by gid below.
+	if ops.stepGenArmed {
+		return ops.Monsters.checkAITimerAt(divisionID, instance.Gid, ops.stepMonsterSlot, monster.TimerIDAcquisition, nowMs)
+	}
 	return ops.Monsters.checkAITimer(divisionID, instance.Gid, monster.TimerIDAcquisition, nowMs)
 }
 

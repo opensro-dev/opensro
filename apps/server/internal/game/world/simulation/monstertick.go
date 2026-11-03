@@ -85,6 +85,12 @@ type MonsterMoverOps struct {
 	// the helpers fall back to the plain commits of before.
 	stepBaseGen  uint64
 	stepGenArmed bool
+	// stepSlot and stepMonsterSlot are the running step actor's
+	// dense storage slots, armed and cleared with stepGenArmed
+	// (#2133): the step's door funnels (monsterpublish.go) read and
+	// commit through these gid-verified hints while armed.
+	stepSlot        uint32
+	stepMonsterSlot uint32
 	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
 	// #2205): the zero value (everywhere but production wiring) runs
 	// the serial leg; >= 1 plans each batch on a pool - one worker
@@ -599,7 +605,7 @@ func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before na
 	}
 	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
 	if ops.stepGenArmed {
-		if mover, gen, ok := ops.Monsters.MoverGeneration(divisionID, before.instance.Gid); ok && mover == next {
+		if mover, gen, ok := ops.Monsters.MoverGenerationAt(divisionID, before.instance.Gid, ops.stepSlot, ops.stepMonsterSlot); ok && mover == next {
 			ops.stepBaseGen = gen
 		}
 	}
