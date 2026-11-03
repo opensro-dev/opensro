@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-costransfer_quest_test.go - the bag-to-COS personal-quest-item refusal
+costransfer_quest_test.go - the bag-to-COS quest-item refusal
 
-Pins the mirror-policy refusal in applyCosTransfer: a personal quest
-item (the sharePetPickup classification) never enters a COS bag, while
-ordinary items, the alchemy-prefix exclusion, and the COS-to-player
-direction keep their existing behaviour.
+Pins the transfer refusal in applyCosTransfer: a quest item (TypeID
+3/3/9) never enters a COS bag, alchemy rows included - the transfer
+judges the TypeID class alone, unlike the pickup share policy whose
+alchemy exemption stays its own. Ordinary items, and the COS-to-player
+direction, keep their existing behaviour.
 
 ===========================================================================
 */
@@ -57,8 +58,8 @@ func questTransferFixture(t *testing.T, codename string, typeFlags uint16) (*ent
 ================
 TestPlayerToCosQuestItemRefused
 
-A personal quest item dragged into the COS bag is refused with the
-transfer's generic refusal shape and neither inventory changes.
+A quest item dragged into the COS bag is refused with the
+cannot-move-to-summon-item code (0xB1) and neither inventory changes.
 ================
 */
 func TestPlayerToCosQuestItemRefused(t *testing.T) {
@@ -70,8 +71,11 @@ func TestPlayerToCosQuestItemRefused(t *testing.T) {
 	}
 	got := rt.HandleItemMove(testDivision, c, payload)
 	if len(got.Frames) != 1 || got.Frames[0].Opcode != wire.OpItemMoveResponse ||
-		!reflect.DeepEqual(got.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeInvalidRequest)) {
+		!reflect.DeepEqual(got.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeCannotEnterCosBag)) {
 		t.Fatalf("quest item entered the COS bag or answered wrong: %+v", got)
+	}
+	if code := got.Frames[0].Payload[1]; code != 0xB1 {
+		t.Fatalf("the refusal answered code %#x, want 0xB1", code)
 	}
 	if !reflect.DeepEqual(before, c.Snapshot()) {
 		t.Fatal("the refusal mutated a container")
@@ -80,25 +84,28 @@ func TestPlayerToCosQuestItemRefused(t *testing.T) {
 
 /*
 ================
-TestPlayerToCosAlchemyItemStillTransfers
+TestPlayerToCosAlchemyItemRefused
 
-The classification's alchemy exclusion is shared with the pickup
-policy: a quest-band row under the ITEM_QNO_RM_ARCHEMY prefix still
-transfers into the COS bag.
+A quest-band row under the ITEM_QNO_RM_ARCHEMY prefix is refused too:
+the transfer judges the TypeID class alone (3/3/9), with no codename
+exemption. The alchemy exemption belongs to the pickup share policy
+(isPersonalQuestPickupItem) and does not apply here.
 ================
 */
-func TestPlayerToCosAlchemyItemStillTransfers(t *testing.T) {
+func TestPlayerToCosAlchemyItemRefused(t *testing.T) {
 	c, rt, gid := questTransferFixture(t, alchemyTransferCodename, wire.PackTypeFlags(3, 3, 9, 1))
+	before := c.Snapshot()
 	payload, err := (wire.ItemMoveRequest{MovementType: wire.MoveTypePlayerToCos, CosGID: gid, SourceSlot: 20, DestSlot: 0}).Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := rt.HandleItemMove(testDivision, c, payload)
-	if len(got.Frames) < 1 || !reflect.DeepEqual(got.Frames[0].Payload, append([]byte{1}, payload...)) {
-		t.Fatalf("alchemy item transfer failed: %+v", got)
+	if len(got.Frames) != 1 || got.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		!reflect.DeepEqual(got.Frames[0].Payload, wire.EncodeItemMoveError(wire.ErrCodeCannotEnterCosBag)) {
+		t.Fatalf("alchemy item entered the COS bag or answered wrong: %+v", got)
 	}
-	if len(c.ActiveCOS.Container.Rows) != 1 || len(c.MissionInventory) != 0 {
-		t.Fatalf("alchemy item landed wrong: cos=%d bag=%d", len(c.ActiveCOS.Container.Rows), len(c.MissionInventory))
+	if !reflect.DeepEqual(before, c.Snapshot()) {
+		t.Fatal("the refusal mutated a container")
 	}
 }
 

@@ -10,7 +10,6 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -23,6 +22,7 @@ applyCosTransfer
 */
 func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	var questFrames []wire.Frame
+	refusalCode := wire.ErrCodeInvalidRequest
 	committed := rt.deps.Update(c, "player-cos-transfer", func() bool {
 		bag, cos, ok := rt.ownedCOSContainer(c, q.CosGID)
 		if !ok {
@@ -42,16 +42,14 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		if q.MovementType == wire.MoveTypePlayerToCos && rt.HalloweenHelmetSeal.Sealed(item.Codename) {
 			return false
 		}
-		// INFERENCE, not native-verified: a personal quest item never
-		// enters a companion's bag. The ported pickup policy
-		// (sharePetPickup / isPersonalQuestPickupItem in party_pickup.go)
-		// already routes quest items to the owner's bag instead of the
-		// pet container on every grant; a manual bag-to-COS drag gets
-		// the same refusal until the native 0x1B executor branch is
-		// read. The generic refusal below stays silent client-side:
-		// the client's notice category for move results has no row for
-		// code 0x02.
-		if q.MovementType == wire.MoveTypePlayerToCos && isPersonalQuestPickupItem(grounditem.Item{Codename: item.Codename, TypeFlags: item.TypeFlags}) {
+		// A quest item never enters a companion's bag: the native
+		// transfer refuses it on its TypeID class alone (3/3/9), with
+		// no codename exemption, and answers with the client's
+		// cannot-move-to-summon-item banner. The pickup share policy
+		// keeps its own alchemy exemption (isPersonalQuestPickupItem);
+		// this guard does not borrow it.
+		if q.MovementType == wire.MoveTypePlayerToCos && isQuestItemTypeID(item.TypeFlags) {
+			refusalCode = wire.ErrCodeCannotEnterCosBag
 			return false
 		}
 		if fault := source.TransferWholeTo(dest, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {
@@ -83,7 +81,7 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		return true
 	})
 	if !committed {
-		return failureResult(wire.ErrCodeInvalidRequest)
+		return failureResult(refusalCode)
 	}
 	return OpResult{Frames: append([]wire.Frame{{Opcode: wire.OpItemMoveResponse, Payload: wire.NewWriter(8).U8(1).U8(q.MovementType).U32(q.CosGID).U8(q.SourceSlot).U8(q.DestSlot).Payload()}}, questFrames...)}
 }
