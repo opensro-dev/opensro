@@ -394,13 +394,29 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		}
 	}()
 	// The session binds the canonical character pointer. Avoid searching the
-	// division's entire saved-character population on every pet tick. Copy
-	// the owner only when this tick admits pet action: a missing companion
-	// ends the session's motion below, and an unsummoned, dead, mounted or
-	// deletion-pending companion (or a fallen owner) takes the cheaper stop
-	// path, never the whole record (#1943). companionSeen separates the two
-	// refusals; ownerDead carries the copy's life fact the guardian test
-	// below weighs, read in the same door pass that judged admission.
+	// division's entire saved-character population on every pet tick. The
+	// tick first judges on door-read facts (readPetTickFacts): a missing
+	// companion ends the session's motion, and an admitted tick that can
+	// finish on values - the bound follower's follow, the early stops -
+	// pays no owner copy at all (#2139). A tick that must commit through
+	// the record abstains to the copy, which judges exactly as before:
+	// an unsummoned, dead, mounted or deletion-pending companion (or a
+	// fallen owner) takes the cheaper stop path, never the whole record
+	// (#1943). companionSeen separates the two refusals; ownerDead
+	// carries the copy's life fact the guardian test below weighs, read
+	// in the same door pass that judged admission.
+	facts := rt.readPetTickFacts(key.division, state.character, key.gid)
+	if !facts.companionSeen {
+		state.roar = nil
+		rt.cancelPetCombat(key, state, nowMs)
+		state.follower = nil
+		return nil
+	}
+	if facts.admitted {
+		if out, handled := rt.advancePetJudged(key, state, facts, nowMs, &following, &answerStuck); handled {
+			return out
+		}
+	}
 	companionSeen := false
 	ownerDead := false
 	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(live *enterworld.Character) bool {
@@ -546,6 +562,108 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: snapshot, pet: cos, ref: ref, run: run, constraint: constraint, nowMs: nowMs})
 	}
 	return state.follower.Advance(owner, float64(rt.cosPacedRun(ref, run)), nowMs, constraint)
+}
+
+/*
+================
+advancePetJudged
+
+advancePet on door-read facts (readPetTickFacts), for the admitted
+ticks that finish without the owner record (#2139): the follower is
+already bound, no battle, roar or pickup is live, and the tick is the
+follow - its early stops included - in advancePet's own order. The
+owner's world comes from WorldStore.SnapshotExisting: seeding it
+would read the live record outside the character door, so a tick
+whose owner has no world entry yet abstains with everything else
+that must commit through the record - the bind, a battle, a roar, a
+pickup, a mercenary, the refusals - and advancePet judges it on the
+companion copy exactly as before. The stuck answer stays lazy the
+same way: a stuck event raised by the judged step takes the copy
+only to answer it.
+================
+*/
+func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
+	// The forced-copy seam and any live battle state judge on the copy.
+	if rt.companionCopy != nil || state.combat != nil || state.roar != nil || state.pickup != nil {
+		return nil, false
+	}
+	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
+	if !ok {
+		return nil, false
+	}
+	pet := &facts.pet
+	ref, found := refs.CharacterRefByCodename(pet.Codename)
+	if !found || ref == nil || ref.RefObjID != pet.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
+		return nil, false
+	}
+	if ref.TidWord>>11 == domain.MercenaryBand {
+		return nil, false
+	}
+	if state.follower == nil || state.follower.GID() != key.gid || state.refObjID != pet.RefObjID {
+		return nil, false
+	}
+	ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(key.division, state.character.Name))
+	if !ok {
+		return nil, false
+	}
+	// Relocation and summons build new followers; every tick installs the one
+	// planner they all route with.
+	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
+	if pet.BroodStage == 1 {
+		rt.cancelPetCombat(key, state, nowMs)
+		return state.follower.Stop(nowMs), true
+	}
+	if rt.TransportFollowTether && isVehicleCOS(ref.TidWord) {
+		// Port-only (transportfollow.go): a following transport holds
+		// its trader as a parked one does, from where it walks now.
+		state.tether = &simulation.Tether{Anchor: state.follower.Position(nowMs),
+			Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
+	}
+	*answerStuck = func() []simulation.Frame {
+		if state.follower == nil || !state.follower.StuckPending() {
+			return nil
+		}
+		snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, nil)
+		if snapshot == nil {
+			return nil
+		}
+		cos := snapshot.CompanionByGID(key.gid)
+		if cos == nil {
+			return nil
+		}
+		return rt.answerPetStuck(key, state, snapshot, cos, ref.TidWord, nowMs)
+	}
+	if state.displacement != nil {
+		state.roar = nil
+		if nowMs < state.displacement.untilMs {
+			return state.follower.Stop(nowMs), true
+		}
+		state.displacement = nil
+	}
+	if rt.cosMovementBlockedFor(key.division, state.character.Name, key.gid) {
+		state.roar = nil
+		rt.cancelPetCombat(key, state, nowMs)
+		return state.follower.Stop(nowMs), true
+	}
+	block := rt.cosAbnormal(key.division, state.character.Name, pet.GID)
+	// The step keeps the native run: natively it is compared with the authored
+	// speed. Only the follower moves at the paced one.
+	walk, run := cosParameter(ref, pet, block, movementWalkParameter), cosParameter(ref, pet, block, movementRunParameter)
+	state.follower.SetMovementSpeeds(walk, rt.cosPacedRun(ref, run), nowMs)
+	var constraint func(simulation.Spawn, simulation.Spawn) (simulation.Spawn, *simulation.MoveError)
+	if rt.ConstrainMovement != nil {
+		constraint = func(from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
+			return rt.ConstrainMovement(state.character.Name, from, to)
+		}
+	}
+	if nowMs < state.wolf.howlHoldUntil {
+		return state.follower.Stop(nowMs), true
+	}
+	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
+		*following = true
+		return rt.advanceOwnerFormation(petCombatStep{key: key, state: state, snapshot: state.character, ownerWorld: &ownerWorld, pet: pet, ref: ref, run: run, constraint: constraint, nowMs: nowMs}), true
+	}
+	return state.follower.Advance(ownerWorld.LiveSpawnAt(nowMs), float64(rt.cosPacedRun(ref, run)), nowMs, constraint), true
 }
 
 // PetPresentation is the sole read boundary for peer pet motion. It holds the
