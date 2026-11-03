@@ -402,9 +402,16 @@ test("a glow that appears on a long-drawn doll starts its own clock, not the dol
 	assert.equal( f.timeOf( 9 ), 0, "the new glow starts at its own zero" );
 	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3611.5 } );
 	assert.equal( f.timeOf( 9 ), 0.5 );
-	// Taken off and worn again, it is a fresh attachment once more.
+	// Missing for a frame (the world's particle budget), it is the same glow:
+	// it keeps its own clock instead of restarting.
 	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 3612 } );
-	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3620 } );
-	assert.equal( f.timeOf( 9 ), 0 );
+	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3613 } );
+	assert.equal( f.timeOf( 9 ), 2 );
+	// Taken off and worn again, the world hands it a new gid (model-emission.ts):
+	// a fresh attachment that starts at its own zero once more.
+	const rewornGlow = { ...glow, actor: { ...glow.actor, gid: 10 } };
+	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 3614 } );
+	f.preview.prepare( { ...f.source, children: [ rewornGlow ] }, f.geometry, f.images, { yaw: 0, seconds: 3620 } );
+	assert.equal( f.timeOf( 10 ), 0 );
 	f.preview.dispose( f.geometry, f.images );
 });
