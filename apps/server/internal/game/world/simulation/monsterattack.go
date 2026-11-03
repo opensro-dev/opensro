@@ -246,7 +246,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	mustMoverTransition(&mover, monster.MoverEventAttackStarted, target.Gid)
 	if nowMs < mover.NextAttackMs || ops.BasicAttack == nil {
-		return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover, frames), nil, true
+		return ops.commitSteppedMoverFrames(divisionID, instance.Gid, mover, frames), nil, true
 	}
 	// Admit facing/action ownership BEFORE the callback can commit damage.
 	// Reserve the selected strategy interval, including its native jitter,
@@ -254,7 +254,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	// raw skill cooldown).
 	// Retaliation must retain it if post-cast bookkeeping is superseded.
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
-	if !ops.Monsters.CommitMover(divisionID, instance.Gid, mover) {
+	if !ops.commitSteppedMover(divisionID, instance.Gid, mover) {
 		return nil, nil, true
 	}
 	result := ops.BasicAttack(divisionID, instance, target.Gid, plan.SkillID, nowMs)
@@ -277,7 +277,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 				event = monster.MoverEventSkillCommandRejected
 			}
 			mustMoverTransition(&mover, event, target.Gid)
-			ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
+			ops.commitSteppedMover(divisionID, instance.Gid, mover)
 			return frames, targeted, true
 		}
 		return append(frames, ops.startReturnLeg(
@@ -290,12 +290,12 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 		// produces a hit while the monster is already walking away.
 		mover.BehaviorDeadlineMs = nowMs + plan.ActionLifecycleMs
 		mustMoverTransition(&mover, monster.MoverEventTargetDefeated, 0)
-		ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
+		ops.commitSteppedMover(divisionID, instance.Gid, mover)
 		return frames, targeted, true
 	}
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
 	// Select the next authored default action on the next due tick.
 	mover.AttackSkillID = 0
-	ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
+	ops.commitSteppedMover(divisionID, instance.Gid, mover)
 	return frames, targeted, true
 }

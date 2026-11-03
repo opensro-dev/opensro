@@ -1,4 +1,5 @@
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
+import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 // Transport pages have no asset names or scene lists. The admitted manifest
 // supplies the identity and bounds; consumers still verify each member digest.
 // Owner: one pack reader. Inputs: origin, pack digest, byte offset and length.
@@ -65,7 +66,9 @@ export function createPackBlocks( download: PackDownload, signal: AbortSignal ) 
 				total: pack.bytes
 			} );
 			alive();
-			if ( bytes.length !== end - start + 1 ) throw Error( "Truncated pack block" );
+			// A stream that ends cleanly short of its claimed range was cut
+			// or re-framed in transit: transient, not content (#2337).
+			if ( bytes.length !== end - start + 1 ) throw assetFailure( "Truncated pack block", true );
 			rangeBytes += bytes.length;
 			while ( resident + bytes.length > budget && cache.size ) {
 				const oldest = cache.keys().next().value!;

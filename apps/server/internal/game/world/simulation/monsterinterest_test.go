@@ -256,4 +256,208 @@ func TestMonsterScopeStreamDeltas(t *testing.T) {
 	if len(ops.shownMonsters) != 0 {
 		t.Fatalf("shownMonsters retains %d departed sessions", len(ops.shownMonsters))
 	}
+	if len(ops.scopeMemo) != 0 {
+		t.Fatalf("scopeMemo retains %d departed sessions", len(ops.scopeMemo))
+	}
+}
+
+/*
+================
+TestScopeLegSkipsTheUnchangedLeg
+
+#2134: a seeded viewer whose block and interest stamp match its last
+full pass skips the delta read, and the skip never swallows a change:
+a monster walking out of the neighbourhood still despawns and
+walking back still spawns, because both crossings move the stamp.
+The published stream is the one the unskipped leg produced.
+================
+*/
+func TestScopeLegSkipsTheUnchangedLeg(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	ops, regionA, _ := scopeStreamFixture(t)
+	a2 := scopeStreamInstance(t, ops.Monsters, regionA, 200)
+	session := viewerSessionAt(regionA, 100)
+	sessions := []SessionSnapshot{session}
+	viewers := map[string]worldgeom.RegionXZ{"viewer": {RegionID: regionA, X: 100, Z: 100}}
+	live := map[string]bool{"viewer": true}
+	recordTestMonsterBootstrap(ops, sessions, t0)
+
+	push := &fakePusher{}
+	leg := func(nowMs int64) []Frame {
+		push.toSession = nil
+		ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
+		return scopeDeltaFrames(push, "viewer")
+	}
+	if frames := leg(t0); len(frames) != 0 {
+		t.Fatalf("seed leg emitted %d scope deltas, want 0", len(frames))
+	}
+	memo, ok := ops.scopeMemo["viewer"]
+	if !ok {
+		t.Fatalf("no scope memo recorded after the seed leg (recorded %v)", ok)
+	}
+	if stamp, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, t0); !ok || stamp != memo.stamp {
+		t.Fatal("the seed leg's memo is not the stamp a fresh scope read keys on")
+	}
+	for i := int64(1); i <= 2; i++ {
+		if frames := leg(t0 + i*250); len(frames) != 0 {
+			t.Fatalf("unchanged leg %d emitted %d scope deltas, want 0", i, len(frames))
+		}
+	}
+
+	// Walk A2 east out of the neighbourhood (block 96 to 101). Its
+	// block membership moves the stamp, so the leg runs in full and
+	// the exit publishes exactly one despawn single.
+	mover, ok := ops.Monsters.Mover(monsterTestDivision, a2.Gid)
+	if !ok {
+		t.Fatal("A2 has no mover")
+	}
+	if err := mover.Transition(monster.MoverEventSpawnHoldElapsed, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
+		t.Fatal(err)
+	}
+	mover.From = monster.Pose{RegionID: regionA, X: 200, Y: 10, Z: 150}
+	mover.Pose = mover.From
+	mover.To = monster.Pose{RegionID: regionA, X: 1700, Y: 10, Z: 150}
+	mover.DepartMs, mover.ArriveMs = t0+500, t0+1500
+	if !ops.Monsters.CommitMover(monsterTestDivision, a2.Gid, mover) {
+		t.Fatal("walk-out commit rejected")
+	}
+	frames := leg(t0 + 1500)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectDespawn || frames[0].ScopeGID != a2.Gid {
+		t.Fatalf("walk-out leg frames = %+v, want one despawn for A2", frames)
+	}
+
+	// Walk it back: one spawn single, again through the full leg -
+	// the skip must not have frozen the shown bookkeeping either.
+	mover.Pose = mover.To
+	mover.From = mover.To
+	mover.To = monster.Pose{RegionID: regionA, X: 200, Y: 10, Z: 150}
+	mover.DepartMs, mover.ArriveMs = t0+1500, t0+2500
+	if !ops.Monsters.CommitMover(monsterTestDivision, a2.Gid, mover) {
+		t.Fatal("walk-back commit rejected")
+	}
+	frames = leg(t0 + 2500)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpSingleObjectSpawn || frames[0].ScopeGID != a2.Gid {
+		t.Fatalf("walk-back leg frames = %+v, want one spawn for A2", frames)
+	}
+	if frames := leg(t0 + 2750); len(frames) != 0 {
+		t.Fatalf("settled leg emitted %d scope deltas, want 0", len(frames))
+	}
+
+	// The viewer crosses into a block of its own while the division stands
+	// still: the stamp alone would call this leg unchanged, so the block
+	// match is what runs it in full and moves the shown set.
+	stamp := ops.scopeMemo["viewer"].stamp
+	viewers["viewer"] = worldgeom.RegionXZ{RegionID: regionA, X: 1800, Z: 100}
+	frames = leg(t0 + 3000)
+	if len(frames) == 0 {
+		t.Fatal("block-crossing leg emitted no scope deltas")
+	}
+	if ops.scopeMemo["viewer"].stamp != stamp {
+		t.Fatal("the division moved, so this leg proved nothing about the viewer's block")
+	}
+}
+
+/*
+================
+scopeRemovingPusher
+
+A pusher that removes one actor's instance the first time a spawn
+is pushed: the mid-leg removal a concurrent writer can land between
+the scope leg's delta read and a later actor's enter.
+================
+*/
+type scopeRemovingPusher struct {
+	fakePusher
+	remove func(spawnedGid uint32)
+	fired  bool
+}
+
+/*
+================
+PushToSession
+================
+*/
+func (p *scopeRemovingPusher) PushToSession(sessionID string, frames []Frame) {
+	p.fakePusher.PushToSession(sessionID, frames)
+	if p.fired {
+		return
+	}
+	for _, frame := range frames {
+		if frame.Opcode == wire.OpSingleObjectSpawn {
+			p.fired = true
+			p.remove(frame.ScopeGID)
+			return
+		}
+	}
+}
+
+/*
+================
+TestScopeLegRetriesAnActorRemovedMidLeg
+
+#2134: an actor removed between the delta read and its enter cannot
+resolve, so it stays unshown - and because the memo holds the stamp
+sampled before that pass, the removal (which bumps the view
+generation) makes the next leg's sample differ and run in full.
+When the actor is back, the owed enter lands. The skip's safety
+reduces to this: every change to the computed in-scope set moves a
+stamp input (block membership, instance appearance, departure or
+spawn move, the statics roster and region lists), while residency
+alone never does - contains spans the hot and cold tiers, so a
+frozen actor stays in the set exactly as the unskipped leg reads it.
+================
+*/
+func TestScopeLegRetriesAnActorRemovedMidLeg(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	ops, regionA, _ := scopeStreamFixture(t)
+	a1 := scopeStreamInstance(t, ops.Monsters, regionA, 100)
+	a2 := scopeStreamInstance(t, ops.Monsters, regionA, 200)
+	state := ops.Monsters.divs[monsterTestDivision]
+
+	session := viewerSessionAt(regionA, 100)
+	sessions := []SessionSnapshot{session}
+	viewers := map[string]worldgeom.RegionXZ{"viewer": {RegionID: regionA, X: 100, Z: 100}}
+	live := map[string]bool{"viewer": true}
+	push := &scopeRemovingPusher{remove: func(spawnedGid uint32) {
+		other := a1.Gid
+		if spawnedGid == a1.Gid {
+			other = a2.Gid
+		}
+		state.instances.remove(other)
+	}}
+	leg := func(nowMs int64) []Frame {
+		push.toSession = nil
+		ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
+		return scopeDeltaFrames(&push.fakePusher, "viewer")
+	}
+
+	// No bootstrap record: the first leg is the create pass. The
+	// first spawn's push removes the other actor, whose enter then
+	// cannot resolve: exactly one spawn lands and the pass stays
+	// pending.
+	frames := leg(t0)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpSingleObjectSpawn {
+		t.Fatalf("first leg frames = %+v, want exactly one spawn", frames)
+	}
+	removed := a1
+	if frames[0].ScopeGID == a1.Gid {
+		removed = a2
+	}
+
+	// The memo holds the pre-removal stamp, so the next leg's fresh
+	// sample differs (the removal bumped the view generation) and
+	// runs in full, publishing nothing.
+	if frames := leg(t0 + 250); len(frames) != 0 {
+		t.Fatalf("quiet leg emitted %d scope deltas, want 0", len(frames))
+	}
+
+	// The actor is restored: the owed enter lands.
+	state.instances.set(removed.Gid, removed)
+	frames = leg(t0 + 500)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpSingleObjectSpawn || frames[0].ScopeGID != removed.Gid {
+		t.Fatalf("restore leg frames = %+v, want one spawn for gid %d", frames, removed.Gid)
+	}
 }

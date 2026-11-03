@@ -90,6 +90,23 @@ commitMoverLocked
 ================
 */
 func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32, mover monster.MoverState) bool {
+	return s.commitMoverChecked(state, gid, mover, 0, false)
+}
+
+/*
+================
+commitMoverChecked
+
+commitMoverLocked with the leg's generation guard (#2137 slice 1):
+when guarded, the commit lands only while the stored row still sits
+at baseGen - the generation the planner's snapshot read. A slower
+lane's set advances the row, the stale commit drops, and the actor
+replans at its next due; nothing of the newer value is overwritten.
+Returns the row's generation after the attempt (the new generation
+on acceptance, the current one on a generation drop).
+================
+*/
+func (s *MonsterState) commitMoverChecked(state *divisionMonsterState, gid uint32, mover monster.MoverState, baseGen uint64, guarded bool) bool {
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
@@ -99,6 +116,9 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 	}
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)
+	}
+	if guarded && state.movers.generation(gid) != baseGen {
+		return false
 	}
 	// Packet-side damage can arm retaliation between a tick's snapshot read
 	// and commit. Reject only a plan from an older retaliation revision.
@@ -139,6 +159,78 @@ func (s *MonsterState) CommitMoverFrames(divisionID string, gid uint32, mover mo
 		return nil
 	}
 	return frames
+}
+
+/*
+================
+CommitMoverGen
+
+CommitMover guarded by the mover row's commit generation: the
+commit lands only while the row still sits at baseGen, the
+generation the caller's snapshot read (#2137 slice 1). Returns the
+row's generation after the attempt alongside acceptance, so a
+step committing several times in a row re-bases on its own accepted
+commits while an intervening slower-lane set drops the next one.
+================
+*/
+func (s *MonsterState) CommitMoverGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64) (uint64, bool) {
+	if err := mover.Validate(); err != nil {
+		panic(err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if !s.commitMoverChecked(state, gid, mover, baseGen, true) {
+		return state.movers.generation(gid), false
+	}
+	return state.movers.generation(gid), true
+}
+
+/*
+================
+CommitMoverFramesGen
+
+CommitMoverFrames with CommitMoverGen's generation guard: frames
+are released only for a commit that landed on its base generation.
+================
+*/
+func (s *MonsterState) CommitMoverFramesGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64, frames []Frame) []Frame {
+	if _, ok := s.CommitMoverGen(divisionID, gid, mover, baseGen); !ok {
+		return nil
+	}
+	return frames
+}
+
+/*
+================
+MoverGeneration
+
+One actor's mover value with the commit generation it was read at:
+the re-read a step makes after a transaction of its own (an idle
+entry, the activity gate) has already advanced the row.
+================
+*/
+func (s *MonsterState) MoverGeneration(divisionID string, gid uint32) (monster.MoverState, uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if !state.instances.contains(gid) {
+		return monster.MoverState{}, 0, false
+	}
+	if mover, ok := state.movers.lookup(gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, state.movers.generation(gid), true
+	}
+	mover := monster.NewSpawnMover(state.instances.get(gid), s.nowMillis())
+	if err := mover.Validate(); err != nil {
+		panic(err)
+	}
+	return mover, state.movers.generation(gid), true
 }
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.

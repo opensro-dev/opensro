@@ -161,3 +161,82 @@ func TestSceneReceiptOverflowClosesOutsideQueueLock(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestSceneReceiptParkedBehindItsBootstrap
+
+A receipt accepted while its scene's bootstrap is not queued yet joins
+the queue behind the bootstrap, never ahead of it (#2294): the entry
+handler releases the publication gate before encoding now, so a tick
+committed after the snapshot build can answer before the bootstrap
+queues. The parked receipt still counts against the queue budget.
+================
+*/
+func TestSceneReceiptParkedBehindItsBootstrap(t *testing.T) {
+	hub := newHub(testCfg())
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(session, nil) })
+	const reset, early, late = 0x366a, 0xb06d, 0xb070
+	queueOpcodes := func() []uint16 {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		out := make([]uint16, len(session.queue))
+		for i, frame := range session.queue {
+			out[i] = frame.Opcode
+		}
+		return out
+	}
+
+	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
+	revision, valid := session.SceneReceiptRevision()
+	if !valid {
+		t.Fatal("receipt revision must be valid while loading")
+	}
+	if err := session.SendSceneReceiptBatch(revision, []Frame{{Opcode: early, Payload: []byte{1}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := queueOpcodes(); len(got) != 0 {
+		t.Fatalf("parked receipt reached the queue: %v", got)
+	}
+
+	// A fresh admission drops whatever the previous scene parked.
+	session.BeginSceneAdmission()
+	session.MarkSceneSnapshotBuilt()
+	revision, valid = session.SceneReceiptRevision()
+	if !valid {
+		t.Fatal("receipt revision must be valid while loading")
+	}
+	if err := session.SendSceneReceiptBatch(revision, []Frame{{Opcode: early, Payload: []byte{7}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SendSceneReset([]Frame{{Opcode: reset, Payload: []byte{9}}}); err != nil {
+		t.Fatal(err)
+	}
+	// The reset batch advanced the revision; receipts capture it after.
+	revision, _ = session.SceneReceiptRevision()
+	if err := session.SendSceneReceiptBatch(revision, []Frame{{Opcode: late, Payload: []byte{8}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []uint16{reset, early, late}
+	got := queueOpcodes()
+	if len(got) != len(want) {
+		t.Fatalf("queue = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+	// The parked receipt kept the payload captured at park time.
+	session.mu.Lock()
+	payload, parkedFrames, parkedBytes := session.queue[1].Payload, session.pendingFrames, session.pendingBytes
+	session.mu.Unlock()
+	if len(payload) != 1 || payload[0] != 7 || parkedFrames != 0 || parkedBytes != 0 {
+		t.Fatalf("park not flushed cleanly: payload %v pending %d/%d", payload, parkedFrames, parkedBytes)
+	}
+}

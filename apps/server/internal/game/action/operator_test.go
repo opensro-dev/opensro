@@ -8,8 +8,8 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"testing"
 
@@ -148,7 +148,7 @@ real data so a fabricated catalog cannot hide an unusable production selector.
 ================
 */
 func TestOperatorTownsFromPublishedCatalog(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)

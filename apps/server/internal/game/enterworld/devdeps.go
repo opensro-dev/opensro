@@ -204,6 +204,18 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		if monster.TempleEnabled() {
+			// Port-only (#1800 step 3): the temple band worlds join the
+			// catalogue only while their switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.TempleDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		template, err = monster.AppendTemple(template, textdataDir, monster.TempleEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		template, err = monster.AppendQinshi(template, textdataDir, monster.QinshiEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)

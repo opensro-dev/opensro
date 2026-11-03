@@ -5,7 +5,7 @@ client_data.py - browser releases that carry new asset data.
 
 An application candidate reuses the live asset data byte for byte. A data
 candidate replaces it: the asset packs are built on the operator's machine
-from the licensed client, so they reach the host as content-addressed
+from the client, so they reach the host as content-addressed
 payload batches the stage role verifies and keeps in the payload store,
 and a small candidate archive (manifest, plan, application files) stages
 them. Staging reuses every served file the live release already holds by

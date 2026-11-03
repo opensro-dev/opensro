@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -26,6 +27,26 @@ import (
 type monsterObjectListKey struct {
 	divisionID string
 	playerGid  uint32
+}
+
+/*
+================
+scopeViewerMemo
+
+One viewer's last full scope pass (#2134): the population, block and
+interest stamp its shown set synced under. A later leg that matches
+division, lease, block and stamp provably faces the in-scope set the
+viewer already holds, so runScopeVisibility skips the delta read,
+the list clone and both set scans for it. The stamp is sampled
+before the pass it describes: a write landing between the sample
+and the pass can only make the memo stale, never wrong-side.
+================
+*/
+type scopeViewerMemo struct {
+	division string
+	lease    instance.Lease
+	block    worldgeom.InterestBlock
+	stamp    interestMemoStamp
 }
 
 // InterestInstances returns the instances whose live position lies inside the
@@ -100,10 +121,30 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 	if ops.shownMonsters == nil {
 		ops.shownMonsters = make(map[string]map[uint32]bool)
 	}
+	if ops.scopeMemo == nil {
+		ops.scopeMemo = make(map[string]scopeViewerMemo)
+	}
 
 	inScopeGids := make(map[uint32]bool)
 	for _, session := range sessions {
-		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewers[session.SessionID], nowMs, ops.shownMonsters[session.SessionID])
+		viewer := viewers[session.SessionID]
+		// The unchanged-leg skip (#2134): a seeded viewer whose block
+		// and interest stamp match its last full pass faces the
+		// in-scope set its shown set already equals, so the delta
+		// below would publish nothing. The budget-breach size is the
+		// one already logged for this division occupancy, so it is
+		// not re-read either.
+		if _, seeded := ops.shownMonsters[session.SessionID]; seeded {
+			if memo, ok := ops.scopeMemo[session.SessionID]; ok &&
+				memo.division == session.DivisionID && memo.lease == session.Population &&
+				worldgeom.InterestBlockAt(viewer) == memo.block {
+				if stamp, ok := ops.Monsters.scopeInterestStamp(session.DivisionID, session.Population, nowMs); ok && stamp == memo.stamp {
+					continue
+				}
+			}
+		}
+		stamp, stampOK := ops.Monsters.scopeInterestStamp(session.DivisionID, session.Population, nowMs)
+		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewer, nowMs, ops.shownMonsters[session.SessionID])
 		// Detection only: never truncate the server-owned existence set.
 		if len(inScope) > monsterScopeSoftLimit {
 			ops.logScopeBudgetBreach(session.DivisionID, len(inScope))
@@ -228,12 +269,24 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 			sort.Slice(exits, func(i, j int) bool { return exits[i] < exits[j] })
 			push.PushToSession(session.SessionID, MonsterDespawnBracketFrames(exits))
 		}
+
+		// Remember the pass for the unchanged-leg skip: the stamp
+		// sampled before it ran and the block it read.
+		if stampOK {
+			ops.scopeMemo[session.SessionID] = scopeViewerMemo{
+				division: session.DivisionID, lease: session.Population,
+				block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+			}
+		} else {
+			delete(ops.scopeMemo, session.SessionID)
+		}
 	}
 
 	// Departed viewers must not leak show bookkeeping (the settled-map rule).
 	for sessionID := range ops.shownMonsters {
 		if !live[sessionID] {
 			delete(ops.shownMonsters, sessionID)
+			delete(ops.scopeMemo, sessionID)
 		}
 	}
 

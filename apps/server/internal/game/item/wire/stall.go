@@ -33,6 +33,11 @@ The v1.150 client's stall (CIFStall, interface child 0x21):
 Offers are [u8 slot][CSOItem][u8 bag slot][u16 count][u32 price] until a
 0xFF slot (client 74F9D0). Refusals are [2][code], a category 0x0A notice.
 
+Port-only, not native: with SRO_RAISED_GOLD_CAPS on, the offer price is
+u64 in the edit request (0x71A8), the edit and visit answers and the sold
+notice, so a 10,000,000,000 price fits. Off, every one of them stays the
+native u32 field above.
+
 The stall network (CIFStallNetwork): 0x76F9 [u8 kind][u8 page][u32
 category][u8] searches (0xB6F9 [1][u8 rows][u8 pages] then rows of
 [CSOItem][u32 owner][u8 slot][u16 count][u8][u64 price][u64 serial],
@@ -132,19 +137,25 @@ type StallOffer struct {
 	Item     ItemBody
 	BagSlot  uint8
 	Quantity uint16
-	Price    uint32
+	Price    uint64
 }
 
 /*
 ================
 WriteStallOffers
 
-Offers until the 0xFF end marker (client 74F9D0).
+Offers until the 0xFF end marker (client 74F9D0). wide writes the
+port-only u64 price; false keeps the native u32 field.
 ================
 */
-func WriteStallOffers(w *Writer, offers []StallOffer) *Writer {
+func WriteStallOffers(w *Writer, offers []StallOffer, wide bool) *Writer {
 	for _, offer := range offers {
-		w.U8(offer.Slot).Bytes(offer.Item.Encode()).U8(offer.BagSlot).U16(offer.Quantity).U32(offer.Price)
+		w.U8(offer.Slot).Bytes(offer.Item.Encode()).U8(offer.BagSlot).U16(offer.Quantity)
+		if wide {
+			w.U64(offer.Price)
+		} else {
+			w.U32(uint32(offer.Price))
+		}
 	}
 	return w.U8(stallOffersEnd)
 }
@@ -154,9 +165,9 @@ func WriteStallOffers(w *Writer, offers []StallOffer) *Writer {
 EncodeStallVisit
 ================
 */
-func EncodeStallVisit(owner uint32, greeting string, open bool, mode uint8, offers []StallOffer, visitors []uint32) []byte {
+func EncodeStallVisit(owner uint32, greeting string, open bool, mode uint8, offers []StallOffer, visitors []uint32, wide bool) []byte {
 	w := NewWriter(64).U8(ResultSuccess).U32(owner).WStr(greeting).U8(boolByte(open)).U8(mode)
-	WriteStallOffers(w, offers)
+	WriteStallOffers(w, offers, wide)
 	w.U8(uint8(len(visitors)))
 	for _, gid := range visitors {
 		w.U32(gid)
@@ -182,9 +193,9 @@ EncodeStallSold
 0x3260 kinds 3 and 4: the slot, the buyer's name and the offers left.
 ================
 */
-func EncodeStallSold(kind, slot uint8, buyer string, offers []StallOffer) []byte {
+func EncodeStallSold(kind, slot uint8, buyer string, offers []StallOffer, wide bool) []byte {
 	w := NewWriter(64).U8(kind).U8(slot).Str(buyer)
-	return WriteStallOffers(w, offers).Payload()
+	return WriteStallOffers(w, offers, wide).Payload()
 }
 
 /*

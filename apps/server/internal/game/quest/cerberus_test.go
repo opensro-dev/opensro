@@ -18,7 +18,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -72,7 +72,7 @@ the roll that fails Ivy's knife. Twenty held apples refuse another cut.
 ================
 */
 func TestCerberusScissorsCutAnAppleWithoutARoll(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := cerberusFixture(t)
 	if captureItemCount(c, cerberusScissors) != 30 {
 		t.Fatal("acceptance did not grant thirty Long Scissors")
@@ -113,7 +113,7 @@ refuses once twenty Bloody Orbs are held.
 ================
 */
 func TestCerberusAppleLuresALadon(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def, _ := cerberusFixture(t)
 	var lured []string
 	spawned := true
@@ -157,7 +157,7 @@ leftover scissors and apples.
 ================
 */
 func TestCerberusRefillSpendsTheDayAtTheGrant(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def, day := cerberusFixture(t)
 	if _, offered := rt.captureSupplyOption(c, def, def.StartNpcCodename); offered {
 		t.Fatal("refill offered while scissors are held")

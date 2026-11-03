@@ -1,0 +1,36 @@
+# native-claims.yml - a pull request citing the client fills its claims table (#2219)
+#
+# Its own workflow because editing the body must re-run this check and nothing
+# else. The body reaches the script through the environment, never the shell.
+name: native-claims
+
+on:
+  pull_request:
+    types: [ opened, edited, reopened, synchronize ]
+
+concurrency:
+  group: native-claims-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  native-claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: New client citations have a claims row
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/checks/check_native_claims.mjs

@@ -157,7 +157,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		if !m.NoteMoveStopped(m.Pose) {
 			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
 		}
-		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
+		return ops.commitSteppedMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
 	}
 	return nil, m, true
 }
@@ -175,8 +175,27 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 	if err := after.Validate(); err != nil {
 		panic(err)
 	}
-	state.movers.set(gid, after)
+	if cadenceOnlyWrite(current, after) {
+		state.movers.setActivity(gid, after.Activity)
+	} else {
+		state.movers.set(gid, after)
+	}
 	state.syncApproachActor(gid, after)
 	s.scheduleBehavior(state, gid, now)
 	return true
+}
+
+/*
+================
+cadenceOnlyWrite
+
+Whether after differs from current only in its activity cadence:
+the gate's idle re-check commit. The new stamp must still be stored
+(the next gate read fires off it) and still re-arms the scheduler,
+but the row itself has nothing to rebuild (#2136).
+================
+*/
+func cadenceOnlyWrite(current, after monster.MoverState) bool {
+	current.Activity, after.Activity = monster.ActivityCadence{}, monster.ActivityCadence{}
+	return current == after
 }

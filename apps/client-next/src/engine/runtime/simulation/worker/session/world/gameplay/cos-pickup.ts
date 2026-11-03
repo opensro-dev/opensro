@@ -99,6 +99,10 @@ createCosPickup
 */
 export function createCosPickup() {
 	const drops = new Set<number>();
+	// Targets a refusal retired (77DD10 retire class): out of the
+	// proposal set until the item actually leaves the world. A spawn
+	// republication of the same entity must not resurrect them.
+	const retired = new Set<number>();
 	const pending = new Map<number, number>();
 	const receipts = new Set<number>();
 	const dropRetry = new Map<number, number>();
@@ -116,6 +120,7 @@ track
 				return;
 			}
 			drops.delete( event.gid );
+			retired.delete( event.gid );
 			dropRetry.delete( event.gid );
 			pending.delete( event.gid );
 			receipts.delete( event.gid );
@@ -153,7 +158,7 @@ ordered-map tie break independently of the browser's spawn arrival order.
 					const item = frame.read( gid ), drop = item?.groundItem;
 					const category = drop ? pickupCategory( drop.typeFlags ) : 0;
 					if (
-						!item || !drop || drop.claimantGid || claimed.has( gid ) ||
+						!item || !drop || drop.claimantGid || claimed.has( gid ) || retired.has( gid ) ||
 						(dropRetry.get( gid ) ?? 0) > frame.now || !(mode & category)
 					) continue;
 					// Port-only (#841): the item filter narrows the native
@@ -215,8 +220,10 @@ fires so gold pickup continues without spamming 0x769E.
 			pending.delete( result.gid );
 			receipts.delete( result.gid );
 			const code = result.subtype === 1 ? 1 : result.result;
-			if ( [ 1, 2, 3, 0x12, 0x39, 0xb1 ].includes( code ?? 0 ) ) drops.delete( result.itemGid );
-			else if ( code === 0x13 || code === 0x99 ) dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
+			if ( [ 1, 2, 3, 0x12, 0x39, 0xb1 ].includes( code ?? 0 ) ) {
+				drops.delete( result.itemGid );
+				retired.add( result.itemGid );
+			} else if ( code === 0x13 || code === 0x99 ) dropRetry.set( result.itemGid, now + DROP_RETRY_MS );
 			else if ( code === 0x14 || code === 0x9c ) petRetry.set( result.gid, now + PET_RETRY_MS );
 			else if ( code === 0xb4 || code === 0xb5 ) {
 				if ( smartPetPickup ) {
@@ -247,8 +254,12 @@ Clears the smartPetPickup full-bag pause when pet or player bag space changes.
 clear
 ================
 		*/
+		isRetired( gid: number ) {
+			return retired.has( gid );
+		},
 		clear() {
 			drops.clear();
+			retired.clear();
 			pending.clear();
 			receipts.clear();
 			dropRetry.clear();

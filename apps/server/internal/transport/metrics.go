@@ -32,6 +32,7 @@ type hubMetrics struct {
 	helloAdmissionRefused  atomic.Uint64
 	detaches               atomic.Uint64
 	detachesIdle           atomic.Uint64
+	detachesRingPark       atomic.Uint64
 	detachesOther          atomic.Uint64
 
 	sessOpened            atomic.Uint64
@@ -104,6 +105,7 @@ type Metrics struct {
 	HelloAdmissionRefused     uint64  `json:"hello_admission_refused"`
 	Detaches                  uint64  `json:"detaches"`
 	DetachesIdle              uint64  `json:"detaches_idle"`
+	DetachesRingPark          uint64  `json:"detaches_ring_park"`
 	DetachesOther             uint64  `json:"detaches_other"`
 
 	// Session lifecycle since boot. The closed breakdown is deliberately
@@ -152,9 +154,12 @@ type Metrics struct {
 	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
 	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
-	HandlerMs   map[string]Histogram     `json:"handler_ms"`
-	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
-	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
+	HandlerMs map[string]Histogram `json:"handler_ms"`
+	// UnhandledOpcodes splits unhandled_opcode_frames by opcode, up to
+	// maxUnhandledOpcodes distinct values (timing.go, #2147).
+	UnhandledOpcodes map[string]uint64        `json:"unhandled_opcodes"`
+	TickPhaseMs      map[string]Histogram     `json:"tick_phase_ms"`
+	SlowHooks        map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
 	// PublicationHolds is each labelled publication-gate holder's slow
@@ -294,6 +299,7 @@ func (h *Hub) Metrics() Metrics {
 		HelloAdmissionRefused:     h.metrics.helloAdmissionRefused.Load(),
 		Detaches:                  h.metrics.detaches.Load(),
 		DetachesIdle:              h.metrics.detachesIdle.Load(),
+		DetachesRingPark:          h.metrics.detachesRingPark.Load(),
 		DetachesOther:             h.metrics.detachesOther.Load(),
 
 		SessionsOpened:             h.metrics.sessOpened.Load(),

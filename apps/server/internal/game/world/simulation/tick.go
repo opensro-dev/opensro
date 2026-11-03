@@ -12,7 +12,6 @@ import (
 	"context"
 	"opensro.online/server/internal/domain"
 	"runtime/debug"
-	"sort"
 	"sync"
 	"time"
 
@@ -293,6 +292,22 @@ type TickHook func(nowMs int64) []DivisionFrames
 
 /*
 ==================
+NamedTickHook
+
+One tick hook and the name its owner gives it. Slow-hook reports and
+the stall watchdog print this name, never the hook's runtime name: a
+closure registered in a constructor reports as <constructor>.funcN
+(newMissionTicker.func2), which named nothing when a tick stalled
+(#2294). An empty Name falls back to the runtime name, as before.
+==================
+*/
+type NamedTickHook struct {
+	Name string
+	Hook TickHook
+}
+
+/*
+==================
 Ticker
 
 Ticker is the server push tick: the capability the HTTP GET/POST transport
@@ -332,11 +347,11 @@ type Ticker struct {
 	ShardCount int
 	Now        Clock
 	// Hooks run once at the end of every coordinated tick (see TickHook).
-	Hooks []TickHook
+	Hooks []NamedTickHook
 	// BeforeHooks settle already accepted monster actions before division AI
 	// makes another decision at this clock. They run on the coordinator and
 	// use the same scoped publication path as end-of-tick hooks.
-	BeforeHooks []TickHook
+	BeforeHooks []NamedTickHook
 	// Monsters is the monster mover + scope-stream leg (monstertick.go).
 	// Wired whenever the population is enabled, which is the DEFAULT;
 	// nil only under the MISSION_SPAWN_MONSTERS=0 kill switch (then the
@@ -372,8 +387,24 @@ type Ticker struct {
 	// states is coordinator-owned. Each value is used only by the worker that
 	// owns its division, so hot-path state needs no cross-shard mutex.
 	states map[string]*divisionTickState
-	done   chan struct{}
-	once   sync.Once
+	// The preparation scratch below is coordinator-owned and kept between
+	// ticks: the drained-resume set, the live-division set, the division
+	// work list and the session order. The order is rebuilt only when
+	// session membership changes (attach/detach); a tick whose snapshot
+	// carries the same sessions is placed into the kept order instead of
+	// re-sorted. Nothing here outlives the tick that filled it: the work
+	// list and the resumed set are consumed synchronously before the next
+	// prepareTick runs.
+	resumedScratch map[string]bool
+	liveScratch    map[string]bool
+	workScratch    []divisionTickWork
+	orderKeys      []sessionOrderKey
+	orderIndex     map[sessionOrderKey]int
+	orderScratch   []int
+	orderUsed      []bool
+	orderValues    []SessionSnapshot
+	done           chan struct{}
+	once           sync.Once
 }
 
 /*
@@ -620,97 +651,6 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 
 /*
 ================
-prepareTick
-================
-*/
-func (t *Ticker) prepareTick() (int64, []divisionTickWork) {
-	tick := t.tickIndex
-	t.tickIndex++
-
-	sessions := t.Source.SnapshotSessions()
-
-	// The resume registry drains once per tick, before any leg runs, so a
-	// mark can never be served twice or leak into a later tick. A drained
-	// identity with no snapshot here (the character re-entered under a new
-	// scene revision, or has not entered yet) is dropped: that entry
-	// bootstraps its own state.
-	resumedIDs := map[string]bool{}
-	if source, ok := t.Source.(ResumeSource); ok {
-		for _, id := range source.DrainResumedSessions() {
-			resumedIDs[id] = true
-		}
-	}
-	sort.SliceStable(sessions, func(i, j int) bool {
-		if sessions[i].DivisionID != sessions[j].DivisionID {
-			return sessions[i].DivisionID < sessions[j].DivisionID
-		}
-		if sessions[i].SessionID != sessions[j].SessionID {
-			return sessions[i].SessionID < sessions[j].SessionID
-		}
-		return sessions[i].CharacterID < sessions[j].CharacterID
-	})
-
-	if t.states == nil {
-		t.states = make(map[string]*divisionTickState)
-	}
-	liveDivisions := make(map[string]bool)
-	work := make([]divisionTickWork, 0)
-	for i := 0; i < len(sessions); {
-		j := i + 1
-		for j < len(sessions) && sessions[j].DivisionID == sessions[i].DivisionID {
-			j++
-		}
-		divisionID := sessions[i].DivisionID
-		liveDivisions[divisionID] = true
-		state := t.states[divisionID]
-		if state == nil {
-			state = &divisionTickState{
-				settled:    make(map[string]int64),
-				shownPeers: make(map[string]map[uint32]bool),
-				monsters:   cloneMonsterMoverOps(t.Monsters),
-			}
-			t.states[divisionID] = state
-		}
-		if state.monsters != nil {
-			state.monsters.divisionID = divisionID
-			state.monsters.watch = &t.watch
-		}
-		work = append(work, divisionTickWork{
-			divisionID: divisionID,
-			sessions:   sessions[i:j],
-			state:      state,
-			resumed:    resumedIDs,
-		})
-		i = j
-	}
-	// Actor lifetimes belong to allocated worlds. Removing the last session
-	// must not delete the division's AI work before it reaches PENDING.
-	if t.Monsters != nil && t.Monsters.Monsters != nil {
-		for _, divisionID := range t.Monsters.Monsters.behaviorDivisions() {
-			if liveDivisions[divisionID] {
-				continue
-			}
-			liveDivisions[divisionID] = true
-			state := t.states[divisionID]
-			if state == nil {
-				state = &divisionTickState{settled: make(map[string]int64), shownPeers: make(map[string]map[uint32]bool), monsters: cloneMonsterMoverOps(t.Monsters)}
-				t.states[divisionID] = state
-			}
-			state.monsters.divisionID = divisionID
-			state.monsters.watch = &t.watch
-			work = append(work, divisionTickWork{divisionID: divisionID, state: state, resumed: resumedIDs})
-		}
-	}
-	for divisionID := range t.states {
-		if !liveDivisions[divisionID] {
-			delete(t.states, divisionID)
-		}
-	}
-	return tick, work
-}
-
-/*
-================
 tickShardForDivision
 ================
 */
@@ -739,6 +679,7 @@ func cloneMonsterMoverOps(source *MonsterMoverOps) *MonsterMoverOps {
 	clone := *source
 	clone.shownMonsters = nil
 	clone.breachLogged = nil
+	clone.scopeMemo = nil
 	return &clone
 }
 
@@ -799,15 +740,15 @@ func (t *Ticker) runHooks(nowMs int64, work []divisionTickWork) {
 runHookList
 ================
 */
-func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickWork) {
+func (t *Ticker) runHookList(hooks []NamedTickHook, nowMs int64, work []divisionTickWork) {
 	for _, hook := range hooks {
 		func() {
 			defer recoverTickPanic("hook")
-			t.watch.enterHook(hook)
+			t.watch.enterHook(hook.Name)
 			defer t.watch.leaveHook()
 			// The hook's routing and pushes below are part of its time.
 			t.clock.timeHook(hook, t.timingNow, func() {
-				t.routeHookFrames(hook(nowMs), work)
+				t.routeHookFrames(hook.Hook(nowMs), work)
 			})
 		}()
 	}

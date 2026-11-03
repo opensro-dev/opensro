@@ -32,6 +32,17 @@ const TRADER = 1, THIEF = 2, HUNTER = 3;
 
 /*
 ================
+isPvpCapeItem
+
+RefObj_IsPvpCape (593310): the item is a free-battle cape, TID 3/1/7/5.
+================
+*/
+export function isPvpCapeItem( typeFlags: number ): boolean {
+	return jobItemType( typeFlags ) === PVP_CAPE_ITEM;
+}
+
+/*
+================
 PlayerInteraction
 ================
 */
@@ -123,7 +134,23 @@ export function playerInteraction(
 // in bits 11..15: horse 1, transport 2, attack pet 3, pickup pet 4 and guild
 // soldier 5 (RefObjTypeFlags_IsCos* 5500B0 / 5500F0 / 582160).
 const COS_TYPE_MASK = 0x7fe, COS_TYPE_WORD = 0x1c6;
-const COS_HORSE = 1, COS_TRANSPORT = 2, COS_ATTACK_PET = 3, COS_GUILD_SOLDIER = 5;
+const COS_HORSE = 1, COS_TRANSPORT = 2, COS_ATTACK_PET = 3, COS_GUILD_SOLDIER = 5, COS_CAPTURED_MONSTER = 6;
+
+/*
+================
+capturedMonsterCos
+
+Band 6 of the COS type word: a quest's captured monster
+(RefObjType_IsCosBand6_CaptureMonster). canAttackCos refuses it with the
+other unlisted bands; this names the case, because 693E50 answers this
+one refusal - and only this one - with a chat line.
+================
+*/
+export function capturedMonsterCos( target: EntityState ): boolean {
+	const word = target.tidWord ?? 0;
+	return target.kind === "cos" && (word & COS_TYPE_MASK) === COS_TYPE_WORD &&
+		(word >>> 11 & 31) === COS_CAPTURED_MONSTER;
+}
 // Category-4 notices 6FCD50 raises for an offensive skill at a party member
 // or a party member's pet.
 export const SKILL_AT_PARTY_MEMBER_NOTICE = 0x22;

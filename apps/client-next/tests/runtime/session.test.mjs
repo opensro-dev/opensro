@@ -844,6 +844,83 @@ test("entry admission failure returns the authenticated roster without another l
 	session.dispose();
 });
 
+test("a maintenance refusal explains itself and is not retried", async t => {
+	const authUrls = [];
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async url => {
+			if ( url.includes( "/auth/" ) ) authUrls.push( url );
+			return Response.json(
+				url.endsWith( "/title/login" ) ? response : url.endsWith( "/character/list" ) ?
+					roster :
+					url.includes( "/auth/" ) ?
+					{ ok: false, code: "MAINTENANCE" } :
+					{ ok: false }
+			);
+		}
+	);
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "roster" } );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	session.step();
+	await settle();
+	const value = session.step();
+	assert.equal( value.phase, "character-select" );
+	assert.equal( value.error, "The server is under maintenance. Please try again later." );
+	// The one refused mint is the whole story: later steps never ask again.
+	await settle();
+	session.step();
+	await settle();
+	session.step();
+	assert.equal( authUrls.length, 1 );
+	session.dispose();
+});
+
+test("a coded refusal without a maintenance name keeps the generic error", async t => {
+	const authUrls = [];
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async url => {
+			if ( url.includes( "/auth/" ) ) authUrls.push( url );
+			return Response.json(
+				url.endsWith( "/title/login" ) ? response : url.endsWith( "/character/list" ) ?
+					roster :
+					url.includes( "/auth/" ) ?
+					{ ok: false, code: "SHARD_OFFLINE" } :
+					{ ok: false }
+			);
+		}
+	);
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "roster" } );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	session.step();
+	await settle();
+	const value = session.step();
+	assert.equal( value.phase, "character-select" );
+	assert.equal( value.error, "Admission request failed" );
+	await settle();
+	session.step();
+	assert.equal( authUrls.length, 1 );
+	session.dispose();
+});
+
 test("raw native shard name survives login, roster and restoration, and clears on logout", async t => {
 	const name = "Native#$Tdisplay suffix";
 	t.mock.method(
@@ -912,5 +989,26 @@ test("a server speaking another release protocol marks the session outdated and 
 	session.step();
 	await settle();
 	assert.equal( session.step().releaseOutdated, true );
+	session.dispose();
+});
+
+test("world lifecycle commands with no world session publish no error", () => {
+	const session = createSession();
+	for ( const kind of [ "world-ready", "restart", "exit", "reconnect", "disconnect" ] ) {
+		session.command( { kind } );
+		assert.equal( session.step()?.error, undefined, kind );
+	}
+	session.dispose();
+});
+
+test("a failed entry error is not replaced by lifecycle commands with no world session", () => {
+	const session = createSession();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	const failed = session.step();
+	assert.equal( failed?.error, "Error: Authentication required" );
+	for ( const kind of [ "world-ready", "restart", "exit", "reconnect" ] ) {
+		session.command( { kind } );
+		assert.equal( session.step()?.error ?? failed?.error, "Error: Authentication required", kind );
+	}
 	session.dispose();
 });

@@ -19,8 +19,8 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/tunables"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -91,7 +91,7 @@ TestTradeOriginsFromTheShippedShops
 ================
 */
 func TestTradeOriginsFromTheShippedShops(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := shippedItems(t)
 	shops, err := commerce.Load(gamedatatest.TextdataDir(t), items)
 	if err != nil {

@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
@@ -261,6 +262,13 @@ func newGameWorldApplication(
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
 	authority.agentAPI.InstallSettings(settingsapi.Path, settingsHandler)
+	// Port-only: the staff console's search of the moderation chat log.
+	chatLogHandler, err := chatlog.OperatorHandler(store.DirForShardFromEnv(ownedShard.ID),
+		filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"))
+	if err != nil {
+		return nil, fmt.Errorf("chat log: %w", err)
+	}
+	authority.agentAPI.InstallChatLog(chatlog.OperatorPath, chatLogHandler)
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}

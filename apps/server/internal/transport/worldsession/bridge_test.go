@@ -197,7 +197,7 @@ func TestBootTickerPushesThroughLiveHub(t *testing.T) {
 		return []simulation.DivisionFrames{{DivisionID: "DIV_A", Frames: []simulation.Frame{sweep}}}
 	}
 
-	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), hook)
+	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), simulation.NamedTickHook{Hook: hook})
 	ticker.Interval = 20 * time.Millisecond // production cadence is 100ms; fast for the test
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

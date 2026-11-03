@@ -46,8 +46,21 @@ type divisionMonsterState struct {
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
 	instances        monsterStorage
-	uniqueNotices    []Frame
-	uniqueDeaths     map[uint32]bool
+	// interestMemo holds populationInterestGIDs results per viewer
+	// interest block. Reconciled block membership has already absorbed
+	// the instant, so an entry lives until a mover crosses a block edge
+	// or the actors or static lists change (interestMemoStamp).
+	interestMemoStamp interestMemoStamp
+	interestMemo      map[worldgeom.InterestBlock][]uint32
+	// interestStatics is byRegion without the gids that have a mover,
+	// rebuilt when interestStaticsStamp stops matching.
+	interestStatics      map[uint16][]uint32
+	interestStaticsStamp interestStaticsStamp
+	// byRegionGeneration advances on every byRegion write
+	// (listRegionGid, removeRegionGid).
+	byRegionGeneration uint64
+	uniqueNotices      []Frame
+	uniqueDeaths       map[uint32]bool
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline

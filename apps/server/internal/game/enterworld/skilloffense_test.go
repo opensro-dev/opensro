@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -26,7 +26,7 @@ TestShippedDirectOffenseCoverage
 ================
 */
 func TestShippedDirectOffenseCoverage(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {
 		t.Skip("shipped media unavailable")
 	}

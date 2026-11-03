@@ -76,14 +76,31 @@ func (s *Store) ReadCharacters(divisionID string, fn func(characters []*domain.C
 	fn(out)
 }
 
-// CharactersForDivision returns the division's live records (fresh slice,
-// same pointers - append-safe against concurrent CreateCharacter).
+// CharactersForDivision returns the division's live records (same
+// pointers - append-safe against concurrent CreateCharacter).
+//
+// The slice is the roster copy the lookup rebuild published for the
+// division's last roster change (create, reap, rename, load): every
+// caller shares that one list until the next change replaces it, so
+// per-tick readers no longer copy the roster per call. The published
+// copy is never written after publication - the reaper's in-place
+// compaction rewrites the live array, not this one - so a retained
+// slice is merely STALE across a roster change, the guarantee the
+// per-call copy gave. Callers must not write elements or append in
+// place; field reads still need the normal read door. A store whose
+// lookups were never built (struct-literal fixtures) takes the old
+// locked copy instead.
 /*
 ================
 CharactersForDivision
 ================
 */
 func (src storeCharacterSource) CharactersForDivision(divisionID string) []*domain.Character {
+	if published := src.s.characterLookups.Load(); published != nil {
+		if index := (*published)[divisionID]; index != nil {
+			return index.list
+		}
+	}
 	src.s.mu.RLock()
 	defer src.s.mu.RUnlock()
 	live := src.s.characters[divisionID]

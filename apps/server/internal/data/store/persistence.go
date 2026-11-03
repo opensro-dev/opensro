@@ -157,8 +157,10 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// Digests of the character rows this attempt writes, staged here
 	// and retained only once the transaction commits (below).
 	stagedDigests := map[committedCharacterKey][32]byte{}
+	stagedRows := map[committedCharacterKey]*domain.Character{}
 	rowCommit := characterRowCommit{tx: tx, scratch: &s.encodeScratch, committed: s.committedDigests,
-		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode]}
+		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode],
+		committedRows: s.committedRows, stagedRows: stagedRows}
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
@@ -309,6 +311,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	for key, digest := range stagedDigests {
 		s.committedDigests[key] = digest
 	}
+	for key, row := range stagedRows {
+		s.committedRows[key] = row
+	}
 	for key, digest := range stagedMeta {
 		s.committedMetaDigests[key] = digest
 	}
@@ -429,6 +434,14 @@ Close
 func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The background checkpointer stops first (#2142 slice 0): its
+	// last cycle must not race the TRUNCATE below, and it closes its
+	// own handle between cycles, so this wait is the only join. It
+	// takes no store door, so holding mu here cannot deadlock it.
+	if s.checkpoints != nil {
+		s.checkpoints.stop()
+		s.checkpoints = nil
+	}
 	if s.db != nil {
 		// A graceful stop never drops a tick: rows a deferred door left
 		// (tickbatch.go) are written before the final checkpoint.
@@ -481,6 +494,11 @@ type characterRowCommit struct {
 	rows      *commitRowCounts
 	now       func() time.Time
 	encode    *time.Duration
+	// committedRows and stagedRows are the staged digests' twin for
+	// the section comparison (character_sections.go): the committed
+	// copies a skip reads, and the fresh copies this attempt stages.
+	committedRows map[committedCharacterKey]*domain.Character
+	stagedRows    map[committedCharacterKey]*domain.Character
 }
 
 /*
@@ -501,15 +519,28 @@ commit skip a row the disk does not hold.
 ================
 */
 func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) error {
+	key := committedCharacterKey{division: division, id: c.ID}
+	// The section skip (#2141): a dirty character whose sections all
+	// still equal its committed copy would encode to the row the disk
+	// already holds, so it costs no encode and no hash. The digest
+	// below remains the write gate for characters that did move - and
+	// the debug check that the comparison told the truth.
+	if committed, known := w.committedRows[key]; known && len(characterSectionsChanged(c, committed)) == 0 {
+		w.rows.skipped++
+		return nil
+	}
 	start := w.now()
 	record, err := encodeCharacterBorrowed(w.scratch, division, c)
 	*w.encode += w.now().Sub(start)
 	if err != nil {
 		return err
 	}
-	key := committedCharacterKey{division: division, id: c.ID}
 	digest := sha256.Sum256(record)
 	if last, known := w.committed[key]; known && last == digest {
+		// Sections moved but the bytes did not (a nil slice became an
+		// empty one): refresh the staged copy so the next commit's
+		// comparison starts clean instead of re-encoding forever.
+		w.stagedRows[key] = domain.CloneCharacter(c)
 		w.rows.skipped++
 		return nil
 	}
@@ -517,6 +548,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		return err
 	}
 	w.staged[key] = digest
+	w.stagedRows[key] = domain.CloneCharacter(c)
 	w.rows.written++
 	return nil
 }

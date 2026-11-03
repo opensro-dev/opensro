@@ -21,7 +21,7 @@ import { createCameraScripts } from "./camera/camera";
 import { createTerrainParts } from "./terrain-parts";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { CameraScript } from "@/engine/contracts/camera-script";
-import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
+import { assetFailure, assetFailurePath, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import {
 	cameraFieldOfViewRadians,
 	initialCameraFieldOfView,
@@ -72,6 +72,11 @@ export function createWorldStream(
 ) {
 	const scripts = createCameraScripts( random );
 	const recovery = createAssetRecovery();
+	// The latest failure's facts for the incident its terminal state
+	// files (#2337): the error text and the asset it was loading.
+	// terminalFailure hands each terminal episode out exactly once.
+	let lastFailure: { error: string; path?: string; } | undefined;
+	let reportedFailure: { error: string; path?: string; } | undefined;
 	// Native UI construction resets App+0x38C (818790 via vtable+0x24).
 	// Asset resets reuse this runtime's UI and keep its committed projection.
 	let fieldOfView = initialCameraFieldOfView();
@@ -430,7 +435,9 @@ export function createWorldStream(
 			const result = assets.take( id );
 			if ( !result ) continue;
 			jobs.delete( id );
-			if ( result.kind === "error" ) throw assetFailure( `${job.path}: ${result.error}`, result.transient );
+			if ( result.kind === "error" ) {
+				throw assetFailure( `${job.path}: ${result.error}`, result.transient, job.path );
+			}
 			if ( job.kind === "catalog" && result.kind === "bytes" ) {
 				const value = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) );
 				if (
@@ -454,7 +461,14 @@ export function createWorldStream(
 		}
 		terrain.poll();
 		if ( outdoor && transaction.phase === "loading" ) {
-			terrain.request( outdoor.regions );
+			// No pose means the player has left this scene (the dock, the
+			// title): the retained scene takes what already landed but
+			// issues no new work. The incoming scene's stage may only ask
+			// for an asset slot at its own step, ahead of this one in the
+			// frame, and a stream that refills behind it every frame
+			// leaves it none until the whole queue drains (#1975). The
+			// stream resumes with the next world pose.
+			if ( pose ) terrain.request( outdoor.regions );
 			if ( waiting && terrain.ready( outdoor.regions ) ) {
 				const result = waiting;
 				waiting = null;
@@ -462,13 +476,15 @@ export function createWorldStream(
 			}
 		}
 		if ( future && !failedFuture && future.anchor === terrain.anchorFor( future.region ) ) {
-			terrain.request( future.outdoor.regions, 1 );
+			if ( pose ) terrain.request( future.outdoor.regions, 1 );
 		}
 		if ( transaction.phase === "loading" || transaction.phase === "ready" ) {
 			const neededTextures = renderer.neededWorldTextures();
-			for ( const path of neededTextures ) {
-				if ( jobs.size >= 3 || assets.available() === 0 ) break;
-				if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
+			if ( pose ) {
+				for ( const path of neededTextures ) {
+					if ( jobs.size >= 3 || assets.available() === 0 ) break;
+					if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
+				}
 			}
 			const stats = renderer.worldStats();
 			if (
@@ -720,6 +736,7 @@ export function createWorldStream(
 				clearFuture();
 				terrain.cancelPending();
 				transaction = { phase: "failed", region, error: String( error ) };
+				lastFailure = { error: String( error ), path: assetFailurePath( error ) };
 				recovery.failed( error, nowMs );
 			}
 		},
@@ -765,6 +782,29 @@ export function createWorldStream(
 		================
 		*/
 		reconnecting: () => transaction.phase === "failed" && recovery.reconnecting(),
+		/*
+		================
+		terminalFailure
+
+		The failure that ended this stream's retries, once per episode:
+		a permanent failure at once, a transient one only when its
+		automatic retries are used up. The runtime files it as a client
+		incident (#2337); a later failure is a new episode and reports
+		again under its own facts.
+		================
+		*/
+		terminalFailure() {
+			if ( transaction.phase !== "failed" || recovery.reconnecting() ) return undefined;
+			const failure = lastFailure;
+			if ( !failure || failure === reportedFailure ) return undefined;
+			reportedFailure = failure;
+			return {
+				error: failure.error,
+				path: failure.path,
+				transient: recovery.transient(),
+				attempts: recovery.attempts()
+			};
+		},
 		/*
 		================
 		retryTransient

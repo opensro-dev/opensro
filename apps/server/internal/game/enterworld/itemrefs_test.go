@@ -1,14 +1,14 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"strings"
 	"testing"
 )
 
 func TestProjectedConsumableNames(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	for _, tc := range []struct {
@@ -44,7 +44,7 @@ TestItemCommandReferencesCarryDisplayNames
 ================
 */
 func TestItemCommandReferencesCarryDisplayNames(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	rows := items.ItemCommandReferences()
 	if len(rows) == 0 {
@@ -68,7 +68,7 @@ func TestItemCommandReferencesCarryDisplayNames(t *testing.T) {
 }
 
 func TestEveryProjectedItemHasDisplayName(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	// 8439 retail rows plus 108 ordinary/sealed pet rows (portItemRows.mjs).

@@ -533,14 +533,30 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 characterByCosGID
 
 Resolve a currently summoned pet to its owning character before mutation.
+
+The gid to owner index (cosownerindex.go) answers first, and its hit
+is verified against the owner's own records before it is trusted: a
+gid the index cannot vouch for falls back to the division walk,
+which then notes what it found. The walk was the whole cost of this
+question (#2138) and stays only as the authority behind the index,
+so a missed maintenance door costs one walk, never a wrong owner.
 ================
 */
 func (rt *Runtime) characterByCosGID(division string, gid uint32) *enterworld.Character {
 	if gid == 0 || rt.deps == nil {
 		return nil
 	}
+	if owner := rt.cosOwners.owner(division, gid); owner != nil {
+		if owner.CompanionByGID(gid) != nil {
+			return owner
+		}
+		// The index vouched for a pet the owner no longer holds:
+		// forget the stale entry and let the walk answer.
+		rt.cosOwners.forget(division, gid)
+	}
 	for _, character := range rt.deps.CharactersForDivision(division) {
 		if character != nil && character.CompanionByGID(gid) != nil {
+			rt.cosOwners.note(division, gid, character)
 			return character
 		}
 	}

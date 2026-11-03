@@ -128,10 +128,17 @@ export function startRuntime(
 	}
 	try {
 		const random = createPresentationRandom( presentationSeed );
-		const runtimeErrors = createRuntimeErrors( message => {
+		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
+			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
 			bugReport.note( message );
 			ui.runtimeError( message );
+			// The resource families behind the fatal loading screen file
+			// the same failure as a client incident (#2337): they keep no
+			// recovery clock, so the error text is their whole evidence.
+			if ( [ "Frontend", "Characters", "Audio", "Interface", "Assets" ].includes( source ) ) {
+				reportAssetIncident( "fatal_asset_failed", { error: message, transient: false, attempts: 0 } );
+			}
 		} );
 		const presentation = own( createPresentation() );
 		let sessionState: SessionState | null = null;
@@ -217,6 +224,30 @@ export function startRuntime(
 					}, world );
 				}
 			}
+		}
+		/*
+		================
+		reportAssetIncident
+
+		Files one terminal asset failure as a client incident (#2337):
+		the asset it was loading ("-" when the failure named none),
+		whether retrying could have helped, and how many automatic
+		retries the failure sequence used. The session adds its phase.
+		================
+		*/
+		function reportAssetIncident(
+			code: string,
+			failure: { error: string; path?: string; transient: boolean; attempts: number; } | undefined
+		) {
+			if ( !failure ) return;
+			sessionCommand( {
+				kind: "client-report",
+				incidentKind: "asset",
+				code,
+				message: `asset=${
+					failure.path ?? "-"
+				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`
+			} );
 		}
 		/*
 		================
@@ -1168,13 +1199,19 @@ export function startRuntime(
 				// Dungeon visibility depends on admitted navigation ownership. Waiting
 				// for the first visible draw here deadlocks first entry into a dungeon.
 				// Retain admitted navigation while offline, but do not emit a late
-				// navigation command into the disconnected simulation.
+				// navigation command into the disconnected simulation. A page
+				// returning to view hands its return to the step: a slept or
+				// frozen page never ran the admission window it would
+				// otherwise be failed for (#2337).
+				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( sessionState?.phase === "world" || !worldPresented ) {
 					navigation.step(
 						worldPresented ? presentation.gameplay()?.pose ?? null : null,
 						presentation.gameplay()?.navigationRegion,
 						presentation.gameplay()?.navigationFailure,
-						presentation.gameplay()?.navigationRequestId
+						presentation.gameplay()?.navigationRequestId,
+						now,
+						visibleAgain
 					);
 				}
 
@@ -1256,7 +1293,6 @@ export function startRuntime(
 					phase === "connecting" || phase === "entering-world" || phase === "world" ||
 						phase === "reconnecting"
 				);
-				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
 				if ( visibleAgain || onlineAgain ) {
 					world.retryTransient();
 					navigation.retryTransient();
@@ -1317,6 +1353,28 @@ export function startRuntime(
 				markStage( "audio" );
 				if ( renderer.phase() === "failed" ) {
 					platform.report( `Renderer failed: ${renderer.error()}` );
+					// #2337: the on-screen renderer error is cut off, so before
+					// disposing, file the full error text and the adapter facts
+					// as an incident. Best-effort: a dead session must not stop
+					// the dispose below.
+					try {
+						const facts = renderer.adapterFacts();
+						const adapter = facts ?
+							`${facts.vendor ?? "-"}/${facts.architecture ?? "-"} features=${
+								facts.features.join( "+" )
+							}` +
+							(facts.degradedPipelines?.length ?
+								` degraded=${facts.degradedPipelines.join( "+" )}` :
+								"") :
+							"unknown";
+						reportAssetIncident( "renderer_failed", {
+							error: `${renderer.error() ?? "renderer failed"} | adapter: ${adapter}`,
+							transient: false,
+							attempts: 0
+						} );
+					} catch {
+						// The session may already be gone; dispose proceeds.
+					}
 					dispose();
 					return;
 				}
@@ -1365,6 +1423,9 @@ export function startRuntime(
 					runtimeErrors.update( "Interface", ui.resourceError() );
 					const assetHealth = assets.health();
 					runtimeErrors.update( "Assets", assetHealth.phase === "failed" ? assetHealth.error : null );
+					runtimeErrors.update( "Frontend", frontendState.error );
+					reportAssetIncident( "world_asset_failed", world.terminalFailure() );
+					reportAssetIncident( "navigation_asset_failed", navigation.terminalFailure() );
 					platform.report( `Replacement runtime: ${renderer.phase()}
 Simulation tick: ${latestSequence}
 Input acknowledged: ${acceptedInput}
@@ -1461,7 +1522,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 ================
 startViewerRuntime
 
-Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+Port-only, not native (docs/guides/VIEWER.md): the embeddable 3D viewer page. It
 creates only the owners one drawn model needs (assets, renderer and the
 character presentation, as startRuntime builds them) and drives
 viewer/viewer.ts by animation frames only while it asks for them: an idle

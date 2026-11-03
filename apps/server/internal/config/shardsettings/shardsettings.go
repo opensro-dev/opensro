@@ -113,12 +113,27 @@ var Settings = []Setting{
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
 	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off", Catalogue: true},
+	// Port-only, not native: the temple band population and its 22
+	// instanced worlds (#1800 step 3). Needs SRO_CAP110_MONSTERS (the
+	// importer writes cap110-temple.txt only on that pairing, and the
+	// consumer refuses the same pairing at load). "off" is native.
+	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
+	// Port-only, not native: the Halloween Day event (#2124). Off is native.
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off"},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: ""},
+	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
+	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
+	// passes it to the Agent too (agentVariables), so the two can never
+	// answer different codes in the same window. Both read it with
+	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
+	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -235,6 +250,10 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_JOB_TRADER_PERCENT_CAP", NomadVar: "trade_job_trader_percent_cap", Default: "20"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER", NomadVar: "trade_job_hunter_percent_per_trader", Default: "10"},
 	{Env: "SRO_TRADE_JOB_HUNTER_PERCENT_CAP", NomadVar: "trade_job_hunter_percent_cap", Default: "60"},
+	// Port-only, not native: a 10,000,000,000 stall price and a
+	// 1,000,000,000 warehouse gold deposit replace the native
+	// 1,000,000,000 and 100,000,000 caps. "off" is native.
+	{Env: "SRO_RAISED_GOLD_CAPS", NomadVar: "raised_gold_caps", Default: "off"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
@@ -299,7 +318,6 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
 	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_INSTANT_INVENTORY_EXPANSION", NomadVar: "instant_inventory_expansion", Default: "on"},
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off", Catalogue: true,
 		Validation: ValueSwitch},

@@ -9,6 +9,7 @@ import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
+import { createChatLog } from "./chatlog.mjs";
 import { createHistory } from "./history.mjs";
 import { createEconomy } from "./economy.mjs";
 import { createSettings } from "./settings.mjs";
@@ -38,6 +39,7 @@ const historySources = [ {
 	token: agentToken
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
+const chatLog = createChatLog( shards.map( row => ({ ...row, token }) ) );
 // Each GameWorld's economy aggregates (economy.mjs), read with their own
 // token; absent, the Economy page says it is off.
 const economyToken = config.economyTokenFile ? (await readFile( config.economyTokenFile, "utf8" )).trim() : "";
@@ -81,6 +83,9 @@ for (
 		"history.js",
 		"history-view.js",
 		"history.css",
+		"chat-log.html",
+		"chat-log.js",
+		"chat-log.css",
 		"invites.js",
 		"invite-made.js",
 		"invite-counts.js",
@@ -244,6 +249,13 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/history" ) {
 			const result = await history.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
+		// The moderation log is staff-only: it sits behind the same request
+		// check as every console route and answers GET alone.
+		if ( url.pathname === "/api/chatlog" && req.method === "GET" ) {
+			const result = await chatLog.request( url.searchParams );
 			respondJSON( res, result.status, result.body );
 			return;
 		}

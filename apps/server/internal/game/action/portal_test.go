@@ -7,14 +7,14 @@ import (
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"strings"
 	"testing"
 )
 
 func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func (portalRejectEntry) ReentryPackets(string, string) ([]enterworld.Packet, bo
 	return nil, false
 }
 func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
 	dir := gamedatatest.TextdataDir(t)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 2001, RefObjID: 2011, Codename: "NPC_CH_FERRY", TalkFlags: 2}}
@@ -150,7 +150,7 @@ func TestPortalSelectedNpcTransactionAndRollback(t *testing.T) {
 }
 
 func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
 	// The fixture gate stands at the player, inside its hit range.
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
@@ -178,7 +178,7 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 // it on the fee and credits the tax to the treasury once the move holds
 // (as the native teleport use does).
 func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", FortressID: 1,
@@ -264,7 +264,7 @@ behind the 1000-unit range (#916).
 ================
 */
 func TestShippedTownGatesRefuseATransportAndFerriesAllowIt(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)

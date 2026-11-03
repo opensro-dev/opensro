@@ -17,7 +17,7 @@ package monster
 import (
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -126,8 +126,8 @@ TestWithQinShiTombAppendsRefsAndFloor1To6Nests
 ================
 */
 func TestWithQinShiTombAppendsRefsAndFloor1To6Nests(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	base := LoadTemplate(dir)
 	if len(base.Refs) == 0 || len(base.Nests) == 0 {
 		t.Fatal("expected non-empty base monster template")

@@ -127,6 +127,248 @@ func TestStallSellsToAVisitor(t *testing.T) {
 
 /*
 ================
+stallAddOfferAt
+
+An 0x71A8 kind 2 add of five potions at one unit price; wide writes the
+port-only u64 price, false the native u32.
+================
+*/
+func stallAddOfferAt(slot, bagSlot uint8, price uint64, wide bool) []byte {
+	w := wire.NewWriter(24).U8(wire.StallEditAdd).U8(slot).U8(bagSlot).U16(5)
+	if wide {
+		w.U64(price)
+	} else {
+		w.U32(uint32(price))
+	}
+	return w.U32(0).U8(0).Payload()
+}
+
+/*
+================
+stallAddOffer
+
+The fixture's slot-13 potions offered in the first stall slot.
+================
+*/
+func stallAddOffer(price uint64, wide bool) []byte {
+	return stallAddOfferAt(0, 13, price, wide)
+}
+
+/*
+================
+stallModifyOffer
+
+An 0x71A8 kind 1 modify of the first offer's price; wide writes the
+port-only u64 price, false the native u32.
+================
+*/
+func stallModifyOffer(price uint64, wide bool) []byte {
+	w := wire.NewWriter(16).U8(wire.StallEditModify).U8(0).U16(5)
+	if wide {
+		w.U64(price)
+	} else {
+		w.U32(uint32(price))
+	}
+	return w.U8(0).Payload()
+}
+
+/*
+================
+stallU64
+
+The little-endian u64 at at.
+================
+*/
+func stallU64(p []byte, at int) uint64 {
+	return uint64(p[at]) | uint64(p[at+1])<<8 | uint64(p[at+2])<<16 | uint64(p[at+3])<<24 |
+		uint64(p[at+4])<<32 | uint64(p[at+5])<<40 | uint64(p[at+6])<<48 | uint64(p[at+7])<<56
+}
+
+/*
+================
+TestStallOfferPriceCaps
+
+Off, the native 1,000,000,000 price is the ceiling and the native u32
+offer wire is used. On, a 10,000,000,000 price is accepted and stored, and
+one above it is refused.
+================
+*/
+func TestStallOfferPriceCaps(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		on      bool
+		wide    bool
+		price   uint64
+		refused bool
+	}{
+		{"off native ceiling", false, false, NativeStallPriceLimit, false},
+		{"off above native", false, false, NativeStallPriceLimit + 1, true},
+		{"on native u32 wire", true, false, NativeStallPriceLimit, false},
+		{"on ten billion", true, true, RaisedStallPriceLimit, false},
+		{"on above raised", true, true, RaisedStallPriceLimit + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, owner, _, _ := stallFixture(t)
+			rt.RaisedGoldCaps = tc.on
+			rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+			out := rt.HandleStallEdit(testDivision, owner, stallAddOffer(tc.price, tc.wide))
+			p := out.Frames[0].Payload
+			if tc.refused {
+				if len(p) != 2 || p[0] != 2 || p[1] != wire.StallErrBadPrice {
+					t.Fatalf("price %d answered % X, want a bad-price refusal", tc.price, p)
+				}
+				if s, _ := rt.Stalls.Get(testDivision, owner.Name); s.Slots[0] != nil {
+					t.Fatalf("refused price %d was stored", tc.price)
+				}
+				return
+			}
+			if p[0] != 1 {
+				t.Fatalf("price %d answered % X, want success", tc.price, p)
+			}
+			s, _ := rt.Stalls.Get(testDivision, owner.Name)
+			if s.Slots[0] == nil || s.Slots[0].Price != tc.price {
+				t.Fatalf("stored offer %+v, want price %d", s.Slots[0], tc.price)
+			}
+		})
+	}
+}
+
+/*
+================
+TestStallModifyAnswerUsesShardWidth
+
+A raised shard answers every modify with the u64 price even when the
+request itself was the native u32 one; a native shard keeps u32. The
+answer is broadcast, so a mismatched width would break every visitor's
+decode as well as the owner's.
+================
+*/
+func TestStallModifyAnswerUsesShardWidth(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		on          bool
+		requestWide bool
+		answerWide  bool
+		price       uint64
+	}{
+		{"off native", false, false, false, NativeStallPriceLimit},
+		{"on native request", true, false, true, NativeStallPriceLimit},
+		{"on wide request", true, true, true, RaisedStallPriceLimit},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, owner, _, _ := stallFixture(t)
+			rt.RaisedGoldCaps = tc.on
+			rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+			if p := rt.HandleStallEdit(testDivision, owner, stallAddOffer(NativeStallPriceLimit, tc.on)).Frames[0].Payload; p[0] != 1 {
+				t.Fatalf("add % X", p)
+			}
+			price := tc.price
+			out := rt.HandleStallEdit(testDivision, owner, stallModifyOffer(price, tc.requestWide))
+			p := out.Frames[0].Payload
+			priceWidth := 4
+			if tc.answerWide {
+				priceWidth = 8
+			}
+			if p[0] != 1 || p[1] != wire.StallEditModify || len(p) != 6+priceWidth {
+				t.Fatalf("modify answered % X, want success and a %d-byte price", p, priceWidth)
+			}
+			got := uint64(0)
+			if tc.answerWide {
+				got = stallU64(p, 5)
+			} else {
+				got = uint64(p[5]) | uint64(p[6])<<8 | uint64(p[7])<<16 | uint64(p[8])<<24
+			}
+			if got != price {
+				t.Fatalf("answer price %d, want %d (% X)", got, price, p)
+			}
+			if s, _ := rt.Stalls.Get(testDivision, owner.Name); s.Slots[0] == nil || s.Slots[0].Price != price {
+				t.Fatalf("stored offer %+v, want price %d", s.Slots[0], price)
+			}
+		})
+	}
+}
+
+/*
+================
+TestStallTenBillionSalePaysCommission
+
+A raised shard's networked ten-billion offer sells end to end: the buyer
+pays the price, the owner gains it less the network commission, and the
+sold notice carries the remaining offer in the raised u64 width.
+================
+*/
+func TestStallTenBillionSalePaysCommission(t *testing.T) {
+	rt, owner, buyer, pushed := stallFixture(t)
+	rt.RaisedGoldCaps = true
+	for _, row := range owner.MissionInventory {
+		if row.Slot == 13 {
+			second := row
+			second.Slot = 14
+			owner.MissionInventory = append(owner.MissionInventory, second)
+			break
+		}
+	}
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	for _, offer := range []struct{ slot, bagSlot uint8 }{{0, 13}, {1, 14}} {
+		if p := rt.HandleStallEdit(testDivision, owner,
+			stallAddOfferAt(offer.slot, offer.bagSlot, RaisedStallPriceLimit, true)).Frames[0].Payload; p[0] != 1 {
+			t.Fatalf("add slot %d % X", offer.slot, p)
+		}
+	}
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 1))
+	setGold(buyer, RaisedStallPriceLimit)
+	setGold(owner, 0)
+	s, _ := rt.Stalls.Get(testDivision, owner.Name)
+	gid := enterworld.ObjectIDForCharacter(owner)
+	buy := wire.NewWriter(24).U32(gid).U8(0).U64(RaisedStallPriceLimit).U16(5).U8(0).U64(s.Slots[0].Serial).Payload()
+	if out := rt.HandleStallNetworkBuy(testDivision, buyer, buy); !bytes.Equal(out.Frames[0].Payload, []byte{1}) {
+		t.Fatalf("network buy %+v", out.Frames)
+	}
+	if goldOf(buyer) != 0 || goldOf(owner) != RaisedStallPriceLimit-stallCommission(RaisedStallPriceLimit) {
+		t.Fatalf("gold buyer %d owner %d, want 0/%d", goldOf(buyer), goldOf(owner),
+			RaisedStallPriceLimit-stallCommission(RaisedStallPriceLimit))
+	}
+	sold := lastFrame(t, pushed[owner.Name], wire.OpStallEvent)
+	if sold.Payload[0] != wire.StallEventNetworkSold || sold.Payload[1] != 0 {
+		t.Fatalf("sold event % X", sold.Payload)
+	}
+	// The remaining slot-1 offer is the notice's last one, so its u64 price
+	// sits just before the 0xFF end marker.
+	if got := stallU64(sold.Payload, len(sold.Payload)-9); got != RaisedStallPriceLimit {
+		t.Fatalf("sold notice price %d, want %d (% X)", got, RaisedStallPriceLimit, sold.Payload)
+	}
+}
+
+/*
+================
+TestStallNetworkListsTenBillion
+
+With the switch on, the network row carries the full ten-billion price in
+its native u64 field.
+================
+*/
+func TestStallNetworkListsTenBillion(t *testing.T) {
+	rt, owner, buyer, _ := stallFixture(t)
+	rt.RaisedGoldCaps = true
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
+	if p := rt.HandleStallEdit(testDivision, owner, stallAddOffer(RaisedStallPriceLimit, true)).Frames[0].Payload; p[0] != 1 {
+		t.Fatalf("add % X", p)
+	}
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 1))
+	listed := rt.HandleStallNetworkSearch(testDivision, buyer, []byte{0, 0, 40, 0, 0, 0, 0})
+	p := listed.Frames[len(listed.Frames)-1].Payload
+	// The row ends with the u64 price and then its u64 serial.
+	priceAt := len(p) - 16
+	price := uint64(p[priceAt]) | uint64(p[priceAt+1])<<8 | uint64(p[priceAt+2])<<16 |
+		uint64(p[priceAt+3])<<24 | uint64(p[priceAt+4])<<32 | uint64(p[priceAt+5])<<40 |
+		uint64(p[priceAt+6])<<48 | uint64(p[priceAt+7])<<56
+	if price != RaisedStallPriceLimit {
+		t.Fatalf("network price %d, want %d (frame % X)", price, RaisedStallPriceLimit, p)
+	}
+}
+
+/*
+================
 TestStallNetworkSaleTakesCommission
 
 A networked offer bought from afar pays the owner its price less 1%.
