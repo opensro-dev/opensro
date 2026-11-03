@@ -24,6 +24,21 @@ main > .page-heading .board-actions {
 	padding: 8px 12px;
 }
 
+/* The line beside Refresh: what the last read found, on dark lacquer. */
+.board-checked {
+	color: var(--cream);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.board-checked.warn {
+	color: #f3cf7a;
+}
+
+.board-checked.bad {
+	color: #ffb4a6;
+}
+
 .board-status {
 	margin: 0 0 12px;
 	color: var(--cream);

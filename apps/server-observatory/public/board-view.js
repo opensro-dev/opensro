@@ -56,11 +56,35 @@ since, so the age keeps moving between polls.
 export function freshness( body, answeredAt, now ) {
 	const age = body.ageSeconds + Math.max( 0, Math.round( (now - answeredAt) / 1000 ) );
 	const stale = age > body.intervalSeconds * 2;
+	const when = age < MINUTE_S ? "just now" : ago( age ) + " ago";
 	return {
 		stale,
 		tone: stale ? "warn" : "ok",
-		text: (stale ? "Stale: collected " : "Collected ") + (age < MINUTE_S ? "just now" : ago( age ) + " ago")
+		text: stale ? "Stale: data from " + when : "Data from " + when,
+		// The page only re-reads; new data needs the collector to run again.
+		title: stale ?
+			"The collector should run every " + ago( body.intervalSeconds ) + " but last ran " + when +
+			". Refreshing re-reads the board; it cannot make the collector run." :
+			"The collector runs every " + ago( body.intervalSeconds ) + "; this page re-reads it every 30 s."
 	};
+}
+
+/*
+================
+checkResult
+
+What a read found, for the line beside Refresh: newer data, the same
+data, or a failure. previous is the generatedAt shown before the read
+(null on the first read); at is the page clock, as a time of day.
+================
+*/
+export function checkResult( previous, body, error, at ) {
+	const clock = new Date( at ).toLocaleTimeString();
+	if ( error ) return { tone: "bad", text: "Checked " + clock + ": " + error };
+	if ( previous === null || body.generatedAt > previous ) {
+		return { tone: "ok", text: "Checked " + clock + ": up to date" };
+	}
+	return { tone: "warn", text: "Checked " + clock + ": no newer data yet" };
 }
 
 /*

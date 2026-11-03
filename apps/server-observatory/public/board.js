@@ -15,6 +15,7 @@ snapshot string becomes a text node.
 import { requestJSON } from "./request.js";
 import {
 	agentTone,
+	checkResult,
 	ciTone,
 	freshness,
 	issueURL,
@@ -31,6 +32,7 @@ import {
 
 const POLL_MS = 30000;
 const FRESH_REPAINT_MS = 5000;
+const MIN_BUSY_MS = 400;
 const byID = id => document.getElementById( id );
 const state = { body: null, answeredAt: 0, timer: 0 };
 
@@ -310,6 +312,7 @@ function paintFresh() {
 	const node = byID( "board-fresh" );
 	node.className = "pill " + fresh.tone;
 	node.textContent = fresh.text;
+	node.title = fresh.title;
 }
 
 /*
@@ -338,18 +341,30 @@ above it, so a blip never blanks the page.
 ================
 */
 async function load() {
-	const status = byID( "board-status" );
-	byID( "board-refresh" ).disabled = true;
+	const status = byID( "board-status" ), button = byID( "board-refresh" );
+	const previous = state.body?.generatedAt ?? null;
+	button.disabled = true;
+	button.textContent = "Checking…";
+	// A read answers in milliseconds; hold the busy label long enough to see.
+	const shown = new Promise( resolve => setTimeout( resolve, MIN_BUSY_MS ) );
+	let error = "";
 	try {
 		state.body = await requestJSON( "/api/board" );
 		state.answeredAt = Date.now();
 		status.textContent = "";
 		paint();
-	} catch ( error ) {
-		status.textContent = error.message + (state.body ? " Showing the last board read." : "");
+	} catch ( failure ) {
+		error = failure.message;
+		status.textContent = error + (state.body ? " Showing the last board read." : "");
 		if ( !state.body ) byID( "board-fresh" ).textContent = "No board";
 	}
-	byID( "board-refresh" ).disabled = false;
+	await shown;
+	const check = checkResult( previous, state.body ?? {}, error, Date.now() );
+	const line = byID( "board-checked" );
+	line.className = "board-checked " + check.tone;
+	line.textContent = check.text;
+	button.textContent = "Refresh";
+	button.disabled = false;
 }
 
 /*

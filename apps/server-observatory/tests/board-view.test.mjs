@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
 	ago,
 	agentTone,
+	checkResult,
 	ciTone,
 	freshness,
 	issueURL,
@@ -49,9 +50,21 @@ test("durations read as just now, minutes, hours or days", () => {
 
 test("freshness keeps counting after the answer and turns stale past twice the interval", () => {
 	const body = { ageSeconds: 100, intervalSeconds: 120 };
-	assert.deepEqual( freshness( body, 0, 0 ), { stale: false, tone: "ok", text: "Collected 1 min ago" } );
-	assert.deepEqual( freshness( body, 0, 141000 ), { stale: true, tone: "warn", text: "Stale: collected 4 min ago" } );
-	assert.equal( freshness( { ageSeconds: 5, intervalSeconds: 120 }, 0, 0 ).text, "Collected just now" );
+	assert.equal( freshness( body, 0, 0 ).text, "Data from 1 min ago" );
+	assert.equal( freshness( body, 0, 0 ).stale, false );
+	const late = freshness( body, 0, 141000 );
+	assert.deepEqual( [ late.stale, late.tone, late.text ], [ true, "warn", "Stale: data from 4 min ago" ] );
+	assert.match( late.title, /cannot make the collector run/, "stale says why a refresh will not help" );
+	assert.equal( freshness( { ageSeconds: 5, intervalSeconds: 120 }, 0, 0 ).text, "Data from just now" );
+});
+
+test("a check says whether it found newer data, the same data, or a failure", () => {
+	assert.match( checkResult( null, { generatedAt: 5 }, "", 0 ).text, /up to date$/ );
+	assert.match( checkResult( 5, { generatedAt: 9 }, "", 0 ).text, /up to date$/ );
+	const same = checkResult( 9, { generatedAt: 9 }, "", 0 );
+	assert.deepEqual( [ same.tone, /no newer data yet$/.test( same.text ) ], [ "warn", true ] );
+	const failed = checkResult( 9, {}, "Console request failed", 0 );
+	assert.deepEqual( [ failed.tone, /Console request failed$/.test( failed.text ) ], [ "bad", true ] );
 });
 
 test("links are built from the repository and a number only", () => {
