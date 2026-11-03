@@ -251,6 +251,7 @@ func openAuthorityPlane(
 		EnterWorldAuthSecret:    enterWorldSecret,
 		MarksDir:                os.Getenv(agentapi.EnvMarksDir),
 		MaintenanceGatePath:     strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)),
+		MaintenanceMessage:      agentapi.MaintenanceMessageFromEnv(),
 		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
 		LevelCap:                levelCap,

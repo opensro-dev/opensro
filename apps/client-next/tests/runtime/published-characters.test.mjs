@@ -115,8 +115,10 @@ test("special COS references share authored state-50 models and matching VAT cli
 	// Reviewed 2026-10-02: every COS band whose BSR ships. Riding mounts,
 	// transports and quest companions author no state-50 emote; 582110's
 	// action-1 route plays one for the growth pets, which all author it.
-	assert.equal( cos.length, 1217 );
-	assert.equal( new Set( cos.map( row => row.glb ) ).size, 43 );
+	// 1218 rows and 44 models since the tomb's MOB_QT_TQ_THIEF_01_COS ships
+	// with its own model (#2024).
+	assert.equal( cos.length, 1218 );
+	assert.equal( new Set( cos.map( row => row.glb ) ).size, 44 );
 	const rows = cos.filter( row => row.codename.startsWith( "COS_P_" ) );
 	assert.equal( rows.length, 1130 );
 	assert.equal( new Set( rows.map( row => row.glb ) ).size, 22 );

@@ -17,7 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -147,8 +147,8 @@ at expiry. A parser-only test cannot catch a missing runtime producer.
 ================
 */
 func TestShippedStatItemPrograms(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	skills := enterworld.NewTextdataSkills(dir)
 	count := 0

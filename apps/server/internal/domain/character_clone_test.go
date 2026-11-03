@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	level := int64(10)
@@ -235,6 +239,60 @@ func TestSnapshotEquipmentDropsBagRowCompanions(t *testing.T) {
 
 /*
 ================
+TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows
+
+The press copy: equipment rows and companion-carrying bag rows in
+source order, plain bag rows gone, the avatar inventory copied whole,
+and a bag-row companion still resolvable through the copy - the trap
+TestSnapshotEquipmentDropsBagRowCompanions pins from the other side.
+================
+*/
+func TestSnapshotCastKeepsCompanionsAndDropsPlainBagRows(t *testing.T) {
+	crow := &CharacterCOS{GID: 7001, Codename: "COS_P_RAVEN_090", Summoned: true, CurrentHP: 100}
+	character := &Character{
+		Name: "castOwner",
+		MissionInventory: []InventoryRow{
+			{Slot: 6, Codename: "WEAPON", MagicOptions: []uint64{11}},
+			{Slot: 20, Codename: "POTION", StackCount: 50},
+			{Slot: 21, Codename: "PET_ITEM", Summon: crow},
+			{Slot: 22, Codename: "ITEM_QSP_TEST_01", StackCount: 1},
+		},
+		AvatarInventory: &AvatarInventory{Capacity: 4, Rows: []InventoryRow{{Slot: 0, Codename: "AVATAR"}}},
+	}
+
+	cast := character.SnapshotCast()
+	if len(cast.MissionInventory) != 2 ||
+		cast.MissionInventory[0].Slot != 6 || cast.MissionInventory[0].Codename != "WEAPON" ||
+		cast.MissionInventory[1].Slot != 21 || cast.MissionInventory[1].Codename != "PET_ITEM" {
+		t.Fatalf("cast inventory = %+v", cast.MissionInventory)
+	}
+	if cast.AvatarInventory == nil || len(cast.AvatarInventory.Rows) != 1 {
+		t.Fatalf("cast avatar inventory = %+v, want the one row", cast.AvatarInventory)
+	}
+	if got := cast.CompanionByGID(7001); got == nil {
+		t.Fatal("the cast copy lost the bag-row crow")
+	}
+	// Detachment matches Snapshot's: the kept companion row is a copy.
+	cast.MissionInventory[1].Summon.CurrentHP = 1
+	if crow.CurrentHP != 100 {
+		t.Fatal("cast copy aliases the record's companion")
+	}
+	if len(character.Snapshot().MissionInventory) != 4 {
+		t.Fatal("the full copy narrowed too")
+	}
+
+	bagOnly := &Character{MissionInventory: []InventoryRow{{Slot: 30, Codename: "BAG"}}}
+	if got := bagOnly.SnapshotCast(); len(got.MissionInventory) != 0 {
+		t.Fatalf("bag-only cast copy kept rows: %+v", got.MissionInventory)
+	}
+	empty := &Character{}
+	if got := empty.SnapshotCast(); got.MissionInventory != nil {
+		t.Fatal("nil inventory became non-nil")
+	}
+}
+
+/*
+================
 benchmarkCombatCharacter
 
 A character shaped like the tick guard's players (#1943): 13 equipment
@@ -269,6 +327,216 @@ func BenchmarkSnapshotFull(b *testing.B) {
 
 /*
 ================
+clonePopulatedCharacter
+
+A record with every mutable child present, so the detachment walk
+below has a node to check at each reference. When Character gains a
+pointer, slice or map child, populate it here: the test refuses a
+fixture that leaves one of the record's own reference fields unset.
+================
+*/
+func clonePopulatedCharacter() *Character {
+	i64p := func(v int64) *int64 { return &v }
+	u32p := func(v uint32) *uint32 { return &v }
+	f64p := func(v float64) *float64 { return &v }
+	spawn := func() *WorldSpawn {
+		return &WorldSpawn{RegionID: i64p(1), X: f64p(1), Y: f64p(2), Z: f64p(3), Angle: i64p(4)}
+	}
+	row := func() InventoryRow {
+		return InventoryRow{
+			MagicOptions: []uint64{1},
+			Summon:       &CharacterCOS{GID: 5, Container: &COSContainer{Rows: []InventoryRow{{Slot: 1}}}},
+		}
+	}
+	cos := func() *CharacterCOS {
+		return &CharacterCOS{
+			GID:       6,
+			Rentals:   []COSRental{{ID: 1}},
+			Container: &COSContainer{Rows: []InventoryRow{row()}},
+		}
+	}
+	mask := int64(7)
+	return &Character{
+		PK:              &PKRecord{DailyCount: 1},
+		EventMembership: &EventMembership{ID: 1},
+		Aggressions:     map[uint32]uint32{1: 1},
+		Mission:         &MissionRuntime{EventGuideStateMask: &mask, EventGuideStateMaskUpdatedAt: "t"},
+		MostWanted:      &MostWanted{Streak: 1},
+		World: &CharacterWorld{
+			SavedReturn:        &SavedReturnLocation{Definition: 1},
+			PackedInstance:     u32p(1),
+			InstanceReturn:     &InstanceReturnAnchor{PackedInstance: 1},
+			Spawn:              spawn(),
+			AuthoredAreaReturn: spawn(),
+			RebirthPoint:       spawn(),
+			LastRecallPoint:    &WorldPoint{WorldSpawn: *spawn()},
+			LastDeathPoint:     &WorldPoint{WorldSpawn: *spawn()},
+			MovementMode:       i64p(3),
+			DungeonFloorIndex:  i64p(1),
+			MoveSegment:        []byte{1},
+		},
+		ActiveCOS:               cos(),
+		CapturedCOS:             cos(),
+		Mercenaries:             []*CharacterCOS{cos()},
+		Brood:                   []*CharacterCOS{cos()},
+		MissionInventory:        []InventoryRow{row()},
+		Buyback:                 []BuybackEntry{{Item: row()}},
+		AvatarInventory:         &AvatarInventory{Capacity: 1, Rows: []InventoryRow{row()}},
+		PetSkillWindows:         []PetSkillWindow{{ItemRefObjID: 1}},
+		ParamJobs:               []ParamJob{{ItemRefObjID: 1}},
+		CompositeJobs:           []CompositeJob{{Kind: "UIL1"}},
+		PremiumClock:            &PremiumClock{ItemRefObjID: 1},
+		LevelReachedAt:          map[uint8]int64{1: 1},
+		ItemGroupCooldowns:      map[uint32]int64{1: 1},
+		TimedSkillJobs:          []TimedSkillJob{{SkillID: 1}},
+		Masteries:               []CharacterMastery{{ID: 1}},
+		Skills:                  []uint32{1},
+		OffensiveSkillCooldowns: map[uint32]int64{1: 1},
+		SharedSkillCooldowns:    map[uint8]int64{1: 1},
+		QuickSlots:              []QuickSlotBinding{{Slot: 1}},
+		CompletedQuestIds:       []uint32{1},
+		QuestCompletionCounts:   map[uint32]uint32{1: 1},
+		QuestSupplies:           map[uint32]QuestSupplyState{1: {Day: 1}},
+		EndedQuestIds:           []uint32{1},
+		ActiveQuests: []ActiveQuestRecord{{
+			RefID:     1,
+			Contents:  []ActiveQuestContentsNode{{Tag: 1, ObjectiveValues: []uint32{1}}},
+			TargetIds: []uint32{1},
+		}},
+		TrackedQuests:      []TrackedQuestRecord{{RefID: 1, Tail6: []uint8{1}}},
+		EnterEventGroupIds: []uint32{1},
+		BlockedWhisperers:  []string{"a"},
+		Friends:            []FriendRecord{{ID: 1}},
+		RaceIndex:          i64p(1),
+		Gender:             i64p(1),
+		ModelRef:           i64p(1),
+		WeaponIndex:        i64p(1),
+		ProtectorIndex:     i64p(1),
+		BodyShapeByte:      i64p(1),
+		HeightIndex:        i64p(1),
+		VolumeIndex:        i64p(1),
+		HeightScale:        f64p(1),
+		VolumeScale:        f64p(1),
+		Level:              i64p(1),
+		MaxLevel:           i64p(1),
+		CurrentHP:          i64p(1),
+		CurrentMP:          i64p(1),
+		SkillPoints:        i64p(1),
+		StatPoints:         i64p(1),
+		Experience:         i64p(1),
+		SkillExp:           i64p(1),
+		Gold:               i64p(1),
+		VisualFlags:        i64p(1),
+		Strength:           i64p(1),
+		Intellect:          i64p(1),
+		GuildID:            i64p(1),
+		ExperiencePercent:  f64p(1),
+		FigureIndex:        i64p(1),
+	}
+}
+
+/*
+================
+sharedMutableNodes
+
+Walk a record and its clone in parallel, collecting the paths of the
+mutable nodes they still share: the same pointer, the same slice
+backing, the same map. Scalars and empty slices share nothing a write
+can cross.
+================
+*/
+func sharedMutableNodes(a, b reflect.Value, path string, depth int, out *[]string) {
+	if depth > 16 || !a.IsValid() || !b.IsValid() || a.Type() != b.Type() {
+		return
+	}
+	switch a.Kind() {
+	case reflect.Pointer:
+		if a.IsNil() || b.IsNil() {
+			return
+		}
+		if a.Pointer() == b.Pointer() {
+			*out = append(*out, path)
+			return
+		}
+		sharedMutableNodes(a.Elem(), b.Elem(), path, depth+1, out)
+	case reflect.Slice:
+		if a.Len() == 0 {
+			return
+		}
+		if a.Pointer() == b.Pointer() {
+			*out = append(*out, path)
+			return
+		}
+		for i := 0; i < a.Len() && i < b.Len(); i++ {
+			sharedMutableNodes(a.Index(i), b.Index(i), path+"[]", depth+1, out)
+		}
+	case reflect.Map:
+		if a.IsNil() || b.IsNil() {
+			return
+		}
+		if a.Pointer() == b.Pointer() {
+			*out = append(*out, path)
+			return
+		}
+		iter := a.MapRange()
+		for iter.Next() {
+			sharedMutableNodes(iter.Value(), b.MapIndex(iter.Key()), path+"{}", depth+1, out)
+		}
+	case reflect.Struct:
+		fields := a.Type()
+		for i := 0; i < a.NumField(); i++ {
+			sharedMutableNodes(a.Field(i), b.Field(i), path+"."+fields.Field(i).Name, depth+1, out)
+		}
+	case reflect.Array:
+		for i := 0; i < a.Len(); i++ {
+			sharedMutableNodes(a.Index(i), b.Index(i), path+"[]", depth+1, out)
+		}
+	case reflect.Interface:
+		if a.IsNil() || b.IsNil() {
+			return
+		}
+		sharedMutableNodes(a.Elem(), b.Elem(), path, depth+1, out)
+	}
+}
+
+/*
+================
+TestCloneCharacterDetachesEveryMutableChild
+
+CloneCharacter's copies are the section skip's ground truth (store,
+character_sections.go): a mutable node the clone still shares with
+the record is one an in-place write can cross without the comparison
+noticing, and the save is lost. Refuse every shared node. The
+fixture must populate each of the record's own reference fields, so
+a child added later fails here first instead of slipping past empty.
+================
+*/
+func TestCloneCharacterDetachesEveryMutableChild(t *testing.T) {
+	source := clonePopulatedCharacter()
+	characterType := reflect.TypeOf(Character{})
+	sourceValue := reflect.ValueOf(source).Elem()
+	for i := 0; i < characterType.NumField(); i++ {
+		field := sourceValue.Field(i)
+		switch field.Kind() {
+		case reflect.Pointer, reflect.Map:
+			if field.IsNil() {
+				t.Fatalf("fixture leaves Character.%s unset", characterType.Field(i).Name)
+			}
+		case reflect.Slice:
+			if field.Len() == 0 {
+				t.Fatalf("fixture leaves Character.%s empty", characterType.Field(i).Name)
+			}
+		}
+	}
+	var shared []string
+	sharedMutableNodes(reflect.ValueOf(source), reflect.ValueOf(CloneCharacter(source)), "Character", 0, &shared)
+	if len(shared) > 0 {
+		t.Fatalf("the clone shares mutable nodes with the record: %s", strings.Join(shared, ", "))
+	}
+}
+
+/*
+================
 BenchmarkSnapshotCombat
 ================
 */
@@ -277,5 +545,18 @@ func BenchmarkSnapshotCombat(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = c.SnapshotCombat()
+	}
+}
+
+/*
+================
+BenchmarkSnapshotCast
+================
+*/
+func BenchmarkSnapshotCast(b *testing.B) {
+	c := benchmarkCombatCharacter()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = c.SnapshotCast()
 	}
 }

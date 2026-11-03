@@ -49,8 +49,8 @@ MAX_LEVEL = 110
 APIS_CODENAME = "MOB_SD_APIS"
 APIS_SOURCE_GRADE = 8
 # The VSRO test-shard backup every imported nest, tactic, monster skill and
-# drop row comes from, as the author pinned it (docs/CAP110_PROGRESS.md,
-# "Database export pin"). The export records this hash in summary.json.
+# drop row comes from, as the author pinned it (docs/features/CAP110.md,
+# Building). The export records this hash in summary.json.
 SOURCE_BACKUP_NAME = "SRO_VT_SHARD.bak"
 SOURCE_BACKUP_SHA256 = "b4d85a043ebce36c8704768dce0dfa63ff9418c8489241d8441b7902e28fa37a"
 TOMB_FLAG = "SRO_PHARAOH_TOMB"

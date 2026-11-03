@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -24,7 +24,7 @@ TestShippedNpcWorldRosterCarriesConversationAndShopAuthority
 ================
 */
 func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
@@ -57,7 +57,7 @@ TestPublishedMerchantBranchesCoverAllTabs
 ================
 */
 func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {
@@ -92,7 +92,7 @@ TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS
 ================
 */
 func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	text := map[string]bool{}
@@ -129,7 +129,7 @@ and rows naming no fortress stay untaxed.
 ================
 */
 func TestShippedFortressBindingsComeFromColumn55(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))

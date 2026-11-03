@@ -19,7 +19,7 @@ import (
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -39,7 +39,7 @@ func TestShippedCerberusSpawnLifecycle(t *testing.T) {
 		memberCount  = 13
 		crtWordRange = 32768
 	)
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "npcpos.txt")); err != nil {
 		t.Skip("shipped textdata not present in this checkout")
 	}

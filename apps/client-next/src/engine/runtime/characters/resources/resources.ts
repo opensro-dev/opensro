@@ -433,6 +433,19 @@ export function createCharacterResources(
 
 		/*
 		================
+		failure
+
+		The first retained failure with the path that produced it: a
+		diagnostic that only says "asset-load" cannot name its source.
+		================
+		*/
+		failure() {
+			const first = failures.entries().next().value;
+			return first ? { path: first[0], message: first[1].message } : null;
+		},
+
+		/*
+		================
 		reset
 
 		Cancel pending work and release all renderer residency for a new world.

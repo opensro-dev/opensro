@@ -197,7 +197,7 @@ func TestBootTickerPushesThroughLiveHub(t *testing.T) {
 		return []simulation.DivisionFrames{{DivisionID: "DIV_A", Frames: []simulation.Frame{sweep}}}
 	}
 
-	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), hook)
+	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster(), simulation.NamedTickHook{Hook: hook})
 	ticker.Interval = 20 * time.Millisecond // production cadence is 100ms; fast for the test
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -505,5 +505,29 @@ func TestSceneReplacementRejectsOldTickAndChangesVisibilityIdentity(t *testing.T
 			}
 		}
 		old = current
+	}
+}
+
+/*
+================
+TestNewTickerArmsTickTraceOnlyWhenEnabled
+
+SRO_TICK_TRACE is opt-in (#2301): unset or off, the composed
+ticker carries no tracer and every zone point stays a no-op; on,
+the tracer and its sink are wired.
+================
+*/
+func TestNewTickerArmsTickTraceOnlyWhenEnabled(t *testing.T) {
+	t.Setenv(transport.EnvTickTrace, "")
+	if ticker := NewTicker(nil, nil); ticker.Trace != nil || ticker.TraceSink != nil {
+		t.Fatal("unset SRO_TICK_TRACE armed the tick trace")
+	}
+	t.Setenv(transport.EnvTickTrace, "off")
+	if ticker := NewTicker(nil, nil); ticker.Trace != nil || ticker.TraceSink != nil {
+		t.Fatal("SRO_TICK_TRACE=off armed the tick trace")
+	}
+	t.Setenv(transport.EnvTickTrace, "on")
+	if ticker := NewTicker(nil, nil); ticker.Trace == nil || ticker.TraceSink == nil {
+		t.Fatal("SRO_TICK_TRACE=on did not arm the tick trace")
 	}
 }

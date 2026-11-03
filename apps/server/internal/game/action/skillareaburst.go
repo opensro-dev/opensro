@@ -56,7 +56,19 @@ func (rt *Runtime) acceptAreaBurst(division string, c, snapshot *enterworld.Char
 	var commit areaCommit
 	var battleFrames []wire.Frame
 	var refusal uint16
-	roster := rt.monsterRewardRoster(division, c, now)
+	// The reward roster serves the fatal settlements alone, and a
+	// burst whose monster victims all survive their plans reaches
+	// none (#2030): door the caster, the player victims and the COS
+	// owners - each mutated by any hit, as areaDoorCharacters keeps
+	// - and build no roster. A monster victim whose plan can kill
+	// keeps the roster-wide door exactly as before.
+	roster := rewardRoster{division: division, characters: areaDoorCharacters(c, &plan)}
+	for _, sequence := range plan.sequences {
+		if areaSequenceCanKill(sequence) {
+			roster = rt.monsterRewardRoster(division, c, now)
+			break
+		}
+	}
 	if !rt.deps.UpdateMany(roster.characters, "player-area-burst", func() bool {
 		if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 			return false

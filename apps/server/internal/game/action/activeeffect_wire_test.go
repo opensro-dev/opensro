@@ -5,8 +5,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"strconv"
 	"testing"
@@ -15,7 +15,7 @@ import (
 // Real authenticated fixture sessions exercise the production hub and reliable
 // transport. Optional export lets the browser consume the actual received burst.
 func TestAttachedEffectAuthenticatedTransport(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	skills := enterworld.NewTextdataSkills(dir)
 	skillID := uint32(27)

@@ -78,6 +78,95 @@ func fieldPass(rt *Runtime, clock *fakeClock) {
 
 /*
 ================
+TestFieldPassPaysNoImmediateCommitPerRecipient
+
+A due field admission installs every recipient through the tick's
+deferred commit door, never the immediate one (#2294): the immediate
+door pays one store transaction a recipient while the tick holds
+every division's publication gates, which is how the skill-object
+hook stalled a live tick past a second. The recipients still land;
+only the commit door changes.
+================
+*/
+func TestFieldPassPaysNoImmediateCommitPerRecipient(t *testing.T) {
+	rt, clock, c, row := harmonyFixture(t)
+	radius := float64(row.TimedEffect.Field.Radius)
+	mate := nearbyCharacter(rt, c, 12, "harmony-mate", radius-1)
+	stranger := nearbyCharacter(rt, c, 13, "harmony-stranger", 1)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(mate)}}}
+	}
+
+	deps := rt.deps.(*enterworld.Deps)
+	immediate, deferred := 0, 0
+	deps.UpdateCharacter = func(_ *enterworld.Character, _ string, fn func() bool) bool {
+		immediate++
+		return fn()
+	}
+	deps.UpdateCharacterDeferred = func(_ *enterworld.Character, _ string, fn func() bool) bool {
+		deferred++
+		return fn()
+	}
+
+	releaseHarmony(t, rt, clock, c, row)
+	immediate, deferred = 0, 0
+	fieldPass(rt, clock)
+	if immediate != 0 {
+		t.Errorf("field pass paid %d immediate character commits, want 0", immediate)
+	}
+	if deferred < 3 {
+		t.Errorf("field pass paid %d deferred character commits, want at least 3 (caster, mate, stranger)", deferred)
+	}
+	for _, name := range []string{c.Name, mate.Name, stranger.Name} {
+		if !hasSkillEffect(rt, name, row.ID) {
+			t.Errorf("%s holds no Harmony after the field pass", name)
+		}
+	}
+}
+
+/*
+================
+TestFieldPassCutsAheldGateThenLands
+
+Behind a held publication gate the pass returns within the tick
+gate's bound having admitted nobody, and the admission lands whole
+on the first served pass: the field's cadence is due-timed, so a
+cut delays it a tick, never drops it (#2294).
+================
+*/
+func TestFieldPassCutsAheldGateThenLands(t *testing.T) {
+	rt, clock, c, row := harmonyFixture(t)
+	mate := nearbyCharacter(rt, c, 12, "harmony-mate", float64(row.TimedEffect.Field.Radius)-1)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(mate)}}}
+	}
+	releaseHarmony(t, rt, clock, c, row)
+
+	unlock := rt.LockPublication(testDivision, "enterWorld")
+	done := make(chan struct{})
+	go func() {
+		fieldPass(rt, clock)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		unlock()
+		<-done
+		t.Fatal("the field pass waited past its bound behind an entry-held gate")
+	}
+	unlock()
+	if hasSkillEffect(rt, mate.Name, row.ID) {
+		t.Fatal("the cut pass admitted a recipient behind the held gate")
+	}
+	fieldPass(rt, clock)
+	if !hasSkillEffect(rt, mate.Name, row.ID) {
+		t.Fatal("the admission never landed after the gate freed")
+	}
+}
+
+/*
+================
 TestHarmonyFieldHoldsItsRecipients
 
 The release plants the object and installs nothing on the caster. The first

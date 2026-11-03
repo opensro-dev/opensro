@@ -17,7 +17,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 import { NATIVE_ONLY } from "../helpers/expanded-build.mjs";
-const { travelMode, resetTravelRegion, gateRequest } = await import( "../../src/engine/foundation/gameplay/travel.ts" );
+const { travelMode, resetTravelRegion, gateRequest, isReturnScroll, isStallChangeItem } = await import(
+	"../../src/engine/foundation/gameplay/travel.ts"
+);
 const { travelLoadingQuads } = await import( "../../src/engine/foundation/ui/mission-loading.ts" );
 const { createWorldCore } = await import( "../../src/engine/runtime/simulation/worker/session/world/core.ts" );
 const { createPresentation } = await import( "../../src/engine/runtime/presentation/presentation.ts" );
@@ -27,10 +29,23 @@ const { decodePortalCatalog, portalMenu, portalNotice } = await import(
 const { interactionApproach, interactionApproachTransition } = await import(
 	"../../src/engine/foundation/gameplay/interaction-approach.ts"
 );
+test("the 755E40 answer switch splits group 3 by subtype: scrolls cast, subtype 4 changes the stall", () => {
+	// (consumable bits) | group 3 << 7 | subtype << 11.
+	const word = ( subtype ) => 3 << 2 | 3 << 5 | 3 << 7 | subtype << 11;
+	assert.equal( isReturnScroll( word( 1 ) ), true );
+	assert.equal( isReturnScroll( word( 3 ) ), true );
+	assert.equal( isStallChangeItem( word( 4 ) ), true );
+	assert.equal( isStallChangeItem( word( 1 ) ), false );
+	assert.equal( isStallChangeItem( word( 3 ) ), false );
+	assert.equal( isStallChangeItem( word( 4 ) | 2 ), false );
+	assert.equal( isReturnScroll( word( 4 ) ), false );
+});
 test( "primary portal menu resolves selected reference and authored destination IDs", NATIVE_ONLY, () => {
 	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/teleportData.json", "utf8" ) ),
 		catalog = decodePortalCatalog( raw );
-	assert.equal( catalog.links.length, 85 );
+	// 85 retail links plus the 5 between the Qin-Shi tomb floors' gates
+	// (GATE_JINSI_*, baked since #2043).
+	assert.equal( catalog.links.length, 90 );
 	const text = {
 		"UIIT_CTL_TELEPORT_RESULT": "Teleport to [%s]area. [%d]gold",
 		"UIIT_CTL_TELEPORT_FREE_RESULT": "Teleport to [%s]area.",

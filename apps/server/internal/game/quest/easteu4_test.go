@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -23,7 +23,7 @@ TestSunsetWitchPagesBeforeTheOffer
 ================
 */
 func TestSunsetWitchPagesBeforeTheOffer(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	// Level 12 is the questdata level: the plain offer mark. The class's
 	// MinLevel (2) opens it earlier under the red scroll (min_level_test.go).

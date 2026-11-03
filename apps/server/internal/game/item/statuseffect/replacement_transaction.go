@@ -77,6 +77,7 @@ func (r *Registry) applyReplacement(a ReplacementApplication, install bool) bool
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := ownerKey(e.DivisionID, e.CharacterName)
+	r.touchLocked(key)
 	rows := r.byOwner[key]
 	if install && len(rows) >= MaxAttachedEffectsPerCharacter {
 		return false
@@ -160,6 +161,7 @@ requestReplacementStopLocked
 */
 func (r *Registry) requestReplacementStopLocked(key string, index int) {
 	r.byOwner[key][index].StopRequested = true
+	r.touchLocked(key)
 	if !r.pendingSet[key] {
 		r.pendingSet[key] = true
 		r.pendingOwners = append(r.pendingOwners, key)

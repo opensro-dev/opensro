@@ -16,8 +16,8 @@ import (
 	"opensro.online/server/internal/testsupport/tier"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -81,7 +81,7 @@ TestPublishedNPCHeadingCoverage
 */
 func TestPublishedNPCHeadingCoverage(t *testing.T) {
 	tier.Long(t, "every published NPC placement has a heading")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	roster := LoadNpcWorldRoster(dir)
 	if len(roster) < 150 {

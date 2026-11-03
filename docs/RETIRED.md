@@ -28,3 +28,35 @@ git checkout 2371a6a -- <path>
 | `docs/SMALL_BUG_PASS_2026-09-29.md` | Discord audit and small UI/text repairs |
 | `docs/TRACE_BUG_BATCH_2026-09-29.md` | Trace and shared native geometry, 2026-09-29 |
 | `docs/WIZARD_SKILL_REVIEW_2026-10-02.md` | Wizard skill PR integration — 2026-10-02 |
+
+Retired later; restore these from `8a456bb` the same way.
+
+| Path | Report |
+| --- | --- |
+| `docs/sox-visual-parity.md` | SOX presentation: BUG-057 |
+| `docs/native-third-party-review.md` | Third-party native review, captured revisions |
+| `docs/COMPANION_PROTOCOL_RELEASE.md` | Companion protocol and authority release order |
+| `docs/CAP110_UPSTREAM_HANDOFF.md` | Cap-110 upstream review handoff |
+| `docs/CAP110_SKILL_ASSET_AUDIT.md` | Mastery 101-110 skill asset audit |
+| `docs/releases/2026-10-13-f7.md` | F7 changes merged without a player note |
+| `docs/GRAPHICS_UPGRADE_2026-10-05.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
+| `docs/GRAPHICS_UPGRADE_2026-10-06.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
+| `docs/GRAPHICS_UPGRADE_2026-10-08.md` | Folded into `docs/features/EXPERIMENTAL_GRAPHICS.md` |
+
+## Second cut, 2026-11-01
+
+Restore these with `git checkout d27317ea55 -- <path>`. Paths are as of that commit.
+
+| Path | Now |
+| --- | --- |
+| `docs/CAP110_PROGRESS.md` | Rewritten as `docs/features/CAP110.md` |
+| `docs/ATTACK-PET-EXPANSION-PLAN.md` | Current parts in `docs/pet-expansion/ATTACK-PET-SYSTEM.md` |
+| `docs/pet-expansion/PET-GEAR-DEGREES.md`, `PET-GEAR-PROCS.md`, `PET-GEAR-SEALS.md` | Folded into `ATTACK-PET-SYSTEM.md` |
+| `docs/pet-expansion/ASSET-PROVENANCE.md`, `PET-ITEM-ICONS.md` | Folded into `docs/pet-expansion/assets/README.md` |
+| `docs/GRAB_PETS.md`, `docs/PET_NAMEPLATES.md`, `docs/TRAINING-DUMMY.md`, `docs/BETA_MASTERY.md` | Folded into `docs/features/SMALL_FEATURES.md` |
+| `docs/ALEXANDRIA_NPC_FIXES.md` | Finished bug report |
+| `docs/pet-expansion/ALL-PET-SKILL-ACCEPTANCE.md` | Dated acceptance matrix |
+| `docs/pet-expansion/CROW-REWORK.md`, `PENGUIN-REWORK.md`, `WOLF-REWORK.md` | Numbers live in `petdesign.json` |
+| `docs/pet-expansion/PET-SKILL-UI.md`, `PET-LOOT-MODEL.md`, `PET-SURVIVABILITY-BALANCE.md` | Finished work notes |
+| `docs/pet-expansion/REVIEW-2026-10-14.md`, `REVIEW-VALIDATION.md` | Dated reviews |
+| Per-feature native evidence, and `docs/evidence/` | Moved to `../research/docs/port-native` |

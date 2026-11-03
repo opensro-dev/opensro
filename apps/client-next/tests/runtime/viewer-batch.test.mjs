@@ -61,11 +61,13 @@ window and navigator.gpu as the viewer page has them, restored after.
 */
 async function withBrowserGlobals( run ) {
 	const window = Object.getOwnPropertyDescriptor( globalThis, "window" ),
-		navigator = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
-	const page = /** @type {any} */ ({ opener: null });
+		navigator = Object.getOwnPropertyDescriptor( globalThis, "navigator" ),
+		ratio = Object.getOwnPropertyDescriptor( globalThis, "devicePixelRatio" );
+	const page = /** @type {any} */ ({ opener: null, addEventListener() {}, removeEventListener() {} });
 	page.parent = page;
 	Object.defineProperty( globalThis, "window", { value: page, configurable: true, writable: true } );
 	Object.defineProperty( globalThis, "navigator", { value: { gpu: {} }, configurable: true } );
+	Object.defineProperty( globalThis, "devicePixelRatio", { value: 1, configurable: true } );
 	try {
 		await run();
 	} finally {
@@ -73,6 +75,8 @@ async function withBrowserGlobals( run ) {
 		else delete scope.window;
 		if ( navigator ) Object.defineProperty( globalThis, "navigator", navigator );
 		else delete scope.navigator;
+		if ( ratio ) Object.defineProperty( globalThis, "devicePixelRatio", ratio );
+		else delete scope.devicePixelRatio;
 	}
 }
 
@@ -163,4 +167,124 @@ test("a batch page's next monster waits for its own glow", () =>
 		scope.window.__viewerNext( 1933 ).catch( () => {} );
 		for ( let t = 16; t <= 1000; t += 16 ) assert.equal( viewer.frame( t ), "draw" );
 		assert.equal( reads(), 0, "no still is read before the glow draws" );
+	} ));
+
+/*
+================
+latchHost
+
+A viewer host whose character owner latches a named load failure on
+demand and whose known monster becomes ready when told. Readbacks never
+answer, so a still that reaches one is known by the read count alone.
+================
+*/
+function latchHost( search ) {
+	let reads = 0, latched = null, readyNow = false;
+	const host = {
+		canvas: { width: 100, height: 100 },
+		picture: { clientWidth: 100, clientHeight: 100, addEventListener() {} },
+		search,
+		wake: () => {},
+		renderer: {
+			setViewerLight() {},
+			phase: () => "ready",
+			setUi() {},
+			frame() {},
+			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],
+			readDoll: () => {
+				reads++;
+				return new Promise( () => {} );
+			}
+		},
+		characters: {
+			receiveLifecycle() {},
+			step() {},
+			ready: () => readyNow,
+			knows: () => true,
+			itemType: () => undefined,
+			dressed: () => true,
+			glows: () => false,
+			glowing: () => false,
+			linkedRide: () => undefined,
+			error: () => latched,
+			failure: () => latched ? { path: "/assets/res/tomb/flame.bsr", message: "model part failed to load" } : null
+		}
+	};
+	return {
+		host: /** @type {any} */ (host),
+		reads: () => reads,
+		latch: ( value ) => {
+			latched = value;
+		},
+		setReady: ( value ) => {
+			readyNow = value;
+		}
+	};
+}
+
+test("a still waits out a latched failure and reaches its readback once healed", () =>
+	withBrowserGlobals( async () => {
+		const { host, reads, latch, setReady } = latchHost( "?monster=1933&still=1&batch=1" );
+		const viewer = createViewer( host );
+		let rejected = /** @type {any} */ (null);
+		scope.window.__viewerStill.then( () => {}, error => {
+			rejected = error;
+		} );
+		// The latch is up and the model has not landed: the still draws on
+		// instead of failing on a failure that may not even be its own.
+		latch( "asset failed" );
+		assert.equal( viewer.frame( 0 ), "draw" );
+		assert.equal( viewer.frame( 16 ), "draw" );
+		// Healed, and the model lands: the still reaches its readback.
+		latch( null );
+		setReady( true );
+		for ( let now = 32; now <= 400 && reads() === 0; now += 16 ) viewer.frame( now );
+		assert.equal( reads(), 1, "the healed still reaches its readback" );
+		await Promise.resolve();
+		assert.equal( rejected, null, "the healed still never rejected" );
+	} ));
+
+test("a still fails named at the drawing bound, and the next row is not condemned by the stale latch", () =>
+	withBrowserGlobals( async () => {
+		const { host, reads, latch, setReady } = latchHost( "?monster=1933&still=1&batch=1" );
+		const viewer = createViewer( host );
+		const first = scope.window.__viewerStill;
+		let rejected = /** @type {any} */ (null);
+		first.then( () => {}, error => {
+			rejected = error;
+		} );
+		latch( "asset failed" );
+		// The model never lands. 300 frames in, the still is still pending:
+		// a deterministic failure now costs the full window, by design.
+		for ( let now = 0; now <= 300000; now += 1000 ) viewer.frame( now );
+		await Promise.resolve();
+		assert.equal( rejected, null, "no rejection before the drawing bound" );
+		// One more frame crosses it: the failure names its asset.
+		assert.equal( viewer.frame( 301000 ), "idle" );
+		await assert.rejects( first, /asset-load: \/assets\/res\/tomb\/flame\.bsr: model part failed to load$/ );
+		// The latch is still up - it is the previous row's failure - but the
+		// next monster loads fine and must reach its own readback.
+		const second = scope.window.__viewerNext( 1933 );
+		let rejectedSecond = /** @type {any} */ (null);
+		second.then( () => {}, error => {
+			rejectedSecond = error;
+		} );
+		setReady( true );
+		for ( let now = 302000; now <= 302400 && reads() === 0; now += 16 ) viewer.frame( now );
+		assert.equal( reads(), 1, "the next row reaches its readback behind the stale latch" );
+		await Promise.resolve();
+		assert.equal( rejectedSecond, null, "the next row never rejected" );
+	} ));
+
+test("an interactive view still fails at once on a latched failure", () =>
+	withBrowserGlobals( async () => {
+		const { host, latch, setReady } = latchHost( "?monster=1933" );
+		const viewer = createViewer( host );
+		latch( "asset failed" );
+		setReady( true );
+		assert.equal( viewer.frame( 0 ), "done" );
+		await assert.rejects(
+			scope.window.__viewerStill,
+			/asset-load: \/assets\/res\/tomb\/flame\.bsr: model part failed to load$/
+		);
 	} ));

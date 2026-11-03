@@ -176,6 +176,10 @@ type Store struct {
 	// commits their phases (lock_timing.go).
 	mu      timedRWMutex
 	commits commitTiming
+	// checkpoints is the WAL's background checkpointer
+	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
+	// whenever no database was adopted.
+	checkpoints *walCheckpointer
 	// encodeScratch is the commit path's reusable JSON encode buffer
 	// (db_write.go). Every encode through it runs under mu, which is
 	// the scratch's ownership domain; its records are consumed by the
@@ -234,6 +238,14 @@ type Store struct {
 	// characterRowTx (db_write.go), so no writer can leave an entry
 	// describing bytes the disk no longer holds.
 	committedDigests map[committedCharacterKey][32]byte
+	// committedRows is the digests' twin: a detached copy of each
+	// character as last committed (domain.CloneCharacter), staged and
+	// retained under exactly the digests' discipline. The commit
+	// compares a dirty character's sections against it and skips the
+	// encode when they all still match (character_sections.go). A
+	// copy exists only beside its digest: both are staged at the same
+	// writes and dropped at the same deletes.
+	committedRows map[committedCharacterKey]*domain.Character
 	// committedMetaDigests is the character digests' discipline for
 	// the meta planes the commit rewrites whole (trade rewards, job
 	// rankings, the version stamps): the last committed digest per
@@ -311,6 +323,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		meta:                 Meta{NextCharID: map[string]int64{}, NextGuildID: map[string]int64{}},
 		charDivision:         map[*domain.Character]string{},
 		committedDigests:     map[committedCharacterKey][32]byte{},
+		committedRows:        map[committedCharacterKey]*domain.Character{},
 		committedMetaDigests: map[string][32]byte{},
 		changes:              newChangeSet(),
 		ground: groundState{
@@ -516,6 +529,7 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
 	s.committedDigests = map[committedCharacterKey][32]byte{}
+	s.committedRows = map[committedCharacterKey]*domain.Character{}
 	s.committedMetaDigests = map[string][32]byte{}
 	s.ledger.seen = map[*domain.Character]int64{}
 	for divisionID, records := range s.characters {
@@ -524,4 +538,8 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 			s.seedLedgerLocked(c)
 		}
 	}
+	// The writer handle adopted above never auto-checkpoints
+	// (configureDB); the background checkpointer copies its WAL
+	// instead (#2142 slice 0).
+	s.checkpoints = startWALCheckpointer(s.dbPath)
 }

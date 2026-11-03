@@ -16,6 +16,15 @@ mirror of the last bursts ride the existing metrics snapshot, so the
 journal can be watched live as well as read later. Diagnostics only: no
 wire, store or protocol surface. SRO_TICK_SPIKE_JOURNAL=off disables it.
 
+Attribution (#2295): a record names the phase (before_hooks, divisions,
+hooks, commit - the metrics' vocabulary) and the slow hook or division
+that took the burst's time, folded from the same per-tick TickPhases the
+histograms eat. The named step inside one hook is finer detail beside
+them, never the headline: it is reported selectively (a gate cut reports
+a nominal 5 ms), so a burst that spent its seconds in hook work must not
+read as caused by a 5 ms step. A burst no phase report ever reached
+carries neither field - unattributed, never blamed on a step.
+
 ===========================================================================
 */
 
@@ -76,7 +85,14 @@ type TickSpike struct {
 	P99MsEnd      float64   `json:"p99_ms_end"`
 	SlowestStep   string    `json:"slowest_step,omitempty"`
 	SlowestStepMs float64   `json:"slowest_step_ms,omitempty"`
-	SessionsEnd   int       `json:"sessions_end"`
+	// The phase and hook that took the burst's time (#2295), folded from
+	// the burst ticks' TickPhases; both absent when no phase report
+	// reached the burst.
+	SlowestPhase   string  `json:"slowest_phase,omitempty"`
+	SlowestPhaseMs float64 `json:"slowest_phase_ms,omitempty"`
+	SlowestHook    string  `json:"slowest_hook,omitempty"`
+	SlowestHookMs  float64 `json:"slowest_hook_ms,omitempty"`
+	SessionsEnd    int     `json:"sessions_end"`
 }
 
 /*
@@ -130,6 +146,10 @@ type tickSpikeJournal struct {
 	burstTickMs float64
 	stepName    string
 	stepMax     time.Duration
+	phaseName   string
+	phaseMax    time.Duration
+	hookName    string
+	hookMax     time.Duration
 }
 
 /*
@@ -256,6 +276,10 @@ func (j *tickSpikeJournal) observeTick(elapsed, interval time.Duration) {
 			j.burstTickMs = float64(interval) / float64(time.Millisecond)
 			j.stepName = ""
 			j.stepMax = 0
+			j.phaseName = ""
+			j.phaseMax = 0
+			j.hookName = ""
+			j.hookMax = 0
 		}
 		j.burstLast = now
 		j.burstTicks++
@@ -290,6 +314,47 @@ func (j *tickSpikeJournal) observeStep(name string, elapsed time.Duration) {
 
 /*
 ================
+tickSpikeJournal.observePhases
+
+Folds one tick's phase durations and slow hooks into the open burst's
+attribution (#2295): the slowest phase under its TickPhaseMs key
+(commit counts only when a flush ran), and the slowest slow hook or
+division by name. Phases outside a burst are ignored, like steps - the
+histograms already own every tick; the journal only attributes bursts.
+================
+*/
+func (j *tickSpikeJournal) observePhases(phases TickPhases) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if !j.burstOpen {
+		return
+	}
+	for _, phase := range []struct {
+		name    string
+		elapsed time.Duration
+	}{
+		{"before_hooks", phases.BeforeHooks},
+		{"divisions", phases.Divisions},
+		{"hooks", phases.Hooks},
+		{"commit", phases.Commit.Elapsed},
+	} {
+		if phase.elapsed > j.phaseMax {
+			j.phaseName = phase.name
+			j.phaseMax = phase.elapsed
+		}
+	}
+	for _, slow := range [2][]SlowHook{phases.SlowHooks, phases.SlowDivisions} {
+		for _, hook := range slow {
+			if hook.Elapsed > j.hookMax {
+				j.hookName = hook.Name
+				j.hookMax = hook.Elapsed
+			}
+		}
+	}
+}
+
+/*
+================
 tickSpikeJournal.closeBurstLocked
 
 Seals the open burst into a record and emits it. Caller holds mu.
@@ -319,6 +384,14 @@ func (j *tickSpikeJournal) closeBurstLocked() {
 	if j.stepName != "" {
 		spike.SlowestStep = j.stepName
 		spike.SlowestStepMs = float64(j.stepMax) / float64(time.Millisecond)
+	}
+	if j.phaseName != "" {
+		spike.SlowestPhase = j.phaseName
+		spike.SlowestPhaseMs = float64(j.phaseMax) / float64(time.Millisecond)
+	}
+	if j.hookName != "" {
+		spike.SlowestHook = j.hookName
+		spike.SlowestHookMs = float64(j.hookMax) / float64(time.Millisecond)
 	}
 	j.burstOpen = false
 	j.emitLocked(spike)

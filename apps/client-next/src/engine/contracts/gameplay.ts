@@ -225,6 +225,7 @@ export type GameplayCommand =
 	| { readonly kind: "friend-request"; readonly name: string; }
 	| { readonly kind: "friend-answer"; readonly accept: boolean; }
 	| { readonly kind: "friend-delete"; readonly jid: number; }
+	| { readonly kind: "friend-conclusion-close"; }
 	| { readonly kind: "letter-send"; readonly receiver: string; readonly body: string; }
 	| { readonly kind: "letter-read"; readonly index: number; }
 	| { readonly kind: "letter-close"; }
@@ -388,6 +389,8 @@ export type GameplayCommand =
 	| { readonly kind: "pickup"; readonly gid: number; }
 	// The pickup shortcut: the worker chooses the item (pickup-nearest.ts).
 	| { readonly kind: "pickup-nearest"; }
+	// Auto Select: the worker chooses the monster (select-nearest.ts).
+	| { readonly kind: "select-nearest-monster"; }
 	// A click on another player: the worker decides whether it attacks
 	// (player-attack.ts). Sent before the click's select.
 	| { readonly kind: "player-interact"; readonly gid: number; readonly alt: boolean; }
@@ -427,6 +430,10 @@ export type GameplayCommand =
 		readonly source: number;
 		readonly destination: number;
 		readonly quantity: number;
+		// An item activation (567290, double-click) composes the same
+		// equip move directly; only an equipment drop passes the
+		// drop-action gate (594980) that owns the free-battle warning.
+		readonly activation?: boolean;
 	}
 	| {
 		readonly kind: "item-use";
@@ -456,6 +463,7 @@ export type GameplayCommand =
 	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
+	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
@@ -804,6 +812,8 @@ export interface GameplayState extends MoverPublication {
 	// The server's port-only SRO_MOONLIT_THIEF_SUIT rule, published at world
 	// entry: level-20 thief suits draw the Moonlit Ash model (equipment-appearance.ts).
 	readonly moonlitThiefSuit?: boolean;
+	// Port-only SRO_RAISED_GOLD_CAPS: the stall and warehouse deposit caps are raised.
+	readonly raisedGoldCaps?: boolean;
 	// The Experimental "Homing projectiles" row (port-only, default off):
 	// target-bone projectiles re-read the victim's socket in flight instead of
 	// flying to the launch-captured endpoint (effects.ts).

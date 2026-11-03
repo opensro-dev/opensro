@@ -77,9 +77,12 @@ function gpuFacts( adapter: GPUAdapter, device?: GPUDevice | null ): GpuFacts {
 createDevice
 
 Initialize one device generation and grant checked capabilities after its pipelines are ready.
+`recovering` marks a replacement for a lost device: the adapter can be
+missing for a moment during a GPU reset, where on a first start it means
+this machine has no WebGPU.
 ================
 */
-export function createDevice( timingEnabled = false, gpuAnimationEnabled = true ): DeviceOwner {
+export function createDevice( timingEnabled = false, gpuAnimationEnabled = true, recovering = false ): DeviceOwner {
 	let textureFiltered = true, textureDetail = DEFAULT_TEXTURE_DETAIL;
 	// Experimental > Image / World / Lighting. All off is the native frame:
 	// the plain copy to the swapchain, retail samplers, env.stages zero and
@@ -146,6 +149,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	};
 	// The adapter's features and limits for bug reports (gpuFacts above).
 	let facts: GpuFacts | null = null;
+	// A rejected request for the device says the GPU is unavailable now, not
+	// that it never will be (#2337: requestDevice rejects after a GPU reset).
+	// Failures past that point are the device's own and stay permanent.
+	let retryable = true;
 	if ( !navigator.gpu ) {
 		fail( "WebGPU is unavailable" );
 	} else {
@@ -154,6 +161,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				return null;
 			}
 			if ( !adapter ) {
+				retryable = recovering;
 				throw new Error( "No WebGPU adapter" );
 			}
 			facts = gpuFacts( adapter );
@@ -169,6 +177,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			}
 			return adapter.requestDevice( { requiredFeatures } );
 		} ).then( created => {
+			retryable = false;
 			if ( !created ) {
 				return;
 			}
@@ -188,7 +197,8 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				// running first: a loss seen while running was the browser's, even
 				// with reason "destroyed" (Chrome destroys a page's device after a
 				// GPU-process or driver reset). The renderer recreates the device
-				// (renderer.ts, at most three times) instead of ending the session.
+				// (device-recovery.ts paces eight attempts, renewed after a
+				// stable minute) instead of ending the session.
 				if ( phase === "running" || phase === "starting" ) {
 					fail( `Device lost (${info.reason}): ${info.message}`, true );
 				}
@@ -201,7 +211,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					degradedPipelines.add( label.startsWith( "flare-" ) ? "flare-visibility" : label );
 					return;
 				}
-				fail( message );
+				// Out of GPU memory is the one uncaptured error a new device can
+				// cure: it starts empty. Validation errors would only repeat.
+				fail(
+					message,
+					typeof GPUOutOfMemoryError !== "undefined" && event.error instanceof GPUOutOfMemoryError
+				);
 			} );
 
 			/*
@@ -502,7 +517,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					geometry!.refreshShadowBindings( sunShadowOn );
 				}
 			} ).catch( fail );
-		} ).catch( fail );
+		} ).catch( error => fail( error, retryable ) );
 	}
 	return {
 		/*

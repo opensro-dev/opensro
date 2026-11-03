@@ -20,7 +20,8 @@ line beats delaying the game.
 Files are named chat-2006-01-02.log (UTC) and pruned past the retention
 window (SRO_CHAT_LOG_RETAIN_DAYS, default 30). The directory is the
 shard's authority directory, which only operators can read; nothing
-here is reachable from the public site or the public API.
+here is reachable from the public site or the public API. Staff search
+it from the console (search.go).
 
 ===========================================================================
 */

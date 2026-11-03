@@ -149,7 +149,12 @@ test("the roster seeds at world entry and follows add, delete and presence event
 	g.receive( { opcode: 0x3f9a, payload: bytes( 4, u32( 7 ), 1 ) }, 0 );
 	assert.equal( lastNotice( g.take() ).key, "UIIT_MSG_FRIEND_DISCONNECT" );
 	g.receive( { opcode: 0x3f9a, payload: bytes( 2, u32( 9 ), "Cale", u32( 1908 ) ) }, 0 );
-	assert.deepEqual( friendsOf( g.take() ).rows.map( row => row.name ), [ "Berk", "Cale" ] );
+	const added = friendsOf( g.take() );
+	assert.deepEqual( added.rows.map( row => row.name ), [ "Berk", "Cale" ] );
+	// 760FB0 case 2: the add raises the conclusion box until its Confirm.
+	assert.equal( added.conclusion, "Cale" );
+	g.command( { kind: "friend-conclusion-close" }, 0, undefined );
+	assert.equal( friendsOf( g.take() ).conclusion, null );
 	g.receive( { opcode: 0x3f9a, payload: bytes( 3, u32( 7 ) ) }, 0 );
 	assert.deepEqual( friendsOf( g.take() ).rows.map( row => row.name ), [ "Cale" ] );
 	assert.equal(

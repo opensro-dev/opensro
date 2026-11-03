@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
@@ -26,7 +27,6 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -40,9 +40,11 @@ import (
 // unlistedSettings are the shard settings the rules page leaves out, each
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
-	action.EnvGMSetSpeed:            "a GM command, not a rule players meet",
-	monster.EnvTrainingDummy:        "GM-only training targets",
-	simulation.EnvBetaUniqueRespawn: "unique monster spawn timing is not published",
+	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
+	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	monster.EnvTrainingDummy:            "GM-only training targets",
+	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
+	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
 	"SRO_MOST_WANTED_TEST_BOUNTY":     "shown in the Most Wanted test pacing rule",
@@ -136,6 +138,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "There is no Pharaoh Tomb.",
 				Now:    "The Pharaoh Tombs open from Kings Valley, each a shared area of level 100-110 monsters and bosses.",
 				Why:    "Endgame hunting for the optional cap-110 expansion."},
+			{Flag: monster.EnvCap110Temple, On: monster.TempleEnabled(),
+				Native: "There is no temple instance.",
+				Now:    "The temple's band worlds open as instances: a party shares its own layer (four or eight residents, by world), a solo player enters alone, and a character outside a band's levels is refused.",
+				Why:    "Instanced group hunting for the optional cap-110 expansion."},
 			{Flag: monster.EnvCap110Qinshi, On: monster.QinshiEnabled(),
 				Native: "The Qin-Shi Emperor Tomb holds its v1.150 monsters.",
 				Now:    "The tomb's upper floors also hold the later database's level 81-110 monsters.",
@@ -228,6 +234,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Monsters drop alchemy materials (claws, hides and other monster parts).",
 				Now:    "Alchemy materials no longer drop.",
 				Why:    "A community vote brought the parts back, so they drop as in the original; this only applies if the removal is switched back on."},
+			{Flag: progression.EnvHalloweenEvent, On: progression.HalloweenEventFromEnv().ActiveAt(time.Now()),
+				Native: "No Halloween event runs: monsters drop no jewelry boxes and So-ok offers no gift exchange.",
+				Now:    "During the event window, monsters drop jewelry boxes and So-ok exchanges each box for a random gift or sixty boxes for an event helmet; boxes left when the window ends are removed at the next world entry.",
+				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
+			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
+				Native: "The event helmets trade like any other item.",
+				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
+				Why:    "A helmet the event paid was never meant to reach a market."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -240,10 +254,6 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Characters start with the retail creation items only.",
 				Now:    "Every character also holds a return scroll and a speed scroll that are never used up.",
 				Why:    "Testers spend their time on the systems under test, not on walking."},
-			{Flag: quest.EnvInstantInventoryExpansion, On: quest.InstantInventoryExpansionFromEnv(),
-				Native: "A bigger bag takes effect at the next world entry.",
-				Now:    "A bigger bag takes effect at once.",
-				Why:    "Relogging to see new slots read as a bug."},
 			{Flag: companion.EnvPetPacing, On: companion.PoliciesFromEnv().Pacing,
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
@@ -252,6 +262,11 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
+				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
+				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
+					groupedGold(int64(action.RaisedStallPriceLimit)), groupedGold(int64(action.RaisedStorageGoldDepositLimit))),
+				Why: "Large trades and shared warehouse funds needed more room than the original's caps allowed; the original caps return with one setting."},
 			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
 				Native: "The reverse return scroll offers the last recall point and the last death point.",
 				Now:    "It also offers places on the map: the later client's own list when the server imported it, else town gates and unique monster areas.",
@@ -431,7 +446,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta; the original speed returns with one setting."},
 			{Flag: action.EnvAnnounceSoxDrop, On: action.AnnouncementsFromEnv().SoxDrop,
 				Native: "A Seal of Star, Moon or Sun drop is not announced.",
-				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
+				Now: fmt.Sprintf("Everyone sees a seal drop notice for degree %d and above: a Star's stays in the Event chat lines, while a Moon's and a Sun's also show in the top-centre banner; a Sun's leads with SEAL OF SUN and its line is coloured, as the Star's and Moon's are by their tiers.",
 					settings.Int(tunables.SoxNoticeMinDegree)),
 				Why: "Requested for the beta; the original quiet drop returns with one setting."},
 			{Flag: action.EnvSealBoard, On: action.SealBoardFromEnv(),

@@ -22,7 +22,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/gamedata"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -32,7 +32,7 @@ TestCreatableRosterHoldsEveryRuntimeMonster
 */
 func TestCreatableRosterHoldsEveryRuntimeMonster(t *testing.T) {
 	tier.Long(t, "every runtime monster is creatable")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir, err := gamedata.ResolveTextdataDir()
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ bake and a flag-off server agree on what can appear.
 */
 func TestCreatableMonstersQinShiTombGate(t *testing.T) {
 	tier.Long(t, "every Qin-Shi tomb monster is creatable behind its gate")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 
 	run := func() monsterRosterOutput {
 		reader, writer, err := os.Pipe()

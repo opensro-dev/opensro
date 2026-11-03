@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-main.mjs - loopback observatory, authenticated player recovery, invite keys, economy and shard rules reads
+main.mjs - loopback observatory, authenticated player recovery, invite keys, economy, shard rules and work board reads
 ===========================================================================
 */
 import { createServer } from "node:http";
@@ -9,9 +9,11 @@ import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
+import { createChatLog } from "./chatlog.mjs";
 import { createHistory } from "./history.mjs";
 import { createEconomy } from "./economy.mjs";
 import { createSettings } from "./settings.mjs";
+import { createBoard } from "./board.mjs";
 import { createInviteKeys, siteAdminURL } from "./invite-keys.mjs";
 import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
@@ -38,6 +40,7 @@ const historySources = [ {
 	token: agentToken
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
+const chatLog = createChatLog( shards.map( row => ({ ...row, token }) ) );
 // Each GameWorld's economy aggregates (economy.mjs), read with their own
 // token; absent, the Economy page says it is off.
 const economyToken = config.economyTokenFile ? (await readFile( config.economyTokenFile, "utf8" )).trim() : "";
@@ -45,6 +48,9 @@ const economy = createEconomy( shards, economyToken );
 // Each GameWorld's shard rules (settings.mjs), read under the operator
 // token the GameWorld's settings guard shares with its other readers.
 const settings = createSettings( shards, token );
+// The work board (board.mjs): a collector's snapshot file and the GitHub
+// repository its numbers belong to; either absent, the page says it is off.
+const board = createBoard( config.boardSnapshotFile, config.boardRepo );
 // The website's invite keys (opensro-web /internal/admin/invites), with the
 // console's own secret; absent, the Invite keys page says it is off.
 const siteAdmin = config.siteAdmin ?? null;
@@ -81,6 +87,9 @@ for (
 		"history.js",
 		"history-view.js",
 		"history.css",
+		"chat-log.html",
+		"chat-log.js",
+		"chat-log.css",
 		"invites.js",
 		"invite-made.js",
 		"invite-counts.js",
@@ -93,7 +102,11 @@ for (
 		"settings.html",
 		"settings.js",
 		"settings-view.js",
-		"settings.css"
+		"settings.css",
+		"board.html",
+		"board.js",
+		"board-view.js",
+		"board.css"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -237,6 +250,7 @@ async function handleRequest( req, res ) {
 				invites: Boolean( siteAdminToken ),
 				economy: economy.enabled,
 				settings: settings.enabled,
+				board: board.enabled,
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );
@@ -247,6 +261,13 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
+		// The moderation log is staff-only: it sits behind the same request
+		// check as every console route and answers GET alone.
+		if ( url.pathname === "/api/chatlog" && req.method === "GET" ) {
+			const result = await chatLog.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
 		if ( url.pathname.startsWith( "/api/economy/" ) ) {
 			const result = await economy.request( url.pathname, url.searchParams );
 			respondJSON( res, result.status, result.body );
@@ -254,6 +275,11 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/settings" ) {
 			const result = await settings.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
+		if ( url.pathname === "/api/board" ) {
+			const result = await board.request();
 			respondJSON( res, result.status, result.body );
 			return;
 		}

@@ -72,7 +72,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			return OpResult{DiagnosticRefusal: "basic-attack-malformed"}
 		}
 
-		snapshot := rt.characterSnapshot(divisionID, character)
+		snapshot := rt.characterSnapshotCast(divisionID, character)
 		if snapshot == nil || snapshot.DeletePending || snapshot.NativeTeleportMode == 1 {
 			return OpResult{DiagnosticRefusal: "character-unavailable"}
 		}
@@ -95,7 +95,7 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 			return OpResult{}
 		}
 
-		snapshot := rt.characterSnapshot(divisionID, character)
+		snapshot := rt.characterSnapshotCast(divisionID, character)
 		if snapshot == nil || snapshot.DeletePending || snapshot.NativeTeleportMode == 1 {
 			return OpResult{}
 		}

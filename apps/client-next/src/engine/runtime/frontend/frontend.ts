@@ -203,6 +203,16 @@ export function createFrontend(
 					message: degradation.message
 				} );
 			}
+			// Held character clocks reach the Agent the same way: the renderer
+			// owns the snapshot rows that hold them, this owner owns the sender.
+			for ( const degradation of renderer.takeDegradations?.() ?? [] ) {
+				send( {
+					kind: "client-report",
+					incidentKind: "degraded",
+					code: degradation.code,
+					message: degradation.message
+				} );
+			}
 			const delta = last ? Math.max( 0, (now - last) / 1000 ) : 0;
 			last = now;
 			if ( authenticated && session?.phase === "signed-out" ) {
@@ -271,9 +281,13 @@ export function createFrontend(
 					kind: "client-report",
 					incidentKind: "runtime",
 					code: "world_entry_rejected",
-					message: `Entry rejected (S2) at ${flow.snapshot().phase}/${
-						entryPending ? "pending" : entering ? "entering" : "loading"
-					}: ${session.error}`
+					message:
+						`Entry rejected (S2) at ${flow.snapshot().phase}/${
+							entryPending ? "pending" : entering ? "entering" : "loading"
+						}: ${session.error}` +
+						(session.entryFailure ?
+							` (stage ${session.entryFailure.stage}; ${session.entryFailure.bytesReceived} bytes in ${session.entryFailure.framesReceived} frames received)` :
+							"")
 				} );
 				entryPending = false;
 				entering = false;

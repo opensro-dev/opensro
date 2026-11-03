@@ -123,6 +123,20 @@ func TestEncodeCampNotice3AC5(t *testing.T) {
 	}
 }
 
+// TestEncodeCampMemberOnlineUpdate3AC5 pins the status-5 flag-1
+// connect/disconnect push (CNetProcess_OnNotification0x3AC5 case 4
+// flag 1 - the member record's offline byte): {u8 5}{u32 memberId}
+// {u8 1}{u8 offline}, offline 1 at disconnect, 0 at world entry.
+func TestEncodeCampMemberOnlineUpdate3AC5(t *testing.T) {
+	t.Parallel()
+	if got, want := EncodeCampMemberOnlineUpdate3AC5(0x000186A5, true), []byte{0x05, 0xA5, 0x86, 0x01, 0x00, 0x01, 0x01}; !bytes.Equal(got, want) {
+		t.Fatalf("offline update = % X, want % X", got, want)
+	}
+	if got, want := EncodeCampMemberOnlineUpdate3AC5(0x000186A5, false), []byte{0x05, 0xA5, 0x86, 0x01, 0x00, 0x01, 0x00}; !bytes.Equal(got, want) {
+		t.Fatalf("online update = % X, want % X", got, want)
+	}
+}
+
 // TestEncodeCampJoinRow3AC5 pins the status-2 joining-member push against
 // the hand-rolled oracle (CNetProcess_OnNotification0x3AC5 case 1
 // -> the real CCharacterDependentData_InsertAcademyMemberRecord

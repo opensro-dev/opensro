@@ -14,7 +14,7 @@ export const TEST_TASKS = [
     description: "Run the complete deterministic test pipeline",
     kind: "test",
     ci: true,
-    requires: ["licensed-client-extraction"],
+    requires: ["client-extraction"],
     timeoutClass: "long",
     pipeline: "tests"
   }),

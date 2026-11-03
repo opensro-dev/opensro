@@ -103,6 +103,9 @@ export interface FriendsState {
 	readonly rows: readonly FriendRow[];
 	readonly prompt: FriendPrompt | null;
 	readonly pending: boolean;
+	// The conclusion box's friend (760FB0 case 2 shows box 0x22 over a
+	// 0x3F9A add), or null while no conclusion waits for its Confirm.
+	readonly conclusion: string | null;
 }
 
 /*
