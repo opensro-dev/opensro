@@ -9,7 +9,7 @@ suppressed slots left out.
 
 ===========================================================================
 */
-import { countJobFraction } from "@/engine/foundation/gameplay/count-job";
+import { countJobFraction, countJobHelpText, countJobRemainingMs } from "@/engine/foundation/gameplay/count-job";
 import { buffDepartureFrame } from "@/engine/foundation/gameplay/buff-slots";
 import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import type { GameplayState, PetTraining } from "@/engine/contracts/gameplay";
@@ -52,7 +52,8 @@ export function buffBoard(
 	timeMs: number,
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
-	showPetTraining = true
+	showPetTraining = true,
+	copy: ( key: string ) => string = key => key
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -123,7 +124,9 @@ export function buffBoard(
 		}
 	}
 	// 6E6E00 kind 5: a premium package's limited uses, one slot per package
-	// with its icon and its period's bar; the help lists each item's uses.
+	// with its icon and its period's bar. The hover help (6E2C90) reads
+	// the package's name, the remained period and one line per limited
+	// row; countJobHelpText composes it from the client's text keys.
 	const packages = new Map<number, NonNullable<typeof game.countJobs>[number][]>();
 	for ( const row of game.countJobs ?? [] ) {
 		packages.set( row.packageRefObjId, [ ...(packages.get( row.packageRefObjId ) ?? []), row ] );
@@ -132,7 +135,7 @@ export function buffBoard(
 		const reference = rows[0]!.reference, path = iconPath( reference.icon );
 		if ( path ) {
 			primary.push( {
-				helpText: [ reference.name ?? "", ...rows.map( r => (r.itemName ?? "") + " x" + r.uses ) ].join( "\n" ),
+				helpText: countJobHelpText( reference.name ?? "", rows, countJobRemainingMs( rows[0]!, timeMs ), copy ),
 				id: "count-job:" + packageRefObjId,
 				path,
 				label: reference.name ?? "",
