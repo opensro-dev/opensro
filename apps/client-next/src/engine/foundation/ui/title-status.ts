@@ -14,10 +14,11 @@ Recorded beside the table (#2271): native strings this flow cannot show.
 verified on the pinned client): the blocked case is this table's
 status 3, argument 1 (handler 0x749550, status table 0x74a0c8,
 argument table 0x74a108). After the status/argument pair the answer
-carries two length-prefixed packet strings (reader 0x4b6870): the
-block reason, then the block-end text. A reason containing '#' is
-split into structured fields and its datetime is parsed and
-converted before display (0x74979d); a plain reason and the end
+carries two length-prefixed packet strings (read at 0x749726, each
+widened by 0x4b6870): the block reason, then the block-end text. A
+reason containing '#' (token test 0x741b00 at 0x74979d) is split into
+structured fields and its datetime is parsed and converted before
+display; a plain reason and the end
 text append raw. The box heads the ACCOUNT_STOP line with a
 "[Block Detail]" caption and formats it "%s\n%s%s\n%s%s"
 (0x749a33): ACCOUNT_STOP, STOP_BLOCK + reason, BLOCK_TIME + end.
