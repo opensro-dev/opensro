@@ -4,8 +4,8 @@
 cape_unsummon_test.go - a committed free-battle cape equip retires the pet
 
 The v1.150 client warns that wearing free-battle equipment unsummons
-growth pets automatically (UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE at
-0x594980) and composes nothing but the ordinary equip move, so the
+growth pets automatically (UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE, from
+its drop handler) and composes nothing but the ordinary equip move, so the
 dismissal is the server's part of that equip. These tests drive the real
 summon and the real inventory move and watch the pet's durable state and
 the published frames.
