@@ -408,6 +408,19 @@ func (p *PetFollower) TakeStuck() bool {
 
 /*
 ================
+StuckPending
+
+Whether the stuck event is held for the action owner, without
+consuming it (TakeStuck does). A caller that must pay for the answer
+only when the event fired asks this first (#2139).
+================
+*/
+func (p *PetFollower) StuckPending() bool {
+	return p.stuck
+}
+
+/*
+================
 ResetStuck
 
 Every native state change and tactics reset clears the count;
