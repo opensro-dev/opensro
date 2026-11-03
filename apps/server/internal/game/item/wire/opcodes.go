@@ -137,6 +137,11 @@ const (
 	// ErrCodeStorageFull is UIIT_MSG_STRGERR_INVENTORY_FULL (01:07): the bag
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
+	// ErrCodeCannotEnterCosBag is UIIT_MSG_COSPETERR_CANT_MOVETO_SUMITEM
+	// (01:B1, a banner): an item class that never enters a companion's
+	// bag. The generic code leaves such a refusal silent; this names the
+	// banner the client shows for it.
+	ErrCodeCannotEnterCosBag uint8 = 0xB1
 	// ErrCodePartyInventoryFull is UIIT_MSG_STRGERR_PARTY_INVENTORY_FULL
 	// (01:DA, 689420 index 0xDA): the server's ground-pickup executor
 	// returns 0x18DA to the picker after sending 0x1807
