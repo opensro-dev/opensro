@@ -235,7 +235,8 @@ import {
 	cosContainerResult,
 	cosGrantResult,
 	cosGroundRequest,
-	cosGroundResult
+	cosGroundResult,
+	cosRemovalResult
 } from "@/engine/foundation/gameplay/cos-container";
 import {
 	advancedPetAssistCountdowns,
@@ -4770,10 +4771,37 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
-					// only, and a grant is source 3 (#2258).
 					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					// 756CF0's print case (756EEC) is shared by ground (0) and
+					// quest (3) sources and dispatches on the destination: a
+					// grant into the pet bag (0x7A) prints with grant rules -
+					// a new row names itself (75741B), a merge stays silent
+					// (7570DD) - and the gold slot has no line (#2258).
+					if ( frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name },
+								true
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
+					dirty = true;
+					return true;
+				}
+				if (
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
+				) {
+					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 2, true ),
+						record = cosRecords.get( gid );
+					if ( !record ) throw Error( "Absent COS removal owner" );
+					// The quest sink (758C13) prints nothing for a removal.
+					cosRecords.set( gid, cosRemovalResult( record, frame.payload ) );
 					cosPickup.spaceChanged( gid );
 					dirty = true;
 					return true;
