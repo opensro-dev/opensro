@@ -12,7 +12,13 @@ import {
 	flagState,
 	groupedNumber,
 	marks,
-	visibleGroups
+	pendingText,
+	rawValue,
+	readFilters,
+	splitFlags,
+	visibleGroups,
+	waiting,
+	writeFilters
 } from "../public/settings-view.js";
 
 const BOUNTY = {
@@ -126,4 +132,68 @@ test("a shard setting reads as on, off or its value", () => {
 	assert.deepEqual( flagState( { env: "SRO_A", value: "", on: false } ), { tone: "off", text: "Off (unset)" } );
 	assert.deepEqual( flagState( { env: "SRO_A", value: "off", on: false } ), { tone: "off", text: "Off" } );
 	assert.deepEqual( flagState( { env: "SRO_A", value: "1.5", on: null } ), { tone: "value", text: "1.5" } );
+});
+
+test("a change on its way reads in the rule's unit and filters", () => {
+	const proposed = {
+		...REPEAT,
+		pending: { id: "p1", to: "8", by: "s1", byName: "Staff A", at: 1793675000, reason: "weekend" }
+	};
+	const queued = { ...RIDE, restartQueued: "1.5" };
+	assert.equal( rawValue( RIDE, "off" ), "Off (native)" );
+	assert.equal( rawValue( RIDE, "1.5" ), "×1.50" );
+	assert.equal( rawValue( BOUNTY, "2000" ), "2,000 gold" );
+	assert.equal( rawValue( BOUNTY, "" ), "", "an empty raw value is not a zero" );
+	assert.deepEqual( pendingText( proposed ), {
+		value: "8 minutes",
+		by: "Staff A",
+		when: "2026-11-03 03:03 UTC",
+		reason: "weekend"
+	} );
+	assert.equal( pendingText( { ...proposed, pending: { ...proposed.pending, byName: "" } } ).by, "s1" );
+	assert.equal( pendingText( REPEAT ), null );
+	assert.deepEqual( marks( queued ).map( m => m.text ), [ "Restart", "Default ×1.30", "After restart ×1.50" ] );
+	assert.equal( waiting( proposed ), true );
+	assert.equal( waiting( queued ), true );
+	assert.equal( waiting( { ...BOUNTY, pending: null, restartQueued: null } ), false );
+	assert.deepEqual(
+		visibleGroups( [ BOUNTY, proposed, queued ], { pendingOnly: true } ).flatMap( g => g.rows.map( r => r.key ) ),
+		[ "job_kill_repeat_minutes", "mall_ride_speed" ]
+	);
+});
+
+test("each group counts its changed rules", () => {
+	const groups = visibleGroups( [ BOUNTY, KILLS, RIDE ] );
+	assert.deepEqual( groups.map( g => [ g.name, g.rows.length, g.changed ] ), [
+		[ "Most Wanted", 2, 1 ],
+		[ "Movement", 1, 1 ]
+	] );
+});
+
+test("shard settings split into set and unset, and the search reaches them", () => {
+	const flags = [
+		{ env: "SRO_A_ON", value: "on", on: true },
+		{ env: "SRO_B_UNSET", value: "", on: false },
+		{ env: "SRO_C_RATE", value: "1.5", on: null }
+	];
+	const all = splitFlags( flags );
+	assert.deepEqual( all.set.map( f => f.env ), [ "SRO_A_ON", "SRO_C_RATE" ] );
+	assert.deepEqual( all.unset.map( f => f.env ), [ "SRO_B_UNSET" ] );
+	assert.deepEqual( splitFlags( flags, "rate" ).set.map( f => f.env ), [ "SRO_C_RATE" ] );
+	assert.deepEqual( splitFlags( flags, "1.5" ).set.map( f => f.env ), [ "SRO_C_RATE" ], "a value matches too" );
+	assert.deepEqual( splitFlags( flags, "unset" ), { set: [], unset: [ flags[1] ] } );
+});
+
+test("filters round-trip through the address, defaults left out", () => {
+	const filters = { shard: "realm", group: "Trade", query: "gold", changedOnly: true, pendingOnly: false };
+	assert.equal( writeFilters( filters ), "shard=realm&group=Trade&q=gold&changed=1" );
+	assert.deepEqual( readFilters( new URLSearchParams( writeFilters( filters ) ) ), filters );
+	assert.equal( writeFilters( { shard: "", group: "All", query: "", changedOnly: false, pendingOnly: false } ), "" );
+	assert.deepEqual( readFilters( new URLSearchParams( "" ) ), {
+		shard: "",
+		group: "All",
+		query: "",
+		changedOnly: false,
+		pendingOnly: false
+	} );
 });
