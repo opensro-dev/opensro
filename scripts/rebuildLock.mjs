@@ -59,6 +59,11 @@ const OWNER_PUBLICATION_GRACE_MS = 60000;
 const MUTEX_STALE_MS = 60000;
 const MUTEX_SPIN_MS = 10000;
 const MUTEX_SPIN_SLEEP_MS = 15;
+// A Python contender's open() never grants delete sharing on Windows, so a
+// removal that lands while it reads a record fails with EPERM or EBUSY.
+// The mutex release retries those with a linear backoff (15 ms, 30 ms, ...):
+// 30 tries bound it near 7 s, far past any read.
+const REMOVE_RETRIES = 30;
 const persistentLocks = new Map();
 
 export const GENERATED_ASSETS_LOCK_NAME = "generated-assets";
@@ -523,6 +528,20 @@ function isStaleRecord( file, staleMs ) {
 
 /*
 ================
+isDeletePendingClaimError
+
+On Windows a directory another process is removing stays in delete-pending
+until its last handle closes, and a mkdir of that name then fails with EPERM
+or EACCES. The holder is leaving, so the claim retries; a real permission
+fault outlasts the spin and is thrown.
+================
+*/
+export function isDeletePendingClaimError( error, platform = process.platform ) {
+	return platform === "win32" && (error?.code === "EPERM" || error?.code === "EACCES");
+}
+
+/*
+================
 acquireStateMutex
 
 mkdir is the claim; the owner record only publishes who holds it, for
@@ -541,6 +560,14 @@ async function acquireStateMutex( lockDir, deadline ) {
 		try {
 			await mkdir( mutexDir );
 		} catch ( error ) {
+			// ENOENT is the delete-pending race one step later: a release
+			// that emptied the state removed the lock dir after our
+			// ensure, before this claim. The retry's ensure re-creates
+			// it; past the spin, both still throw.
+			if ( (isDeletePendingClaimError( error ) || error?.code === "ENOENT") && Date.now() < spinUntil ) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
 			if ( error?.code !== "EEXIST" ) {
 				throw error;
 			}
@@ -582,7 +609,12 @@ async function acquireStateMutex( lockDir, deadline ) {
 			async release() {
 				const current = await readStateFile( mutexOwnerPath );
 				if ( current?.record?.token === token ) {
-					await rm( mutexDir, { recursive: true, force: true } );
+					await rm( mutexDir, {
+						recursive: true,
+						force: true,
+						maxRetries: REMOVE_RETRIES,
+						retryDelay: MUTEX_SPIN_SLEEP_MS
+					} );
 				}
 			}
 		};

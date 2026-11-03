@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
@@ -162,6 +163,17 @@ func newGameWorldApplication(
 			log.WithField("path", spikePath).Info("tick spike journal: appending burst records")
 		}
 	}
+	// Diagnostics only, and off unless SRO_TICK_TRACE arms it: the
+	// slow-tick Perfetto traces (transport tick_trace.go, #2301)
+	// rotate beside the journal. A failure here never stops the boot.
+	if transport.TickTraceEnabled() {
+		traceDir := store.DirForShardFromEnv(ownedShard.ID)
+		if err := ts.Hub.EnableTickTrace(traceDir); err != nil {
+			log.WithError(err).WithField("dir", traceDir).Warn("tick trace: running without it")
+		} else {
+			log.WithField("dir", traceDir).Info("tick trace: armed, one Perfetto file per slow tick")
+		}
+	}
 	dataPaths, err := gamedata.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("game data: %w", err)
@@ -261,6 +273,13 @@ func newGameWorldApplication(
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
 	authority.agentAPI.InstallSettings(settingsapi.Path, settingsHandler)
+	// Port-only: the staff console's search of the moderation chat log.
+	chatLogHandler, err := chatlog.OperatorHandler(store.DirForShardFromEnv(ownedShard.ID),
+		filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"))
+	if err != nil {
+		return nil, fmt.Errorf("chat log: %w", err)
+	}
+	authority.agentAPI.InstallChatLog(chatlog.OperatorPath, chatLogHandler)
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}

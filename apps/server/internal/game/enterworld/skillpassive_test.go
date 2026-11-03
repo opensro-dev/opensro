@@ -12,7 +12,7 @@ package enterworld
 import (
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -61,8 +61,8 @@ TestAuthoredPassiveCriticalFamily
 ================
 */
 func TestAuthoredPassiveCriticalFamily(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	if err := source.Load(); err != nil {
 		t.Fatal(err)

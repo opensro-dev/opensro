@@ -49,7 +49,7 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	// block in the same order as the send (guild/baseline.go).
 	game.deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return game.deps.Guilds })
 	hub.OnSessionClose(func(session *transport.Session, cause error) {
-		game.sessionClosed(session, cause)
+		game.sessionClosed(session, cause, authorityStore)
 		guild.ForgetSession(session)
 	})
 }
@@ -150,7 +150,7 @@ cause is the transport's close cause: a server shutdown is no player's
 disconnect, so the port-only trader cargo rule skips it.
 ================
 */
-func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error) {
+func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error, authorityStore *store.Store) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
 	if game.friends != nil {
 		game.friends.SessionClosed(session)
@@ -170,5 +170,6 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error
 		game.items.DropInstanceInvite(divisionID, character.Name)
 		game.items.DropDisconnectedCargo(divisionID, character.Name, session.ID, cause)
 		game.items.ForgetCharacterSession(divisionID, character.Name, session.ID)
+		authorityStore.ReleaseCommittedCopy(divisionID, character.ID)
 	}
 }

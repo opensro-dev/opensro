@@ -1,0 +1,58 @@
+# native-claims.yml - a pull request citing the client fills its claims table (#2219)
+#
+# Its own workflow because editing the body must re-run this check and nothing
+# else. The body reaches the script through the environment, never the shell.
+#
+# The script always comes from the BASE, never from the tree under test. A
+# branch older than the gate has no script to run (run 41547159997 died with
+# MODULE_NOT_FOUND on #2408's pre-gate fork tree), and a pull request must not
+# judge itself with its own copy in any case. So the base is checked out on
+# the side (scripts/checks only) and its script is copied over the head tree's
+# before running; the diff and the files it reads stay the pull request's.
+# The base checkout is full-depth so the script's `base...HEAD` diff can
+# resolve the base inside the head repository, where a stale branch's own
+# history does not reach it.
+name: native-claims
+
+on:
+  pull_request:
+    types: [ opened, edited, reopened, synchronize ]
+
+concurrency:
+  group: native-claims-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  native-claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the pull request head (the sources under test)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check out the base gate script (the script under trust)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          sparse-checkout: scripts/checks
+          path: base-gate
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: New client citations have a claims row
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          cp base-gate/scripts/checks/check_native_claims.mjs scripts/checks/check_native_claims.mjs
+          git fetch --no-tags ./base-gate "$PR_BASE_SHA"
+          node scripts/checks/check_native_claims.mjs

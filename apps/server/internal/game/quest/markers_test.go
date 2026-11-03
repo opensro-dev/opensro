@@ -5,15 +5,15 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 	"slices"
 	"testing"
 )
 
 func TestMarkerStatesFollowAuthoritativeQuestLifecycle(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	defs, items := loadShippedDefinitions(t)
 	rt, err := NewRuntime(&enterworld.Deps{Items: items}, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
 	if err != nil {
@@ -88,7 +88,7 @@ so the world map and minimap can place it; a stage advance moves it.
 ================
 */
 func TestJournalTargetsFollowTheQuestNpc(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	defs, items := loadShippedDefinitions(t)
 	refs := map[string]uint32{"NPC_EU_ADVICE": 7526, "NPC_EU_ARMOR": 7527}
 	if err := defs.ResolveJournalNpcs(func(code string) (uint32, bool) {
@@ -160,7 +160,7 @@ func TestMarkerPublicationReplacementRemovalAndReconnect(t *testing.T) {
 }
 
 func TestUnfinishedQuestConversationIsInformational(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {
@@ -195,7 +195,7 @@ func TestUnfinishedQuestConversationIsInformational(t *testing.T) {
 }
 
 func TestMarkerGoingStateHonorsEquippedStagePrerequisite(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, err := NewRuntime(&enterworld.Deps{}, loadTestDefinitions(t), func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +298,7 @@ penalty) still sees the report marker and the turn-in it advertises.
 ================
 */
 func TestTurnInSurvivesALevelLoss(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	defs, err := LoadDefinitions(NewCatalog(dir), enterworld.NewTextdataItems(dir))
 	if err != nil {

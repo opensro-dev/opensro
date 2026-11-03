@@ -224,9 +224,14 @@ func (c *Catalog) assimilate(item *inventory.Item, stone inventory.Item, changed
 	return nil
 }
 
-// Stone applies one attribute or magic stone. Invalid recipes are refused
-// before consuming anything. Assimilation runs only after a successful
-// application, and all its changes belong to the same detached plan.
+// Stone applies one attribute or magic stone. Structural problems (bad
+// slots, wrong items) and an attribute stone's target check are refused
+// before the roll and consume nothing. A magic stone's recipe gates run
+// after the roll, as native does: a failed roll consumes the stone and
+// answers as a plain failure, while a passed roll reaches the gates and
+// keeps the stone when one of them refuses. Assimilation runs only after
+// a successful application, and all its changes belong to the same
+// detached plan.
 /*
 ================
 Stone
@@ -286,17 +291,16 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	item := &out[target]
 	stone := out[material]
 	r := c.Items[stone.Codename]
-	if c.Items[item.Codename].Degree() != int(r.Params[0]) {
+	degreeMismatch := c.Items[item.Codename].Degree() != int(r.Params[0])
+	if !magic && degreeMismatch {
 		// v1.188 answers each stone with its own code: 0x5421 for an
-		// attribute stone (its target check) and 0x540F for a magic stone
-		// (its magic-param application); the client names each in
-		// category 0x12 (client CPSMission_OnAlchemyStoneResponse0xB651).
-		if magic {
-			return zero, Refusal(stoneErrMagicDegree)
-		}
+		// attribute stone (its target check, before the roll) and 0x540F
+		// for a magic stone (its magic-param application, after the
+		// roll); the client names each in category 0x12 (client
+		// CPSMission_OnAlchemyStoneResponse0xB651).
 		return zero, Refusal(stoneErrAttributeDegree)
 	}
-	if len(item.MagicOptions) > c.magicLimit(*item) {
+	if !magic && len(item.MagicOptions) > c.magicLimit(*item) {
 		return zero, Refusal(0x22)
 	}
 	for _, v := range item.MagicOptions {
@@ -308,36 +312,18 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	var option Magic
 	oldIndex := -1
 	var oldValue uint32
+	optionKnown := false
+	var immortalValue uint32
 	if magic {
+		// The gates these values feed run after the roll (below); this
+		// only reads the detached clone.
 		var ok bool
 		option, ok = c.Option(r.Descriptions[0], int(r.Params[0]))
-		if !ok {
-			return zero, Refusal(0x21)
-		}
-		if !option.Allows(item.TypeFlags) {
-			return zero, Refusal(9)
-		}
-		oldIndex, oldValue = c.findMagic(*item, option.Tag)
-		if oldIndex < 0 && len(item.MagicOptions) >= c.magicLimit(*item) {
-			return zero, Refusal(0x22)
-		}
-		if option.Tag == 0x726570 && oldIndex < 0 {
-			return zero, Refusal(0x25)
-		}
-		if option.Tag == MagicTagAstral {
-			_, immortal := c.findMagic(*item, 0x61746861)
-			if immortal <= oldValue {
-				return zero, Refusal(0x24)
-			}
-		}
-		switch option.Tag {
-		case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x617065:
-			if oldValue >= 6 {
-				return zero, Refusal(0x22)
-			}
-		case 0x726570:
-			if oldValue >= 7 {
-				return zero, Refusal(0x22)
+		optionKnown = ok
+		if ok {
+			oldIndex, oldValue = c.findMagic(*item, option.Tag)
+			if option.Tag == MagicTagAstral {
+				_, immortalValue = c.findMagic(*item, 0x61746861)
 			}
 		}
 	} else {
@@ -374,6 +360,45 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	if result.Success {
 		oldCount := len(item.MagicOptions)
 		if magic {
+			// Native magic-stone order: every
+			// recipe gate runs only on a passed roll, in this order,
+			// and a refusal consumes nothing - a failed roll has
+			// already been answered as a plain failure and consumes
+			// the stone below. A new option on a full item answers 2
+			// and adds nothing; the port also skips the assimilation
+			// native runs on that path, whose change native never
+			// saves (a native bug, not copied).
+			if len(item.MagicOptions) > c.magicLimit(*item) {
+				return zero, Refusal(2)
+			}
+			if !optionKnown {
+				return zero, Refusal(2)
+			}
+			if degreeMismatch {
+				return zero, Refusal(stoneErrMagicDegree)
+			}
+			if !option.Allows(item.TypeFlags) {
+				return zero, Refusal(9)
+			}
+			if option.Tag == 0x726570 && oldIndex < 0 {
+				return zero, Refusal(0x25)
+			}
+			if option.Tag == MagicTagAstral && immortalValue <= oldValue {
+				return zero, Refusal(0x24)
+			}
+			switch option.Tag {
+			case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x617065:
+				if oldValue >= 6 {
+					return zero, Refusal(0x22)
+				}
+			case 0x726570:
+				if oldValue >= 7 {
+					return zero, Refusal(0x22)
+				}
+			}
+			if oldIndex < 0 && len(item.MagicOptions) >= c.magicLimit(*item) {
+				return zero, Refusal(2)
+			}
 			value := oldValue + 1
 			switch option.Tag {
 			case 0x61746861, 0x6c75636b, 0x736f6c69, 0x61737472, 0x617065, 0x726570:

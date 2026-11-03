@@ -101,3 +101,44 @@ func TestStackCountSurvivesAddAndRemove(t *testing.T) {
 		t.Fatalf("removed DroppedAt = %v, want the stamp it was added with", removed.DroppedAt)
 	}
 }
+
+/*
+================
+TestRegistryHasExpired
+
+The read-only peek agrees with the sweep it gates: an entry at exactly
+its lifetime counts, one second short does not, and a drop without a
+timestamp never does. The peek must also leave every record in place.
+================
+*/
+func TestRegistryHasExpired(t *testing.T) {
+	registry := NewRegistry()
+	now := time.Unix(10_000, 0)
+
+	if registry.HasExpired("1", now, FixtureLifetime) {
+		t.Fatal("an empty division reported an expired entry")
+	}
+	registry.Add("1", Item{RefObjID: 4})
+	if registry.HasExpired("1", now, FixtureLifetime) {
+		t.Fatal("an entry without a timestamp reported expired")
+	}
+	fresh := registry.Add("1", Item{RefObjID: 3, DroppedAt: now.Add(-FixtureLifetime + time.Second)})
+	if registry.HasExpired("1", now, FixtureLifetime) {
+		t.Fatal("an entry one second short of its lifetime reported expired")
+	}
+	registry.Add("1", Item{RefObjID: 1, DroppedAt: now.Add(-FixtureLifetime)})
+	if !registry.HasExpired("1", now, FixtureLifetime) {
+		t.Fatal("an entry exactly at its lifetime did not report expired")
+	}
+	// The peek is read-only: the fresh entry is still swept by the real pass.
+	expired := registry.ExpireItems("1", now, FixtureLifetime)
+	if len(expired) != 1 || expired[0].RefObjID != 1 {
+		t.Fatalf("sweep after the peek expired %v, want only the elapsed entry", expired)
+	}
+	if _, ok := registry.Get("1", fresh.Gid); !ok {
+		t.Fatal("the peek disturbed a fresh entry")
+	}
+	if registry.HasExpired("1", now, FixtureLifetime) {
+		t.Fatal("the peek still reports expired after the sweep took the entry")
+	}
+}

@@ -34,8 +34,8 @@ import (
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const ivy3TestDivision = "ivy3-test"
@@ -61,7 +61,7 @@ type ivy3World struct {
 
 func newIvy3World(t *testing.T) *ivy3World {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)

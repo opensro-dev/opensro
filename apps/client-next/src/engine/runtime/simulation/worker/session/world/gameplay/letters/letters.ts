@@ -110,12 +110,16 @@ export function createLetters( send: ( frame: WireFrame ) => void ) {
 		send
 
 		Sends a letter, or answers the write window's own refusal (60D270):
-		an empty receiver first, then an empty body.
+		an empty receiver first, then an empty body, then a job alias
+		(704730).
 		================
 		*/
 		send( receiver: string, body: string ): readonly SystemNotice[] {
 			if ( !receiver.trim() ) return [ windowNotice( "UIIT_MSG_LETTERERR_IDWRITE" ) ];
 			if ( !body ) return [ windowNotice( "UIIT_MSG_LETTERERR_MESSAGEWRITE" ) ];
+			// 704730: a job alias (its leading '*') is refused, unsent,
+			// with a guide line (67A600), not the window's banner.
+			if ( receiver.startsWith( "*" ) ) return [ { key: "UIIT_MSG_MEMO_NOTUSE_JOB", value: 0 } ];
 			const frame = letterSend( receiver, body );
 			if ( frame ) send( frame );
 			return [];

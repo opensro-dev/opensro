@@ -13,6 +13,7 @@ class, never on the band directly, as the original does.
 */
 import type { CosRecord } from "@/engine/contracts/gameplay";
 import type { UiRect } from "@/engine/contracts/ui";
+import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
 
 export const COS_CLASS_RIDING = 0;
 export const COS_CLASS_TRANSPORT = 1;
@@ -122,6 +123,41 @@ export function cosHasInventory( record: Pick<CosRecord, "band" | "inventory"> |
 	if ( !record?.inventory ) return false;
 	const cls = cosClass( record.band );
 	return cls === COS_CLASS_TRANSPORT || cls === COS_CLASS_PICKUP;
+}
+
+/*
+================
+cosSpecialtyMoveRefused
+
+The trade-goods refusal at the COS move sites: 550300 tests the item for
+the specialty class (Etc tid 3/8) and 830410 compares the active record's
+class (+0x14) against 1, so a trade good may enter only a transport COS's
+bag. 567290 and 570120 test both facts outright; 59B1D0 and 6A8740 print
+the same line through the COS interaction state. A refused move prints
+UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY and sends nothing.
+================
+*/
+export function cosSpecialtyMoveRefused( typeFlags: number, band: number ): boolean {
+	return isTradeGoods( typeFlags ) && cosClass( band ) !== COS_CLASS_TRANSPORT;
+}
+
+/*
+================
+cosShopTradeRefused
+
+The merchant refusal for a COS bag at a shop: CIFMerchant_ValidateSlotAction
+(5B2630) and CIFMerchant_OnSlotTransfer (5B6CA0) route a COS-inventory slot
+(message 0x7A) to UIIT_MSG_COSPETERR_CANT_TRADE_SHOP whenever the special
+trade function (interaction lock 0x800) is closed, and 5B6CA0 repeats the
+same line under that lock when the active record's class (+0x14) is not 1.
+Only a transport COS may trade at a shop; every other class is refused
+before anything is sent. In this port a COS shop command is only composed
+for the shop's own COS (the special-trade container the server published),
+so the class arm is the reachable one here.
+================
+*/
+export function cosShopTradeRefused( band: number ): boolean {
+	return cosClass( band ) !== COS_CLASS_TRANSPORT;
 }
 
 /*
@@ -579,4 +615,65 @@ the range's maximum is zero.
 */
 export function cosAttackText( range: readonly [number, number] ): string {
 	return range[1] === 0 ? "0" : `${range[0]} ~ ${range[1]}`;
+}
+
+/*
+================
+cosSatietyDroppedLow
+
+The one satiety fall that prints UIIT_MSG_COSPETERR_HGP_30LOW: the COS
+manager's per-update drain (8304F0) stores the drained word (+0x10) and,
+when the old value was still at or above 3000 while the new one is below
+(830585/83058F against 830591/830595), calls the presentation refresh
+(830330) with its flag set. The packet paths (77A194, 77A9F8) only ever
+pass the flag clear - they refresh the gauge on the rise back above
+3000 - so in this client, whose satiety arrives by packet, the fall is
+watched where the value lands. 82D300's at-or-below test (<= 3000)
+drives the halved stats, never the line.
+================
+*/
+export function cosSatietyDroppedLow( previous: number | undefined, next: number ): boolean {
+	return previous !== undefined && previous >= SATIETY_LOW && next < SATIETY_LOW;
+}
+
+/*
+================
+cosCapeWarnsGrowthPet
+
+594980's pet condition for the free-battle warning: the COS manager
+holds an attack-class entry (82EF30 sought with class 3) and no
+guild-class one (class 4). 82EF30 walks the manager's list comparing
+the entry's class byte (record +0x14) and tests nothing else, so a
+dead pet of either class counts as out until it leaves the manager.
+
+Of 594980's remaining conditions, the empty target socket and the
+0x40 gender leg are judged at the equip command, where the socket
+rows and the item's ReqGender live.
+================
+*/
+export function cosCapeWarnsGrowthPet( records: readonly Pick<CosRecord, "band">[] ): boolean {
+	let attack = false, guild = false;
+	for ( const record of records ) {
+		const cls = cosClass( record.band );
+		if ( cls === COS_CLASS_ATTACK ) attack = true;
+		if ( cls === COS_CLASS_GUILD ) guild = true;
+	}
+	return attack && !guild;
+}
+
+/*
+================
+cosCapeGenderPasses
+
+The 0x40 leg of 789C60 as 594980 calls it (789E18): the item's
+ReqGender (type data +0x1AC) passes when it equals the wearer's sex
+selector (the local player model's +0x1AC), and item value 2 is cut
+for both sexes and always passes. A lane that cannot supply a value
+(the published reference carries no ReqGender for the item, or the
+wearer's model is unknown) does not suppress the warning: the
+original always holds both, the port's references are best-effort.
+================
+*/
+export function cosCapeGenderPasses( reqGender: number | undefined, sex: number | undefined ): boolean {
+	return reqGender === undefined || reqGender === 2 || sex === undefined || reqGender === sex;
 }

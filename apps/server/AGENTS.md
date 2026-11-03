@@ -40,11 +40,11 @@ this way (see `internal/game/world/movement/runtime.go`); match it.
 - The verified game-data projection lives in the module, at
   `.generated/game-data/1.150/server` (git-ignored). Tests reach it only
   through `internal/testsupport/gamedatatest` (which gates on
-  `licensed.RequireGameData`), never through a relative path, and never at
+  `clientdata.RequireGameData`), never through a relative path, and never at
   package initialization: reads before the test log starts are invisible to
   Go's test cache, which the gate keeps on.
 - Tests that read the published client tree get it from
-  `licensed.ClientPublicRoot`, which resolves the main checkout's tree (or
+  `clientdata.ClientPublicRoot`, which resolves the main checkout's tree (or
   `SRO_GENERATED_ROOT`) the way `scripts/lib/generatedRoot.mjs` does. Never join a relative
   `.generated/client-public`.
 - Test fixtures in `internal/game/action` use the level-1 leveldata row;

@@ -17,7 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -73,7 +73,7 @@ inventory and the active journal record available for a later retry.
 ================
 */
 func TestResuscitationBatchCapsPotionsAndPreservesUnspentHearts(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, held := range []int64{0, 28, 30, 31} {
 		rt := testRuntime(t)
 		c := questCharacter()
@@ -124,7 +124,7 @@ Acceptance and turn-in use the same merchant set as the withdrawal service.
 ================
 */
 func TestResuscitationCollectionUsesEveryHerbalist(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, npc := range []string{"NPC_CH_POTION", "NPC_WC_POTION", "NPC_KT_POTION", "NPC_EU_POTION", "NPC_CA_POTION"} {
 		rt := testRuntime(t)
 		c := questCharacter()

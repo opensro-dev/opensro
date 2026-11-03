@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -103,8 +103,8 @@ pass merely because the isolated program decoder works.
 ================
 */
 func TestShippedQuestTrapPrograms(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	for _, expected := range []struct {
 		id, target, duration uint32

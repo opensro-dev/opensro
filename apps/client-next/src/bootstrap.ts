@@ -57,7 +57,7 @@ function startGame() {
 ================
 startViewer
 
-viewer.html (docs/VIEWER.md) marks its root data-page="viewer": the same
+viewer.html (docs/guides/VIEWER.md) marks its root data-page="viewer": the same
 entry starts the 3D viewer instead of the game. Port-only, not native.
 ================
 */

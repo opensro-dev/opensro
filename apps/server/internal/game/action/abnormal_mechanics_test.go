@@ -254,8 +254,8 @@ func TestImmobilizingStatusSettlesPlayerMovement(t *testing.T) {
 TestPotionRecoveryHonorsAbnormalReductions
 
 All three recovery families pass through the reference server's reduced-recovery
-step. Zombie reverses the full authored HP amount before that recovery path;
-MP still receives its reduction.
+step. Zombie reverses the full authored HP amount before that recovery path and
+stops at one HP; MP still receives its reduction.
 ================
 */
 func TestPotionRecoveryHonorsAbnormalReductions(t *testing.T) {
@@ -308,7 +308,7 @@ func TestPotionRecoveryHonorsAbnormalReductions(t *testing.T) {
 			if amount.hp > 0 {
 				wantHP = min(maxHP, hp+amount.hp/2)
 				if zombie {
-					wantHP = max(0, hp-amount.hp)
+					wantHP = max(1, hp-amount.hp)
 				}
 			}
 			if amount.mp > 0 {

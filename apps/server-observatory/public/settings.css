@@ -92,7 +92,11 @@ its name, for a phone.
 }
 
 .rules-search {
-	flex: 1 1 220px;
+	flex: 0 1 320px;
+}
+
+.rules-search input {
+	width: 100%;
 }
 
 .rules-search input,
@@ -159,11 +163,13 @@ its name, for a phone.
 	list-style: none;
 }
 
+/* The value sits beside its name, not across the page: the name column
+   stops at a reading width and the value column follows it. */
 .rules-row {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
-	gap: 10px 18px;
-	padding: 12px 4px;
+	grid-template-columns: minmax(0, 60ch) minmax(180px, 1fr);
+	gap: 10px 28px;
+	padding: 12px 4px 12px 12px;
 	border-top: 1px solid var(--line);
 }
 
@@ -173,7 +179,6 @@ its name, for a phone.
 
 .rules-row.changed {
 	box-shadow: inset 3px 0 0 var(--amber);
-	padding-left: 12px;
 }
 
 .rules-name {
@@ -182,7 +187,7 @@ its name, for a phone.
 	min-width: 0;
 }
 
-.rules-title strong {
+.rules-title {
 	color: var(--heading);
 	font: 700 16px var(--serif);
 }
@@ -319,6 +324,139 @@ its name, for a phone.
 
 .rules-fixed-list strong {
 	color: var(--text);
+}
+
+/* ----- Heading actions, legend, waiting changes ----- */
+
+/* The theme's action box is dark lacquer, so its words are cream. */
+main > .page-heading .rules-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 8px 12px;
+	padding: 8px 12px;
+}
+
+.rules-actions .rules-server {
+	color: var(--cream);
+}
+
+.rules-read {
+	align-self: center;
+	color: var(--cream);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+button.rules-tile {
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	cursor: pointer;
+}
+
+button.rules-tile:disabled {
+	cursor: default;
+	opacity: 0.6;
+}
+
+button.rules-tile:not(:disabled):hover {
+	background: var(--surface-raised);
+}
+
+button.rules-tile[aria-pressed="true"] {
+	background: var(--surface-raised);
+	border-color: var(--lacquer);
+	box-shadow: inset 0 0 0 1px var(--lacquer);
+}
+
+button.rules-tile[aria-pressed="true"] span::after {
+	content: " · showing only these";
+	color: var(--lacquer);
+}
+
+/* Panel bodies line up with their heading, not the panel's edge. */
+.rules-group-panel > .rules-help,
+.rules-group-panel > .rules-flags,
+.rules-group-panel > .rules-unset,
+.rules-group-panel > .rules-fixed-list {
+	margin-left: 16px;
+	margin-right: 16px;
+}
+
+.rules-group-panel > .rules-help {
+	margin-bottom: 8px;
+}
+
+.rules-group-panel > .rules-unset,
+.rules-group-panel > .rules-fixed-list {
+	margin-bottom: 14px;
+}
+
+.rules-tile.sky {
+	border-left-color: var(--sky);
+}
+
+.rules-checks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+}
+
+.rules-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 0 0 12px;
+	padding: 0;
+	list-style: none;
+	color: var(--cream);
+	font-size: 12px;
+}
+
+.rules-legend li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.rules-row.waiting {
+	box-shadow: inset 3px 0 0 var(--sky);
+}
+
+.rules-pending {
+	grid-column: 1 / -1;
+	padding: 8px 12px;
+	border: 1px solid var(--sky);
+	border-radius: 6px;
+	background: #dbe6f2;
+	color: var(--text);
+	font-size: 13px;
+}
+
+.rules-pending q {
+	display: block;
+	margin-top: 4px;
+	font-style: italic;
+}
+
+.rules-chip.queued {
+	color: var(--sky);
+	background: #dbe6f2;
+}
+
+.rules-unset {
+	margin-top: 10px;
+}
+
+.rules-unset summary {
+	color: var(--muted);
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.rules-unset[open] summary {
+	margin-bottom: 6px;
 }
 
 /* ----- Narrow screens ----- */

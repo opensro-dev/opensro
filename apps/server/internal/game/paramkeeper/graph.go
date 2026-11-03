@@ -334,6 +334,38 @@ func (g *Graph) Apply(id uint16, channel Channel, source uint32, value float32) 
 
 /*
 ================
+Graph.ApplyInPlace
+
+Apply for a graph the caller owns outright and discards on error (a
+fresh Clone being built up): the same source validation, the same
+refusals, the same errors, but applied onto the receiver instead of
+onto a swapped-in copy of its state - ApplyBatchInPlace's contract
+for one write. On error the receiver is left partially applied and
+must be dropped, which the owning caller already does. The full
+projection's abnormal writes land one per modifier (#2030); a whole
+state copy per write was their measured cloneState cost.
+================
+*/
+func (g *Graph) ApplyInPlace(id uint16, channel Channel, source uint32, value float32) (bool, error) {
+	if err := g.checkExternalSource(id, source); err != nil {
+		return false, err
+	}
+	idx := g.nodeIndex(id)
+	if channel >= channelCount || !finite(value) {
+		return false, fmt.Errorf("paramkeeper: invalid channel %d or non-finite modifier", channel)
+	}
+	if value == g.topology.definitions[idx].Ignore {
+		return false, nil
+	}
+	changed, err := g.apply(idx, channel, source, value)
+	if err == nil && changed {
+		g.dirty = true
+	}
+	return changed && err == nil, err
+}
+
+/*
+================
 Graph.Remove
 ================
 */

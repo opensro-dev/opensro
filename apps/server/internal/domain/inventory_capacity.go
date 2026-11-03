@@ -7,18 +7,16 @@ The capacity byte counts the 13 equipment sockets and the bag together, as
 the 0x32B3 entry block ships it. A character is created with 45 (a 32-slot
 bag) and the six QSP_*_EXINVENTORY quests add to it.
 
-Native v1.188 pays the slots from the quest reward row (byte +0x3db) through
-the player's quest inventory expansion, which refuses silently past 112, and
-then announces the new size with 0x3092. The v1.150 client has no such
-message: CICPlayer+0x1848, the bag size, is written by the entry parser
-(CICPlayer_DeserializeEnteredInventoryAndInitializeHud), the sole direct
-caller of the inventory rebuild (CIFInventory_RebuildCapacityAndGold),
-which holds at most two 32-slot tabs. The port therefore stops at 77. Inference
-for the v1.150 wire contract: a paid expansion waits for the next world
-entry (login, teleport or resurrection), where the client learns it.
-Port-only, not native: SRO_INSTANT_INVENTORY_EXPANSION presents the slots at
-the turn-in and sends the v1.188 0x3092 announce, which the port client
-applies (quest/instant_expansion.go).
+Native pays the slots from the quest reward row through the player's quest
+inventory expansion: it refuses silently past the server's limit, and on
+completion the running character's storage grows at once and the server
+announces the new size with 0x3092 (research/investigations/items/
+native-audit-rows-20261031.md, row 26). The v1.150 client defines the
+shipped maximum: its inventory holds at most two 32-slot tabs behind the 13
+sockets, so the port stops at 77 where the server's own limit is higher.
+Slots granted before this rule was ported may still wait in
+InventoryExpansion on a saved record; a world entry presents those
+(PresentInventoryExpansion). New grants never wait.
 
 ===========================================================================
 */
@@ -74,20 +72,24 @@ func (character *Character) InventoryCapacityValid() bool {
 ================
 GrantInventoryExpansion
 
-A quest's slot reward. It waits in InventoryExpansion until the next world
-entry presents it. Past MaxInventorySize the grant is refused and the quest
-still completes, as the native expansion's refusal is ignored by its caller.
+A quest's slot reward, applied to the capacity in force at the turn-in:
+native grows the running character's storage when the expansion completes.
+Past MaxInventorySize the grant is refused and the quest still completes,
+as the native expansion's refusal is ignored by its caller. Slots still
+waiting from before this rule was ported count against the limit and keep
+waiting for their world entry.
 ================
 */
 func (character *Character) GrantInventoryExpansion(slots uint8) bool {
 	if character == nil || slots == 0 {
 		return false
 	}
-	total := int(character.InventoryCapacity()) + int(character.InventoryExpansion) + int(slots)
+	size := character.InventoryCapacity()
+	total := int(size) + int(character.InventoryExpansion) + int(slots)
 	if total > int(MaxInventorySize) {
 		return false
 	}
-	character.InventoryExpansion += slots
+	character.InventorySize = size + slots
 	return true
 }
 
@@ -95,7 +97,8 @@ func (character *Character) GrantInventoryExpansion(slots uint8) bool {
 ================
 PresentInventoryExpansion
 
-Moves the waiting slots into the capacity in force. A path that builds a
+Moves the waiting slots into the capacity in force. Only records saved
+before grants applied live can hold waiting slots. A path that builds a
 world entry calls it on the detached record it encodes; once the entry is
 built, the live record adopts the encoded capacity (AdoptInventorySize).
 ================

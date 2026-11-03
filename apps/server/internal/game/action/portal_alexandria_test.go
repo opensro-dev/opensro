@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/testsupport/alexandriatest"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -43,9 +43,9 @@ TestAlexandriaPortalCatalogFollowsTheFlag
 ================
 */
 func TestAlexandriaPortalCatalogFollowsTheFlag(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(alexandria.EnvAlexandria, "")
-	native := mustPortalCatalog(t, licensed.RetailTextdataDir(t))
+	native := mustPortalCatalog(t, clientdata.RetailTextdataDir(t))
 	// The placement row does not matter here; any native npcpos ref will do.
 	variant := alexandriatest.Variant(t, firstNpcPosRef(t))
 
@@ -86,7 +86,7 @@ catalogue, as they did before any evaluator existed.
 ================
 */
 func TestAlexandriaPortalCatalogKind7(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	variant := alexandriatest.Variant(t, firstNpcPosRef(t))
 	t.Setenv(alexandria.EnvAlexandria, "on")
 	gate := uint32(alexandriatest.TeleportID)
@@ -131,7 +131,7 @@ firstNpcPosRef
 */
 func firstNpcPosRef(t *testing.T) string {
 	t.Helper()
-	for _, row := range enterworld.ReadTextdataFile(filepath.Join(licensed.RetailTextdataDir(t), "npcpos.txt")) {
+	for _, row := range enterworld.ReadTextdataFile(filepath.Join(clientdata.RetailTextdataDir(t), "npcpos.txt")) {
 		if len(row) >= 5 {
 			return row[0]
 		}

@@ -3,7 +3,7 @@
 
 viewer-still.test.mjs - the 3D viewer draws one shipped monster as a still
 
-Port-only, not native (docs/VIEWER.md). viewer.html draws Tiger Girl
+Port-only, not native (docs/guides/VIEWER.md). viewer.html draws Tiger Girl
 (refObjId 1954) through the game's renderer into a transparent PNG of the
 requested size: its corners are clear and its middle holds the model. An
 id no catalogue knows fails with the fixed reason and the stage it

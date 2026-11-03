@@ -4,7 +4,7 @@ The asset pipeline, repository checks and the task runner. Run everything from
 the repository root through the task CLI: `pnpm task list` shows every task,
 `pnpm task explain <task>` its command and prerequisites. Task definitions live
 in [tasks/](tasks/README.md). The pipeline itself is described in
-[docs/ASSET_PIPELINE.md](../docs/ASSET_PIPELINE.md).
+[docs/architecture/ASSET_PIPELINE.md](../docs/architecture/ASSET_PIPELINE.md).
 
 ## Entry points
 

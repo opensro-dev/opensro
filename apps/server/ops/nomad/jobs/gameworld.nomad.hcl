@@ -223,6 +223,13 @@ variable "cap110_qinshi" {
   default = "off"
 }
 
+# Port-only, not native: the temple band instances (#1800 step 3). It
+# needs cap110_monsters on as well; GameWorld refuses to start otherwise.
+variable "cap110_temple" {
+  type    = string
+  default = "off"
+}
+
 # Port-only, not native: the name-change scroll (#1689) - the Item Mall
 # lists it for 500 silk and a use queues a rename for the next login.
 # "off" is native: names never change.
@@ -236,6 +243,25 @@ variable "name_change_scroll" {
 variable "pharaoh_tomb_gear_rate" {
   type    = string
   default = "1"
+}
+
+# Port-only, not native: the Halloween Day event. "off" is native. "on" needs
+# halloween_event_window, START/END in UTC; without a valid window it stays off.
+variable "halloween_event" {
+  type    = string
+  default = "off"
+}
+
+variable "halloween_event_window" {
+  type    = string
+  default = ""
+}
+
+# Port-only, not native: seals the event's helmets at every transfer door.
+# Stays on after the event ends, so they stay with whoever earned them.
+variable "halloween_helmet_seal" {
+  type    = string
+  default = "off"
 }
 
 # beta_silk is the silk one in-world hour earns into the account's real Item
@@ -261,6 +287,18 @@ variable "beta_silk_active_only" {
 variable "maintenance_gate_path" {
   type    = string
   default = ""
+}
+
+# maintenance_message names the maintenance gate's world-entry refusal
+# (port-only, not native): "off" answers SHARD_OFFLINE, a code no client
+# maps, so players keep today's player-visible result (the generic
+# admission failure) even though the wire code differs from the
+# MAINTENANCE the gate answered before this switch existed; "on" answers
+# MAINTENANCE so the client can explain the refusal instead. The shard
+# setting SRO_MAINTENANCE_MESSAGE fills this and the Agent job's variable.
+variable "maintenance_message" {
+  type    = string
+  default = "off"
 }
 
 # pet_pacing moves grab and growth pets at four fifths of their run speed
@@ -672,6 +710,15 @@ variable "trade_job_hunter_percent_cap" {
   default = "60"
 }
 
+# raised_gold_caps raises the stall price cap to ten billion and the
+# warehouse gold deposit cap to one billion (port-only, not native).
+# Anything but "on" keeps the native caps (one billion and one hundred
+# million) and the native u32 stall-offer wire.
+variable "raised_gold_caps" {
+  type    = string
+  default = "off"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 # On, the destinations are the VSRO client's refoptionalteleport table when
@@ -943,14 +990,6 @@ variable "beta_drop_cap" {
 variable "beta_gold_rate" {
   type    = string
   default = "1"
-}
-
-# instant_inventory_expansion makes quest bag slots usable at the turn-in
-# (port-only, not native: v1.150 learns its bag size at world entry). The
-# owner approved it on for the beta; "off" restores the native wait.
-variable "instant_inventory_expansion" {
-  type    = string
-  default = "on"
 }
 
 variable "beta_rare_rate" {
@@ -1236,11 +1275,16 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CAP110_SKILLS                  = var.cap110_skills
         SRO_PHARAOH_TOMB                   = var.pharaoh_tomb
         SRO_CAP110_QINSHI                  = var.cap110_qinshi
+        SRO_CAP110_TEMPLE                  = var.cap110_temple
         SRO_NAME_CHANGE_SCROLL             = var.name_change_scroll
         SRO_PHARAOH_TOMB_GEAR_RATE         = var.pharaoh_tomb_gear_rate
+        SRO_HALLOWEEN_EVENT                = var.halloween_event
+        SRO_HALLOWEEN_EVENT_WINDOW         = var.halloween_event_window
+        SRO_HALLOWEEN_HELMET_SEAL          = var.halloween_helmet_seal
         SRO_BETA_SILK                           = var.beta_silk
         SRO_BETA_SILK_ACTIVE_ONLY               = var.beta_silk_active_only
         SRO_MAINTENANCE_GATE_PATH               = var.maintenance_gate_path
+        SRO_MAINTENANCE_MESSAGE                 = var.maintenance_message
         SRO_PET_PACING                          = var.pet_pacing
         SRO_STORAGE_AUTO_STACK                  = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                     = var.fast_den_return
@@ -1296,6 +1340,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_JOB_TRADER_PERCENT_CAP        = var.trade_job_trader_percent_cap
         SRO_TRADE_JOB_HUNTER_PERCENT_PER_TRADER = var.trade_job_hunter_percent_per_trader
         SRO_TRADE_JOB_HUNTER_PERCENT_CAP        = var.trade_job_hunter_percent_cap
+        SRO_RAISED_GOLD_CAPS                    = var.raised_gold_caps
         SRO_REVERSE_RETURN_MAP                  = var.reverse_return_map
         SRO_GM_SETSPEED                         = var.gm_setspeed
         SRO_GM_TRAINING_DUMMY                   = var.gm_training_dummy
@@ -1311,7 +1356,6 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SKILL_EXP_RATE                 = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                      = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                      = var.beta_gold_rate
-        SRO_INSTANT_INVENTORY_EXPANSION         = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                      = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                     = var.beta_seal_rates
         SRO_SUN_EVENT_ONLY                      = var.sun_event_only

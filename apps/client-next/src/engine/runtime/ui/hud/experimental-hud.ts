@@ -117,12 +117,6 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Distance haze that thins with height."
 			},
 			{
-				key: "dynamicSun",
-				id: "experimental-dynamic-sun",
-				label: "Moving sunlight",
-				description: "Lighting follows the time of day."
-			},
-			{
 				key: "compressedTextures",
 				id: "experimental-compressed-textures",
 				label: "Compressed textures",
@@ -145,6 +139,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-sun-drop-marker",
 				label: "Seal of Sun drop marker",
 				description: "Mark your own degree-9+ Sun drops on the ground."
+			},
+			{
+				key: "warpArrivalSound",
+				id: "experimental-warp-arrival-sound",
+				label: "Portal arrival sound",
+				description: "Play the portal-out cue when you arrive."
 			}
 		]
 	},
@@ -157,6 +157,15 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-sun-shadow",
 				label: "Sun shadows",
 				description: "Scene shadows cast by the sunlight."
+			},
+			{
+				// Moved from World (#2105): the window fits seven rows a tab
+				// and the portal arrival sound joins World and map; the
+				// option, its key and its default are unchanged.
+				key: "dynamicSun",
+				id: "experimental-dynamic-sun",
+				label: "Moving sunlight",
+				description: "Lighting follows the time of day."
 			},
 			{
 				key: "perPixelLighting",
@@ -357,6 +366,11 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pickup",
 		section: "Pickup pet filter",
 		rows: [ {
+			key: "autoSelect",
+			id: "experimental-auto-select",
+			label: "Auto Select",
+			description: "Actions window: select the nearest monster."
+		}, {
 			key: "smartPetPickup",
 			id: "experimental-smart-pet-pickup",
 			label: "Keep pet gold pickup when full",

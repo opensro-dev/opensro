@@ -734,6 +734,14 @@ func (rt *Runtime) planMonsterKillLoot(
 			admitted = append(admitted, rt.scatterMonsterDrop(seal, at, monster.Rarity()))
 		}
 	}
+	// Port-only, not native: while the Halloween window runs, an
+	// ordinary kill can leave one jewelry box (halloween.go). Appended
+	// after admission and the drop cap like the ticket above; the
+	// helper itself is inert outside the window.
+	if box, ok := rt.halloweenBoxDrop(snapshot, monster, at, snapshot.Name, now); ok {
+		box.OwnerJID = ownerJID
+		admitted = append(admitted, rt.scatterMonsterDrop(box, at, monster.Rarity()))
+	}
 	return admitted
 }
 

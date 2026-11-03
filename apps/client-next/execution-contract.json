@@ -86,7 +86,8 @@
 				"receiveLifecycle",
 				"step",
 				"ready",
-				"error"
+				"error",
+				"failure"
 			]
 		},
 		{
@@ -292,6 +293,20 @@
 				"step",
 				"value",
 				"alpha"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/hud/quest-info.ts",
+			"functions": [
+				"closeWindow",
+				"entries",
+				"iconPath",
+				"iconVisible",
+				"observe",
+				"openWindow",
+				"reset",
+				"windowOpen"
 			]
 		},
 		{
@@ -971,7 +986,8 @@
 				"pickFrontendCharacter",
 				"setWorldCamera",
 				"setWorld",
-				"pickFrontendRace"
+				"pickFrontendRace",
+				"takeDegradations"
 			]
 		},
 		{
@@ -1552,7 +1568,8 @@
 				"hasModel",
 				"socket",
 				"dispose",
-				"invalidate"
+				"invalidate",
+				"takeDegradations"
 			],
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"consumer": "src/engine/runtime/renderer/characters/portrait.ts"
@@ -1794,6 +1811,13 @@
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/party-chat-command.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/cos-chat-command.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy"
@@ -4194,14 +4218,15 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "baf1388099c6f40b5bac7464d9cf4e367026759693100662dfda7434e717ccac",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it.",
+			"sourceSha256": "2ff181f7f7f5df805b9d70b2737b020211925d28b4952e02df5e39e1443750ea",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the readback ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [
 				"tests/browser/particle-query.test.mjs",
 				"tests/browser/deferred-particles.test.mjs",
-				"tests/runtime/deferred-particles.test.mjs"
+				"tests/runtime/deferred-particles.test.mjs",
+				"tests/runtime/runtime-failures.test.mjs"
 			]
 		},
 		{

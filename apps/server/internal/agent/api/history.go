@@ -37,3 +37,15 @@ under its own operator guard.
 func (api *API) InstallSettings(path string, handler http.Handler) {
 	api.settingsPath, api.settings = path, handler
 }
+
+/*
+================
+InstallChatLog
+
+The staff console's moderation chat search (game/social/chatlog), under
+its own operator guard.
+================
+*/
+func (api *API) InstallChatLog(path string, handler http.Handler) {
+	api.chatLogPath, api.chatLog = path, handler
+}

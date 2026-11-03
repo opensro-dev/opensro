@@ -90,10 +90,9 @@ import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-cont
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
-// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
-// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
-// its bag size at world entry. The server sends it only with
-// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+// Capacity announce 0x3092 [kind][capacity]; kind 1 is the bag. The server
+// grows the bag live when a paid expansion completes and announces the new
+// size here, in the same session, with no world entry in between.
 const STORAGE_CAPACITY_OPCODE = 0x3092;
 const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
@@ -102,6 +101,12 @@ const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 // retires it on the pet's next tick, then the answer crosses the network. The
 // shared 10 s wait left one second for both, and a long walk ended sessions.
 const COS_PICKUP_ANSWER_MS = 15000;
+// An open answer is ordered behind the inbound stream: while frames still
+// arrive it is in transit, not lost. A full answer window past the last
+// frame - or this hard limit from the first frame seen - ends the wait
+// (#2148; the movement receipt rule of #1978 on the item lane).
+const INBOUND_HOLD_MS = 10000;
+const INBOUND_LIMIT_MS = 90000;
 /*
 ================
 createInventory
@@ -134,6 +139,11 @@ export function createInventory(
 			storage?: boolean;
 			buybackIndex?: number;
 			deadline: number;
+			// The latest deadline an inbound hold may reach, fixed by the first hold.
+			answerLimit?: number;
+			// When the first reference hold reached this request (#2148): the
+			// timeout report stamps how long before the deadline it landed.
+			firstHeldAt?: number;
 		} | null = null,
 		error: string | null = null;
 	let itemCooldowns: readonly ItemCooldown[] = [];
@@ -143,10 +153,13 @@ export function createInventory(
 	// The street stall the player keeps or stands at, and the stall network
 	// window (stall.ts); a purchase lands on this owner's slots.
 	let stall: StallState = emptyStall();
+	// Port-only, not native: SRO_RAISED_GOLD_CAPS widens the stall offer
+	// price field to u64 (stall.ts); the world entry publishes it.
+	let raisedGoldCaps = false;
 	// Set when a request went unanswered past its deadline; only a world
 	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
 	// timedOutRequest names that request for the incident report.
-	let timedOut = false, timedOutRequest = "";
+	let timedOut = false, timedOutRequest = "", timedOutDetail = "";
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
 	let shopCompletionRevision = 0;
@@ -427,7 +440,26 @@ timeoutMessage
 	*/
 	function timeoutMessage(): string {
 		const request = timedOutRequest ? " (" + timedOutRequest + ")" : "";
-		return "Inventory transaction timed out" + request + "; reconnect to resynchronize";
+		const detail = timedOutDetail ? "; " + timedOutDetail : "";
+		return "Inventory transaction timed out" + request + detail + "; reconnect to resynchronize";
+	}
+	/*
+================
+holdAnswer
+
+An open answer waits behind the inbound stream (the reference frames, or
+any frame at all): its deadline reaches until, never past the limit the
+first hold fixed - a stream that never ends must not keep an answer open
+forever. The mall's open request rides the same stream and holds with it.
+================
+	*/
+	function holdAnswer( now: number, until: number, limit: number ) {
+		if ( pending ) {
+			const answerLimit = pending.answerLimit ?? limit;
+			const deadline = Math.max( pending.deadline, Math.min( until, answerLimit ) );
+			pending = { ...pending, deadline, answerLimit, firstHeldAt: pending.firstHeldAt ?? now };
+		}
+		mall.holdUntil( now, until, limit );
 	}
 	/*
 ================
@@ -608,7 +640,7 @@ pet record names, for decoders of rows held elsewhere (the storage room).
 ================
 takeExchangeNotice
 
-The exchange line the last 0x3645 raised, once.
+The exchange line the last 0x3645 or 0x3272 raised, once.
 ================
 		*/
 		takeExchangeNotice(): SystemNotice | null {
@@ -697,6 +729,7 @@ bootstrap
 		*/
 		bootstrap( value: unknown ) {
 			bindingMoves = [];
+			raisedGoldCaps = (value as { raisedGoldCaps?: unknown; } | null)?.raisedGoldCaps === true;
 			itemCooldowns = [];
 			presentations = new WeakMap();
 			gachaRows = null;
@@ -752,6 +785,7 @@ bootstrap
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			error = null;
 			for ( const r of b.refItemSnapshot ?? [] ) {
 				const tooltip = itemTooltipReference( r.nativeFields, r.descriptionSymbol );
@@ -815,6 +849,7 @@ exchange's, else the category-1 notice code it raised (0 for none).
 				slots = applyExchangeSwap( slots, outcome.swap, equipmentSlotCount ?? 13, inventorySlotCount ?? 45 );
 				published = null;
 			}
+			if ( outcome.message ) exchangeNotice = outcome.message;
 			exchange = outcome.state;
 			return outcome.notice ?? 0;
 		},
@@ -827,7 +862,7 @@ not the stall's.
 ================
 		*/
 		stallReceive( frame: import("@/engine/contracts/network").WireFrame, localGid: number ): StallOutcome | null {
-			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs } );
+			const outcome = stallFrame( stall, frame, { localGid, refs, objRefs, widePrice: raisedGoldCaps } );
 			if ( !outcome ) return null;
 			const firstBag = equipmentSlotCount ?? 13, endBag = inventorySlotCount ?? 45;
 			if ( outcome.receive?.length || outcome.give?.length ) {
@@ -878,7 +913,7 @@ stallCommand
 ================
 		*/
 		stallCommand( command: StallCommand ) {
-			const request = stallRequest( stall, command );
+			const request = stallRequest( stall, command, raisedGoldCaps );
 			stall = request.state;
 			for ( const frame of request.frames ) send( frame );
 			return request.frames.at( -1 ) ?? null;
@@ -1540,6 +1575,32 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 		},
 		/*
 ================
+holdForReferences
+
+Every open answer waits behind the reference frames (gameplay
+referenceProgress), so none can have been lost before until. The first hold
+fixes limit, and later frames cannot move it: a stream that never ends must
+not keep an answer open forever.
+================
+		*/
+		holdForReferences( now: number, until: number, limit: number ) {
+			holdAnswer( now, until, limit );
+		},
+		/*
+================
+noteInboundProgress
+
+Every frame, whichever owner answers it (gameplay's receive wrapper),
+proves the inbound stream is delivering: an answer still missing is
+ordered behind what has not been consumed yet, not lost. The wait ends a
+full window after the stream falls silent, or at the hard limit.
+================
+		*/
+		noteInboundProgress( now: number ) {
+			holdAnswer( now, now + INBOUND_HOLD_MS, now + INBOUND_LIMIT_MS );
+		},
+		/*
+================
 use
 ================
 		*/
@@ -2112,12 +2173,12 @@ receive
 					}
 					applyMove( p[o + 1]!, p[o + 2]!, v.getUint16( o + 3, true ) );
 				}
-			} else if ( p[1] === 6 && p[2] === 254 ) {
+			} else if ( (p[1] === 6 || p[1] === 0x1c) && p[2] === 254 ) {
 				if ( p.length !== 7 ) throw Error( "Invalid gold pickup result" );
 				// Amount granted, not a bag slot or the absolute balance.
 				// 30B3 type 1 owns the balance; gameplay prints the gain notice;
 				// ANI_PICK owns sound, avoiding duplicates.
-			} else if ( p[1] === 6 && p[2] !== 254 ) {
+			} else if ( (p[1] === 6 || p[1] === 0x1c) && p[2] !== 254 ) {
 				const n = slot( p[2]! );
 				if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
 					throw Error( "Pickup references a non-bag slot" );
@@ -2127,19 +2188,28 @@ receive
 				else next.delete( n );
 			} else if ( p[1] === 14 || p[1] === 15 ) {
 				if ( p.length < 4 ) throw Error( "Truncated quest inventory result" );
-				const n = slot( p[2]! );
-				if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
-					throw Error( "Quest item references non-bag slot" );
-				}
-				if ( p[1] === 15 ) {
-					if ( p.length !== 4 || !next.has( n ) ) throw Error( "Invalid quest item removal" );
-					next.delete( n );
+				if ( p[1] === 14 && p[2] === 254 ) {
+					if ( p.length !== 7 ) throw Error( "Invalid quest gold grant result" );
+					// A gold heap granted at the gold slot: the amount, not a
+					// bag row - 30B3 type 1 owns the balance and gameplay
+					// prints the gain notice, as on the pickup gold arm.
 				} else {
-					const item = body( p, 4 );
-					if ( !item ) throw Error( "Empty quest item grant" );
-					const old = next.get( n );
-					if ( old && old.refObjId !== item.refObjId ) throw Error( "Quest grant overwrites another item" );
-					next.set( n, { ...item, slot: n } );
+					const n = slot( p[2]! );
+					if ( n < (equipmentSlotCount ?? 13) || n >= (inventorySlotCount ?? 256) ) {
+						throw Error( "Quest item references non-bag slot" );
+					}
+					if ( p[1] === 15 ) {
+						if ( p.length !== 4 || !next.has( n ) ) throw Error( "Invalid quest item removal" );
+						next.delete( n );
+					} else {
+						const item = body( p, 4 );
+						if ( !item ) throw Error( "Empty quest item grant" );
+						const old = next.get( n );
+						if ( old && old.refObjId !== item.refObjId ) {
+							throw Error( "Quest grant overwrites another item" );
+						}
+						next.set( n, { ...item, slot: n } );
+					}
 				}
 			} else if ( p[1] === 7 ) {
 				if ( p.length !== 3 ) {
@@ -2245,7 +2315,15 @@ step
 			// Native replies have no transaction ID. After timeout a late response
 			// could acknowledge a new request, so reconnect instead of reopening it.
 			if ( timedOut || pending && now >= pending.deadline ) {
-				if ( !timedOut && pending ) timedOutRequest = describeRequest( pending );
+				if ( !timedOut && pending ) {
+					timedOutRequest = describeRequest( pending );
+					// Was the reference stream holding this answer open, and
+					// since when (#2148)? A held-past-cap timeout and a
+					// never-held one read identically without the stamp.
+					timedOutDetail = pending.firstHeldAt === undefined ?
+						"held=0" :
+						`held=1 firstHoldAgeMs=${Math.round( now - pending.firstHeldAt )}`;
+				}
 				timedOut = true;
 				throw Error( timeoutMessage(), { cause: INVENTORY_TRANSACTION_TIMEOUT } );
 			}
@@ -2315,6 +2393,7 @@ clear
 			shop = undefined;
 			timedOut = false;
 			timedOutRequest = "";
+			timedOutDetail = "";
 			objRefs.clear();
 			names.clear();
 			icons.clear();

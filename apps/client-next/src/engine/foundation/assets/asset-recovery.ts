@@ -14,10 +14,18 @@ const MAX_AUTOMATIC_RETRIES = 8;
 /*
 ================
 assetFailure
+
+A load failure that says whether retrying can help, and which asset it
+was loading when the loader knows: the incident a terminal failure files
+names the path (#2337). Untagged failures are permanent.
 ================
 */
-export function assetFailure( message: string, transient = false ): Error & { transient: boolean; } {
-	return Object.assign( new Error( message ), { transient } );
+export function assetFailure(
+	message: string,
+	transient = false,
+	path?: string
+): Error & { transient: boolean; path?: string; } {
+	return Object.assign( new Error( message ), { transient, ...(path !== undefined ? { path } : {}) } );
 }
 
 /*
@@ -27,6 +35,18 @@ transientAssetFailure
 */
 export function transientAssetFailure( error: unknown ): boolean {
 	return error instanceof Error && "transient" in error && error.transient === true;
+}
+
+/*
+================
+assetFailurePath
+
+The asset a tagged failure was loading, or undefined: a failure raised
+away from its request (a scene that cannot form) names none.
+================
+*/
+export function assetFailurePath( error: unknown ): string | undefined {
+	return error instanceof Error && "path" in error && typeof error.path === "string" ? error.path : undefined;
 }
 
 /*
@@ -76,6 +96,17 @@ export function createAssetRecovery() {
 		*/
 		transient() {
 			return transient;
+		},
+		/*
+		================
+		attempts
+
+		Automatic retries this failure sequence has used: the count the
+		incident files when the sequence gives up (#2337).
+		================
+		*/
+		attempts() {
+			return attempts;
 		},
 		/*
 		================
