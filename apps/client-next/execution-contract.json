@@ -986,7 +986,8 @@
 				"pickFrontendCharacter",
 				"setWorldCamera",
 				"setWorld",
-				"pickFrontendRace"
+				"pickFrontendRace",
+				"takeDegradations"
 			]
 		},
 		{
@@ -1567,7 +1568,8 @@
 				"hasModel",
 				"socket",
 				"dispose",
-				"invalidate"
+				"invalidate",
+				"takeDegradations"
 			],
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"consumer": "src/engine/runtime/renderer/characters/portrait.ts"
