@@ -203,3 +203,76 @@ func TestBehaviorQueueDueSetMatchesLegacyHeap(t *testing.T) {
 		t.Fatalf("only %d actors fired in the walk", fired)
 	}
 }
+
+/*
+================
+TestBehaviorQueueUnchangedDeadlineStaysSingleCopy
+
+Re-scheduling a live row at the deadline it already holds is the
+leg's steady state (every commit-side reschedule of the batch's own
+at recomputes the same value). It must not stack copies on the
+wheel: the copy placed first already names the due, and every
+duplicate is a copy the next drain walks and drops (#2136). The due
+set itself stays the heap oracle's, pinned above.
+================
+*/
+func TestBehaviorQueueUnchangedDeadlineStaysSingleCopy(t *testing.T) {
+	var q behaviorQueue
+	placed := func() int {
+		n := len(q.due) + len(q.far)
+		for _, bucket := range q.buckets {
+			n += len(bucket)
+		}
+		return n
+	}
+	q.set(7, 1000)
+	q.set(7, 1000)
+	q.set(7, 1000)
+	if got := placed(); got != 1 {
+		t.Fatalf("unchanged-deadline reschedules placed %d copies, want 1", got)
+	}
+	if due := q.takeDue(999, nil); len(due) != 0 {
+		t.Fatalf("fired before its deadline: %v", due)
+	}
+	if due := q.takeDue(1000, nil); len(due) != 1 || due[0].gid != 7 {
+		t.Fatalf("deadline fired %v, want gid 7 once", due)
+	}
+	// A fired row re-scheduled at the same value is a fresh due again.
+	q.set(7, 1000)
+	if due := q.takeDue(1000, nil); len(due) != 1 || due[0].gid != 7 {
+		t.Fatalf("revived deadline fired %v, want gid 7 once", due)
+	}
+
+	var deferred behaviorQueue
+	deferred.set(8, 500)
+	deferred.set(8, 1500)
+	if due := deferred.takeDue(1000, nil); len(due) != 0 {
+		t.Fatalf("deferred row fired early: %v", due)
+	}
+	if due := deferred.takeDue(1500, nil); len(due) != 1 || due[0].gid != 8 {
+		t.Fatalf("deferred deadline fired %v, want gid 8 once", due)
+	}
+}
+
+/*
+================
+BenchmarkBehaviorQueueRescheduleUnchanged
+
+The commit-side reschedule pattern: rows already queued, each
+re-set at the very deadline the batch build placed (#2136).
+================
+*/
+func BenchmarkBehaviorQueueRescheduleUnchanged(b *testing.B) {
+	var q behaviorQueue
+	const rows = 256
+	for gid := uint32(1); gid <= rows; gid++ {
+		q.set(gid, 5000)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for gid := uint32(1); gid <= rows; gid++ {
+			q.set(gid, 5000)
+		}
+	}
+}

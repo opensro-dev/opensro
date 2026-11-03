@@ -199,8 +199,12 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 		state.movers.setActivityAt(slot, gid, after.Activity)
 	} else {
 		state.movers.setAt(slot, gid, after)
+		// Approach membership derives from mode, target and instance
+		// eligibility, none of which a cadence-only write moves (and
+		// the gate's rows are never chasing or attacking), so the sync
+		// rides only this full write and the mover commits (#2136).
+		state.syncApproachActor(gid, after)
 	}
-	state.syncApproachActor(gid, after)
 	s.scheduleBehavior(state, gid, now)
 	return true
 }
