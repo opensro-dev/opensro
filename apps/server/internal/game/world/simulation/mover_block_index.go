@@ -28,16 +28,24 @@ const maxMoverBlockDirty = 4096
 ================
 moverBlockIndex
 
-generation advances whenever a mover changes block or leaves or enters
-the index, so a memoized viewer answer stays valid across ticks in which
-nothing crossed a block edge.
+blockGeneration advances per block whenever a mover enters or leaves
+that block, and dungeonGeneration per dungeon on the same events, so a
+memoized viewer answer keys on the blocks its own neighbourhood reads
+(#2134): a crossing in a far neighbourhood no longer retires every
+viewer's stamp. The counters only advance, never reset - a rebuild
+re-enters every mover, which advances them again.
 ================
 */
 type moverBlockIndex struct {
-	built      bool
-	dirty      []uint32
-	nowMs      int64
-	generation uint64
+	built bool
+	dirty []uint32
+	nowMs int64
+
+	blockGeneration   map[worldgeom.InterestBlock]uint64
+	dungeonGeneration map[uint16]uint64
+	// membership advances on every enter/leave; it versions stampCache.
+	membership uint64
+	stampCache map[worldgeom.InterestBlock]moverBlockStamp
 
 	blockOf  map[uint32]worldgeom.InterestBlock
 	members  map[worldgeom.InterestBlock]map[uint32]struct{}
@@ -70,6 +78,88 @@ func (x *moverBlockIndex) note(gid uint32) {
 
 /*
 ================
+moverBlockIndex.bumpBlock
+
+Advance the generations one membership change under block moves: the
+block's own, and its dungeon's when it has one.
+================
+*/
+func (x *moverBlockIndex) bumpBlock(block worldgeom.InterestBlock) {
+	if x.blockGeneration == nil {
+		x.blockGeneration = make(map[worldgeom.InterestBlock]uint64)
+		x.dungeonGeneration = make(map[uint16]uint64)
+	}
+	x.blockGeneration[block]++
+	x.membership++
+	if block.Dungeon != 0 {
+		x.dungeonGeneration[block.Dungeon]++
+	}
+}
+
+/*
+================
+moverBlockStamp
+
+A cached stampBlocks mix and the membership count it was folded
+under. Generations change only through bumpBlock, which advances
+membership, so a matching membership proves the mix is current.
+================
+*/
+type moverBlockStamp struct {
+	membership uint64
+	stamp      uint64
+}
+
+/*
+================
+moverBlockIndex.stampBlocks
+
+The blocks input of a viewer answer for block, as one positional mix
+of the generations of the blocks whose membership decides it: the 3x3
+neighbourhood, plus the Whole block for a dungeon block (Whole movers
+neighbour every cell of their dungeon). A Whole block's answer is the
+whole dungeon, so it keys on the dungeon-wide generation alone.
+
+A single changed generation provably changes the mix: each step
+xor-folds the next generation in, then multiplies by an odd
+constant - both bijections on uint64. Several generations changing
+at once collide with probability about 2^-64, the width of the
+stamp. The mix is folded once per
+block per membership change and cached in stampCache: a leg's many
+viewers mostly share blocks, and re-folding nine map reads per
+viewer per leg cost more than the leg it was meant to cheapen.
+================
+*/
+func (x *moverBlockIndex) stampBlocks(block worldgeom.InterestBlock) uint64 {
+	if cached, ok := x.stampCache[block]; ok && cached.membership == x.membership {
+		return cached.stamp
+	}
+	var stamp uint64
+	if block.Whole {
+		stamp = x.dungeonGeneration[block.Dungeon]
+	} else {
+		stamp = 1469598103934665603
+		fold := func(block worldgeom.InterestBlock) {
+			stamp = (stamp ^ (x.blockGeneration[block] + 1)) * 1099511628211
+		}
+		for dz := -1; dz <= 1; dz++ {
+			for dx := -1; dx <= 1; dx++ {
+				fold(worldgeom.InterestBlock{Dungeon: block.Dungeon, X: block.X + dx, Z: block.Z + dz})
+			}
+		}
+		if block.Dungeon != 0 {
+			fold(worldgeom.InterestBlock{Dungeon: block.Dungeon, Whole: true})
+		}
+	}
+	if x.stampCache == nil {
+		x.stampCache = make(map[worldgeom.InterestBlock]moverBlockStamp)
+	}
+	x.stampCache[block] = moverBlockStamp{membership: x.membership, stamp: stamp}
+	return stamp
+}
+
+/*
+================
 moverBlockIndex.leave
 ================
 */
@@ -80,7 +170,7 @@ func (x *moverBlockIndex) leave(gid uint32) {
 	}
 	delete(x.blockOf, gid)
 	delete(x.segments, gid)
-	x.generation++
+	x.bumpBlock(block)
 	members := x.members[block]
 	delete(members, gid)
 	if len(members) == 0 {
@@ -102,7 +192,7 @@ moverBlockIndex.enter
 */
 func (x *moverBlockIndex) enter(gid uint32, block worldgeom.InterestBlock) {
 	x.blockOf[gid] = block
-	x.generation++
+	x.bumpBlock(block)
 	members := x.members[block]
 	if members == nil {
 		members = make(map[uint32]struct{})
@@ -161,11 +251,18 @@ recomputed whenever the instant differs.
 func (s *moverStorage) reconcileBlocks(nowMs int64) {
 	x := &s.blocks
 	if !x.built {
+		// A rebuild discards the old membership instead of leaving
+		// it, so bump every block it held first: a mover that crossed
+		// during the dirty overflow would otherwise leave its old
+		// block's generation - and every viewer stamp keyed on it -
+		// standing still (#2134 review).
+		for block := range x.members {
+			x.bumpBlock(block)
+		}
 		x.blockOf = make(map[uint32]worldgeom.InterestBlock, len(s.slots))
 		x.members = make(map[worldgeom.InterestBlock]map[uint32]struct{})
 		x.dungeons = make(map[uint16]map[uint32]struct{})
 		x.segments = make(map[uint32]struct{})
-		x.generation++
 		x.built, x.nowMs = true, nowMs
 		for i := range s.slots {
 			s.placeInBlock(s.slots[i].gid, nowMs)

@@ -36,6 +36,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor behaviorA
 	// actor was snapshot at (#2137 slice 1): a slower lane's set
 	// since the snapshot drops them instead of being overwritten.
 	ops.stepBaseGen, ops.stepGenArmed = actor.moverGen, true
+	ops.stepSlot, ops.stepMonsterSlot = actor.slot, actor.monsterSlot
 	frames, targeted := ops.advanceInstanceSnapshot(divisionID, instance, actor.mover, true, players, nowMs)
 	ops.stepGenArmed = false
 	for _, session := range ops.divisionSessions(divisionID, sessions) {
@@ -114,6 +115,12 @@ func (ops *MonsterMoverOps) commitSteppedActivity(division string, gid uint32, b
 		ops.plan.recordActivity(before, after)
 		return true
 	}
+	// The step's own actor is armed: commit through its carried
+	// slots (#2133). The doors verify each hint against the gid, so
+	// this is the gid commit with the map resolves left out.
+	if ops.stepGenArmed {
+		return ops.Monsters.commitActivityAt(division, gid, ops.stepSlot, ops.stepMonsterSlot, before, after, now)
+	}
 	return ops.Monsters.commitActivity(division, gid, before, after, now)
 }
 
@@ -180,6 +187,9 @@ the commit chains off the row's real generation at replay.
 func (ops *MonsterMoverOps) stepMoverGeneration(divisionID string, gid uint32) (monster.MoverState, uint64, bool) {
 	if ops.plan != nil && ops.plan.shadowed {
 		return ops.plan.shadow, ops.plan.actor.moverGen, true
+	}
+	if ops.stepGenArmed {
+		return ops.Monsters.MoverGenerationAt(divisionID, gid, ops.stepSlot, ops.stepMonsterSlot)
 	}
 	return ops.Monsters.MoverGeneration(divisionID, gid)
 }

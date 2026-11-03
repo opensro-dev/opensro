@@ -5630,6 +5630,47 @@ test("world admission failures publish a visible native retry dialog and clear a
 	}
 });
 
+test("a UI image still retrying in world keeps the game on screen and draws once it arrives (#2444)", () => {
+	const icon = "/assets/images/Media_extracted/interface/targetwindow/tw_icon_giant.png";
+	const published = {};
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {}, published );
+	try {
+		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		// The live stall: the giant grade icon's download makes no progress.
+		published[icon] = { error: "Error: No download progress for 15000 ms" };
+		f.state.entities.push( {
+			gid: 9,
+			regionId: 1,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0,
+			kind: "monster",
+			name: "Giant",
+			level: 1,
+			rarity: 4,
+			maxHp: 100
+		} );
+		f.state.gameplay.target = 9;
+		f.state.gameplay.vitals = [ { gid: 9, hp: 100, abnormal: 0 } ];
+		let result;
+		for ( let i = 20; i < 30; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.includes( icon ), "the target window asked for the grade icon" );
+		assert.equal( result.loadingError, undefined, "a retrying image is not a loading failure" );
+		assert.ok( !f.hasText( "Unable to finish loading" ) );
+		assert.equal( f.ui.resourceError(), null, "a retrying image is not a client error" );
+		// The download recovers: the next retry delivers and the icon draws.
+		delete published[icon];
+		const before = f.requested.filter( path => path === icon ).length;
+		for ( let i = 30; i < 120; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.filter( path => path === icon ).length > before, "the image was retried" );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture === icon ), "the icon draws once it arrives" );
+		assert.equal( result.loadingError, undefined );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("inventory ground drop confirms once, cancels and rejects a replaced source", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {

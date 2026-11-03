@@ -119,3 +119,56 @@ func TestResumeBeforeAnUnappliedEntryIsServed(t *testing.T) {
 		return len(dataFrames(second.written())) == 0
 	})
 }
+
+/*
+================
+TestResumeDropsAnEntryStillQueued
+
+The live #2443 shape: a teleport's re-entry [reset, EnterWorld answer,
+scene] was queued behind a parked writer and never written when the
+link dropped. The resumed browser asks for a new entry, so the queued
+answer is as superseded as one in the ring: re-sent, it is applied in
+place of the new one, and the new answer then lands on a client already
+in the world ("Unexpected EnterWorld result"). The resume drops the
+queued answer and every counted frame behind it; what came before it
+still goes out.
+================
+*/
+func TestResumeDropsAnEntryStillQueued(t *testing.T) {
+	t.Parallel()
+	_, sess, fc := parkBoundSession(t, time.Hour)
+	if err := sess.Send(ringTestOp, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	writtenCount(t, fc, 1)
+	sess.detachGen(sess.gen, errRingParkBound)
+	detached(t, sess)
+	// Queued while detached: the reset that opens the re-entry, its
+	// answer and the scene behind it.
+	for _, f := range []Frame{
+		{Opcode: ringTestOp, Payload: []byte{2}},
+		{Opcode: OpEnterWorldResult, Payload: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0}},
+		{Opcode: ringTestOp, Payload: []byte{3}},
+		{Opcode: ringTestOp, Payload: []byte{4}},
+	} {
+		if err := sess.Send(f.Opcode, f.Payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	second := newFakeConn(false)
+	if err := sess.attach(second, true, 1); err != nil {
+		t.Fatalf("resume past the applied frame: %v", err)
+	}
+	wait.Eventually(t, 5*time.Second, "the frame before the answer is written", func() bool {
+		return len(dataFrames(second.written())) >= 1
+	})
+	wait.Consistently(t, 300*time.Millisecond, "nothing from the queued answer on is written", func() bool {
+		written := dataFrames(second.written())
+		return len(written) == 1 && written[0].Payload[0] == 2
+	})
+	for _, f := range second.written() {
+		if f.Opcode == OpEnterWorldResult {
+			t.Fatal("the superseded EnterWorld answer was written after the resume")
+		}
+	}
+}

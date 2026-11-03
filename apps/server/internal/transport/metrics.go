@@ -22,6 +22,9 @@ type hubMetrics struct {
 	resumeAttempted           atomic.Uint64
 	resumeAccepted            atomic.Uint64
 	resumeFresh               atomic.Uint64
+	// resumeEnded counts resumes of evicted sessions, answered with their
+	// BYE (#2146): a newer login won, so they are not refused resumes.
+	resumeEnded atomic.Uint64
 	// resumeNoPosition and resumeGap count resumes refused into a fresh
 	// session (#1466, #1519): a HELLO with no stream position, and a
 	// position the resume ring cannot serve (dropped past its floor,
@@ -102,6 +105,7 @@ type Metrics struct {
 	ResumeAttempted           uint64  `json:"resume_attempted"`
 	ResumeAccepted            uint64  `json:"resume_accepted"`
 	ResumeFresh               uint64  `json:"resume_fresh"`
+	ResumeEnded               uint64  `json:"resume_ended"`
 	ResumeNoPosition          uint64  `json:"resume_no_position"`
 	ResumeGap                 uint64  `json:"resume_gap"`
 	HelloAdmissionAccepted    uint64  `json:"hello_admission_accepted"`
@@ -301,6 +305,7 @@ func (h *Hub) Metrics() Metrics {
 		ResumeAttempted:           h.metrics.resumeAttempted.Load(),
 		ResumeAccepted:            h.metrics.resumeAccepted.Load(),
 		ResumeFresh:               h.metrics.resumeFresh.Load(),
+		ResumeEnded:               h.metrics.resumeEnded.Load(),
 		ResumeNoPosition:          h.metrics.resumeNoPosition.Load(),
 		ResumeGap:                 h.metrics.resumeGap.Load(),
 		HelloAdmissionAccepted:    h.metrics.helloAdmissionAccepted.Load(),

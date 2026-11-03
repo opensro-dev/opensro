@@ -17,12 +17,35 @@ Mover
 ================
 */
 func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState, bool) {
+	return s.MoverAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot)
+}
+
+/*
+================
+MoverAt
+
+Mover through the slots the behaviour batch carried for the actor
+(#2133): the existence probe and the row read go through the
+verified hints and fall back to the gid resolve whenever a hint no
+longer names the gid, so the value is Mover's either way. The
+synthesized spawn mover of an actor with no row yet reads its
+instance by gid, as Mover does: that is the spawn window, not the
+step's steady state.
+================
+*/
+func (s *MonsterState) MoverAt(divisionID string, gid uint32, slot, monsterSlot uint32) (monster.MoverState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	state := s.populationForObject(divisionID, gid)
-	if !state.instances.contains(gid) {
+	if !state.instances.containsAt(monsterSlot, gid) {
 		return monster.MoverState{}, false
+	}
+	if mover, ok := state.movers.lookupAt(slot, gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, true
 	}
 	if mover, ok := state.movers.lookup(gid); ok {
 		if err := mover.Validate(); err != nil {
@@ -213,24 +236,47 @@ entry, the activity gate) has already advanced the row.
 ================
 */
 func (s *MonsterState) MoverGeneration(divisionID string, gid uint32) (monster.MoverState, uint64, bool) {
+	return s.MoverGenerationAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot)
+}
+
+/*
+================
+MoverGenerationAt
+
+MoverGeneration through the slots the behaviour batch carried for
+the actor (#2133): the existence probe, the row read and the
+generation read go through the verified hints and fall back to the
+gid resolve whenever a hint no longer names the gid, so the value
+and the generation are MoverGeneration's either way.
+generationAt answers for whichever row the read found: the hinted
+slot's row when the hint held, the gid's row when it did not.
+================
+*/
+func (s *MonsterState) MoverGenerationAt(divisionID string, gid uint32, slot, monsterSlot uint32) (monster.MoverState, uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	state := s.populationForObject(divisionID, gid)
-	if !state.instances.contains(gid) {
+	if !state.instances.containsAt(monsterSlot, gid) {
 		return monster.MoverState{}, 0, false
+	}
+	if mover, ok := state.movers.lookupAt(slot, gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, state.movers.generationAt(slot, gid), true
 	}
 	if mover, ok := state.movers.lookup(gid); ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
-		return mover, state.movers.generation(gid), true
+		return mover, state.movers.generationAt(slot, gid), true
 	}
 	mover := monster.NewSpawnMover(state.instances.get(gid), s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return mover, state.movers.generation(gid), true
+	return mover, state.movers.generationAt(slot, gid), true
 }
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.

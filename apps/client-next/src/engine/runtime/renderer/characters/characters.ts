@@ -3168,6 +3168,17 @@ the next full prepare pass, so this may run between frames.
 		currentActors: (): readonly CharacterActor[] => actors,
 		/*
 		================
+		takeDegradations
+
+		The snapshot owners' held-clock reports since the last take
+		(#2407), in the Degradation shape every owner hands its reporter.
+		================
+		*/
+		takeDegradations(): import("@/engine/contracts/network").Degradation[] {
+			return [ ...snapshots.takeDegradations(), ...portraitSnapshots.takeDegradations() ];
+		},
+		/*
+		================
 		actors
 
 		Publish the frame actor lists used by poses, picking and rendering.

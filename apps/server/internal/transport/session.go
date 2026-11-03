@@ -154,7 +154,11 @@ type Session struct {
 	// (the legacy HELLO-time verifier) or none is pending.
 	admissionCommit func() error
 	lastRecv        time.Time
-	readCancel      context.CancelFunc
+	// lastSent is when the writer last put a frame on the wire; the
+	// keepalive proves the wire off it when the session goes quiet
+	// outbound (#2148, keepalive.go).
+	lastSent   time.Time
+	readCancel context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
@@ -171,6 +175,11 @@ type Session struct {
 	// frames, and the mission bridge skips it — the BYE drain is all that
 	// remains. Atomic so no reader ever needs s.mu or h.mu.
 	evicted atomic.Bool
+	// evictReason is the BYE reason the eviction closes with (Replaced or
+	// Unauthorized), stored before the latch so a reader that sees evicted
+	// also sees why. The hub keeps it past teardown (endedResume) so the
+	// evicted client's resume is told, not handed a fresh session (#2146).
+	evictReason atomic.Uint32
 
 	done chan struct{} // closed exactly once at final teardown
 
@@ -296,14 +305,18 @@ Done
 */
 func (s *Session) Done() <-chan struct{} { return s.done }
 
-// markEvicted flips the session into lame-duck mode. One-way; called by
-// Hub.BindExclusive when another session takes this session's bind key.
+// markEvicted flips the session into lame-duck mode. One-way; called when
+// another session takes this session's bind key or account slot (reason
+// ByeReasonReplaced) or the account is evicted (ByeReasonUnauthorized).
 /*
 ================
 markEvicted
 ================
 */
-func (s *Session) markEvicted() { s.evicted.Store(true) }
+func (s *Session) markEvicted(reason uint8) {
+	s.evictReason.Store(uint32(reason))
+	s.evicted.Store(true)
+}
 
 // Evicted reports whether the session lost its bind key to a replacement
 // (single-session bind, BYE Replaced) and is now a lame duck: inbound game
@@ -796,6 +809,9 @@ func (s *Session) writeLoop() {
 			s.detachGen(gen, err)
 			continue
 		}
+		s.mu.Lock()
+		s.lastSent = time.Now()
+		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
 			s.mu.Lock()

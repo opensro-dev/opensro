@@ -390,14 +390,20 @@ export function createCharacterPresentation(
 
 	Turns each despawned character into a fading copy (with its particles,
 	animation and children) under a fresh actor id, forgets the despawned
-	gids, and drops fading copies older than 1.5 seconds.
+	gids, and drops fading copies older than 1.5 seconds. A gid that
+	respawned before its copy faded keeps the copy on the old material
+	owner and hands the new body a fresh one.
 	================
 	*/
-	function retireDespawned( seconds: number ) {
+	function retireDespawned( seconds: number, entities: readonly EntityState[] ) {
 		for ( const gid of retiring ) {
 			const actor = output.displayed.get( gid );
 			if ( actor ) {
 				const id = allocateActor(), state = states.get( gid );
+				// A gid that respawned before its copy faded is a new instance:
+				// the copy keeps the old material owner (and its particles),
+				// the retained state hands the new body a fresh one (#2438).
+				if ( state && entities.some( entity => entity.gid === gid ) ) state.modifierId = allocateActor();
 				const animation = state?.modifierResource && state.dispatch && state.modelAnimation ?
 					{
 						resource: state.modifierResource,
@@ -1024,7 +1030,7 @@ export function createCharacterPresentation(
 		) {
 			const begun = beginFrame( entities, gameplay, seconds, dock, preview );
 			if ( dockPreview.step( { seconds, dock, preview, lizard, nativeServerName }, output, published ) ) return;
-			retireDespawned( seconds );
+			retireDespawned( seconds, entities );
 			const presented = selectPresented( entities, gameplay );
 			// GameConfig +0x12E (745D10) forces the death model (8E655D) on an
 			// uncensored Korean shard. It also picks the authored blood over the

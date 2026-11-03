@@ -446,7 +446,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		nowMs:    nowMs,
 	}
 	actors := make([]behaviorActorSnapshot, 0, len(batch.actors))
-	for _, ref := range batch.actors {
+	for i, ref := range batch.actors {
 		// The scheduler carries identities, not a second copy of the
 		// world: the same dispatch decisions, in the same order, as
 		// the serial loop (monstertick.go) makes them.
@@ -459,7 +459,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		if stepped++; stepped%monsterLegStepActors == 0 {
 			ops.watch.step()
 		}
-		actor, ok := view.actor(ref)
+		actor, ok := view.actorAt(i)
 		if !ok {
 			continue
 		}
@@ -576,6 +576,7 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 	gid := actor.instance.Gid
 	armed := *ops
 	armed.stepBaseGen, armed.stepGenArmed = actor.moverGen, true
+	armed.stepSlot, armed.stepMonsterSlot = actor.slot, actor.monsterSlot
 	started := time.Now()
 	defer func() { stats.noteAdvance(time.Since(started)) }()
 
@@ -591,16 +592,16 @@ func (ops *MonsterMoverOps) commitLegPlan(work legBatchWork, plan *legPlan, stat
 			// commit with no frames from a dropped one; the stored
 			// value equalling next is the acceptance witness, the
 			// same one commitSteppedNavigation chains off.
-			stored, _, ok := ops.Monsters.MoverGeneration(work.division, gid)
+			stored, _, ok := ops.Monsters.MoverGenerationAt(work.division, gid, actor.slot, actor.monsterSlot)
 			landed = ok && stored == op.mover
 		case legPlanOpActivity:
-			landed = ops.Monsters.commitActivity(work.division, gid, op.before, op.after, work.nowMs)
+			landed = ops.Monsters.commitActivityAt(work.division, gid, actor.slot, actor.monsterSlot, op.before, op.after, work.nowMs)
 		case legPlanOpFollow:
 			// commitFollow hands back the frames it was given; the
 			// step's frames already ride the plan's output.
 			_, landed = ops.Monsters.commitFollow(op.follow, op.mover, op.frames)
 		case legPlanOpRebase:
-			stored, gen, ok := ops.Monsters.MoverGeneration(work.division, gid)
+			stored, gen, ok := ops.Monsters.MoverGenerationAt(work.division, gid, actor.slot, actor.monsterSlot)
 			landed = ok && stored == op.mover
 			if landed {
 				armed.stepBaseGen = gen

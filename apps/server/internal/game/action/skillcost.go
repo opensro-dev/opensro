@@ -76,6 +76,21 @@ caster's keeper maximum (param 4), stored current MP and parameter 0x8D.
 func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, uint16) {
 	stats, _, err := rt.playerCombatStats(division, c)
 	maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(c, stats, err)
+	return resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, err, skill)
+}
+
+/*
+==================
+resourceCostVerdict
+
+offensiveResourceCost on keeper vitals and a projection the caller
+already holds: the HP check, then resourceCostAt on the keeper
+maximum (param 4), the stored current MP and parameter 0x8D. The
+waiting cast judges through here on its memoised stats (#2139), so
+the wait and release verdicts cannot drift apart.
+==================
+*/
+func resourceCostVerdict(maxHP, maxMP, currentHP, currentMP int64, stats combat.Stats, err error, skill enterworld.SkillRow) (int64, uint16) {
 	if refusal := hpCostRefusal(currentHP, maxHP, skill); refusal != 0 {
 		return 0, refusal
 	}

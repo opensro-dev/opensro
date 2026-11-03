@@ -165,22 +165,46 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
+	return s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+}
+
+/*
+================
+commitActivityAt
+
+commitActivity through the slots the behaviour batch carried for
+the actor (#2133): the guard read, the death check and the write
+go through the verified hints and fall back to the gid resolve
+whenever a hint no longer names the gid, so the commit lands - or
+is refused - exactly as commitActivity's. The gate runs this once
+per due actor per tick, which is where the profile charged the
+storages' gid-to-slot maps.
+================
+*/
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	current, exists := state.movers.lookup(gid)
-	if !exists || current != before || state.instances.isDead(gid) {
+	current, exists := state.movers.lookupAt(slot, gid)
+	if !exists {
+		current, exists = state.movers.lookup(gid)
+	}
+	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
 		return false
 	}
 	if err := after.Validate(); err != nil {
 		panic(err)
 	}
 	if cadenceOnlyWrite(current, after) {
-		state.movers.setActivity(gid, after.Activity)
+		state.movers.setActivityAt(slot, gid, after.Activity)
 	} else {
-		state.movers.set(gid, after)
+		state.movers.setAt(slot, gid, after)
+		// Approach membership derives from mode, target and instance
+		// eligibility, none of which a cadence-only write moves (and
+		// the gate's rows are never chasing or attacking), so the sync
+		// rides only this full write and the mover commits (#2136).
+		state.syncApproachActor(gid, after)
 	}
-	state.syncApproachActor(gid, after)
 	s.scheduleBehavior(state, gid, now)
 	return true
 }

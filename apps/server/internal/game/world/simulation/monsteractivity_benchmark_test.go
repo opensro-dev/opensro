@@ -40,7 +40,10 @@ One batch build over 5000 actors, all due every tick: the queue drain
 plus the per-actor reschedule, which is the tick's scheduling cost.
 The pre-wheel control arm drove the old heap by hand and is gone with
 it; the before/after for this arm is the same benchmark on the base
-tree.
+tree. Each build releases its batch, the production pattern: the leg
+dispatches, then returns the refs backings to the scratch pool
+(#2030), so the measured loop prices the drain and the reschedule,
+not a fresh backing's growth from empty every tick.
 ================
 */
 func BenchmarkBehaviorBatch(b *testing.B) {
@@ -48,9 +51,11 @@ func BenchmarkBehaviorBatch(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for tick := 0; tick < b.N; tick++ {
-		if got := s.behaviorBatches(int64(tick)); len(got) != 1 || len(got[0].actors) != 5000 {
+		got := s.behaviorBatches(int64(tick))
+		if len(got) != 1 || len(got[0].actors) != 5000 {
 			b.Fatal("lost actors")
 		}
+		s.releaseBehaviorBatches(got)
 	}
 }
 
