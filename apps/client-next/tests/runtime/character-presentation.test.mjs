@@ -28,6 +28,7 @@ async function load( entry ) {
 }
 const { createCharacterPresentation } = await load( "src/engine/runtime/characters/characters.ts" );
 const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
+const { createModelMaterialClocks } = await load( "src/engine/foundation/animation/model-material-clock.ts" );
 const { createPresentationRandom } = await load( "src/engine/runtime/random/random.ts" );
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 /*
@@ -3121,6 +3122,45 @@ test("cold production animation particles dispatch both blend installations and 
 	assert.ok( !f.actors.some( a => a.gid === first.gid ) );
 	f.presentation.reset();
 	assert.equal( f.actors.length, 0 );
+	f.dispose();
+});
+
+test("despawn copy keeps the old material owner and a same-batch respawn takes a fresh one", () => {
+	const f = fixture(), body = entity( 1, { kind: "monster" } );
+	for ( let i = 0; i < 50 && !f.actors.some( a => a.gid === 1 ); i++ ) f.step( [ body ], i / 100 );
+	assert.equal( f.presentation.error(), null );
+	const shown = f.actors.find( a => a.gid === 1 );
+	assert.ok( shown, "body is displayed before it despawns" );
+	// #2438: the despawn and the respawn land in one inter-frame batch
+	// (teleport, resync, server gid reuse), so the gid never sits out a
+	// frame and its per-gid presentation state survives to be reused.
+	f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+	f.step( [ body ], .5 );
+	const copy = f.actors.find( a => a.gid !== 1 && a.model === shown.model && !a.attachment ),
+		respawned = f.actors.find( a => a.gid === 1 );
+	assert.ok( copy, "the despawned body leaves a fading copy" );
+	assert.ok( respawned, "the respawned body is presented beside its copy" );
+	assert.equal( copy.modifierId, shown.modifierId, "the fading copy keeps the old material owner" );
+	assert.notEqual( respawned.modifierId, copy.modifierId, "the respawned body owns a fresh material instance" );
+	// The strict clock is the assertion the renderer no longer throws: two
+	// animated-material actors, two owners, one step, no throw.
+	const animated = {
+			primitives: [ {
+				geometry: {
+					material: {
+						colorTimeline: {
+							duration: 10000,
+							mode: 2,
+							flags: 2,
+							colors: [ { time: 0, value: [ 1, 0, 0, 1 ] }, { time: 10000, value: [ 0, 1, 0, 1 ] } ]
+						},
+						uvVelocity: [ 0, 0, 0, 0, 1, 0 ]
+					}
+				}
+			} ]
+		},
+		clocks = createModelMaterialClocks( true );
+	assert.doesNotThrow( () => clocks.step( [ copy, respawned ], .5, () => animated ) );
 	f.dispose();
 });
 

@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readZipEntries } from "../helpers/zip-reader.mjs";
 import { createHash } from "node:crypto";
-const { createDiagnosticUpload, diagnosticUploadBudget } = await import(
+const { createDiagnosticUpload, diagnosticUploadBudget, diagnosticValue } = await import(
 	"../../src/engine/runtime/bug-report/archive.ts"
 );
 const OPTIONS = { id: "BR-261007-0125-52FC", clip: { start: 3, end: 8 }, maxBytes: 2 * 1024 * 1024 };
@@ -81,6 +81,21 @@ function fixture() {
 		} )
 	};
 }
+
+test("the shared report replacer keeps bigint, Map, Set and binary values serializable", () => {
+	// Bare JSON.stringify throws on the bigint; every report stringify goes
+	// through diagnosticValue (archive.ts), so none of them can.
+	const text = JSON.stringify( {
+		sessionId: 9007199254740993n,
+		seen: new Map( [ [ "a", 1 ] ] ),
+		tags: new Set( [ "x" ] ),
+		bytes: new Uint8Array( 3 )
+	}, diagnosticValue );
+	assert.equal(
+		text,
+		'{"sessionId":"9007199254740993","seen":{"a":1},"tags":["x"],"bytes":"[Uint8Array: 3 bytes]"}'
+	);
+});
 
 test("shared diagnostic ZIP preserves replay clocks and cast IDs, omitting private fields", async () => {
 	const input = fixture(), before = JSON.stringify( input );

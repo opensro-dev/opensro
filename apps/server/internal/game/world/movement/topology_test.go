@@ -20,7 +20,7 @@ import (
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 // publishedDungeonPortalCensus is the total count of resolved room-to-room
@@ -238,8 +238,8 @@ on from the landing cell (#1728).
 ================
 */
 func TestPublishedDungeonPortalTraversal(t *testing.T) {
-	licensed.RequireGameData(t)
-	root, err := licensed.ClientPublicRoot()
+	clientdata.RequireGameData(t)
+	root, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		t.Fatal(err)
 	}

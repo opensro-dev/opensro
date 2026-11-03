@@ -8,7 +8,8 @@ It keeps the roster the server seeds at world entry (0x3769) and patches
 with 0x3F9A, the one request prompt that may be waiting for this player,
 and whether this player's own request waits for an answer: the original's
 panel states 2 and 1 (CIFPanel +0x7D4, set by 760C90 and the request
-send, cleared by 760AF0 and the consent).
+send, cleared by 760AF0 and the consent). An add (760FB0 case 2) also
+raises the conclusion box, held here until its Confirm dismisses it.
 
 Notices are returned to the composer, which owns the notice list:
 connect/disconnect as chat system lines (760FB0 -> ChatSystemMessage
@@ -86,7 +87,10 @@ createFriends
 ================
 */
 export function createFriends( send: ( frame: WireFrame ) => void ) {
-	let rows: readonly FriendRow[] = [], prompt: FriendPrompt | null = null, pending = false;
+	let rows: readonly FriendRow[] = [],
+		prompt: FriendPrompt | null = null,
+		pending = false,
+		conclusion: string | null = null;
 
 	return {
 		/*
@@ -101,6 +105,7 @@ export function createFriends( send: ( frame: WireFrame ) => void ) {
 			rows = [];
 			prompt = null;
 			pending = false;
+			conclusion = null;
 		},
 		/*
 		================
@@ -108,7 +113,17 @@ export function createFriends( send: ( frame: WireFrame ) => void ) {
 		================
 		*/
 		state(): FriendsState {
-			return { rows, prompt, pending };
+			return { rows, prompt, pending, conclusion };
+		},
+		/*
+		================
+		closeConclusion
+
+		The conclusion box's Confirm (52F460 case 0x21) dismisses it.
+		================
+		*/
+		closeConclusion() {
+			conclusion = null;
 		},
 		/*
 		================
@@ -166,6 +181,8 @@ export function createFriends( send: ( frame: WireFrame ) => void ) {
 				if ( !event ) return { handled: false, notices: [] };
 				const row = event.kind === "state" ? rows.find( r => r.jid === event.jid ) : undefined;
 				rows = applyFriendEvent( rows, event );
+				// 760FB0 case 2: the add also raises the conclusion box.
+				if ( event.kind === "added" ) conclusion = event.row.name;
 				if ( event.kind !== "state" || !row || row.online === event.online || row.name === localName ) {
 					return { handled: true, notices: [] };
 				}

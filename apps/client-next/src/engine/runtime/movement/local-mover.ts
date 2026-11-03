@@ -105,6 +105,9 @@ export interface LocalMoverWorld {
 	readonly pose: Pose | null;
 	readonly poseAtMs: number | undefined;
 	readonly revision: number;
+	// The worker's relocation generation (MovementTransition.relocation): it
+	// moves on only when the worker forbids a glide, and the mover then snaps.
+	readonly relocation: number;
 	readonly moving: boolean;
 	// What the worker walks, if it walks something the mover can rebuild
 	// (movement.ts movementAim), and the speed factor of a direction walk's
@@ -348,7 +351,7 @@ export function createLocalMover() {
 		inputs: SavedInput[];
 		// The last click predicted, and the publication last rebuilt from.
 		lastSeq: number;
-		reconciled: { atMs: number | undefined; revision: number; };
+		reconciled: { atMs: number | undefined; revision: number; relocation: number; };
 		requestId: number;
 		// Walking speed (units a second) the cap holds the drawn body to.
 		speed: number;
@@ -459,7 +462,8 @@ export function createLocalMover() {
 			drawnAtMs: walk?.drawnAtMs ?? input.now,
 			inputs: [ ...(walk?.inputs ?? []), saved ],
 			lastSeq: input.seq,
-			reconciled: walk?.reconciled ?? { atMs: world.poseAtMs, revision: world.revision },
+			reconciled: walk?.reconciled ??
+				{ atMs: world.poseAtMs, revision: world.revision, relocation: world.relocation },
 			requestId: world.view!.requestId,
 			speed: input.speed
 		};
@@ -598,15 +602,22 @@ export function createLocalMover() {
 			let snapped = false;
 			const fresh = world.poseAtMs !== walk.reconciled.atMs || world.revision !== walk.reconciled.revision;
 			if ( fresh && world.pose && world.poseAtMs !== undefined && world.originMs !== undefined ) {
-				walk.reconciled = { atMs: world.poseAtMs, revision: world.revision };
+				// A new relocation is the worker forbidding a glide (movement.ts
+				// beginTransition reset, admitCorrection): a teleport, a dash's
+				// start, a correction through disconnected navigation. Native
+				// 86D5C0 seats the body at the point and snaps (owner vtable+0x94),
+				// however near it is; a Wizard's teleport landing inside the
+				// smoothing bound walked there at running speed, camera and all.
+				const relocated = world.relocation !== walk.reconciled.relocation;
+				walk.reconciled = { atMs: world.poseAtMs, revision: world.revision, relocation: world.relocation };
 				let rebuilt = replay( world, now, navigation );
 				if ( !rebuilt ) return end();
-				// A teleport-sized rebuild is a jump on purpose. The clicks still in
-				// flight were aimed from the old place: drop them, so the body does
-				// not walk a click's leg from the new place before the worker
-				// answers it (the worker decides what they mean there).
+				// A relocated or teleport-sized rebuild is a jump on purpose. The
+				// clicks still in flight were aimed from the old place: drop them,
+				// so the body does not walk a click's leg from the new place before
+				// the worker answers it (the worker decides what they mean there).
 				const gap = poseDelta( walk.drawn, rebuilt.pose );
-				snapped = !gap || hypot3( ...gap ) > MAX_SMOOTHED_CORRECTION;
+				snapped = relocated || !gap || hypot3( ...gap ) > MAX_SMOOTHED_CORRECTION;
 				if ( snapped && walk.inputs.length ) {
 					walk.inputs = [];
 					rebuilt = replay( world, now, navigation )!;

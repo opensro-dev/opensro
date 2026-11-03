@@ -15,6 +15,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -388,7 +389,22 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	var killDrops []grounditem.Item
-	roster := rt.monsterRewardRoster(divisionID, character, nowMs)
+	// The reward roster serves the settlement alone, and a strike
+	// whose planned damage cannot kill reaches none (#2030): door the
+	// caster alone and build no roster. A plan that can kill keeps
+	// the roster-wide door exactly as before. The sequence refuses
+	// outright when the target's HP moved off the planned value and
+	// applied damage never exceeds planned damage, so a fatal impact
+	// implies a lethal plan; settleStrikeFatal guards the rest.
+	var plannedDamage uint64
+	for _, plan := range damagePlans {
+		plannedDamage += uint64(plan.Damage)
+	}
+	canKill := plannedDamage >= uint64(target.CurrentHP)
+	roster := rewardRoster{division: divisionID, characters: []*enterworld.Character{character}}
+	if canKill {
+		roster = rt.monsterRewardRoster(divisionID, character, nowMs)
+	}
 	var settlement monsterSettlement
 	committed := make([]simulation.MonsterDamageResult, 0, len(formulas))
 	var ammo ammunitionResult
@@ -445,7 +461,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
 			}
 			if committed[len(committed)-1].Fatal {
-				settlement = rt.settleMonsterInsideDoor(divisionID, character, roster, committed[len(committed)-1], monsterPose, nowMs)
+				settlement = rt.settleStrikeFatal(divisionID, character, roster, canKill, committed[len(committed)-1], monsterPose, nowMs)
 				killProgressionFrames, killDrops = settlement.actorFrames, settlement.drops
 			}
 			return true
@@ -606,6 +622,40 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		ActorPrivate: privateFrames,
 		Recipients:   settlement.others,
 	}, skillCastAccepted
+}
+
+/*
+================
+settleStrikeFatal
+
+The fatal impact of a strike, settled inside the strike door: a
+player's skill strike, or a companion's struck for its owner.
+canKill says the plan was lethal and the roster is the full reward
+roster; without it the settlement runs on the caster's narrow roster
+and the kill was impossible by the planned-damage invariant, which
+noteSurpriseFatal makes audible instead of silent (#2030).
+================
+*/
+func (rt *Runtime) settleStrikeFatal(division string, character *enterworld.Character, roster rewardRoster, canKill bool, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+	if !canKill {
+		rt.noteSurpriseFatal(division, impact.Instance.Gid)
+	}
+	return rt.settleMonsterInsideDoor(division, character, roster, impact, pose, now)
+}
+
+/*
+================
+noteSurpriseFatal
+
+A strike killed under a plan that could not kill: the invariant the
+roster gate rests on broke. Count it and log it at Error with the
+division and the monster, because the settlement just ran with the
+narrow roster and underpaid - this is the sign that is not silence.
+================
+*/
+func (rt *Runtime) noteSurpriseFatal(division string, gid uint32) {
+	rt.surpriseFatalCount.Add(1)
+	log.WithFields(log.Fields{"division": division, "gid": gid}).Error("strike killed under a non-lethal plan; reward settled with the narrow roster")
 }
 
 /*

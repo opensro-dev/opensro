@@ -49,7 +49,17 @@ func TestSendBatchCarriesAdmissionBurstPastFormerFrameCap(t *testing.T) {
 	}
 
 	connection.openGate()
+	// The object rows drain behind the multi-megabyte result without
+	// waiting for the client to acknowledge it: the result is never
+	// re-sent (supersededEntryLocked), so the ring holds it as a
+	// payload-free marker and its bytes never fill the ring's bound.
 	written := waitWritten(t, connection, 1+len(frames)+1)
+	session.mu.Lock()
+	ringed, ringBytes := len(session.ring), session.ringBytes
+	session.mu.Unlock()
+	if ringed != len(frames)+1 || ringBytes >= 1<<20 {
+		t.Fatalf("ring = %d frames/%d bytes, want %d frames with the result held as a marker", ringed, ringBytes, len(frames)+1)
+	}
 	if written[0].Opcode != OpWelcome || written[1].Opcode != OpEnterWorldResult {
 		t.Fatalf("admission prefix = 0x%04X,0x%04X, want WELCOME,ENTERWORLDRESULT", written[0].Opcode, written[1].Opcode)
 	}

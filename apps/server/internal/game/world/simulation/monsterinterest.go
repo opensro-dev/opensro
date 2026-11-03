@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -26,6 +27,26 @@ import (
 type monsterObjectListKey struct {
 	divisionID string
 	playerGid  uint32
+}
+
+/*
+================
+scopeViewerMemo
+
+One viewer's last full scope pass (#2134): the population, block and
+interest stamp its shown set synced under. A later leg that matches
+division, lease, block and stamp provably faces the in-scope set the
+viewer already holds, so runScopeVisibility skips the delta read,
+the list clone and both set scans for it. The stamp is sampled
+before the pass it describes: a write landing between the sample
+and the pass can only make the memo stale, never wrong-side.
+================
+*/
+type scopeViewerMemo struct {
+	division string
+	lease    instance.Lease
+	block    worldgeom.InterestBlock
+	stamp    interestMemoStamp
 }
 
 // InterestInstances returns the instances whose live position lies inside the
@@ -94,22 +115,127 @@ triangulated REV/DUMP/RZ), so every scope-exit MUST emit an explicit
 despawn. A stationary viewer's interest blocks are constant, so after the
 initial seed only monsters crossing a block boundary produce deltas
 (coordinator seq401 condition 3 - flicker without movement is a bug).
+The stamp keys on the viewer's own blocks, so churn in a far
+neighbourhood neither re-reads its shown set nor re-scans its answer
+(#2134); a leg the per-block memo cannot bridge with a recorded
+difference runs the full pass below.
 ==================
 */
 func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSnapshot, viewers map[string]worldgeom.RegionXZ, live map[string]bool, push Pusher) {
 	if ops.shownMonsters == nil {
 		ops.shownMonsters = make(map[string]map[uint32]bool)
 	}
+	if ops.scopeMemo == nil {
+		ops.scopeMemo = make(map[string]scopeViewerMemo)
+	}
 
 	inScopeGids := make(map[uint32]bool)
 	for _, session := range sessions {
-		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewers[session.SessionID], nowMs, ops.shownMonsters[session.SessionID])
+		viewer := viewers[session.SessionID]
+		shown, seeded := ops.shownMonsters[session.SessionID]
+		stamp, stampOK := ops.Monsters.scopeInterestStamp(session.DivisionID, session.Population, viewer, nowMs)
+		memo, memoOK := ops.scopeMemo[session.SessionID]
+		sameScope := memoOK && memo.division == session.DivisionID && memo.lease == session.Population &&
+			worldgeom.InterestBlockAt(viewer) == memo.block
+
+		// The unchanged-leg skip (#2134): a seeded viewer whose block
+		// and interest stamp match its last pass faces the in-scope
+		// set its shown set already equals, so the delta below would
+		// publish nothing. The budget-breach size is the one already
+		// logged for this division occupancy, so it is not re-read
+		// either.
+		if seeded && stampOK && sameScope && stamp == memo.stamp {
+			continue
+		}
+
+		// enterOne publishes one scope-enter: one 0x30D7 single at the
+		// monster's LIVE pose (a wanderer spawns where it is, not at
+		// its anchor). If a segment is IN FLIGHT, follow with the
+		// channel push (the spawn row ships the walk channel) and the
+		// CURRENT goal, so the new viewer's client integrates the same
+		// walk the rest of the division sees (without this the monster
+		// would stand frozen until its next leg). A gid whose mover
+		// row is gone is not marked shown; the actor is gone too,
+		// which moves the stamp, so a later leg re-reads in full.
+		enterOne := func(instance monster.Instance) {
+			mover, ok := ops.Monsters.Mover(session.DivisionID, instance.Gid)
+			if !ok {
+				return
+			}
+			// Mid-flight scope-enter: resolve the interpolated XZ onto the
+			// terrain (BUG-8 second injection path, board seq735/seq779) so
+			// the spawn single never ships a chord height.
+			pose := mover.LivePoseAt(nowMs, ops.GroundHeight)
+			frames := []Frame{{
+				ScopeGID: instance.Gid, ScopeVisible: true,
+				Opcode: wire.OpSingleObjectSpawn,
+				Payload: BuildMonsterSpawnSingle(monsterWireDefFromInstance(instance, nowMs), instance.Gid, Spawn{
+					RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Angle: pose.Heading,
+				}),
+			}}
+			if instance.AbnormalMask() != 0 {
+				frames = append(frames, Frame{Opcode: OpVitalsUpdate, Payload: MonsterAbnormalPayload(instance)})
+			}
+			if instance.CurrentHP != 0 && mover.InFlight(nowMs) {
+				frames = append(frames, monsterInFlightSnapshotFrames(instance, mover, nil)...)
+			}
+			push.PushToSession(session.SessionID, frames)
+			shown[instance.Gid] = true
+		}
+
+		// emitExits publishes scope-exit despawns: one 0x36AB for a
+		// single exit, the byListSub=2 bracket for a bulk exit (a
+		// block shift evicts whole blocks at once; both shapes are
+		// native and both are client-safe post WIP seq373). Callers
+		// remove the gids from shown first.
+		emitExits := func(exits []uint32) {
+			if len(exits) == 1 {
+				despawn := wire.ObjectDespawn{Gid: exits[0]}
+				push.PushToSession(session.SessionID, []Frame{{
+					ScopeGID: exits[0],
+					Opcode:   wire.OpObjectDespawn,
+					Payload:  despawn.Encode(),
+				}})
+			} else if len(exits) > 1 {
+				sort.Slice(exits, func(i, j int) bool { return exits[i] < exits[j] })
+				push.PushToSession(session.SessionID, MonsterDespawnBracketFrames(exits))
+			}
+		}
+
+		// The block-delta fast path (#2134): the stamp moved, but only
+		// in blocks some other neighbourhood reads - or this block's
+		// answer changed by a difference the per-block memo recorded.
+		// A viewer whose shown set still equals the replaced answer
+		// applies just that difference. Anything the memo cannot
+		// bridge falls through to the full pass, which is always
+		// correct.
+		if seeded && stampOK && sameScope {
+			if entered, enteredSnapshots, left, total, ok := ops.Monsters.populationInterestBlockDelta(session.DivisionID, session.Population, viewer, nowMs, memo.stamp, shown); ok {
+				// Detection only: never truncate the server-owned existence set.
+				if total > monsterScopeSoftLimit {
+					ops.logScopeBudgetBreach(session.DivisionID, total)
+				}
+				for _, gid := range entered {
+					enterOne(enteredSnapshots[gid])
+				}
+				for _, gid := range left {
+					delete(shown, gid)
+				}
+				emitExits(left)
+				ops.scopeMemo[session.SessionID] = scopeViewerMemo{
+					division: session.DivisionID, lease: session.Population,
+					block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+				}
+				continue
+			}
+		}
+
+		inScope, snapshots := ops.Monsters.populationInterestDelta(session.DivisionID, session.Population, viewer, nowMs, shown)
 		// Detection only: never truncate the server-owned existence set.
 		if len(inScope) > monsterScopeSoftLimit {
 			ops.logScopeBudgetBreach(session.DivisionID, len(inScope))
 		}
 
-		shown, seeded := ops.shownMonsters[session.SessionID]
 		if !seeded {
 			// First sight of this session: the client already holds the
 			// bootstrap object list, recorded when it was built. The session
@@ -173,43 +299,10 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 			if shown[gid] {
 				continue
 			}
-			instance := snapshots[gid]
-			// Scope-enter: one 0x30D7 single at the monster's LIVE pose
-			// (a wanderer spawns where it is, not at its anchor). If a
-			// segment is IN FLIGHT, follow with the channel push (the
-			// spawn row ships the walk channel) and the CURRENT goal, so
-			// the new viewer's client integrates the same walk the rest
-			// of the division sees (without this the monster would stand
-			// frozen until its next leg).
-			mover, ok := ops.Monsters.Mover(session.DivisionID, instance.Gid)
-			if !ok {
-				continue
-			}
-			// Mid-flight scope-enter: resolve the interpolated XZ onto the
-			// terrain (BUG-8 second injection path, board seq735/seq779) so
-			// the spawn single never ships a chord height.
-			pose := mover.LivePoseAt(nowMs, ops.GroundHeight)
-			frames := []Frame{{
-				ScopeGID: instance.Gid, ScopeVisible: true,
-				Opcode: wire.OpSingleObjectSpawn,
-				Payload: BuildMonsterSpawnSingle(monsterWireDefFromInstance(instance, nowMs), instance.Gid, Spawn{
-					RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Angle: pose.Heading,
-				}),
-			}}
-			if instance.AbnormalMask() != 0 {
-				frames = append(frames, Frame{Opcode: OpVitalsUpdate, Payload: MonsterAbnormalPayload(instance)})
-			}
-			if instance.CurrentHP != 0 && mover.InFlight(nowMs) {
-				frames = append(frames, monsterInFlightSnapshotFrames(instance, mover, nil)...)
-			}
-			push.PushToSession(session.SessionID, frames)
-			shown[instance.Gid] = true
+			enterOne(snapshots[gid])
 		}
 
-		// Scope-exit: explicit despawns - one 0x36AB for a single exit,
-		// the byListSub=2 bracket for a bulk exit (a block shift evicts
-		// whole blocks at once; both shapes are native and both are
-		// client-safe post WIP seq373).
+		// Scope-exit: every shown gid the answer no longer holds.
 		var exits []uint32
 		for gid := range shown {
 			if !inScopeGids[gid] {
@@ -217,16 +310,17 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 				delete(shown, gid)
 			}
 		}
-		if len(exits) == 1 {
-			despawn := wire.ObjectDespawn{Gid: exits[0]}
-			push.PushToSession(session.SessionID, []Frame{{
-				ScopeGID: exits[0],
-				Opcode:   wire.OpObjectDespawn,
-				Payload:  despawn.Encode(),
-			}})
-		} else if len(exits) > 1 {
-			sort.Slice(exits, func(i, j int) bool { return exits[i] < exits[j] })
-			push.PushToSession(session.SessionID, MonsterDespawnBracketFrames(exits))
+		emitExits(exits)
+
+		// Remember the pass for the unchanged-leg skip: the stamp
+		// sampled before it ran and the block it read.
+		if stampOK {
+			ops.scopeMemo[session.SessionID] = scopeViewerMemo{
+				division: session.DivisionID, lease: session.Population,
+				block: worldgeom.InterestBlockAt(viewer), stamp: stamp,
+			}
+		} else {
+			delete(ops.scopeMemo, session.SessionID)
 		}
 	}
 
@@ -234,6 +328,7 @@ func (ops *MonsterMoverOps) runScopeVisibility(nowMs int64, sessions []SessionSn
 	for sessionID := range ops.shownMonsters {
 		if !live[sessionID] {
 			delete(ops.shownMonsters, sessionID)
+			delete(ops.scopeMemo, sessionID)
 		}
 	}
 

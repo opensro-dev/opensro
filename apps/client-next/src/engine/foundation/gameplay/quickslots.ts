@@ -110,12 +110,25 @@ export function quickSlotCommand(
 	mountedOn = 0
 ): import("@/engine/contracts/gameplay").GameplayCommand | null {
 	if ( row.kind === 0x46 ) {
-		return itemActivation(
+		const command = itemActivation(
 			row.payload + EQUIPMENT_SLOT_COUNT,
 			state.inventory,
 			state.inventorySlotCount,
 			state.inventoryPending
 		);
+		if ( command?.kind === "inventory-move" ) {
+			// The activation mark names the inventory double-click
+			// dispatch (567290) the itemActivation caller in ui.ts
+			// ports; the hotbar entry is untraced, so it keeps the
+			// unmarked move it has always sent.
+			return {
+				kind: "inventory-move",
+				source: command.source,
+				destination: command.destination,
+				quantity: command.quantity
+			};
+		}
+		return command;
 	}
 	if ( row.kind === 0x49 && state.skills?.includes( row.payload ) ) {
 		return { kind: "skill", skillId: row.payload, ...(state.target ? { gid: state.target } : {}) };

@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 
 const { createRuntimeErrors } = await import( sourceFileUrl( "src/engine/runtime/runtime-errors.ts" ).href );
 test("runtime failures report once per transition, independently by subsystem, and rearm after recovery", () => {
-	const messages = [], errors = createRuntimeErrors( message => messages.push( message ) );
+	const messages = [], errors = createRuntimeErrors( ( source, error ) => messages.push( `${source}: ${error}` ) );
 	for ( let i = 0; i < 100; i++ ) errors.update( "Characters", "Missing height" );
 	errors.update( "Audio", "Missing sound" );
 	errors.update( "Characters", "Invalid model" );

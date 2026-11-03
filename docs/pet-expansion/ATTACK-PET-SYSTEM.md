@@ -97,7 +97,7 @@ Transfer applies after native damage links, shields and mana redirection. One
 strongest eligible bear applies; bonds do not stack. Allies share a transfer
 limit of 20% of bear maximum HP each second, and transfer leaves at least one HP.
 Transferred costs do not charge hit counters, damage links or retribution.
-Gold recovery pulses and licensed cleric healing/rebirth sounds mark confirmed
+Gold recovery pulses and native cleric healing/rebirth sounds mark confirmed
 events without changing the bear’s pose. Balance remains subject to testing.
 
 Bear **Crushing Paw** now retaliates after every ten landed physical or spell
@@ -395,8 +395,7 @@ Live acceptance on 16 October confirmed legitimate D9 harness/charm 50% blues
 display 80%, Iron Hide III produced exactly 6000ms and early recast was refused.
 One 50% piece produced 15000ms; Roar's 18s became about 3600ms against weak
 Small-eyed Ghosts. Original gear restored; owner full HP in Hotan. This is not
-blanket acceptance of every passive or affix. See the
-[REVIEW-VALIDATION.md](REVIEW-VALIDATION.md) for validation coverage.
+blanket acceptance of every passive or affix.
 
 ### Source map
 
@@ -428,3 +427,221 @@ cooldown and one-second Roar windup remain. Consumption/expiry clamps currentHP;
 it never deals damage or kills. Unsummon/relog/town/invalid passive clears stacks.
 Resolve is transient and never changes saved ranks, equipment or database schema.
 Subtle model growth (+12% at full), amber ground ring and brief full-stack pulse.
+
+## The design lives in one JSON source
+
+[`apps/server/internal/game/companion/petdesign.json`](../../apps/server/internal/game/companion/petdesign.json)
+is the one source of every number: pets, skills, rows, cooldowns, gear degrees, affixes (blues),
+procs. Edit it, then run
+
+```
+py scripts/tools/pet_design_export.py
+```
+
+which validates it, rewrites it in its canonical layout and generates the client
+module (`apps/client-next/src/engine/foundation/ui/pet-design-data.ts`). The server
+embeds the file and the asset build reads it in place; `pnpm task check:pet-design`
+fails when the client module no longer matches. Only rows whose
+**Status** is `Implemented` can be learned or rolled; the engine notes column says
+what each rank does in code. Rebuild game data after changing gear rows.
+
+## Wire
+
+Wire: state push 0x3FB1; command = normal COS request 0x769E, tag F0,
+`[petGID:u32le][F0][op][arg]` with ops 0 state, 1 learn, 2 use (queue an action), 3 wear bag
+slot, 4 remove gear slot, 5 reset, 6 slot passive. Retail decoder unchanged.
+
+## Gear degrees
+
+Port-only; the existing
+`SRO_ATTACK_PET_EXPANSION` flag still controls pet gear.
+
+| Degree | Pet/monster level band | Maximum blues | Minimum roll percentile |
+| --- | --- | --- | --- |
+| D1 | 1–7 | 1 | 0% |
+| D2 | 8–15 | 2 | 6.25% |
+| D3 | 16–23 | 2 | 12.5% |
+| D4 | 24–31 | 3 | 18.75% |
+| D5 | 32–41 | 3 | 25% |
+| D6 | 42–51 | 4 | 31.25% |
+| D7 | 52–63 | 4 | 37.5% |
+| D8 | 64–75 | 5 | 43.75% |
+| D9 | 76+ | 6 | 50% |
+
+These are the character equipment degree thresholds through D9. Pet drops now
+inherit the degree of actual normal character-equipment loot, including
+lower-degree items a higher-level monster can roll. Uniques use their normal
+equipment tables; there is no additional pet-only degree promotion.
+See [PET-LOOT-DB-CONFIG.md](PET-LOOT-DB-CONFIG.md) for the DB chance multiplier. White pet items may have zero
+blues. Magic drops roll one or two, subject to the degree cap. Rare drops roll
+three through six, also subject to that cap. Six-blue weight is available only
+on D9. A group may appear only once on an item, and only implemented affixes roll.
+
+Higher degrees unlock the existing stronger affix tiers and improve rolls
+within each eligible tier. The integer roll floor is
+`affixMin + floor((affixMax - affixMin) * percentile)`; the maximum remains the
+affix tier's authored maximum. For example, a 10–30% affix rolls 10–30% at
+D1 if eligible, and 20–30% at D9. A D9 item can still select a lower affix
+tier; D9 does not guarantee six blues or perfect rolls.
+
+### Source and compatibility
+
+Edit [`petdesign.json`](../../apps/server/internal/game/companion/petdesign.json): `gear` owns equipment requirements, maximum blues,
+six-blue weights and roll floors; `rules` owns the global six-blue ceiling.
+Legacy design drop chances/rank multipliers no longer control runtime drops.
+Run `python scripts/tools/pet_design_export.py` to regenerate the client
+module; the server and the asset pipeline read the file itself. Do not hand-edit
+generated files.
+
+Worn gear now stores six options. Existing five-option saves load with an
+empty sixth slot; existing items retain their options and are not rerolled.
+Do not roll back to a five-option server after issuing six-option items:
+older code would discard the sixth option when loading them.
+
+All27 slot/degree icons from `assets/README.md` are included. No extra icon
+per blue count is needed: the degree selects the art, while the tooltip
+shows actual options and the new per-degree cap.
+
+## Gear spell procs
+
+These blues have separate **pet dealing damage** and
+**pet taking damage** versions:
+
+|Spell|Effect|
+|---|---|
+|Chain Lightning|Up to 5 distinct monsters;8 m hops,20% less damage per hop.|
+|Blizzard|5 m field,4 damage pulses across 4 seconds. Uses the penguin storm visual.|
+|Fire Burst|3 m burst, up to 8 monsters.|
+|Poison Cloud|5 m field,4 damage pulses across 4 seconds.|
+|Mend|Heals the owner for 5% maximum HP.|
+
+Attack versions generally roll on Collar/Charm; retaliation versions on
+Harness/Charm. Existing attack-Mend stays Charm-only. Proc families start
+atD3, with stronger chance tiers atD6/D7/D9, matching their existing chance
+progressions. Each direction is a separate blue group and may coexist.
+
+### Degree power
+
+|Degree|Base proc damage|
+|---|---:|
+|D1|100|
+|D2|213|
+|D3|325|
+|D4|438|
+|D5|550|
+|D6|663|
+|D7|775|
+|D8|888|
+|D9|1000|
+
+This is damage per target for Fire Burst and the first Chain Lightning hit.
+Blizzard/Poison Cloud split that total across their four pulses, preserving
+the remainder on the last pulse. Mend retains its existing 5% heal. This
+proc damage is separate from flat fire/cold/lightning/poison damage blues.
+Higher roll chance and degree power are independent. Multiple items add the
+same proc's chance (capped 100%) and use its strongest contributing degree.
+
+### Limits
+
+- Only committed damaging pet actions or nonfatal hits taken from ordinary
+  population monsters qualify. Physical and magic hits both qualify.
+- Full blocks, fully shielded hits, player/PvP hits and brood clones do not.
+- At most one proc fires per action, sharing the existing 2 second internal
+  cooldown across both directions. Selection order: Chain, Blizzard, Fire,
+  Poison, Mend. Chances still roll independently in that order.
+- Fixed proc hits use normal credited settlement for loot/EXP. They do not
+  generate more attacks, proc rolls, leech or learned-skill stacks.
+- Only the correct population, range and line-of-sight are admitted. Area
+  pulses hit at most 8 monsters. No player targets.
+- At most 4 fields per pet; missed ticks do not replay a damage backlog.
+  Death, owner death, town entry, separation or unsummon discard fields.
+- Proc state is transient; logout/restart clears cooldowns/fields.
+- Dedicated new visuals were not authored for the other gear spells.
+
+### Configuration and stable IDs
+
+`pet_affix_rules` controls min/max **proc chance**, selection weight and
+roll power, loaded at shard startup. Setting weight 0 disables future rolls.
+Already saved blue rolls retain their values.
+
+Existing attack codes 84–86(Chain),90–91(Fire),96–97(Mend) remain stable.
+Previously planned codes 87–89 now implement Blizzard when struck;
+92–93 implement Poison Cloud when struck. New paired blues use 220–231
+and seed automatically. The local DB metadata for 87–89 and 92–93 was updated
+to match their new groups; configured chance ranges and weights were kept.
+No schema migration is needed.
+
+Power is authored perdegree in `gear[].procDamage` in `petdesign.json`;
+regenerate with `scripts/tools/pet_design_export.py` and rebuild the server
+and client after editing. Recovery uses `rules.procInternalCooldownMs`.
+
+## Sealed gear and elemental blues
+
+Collars, harnesses and charms have ordinary, Seal of Star, Seal of Moon and
+Seal of Sun versions at every degree. They share the degree's icon and the
+native sealed-item animated slot shine and yellow tooltip heading.
+
+| Quality | White stats and rolled blue values |
+| --- | --- |
+| Ordinary | 100% |
+| Seal of Star | 150% |
+| Seal of Moon | 200% |
+| Seal of Sun | 250% |
+
+Blue values are multiplied once when dropped and rounded down to integers.
+The stored values survive pickup, equip, trade, storage and relog without
+being multiplied again. Per-item blue count limits remain unchanged. Global
+cooldown reduction remains capped at 80%; proc chances remain capped at 100%.
+Seals also increase the degree's proc damage, but do not change proc recovery.
+
+The three slots reserve IDs `301xx`, `302xx` and `303xx`. The units digit is
+degree 1–9; tens digit 0/1/2/3 is ordinary/Star/Moon/Sun. Existing ordinary
+references and saved rolls are unchanged. Sealed codenames append `_STAR`,
+`_MOON` or `_SUN` to the ordinary codename. No database schema change is needed.
+
+### Drop configuration
+
+Pet equipment still drops only from monsters, through the existing
+`pet_gear_drop_factor` policy described in [PET-LOOT-DB-CONFIG.md](PET-LOOT-DB-CONFIG.md).
+It inherits the triggering normal-equipment drop's degree and seal tier.
+Thus native monster loot tables control seal rarity; there is no second,
+independent seal roll and no NPC source. Changing the pet factor changes the
+number of pet drops, not their relative seal odds.
+
+### Elemental blues
+
+Fire, cold and lightning add separate fixed-damage hits to each successfully
+damaged monster, displayed through the native yellow damage-number packet.
+They are no longer hidden inside the ordinary physical/magic damage formula.
+They do not recursively trigger counters, leech or chance-to-cast blues.
+Their tooltip lines describe these fixed hits, without obsolete 5% status
+chances or a random lightning range. Chance-to-cast proc blues remain separate.
+
+Poison's displayed value is its **total damage over four seconds**. It ticks
+once per second: 12 means four ticks of 3. Remainders are distributed over the
+four ticks without losing damage. Another hit refreshes this pet's poison on
+that monster without postponing the next tick or stacking another copy.
+Different pets retain independent poison applications. Death, recall, town
+entry, logout or an invalid target discards pending ticks. Late simulation
+ticks never replay a backlog.
+
+### Building
+
+`scripts/build/shared/portItemRows.mjs` creates all 108 reference rows. Rebuild
+the server game-data bundle and refresh the client `pet-loot` asset family
+together, then deploy the server and reload the client. Sealed items use the
+same owned icons and models; original PK2 archives are unchanged.
+
+## Source owners
+
+- `apps/server/internal/game/companion/petdesign.json` + `scripts/tools/pet_design_export.py`: design and its client export.
+- `apps/server/internal/game/companion/`: `design.go` (embedded design),
+  `training.go` (points, rows, slots), `gear.go` (rolls, affix encoding, modifiers).
+- `apps/server/internal/domain/character.go`: persisted `PetTraining`.
+- `apps/server/internal/game/action/`: `pettraining.go` (commands, gear moves),
+  `pettrained.go`, `petmanual.go`, `petshield.go`, `petspirit.go`, `petbond.go` (combat effects),
+  `petgeardrop.go` (drops), `petcombat.go`, `monsterstrike.go`, `monsterloot.go` (existing owners hooked).
+- `item/wire/pettraining.go`, `itemmove.go`: state frame and gear options on items.
+- `scripts/build/shared/portItemRows.mjs`: gear item rows and text.
+- Client: worker `pet-training.ts`, `foundation/ui/pet-training.ts`, `ui.ts`
+  pet window, tooltips.

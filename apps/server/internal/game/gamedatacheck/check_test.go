@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/gamedata"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,7 +25,7 @@ TestCheckAcceptsTheShippedGameData
 */
 func TestCheckAcceptsTheShippedGameData(t *testing.T) {
 	tier.Long(t, "the whole shipped game-data projection passes its check")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	result, err := Check()
 	if err != nil {
 		t.Fatalf("shipped game data refused: %v", err)

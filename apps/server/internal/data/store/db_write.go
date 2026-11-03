@@ -55,6 +55,10 @@ type characterRowTx struct {
 	store   *Store
 	written map[committedCharacterKey][32]byte
 	deleted map[committedCharacterKey]bool
+	// copies stages the committed copies (character_sections.go) for
+	// the rows this transaction writes, retained at Commit under the
+	// written digests' discipline.
+	copies map[committedCharacterKey]*domain.Character
 }
 
 /*
@@ -71,7 +75,8 @@ func (s *Store) beginCharacterTxLocked() (*characterRowTx, error) {
 		return nil, err
 	}
 	return &characterRowTx{Tx: tx, store: s,
-		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{}}, nil
+		written: map[committedCharacterKey][32]byte{}, deleted: map[committedCharacterKey]bool{},
+		copies: map[committedCharacterKey]*domain.Character{}}, nil
 }
 
 /*
@@ -83,6 +88,18 @@ its digest for Commit to retain.
 ================
 */
 func (w *characterRowTx) upsertCharacter(division string, c *domain.Character) error {
+	// The section skip (#2141), as in the commit path: a row whose
+	// sections all equal its committed copy already holds these
+	// bytes on disk. The digest is re-recorded so Commit retains it
+	// beside the (unchanged) copy, exactly as a write would.
+	key := committedCharacterKey{division: division, id: c.ID}
+	if digest, digested := w.store.committedDigests[key]; digested {
+		if committed, copied := w.store.committedRows[key]; copied && len(characterSectionsChanged(c, committed)) == 0 {
+			w.written[key] = digest
+			delete(w.deleted, key)
+			return nil
+		}
+	}
 	record, err := encodeCharacter(division, c)
 	if err != nil {
 		return err
@@ -104,6 +121,7 @@ func (w *characterRowTx) writeCharacterRecord(division string, c *domain.Charact
 	}
 	key := committedCharacterKey{division: division, id: c.ID}
 	w.written[key] = sha256.Sum256(record)
+	w.copies[key] = domain.CloneCharacter(c)
 	delete(w.deleted, key)
 	return nil
 }
@@ -124,6 +142,7 @@ func (w *characterRowTx) deleteCharacter(division string, id int64) error {
 	key := committedCharacterKey{division: division, id: id}
 	w.deleted[key] = true
 	delete(w.written, key)
+	delete(w.copies, key)
 	return nil
 }
 
@@ -143,9 +162,13 @@ func (w *characterRowTx) Commit() error {
 	}
 	for key := range w.deleted {
 		delete(w.store.committedDigests, key)
+		delete(w.store.committedRows, key)
 	}
 	for key, digest := range w.written {
 		w.store.committedDigests[key] = digest
+	}
+	for key, row := range w.copies {
+		w.store.committedRows[key] = row
 	}
 	return nil
 }
@@ -158,6 +181,7 @@ characterRowTx::Rollback
 func (w *characterRowTx) Rollback() error {
 	w.written = map[committedCharacterKey][32]byte{}
 	w.deleted = map[committedCharacterKey]bool{}
+	w.copies = map[committedCharacterKey]*domain.Character{}
 	return w.Tx.Rollback()
 }
 
@@ -204,11 +228,16 @@ func encodeCharacterBorrowed(scratch *jsonscratch.Scratch, division string, c *d
 /*
 ================
 writeCharacterTx
+
+The one-row door form: a door's own transaction writes its rows
+through tx.Exec directly (beginCharacterTxLocked's doors, the
+seed). The commit's many-row path prepares the same statement once
+per attempt instead (#1943 W3, characterRowCommit::writeRow in
+persistence.go); both spell it from upsertCharacterSQL below.
 ================
 */
 func writeCharacterTx(tx *sql.Tx, division string, c *domain.Character, record []byte) error {
-	_, err := tx.Exec(
-		"INSERT INTO characters (division, id, name_lower, record) VALUES (?, ?, ?, ?) ON CONFLICT(division, id) DO UPDATE SET name_lower = excluded.name_lower, record = excluded.record",
+	_, err := tx.Exec(upsertCharacterSQL,
 		division, c.ID, strings.ToLower(c.Name), string(record))
 	return err
 }
@@ -245,6 +274,8 @@ func replaceGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisions map[str
 }
 
 const (
+	upsertCharacterSQL = "INSERT INTO characters (division, id, name_lower, record) VALUES (?, ?, ?, ?) " +
+		"ON CONFLICT(division, id) DO UPDATE SET name_lower = excluded.name_lower, record = excluded.record"
 	upsertGroundSQL = "INSERT INTO ground_items (division, gid, record) VALUES (?, ?, ?) " +
 		"ON CONFLICT(division, gid) DO UPDATE SET record = excluded.record"
 	deleteGroundSQL = "DELETE FROM ground_items WHERE division = ? AND gid = ?"
@@ -266,9 +297,14 @@ on the tick goroutine. The diff is a merge walk over gid-sorted rows
 (Registry.Snapshot sorts, the load query orders by gid), so a commit
 that changed one drop does one statement and allocates nothing for
 the rows it skips. Returns the rows written and deleted.
+
+The walk writes through one groundRowWriter (#1943 W3): the changed
+rows of a churn-heavy commit no longer pay tx.Exec's prepare each.
 ================
 */
 func writeGroundDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed, next map[string][]domain.GroundItemRecord) (int, int, error) {
+	writer := newGroundRowWriter(tx, scratch)
+	defer writer.close()
 	divisionIDs := make([]string, 0, len(next)+len(committed))
 	for divisionID := range next {
 		divisionIDs = append(divisionIDs, divisionID)
@@ -281,7 +317,7 @@ func writeGroundDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed, next
 	sort.Strings(divisionIDs)
 	written, deleted := 0, 0
 	for _, divisionID := range divisionIDs {
-		w, d, err := writeGroundDivisionDiffTx(tx, scratch, divisionID, sortedGround(committed[divisionID]), sortedGround(next[divisionID]))
+		w, d, err := writeGroundDivisionDiffTx(writer, divisionID, sortedGround(committed[divisionID]), sortedGround(next[divisionID]))
 		if err != nil {
 			return 0, 0, err
 		}
@@ -297,19 +333,19 @@ writeGroundDivisionDiffTx
 One division's merge walk; both row lists are sorted by gid.
 ================
 */
-func writeGroundDivisionDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisionID string, old, next []domain.GroundItemRecord) (int, int, error) {
+func writeGroundDivisionDiffTx(writer *groundRowWriter, divisionID string, old, next []domain.GroundItemRecord) (int, int, error) {
 	written, deleted := 0, 0
 	i, j := 0, 0
 	for i < len(old) || j < len(next) {
 		switch {
 		case j == len(next) || i < len(old) && old[i].Gid < next[j].Gid:
-			if _, err := tx.Exec(deleteGroundSQL, divisionID, old[i].Gid); err != nil {
+			if err := writer.deleteRow(divisionID, old[i].Gid); err != nil {
 				return 0, 0, err
 			}
 			deleted++
 			i++
 		case i == len(old) || next[j].Gid < old[i].Gid:
-			if err := upsertGroundTx(tx, scratch, divisionID, &next[j]); err != nil {
+			if err := writer.upsert(divisionID, &next[j]); err != nil {
 				return 0, 0, err
 			}
 			written++
@@ -318,7 +354,7 @@ func writeGroundDivisionDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisio
 			// Same gid. DeepEqual can only err towards a rewrite, never
 			// towards a missed change, and it follows any new field.
 			if !reflect.DeepEqual(&old[i], &next[j]) {
-				if err := upsertGroundTx(tx, scratch, divisionID, &next[j]); err != nil {
+				if err := writer.upsert(divisionID, &next[j]); err != nil {
 					return 0, 0, err
 				}
 				written++
@@ -331,16 +367,91 @@ func writeGroundDivisionDiffTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisio
 
 /*
 ================
-upsertGroundTx
+groundRowWriter
+
+One transaction's ground rows, written through statements the
+transaction prepares once (#1943 W3): the upsert and the delete,
+each prepared on first use, so a commit that only upserts never
+prepares the delete. writeGroundDiffTx and writeGroundChangesTx
+each own one and close it before their caller commits.
 ================
 */
-func upsertGroundTx(tx *sql.Tx, scratch *jsonscratch.Scratch, divisionID string, item *domain.GroundItemRecord) error {
-	record, err := scratch.Marshal(item)
+type groundRowWriter struct {
+	tx         *sql.Tx
+	scratch    *jsonscratch.Scratch
+	upsertStmt *sql.Stmt
+	deleteStmt *sql.Stmt
+}
+
+/*
+================
+newGroundRowWriter
+================
+*/
+func newGroundRowWriter(tx *sql.Tx, scratch *jsonscratch.Scratch) *groundRowWriter {
+	return &groundRowWriter{tx: tx, scratch: scratch}
+}
+
+/*
+================
+groundRowWriter::upsert
+
+One ground row, marshaled into the writer's scratch exactly as the
+old per-row tx.Exec form did (upsertGroundTx, folded in here).
+================
+*/
+func (w *groundRowWriter) upsert(divisionID string, item *domain.GroundItemRecord) error {
+	record, err := w.scratch.Marshal(item)
 	if err != nil {
 		return fmt.Errorf("marshaling ground %s/gid %d: %w", divisionID, item.Gid, err)
 	}
-	_, err = tx.Exec(upsertGroundSQL, divisionID, item.Gid, string(record))
+	if w.upsertStmt == nil {
+		stmt, err := w.tx.Prepare(upsertGroundSQL)
+		if err != nil {
+			return err
+		}
+		w.upsertStmt = stmt
+	}
+	// string(record), as in writeCharacterTx: a []byte binds as a blob.
+	_, err = w.upsertStmt.Exec(divisionID, item.Gid, string(record))
 	return err
+}
+
+/*
+================
+groundRowWriter::deleteRow
+
+One ground row removed by gid.
+================
+*/
+func (w *groundRowWriter) deleteRow(divisionID string, gid uint32) error {
+	if w.deleteStmt == nil {
+		stmt, err := w.tx.Prepare(deleteGroundSQL)
+		if err != nil {
+			return err
+		}
+		w.deleteStmt = stmt
+	}
+	_, err := w.deleteStmt.Exec(divisionID, gid)
+	return err
+}
+
+/*
+================
+groundRowWriter::close
+
+Releases whichever statements the writes prepared.
+================
+*/
+func (w *groundRowWriter) close() {
+	if w.upsertStmt != nil {
+		_ = w.upsertStmt.Close()
+		w.upsertStmt = nil
+	}
+	if w.deleteStmt != nil {
+		_ = w.deleteStmt.Close()
+		w.deleteStmt = nil
+	}
 }
 
 /*

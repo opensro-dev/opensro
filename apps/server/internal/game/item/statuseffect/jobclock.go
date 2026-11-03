@@ -37,13 +37,17 @@ func (c *relativeJobClock) advance(delta float32) (checkpoint, forceRetirement b
 	return checkpoint, !c.active && !c.retiredByEffect
 }
 
-func (e *Effect) advanceJob(nowMs int64) {
+// advanceJob moves the durable-job clock to nowMs and reports whether
+// the row moved, so the per-tick sweeps can leave untouched owners'
+// snapshot views standing.
+func (e *Effect) advanceJob(nowMs int64) bool {
 	if !e.jobClockPresent || nowMs <= e.jobUpdatedAtMs {
-		return
+		return false
 	}
 	checkpoint, _ := e.jobClock.advance(float32(nowMs-e.jobUpdatedAtMs) / 1000)
 	e.jobCheckpointDue = e.jobCheckpointDue || checkpoint
 	e.jobUpdatedAtMs = nowMs
+	return true
 }
 
 // PersistentRemainingMs is the durable record's whole-second value, not the

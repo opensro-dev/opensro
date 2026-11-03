@@ -215,9 +215,9 @@ type QuestSpec struct {
 	// RewardChoiceCheckCountry is _RefQuestReward IsCheckCountry: a choice
 	// whose item belongs to the other country is not offered.
 	RewardChoiceCheckCountry bool
-	// RewardInventorySlots is the reward row's inventory slots (byte +0x3db,
-	// paid after the items and gold by the server's reward-row payment). They
-	// wait for the next world entry (domain.GrantInventoryExpansion).
+	// RewardInventorySlots is the reward row's inventory slots, paid after
+	// the items and gold by the server's reward-row payment. They grow the
+	// bag at the turn-in (domain.GrantInventoryExpansion).
 	RewardInventorySlots uint8
 	// TurnInGold is a fee the completing NPC takes once the reward is paid
 	// (the server's QSP_KT_EXINVENTORY_3 talk handler). A character who cannot

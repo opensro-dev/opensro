@@ -70,6 +70,8 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 	e.CharacterName, e.OwnerGID, e.InstanceToken, e.Phase = link.SourceName, link.SourceGID, link.SourceToken, 1
 	r.byOwner[source] = append(r.byOwner[source], e)
 	r.byOwner[target] = append(r.byOwner[target], recipient)
+	r.touchLocked(source)
+	r.touchLocked(target)
 	link.TargetModifiers = Modifiers{}
 	r.links[linkKey(link.DivisionID, link.SourceToken)] = link
 	// The server installs the latest target effect in ParamKeeper+210.

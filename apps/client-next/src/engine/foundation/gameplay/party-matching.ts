@@ -10,6 +10,7 @@ responses cannot disagree about which request is still answerable.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./party-member";
+import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import { NATIVE_LEVEL_CAP } from "./level-cap";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
@@ -340,6 +341,27 @@ export function partyMatchPacket(
 	if ( at !== p.length ) throw Error( "Trailing matching bytes" );
 	return next;
 }
+
+/*
+================
+partyMatchAckNotice
+
+The join-answer line a 0xB5BF answer raises (handler 75EBD0):
+detail 1 the completed-match centre banner (67D030), detail 0 the
+refusal and detail 2 the no-reply guide lines (67A600, type 4). An outer-2
+answer raises the category-2 table in gameplay instead, and other
+opcodes raise nothing here.
+================
+*/
+export function partyMatchAckNotice( opcode: number, detail: number | undefined ): SystemNotice | null {
+	if ( opcode !== 0xb5bf ) return null;
+	if ( detail === 1 ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER", value: 0, banner: true, bannerOnly: true };
+	}
+	if ( detail === 0 ) return { key: "UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED", value: 0, nativeType: 4 };
+	if ( detail === 2 ) return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0, nativeType: 4 };
+	return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 };
+}
 // 637CF0 uses exact name equality and inclusive overlapping level intervals.
 /*
 ================
@@ -439,6 +461,53 @@ partyDefaultPurpose
 */
 export function partyDefaultPurpose( job: number ): number {
 	return job === 2 ? 3 : job === 1 || job === 3 ? 2 : 0;
+}
+
+// The record form's title box and the register/modify frame both hold 50
+// characters (the form setup gives edit 0x31 a 0x32 limit at 63C2F9, right
+// after 63BE00 fills the default), so a longer localised default is cut to fit.
+export const PARTY_TITLE_MAX_LENGTH = 50;
+// 63BE00 indexes its default table with the purpose radio (this+0x7C4):
+// Hunting, Quest, Trader, Thief. The catalogue numbers do not follow that
+// order: DEFAULT2 is the trader's, DEFAULT3 the quest's.
+const PARTY_DEFAULT_TITLE_KEYS = [
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT3",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT2",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4"
+] as const;
+/*
+================
+partyDefaultTitleKey
+
+The default title of each purpose, in the radio's order. Purpose 0 (the
+jobless default) stands in for an out-of-range byte, which the radio and
+partyPurposeAllowed never produce.
+================
+*/
+export function partyDefaultTitleKey( purpose: number ): string {
+	return PARTY_DEFAULT_TITLE_KEYS[purpose] ?? PARTY_DEFAULT_TITLE_KEYS[0]!;
+}
+/*
+================
+partyFormTitle
+
+What 63BE00 leaves in the title box for `current` and `purpose`: an empty box,
+or one still holding any of the four defaults, becomes the selected purpose's
+default; a title the player typed is never replaced. The comparison uses the
+same 50-character cut the box applies, so a cut default still counts as one.
+================
+*/
+export function partyFormTitle(
+	current: string,
+	purpose: number,
+	strings: Readonly<Record<string, string>>
+): string {
+	const title = ( key: string ) => (strings[key] ?? "").slice( 0, PARTY_TITLE_MAX_LENGTH );
+	if ( !current.length || PARTY_DEFAULT_TITLE_KEYS.some( key => title( key ) === current ) ) {
+		return title( partyDefaultTitleKey( purpose ) );
+	}
+	return current;
 }
 
 /*

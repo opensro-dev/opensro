@@ -659,3 +659,32 @@ test("core republishes the pending travel inside a journal resync", () => {
 	core.ack( resync.sequence );
 	assert.equal( presentation.travel()?.revision, core.readyRevision() );
 });
+
+test("a snapshot with stall network bigint price and serial publishes and costs without throwing", () => {
+	const owner = createEntities();
+	const event = {
+		kind: "gameplay",
+		state: {
+			stall: {
+				phase: "none",
+				network: {
+					open: true,
+					rows: [ {
+						item: {},
+						owner: 1,
+						slot: 0,
+						quantity: 1,
+						price: 12345678901234567890n,
+						serial: 987654321n
+					} ]
+				}
+			}
+		}
+	};
+	assert.ok( journalCost( event ) > 0 );
+	owner.publish( event );
+	const batch = owner.take();
+	assert.equal( batch.events.length, 1 );
+	assert.equal( batch.events[0].state.stall.network.rows[0].price, 12345678901234567890n );
+	assert.equal( batch.events[0].state.stall.network.rows[0].serial, 987654321n );
+});

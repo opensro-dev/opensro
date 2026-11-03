@@ -5,7 +5,7 @@ renderPortraits.mjs - the catalogue's monster portraits, from the viewer
 
 Port-only, not native. Each monster's portrait is a still of its model drawn
 by the game's own renderer: the client's viewer page
-(viewer.html?monster=<refObjId>&still=1&size=N, docs/VIEWER.md) resolves
+(viewer.html?monster=<refObjId>&still=1&size=N, docs/guides/VIEWER.md) resolves
 window.__viewerStill with a transparent PNG data URL, or rejects with a
 fixed reason and the stage it stopped at. One owned headless browser draws
 them in one batch page (&batch=1): the first monster loads the page, each

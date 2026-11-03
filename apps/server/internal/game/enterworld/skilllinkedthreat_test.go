@@ -15,7 +15,7 @@ package enterworld
 import (
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -126,7 +126,7 @@ whose lkag share rises 36..60 in steps of three.
 ================
 */
 func TestShippedProtectTiersAreLinkedThreat(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	skills := sharedShippedSkills(t)
 	for tier := uint32(0); tier < protectTiers; tier++ {

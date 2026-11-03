@@ -97,6 +97,10 @@ type Config struct {
 	HTTPClient              *http.Client
 	Now                     func() time.Time
 	Readiness               *readiness.Gate
+	// MaintenanceMessage names this Agent's not-operating shard refusals
+	// MAINTENANCE instead of SHARD_OFFLINE (SRO_MAINTENANCE_MESSAGE).
+	// Port-only, not native: see agentapi.EnvMaintenanceMessage.
+	MaintenanceMessage bool
 	// BugReports is nil when the operator has not configured bug reports.
 	BugReports *bugreport.Service
 	// BcryptCost is the cost of the unknown-account refusal and of the hashes
@@ -144,7 +148,9 @@ type Server struct {
 	clientKey        []byte
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
-	bugReports       *bugreport.Service
+	// maintenanceMessage mirrors Config.MaintenanceMessage.
+	maintenanceMessage bool
+	bugReports         *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
 	startedAt        time.Time
 	revokedMu        sync.Mutex
@@ -237,6 +243,7 @@ func New(config Config) (*Server, error) {
 		refusalLines:            newLoginLimiter(now),
 		clientKey:               clientKey,
 		readiness:               config.Readiness,
+		maintenanceMessage:      config.MaintenanceMessage,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
 		revokedNonces:           make(map[string]time.Time),

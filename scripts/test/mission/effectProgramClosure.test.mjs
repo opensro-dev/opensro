@@ -13,6 +13,10 @@ import {
   gameRoot,
   retailTextdataRoot
 } from "../../build/world/paths.mjs";
+import {
+  isQinShiTombSkillEffectName,
+  qinshiTombEnabled
+} from "../../build/shared/qinshiTomb.mjs";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
 
 const EFFECT_RECORDS_PATH = "/assets/skill/effectRecords.json";
@@ -118,12 +122,24 @@ test("skillaniset2 Service=0 authoring rows never cross into runtime records", a
 
   assert.ok(disabledNames.size > 0, "fixture has no disabled versioned animation rows");
   const activeAnimationSets = parseSkillAniSet(skillEffectPath);
+  // Port-only carve-out, by design: retail ships the Qin-Shi tomb
+  // skillaniset2 rows with Service=0, and parseSkillAniSet admits exactly
+  // that family when SRO_QINSHI_TOMB is on (parseSkillEffect.mjs:268-275).
+  // Those rows cross on purpose; every other disabled row stays gated.
+  const admittedFamily = [...disabledNames].filter((name) => isQinShiTombSkillEffectName(name)).sort();
   for (const name of disabledNames) {
+    if (isQinShiTombSkillEffectName(name)) continue;
     assert.equal(activeAnimationSets.has(name), false, `${name} ignored its native Service gate`);
   }
+  assert.deepEqual(
+    [...disabledNames].filter((name) => activeAnimationSets.has(name)).sort(),
+    qinshiTombEnabled() ? admittedFamily : [],
+    "the admitted Service=0 rows are exactly the tomb family (none while the tomb is off)"
+  );
 
   const records = await readPublishedAssetJson(EFFECT_RECORDS_PATH);
   for (const record of Object.values(records)) {
+    if (isQinShiTombSkillEffectName(record.animBaseName)) continue;
     assert.equal(
       disabledNames.has(record.animBaseName),
       false,

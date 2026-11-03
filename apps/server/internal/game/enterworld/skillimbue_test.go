@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -25,8 +25,8 @@ TestShippedFireForceWholeProgram
 */
 func TestShippedFireForceWholeProgram(t *testing.T) {
 	tier.Long(t, "the shipped fire-force program resolves over the whole skill table")
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	source := NewTextdataSkills(dir)
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
@@ -89,8 +89,8 @@ row authoring 2 (Sword Geomgi D) end it.
 ================
 */
 func TestBasicAttackResumesOnlyOnOne(t *testing.T) {
-	licensed.RequireGameData(t)
-	source := NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	source := NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}

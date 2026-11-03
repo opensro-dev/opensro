@@ -67,7 +67,7 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 		maxLimit += state.instances.maxRadiusBound() * float64(monster.GradeScale(4))
 	}
 	// Query only the outdoor sector window that can intersect maxLimit;
-	// dungeons and unbounded queries fall back to the full mover table.
+	// dungeons walk the dungeon buckets, unbounded queries the full table.
 	for gid, pose := range state.movers.livePosesWithinOutdoorReach(center, maxLimit, nowMs, nil) {
 		// Region arithmetic masks the dungeon bit. Do not let matching low
 		// bits alias indoor and outdoor coordinates into a valid area target.

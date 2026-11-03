@@ -22,8 +22,8 @@ import (
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/paramkeeper"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -211,7 +211,7 @@ TestUnlinkedParameterMatchesFullProjection
 */
 func TestUnlinkedParameterMatchesFullProjection(t *testing.T) {
 	tier.Long(t, "the unlinked parameter equals the full projection over the shipped catalogues")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items, skills := enterworld.NewTextdataItems(dir), enterworld.NewTextdataSkills(dir)
 	options := enterworld.NewTextdataMagicOptions(dir)

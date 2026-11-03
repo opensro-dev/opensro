@@ -34,6 +34,7 @@ const (
 	NpcServiceRecallPoint      uint8 = 0x07
 	NpcServiceTeleport         uint8 = 0x08
 	NpcServiceResurrectPoint   uint8 = 0x09
+	NpcServiceWithdrawSkill    uint8 = 0x0a
 	NpcServiceStable           uint8 = 0x0b
 	NpcServiceSpecialTrade     uint8 = 0x0c
 	NpcServiceThiefBuy         uint8 = 0x0d

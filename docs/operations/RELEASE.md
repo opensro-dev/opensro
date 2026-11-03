@@ -1,0 +1,43 @@
+# Release checklist
+
+Source control carries source only. A release assembly additionally
+carries the locally generated compact client packs and the server archive, so
+a shipped tree needs no parent checkout or original installation at runtime.
+
+Before tagging a release:
+
+1. `pnpm install --frozen-lockfile`
+2. `pnpm check source` (includes the Go server gates).
+3. On a client extraction: `pnpm assets build`,
+   `pnpm task build server-game-data`, then the full `pnpm check`. For a
+   data release, build the packs against the live layout so unchanged packs
+   keep the bytes and URLs players have cached (assetPackLayout.mjs):
+   `curl -o live-manifest.json https://opensro.online/assets/packs/manifest.json`,
+   then `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
+   Then `pnpm assets ledger` must report no unclaimed assets and no missing
+   owner (run `pnpm assets build full` if it does); the beta packager
+   refuses otherwise. [docs/architecture/ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md)
+   explains the ledger.
+4. `git status --ignored` must list `.generated/`, `temp/` and `.state/` as
+   ignored, and nothing generated as tracked.
+5. `pnpm --filter @sro/client-next build:beta` packages the browser release;
+   keep its `private/` source maps outside the deployable package. A data
+   release is staged from this package (`data_release.py`, see
+   [docs/architecture/ASSET_DELIVERY.md](../architecture/ASSET_DELIVERY.md)) before step 6.
+6. Only after packaging and staging: `pnpm assets compact` and
+   `pnpm assets check compact`. Compact replaces the loose public files, the
+   outdoor world and the loose server projection with their release copies,
+   and the client check inside `build:beta` reads all three, so compacting
+   first fails the packager. `pnpm assets build full` followed by
+   `pnpm task build server-game-data` restores a compacted tree; a plain
+   `pnpm assets build` does not restore the outdoor world. The compact check
+   enforces a combined client-plus-server ceiling of 80% of the original PK2
+   payload and verifies the archive is lossless and manifest-consistent.
+7. With the loose server projection absent, `pnpm check server` proves
+   archive-only materialization. Then `pnpm release` removes ignored build and
+   profiling output.
+8. No file selected by `git ls-files` may be 50 MiB or larger.
+9. Review licensing and trademark language for the release.
+
+Never force-add extracted PK2 data, generated media, asset packs,
+precompressed sidecars, logs, caches or probe output.

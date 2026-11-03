@@ -118,7 +118,7 @@ func (s *MonsterState) SpawnCaravanBandit(request CaravanBanditSpawn) bool {
 	state.instances.set(actor.Gid, actor)
 	state.movers.set(actor.Gid, mover)
 	state.behavior.set(actor.Gid, 0)
-	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+	state.listRegionGid(spawn.RegionID, actor.Gid)
 	// The retail server's monster spawn arms a bandit's timers like any
 	// monster's: a thief or hunter leaves 20 s after its spawn or its last attack.
 	armLifetimeLocked(state, actor, request.NowMs)
