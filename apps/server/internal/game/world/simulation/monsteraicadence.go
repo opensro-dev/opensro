@@ -20,21 +20,20 @@ for the actor (#2133): the instance read goes through the verified
 hint and falls back to the gid resolve when the hint no longer
 names the gid, so the timer verdict is checkAITimer's either way.
 The timer bank itself is keyed by gid as before - only the
-instance locate changes.
+instance locate changes. The check reads the timer facts (hit
+points, nest tactics flags) off the resident row instead of
+expanding the full Instance (#2029): the facts are all it uses.
 ================
 */
 func (s *MonsterState) checkAITimerAt(divisionID string, gid uint32, monsterSlot uint32, id monster.AITimerID, nowMs int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(divisionID, gid)
-	instance, exists := state.instances.lookupAt(monsterSlot, gid)
-	if !exists {
-		instance, exists = state.instances.lookup(gid)
-	}
-	if !exists || instance.CurrentHP == 0 {
+	hp, tacticsFlags, ok := state.instances.timerFactsAt(monsterSlot, gid)
+	if !ok || hp == 0 {
 		return false
 	}
-	return s.aiTimersLocked(state, instance, nowMs).CheckTimer(id, uint32(nowMs))
+	return s.aiTimerBankLocked(state, gid, tacticsFlags, nowMs).CheckTimer(id, uint32(nowMs))
 }
 
 func (s *MonsterState) selectedAITimerReady(divisionID string, gid uint32, nowMs int64) bool {
@@ -63,10 +62,27 @@ func (s *MonsterState) CompleteMonsterSkillCommand(divisionID string, gid uint32
 		func() uint32 { return monster.SummonRandomWord(s.random()) })
 }
 
-// Lazy entity initialization is distinct from consuming a decision's timer.
-// Callers hold s.mu. FOLLOW stages CheckTimer on a detached value until commit.
+/*
+================
+aiTimersLocked
+
+The actor's timer bank for a caller holding the full instance;
+aiTimerBankLocked does the work.
+================
+*/
 func (s *MonsterState) aiTimersLocked(state *divisionMonsterState, instance monster.Instance, nowMs int64) *monster.AITimeManager {
-	gid := instance.Gid
+	return s.aiTimerBankLocked(state, instance.Gid, instance.Nest.NativeTacticsFlags, nowMs)
+}
+
+/*
+================
+aiTimerBankLocked
+
+Lazy entity initialization is distinct from consuming a decision's timer.
+Callers hold s.mu. FOLLOW stages CheckTimer on a detached value until commit.
+================
+*/
+func (s *MonsterState) aiTimerBankLocked(state *divisionMonsterState, gid uint32, nativeTacticsFlags uint32, nowMs int64) *monster.AITimeManager {
 	if state.aiTimers == nil {
 		state.aiTimers = make(map[uint32]*monster.AITimeManager)
 	}
@@ -78,7 +94,7 @@ func (s *MonsterState) aiTimersLocked(state *divisionMonsterState, instance mons
 		timers.SetTimer(0, 300, 0, uint32(nowMs), false, next)
 		timers.SetTimer(6, 1500, 0, uint32(nowMs), false, next)
 		timers.SetTimer(7, 30, 0, uint32(nowMs), false, next)
-		timers.InitAcquisitionTimer(uint8(instance.Nest.NativeTacticsFlags), next)
+		timers.InitAcquisitionTimer(uint8(nativeTacticsFlags), next)
 		state.aiTimers[gid] = timers
 	}
 	return timers
