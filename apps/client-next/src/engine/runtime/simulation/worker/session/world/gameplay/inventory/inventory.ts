@@ -223,7 +223,6 @@ presentShop
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
-	const codenames = new Map<number, string>();
 	const icons = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
@@ -250,9 +249,9 @@ present
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
-			codename: codenames.get( item.refObjId ) ?? item.codename,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
+			nativeFields: tooltip?.fields,
 			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass )
 		};
 		presentations.set( item, result );
@@ -383,8 +382,7 @@ decodeShopItems
 		const next = new Map( target ),
 			seen = new Set<number>(),
 			nextRefs = new Map( refs ),
-			nextNames = new Map( names ),
-			nextCodenames = new Map( codenames );
+			nextNames = new Map( names );
 		for ( const row of items ) {
 			if ( !row || typeof row !== "object" ) throw Error( "Invalid shop inventory row" );
 			const n = commerceInteger( row.slot, capacity - 1 ),
@@ -399,14 +397,13 @@ decodeShopItems
 			if ( nextRefs.has( id ) && nextRefs.get( id ) !== flags ) throw Error( "Conflicting shop item reference" );
 			nextRefs.set( id, flags );
 			nextNames.set( id, row.name );
-			if ( typeof row.codename === "string" ) nextCodenames.set( id, row.codename );
 			const bytes = Uint8Array.from( row.body ), decoded = decodeInventoryItem( bytes, 0, nextRefs, objRefs );
 			if ( !decoded.item || decoded.item.refObjId !== id || decoded.next !== bytes.length ) {
 				throw Error( "Invalid shop item body" );
 			}
 			next.set( n, { ...decoded.item, slot: n, name: row.name } );
 		}
-		return { next, nextRefs, nextNames, nextCodenames };
+		return { next, nextRefs, nextNames };
 	}
 	/*
 ================
@@ -414,14 +411,12 @@ applyShopItems
 ================
 	*/
 	function applyShopItems( items: unknown ) {
-		const { next, nextRefs, nextNames, nextCodenames } = decodeShopItems( items );
+		const { next, nextRefs, nextNames } = decodeShopItems( items );
 		slots = next;
 		refs.clear();
 		for ( const [id, flags] of nextRefs ) refs.set( id, flags );
 		names.clear();
 		for ( const [id, name] of nextNames ) names.set( id, name );
-		codenames.clear();
-		for ( const [id, codename] of nextCodenames ) codenames.set( id, codename );
 		published = null;
 		gachaRows = null;
 	}
@@ -778,7 +773,6 @@ bootstrap
 			inventorySlotCount = b.inventorySlotCount;
 			equipmentSlotCount = b.equipmentSlotCount;
 			names.clear();
-			codenames.clear();
 			icons.clear();
 			objRefs.clear();
 			for (
@@ -809,7 +803,6 @@ bootstrap
 				useCooldowns.set( r.refObjId, cooldown );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
-				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
@@ -1716,14 +1709,12 @@ receive
 			if ( op === 0xb06d && p[0] === 1 && p[1] === 0x18 ) {
 				if ( !mallDelivery ) throw Error( "Mall receipt lacks delivery" );
 				mall.acknowledge( p, mallDelivery.slots );
-				const { next, nextRefs, nextNames, nextCodenames } = mallDelivery.prepared;
+				const { next, nextRefs, nextNames } = mallDelivery.prepared;
 				slots = next;
 				refs.clear();
 				for ( const [id, flags] of nextRefs ) refs.set( id, flags );
 				names.clear();
 				for ( const [id, name] of nextNames ) names.set( id, name );
-				codenames.clear();
-				for ( const [id, codename] of nextCodenames ) codenames.set( id, codename );
 				published = null;
 				gachaRows = null;
 				mallDelivery = null;
@@ -2407,7 +2398,6 @@ clear
 			timedOutDetail = "";
 			objRefs.clear();
 			names.clear();
-			codenames.clear();
 			icons.clear();
 			inventorySlotCount = undefined;
 			equipmentSlotCount = undefined;

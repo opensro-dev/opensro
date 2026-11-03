@@ -3,12 +3,13 @@
 
 mall-use-hud.ts - the mall item-use confirmation's state
 
-CIFMessageBox_ConfigureByType (52F460) kind 0x1E asks
-UIIT_MSG_QUESTION_SILKMALL_ITEM_USE before a mall item is used (573AD0
-opens it from a bag double-activation; foundation/gameplay/mall-use.ts
-carries the gate). The HUD owns the one pending ask: the bag row it was
-raised on, kept so that Yes runs exactly that slot's use and a row that
-changed or left the bag cancels the ask, as the native box is modal.
+CIFMessageBox_ConfigureByType (52F460) kind 0x1F asks
+UIIT_MSG_QUESTION_SILKMALL_ITEM_USE before a gated item is used (the
+bag activation 561D50 opens it at 562177; foundation/gameplay/
+mall-use.ts carries the gate). The HUD owns the one pending ask: the
+bag row it was raised on, kept so that Yes runs exactly that slot's
+use and a row that changed or left the bag cancels the ask, as the
+native box is modal.
 
 ===========================================================================
 */

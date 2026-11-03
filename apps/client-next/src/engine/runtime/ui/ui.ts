@@ -2511,11 +2511,12 @@ export function createUi(
 				dirty = true;
 				return;
 			}
-			// 52F460 kind 0x1E (opened by 573AD0): a mall item's plain use asks
-			// first; the box's Yes runs the use, its No nothing. Only the bare
-			// use is asked - a use already carrying its target, message or pick
-			// was raised by its own flow and runs at once. The gate is the
-			// recorded inference in foundation/gameplay/mall-use.ts.
+			// 52F460 kind 0x1F (the bag activation 561D50 opens it at
+			// 562177): a gated item's plain use asks first; the box's Yes
+			// runs the use, its No nothing. Only the bare use is asked -
+			// a use already carrying its target, message or pick was
+			// raised by its own flow and runs at once. The gate is the
+			// native rule in foundation/gameplay/mall-use.ts.
 			if (
 				item && isMallUseConfirmItem( item ) && command.targetSlot === undefined &&
 				command.revivalSlot === undefined && command.summonerSlot === undefined &&
