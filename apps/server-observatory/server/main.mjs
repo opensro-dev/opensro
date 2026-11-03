@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-main.mjs - loopback observatory, authenticated player recovery, invite keys, economy and shard rules reads
+main.mjs - loopback observatory, authenticated player recovery, invite keys, economy, shard rules and work board reads
 ===========================================================================
 */
 import { createServer } from "node:http";
@@ -13,6 +13,7 @@ import { createChatLog } from "./chatlog.mjs";
 import { createHistory } from "./history.mjs";
 import { createEconomy } from "./economy.mjs";
 import { createSettings } from "./settings.mjs";
+import { createBoard } from "./board.mjs";
 import { createInviteKeys, siteAdminURL } from "./invite-keys.mjs";
 import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
@@ -47,6 +48,9 @@ const economy = createEconomy( shards, economyToken );
 // Each GameWorld's shard rules (settings.mjs), read under the operator
 // token the GameWorld's settings guard shares with its other readers.
 const settings = createSettings( shards, token );
+// The work board (board.mjs): a collector's snapshot file and the GitHub
+// repository its numbers belong to; either absent, the page says it is off.
+const board = createBoard( config.boardSnapshotFile, config.boardRepo );
 // The website's invite keys (opensro-web /internal/admin/invites), with the
 // console's own secret; absent, the Invite keys page says it is off.
 const siteAdmin = config.siteAdmin ?? null;
@@ -98,7 +102,11 @@ for (
 		"settings.html",
 		"settings.js",
 		"settings-view.js",
-		"settings.css"
+		"settings.css",
+		"board.html",
+		"board.js",
+		"board-view.js",
+		"board.css"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -242,6 +250,7 @@ async function handleRequest( req, res ) {
 				invites: Boolean( siteAdminToken ),
 				economy: economy.enabled,
 				settings: settings.enabled,
+				board: board.enabled,
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );
@@ -266,6 +275,11 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/settings" ) {
 			const result = await settings.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
+		if ( url.pathname === "/api/board" ) {
+			const result = await board.request();
 			respondJSON( res, result.status, result.body );
 			return;
 		}
