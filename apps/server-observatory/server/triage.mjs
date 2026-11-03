@@ -97,6 +97,8 @@ function threadRow( t ) {
 		closes: t.closes === true,
 		// Why the owner must decide this one; empty: the coordinator's call, it posts on its own.
 		ask: text( t.ask ),
+		// Why it cannot post yet: the coordinator's hold, or the thread not read in full.
+		waits: text( t.waits ),
 		posted: postedRow( t.posted ),
 		decision: decisionRow( t.decision ) ?? { state: "pending", by: "", at: "", note: "" }
 	};

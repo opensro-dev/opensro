@@ -105,6 +105,7 @@ What approving does with this thread, or what it already did.
 export function postText( t ) {
 	if ( t.posted ) return { text: t.posted.closed ? "posted, tagged Closed, archived" : "reply posted", tone: "ok" };
 	if ( !t.reply ) return { text: "no public reply written yet: cannot post", tone: "bad" };
+	if ( t.waits ) return { text: "waits for the coordinator: " + t.waits, tone: "warn" };
 	if ( t.decision.state === "pending" && !t.ask ) {
 		return { text: "not flagged: posts on its own within a minute", tone: "idle" };
 	}

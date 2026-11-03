@@ -185,6 +185,10 @@ test("the Bug reports page says what approving posts, or what was posted", async
 	assert.deepEqual( threads.map( bucket ), [ "pending", "auto", "approved" ] );
 	assert.deepEqual( counts( threads ), { pending: 1, auto: 1, approved: 1, rejected: 0, all: 3 } );
 	assert.match( postText( { reply: "x", decision: { state: "approved" } } ).text, /within a minute/ );
+	assert.match(
+		postText( { reply: "x", waits: "new messages since the read", decision: pending } ).text,
+		/^waits for the coordinator: new messages/
+	);
 	assert.equal(
 		postText( { reply: "x", posted: { closed: true }, decision: pending } ).text,
 		"posted, tagged Closed, archived"
