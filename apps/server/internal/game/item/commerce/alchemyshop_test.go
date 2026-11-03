@@ -70,10 +70,10 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same 70 goods the default list sells, regrouped: nothing on the
-	// smith's or grocer's authored tabs, 9 + 14 + 19 on the three new ones.
-	if len(goods) != 70 {
-		t.Fatalf("regrouped list = %d goods, want the default 70", len(goods))
+	// The same 66 goods the default list sells, regrouped: nothing on the
+	// smith's or grocer's authored tabs, 5 + 14 + 19 on the three new ones.
+	if len(goods) != 66 {
+		t.Fatalf("regrouped list = %d goods, want the default 66", len(goods))
 	}
 	counts := map[string]int{}
 	for _, good := range goods {
@@ -82,7 +82,7 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		}
 		counts[good.Tab]++
 	}
-	if counts[janganElixirsTab] != 9 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 {
+	if counts[janganElixirsTab] != 5 || counts[janganAttrStonesTab] != 14 || counts[janganMagicStonesTab] != 19 {
 		t.Fatalf("tab goods = %v", counts)
 	}
 
@@ -115,8 +115,6 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_01", "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_02",
 		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_03", "ITEM_ETC_ARCHEMY_POTION_SPEED_05",
 		"ITEM_ETC_ARCHEMY_POTION_SPEED_11", "ITEM_ETC_ARCHEMY_RONDO_01", "ITEM_ETC_ARCHEMY_RONDO_02",
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A",
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A",
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B",
 		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_B",
 		"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09",
@@ -129,8 +127,8 @@ func TestJanganAlchemyShopRegroupsTheDefaultList(t *testing.T) {
 			t.Fatalf("elixirs offer %d slot = %d", i, offer.Slot)
 		}
 	}
-	if elixirs[7].Price != 1000000 || elixirs[15].Price != 54469 {
-		t.Fatalf("elixir prices = %d/%d", elixirs[7].Price, elixirs[15].Price)
+	if elixirs[7].Price != 1000000 || elixirs[11].Price != 54469 {
+		t.Fatalf("elixir prices = %d/%d", elixirs[7].Price, elixirs[11].Price)
 	}
 	attr := c.Tabs[authoredMax+2]
 	if len(attr) != 14 || attr[0].Ref.Codename != "ITEM_ETC_ARCHEMY_ATTRSTONE_PA_09" || attr[0].Price != 2000000 {
@@ -178,8 +176,8 @@ func TestJanganAlchemyShopOffKeepsTodaysShops(t *testing.T) {
 	if _, ok := c.tabIDs[janganElixirsTab]; ok {
 		t.Fatal("switch off registered the synthesized tabs")
 	}
-	if offers := c.Tabs[c.tabIDs[janganSmithTab]]; len(offers) != 1+13 {
-		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 13 goods", len(offers))
+	if offers := c.Tabs[c.tabIDs[janganSmithTab]]; len(offers) != 1+9 {
+		t.Fatalf("smith tab 3 = %d offers, want its arrows and the 9 goods", len(offers))
 	}
 	grocer := c.Tabs[c.tabIDs[janganGrocerTab]]
 	if len(grocer) != 7+29 || grocer[len(grocer)-1].Ref.Codename != "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09" {

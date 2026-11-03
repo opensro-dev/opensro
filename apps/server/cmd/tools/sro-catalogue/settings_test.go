@@ -180,7 +180,7 @@ func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
 	}
 	wantPrices := map[uint32]uint64{}
 	for codename, price := range map[string]uint64{
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
+		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,
 	} {

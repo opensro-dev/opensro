@@ -44,6 +44,7 @@ func TestElixirDropsNeedTheShop(t *testing.T) {
 	all := func(string) bool { return true }
 	none := func(string) bool { return false }
 	onlyB := func(codename string) bool { return strings.HasSuffix(codename, "_B") }
+	onlyA := func(codename string) bool { return strings.HasSuffix(codename, "_A") }
 	if err := (ElixirDrops{}).CheckSource(none, "SRO_SHOP_EXTRA_GOODS"); err != nil {
 		t.Fatalf("native drops need no shop: %v", err)
 	}
@@ -51,7 +52,11 @@ func TestElixirDropsNeedTheShop(t *testing.T) {
 	if err := off.CheckSource(all, "SRO_SHOP_EXTRA_GOODS"); err != nil {
 		t.Fatalf("every elixir sold: %v", err)
 	}
-	for _, sold := range []func(string) bool{none, onlyB} {
+	// The A grade has no icon in the client and the shop does not sell it.
+	if err := off.CheckSource(onlyB, "SRO_SHOP_EXTRA_GOODS"); err != nil {
+		t.Fatalf("the B grade is the shop's whole elixir list: %v", err)
+	}
+	for _, sold := range []func(string) bool{none, onlyA} {
 		err := off.CheckSource(sold, "SRO_SHOP_EXTRA_GOODS")
 		if err == nil || !strings.Contains(err.Error(), EnvElixirDropsOff) || !strings.Contains(err.Error(), "SRO_SHOP_EXTRA_GOODS") {
 			t.Fatalf("an unsold elixir must stop the boot naming both settings: %v", err)
