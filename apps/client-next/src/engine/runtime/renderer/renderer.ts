@@ -820,6 +820,10 @@ export function createRenderer(
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				const doll2Input = uiProduct?.doll2;
+				// The pet window's doll pauses as the inventory's does: without it,
+				// reopening the window advanced its glows through the whole closed
+				// interval in one frame.
+				if ( !doll2Input ) doll2.pause();
 				if ( doll2Input ) {
 					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
 						w2 = Math.max( 1, Math.ceil( r[2] ) ),

@@ -143,6 +143,8 @@ export function createPortrait(
 	// The doll clock: seconds the doll has been drawn since its model or gid last
 	// changed, and the frame time it last advanced to (undefined while at rest).
 	let drawn = 0, drawnAt: number | undefined;
+	// The doll clock at which each worn glow (by gid) first showed, and on which model.
+	let glowBirths = new Map<number, { readonly model: string; readonly birth: number; }>();
 	let borrowed: readonly PortraitPart[] = [];
 	let empty = true;
 	// The retained HUD result: owned copies of every input that decides the
@@ -269,6 +271,7 @@ export function createPortrait(
 			if ( bodyChanged || identity !== value.actor.gid ) {
 				drawn = 0;
 				drawnAt = undefined;
+				glowBirths = new Map();
 				identity = value.actor.gid;
 				if ( bodyChanged ) {
 					preview.actors( [] );
@@ -290,6 +293,19 @@ export function createPortrait(
 				if ( drawnAt !== undefined ) drawn += Math.max( 0, seconds - drawnAt );
 				drawnAt = seconds;
 			}
+			// A worn glow is a fresh attachment (ApplyWeaponGlow 8EA960) whose
+			// effect starts at its own zero. Handed the doll's age instead, a glow
+			// equipped late replayed that whole age in one frame.
+			const births = new Map<number, { readonly model: string; readonly birth: number; }>();
+			for ( const child of value.children ?? [] ) {
+				if ( !child.effect ) continue;
+				const known = glowBirths.get( child.actor.gid );
+				births.set(
+					child.actor.gid,
+					known?.model === child.actor.model ? known : { model: child.actor.model, birth: drawn }
+				);
+			}
+			glowBirths = births;
 			const actor: CharacterActor = {
 				...value.actor,
 				animationLod: undefined,
@@ -310,7 +326,7 @@ export function createPortrait(
 				...(value.children ?? []).map( child => ({
 					...child.actor,
 					pose: actor.pose,
-					time: actor.time,
+					time: Math.max( 0, actor.time - (births.get( child.actor.gid )?.birth ?? 0) ),
 					opacity: 1,
 					layers: undefined,
 					animationLod: undefined,
