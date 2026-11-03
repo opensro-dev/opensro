@@ -1512,6 +1512,11 @@ export function createUi(
 	const text = createUiText( assets, base ),
 		resources = createUiAssets( assets, texture, base );
 	let diagnosticError: string | null = null;
+	// The world was on screen at the last step. A UI image still retrying
+	// then draws nothing until it arrives: it is neither a loading failure
+	// nor a client error (#2444). Before the world shows, entry waits on
+	// the interface baseline, so a retry there still names itself.
+	let worldShown = false;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;
 	let deathLifeAt = 0, deathStateAt: number | null = null, rebirthDue = false, deathRequested = false;
@@ -6017,8 +6022,8 @@ export function createUi(
 		================
 		*/
 		resourceError: () =>
-			resources.error() ?? hud.error() ?? text.error() ?? guideResources.error() ?? minimapResources.error() ??
-				null,
+			(worldShown ? null : resources.error()) ?? hud.error() ?? text.error() ?? guideResources.error() ??
+				minimapResources.error() ?? null,
 		/*
 		================
 		entryReady
@@ -11481,6 +11486,7 @@ export function createUi(
 			);
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
+			worldShown = worldVisible;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -25067,7 +25073,7 @@ export function createUi(
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
 				minimapResources.error();
-			const assetFailure = next.worldError ?? fatalAssetFailure ?? resources.error();
+			const assetFailure = next.worldError ?? fatalAssetFailure ?? (worldVisible ? null : resources.error());
 			let nativeLoadError = false;
 			if ( assetFailure && phase !== "disconnected" ) {
 				const dw = Math.min( 600, w - 20 ),
