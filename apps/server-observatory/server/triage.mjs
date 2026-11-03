@@ -11,8 +11,10 @@ board, and overlays the decisions staff made here since.
 A decision is the one write: approve or reject a thread's draft, with an
 optional note, appended as one JSON line to triageDecisionsFile. The
 collector reads that file back into its store; until it does, the
-overlay shows the decision at once. Approving posts nothing anywhere: the
-page offers the reply to copy, and whoever posts it does so by hand.
+overlay shows the decision at once. Approving is the staff click that lets
+the collector post: its watcher posts the thread's public reply as the
+bot and, when the thread is done, tags it Closed and archives it. A thread
+with no public reply written cannot be posted, whatever its decision.
 
 Draft text is data. It is shown as text, never as markup, and nothing in
 it is read for meaning here.
@@ -28,6 +30,8 @@ const MAX_THREADS = 200;
 const MAX_TEXT = 300;
 const MAX_DRAFT = 8000;
 const MAX_NOTE = 500;
+// One Discord message.
+const MAX_REPLY = 1900;
 const MAX_ISSUES = 20;
 const THREAD = /^\d{6,24}$/;
 const PRIORITIES = new Set( [ "Critical", "High", "Medium", "Low" ] );
@@ -63,6 +67,18 @@ function decisionRow( d ) {
 
 /*
 ================
+postedRow
+
+When the collector posted the reply and whether it closed the thread.
+================
+*/
+function postedRow( p ) {
+	if ( !object( p ) || typeof p.at !== "string" || !Number.isFinite( Date.parse( p.at ) ) ) return null;
+	return { at: p.at, closed: p.closed === true };
+}
+
+/*
+================
 threadRow
 ================
 */
@@ -77,6 +93,9 @@ function threadRow( t ) {
 			t.issues.slice( 0, MAX_ISSUES ).filter( n => Number.isInteger( n ) && n > 0 ) :
 			[],
 		draft: text( t.draft, MAX_DRAFT ),
+		reply: text( t.reply, MAX_REPLY ),
+		closes: t.closes === true,
+		posted: postedRow( t.posted ),
 		decision: decisionRow( t.decision ) ?? { state: "pending", by: "", at: "", note: "" }
 	};
 }

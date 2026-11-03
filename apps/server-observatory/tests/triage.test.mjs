@@ -56,6 +56,24 @@ test("a snapshot reads typed: unknown enums fall back, draft text stays text", (
 	assert.equal( triageBody( { ...SNAPSHOT, schemaVersion: 2 }, [] ), null );
 });
 
+test("a thread carries its public reply, whether posting closes it, and when it was posted", () => {
+	const threads = [
+		{
+			...SNAPSHOT.threads[0],
+			reply: "Fixed and live.",
+			closes: true,
+			posted: { at: "2026-11-03T06:00:00Z", closed: true }
+		},
+		{ ...SNAPSHOT.threads[1], closes: "yes", posted: { at: "not a time" } }
+	];
+	const [done, fresh] = triageBody( { ...SNAPSHOT, threads }, [] ).threads;
+	assert.deepEqual( [ done.reply, done.closes, done.posted ], [ "Fixed and live.", true, {
+		at: "2026-11-03T06:00:00Z",
+		closed: true
+	} ] );
+	assert.deepEqual( [ fresh.reply, fresh.closes, fresh.posted ], [ "", false, null ] );
+});
+
 test("decision lines: torn or foreign lines are skipped, the last decision wins", () => {
 	const lines = [
 		JSON.stringify( {

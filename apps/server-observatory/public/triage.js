@@ -1,10 +1,10 @@
 /*
 ===========================================================================
 
-triage.js - the Bug reports page: read, filter, approve, reject, copy
+triage.js - the Bug reports page: read, filter, approve, reject
 
-Reads /api/triage, shows each thread's drafted reply as text, and sends a
-decision to /api/triage/decision. Every render builds elements with
+Reads /api/triage, shows each thread's triage note and the public reply
+approving posts, and sends a decision to /api/triage/decision. Every render builds elements with
 textContent; draft text never becomes markup. The filter lives in the URL.
 
 ===========================================================================
@@ -15,6 +15,7 @@ import {
 	counts,
 	decisionText,
 	FILTERS,
+	postText,
 	priorityTone,
 	readFilter,
 	visible,
@@ -23,7 +24,6 @@ import {
 
 const REPO_ISSUES = "https://github.com/opensro-dev/opensro/issues/";
 const POLL_MS = 30000;
-const COPIED_MS = 2000;
 
 const state = { threads: [], filter: readFilter( location.search ), canDecide: false, busy: new Set() };
 
@@ -108,8 +108,21 @@ function draftItem( t ) {
 			meta.append( el( "a", { href: REPO_ISSUES + n, target: "_blank", rel: "noopener", text: "#" + n } ) );
 		} );
 	}
-	const draft = el( "pre", { class: "triage-draft", text: t.draft || "(no draft text)" } );
-	const item = el( "li", { class: `panel triage-item ${t.decision.state}` }, head, meta, draft );
+	const post = postText( t );
+	const reply = el(
+		"div",
+		{ class: "triage-reply" },
+		el( "h4", { text: "Public reply" } ),
+		pill( post.text, post.tone ),
+		el( "pre", { class: "triage-draft", text: t.reply || "(none yet)" } )
+	);
+	const note = el(
+		"details",
+		{ class: "triage-note-draft" },
+		el( "summary", { text: "Triage note (internal, never posted)" } ),
+		el( "pre", { class: "triage-draft", text: t.draft || "(no note)" } )
+	);
+	const item = el( "li", { class: `panel triage-item ${t.decision.state}` }, head, meta, reply, note );
 	if ( t.decision.note ) item.append( el( "p", { class: "triage-note", text: "Note: " + t.decision.note } ) );
 	item.append( actions( t ) );
 	return item;
@@ -119,26 +132,13 @@ function draftItem( t ) {
 ================
 actions
 
-Approve, reject (with the reason box) and copy. Decisions are offered only
-to staff who may make them; copy is for approved drafts.
+Approve and reject (with the reason box), offered only to staff who may
+decide, and only while nothing is posted. Approve needs a public reply.
 ================
 */
 function actions( t ) {
 	const bar = el( "div", { class: "triage-actions" } );
-	if ( t.decision.state === "approved" ) {
-		const copy = el( "button", { class: "button", type: "button", text: "Copy reply" } );
-		copy.addEventListener( "click", async () => {
-			try {
-				await navigator.clipboard.writeText( t.draft );
-				copy.textContent = "Copied";
-				setTimeout( () => (copy.textContent = "Copy reply"), COPIED_MS );
-			} catch {
-				status( "The browser refused the clipboard; select the text and copy it by hand." );
-			}
-		} );
-		bar.append( copy );
-	}
-	if ( !state.canDecide ) return bar;
+	if ( !state.canDecide || t.posted ) return bar;
 	const busy = state.busy.has( t.thread );
 	const note = el( "input", {
 		class: "triage-reason",
@@ -154,6 +154,7 @@ function actions( t ) {
 	} );
 	const reject = el( "button", { class: "button", type: "button", text: "Reject" } );
 	if ( busy ) { for ( const b of [ approve, reject ] ) b.setAttribute( "disabled", "" ); }
+	if ( !t.reply ) approve.setAttribute( "disabled", "" );
 	approve.addEventListener( "click", () => decide( t.thread, "approve", note.value ) );
 	reject.addEventListener( "click", () => {
 		if ( !note.value.trim() ) {
@@ -197,7 +198,7 @@ async function decide( thread, decision, note ) {
 		state.threads = body.threads;
 		status(
 			decision === "approve" ?
-				"Approved. Copy the reply from the Approved tab to post it." :
+				"Approved. The watcher posts the reply within a minute." :
 				"Rejected; it goes back for a redraft."
 		);
 	} catch ( err ) {

@@ -161,3 +161,19 @@ test("an open tab reloads only when the served page code differs from what it lo
 	assert.equal( pageChanged( undefined, "100" ), false, "the first read only learns the version" );
 	assert.equal( pageChanged( "100", "" ), false, "an unreadable version never reloads" );
 });
+
+test("the Bug reports page says what approving posts, or what was posted", async () => {
+	const { postText } = await import( "../public/triage-view.js" );
+	const pending = { state: "pending" };
+	assert.equal( postText( { reply: "", decision: pending } ).tone, "bad", "no reply cannot be posted" );
+	assert.match(
+		postText( { reply: "x", closes: true, decision: pending } ).text,
+		/tags the thread Closed and archives/
+	);
+	assert.equal( postText( { reply: "x", closes: false, decision: pending } ).text, "Approve posts this reply" );
+	assert.match( postText( { reply: "x", decision: { state: "approved" } } ).text, /within a minute/ );
+	assert.equal(
+		postText( { reply: "x", posted: { closed: true }, decision: pending } ).text,
+		"posted, tagged Closed, archived"
+	);
+});

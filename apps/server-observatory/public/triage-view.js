@@ -13,7 +13,7 @@ const PRIORITY_ORDER = [ "Critical", "High", "Medium", "Low", "" ];
 const STATE_ORDER = [ "pending", "rejected", "approved" ];
 export const FILTERS = [
 	{ key: "pending", label: "to decide" },
-	{ key: "approved", label: "approved, to post" },
+	{ key: "approved", label: "approved" },
 	{ key: "rejected", label: "rejected, to redraft" },
 	{ key: "all", label: "all drafts" }
 ];
@@ -79,6 +79,27 @@ const ACTION_TEXT = Object.freeze( {
 
 export function actionText( action ) {
 	return ACTION_TEXT[action] ?? ACTION_TEXT.reply;
+}
+
+/*
+================
+postText
+
+What approving does with this thread, or what it already did.
+================
+*/
+export function postText( t ) {
+	if ( t.posted ) return { text: t.posted.closed ? "posted, tagged Closed, archived" : "reply posted", tone: "ok" };
+	if ( !t.reply ) return { text: "no public reply written yet: cannot post", tone: "bad" };
+	if ( t.decision.state === "approved" ) {
+		return { text: "approved: the watcher posts it within a minute", tone: "warn" };
+	}
+	return {
+		text: t.closes ?
+			"Approve posts this reply, tags the thread Closed and archives it" :
+			"Approve posts this reply",
+		tone: "idle"
+	};
 }
 
 /*
