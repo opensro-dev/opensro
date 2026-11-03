@@ -446,7 +446,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		nowMs:    nowMs,
 	}
 	actors := make([]behaviorActorSnapshot, 0, len(batch.actors))
-	for _, ref := range batch.actors {
+	for i, ref := range batch.actors {
 		// The scheduler carries identities, not a second copy of the
 		// world: the same dispatch decisions, in the same order, as
 		// the serial loop (monstertick.go) makes them.
@@ -459,7 +459,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		if stepped++; stepped%monsterLegStepActors == 0 {
 			ops.watch.step()
 		}
-		actor, ok := view.actor(ref)
+		actor, ok := view.actorAt(i)
 		if !ok {
 			continue
 		}

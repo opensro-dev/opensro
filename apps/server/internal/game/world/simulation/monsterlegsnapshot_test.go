@@ -36,9 +36,10 @@ func TestLegSnapshotMatchesDispatchRead(t *testing.T) {
 	}
 	for _, batch := range batches {
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
-		for _, ref := range batch.actors {
+		defer view.release()
+		for i, ref := range batch.actors {
 			want := ops.Monsters.behaviorActorMover(batch.key, ref)
-			got, ok := view.actor(ref)
+			got, ok := view.actorAt(i)
 			if ok != want.ok {
 				t.Fatalf("actor %d: snapshot ok=%v, dispatch read ok=%v", ref.gid, ok, want.ok)
 			}
@@ -79,6 +80,8 @@ func TestLegSnapshotConcurrentBuildersAgree(t *testing.T) {
 			}()
 		}
 		wg.Wait()
+		defer views[0].release()
+		defer views[1].release()
 		if !reflect.DeepEqual(views[0].actors, views[1].actors) {
 			t.Fatalf("concurrent snapshot builds disagree over %d actors", len(batch.actors))
 		}
@@ -145,5 +148,39 @@ func TestLegSnapshotStaleCommitDrops(t *testing.T) {
 	stored, _, _ = registry.MoverGeneration(monsterTestDivision, gid)
 	if stored.Pose.Heading != 23456 {
 		t.Fatalf("stored heading = %d, want the re-based commit's 23456", stored.Pose.Heading)
+	}
+}
+
+/*
+================
+TestLegSnapshotBuildAllocations
+
+The pooled slice view builds with no steady-state allocation: the
+map it replaces charged every batch a fresh view and a fresh set of
+buckets - 3.6 GB a minute of copies on the live shard (#2030, two
+heap pulls 60 s apart on 2026-11-03). The window runs warm first;
+the pool is only empty once.
+================
+*/
+func TestLegSnapshotBuildAllocations(t *testing.T) {
+	ops, _, now := seededLegWorld(t, 24)
+	batches := ops.Monsters.behaviorBatches(*now)
+	if len(batches) == 0 {
+		t.Fatal("seeded leg produced no behavior batches")
+	}
+	batch := batches[0]
+	build := func() {
+		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
+		view.release()
+	}
+	build()
+	fewest := testing.AllocsPerRun(50, build)
+	for range 2 {
+		if got := testing.AllocsPerRun(50, build); got < fewest {
+			fewest = got
+		}
+	}
+	if fewest > 0.5 {
+		t.Fatalf("leg snapshot build allocates %.2f per run in steady state, want at most 0.5", fewest)
 	}
 }
