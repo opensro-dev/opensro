@@ -142,9 +142,34 @@ paintRelease
 function paintRelease( body ) {
 	const r = body.release;
 	byID( "release-freeze" ).textContent = r?.freeze ? "freeze " + r.freeze.slice( 0, 9 ) : "";
-	byID( "release-title" ).textContent = r?.live ? "No release in flight" : "Release in flight";
+	byID( "release-title" ).textContent = r?.live ?
+		"No release in flight" :
+		r?.assembling ?
+		"Release being assembled" :
+		"Release in flight";
 	if ( !r ) {
 		byID( "release-body" ).replaceChildren( el( "p", { class: "board-empty" }, "No release in flight." ) );
+		return;
+	}
+	if ( r.assembling ) {
+		// Decided, not frozen: merges flow; the card counts what is still open.
+		const merged = r.contains.length - r.waiting.length;
+		byID( "release-body" ).replaceChildren(
+			el( "h3", { class: "board-release" }, r.name ),
+			r.why ? el( "p", { class: "board-help" }, r.why ) : null,
+			el(
+				"p",
+				{},
+				pill( `${merged} of ${r.contains.length} merged`, r.waiting.length ? "warn" : "ok" ),
+				" ",
+				el( "strong", {}, "List: " ),
+				numberLinks( r.contains, pullURL )
+			),
+			r.waiting.length ?
+				el( "p", {}, el( "strong", {}, "Still open: " ), numberLinks( r.waiting, pullURL ) ) :
+				el( "p", {}, "Every listed PR is merged: freeze it next." ),
+			r.rules.length ? el( "ul", { class: "board-rules" }, ...r.rules.map( rule => el( "li", {}, rule ) ) ) : null
+		);
 		return;
 	}
 	if ( r.live ) {

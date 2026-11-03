@@ -77,6 +77,13 @@ test("a good snapshot passes with its age and the repository", async () => {
 	} );
 });
 
+test("an assembling release reads from a literal true and keeps only numeric open PRs", () => {
+	const assembling = { ...SNAPSHOT.release, freeze: "", assembling: true, waiting: [ 2421, "x", 2428 ] };
+	const r = boardBody( { ...SNAPSHOT, release: assembling }, NOW ).release;
+	assert.deepEqual( [ r.assembling, r.waiting, r.freeze ], [ true, [ 2421, 2428 ], "" ] );
+	assert.equal( boardBody( SNAPSHOT, NOW ).release.assembling, false );
+});
+
 test("a release reads live only from a literal true, and a live thread action passes", () => {
 	assert.equal( boardBody( SNAPSHOT, NOW ).release.live, false );
 	assert.equal(

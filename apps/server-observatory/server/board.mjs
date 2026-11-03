@@ -120,6 +120,9 @@ function releaseRow( r ) {
 		why: text( r.why ),
 		// live: the host serves the freeze on every component (the collector reads it).
 		live: r.live === true,
+		// assembling: the list is decided, nothing is frozen; waiting is the part still open.
+		assembling: r.assembling === true,
+		waiting: numbers( r.waiting ),
 		steps: rows( r.steps, s =>
 			object( s ) && typeof s.step === "string" ?
 				{ step: text( s.step ), state: STEP_STATES.has( s.state ) ? s.state : "waiting" } :
