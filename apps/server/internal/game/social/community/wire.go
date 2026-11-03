@@ -317,9 +317,8 @@ func EncodeLetterSendAckB261() []byte {
 
 // The 0xB261 result-2 refusal codes. On result 2 the client's letter-send
 // answer handler reads one more byte and hands it verbatim to the
-// category-0x14 notice table (dispatcher arms at client 0x68B149,
-// 0x68B161, 0x68B16B), whose letter rows are exactly these three; every
-// other code falls to the table's silent default arm.
+// category-0x14 notice table, whose letter rows are exactly these
+// three; every other code falls to the table's silent default arm.
 const (
 	// LetterSendRefusalUnknownUser raises UIIT_MSG_LETTERERR_UNKNOWNUSER.
 	LetterSendRefusalUnknownUser uint8 = 0x0d
