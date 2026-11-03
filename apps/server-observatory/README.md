@@ -82,6 +82,44 @@ send Discord messages or operate an external paging service.
 - Realm strip, population hotspots, a per-session realm chronicle and operator
   alerts for unavailable realms, stale captures and storage errors.
 
+## Work board
+
+`/board.html` joins the work in one page:
+
+- the release in flight and its fixed PR list;
+- what needs the owner;
+- each agent's latest status;
+- agent and fork PRs, with approvals at the head, CI and the blocker;
+- bug-report threads and the issues they link;
+- issue counts by label, and recent merges.
+
+The page re-reads `/api/board` every 30 seconds while the tab is visible. It shows how old the snapshot is, and turns amber once that age passes twice the collector's interval.
+
+The console reads one JSON file and never gathers the data itself. Set both keys in the config:
+
+```json
+{ "boardSnapshotFile": "/var/lib/sro-console/board.json", "boardRepo": "opensro-dev/opensro" }
+```
+
+Without them, the page says the board is not configured.
+
+A collector writes that file wherever the work is visible. It should write a temporary file and rename it over the old one, so the console never reads half a snapshot. The file is the work board contract v1. `server/board.mjs` caps it at 1 MiB, checks every field's type, bounds each string to 300 characters, and drops anything the contract doesn't name:
+
+| Field | Shape |
+| --- | --- |
+| `schemaVersion` | `1` |
+| `generatedAt` | ISO time the collector ran |
+| `intervalSeconds` | how often it runs (30 to 86400; default 300) |
+| `release` | `{ name, freeze (sha), why, steps: [{ step, state: done\|running\|waiting\|failed }], contains: [PR], fixes: [issue], next: { name, candidates: [PR] }, rules: [text] }` or null |
+| `needs` | `[{ what, detail }]` |
+| `agents` | `[{ name, task, tree, state, blockedOn, at (ISO) }]` |
+| `prs` | `[{ number, title, author, fork, approvals, needed, ci: green\|red\|running\|none, blocker, ready, createdAt }]` |
+| `threads` | `[{ thread (digits), title, priority, action: fixed\|close\|reply, issues: [issue] }]` |
+| `issues` | `{ open, withoutPr, labels: [{ name, count }] }` |
+| `merged` | `[{ number, title, mergedAt }]` |
+
+The snapshot carries numbers, never links: the page builds every GitHub link from `boardRepo` and a number, and renders every string as text.
+
 ## Item catalog
 
 `pnpm task build server-game-data` builds the server game-data projection and
