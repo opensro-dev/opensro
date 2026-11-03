@@ -353,7 +353,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	var dispatch struct {
 		division string
 		key      populationKey
-		ref      behaviorActorRef
+		index    int
 		players  []playerPose
 		view     *legSnapshot
 	}
@@ -369,7 +369,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// step's whole-value commits drop instead of overwriting it -
 		// the #2047 overwrite hazard is now carried by the generation
 		// guard rather than by resolve-inside-the-lock timing.
-		actor, ok := dispatch.view.actor(dispatch.ref)
+		actor, ok := dispatch.view.actorAt(dispatch.index)
 		if !ok {
 			return
 		}
@@ -399,9 +399,10 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
 		if ops.pooledLeg() && len(batch.actors) > 1 {
 			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
+			view.release()
 			continue
 		}
-		for _, ref := range batch.actors {
+		for index, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
 			// All dispatch decides is that the actor is still there: a
 			// despawn between scheduling and dispatch drops it here. Its
@@ -422,7 +423,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.key, dispatch.ref, dispatch.players, dispatch.view = divisionID, batch.key, ref, players, view
+				dispatch.division, dispatch.key, dispatch.index, dispatch.players, dispatch.view = divisionID, batch.key, index, players, view
 				advanceBefore := stats.advance
 				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
@@ -434,12 +435,13 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				}
 				continue
 			}
-			actor, ok := view.actor(ref)
+			actor, ok := view.actorAt(index)
 			if !ok {
 				continue
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
+		view.release()
 	}
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped
