@@ -375,7 +375,7 @@ fn ssrWaterReflection(screenUv:vec2f,depth01:f32,bumpOff:vec2f)->vec4f{
  let near=max(env.camera.x,0.1);
  let far=max(env.camera.y,near+1.0);
  let ndc=vec2f(screenUv.x*2.0-1.0,1.0-screenUv.y*2.0);
- let ray=normalize(fHat+rHat*ndc.x+uHat*ndc.y);
+ let ray=normalize(env.forward.xyz+env.right.xyz*ndc.x+env.up.xyz*ndc.y);
  let linFrag=near*far/(far-depth01*(far-near));
  // The fragment's own position, relative to the eye; the surface's flat
  // normal reflects the view ray upward off the water.
@@ -386,7 +386,7 @@ fn ssrWaterReflection(screenUv:vec2f,depth01:f32,bumpOff:vec2f)->vec4f{
   p=p+dir;
   let vz=dot(p,fHat);
   if(vz<=near||vz>=far){break;}
-  let ndc2=vec2f(dot(p,rHat)*t*asp/vz,dot(p,uHat)*t/vz);
+  let ndc2=vec2f(dot(p,rHat)/(vz*t*asp),dot(p,uHat)/(vz*t));
   if(abs(ndc2.x)>1.0||abs(ndc2.y)>1.0){break;}
   let uv2=vec2f(ndc2.x*.5+.5,.5-ndc2.y*.5)+bumpOff;
   if(uv2.x<0.0||uv2.y<0.0||uv2.x>1.0||uv2.y>1.0){break;}

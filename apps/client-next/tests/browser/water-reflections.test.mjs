@@ -64,6 +64,7 @@ test(
 				const { defaultVideoOptions, changeVideo } = await import(
 					"/src/engine/foundation/rendering/video-options.ts"
 				);
+				const { viewProjection } = await import( "/src/engine/foundation/rendering/world-math.ts" );
 				const width = 192, height = 120;
 				const canvas = document.createElement( "canvas" );
 				const output = document.createElement( "canvas" );
@@ -228,16 +229,40 @@ test(
 				// colour leans blue (no red-dominant texel at all); the traced
 				// pillar leans red (hundreds of them) - the trace is the only
 				// thing that can redden this band.
-				const redCount = rgba => {
+				// Placement, not only counts: the trace's red must land at the
+				// pillar's mirror position - its screen column, below its base -
+				// while water away from that column stays clean. A sheared
+				// reprojection reddens the whole band instead (the review's
+				// finding: the count over the band passed the sheared trace).
+				const camera = { eye: [ 30, 16, -46 ], target: [ 0, 0, 6 ], fov: 1.1, near: 1, far: 500 };
+				const vp = viewProjection( camera, width / height );
+				const project = point => {
+					const x = vp[0] * point[0] + vp[4] * point[1] + vp[8] * point[2] + vp[12];
+					const y = vp[1] * point[0] + vp[5] * point[1] + vp[9] * point[2] + vp[13];
+					const w = vp[3] * point[0] + vp[7] * point[1] + vp[11] * point[2] + vp[15];
+					return [ (x / w * .5 + .5) * width, (.5 - y / w * .5) * height ];
+				};
+				const base = project( [ 0, .5, 8 ] ), top = project( [ 0, 14, 8 ] );
+				const window = ( rgba, x0, x1, y0, y1 ) => {
 					let n = 0;
-					for ( let y = 42; y < 66; y++ ) {
-						for ( let x = 40; x < 88; x++ ) {
+					for ( let y = Math.max( 0, y0 | 0 ); y < Math.min( height, y1 | 0 ); y++ ) {
+						for ( let x = Math.max( 0, x0 | 0 ); x < Math.min( width, x1 | 0 ); x++ ) {
 							const i = (y * width + x) * 4;
 							if ( rgba[i] - rgba[i + 2] > 20 ) n++;
 						}
 					}
 					return n;
 				};
+				const mirrorWindow = rgba => window( rgba, base[0] - 12, base[0] + 12, base[1] + 2, base[1] + 22 );
+				// The band left of the pillar: pure water mirror-less, and the
+				// region the sheared reprojection reddened by the hundreds (the
+				// original count-based proof's band). The corrected trace must
+				// leave it clean.
+				const farWindow = rgba => window( rgba, 40, 88, 42, 66 );
+				// The whole water surface below the pillar's base row (the
+				// pillar is red itself; only its reflection, which lands
+				// below the base, may redden the water).
+				const wholeWater = rgba => window( rgba, 0, width, Math.max( 42, base[1] + 2 ), height );
 				return {
 					off,
 					on,
@@ -245,11 +270,15 @@ test(
 					mirrorOff,
 					mirrorOn,
 					mirrorOffAgain,
-					redCount: {
-						off: redCount( off.rgba ),
-						on: redCount( on.rgba ),
-						mirrorOff: redCount( mirrorOff.rgba ),
-						mirrorOn: redCount( mirrorOn.rgba )
+					pins: { base, top },
+					red: {
+						mirror: { off: mirrorWindow( off.rgba ), on: mirrorWindow( on.rgba ) },
+						far: { off: farWindow( off.rgba ), on: farWindow( on.rgba ) },
+						whole: {
+							off: wholeWater( off.rgba ),
+							on: wholeWater( on.rgba ),
+							mirrorOn: wholeWater( mirrorOn.rgba )
+						}
 					},
 					tex: on.tex,
 					gpuErrors: trace.__gpuErrors
@@ -283,18 +312,35 @@ test(
 			// carries no reflection term, so every red-dominant texel in the
 			// band is the trace's own take of the pillar's screen pixels.
 			assert.equal(
-				result.redCount.off,
+				result.red.whole.off,
 				0,
-				`The off water carries no red (${result.redCount.off} texels)`
+				`The off water carries no red (${result.red.whole.off} texels)`
 			);
 			assert.ok(
-				result.redCount.on >= 100,
-				`The trace reddens the water (${result.redCount.on} texels)`
+				result.red.whole.on >= 30,
+				`The trace reddens the water below the pillar's base (${result.red.whole.on} texels)`
+			);
+			// Placement: the pillar's own column carries the trace's red below
+			// its base, and named water away from that column carries none.
+			assert.ok(
+				result.red.mirror.on >= 30,
+				`The pillar's reflection lands at its mirror position (${result.red.mirror.on} texels at ${
+					result.pins.base.map( v => v.toFixed( 1 ) ).join( "," )
+				})`
+			);
+			assert.ok(
+				result.red.far.on <= 4,
+				`The band away from the mirror position stays clean (${result.red.far.on} texels)`
+			);
+			assert.equal(
+				result.red.far.off,
+				0,
+				`The off band carries no red (${result.red.far.off} texels)`
 			);
 			// Under the native mirror the row's source takes over too.
 			assert.ok(
-				result.redCount.mirrorOn >= 100,
-				`The trace replaces the mirror's term (${result.redCount.mirrorOn} texels)`
+				result.red.whole.mirrorOn >= 60,
+				`The trace replaces the mirror's term (${result.red.whole.mirrorOn} texels)`
 			);
 			assert.deepEqual( result.gpuErrors, [], "No uncaptured GPU errors in any mode" );
 			assert.deepEqual( errors, [] );
