@@ -47,11 +47,11 @@ type divisionMonsterState struct {
 	pendingSummons   map[uint32]pendingMonsterSummon
 	instances        monsterStorage
 	// interestMemo holds populationInterestGIDs results per viewer
-	// interest block. Reconciled block membership has already absorbed
-	// the instant, so an entry lives until a mover crosses a block edge
-	// or the actors or static lists change (interestMemoStamp).
-	interestMemoStamp interestMemoStamp
-	interestMemo      map[worldgeom.InterestBlock][]uint32
+	// interest block (interestMemoEntry). Reconciled block membership
+	// has already absorbed the instant, so an entry lives until a
+	// mover crosses one of its own block's edges or the actors or
+	// static lists change.
+	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
 	// interestStatics is byRegion without the gids that have a mover,
 	// rebuilt when interestStaticsStamp stops matching.
 	interestStatics      map[uint16][]uint32
