@@ -1,6 +1,8 @@
 package simulation
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -261,6 +263,77 @@ func TestMonsterScopeStreamDeltas(t *testing.T) {
 	if len(ops.scopeMemo) != 0 {
 		t.Fatalf("scopeMemo retains %d departed sessions", len(ops.scopeMemo))
 	}
+}
+
+/*
+================
+TestMonsterScopeStreamFrameBytes
+
+#2134's done-when asks for spawn and despawn frames byte-identical
+for a recorded scene. TestMonsterScopeStreamDeltas pins the shape
+(opcodes, counts, the appear/rarity bytes); this test pins the whole
+payload of every scope frame the same recorded walk emits: the
+0x30D7 enter single for regionB's monster, the whole byListSub=2
+bracket for regionA's pair (start, gid chunk, finalize), and the
+0x36AB exit single. Any change to
+the maintained-interest path that alters a byte on the wire fails
+here even when the gid sets still match.
+================
+*/
+func TestMonsterScopeStreamFrameBytes(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	ops, regionA, regionB := scopeStreamFixture(t)
+	push := &fakePusher{}
+
+	session := viewerSessionAt(regionA, 100)
+	recordTestMonsterBootstrap(ops, []SessionSnapshot{session}, t0)
+	ops.RunMonsterLeg(t0, []SessionSnapshot{session}, push)
+	for i := int64(1); i <= 3; i++ {
+		ops.RunMonsterLeg(t0+i*250, []SessionSnapshot{session}, push)
+	}
+	session = viewerSessionAt(regionA, 400)
+	ops.RunMonsterLeg(t0+1000, []SessionSnapshot{session}, push)
+
+	type wantFrame struct {
+		opcode uint16
+		gid    uint32
+		length int
+		sha    string
+	}
+	pin := func(label string, frames []Frame, want []wantFrame) {
+		t.Helper()
+		if len(frames) != len(want) {
+			t.Fatalf("%s: %d scope frames, want %d (%+v)", label, len(frames), len(want), frames)
+		}
+		for i, w := range want {
+			got := frames[i]
+			sum := sha256.Sum256(got.Payload)
+			if got.Opcode != w.opcode || got.ScopeGID != w.gid || len(got.Payload) != w.length || hex.EncodeToString(sum[:]) != w.sha {
+				t.Fatalf("%s frame %d = op %#04x gid %d len %d sha %s, want op %#04x gid %d len %d sha %s",
+					label, i, got.Opcode, got.ScopeGID, len(got.Payload), hex.EncodeToString(sum[:]),
+					w.opcode, w.gid, w.length, w.sha)
+			}
+		}
+	}
+
+	session = viewerSessionAt(regionA, 1700)
+	ops.RunMonsterLeg(t0+1250, []SessionSnapshot{session}, push)
+	// The crossing tick emits exactly these four frames, in order: the
+	// enter single, then the exit bracket (start, the pair's gid chunk,
+	// finalize). Nothing else rides the tick.
+	pin("crossing", sessionFrames(push, "viewer"), []wantFrame{
+		{wire.OpSingleObjectSpawn, 400003, 66, "bb5f151e32df165ccf4c2e67882c4f8f4dfc65681bfe41a14e5fbb234625f089"},
+		{opObjectListStart, 0, 3, "138793139d414148c3ea406f4b273bdfb394d17fab3636115815abdf639d433d"},
+		{wire.OpObjectListChunk, 0, 8, "5908ea4a61509511e79e386e2727402e192817006aec5882b8b6e25cc7cbe804"},
+		{opObjectListFinalize, 0, 0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+	})
+
+	push.toSession = nil
+	session = viewerSessionAt(regionB, 740)
+	ops.RunMonsterLeg(t0+1500, []SessionSnapshot{session}, push)
+	pin("exit", scopeDeltaFrames(push, "viewer"), []wantFrame{
+		{wire.OpObjectDespawn, 400003, 4, "ac4e0cd9b5ae0aced667120e79916ad674e5cb3e5e0d484d0cbda4c796306972"},
+	})
 }
 
 /*
