@@ -1,0 +1,107 @@
+/*
+===========================================================================
+
+triage-view.js - what the Bug reports page shows, as plain functions
+
+No DOM here, so the tests run on node. The page (triage.js) renders what
+these return.
+
+===========================================================================
+*/
+
+const PRIORITY_ORDER = [ "Critical", "High", "Medium", "Low", "" ];
+const STATE_ORDER = [ "pending", "rejected", "approved" ];
+export const FILTERS = [
+	{ key: "pending", label: "to decide" },
+	{ key: "approved", label: "approved, to post" },
+	{ key: "rejected", label: "rejected, to redraft" },
+	{ key: "all", label: "all drafts" }
+];
+
+/*
+================
+counts
+================
+*/
+export function counts( threads ) {
+	const out = { pending: 0, approved: 0, rejected: 0, all: threads.length };
+	for ( const t of threads ) out[t.decision.state] += 1;
+	return out;
+}
+
+/*
+================
+visible
+
+The drafts one filter, search text and priority leave, most urgent first:
+undecided before rejected before approved, then by priority.
+================
+*/
+export function visible( threads, filter, search = "", priority = "" ) {
+	const needle = search.trim().toLowerCase();
+	return threads
+		.filter( t => filter === "all" || t.decision.state === filter )
+		.filter( t => !priority || t.priority === priority )
+		.filter( t =>
+			!needle || t.title.toLowerCase().includes( needle ) || t.thread.includes( needle ) ||
+			t.issues.some( n => ("#" + n).includes( needle ) )
+		)
+		.sort( ( a, b ) =>
+			STATE_ORDER.indexOf( a.decision.state ) - STATE_ORDER.indexOf( b.decision.state ) ||
+			PRIORITY_ORDER.indexOf( a.priority ) - PRIORITY_ORDER.indexOf( b.priority ) ||
+			a.thread.localeCompare( b.thread )
+		);
+}
+
+/*
+================
+priorityTone
+================
+*/
+export function priorityTone( priority ) {
+	return priority === "Critical" || priority === "High" ? "bad" : priority === "Medium" ? "warn" : "idle";
+}
+
+/*
+================
+actionText
+
+What posting the reply does to the thread.
+================
+*/
+export function actionText( action ) {
+	return action === "fixed" ? "fixed by the release" : action === "close" ? "reply and close" : "reply only";
+}
+
+/*
+================
+decisionText
+================
+*/
+export function decisionText( d ) {
+	if ( d.state === "pending" ) return { text: "to decide", tone: "warn" };
+	const who = d.by ? ` by ${d.by}` : "";
+	return d.state === "approved" ?
+		{ text: "approved" + who, tone: "ok" } :
+		{ text: "rejected" + who, tone: "bad" };
+}
+
+/*
+================
+readFilter / writeFilter
+
+The filter lives in the URL so a reload or a shared link keeps it.
+================
+*/
+export function readFilter( search ) {
+	const key = new URLSearchParams( search ).get( "show" );
+	return FILTERS.some( f => f.key === key ) ? key : "pending";
+}
+
+export function writeFilter( search, key ) {
+	const params = new URLSearchParams( search );
+	if ( key === "pending" ) params.delete( "show" );
+	else params.set( "show", key );
+	const text = params.toString();
+	return text ? "?" + text : "";
+}

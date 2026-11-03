@@ -33,7 +33,7 @@ const THREAD = /^\d{1,24}$/;
 const STEP_STATES = new Set( [ "done", "running", "waiting", "failed" ] );
 const CI_STATES = new Set( [ "green", "red", "running", "none" ] );
 const THREAD_ACTIONS = new Set( [ "fixed", "close", "reply" ] );
-const EVIDENCE_STATES = new Set( [ "done", "na", "missing" ] );
+const EVIDENCE_STATES = new Set( [ "done", "na", "working", "missing" ] );
 const MAX_SEATS = 4;
 const MAX_EVIDENCE = 12;
 
@@ -196,8 +196,8 @@ function seatRow( s ) {
 ================
 evidenceRow
 
-One line of the PR's Evidence checklist: done, not applicable (with its
-reason) or missing.
+One kind of a PR's evidence: done, not applicable (with its reason),
+working (a task is held; the note names it) or missing.
 ================
 */
 function evidenceRow( e ) {

@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- triage.html - the #bug-reports drafts: read each drafted reply, approve or reject it, copy the approved ones to post. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3d0d09">
+<title>Bug reports · Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/theme-boards.css">
+<link rel="stylesheet" href="/theme-fit.css">
+<link rel="stylesheet" href="/board.css">
+<link rel="stylesheet" href="/triage.css">
+<script type="module" src="/triage.js"></script>
+</head>
+<body>
+<aside class="rail">
+<a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
+<nav aria-label="Dashboard views">
+<a href="/board.html">Work board</a>
+<a href="/triage.html" class="active" aria-current="page">Bug reports</a>
+<a href="/#overview">Overview</a>
+<a href="/#players">Players</a>
+<a href="/#world">World census</a>
+<a href="/#health">Runtime</a>
+<a href="/#items">Items</a>
+<a href="/#recovery">Player recovery</a>
+<a href="/history.html">Session history</a>
+<a href="/chat-log.html">Chat log</a>
+<a href="/economy.html">Economy</a>
+<a href="/settings.html">Shard rules</a>
+</nav>
+<div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
+</aside>
+<div class="shell">
+<main class="board triage">
+<div class="page-heading">
+<div>
+<div class="eyebrow">#BUG-REPORTS</div>
+<h1>Bug reports</h1>
+<p>Each thread's drafted reply. Approve it to post, or reject it with a reason so it is redrafted. Nothing posts from here: an approved reply has a Copy button for you to paste into the thread.</p>
+</div>
+<div class="heading-actions board-actions">
+<span id="triage-fresh" class="pill idle">Loading…</span>
+<button id="triage-refresh" class="button" type="button">Refresh</button>
+</div>
+</div>
+
+<p id="triage-status" class="board-status" role="status" aria-live="polite"></p>
+
+<div id="triage-summary" class="board-summary" role="group" aria-label="Show drafts by decision"></div>
+
+<section class="panel board-panel" aria-labelledby="drafts-title">
+<div class="panel-heading"><h2 id="drafts-title">Drafts</h2><span id="drafts-count" class="tag">0</span></div>
+<div class="triage-tools">
+<label>Search <input id="triage-search" type="search" placeholder="Title, thread or issue"></label>
+<label>Priority <select id="triage-priority"><option value="">Any</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label>
+</div>
+<ol id="drafts-body" class="triage-list"></ol>
+</section>
+
+<footer><span><span class="tiny-star">◆</span>SILKROAD OBSERVATORY / BUG REPORTS</span></footer>
+</main>
+</div>
+</body>
+</html>

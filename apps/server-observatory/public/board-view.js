@@ -146,6 +146,7 @@ export function seatsText( pr ) {
 const EVIDENCE_MARKS = Object.freeze( {
 	done: { tone: "ok", mark: "✓" },
 	na: { tone: "idle", mark: "n/a" },
+	working: { tone: "warn", mark: "…" },
 	missing: { tone: "bad", mark: "✗" }
 } );
 
