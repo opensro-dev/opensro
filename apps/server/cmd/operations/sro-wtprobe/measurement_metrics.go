@@ -226,7 +226,7 @@ func probeMetricCounters(snapshot transport.Metrics) map[string]uint64 {
 		"handshake_hello_timeout": snapshot.HandshakeHelloTimeout, "handshake_read_failed": snapshot.HandshakeReadFailed,
 		"handshake_protocol_rejected": snapshot.HandshakeProtocolRejected, "handshake_count": snapshot.HandshakeCount,
 		"resume_attempted": snapshot.ResumeAttempted, "resume_accepted": snapshot.ResumeAccepted,
-		"resume_fresh": snapshot.ResumeFresh, "resume_no_position": snapshot.ResumeNoPosition, "resume_gap": snapshot.ResumeGap,
+		"resume_fresh": snapshot.ResumeFresh, "resume_ended": snapshot.ResumeEnded, "resume_no_position": snapshot.ResumeNoPosition, "resume_gap": snapshot.ResumeGap,
 		"hello_admission_accepted": snapshot.HelloAdmissionAccepted, "hello_admission_refused": snapshot.HelloAdmissionRefused,
 		"detaches": snapshot.Detaches, "detaches_idle": snapshot.DetachesIdle, "detaches_ring_park": snapshot.DetachesRingPark, "detaches_other": snapshot.DetachesOther,
 		"sessions_opened": snapshot.SessionsOpened, "sessions_closed": snapshot.SessionsClosed,

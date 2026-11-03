@@ -47,11 +47,11 @@ type divisionMonsterState struct {
 	pendingSummons   map[uint32]pendingMonsterSummon
 	instances        monsterStorage
 	// interestMemo holds populationInterestGIDs results per viewer
-	// interest block. Reconciled block membership has already absorbed
-	// the instant, so an entry lives until a mover crosses a block edge
-	// or the actors or static lists change (interestMemoStamp).
-	interestMemoStamp interestMemoStamp
-	interestMemo      map[worldgeom.InterestBlock][]uint32
+	// interest block (interestMemoEntry). Reconciled block membership
+	// has already absorbed the instant, so an entry lives until a
+	// mover crosses one of its own block's edges or the actors or
+	// static lists change.
+	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
 	// interestStatics is byRegion without the gids that have a mover,
 	// rebuilt when interestStaticsStamp stops matching.
 	interestStatics      map[uint16][]uint32
@@ -130,6 +130,9 @@ type MonsterState struct {
 	// bandits is built once from the immutable template (BanditTables).
 	banditsOnce sync.Once
 	bandits     *monster.BanditTables
+	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
+	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
+	tombChain *TombChain
 }
 
 /*
@@ -449,6 +452,9 @@ func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity b
 		s.sampleHiveDensity(state, snapshot, nowMs)
 	}
 	s.runDueHiveTicks(state, nowMs)
+	if s.tombChain != nil {
+		s.tombChain.tickLocked(s, state, nowMs)
+	}
 	state.populationTicked = true
 }
 

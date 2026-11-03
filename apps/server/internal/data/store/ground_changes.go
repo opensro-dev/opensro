@@ -62,7 +62,8 @@ func (s *Store) takeGroundChangesLocked() *domain.GroundChanges {
 writeGroundChangesTx
 
 Writes the changes inside the commit's transaction: the whole-plane
-diff for a Full set, else one statement per changed row. The GidCounter
+diff for a Full set, else one statement per changed row, both through
+one groundRowWriter's prepared statements (#1943 W3). The GidCounter
 is written with every ground write, so a moved counter persists even
 when no item row changed.
 ================
@@ -73,15 +74,17 @@ func writeGroundChangesTx(tx *sql.Tx, scratch *jsonscratch.Scratch, committed ma
 			return err
 		}
 	} else {
+		writer := newGroundRowWriter(tx, scratch)
+		defer writer.close()
 		for i := range changes.Rows {
 			row := &changes.Rows[i]
 			if row.Record == nil {
-				if _, err := tx.Exec(deleteGroundSQL, row.Division, row.Gid); err != nil {
+				if err := writer.deleteRow(row.Division, row.Gid); err != nil {
 					return err
 				}
 				continue
 			}
-			if err := upsertGroundTx(tx, scratch, row.Division, row.Record); err != nil {
+			if err := writer.upsert(row.Division, row.Record); err != nil {
 				return err
 			}
 		}

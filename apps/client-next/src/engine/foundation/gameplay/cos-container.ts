@@ -41,6 +41,19 @@ export function cosGrantResult( record: CosRecord, p: Uint8Array, refs: Readonly
 	};
 }
 
+// A quest removal out of the pet bag (0xB06D type 0x16): the family's
+// gid row, naming the pet slot the item leaves. The native quest sink
+// takes the item out of its container and prints nothing.
+export function cosRemovalResult( record: CosRecord, p: Uint8Array ): CosRecord {
+	if (
+		p.length !== 7 || p[0] !== 1 || p[1] !== 0x16 ||
+		new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true ) !== record.gid || !record.inventory
+	) throw Error( "Invalid COS removal result" );
+	const slot = p[6]!;
+	if ( !record.inventory.some( row => row.slot === slot ) ) throw Error( "Invalid COS removal source" );
+	return { ...record, inventory: record.inventory.filter( row => row.slot !== slot ) };
+}
+
 export function cosGroundResult( record: CosRecord, p: Uint8Array, refs: ReadonlyMap<number, number> ): CosRecord {
 	if (
 		p.length < 7 || p[0] !== 1 || ![ 0x11, 0x12 ].includes( p[1]! ) ||

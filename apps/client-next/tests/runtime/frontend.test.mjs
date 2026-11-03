@@ -907,3 +907,53 @@ test("portrait dock framing keeps every roster slot in frame and never changes t
 		);
 	}
 });
+
+const { createCharacters } = await load( "src/engine/runtime/renderer/characters/characters.ts" );
+test("a held character clock reaches the session sender as one degraded report", () => {
+	const characters = createCharacters();
+	// Admission holds the invalid clock and records the report once
+	// (actor-snapshots owns the hold); this test owns the last mile:
+	// snapshot owner -> renderer drain -> frontend step -> session sender.
+	characters.actors( [
+		{
+			gid: 7,
+			model: "m-held",
+			clip: "run",
+			time: Number.NaN,
+			loop: true,
+			scale: 1,
+			pose: { regionId: 25000, x: 0, y: 0, z: 0, yaw: 0 }
+		}
+	] );
+	const assets = {
+		available: () => 8,
+		request: () => 0,
+		take: () => undefined,
+		cancel: () => false
+	};
+	const renderer = {
+		cancelWorldUpdate() {},
+		settleWorld: () => false,
+		setWorld() {},
+		adoptWorld() {},
+		setWorldTexture() {},
+		neededWorldTextures: () => [],
+		worldStats: () => ({}),
+		setWorldCamera() {},
+		characterStats: () => ({ actors: 1 }),
+		takeDegradations: () => characters.takeDegradations()
+	};
+	const sent = [];
+	const frontend = createFrontend( assets, renderer, "http://fixture.invalid", command => sent.push( command ) );
+	let now = 0;
+	const session = { phase: "signed-out", revision: 1, characters: [] };
+	frontend.step( session, now += 100 );
+	const reports = sent.filter( command => command.kind === "client-report" );
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].incidentKind, "degraded" );
+	assert.equal( reports[0].code, "character-time-held" );
+	assert.match( reports[0].message, /gid=7 model=m-held clip=run time=NaN held=0/ );
+	// The queue is drained by the step: the next frame reports nothing more.
+	frontend.step( session, now += 100 );
+	assert.equal( sent.filter( command => command.kind === "client-report" ).length, 1 );
+});

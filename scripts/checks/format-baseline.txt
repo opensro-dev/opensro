@@ -31,7 +31,6 @@ apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts
 apps/client-next/src/engine/foundation/animation/model-animation.ts
-apps/client-next/src/engine/foundation/animation/model-material-clock.ts
 apps/client-next/src/engine/foundation/animation/native-clip.ts
 apps/client-next/src/engine/foundation/animation/one-shot-layers.ts
 apps/client-next/src/engine/foundation/animation/orb-mover.ts
@@ -132,7 +131,6 @@ apps/client-next/src/engine/foundation/ui/minimap-catalog.ts
 apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts
-apps/client-next/src/engine/foundation/ui/notice-dialog.ts
 apps/client-next/src/engine/foundation/ui/notice-text.ts
 apps/client-next/src/engine/foundation/ui/progression-bars.ts
 apps/client-next/src/engine/foundation/ui/quest-guide.ts

@@ -1,7 +1,9 @@
 package simulation
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -295,7 +297,7 @@ func TestScopeLegSkipsTheUnchangedLeg(t *testing.T) {
 	if !ok {
 		t.Fatalf("no scope memo recorded after the seed leg (recorded %v)", ok)
 	}
-	if stamp, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, t0); !ok || stamp != memo.stamp {
+	if stamp, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, viewers["viewer"], t0); !ok || stamp != memo.stamp {
 		t.Fatal("the seed leg's memo is not the stamp a fresh scope read keys on")
 	}
 	for i := int64(1); i <= 2; i++ {
@@ -347,16 +349,93 @@ func TestScopeLegSkipsTheUnchangedLeg(t *testing.T) {
 	}
 
 	// The viewer crosses into a block of its own while the division stands
-	// still: the stamp alone would call this leg unchanged, so the block
-	// match is what runs it in full and moves the shown set.
-	stamp := ops.scopeMemo["viewer"].stamp
+	// still: the old block's stamp reads the same across the leg, so only
+	// the block match can be what runs it in full and moves the shown set.
+	still, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, viewers["viewer"], t0+3000)
+	if !ok {
+		t.Fatal("no scope stamp for the still division")
+	}
 	viewers["viewer"] = worldgeom.RegionXZ{RegionID: regionA, X: 1800, Z: 100}
 	frames = leg(t0 + 3000)
 	if len(frames) == 0 {
 		t.Fatal("block-crossing leg emitted no scope deltas")
 	}
-	if ops.scopeMemo["viewer"].stamp != stamp {
+	if after, ok := ops.Monsters.scopeInterestStamp(monsterTestDivision, session.Population, worldgeom.RegionXZ{RegionID: regionA, X: 100, Z: 100}, t0+3000); !ok || after != still {
 		t.Fatal("the division moved, so this leg proved nothing about the viewer's block")
+	}
+}
+
+/*
+================
+TestScopeLegFarViewerSkipsNearChurn
+
+#2134: the interest stamp names the viewer's own blocks, so a monster
+crossing a block edge in a far neighbourhood does not retire a distant
+viewer's skip. The near viewer still gets its despawn on the same leg;
+the far viewer's memo stamp is untouched and its leg publishes nothing.
+With a division-wide stamp the far viewer's stamp moved on every such
+leg and its shown set was re-read in full.
+================
+*/
+func TestScopeLegFarViewerSkipsNearChurn(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	ops, regionA, regionB := scopeStreamFixture(t)
+	a2 := scopeStreamInstance(t, ops.Monsters, regionA, 200)
+	nearSession := viewerSessionAt(regionA, 100)
+	// The far viewer sits at regionB's east edge: A2's eastward walk
+	// crosses regionA's blocks only (its destination block neighbours
+	// regionB's WEST edge), so nothing in the far view ever changes.
+	farSession := viewerSessionAt(regionB, 1700)
+	farSession.SessionID = "far"
+	farSession.CharacterID = 8
+	sessions := []SessionSnapshot{nearSession, farSession}
+	viewers := map[string]worldgeom.RegionXZ{
+		"viewer": {RegionID: regionA, X: 100, Z: 100},
+		"far":    {RegionID: regionB, X: 1700, Z: 100},
+	}
+	live := map[string]bool{"viewer": true, "far": true}
+	recordTestMonsterBootstrap(ops, sessions, t0)
+
+	push := &fakePusher{}
+	leg := func(nowMs int64) {
+		push.toSession = nil
+		ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
+	}
+	leg(t0)
+	farMemo, ok := ops.scopeMemo["far"]
+	if !ok {
+		t.Fatal("no scope memo recorded for the far viewer after the seed leg")
+	}
+
+	// Walk A2 east out of the near viewer's neighbourhood, as in
+	// TestScopeLegSkipsTheUnchangedLeg: the near leg runs in full and
+	// publishes exactly one despawn; the far leg must stay skipped.
+	mover, ok := ops.Monsters.Mover(monsterTestDivision, a2.Gid)
+	if !ok {
+		t.Fatal("A2 has no mover")
+	}
+	if err := mover.Transition(monster.MoverEventSpawnHoldElapsed, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := mover.Transition(monster.MoverEventStartWander, 0); err != nil {
+		t.Fatal(err)
+	}
+	mover.From = monster.Pose{RegionID: regionA, X: 200, Y: 10, Z: 150}
+	mover.Pose = mover.From
+	mover.To = monster.Pose{RegionID: regionA, X: 1700, Y: 10, Z: 150}
+	mover.DepartMs, mover.ArriveMs = t0+500, t0+1500
+	if !ops.Monsters.CommitMover(monsterTestDivision, a2.Gid, mover) {
+		t.Fatal("walk-out commit rejected")
+	}
+	leg(t0 + 1500)
+	if frames := scopeDeltaFrames(push, "viewer"); len(frames) != 1 || frames[0].Opcode != wire.OpObjectDespawn || frames[0].ScopeGID != a2.Gid {
+		t.Fatalf("near leg frames = %+v, want one despawn for A2", frames)
+	}
+	if frames := scopeDeltaFrames(push, "far"); len(frames) != 0 {
+		t.Fatalf("far leg emitted %d scope deltas, want 0: %+v", len(frames), frames)
+	}
+	if got := ops.scopeMemo["far"]; got != farMemo {
+		t.Fatalf("far viewer's memo moved on near churn: %+v -> %+v", farMemo, got)
 	}
 }
 
@@ -459,5 +538,161 @@ func TestScopeLegRetriesAnActorRemovedMidLeg(t *testing.T) {
 	frames = leg(t0 + 500)
 	if len(frames) != 1 || frames[0].Opcode != wire.OpSingleObjectSpawn || frames[0].ScopeGID != removed.Gid {
 		t.Fatalf("restore leg frames = %+v, want one spawn for gid %d", frames, removed.Gid)
+	}
+}
+
+/*
+================
+TestScopeLegRebuildRetiresTheVacatedBlock
+
+#2134 review: past maxMoverBlockDirty the block index drops its notes
+and the next scan rebuilds it, discarding the old membership instead
+of leaving it. A mover that crossed out of the viewer's blocks inside
+that window must still retire the viewer's stamp - the rebuild bumps
+every block the old index held - or the leg skips and the monster
+stays shown with no despawn.
+================
+*/
+func TestScopeLegRebuildRetiresTheVacatedBlock(t *testing.T) {
+	const t0 = int64(1_784_000_000_000)
+	state := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil),
+		byRegion: map[uint16][]uint32{}}
+	registry := &MonsterState{
+		divs:  map[string]*divisionMonsterState{monsterTestDivision: state},
+		clock: func() time.Time { return time.UnixMilli(t0) },
+	}
+	ops := &MonsterMoverOps{Monsters: registry}
+	home := monster.Pose{RegionID: interestScanRegion, X: 960, Z: 960}
+	away := monster.Pose{RegionID: interestScanRegion, X: 960 + 4*320, Z: 960}
+	state.instances.set(1, monster.Instance{Gid: 1, CurrentHP: 1})
+	state.movers.set(1, monster.MoverState{Pose: home})
+	// The burst below rewrites this instanceless row: a row added
+	// mid-burst would move the statics roster generation and retire
+	// the stamp on its own, proving nothing about the rebuild.
+	state.movers.set(2, monster.MoverState{Pose: away})
+
+	session := SessionSnapshot{SessionID: "viewer", DivisionID: monsterTestDivision, CharacterID: 7}
+	sessions := []SessionSnapshot{session}
+	viewers := map[string]worldgeom.RegionXZ{"viewer": {RegionID: interestScanRegion, X: 960, Z: 960}}
+	live := map[string]bool{"viewer": true}
+	registry.RecordObjectList(monsterTestDivision, PlayerObjectID(7), []uint32{1})
+
+	push := &fakePusher{}
+	leg := func(nowMs int64) []Frame {
+		push.toSession = nil
+		ops.runScopeVisibility(nowMs, sessions, viewers, live, push)
+		return scopeDeltaFrames(push, "viewer")
+	}
+	if frames := leg(t0); len(frames) != 0 {
+		t.Fatalf("seed leg emitted %d scope deltas, want 0", len(frames))
+	}
+
+	// Burst past the dirty bound so the next scan rebuilds the
+	// index, then cross the mover four blocks east - outside the
+	// viewer's 3x3 - inside that window.
+	for i := 0; i <= maxMoverBlockDirty; i++ {
+		state.movers.set(2, monster.MoverState{Pose: away})
+	}
+	if state.movers.blocks.built {
+		t.Fatal("the burst did not drop the block index to a rebuild")
+	}
+	state.movers.set(1, monster.MoverState{Pose: away})
+
+	if frames := leg(t0 + 100); len(frames) != 1 || frames[0].Opcode != wire.OpObjectDespawn || frames[0].ScopeGID != 1 {
+		t.Fatalf("post-rebuild leg frames = %+v, want one despawn for gid 1", frames)
+	}
+	if ops.shownMonsters["viewer"][1] {
+		t.Fatal("gid 1 is still shown after the rebuild retired its block")
+	}
+}
+
+/*
+================
+scopeBenchWorld
+
+One division holding the interest-scan crowd, with viewerCount
+sessions clustered in the centre blocks or spread over the five-by-
+five regions around them. The division state comes back so a bench
+can flip movers across a block edge between legs.
+================
+*/
+func scopeBenchWorld(viewerCount int, spread bool) (*MonsterMoverOps, []SessionSnapshot, map[string]worldgeom.RegionXZ, map[string]bool, *divisionMonsterState) {
+	state := interestScanCrowd(3000, 300)
+	registry := &MonsterState{
+		divs:  map[string]*divisionMonsterState{monsterTestDivision: state},
+		clock: func() time.Time { return time.UnixMilli(1_784_000_000_000) },
+	}
+	ops := &MonsterMoverOps{Monsters: registry}
+	sessions := make([]SessionSnapshot, 0, viewerCount)
+	viewers := make(map[string]worldgeom.RegionXZ, viewerCount)
+	live := make(map[string]bool, viewerCount)
+	for i := 0; i < viewerCount; i++ {
+		id := fmt.Sprintf("s%d", i)
+		viewer := worldgeom.RegionXZ{RegionID: interestScanRegion, X: 900 + float64(i%7)*20, Z: 900 + float64(i/7)*20}
+		if spread {
+			region := uint16(interestScanRegion + i%5 - 2 + (i/5%5-2)*0x100)
+			viewer = worldgeom.RegionXZ{RegionID: region, X: 960, Z: 960}
+		}
+		sessions = append(sessions, SessionSnapshot{
+			SessionID: id, DivisionID: monsterTestDivision, CharacterID: int64(1000 + i),
+			World: WorldState{Spawn: Spawn{RegionID: viewer.RegionID, X: viewer.X, Y: 10, Z: viewer.Z}, SpawnSet: true},
+		})
+		viewers[id] = viewer
+		live[id] = true
+	}
+	return ops, sessions, viewers, live, state
+}
+
+/*
+================
+BenchmarkScopeVisibilityLeg
+
+One runScopeVisibility leg over the seeded viewers of a 3000-mover
+crowd (#2134). Quiet: nothing moves between legs, so the
+unchanged-leg skip serves everyone. Roaming: eight movers straddle a
+block edge inside the clustered viewers' area, so their stamps move
+on every leg while far neighbourhoods stand still.
+================
+*/
+func BenchmarkScopeVisibilityLeg(b *testing.B) {
+	shapes := []struct {
+		name    string
+		viewers int
+		spread  bool
+		flips   int
+	}{
+		{"clustered/50viewers/quiet", 50, false, 0},
+		{"clustered/50viewers/roaming8", 50, false, 8},
+		{"clustered/200viewers/quiet", 200, false, 0},
+		{"clustered/200viewers/roaming8", 200, false, 8},
+		{"spread/200viewers/roaming8", 200, true, 8},
+	}
+	for _, shape := range shapes {
+		b.Run(shape.name, func(b *testing.B) {
+			ops, sessions, viewerMap, live, state := scopeBenchWorld(shape.viewers, shape.spread)
+			push := &fakePusher{}
+			nowMs := int64(1_784_000_000_000)
+			for leg := 0; leg < 3; leg++ {
+				nowMs += 100
+				ops.runScopeVisibility(nowMs, sessions, viewerMap, live, push)
+			}
+			if len(ops.shownMonsters) != shape.viewers {
+				b.Fatalf("seeded %d viewers, want %d", len(ops.shownMonsters), shape.viewers)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				nowMs += 100
+				for flip := 0; flip < shape.flips; flip++ {
+					x := 950.0
+					if (i+flip)%2 == 1 {
+						x = 990.0
+					}
+					state.movers.set(uint32(400+flip), monster.MoverState{Pose: monster.Pose{RegionID: interestScanRegion, X: x, Z: 960}})
+				}
+				push.toSession = push.toSession[:0]
+				ops.runScopeVisibility(nowMs, sessions, viewerMap, live, push)
+			}
+		})
 	}
 }

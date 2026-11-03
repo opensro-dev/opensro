@@ -12,9 +12,14 @@ here too instead of surviving from an older frame.
 ===========================================================================
 */
 import type { CharacterActor, CharacterLayer } from "@/engine/contracts/character";
+import type { Degradation } from "@/engine/contracts/network";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 type Mutable<T> = { -readonly [K in keyof T]: T[K]; };
 type Actor = Mutable<CharacterActor>;
+// The held-clock report queue's bound, the world owner's degradation
+// bound (entities.ts MAX_PENDING_DEGRADATIONS): an undrained owner
+// cannot grow it, and the session reporter caps codes per session.
+const MAX_HELD_TIME_REPORTS = 64;
 /*
 ================
 copyVector
@@ -47,6 +52,11 @@ export function createActorSnapshots() {
 	// residency; only first/last references advance its invalidation revision.
 	const modelReferences = new Map<string, number>();
 	let created = 0, modelRevision = 0;
+	// Clocks a publication asked this owner to hold (#2407): the pending
+	// first-substitution reports (takeDegradations), the fields already
+	// reported per gid, and the substitution count stats() exposes.
+	let degradations: Degradation[] = [], heldSubstitutions = 0;
+	const reportedHolds = new Map<number, Set<string>>();
 	/*
 	================
 	reference
@@ -64,6 +74,56 @@ export function createActorSnapshots() {
 			modelReferences.set( model, count );
 			if ( count === 1 && delta === 1 ) modelRevision++;
 		}
+	}
+	/*
+	================
+	validClock
+
+	Whether a published clock may reach pose evaluation: finite and not
+	negative. Pose evaluation and the particle graph reject both fatally,
+	and a session must not end on one stale publication (#2407).
+	================
+	*/
+	function validClock( value: number ) {
+		return Number.isFinite( value ) && value >= 0;
+	}
+	/*
+	================
+	validWeight
+
+	Whether a published layer weight may reach pose evaluation: the
+	0..1 range pose evaluation enforces.
+	================
+	*/
+	function validWeight( value: number ) {
+		return Number.isFinite( value ) && value >= 0 && value <= 1;
+	}
+	/*
+	================
+	noteHeldTime
+
+	Record one held clock. The count always advances (stats), the report
+	only on a gid's first substitution for that field, so one stale
+	producer cannot report per frame. The message names the actor and
+	the bad value, so the producer is findable from the report alone.
+	================
+	*/
+	function noteHeldTime( source: CharacterActor, key: string, field: string, bad: number, held: number ) {
+		heldSubstitutions++;
+		let reported = reportedHolds.get( source.gid );
+		if ( !reported ) {
+			reported = new Set();
+			reportedHolds.set( source.gid, reported );
+		}
+		if ( reported.has( key ) ) return;
+		reported.add( key );
+		if ( degradations.length >= MAX_HELD_TIME_REPORTS ) return;
+		degradations.push( {
+			code: "character-time-held",
+			message: `gid=${source.gid} model=${source.model} clip=${source.clip} ${field}=${
+				String( bad )
+			} held=${held}`
+		} );
 	}
 	/*
 	================
@@ -92,7 +152,10 @@ export function createActorSnapshots() {
 		target.gid = source.gid;
 		target.model = source.model;
 		target.clip = source.clip;
-		target.time = source.time;
+		// An invalid clock holds the row's last valid value (#2407): the
+		// row is the only clock poses, picking and particles ever read.
+		if ( validClock( source.time ) ) target.time = source.time;
+		else noteHeldTime( source, "time", "time", source.time, target.time );
 		target.loop = source.loop;
 		target.scale = source.scale;
 		target.shadowSize = source.shadowSize;
@@ -122,13 +185,28 @@ export function createActorSnapshots() {
 				const owned = layers[i];
 				if ( owned ) {
 					owned.clip = layer.clip;
-					owned.time = layer.time;
+					if ( validClock( layer.time ) ) owned.time = layer.time;
+					else noteHeldTime( source, `layer${i}time`, `layers[${i}].time`, layer.time, owned.time );
 					owned.loop = layer.loop;
-					owned.weight = layer.weight;
+					if ( validWeight( layer.weight ) ) owned.weight = layer.weight;
+					else noteHeldTime( source, `layer${i}weight`, `layers[${i}].weight`, layer.weight, owned.weight );
 					owned.lane = layer.lane;
 					owned.activation = layer.activation;
 					owned.rate = layer.rate;
-				} else layers[i] = { ...layer };
+				} else {
+					// A slot first admitted with an invalid clock holds at
+					// rest (full weight), the values a layer starts from.
+					const fresh = { ...layer };
+					if ( !validClock( fresh.time ) ) {
+						noteHeldTime( source, `layer${i}time`, `layers[${i}].time`, fresh.time, 0 );
+						fresh.time = 0;
+					}
+					if ( !validWeight( fresh.weight ) ) {
+						noteHeldTime( source, `layer${i}weight`, `layers[${i}].weight`, fresh.weight, 1 );
+						fresh.weight = 1;
+					}
+					layers[i] = fresh;
+				}
 			}
 			layers.length = source.layers.length;
 			target.layers = layers;
@@ -298,6 +376,9 @@ export function createActorSnapshots() {
 						materialTint: undefined,
 						effectAnchor: undefined
 					};
+					// A first clock that is already invalid holds at rest:
+					// copy keeps the row's value, so it must start valid.
+					if ( !validClock( row.time ) ) row.time = 0;
 					index.set( source.gid, row );
 					created++;
 					reference( source.model, 1 );
@@ -314,12 +395,27 @@ export function createActorSnapshots() {
 				if ( !seen.has( gid ) ) {
 					reference( index.get( gid )!.model, -1 );
 					index.delete( gid );
+					reportedHolds.delete( gid );
 				}
 			}
 			return rows;
 		},
 		modelRevision: () => modelRevision,
-		stats: () => ({ created }),
+		stats: () => ({ created, heldTimes: heldSubstitutions }),
+		/*
+		================
+		takeDegradations
+
+		The held-clock reports since the last take (contracts/network
+		Degradation), drained by the renderer owner's reporter in the
+		shape the world and asset owners hand theirs over.
+		================
+		*/
+		takeDegradations(): Degradation[] {
+			const taken = degradations;
+			degradations = [];
+			return taken;
+		},
 		/*
 		================
 		reset
@@ -330,6 +426,7 @@ export function createActorSnapshots() {
 			modelRevision++;
 			index.clear();
 			seen.clear();
+			reportedHolds.clear();
 			rows.length = 0;
 		}
 	};

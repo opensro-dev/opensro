@@ -237,3 +237,30 @@ test("proposal timeouts distinguish the sender and recipient pending modes", () 
 	assert.equal( socialPacket( target, frame )?.invitation, null );
 	assert.equal( socialPacket( source, writer().u8( 1 ).frame( 0xb71b ) )?.warPending, 0 );
 });
+
+test("a war kill raises the kill-news banner (61A500)", () => {
+	const state = {
+		...masterState(),
+		wars: [ { id: 5, enemyId: 9, name: "Blue", type: 1, localScore: 0, enemyScore: 0, word38: 0, word3c: 0 } ]
+	};
+	// The wire names only the victim (the first slot rides empty; the
+	// killer is resolved from the roster by jid, as 762040 -> 61A500).
+	const killed = defined(
+		socialPacket(
+			state,
+			writer().u8( 0x1d ).u8( 1 ).u32( 5 ).u32( 3 ).u32( 10 ).str( "" ).str( "Victim" ).frame( 0x3b29 )
+		)
+	);
+	assert.equal( killed.notice?.key, "UIIT_MSG_GUILDWAR_KILLNEWS" );
+	assert.equal( killed.notice?.notificationBanner, true );
+	assert.equal( killed.notice?.bannerOnly, true );
+	// 61A500 passes the victim name to the format twice (the belonging
+	// slot, pushes at 0x61a710).
+	assert.deepEqual( killed.notice?.arguments, [ "Alice", "Victim", "Victim" ] );
+	assert.equal( killed.guild?.members[0]?.warKills, 1 );
+	assert.equal( killed.guild?.members[0]?.warScore, 3 );
+	const named = defined(
+		socialPacket( state, writer().u8( 0x1d ).u8( 2 ).u32( 5 ).u32( 0 ).u32( 10 ).str( "Victim" ).frame( 0x3b29 ) )
+	);
+	assert.deepEqual( named.notice?.arguments, [ "Alice", "Victim", "Victim" ] );
+});

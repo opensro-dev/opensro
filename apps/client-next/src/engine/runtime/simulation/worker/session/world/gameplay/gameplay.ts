@@ -104,6 +104,7 @@ import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change"
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
+	partyMatchAckNotice,
 	partyMatchPacket,
 	partyMatchRequest,
 	partyActiveJob,
@@ -234,7 +235,8 @@ import {
 	cosContainerResult,
 	cosGrantResult,
 	cosGroundRequest,
-	cosGroundResult
+	cosGroundResult,
+	cosRemovalResult
 } from "@/engine/foundation/gameplay/cos-container";
 import {
 	advancedPetAssistCountdowns,
@@ -285,12 +287,15 @@ import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { vitalsUpdate } from "@/engine/foundation/gameplay/vitals";
 import {
+	cosCapeGenderPasses,
 	cosCapeWarnsGrowthPet,
 	cosSatietyDroppedLow,
 	cosShopTradeRefused,
 	cosSpecialtyMoveRefused
 } from "@/engine/foundation/ui/cos-command";
 import { isPvpCapeItem } from "@/engine/foundation/gameplay/player-attack";
+import { isTradeGoods } from "@/engine/foundation/gameplay/specialty-deal";
+import { dissolveNeededSlots, isAlchemyEquipment } from "@/engine/foundation/ui/alchemy-selection";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
@@ -1154,6 +1159,20 @@ attack can arrive in the same batch as the previous close and starve the walk.
 			playerModels = { country: localCountry, models: worldReferences.playerModels( localCountry ) };
 		}
 		return playerModels.models;
+	}
+	/*
+	================
+	localPlayerSex
+
+	The local player's sex selector (+0x1AC of its model reference): the
+	wearer value 789C60's gender leg compares an item's ReqGender
+	against. Unknown until the local actor and its model are known.
+	================
+	*/
+	function localPlayerSex(): number | undefined {
+		const local = readEntity( localGid );
+		if ( !local ) return undefined;
+		return localPlayerModels().find( model => model.refObjId === local.refObjId )?.sex;
 	}
 	let bindings = skillBindings( {} );
 	let catalog: readonly SkillMetadata[] = [];
@@ -2315,6 +2334,24 @@ state here before a command can claim a native wire conversation.
 					npcConversation.showWindow();
 					throw Error( "Select a guild manager" );
 				}
+				// 5DA1B0 @5da261: with the 0x4000 capability proven by the
+				// row above, a guild under level 3 prints the limit on the
+				// guide and the centre banner (67a600 @5db134, 67d030
+				// @5da2ae) and sends nothing.
+				if ( social.guild && social.guild.level < 3 ) {
+					npcConversation.showWindow();
+					notices = [
+						...notices.slice( -99 ),
+						{
+							key: "UIIT_MSG_GUILD_STORE_LIMIT",
+							value: 0,
+							nativeType: 0,
+							notificationBanner: true,
+							sequence: ++noticeSequence
+						}
+					];
+					return null;
+				}
 				npcConversation.hideWindow();
 				dirty = true;
 				storage.openGuild( command.gid );
@@ -2649,10 +2686,83 @@ state here before a command can claim a native wire conversation.
 					}
 					return null;
 				}
-				return inventory.process(
-					command as import("@/engine/contracts/item-process").ItemProcessCommand,
-					now
-				);
+				const processCommand = command as import("@/engine/contracts/item-process").ItemProcessCommand;
+				if ( processCommand.kind === "alchemy-start" ) {
+					// 6220A0: a compound or advanced staging holding only
+					// its target prints the no-dissolvable line and sends
+					// nothing; 621D00 refuses a dissolve whose products
+					// would not fit the bag. Both judge the staged window
+					// before anything is sent, so they stand here, beside
+					// the other client-side refusals.
+					const state = inventory.state(), alchemyState = state.alchemy;
+					if ( alchemyState.visible && !alchemyState.pending && !alchemyState.locked ) {
+						if (
+							(processCommand.mode === "compound" || processCommand.mode === "advanced") &&
+							processCommand.slots.length === 1
+						) {
+							notices = [ ...notices.slice( -99 ), {
+								key: "UIIT_MSG_ENCHANTERR_HAVE_NO_DISSOLVABLE_ITEM",
+								value: 0,
+								sequence: ++noticeSequence
+							} ];
+							dirty = true;
+							return null;
+						}
+						if ( processCommand.mode === "dissolve" && processCommand.slots.length === 2 ) {
+							const equipment = processCommand.slots
+									.map( slot => state.inventory.find( row => row.slot === slot ) )
+									.find( row => row !== undefined && isAlchemyEquipment( row.typeFlags ) ),
+								needed = equipment ?
+									dissolveNeededSlots(
+										equipment.tooltip?.fields.price,
+										equipment.tooltip?.fields.itemClass,
+										equipment.magic.length
+									) :
+									null;
+							if (
+								needed !== null && state.inventorySlotCount !== undefined &&
+								state.equipmentSlotCount !== undefined
+							) {
+								const bagRows = state.inventory.filter( row =>
+									row.slot >= state.equipmentSlotCount! && row.slot < state.inventorySlotCount!
+								).length;
+								if ( state.inventorySlotCount - state.equipmentSlotCount - bagRows < needed ) {
+									notices = [ ...notices.slice( -99 ), {
+										key: "UIIT_MSG_ALCHEMY_NOT_ENOUGH_SLOT",
+										value: needed,
+										sequence: ++noticeSequence
+									} ];
+									dirty = true;
+									return null;
+								}
+							}
+						}
+					}
+				}
+				if ( processCommand.kind === "alchemy-close" || processCommand.kind === "alchemy-cancel" ) {
+					// 624060 prints the cancelled line when the compound
+					// tab (mode 1) is cancelled busy, and 625550 when the
+					// window closes on a reinforce operation in flight;
+					// the other modes cancel silently.
+					const before = inventory.state().alchemy,
+						frame = inventory.process( processCommand, now );
+					if (
+						before.pending &&
+						(before.mode === "compound" ||
+							(processCommand.kind === "alchemy-close" &&
+								(before.mode === "reinforce" || before.mode === "attribute" ||
+									before.mode === "magic")))
+					) {
+						notices = [ ...notices.slice( -99 ), {
+							key: "UIIT_MSG_ALCHEMY_CANCELED_COMPOUND",
+							value: 0,
+							sequence: ++noticeSequence
+						} ];
+						dirty = true;
+					}
+					return frame;
+				}
+				return inventory.process( processCommand, now );
 			}
 			if (
 				[
@@ -2715,7 +2825,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2728,7 +2839,9 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_CANT_TRADE_SHOP",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0,
+						notificationBanner: true
 					} ];
 					dirty = true;
 					return null;
@@ -2757,7 +2870,8 @@ state here before a command can claim a native wire conversation.
 						notices = [ ...notices.slice( -99 ), {
 							key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 							value: 0,
-							sequence: ++noticeSequence
+							sequence: ++noticeSequence,
+							nativeType: 0
 						} ];
 						dirty = true;
 						return null;
@@ -2801,7 +2915,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 0
 					} ];
 					dirty = true;
 					return null;
@@ -2946,8 +3061,11 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				if ( command.kind === "instance-consent" && !social.instance ) return null;
 				// 0x52EDD0: confirming the instance box (simple_msgbox_type 4)
-				// while dead prints UIIT_MSG_QUEST_INS_DEATH and swallows the
-				// submit - the box stays open and nothing is sent.
+				// while dead prints UIIT_MSG_QUEST_INS_DEATH on the centre
+				// banner only and swallows the submit - the box stays open
+				// and nothing is sent. ASM (capstone on the pinned client):
+				// the body 52EDD0-52EF01 calls 67D030 once at 52EE9A and
+				// 67A600 never, so there is no guide-line leg.
 				if (
 					command.kind === "instance-consent" && command.accept &&
 					local?.appearanceState?.[0] === 2
@@ -2955,8 +3073,8 @@ state here before a command can claim a native wire conversation.
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_QUEST_INS_DEATH",
 						value: 0,
-						nativeType: 0,
 						banner: true,
+						bannerOnly: true,
 						sequence: ++noticeSequence
 					} ];
 					dirty = true;
@@ -3243,22 +3361,37 @@ state here before a command can claim a native wire conversation.
 				return inventory.avatarMove( command.equip, command.source, command.destination, now );
 			}
 			if ( command.kind === "inventory-move" ) {
-				// 594980: wearing a free-battle cape while a growth pet is
-				// summoned prints the warning; the equip itself proceeds
-				// and the pet's unsummon is the server's answer. 594980
-				// also requires the target socket's record empty (+0x28
-				// clear), so a swap onto a worn cape stays silent.
+				// 594980 is the equipment drop action: the key is pushed
+				// nowhere else in the client (594AA9) and the handler is
+				// reached only through the equipment window's vtable, so
+				// the warning belongs to the drop. A double-click
+				// activation (567290) composes the same equip move with
+				// destination kind 0x46 at 5678B0 without passing the
+				// gate and prints nothing. When the gate passes, wearing
+				// the cape prints on the guide lane (67A600 type 5 at
+				// 594AE5) and the centre banner (67D030 at 594B00); the
+				// equip itself proceeds and the summoned growth pet's
+				// unsummon is the server's part of the committed equip
+				// (the inference recorded in itemmove.go). 594980 also
+				// requires the target socket's record empty (+0x28
+				// clear), so a swap onto a worn cape stays silent, and
+				// its 789C60 gender leg (mask 0x40) stays silent for a
+				// cape cut for the other sex.
 				const source = command.source;
 				const item = inventory.state().inventory.find( row => row.slot === source );
 				if (
+					!command.activation &&
 					item && command.destination === CAPE_SOCKET && isPvpCapeItem( item.typeFlags ) &&
+					cosCapeGenderPasses( item.tooltip?.fields.reqGender, localPlayerSex() ) &&
 					!inventory.state().inventory.some( row => row.slot === CAPE_SOCKET ) &&
 					cosCapeWarnsGrowthPet( [ ...cosRecords.values() ] )
 				) {
 					notices = [ ...notices.slice( -99 ), {
 						key: "UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE",
 						value: 0,
-						sequence: ++noticeSequence
+						sequence: ++noticeSequence,
+						nativeType: 5,
+						notificationBanner: true
 					} ];
 					dirty = true;
 				}
@@ -3343,9 +3476,29 @@ state here before a command can claim a native wire conversation.
 					reverseMapPoint: command.reverseMapPoint,
 					renameName: command.renameName
 				};
-				// 5608B0: the ride-state refusal prints instead of using.
 				const usedSlot = command.slot;
 				const usedItem = inventory.state().inventory.find( row => row.slot === usedSlot );
+				// 567290 (kind-0xF arm): activating a trade good never
+				// uses it. 550300 tests the item and 830410 compares
+				// the active record's class byte against 1: with a
+				// transport active the activation composes the COS-bag
+				// move (kind 0x7A, move type 0xF), otherwise the line
+				// prints (67A600 type 0 at 56762F) and nothing is sent.
+				// The selection is this port's active record: it follows
+				// the last summoned or window-selected companion.
+				if ( usedItem && isTradeGoods( usedItem.typeFlags ) ) {
+					const record = context.selectedGid ? cosRecords.get( context.selectedGid ) : undefined;
+					if ( record && !cosSpecialtyMoveRefused( usedItem.typeFlags, record.band ) ) {
+						return inventory.transferCos( record, true, usedSlot, undefined, now, cosItemCaps );
+					}
+					api.notice( {
+						key: "UIIT_MSG_COS_CANNOT_BUY_SPECIALTY_TO_INVENTORY",
+						value: 0,
+						nativeType: 0
+					} );
+					return null;
+				}
+				// 5608B0: the ride-state refusal prints instead of using.
 				if ( local?.mountedOn && usedItem && isRideStateRefusedItem( usedItem.typeFlags ) ) {
 					api.notice( { key: "UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE", value: 0 } );
 					return null;
@@ -3813,21 +3966,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				} );
 				if ( matched ) {
 					const flag = frame.payload[0],
-						detail = frame.payload[1],
-						key = flag === 2 ?
-							null :
-							frame.opcode === 0xb5bf ?
-							detail === 1 ?
-								"UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER" :
-								detail === 0 ?
-								"UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED" :
-								"UIIT_MSG_PARTYMATCH_JOIN_NOREPLY" :
-							null;
+						detail = frame.payload[1];
 					if ( flag === 2 ) {
 						const notice = constantNativeNotice( 2, detail! );
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					} else if ( key ) {
-						notices = [ ...notices.slice( -99 ), { sequence: ++noticeSequence, key, value: 0 } ];
+					} else {
+						const answer = partyMatchAckNotice( frame.opcode, detail );
+						if ( answer ) notices = [ ...notices.slice( -99 ), { ...answer, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
@@ -4228,8 +4373,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( nextSocial.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...nextSocial.notice, sequence: ++noticeSequence } ];
 					}
+					for ( const flip of nextSocial.notices ?? [] ) {
+						notices = [ ...notices.slice( -99 ), { ...flip, sequence: ++noticeSequence } ];
+					}
 					social = withMemberCountries(
-						nextSocial.notice ? { ...nextSocial, notice: undefined } : nextSocial
+						nextSocial.notice || nextSocial.notices ?
+							{ ...nextSocial, notice: undefined, notices: undefined } :
+							nextSocial
 					);
 					if (
 						social.invitation &&
@@ -4629,10 +4779,37 @@ Packet handling must not depend on which HUD panel is currently open.
 							.getUint32( 2, true ),
 						record = cosRecords.get( gid );
 					if ( !record ) throw Error( "Absent COS grant owner" );
-					// Silent: 756CF0's pet branch (window 0x7A) prints for source 0
-					// only, and a grant is source 3 (#2258).
 					const next = cosGrantResult( record, frame.payload, cosItemRefs );
+					// 756CF0's print case (756EEC) is shared by ground (0) and
+					// quest (3) sources and dispatches on the destination: a
+					// grant into the pet bag (0x7A) prints with grant rules -
+					// a new row names itself (75741B), a merge stays silent
+					// (7570DD) - and the gold slot has no line (#2258).
+					if ( frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name },
+								true
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
+					cosPickup.spaceChanged( gid );
+					dirty = true;
+					return true;
+				}
+				if (
+					frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 0x16
+				) {
+					if ( frame.payload.length !== 7 ) throw Error( "Invalid COS removal result" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength )
+							.getUint32( 2, true ),
+						record = cosRecords.get( gid );
+					if ( !record ) throw Error( "Absent COS removal owner" );
+					// The quest sink (758C13) prints nothing for a removal.
+					cosRecords.set( gid, cosRemovalResult( record, frame.payload ) );
 					cosPickup.spaceChanged( gid );
 					dirty = true;
 					return true;

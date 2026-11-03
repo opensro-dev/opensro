@@ -10,6 +10,7 @@ responses cannot disagree about which request is still answerable.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./party-member";
+import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import { NATIVE_LEVEL_CAP } from "./level-cap";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
@@ -339,6 +340,27 @@ export function partyMatchPacket(
 	}
 	if ( at !== p.length ) throw Error( "Trailing matching bytes" );
 	return next;
+}
+
+/*
+================
+partyMatchAckNotice
+
+The join-answer line a 0xB5BF answer raises (handler 75EBD0):
+detail 1 the completed-match centre banner (67D030), detail 0 the
+refusal and detail 2 the no-reply guide lines (67A600, type 4). An outer-2
+answer raises the category-2 table in gameplay instead, and other
+opcodes raise nothing here.
+================
+*/
+export function partyMatchAckNotice( opcode: number, detail: number | undefined ): SystemNotice | null {
+	if ( opcode !== 0xb5bf ) return null;
+	if ( detail === 1 ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER", value: 0, banner: true, bannerOnly: true };
+	}
+	if ( detail === 0 ) return { key: "UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED", value: 0, nativeType: 4 };
+	if ( detail === 2 ) return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0, nativeType: 4 };
+	return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 };
 }
 // 637CF0 uses exact name equality and inclusive overlapping level intervals.
 /*

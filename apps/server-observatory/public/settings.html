@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- settings.html - shard rules: every tunable rule and shard setting beside its default (read-only until staff sign-in). -->
+<!-- settings.html - shard rules: every tunable rule and shard setting beside its default, with any change on its way (read-only). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -17,6 +17,7 @@
 <aside class="rail">
 <a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
 <nav aria-label="Dashboard views">
+<a href="/board.html">Work board</a>
 <a href="/#overview">Overview</a>
 <a href="/#players">Players</a>
 <a href="/#world">World census</a>
@@ -36,32 +37,49 @@
 <div>
 <div class="eyebrow">SHARD RULES</div>
 <h1>Live settings</h1>
-<p>Every tunable rule of this shard and every shard setting, with its default and the values it accepts. Live rules change on the next action, entry rules at each player's next world entry, restart rules at the next restart.</p>
+<p>What this shard runs, beside each default. Read-only: a change is proposed and approved on the GameWorld, and shows here while it waits.</p>
 </div>
-</div>
-
-<p class="rules-note" role="note">Read-only for now. Changes will be proposed here with a reason and applied once a second staff member approves them, when staff sign-in reaches this console.</p>
-
-<form id="rules-filter" class="panel rules-filter" aria-label="Filter settings">
+<div class="heading-actions rules-actions">
 <label class="rules-server">Server<select id="rules-shard"></select></label>
-<label class="rules-search">Find<input id="rules-query" type="search" placeholder="Name, key or SRO_ variable" autocomplete="off"></label>
-<div id="rules-groups" class="rules-chips" role="group" aria-label="Groups"></div>
-<label class="rules-check"><input id="rules-changed" type="checkbox"> Changed only</label>
-</form>
+<button id="rules-refresh" class="button" type="button">Refresh</button>
+<span id="rules-read" class="rules-read" aria-live="polite"></span>
+</div>
+</div>
+
 <p id="rules-status" class="rules-status" role="status" aria-live="polite">Loading…</p>
 
-<div id="rules-summary" class="rules-summary" aria-label="Summary"></div>
+<div id="rules-summary" class="rules-summary" role="group" aria-label="Summary and quick filters"></div>
+
+<form id="rules-filter" class="panel rules-filter" aria-label="Filter rules and settings">
+<label class="rules-search">Find<input id="rules-query" type="search" placeholder="Name, key or SRO_ variable" autocomplete="off"></label>
+<div id="rules-groups" class="rules-chips" role="group" aria-label="Groups"></div>
+<div class="rules-checks">
+<label class="rules-check"><input id="rules-changed" type="checkbox"> Changed only</label>
+<label class="rules-check"><input id="rules-pending" type="checkbox"> Waiting only</label>
+</div>
+</form>
+
+<ul class="rules-legend" aria-label="What the marks mean">
+<li><span class="rules-chip live">Live</span>applies on the next action</li>
+<li><span class="rules-chip entry">Next world entry</span>at each player's next entry</li>
+<li><span class="rules-chip restart">Restart</span>at the next restart</li>
+<li><span class="rules-chip changed">Default …</span>runs other than its default</li>
+</ul>
 
 <div id="rules-board" class="rules-board"></div>
 
 <section class="panel rules-group-panel" aria-labelledby="flags-title">
-<div class="panel-heading"><div><div class="eyebrow">DEPLOYMENT</div><h2 id="flags-title">Shard settings</h2></div><span id="flags-count" class="tag">0</span></div>
+<div class="panel-heading"><h2 id="flags-title">Shard settings</h2><span id="flags-count" class="tag">0</span></div>
 <p class="rules-help">The switches this deployment sets, as the GameWorld reads them. They change with a deployment, not from here.</p>
-<ul id="flags-body" class="rules-flags" aria-label="Shard settings and their state"></ul>
+<ul id="flags-set" class="rules-flags" aria-label="Shard settings this deployment sets"></ul>
+<details id="flags-unset-box" class="rules-unset">
+<summary id="flags-unset-title">Unset</summary>
+<ul id="flags-unset" class="rules-flags" aria-label="Shard settings left unset"></ul>
+</details>
 </section>
 
 <section class="panel rules-group-panel rules-fixed" aria-labelledby="fixed-title">
-<div class="panel-heading"><div><div class="eyebrow">NOT TUNABLE</div><h2 id="fixed-title">Fixed rules</h2></div></div>
+<div class="panel-heading"><h2 id="fixed-title">Fixed rules</h2><span class="tag">not tunable</span></div>
 <ul class="rules-fixed-list">
 <li><strong>Server tick</strong><span>Every timing rule is counted in ticks.</span></li>
 <li><strong>Pet and transport ranges</strong><span>Mirrored by the client; a change would desync it.</span></li>

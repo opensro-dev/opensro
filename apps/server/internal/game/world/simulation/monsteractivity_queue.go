@@ -485,7 +485,16 @@ type behaviorActorSnapshot struct {
 	// synthesized): the base generation the step's commits guard on
 	// (#2137 slice 1, CommitMoverGen).
 	moverGen uint64
-	ok       bool
+	// slot and monsterSlot are the dense storage slots the batch
+	// resolved for this actor, carried from the ref the snapshot was
+	// read through (#2133): the step arms them on its ops so its
+	// doors (monsterpublish.go) read and commit through the verified
+	// hints instead of resolving the gid through the storage maps
+	// again. behaviorNoMoverSlot/behaviorNoMonsterSlot when the
+	// batch carried none.
+	slot        uint32
+	monsterSlot uint32
+	ok          bool
 }
 
 /*
@@ -556,18 +565,18 @@ func (s *MonsterState) behaviorActorMoverLocked(state *divisionMonsterState, ref
 	if !ok {
 		mover, ok = state.movers.lookup(ref.gid)
 	}
-	gen := state.movers.generation(ref.gid)
+	gen := state.movers.generationAt(ref.slot, ref.gid)
 	if ok {
 		if err := mover.Validate(); err != nil {
 			panic(err)
 		}
-		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
+		return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
 	}
 	mover = monster.NewSpawnMover(actor, s.nowMillis())
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
-	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, ok: true}
+	return behaviorActorSnapshot{instance: actor, mover: mover, moverGen: gen, slot: ref.slot, monsterSlot: ref.monsterSlot, ok: true}
 }
 
 /*

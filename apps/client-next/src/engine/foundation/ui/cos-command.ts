@@ -642,24 +642,38 @@ cosCapeWarnsGrowthPet
 
 594980's pet condition for the free-battle warning: the COS manager
 holds an attack-class entry (82EF30 sought with class 3) and no
-guild-class one (class 4). A dead attack pet is on its way out with the
-cleanup, so it no longer counts as summoned.
+guild-class one (class 4). 82EF30 walks the manager's list comparing
+the entry's class byte (record +0x14) and tests nothing else, so a
+dead pet of either class counts as out until it leaves the manager.
 
-Of 594980's remaining conditions, the empty target socket is judged at
-the equip command, where the socket rows live. The 0x40 gender leg of
-789C60 (the item's ReqGender against the wearer's sex, item value 2
-passing for everyone) is not judged on this lane: the worker's item
-catalogue carries no ReqGender column, so a wrong-gender cape warns
-here where the original stays silent. Judging it needs the published
-references widened by that one column.
+Of 594980's remaining conditions, the empty target socket and the
+0x40 gender leg are judged at the equip command, where the socket
+rows and the item's ReqGender live.
 ================
 */
-export function cosCapeWarnsGrowthPet( records: readonly Pick<CosRecord, "band" | "dead">[] ): boolean {
+export function cosCapeWarnsGrowthPet( records: readonly Pick<CosRecord, "band">[] ): boolean {
 	let attack = false, guild = false;
 	for ( const record of records ) {
 		const cls = cosClass( record.band );
-		if ( cls === COS_CLASS_ATTACK && !record.dead ) attack = true;
+		if ( cls === COS_CLASS_ATTACK ) attack = true;
 		if ( cls === COS_CLASS_GUILD ) guild = true;
 	}
 	return attack && !guild;
+}
+
+/*
+================
+cosCapeGenderPasses
+
+The 0x40 leg of 789C60 as 594980 calls it (789E18): the item's
+ReqGender (type data +0x1AC) passes when it equals the wearer's sex
+selector (the local player model's +0x1AC), and item value 2 is cut
+for both sexes and always passes. A lane that cannot supply a value
+(the published reference carries no ReqGender for the item, or the
+wearer's model is unknown) does not suppress the warning: the
+original always holds both, the port's references are best-effort.
+================
+*/
+export function cosCapeGenderPasses( reqGender: number | undefined, sex: number | undefined ): boolean {
+	return reqGender === undefined || reqGender === 2 || sex === undefined || reqGender === sex;
 }
