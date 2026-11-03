@@ -449,6 +449,13 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 
 	assert.equal( manifest.format, "sro-mission-npc-models" );
 	assert.equal( manifest.version, NPC_MANIFEST_VERSION );
+	// Port-only published models no roster names: the Stormbrood egg is
+	// original port content (crowEgg.mjs) the bake always appends as a COS
+	// resource. Named here so the count below says what the +1 is.
+	const PORT_ONLY_COS_MODELS = [ "PORT_STORMBROOD_EGG" ];
+	for ( const codename of PORT_ONLY_COS_MODELS ) {
+		assert.equal( manifest.models[codename]?.kind, "cos", `${codename} is not published as kind cos` );
+	}
 	// Fortress structures whose v1.150 BSR ships (the small guard towers do not).
 	const structureNames = new Set( loadFortressStructureRoster().map( ( ref ) => ref.codename ) );
 	const structureRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "structure" );
@@ -463,12 +470,12 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	);
 	assert.equal(
 		manifest.count,
-		roster.length + structureRows.length + boothRows.length + 4 + deathRows.length,
-		"the rosters, structures and booths plus four packetless CICRide resources and the characterInfo death models"
+		roster.length + structureRows.length + boothRows.length + 4 + deathRows.length + PORT_ONLY_COS_MODELS.length,
+		"the rosters, structures and booths plus four packetless CICRide resources, the characterInfo death models and the port-only COS models"
 	);
 	assert.equal(
 		Object.values( manifest.models ).filter( ( entry ) => entry.kind === "cos" ).length,
-		cosRoster.length,
+		cosRoster.length + PORT_ONLY_COS_MODELS.length,
 		"every enabled COS reference, and only those, is published as kind cos"
 	);
 	for ( const ref of roster ) {

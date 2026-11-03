@@ -376,6 +376,13 @@ type Character struct {
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
+	// HalloweenBoxDay is the 04:00-UTC day (progression.HalloweenDayKey)
+	// the character's daily jewelry-box count belongs to, and
+	// HalloweenBoxCount the boxes minted that day from every source
+	// (port-only, not native: SRO_HALLOWEEN_EVENT, action/halloween.go;
+	// schema 34). Zero day: nothing counted yet.
+	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
+	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).

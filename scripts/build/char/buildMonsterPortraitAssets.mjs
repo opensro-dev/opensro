@@ -59,7 +59,13 @@ export function monsterPortraitReferences( manifest ) {
 		row.kind === "monster" && Number.isInteger( row.refObjId ) && row.refObjId > 0
 	).sort( ( a, b ) => a.refObjId - b.refObjId ).map( row => {
 		const slot = [ 1, 3, 4 ].includes( row.materialKind ) ? row.materialKind : 0;
-		return { refObjId: row.refObjId, glb: row.materialVariants?.[String( slot )] ?? row.glb };
+		return {
+			refObjId: row.refObjId,
+			// Named only when the manifest names the row: an undefined
+			// key would change the reference's shape for every consumer.
+			...(row.codename ? { codename: row.codename } : {}),
+			glb: row.materialVariants?.[String( slot )] ?? row.glb
+		};
 	} );
 }
 
@@ -127,12 +133,30 @@ export async function monsterPortraitRendererFingerprint( manifest, readAsset = 
 
 /*
 ================
-renderMonsterPortrait
+monsterPortraitFailure
 
-Keep one viewer page and renderer for the batch. Reload after a failed draw.
+The error a failed still leaves behind: its row, the model it was
+drawing and the viewer's own reason. A batch death that only says
+"asset-load" cannot be reproduced, because it does not say which of
+the 1919 monsters stopped the build.
 ================
 */
-export async function renderMonsterPortrait( page, base, refObjId ) {
+function monsterPortraitFailure( refObjId, row, error ) {
+	const message = error instanceof Error ? error.message : String( error );
+	const who = row?.codename ? `${refObjId} (${row.codename})` : String( refObjId );
+	const what = row?.glb ? ` on ${row.glb}` : "";
+	return Error( `Monster portrait ${who} failed${what}: ${message}`, { cause: error } );
+}
+
+/*
+================
+renderMonsterPortrait
+
+Keep one viewer page and renderer for the batch. Reload after a failed
+draw, and name the row that failed.
+================
+*/
+export async function renderMonsterPortrait( page, base, refObjId, row ) {
 	try {
 		let id = refObjId;
 		if ( !(await page.evaluate( () => typeof window.__viewerNext === "function" )) ) {
@@ -166,7 +190,7 @@ export async function renderMonsterPortrait( page, base, refObjId ) {
 		return Buffer.from( match[1], "base64" );
 	} catch ( error ) {
 		await page.goto( "about:blank" );
-		throw error;
+		throw monsterPortraitFailure( refObjId, row, error );
 	}
 }
 
@@ -215,7 +239,10 @@ export async function buildMonsterPortraitAssets() {
 			const cached = await stat( target ).then( value => value.size > 100 ).catch( () => false );
 			if ( cached ) claimPublicFile( target );
 			else {
-				await writeIntoPublicTree( target, await renderMonsterPortrait( launched.page, base, row.refObjId ) );
+				await writeIntoPublicTree(
+					target,
+					await renderMonsterPortrait( launched.page, base, row.refObjId, row )
+				);
 				rendered++;
 			}
 			rows.push( [ row.refObjId, output ] );

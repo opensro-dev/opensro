@@ -1,13 +1,13 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestShippedConditionalChildSelfPrograms(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	skills := NewTextdataSkills(dir)
 	for _, tc := range []struct{ id, tag, first, cast uint32 }{{10495, 0x64656670, 16, 0}, {10498, 0x647275, 20, 0}, {10507, 0x647275, 20, 929}, {10510, 0x6372, 10, 929}} {

@@ -47,7 +47,7 @@ const write = async ( p, b ) => {
 	await writeFile( p, b, { flag: "wx" } );
 };
 // The application's pages: the game, and the embeddable 3D viewer
-// (docs/VIEWER.md) served beside it at /play/viewer.html.
+// (docs/guides/VIEWER.md) served beside it at /play/viewer.html.
 const APPLICATION_PAGES = [ "index.html", "viewer.html" ];
 
 /*

@@ -210,7 +210,9 @@ HandleGachaNpcAction
 
 HandleGachaNpcAction accepts only the exact action-0x27 native composition:
 0x7338 [boundGid][0x10000]. It must name the actor's currently selected,
-live roster NPC and that NPC must occur in gachanpcmap.txt.
+live roster NPC and that NPC must occur in gachanpcmap.txt. Every refusal
+answers the generic lane's 0xB338 kind-2 frame (npcFunctionRefusal), so
+the client's pending function request retires; the string is only logged.
 ================
 */
 func (rt *Runtime) HandleGachaNpcAction(
@@ -222,27 +224,29 @@ func (rt *Runtime) HandleGachaNpcAction(
 		return nil, "characterNotFound"
 	}
 	if rt.GachaCatalog == nil {
-		return nil, "Gacha catalogue is unavailable"
+		return npcFunctionRefusal(wire.ErrCodeInvalidRequest), "Gacha catalogue is unavailable"
 	}
 	gid, actionFlags, err := gacha.DecodeNpcAction(payload)
 	if err != nil {
-		return nil, err.Error()
+		return npcFunctionRefusal(wire.ErrCodeInvalidRequest), err.Error()
 	}
 	if actionFlags != gacha.InteractionFlagGacha {
-		return nil, fmt.Sprintf("unsupported action flags 0x%X", actionFlags)
+		return npcFunctionRefusal(wire.ErrCodeInvalidRequest), fmt.Sprintf("unsupported action flags 0x%X", actionFlags)
 	}
 
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
 	if selected, ok := rt.Selected.Get(divisionID, character.Name); !ok || selected != gid {
-		return nil, "bound NPC is not the current selected object"
+		return npcFunctionRefusal(selectObjectNotFound), "bound NPC is not the current selected object"
 	}
-	npc, ok := rt.gachaNpcForGID(divisionID, character, gid)
+	// The same live world/region admission as the generic NPC owner: a
+	// selected gid can survive travel, so roster presence is not enough.
+	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
 	if !ok {
-		return nil, fmt.Sprintf("gid %d is not a live Gacha roster NPC", gid)
+		return npcFunctionRefusal(selectObjectNotFound), fmt.Sprintf("gid %d is not a live Gacha roster NPC", gid)
 	}
 	if !rt.GachaCatalog.HasNpc(npc.RefObjID) {
-		return nil, fmt.Sprintf("NPC RefObjID %d has no v1.150 Gacha set", npc.RefObjID)
+		return npcFunctionRefusal(npcFunctionNotOffered), fmt.Sprintf("NPC RefObjID %d has no v1.150 Gacha set", npc.RefObjID)
 	}
 	if !rt.npcWithinHitRange(divisionID, character, npc) {
 		return npcFunctionTooFar(), fmt.Sprintf("NPC %s is beyond its interaction range", npc.Codename)
@@ -415,25 +419,6 @@ func (rt *Runtime) HandleGachaRoll(
 			character.Name, request.SelectedEntryID, npc.RefObjID, outcome, rolledReward, rolledQuantity)
 	}
 	return frames, ""
-}
-
-/*
-================
-gachaNpcForGID
-================
-*/
-func (rt *Runtime) gachaNpcForGID(
-	divisionID string,
-	character *enterworld.Character,
-	gid uint32,
-) (simulation.NpcDef, bool) {
-	// Use the same live world/region admission as the generic NPC owner.
-	// A selected GID can survive travel; roster presence alone is insufficient.
-	npc, ok := rt.npcForCurrentViewer(divisionID, character, gid)
-	if !ok || !rt.GachaCatalog.HasNpc(npc.RefObjID) {
-		return simulation.NpcDef{}, false
-	}
-	return npc, true
 }
 
 /*

@@ -89,7 +89,7 @@ func (game *gameplayPlane) installFollowFixture(api *agentapi.API, ticker *simul
 	}
 	c := &followFixtureControl{game: game, ops: ticker.Monsters, bridge: worldsession.New(game.hub), active: make(map[string]*liveFollowFixture), requests: make(chan followFixtureRequest, 8)}
 	api.InstallFollowFixture(c.command)
-	ticker.Hooks = append(ticker.Hooks, c.tick)
+	ticker.Hooks = append(ticker.Hooks, simulation.NamedTickHook{Name: "dev-follow-fixture", Hook: c.tick})
 }
 
 func (c *followFixtureControl) observe(f *liveFollowFixture, now int64) {

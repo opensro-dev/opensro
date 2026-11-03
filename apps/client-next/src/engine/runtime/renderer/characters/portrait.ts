@@ -113,6 +113,15 @@ export function createPortrait(
 
 		/*
 		================
+		takeDegradations
+
+		The snapshot owner's non-fatal fault reports since the last take.
+		================
+		*/
+		takeDegradations(): import("@/engine/contracts/network").Degradation[];
+
+		/*
+		================
 		invalidate
 
 		Release device-bound preview handles while preserving the borrowed source.
@@ -368,6 +377,16 @@ export function createPortrait(
 		*/
 		pause() {
 			drawnAt = undefined;
+		},
+		/*
+		================
+		takeDegradations
+
+		The preview snapshot owner's held-clock reports since the last take.
+		================
+		*/
+		takeDegradations() {
+			return preview.takeDegradations();
 		},
 		/*
 		================

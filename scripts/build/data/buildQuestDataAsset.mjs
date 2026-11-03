@@ -106,27 +106,29 @@ import path from "node:path";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { readTextDataRowsSync, readLocalizedTextDataRowsSync } from "../shared/textDataIo.mjs";
-import { questGuideRecords } from '../shared/questGuideRecords.mjs';
-import { completeGuideTitles } from '../shared/textResources.mjs';
-import { completedEnglish, isPlaceholderText } from '../shared/englishCompletions.mjs';
+import { questGuideRecords } from "../shared/questGuideRecords.mjs";
+import { completeGuideTitles } from "../shared/textResources.mjs";
+import { completedEnglish, isPlaceholderText } from "../shared/englishCompletions.mjs";
 
 import { extractedRoot, gameRoot, publicRoot } from "../world/paths.mjs";
 
 const textdataRoot = path.join(
-  extractedRoot,
-  "Media_extracted",
-  "server_dep",
-  "silkroad",
-  "textdata"
+	extractedRoot,
+	"Media_extracted",
+	"server_dep",
+	"silkroad",
+	"textdata"
 );
-const questDataPath = path.join(textdataRoot, "questdata.txt");
-const questContentsDataPath = path.join(textdataRoot, "questcontentsdata.txt");
-const textQuestPath = path.join(textdataRoot, "textquest.txt");
-const textHelpPath = path.join(textdataRoot,'texthelp.txt');
-const guideDataPath = path.join(textdataRoot,'gameguidedata.txt');
+const questDataPath = path.join( textdataRoot, "questdata.txt" );
+const questContentsDataPath = path.join( textdataRoot, "questcontentsdata.txt" );
+const textQuestPath = path.join( textdataRoot, "textquest.txt" );
+const textEventPath = path.join( textdataRoot, "textevent.txt" );
+const textDataNamePath = path.join( textdataRoot, "textdataname.txt" );
+const textHelpPath = path.join( textdataRoot, "texthelp.txt" );
+const guideDataPath = path.join( textdataRoot, "gameguidedata.txt" );
 
 // The projected source columns, in shipped order (see the contract above).
-const PROJECTED_COLUMNS = [1, 3, 5, 6, 8, 9, 10];
+const PROJECTED_COLUMNS = [ 1, 3, 5, 6, 8, 9, 10 ];
 // questdata.txt carries 11 columns; CGlobalDataManager_ParseQuestData reads through column 10.
 const MIN_COLUMN_COUNT = 11;
 // questdata.txt column 2: the codename the questcontentsdata join keys on
@@ -153,136 +155,236 @@ const CONTENTS_PROGRESS_CLEAR_COLUMN = 13;
 // v1.150 build's output is unchanged; 110 admits the expansion's rows
 // when a variant build supplies them (#1749).
 function configuredGuideLevelCap() {
-  const value = (process.env.SRO_LEVEL_CAP ?? "").trim().toLowerCase();
-  if (value === "" || value === "0" || value === "off" || value === "false" || value === "90") return 90;
-  if (value === "110") return 110;
-  throw new Error(`[questdata] SRO_LEVEL_CAP must be off, 90 or 110, not ${JSON.stringify(value)}`);
+	const value = (process.env.SRO_LEVEL_CAP ?? "").trim().toLowerCase();
+	if ( value === "" || value === "0" || value === "off" || value === "false" || value === "90" ) return 90;
+	if ( value === "110" ) return 110;
+	throw new Error( `[questdata] SRO_LEVEL_CAP must be off, 90 or 110, not ${JSON.stringify( value )}` );
 }
 
 export function buildQuestDataAsset() {
-  for (const requiredPath of [questDataPath, questContentsDataPath, textQuestPath,textHelpPath,guideDataPath]) {
-    if (!fs.existsSync(requiredPath)) {
-      throw new Error(`[questdata] required source missing: ${requiredPath}`);
-    }
-  }
+	for (
+		const requiredPath of [
+			questDataPath,
+			questContentsDataPath,
+			textQuestPath,
+			textEventPath,
+			textHelpPath,
+			guideDataPath
+		]
+	) {
+		if ( !fs.existsSync( requiredPath ) ) {
+			throw new Error( `[questdata] required source missing: ${requiredPath}` );
+		}
+	}
 
-  // The questcontentsdata join table (codename -> the column-4 byte the
-  // CGlobalDataManager_ParseQuestContentsData parse stores at payload+0xb1 @0x008113d9, plus the column-2
-  // byte it stores at payload+0xb0 @0x00810fdb). Duplicate codenames keep
-  // the FIRST row (std::map insert semantics).
-  const giveupWarnByCodename = new Map();
-  const countryByCodename = new Map();
-  const progressClearByCodename = new Map();
-  for (const cols of readTextDataRowsSync(questContentsDataPath)) {
-    const codename = cols[CONTENTS_CODENAME_COLUMN]?.trim();
-    if (!codename || giveupWarnByCodename.has(codename)) {
-      continue;
-    }
-    giveupWarnByCodename.set(
-      codename,
-      Number.parseInt(cols[CONTENTS_GIVEUP_WARN_COLUMN] ?? "0", 10) & 0xff || 0
-    );
-    countryByCodename.set(
-      codename,
-      Number.parseInt(cols[CONTENTS_COUNTRY_COLUMN] ?? "0", 10) & 0xff || 0
-    );
-    progressClearByCodename.set(
-      codename,
-      Number.parseInt(cols[CONTENTS_PROGRESS_CLEAR_COLUMN] ?? "0", 10) & 0xff || 0
-    );
-  }
+	// The questcontentsdata join table (codename -> the column-4 byte the
+	// CGlobalDataManager_ParseQuestContentsData parse stores at payload+0xb1 @0x008113d9, plus the column-2
+	// byte it stores at payload+0xb0 @0x00810fdb). Duplicate codenames keep
+	// the FIRST row (std::map insert semantics).
+	const giveupWarnByCodename = new Map();
+	const countryByCodename = new Map();
+	const progressClearByCodename = new Map();
+	for ( const cols of readTextDataRowsSync( questContentsDataPath ) ) {
+		const codename = cols[CONTENTS_CODENAME_COLUMN]?.trim();
+		if ( !codename || giveupWarnByCodename.has( codename ) ) {
+			continue;
+		}
+		giveupWarnByCodename.set(
+			codename,
+			Number.parseInt( cols[CONTENTS_GIVEUP_WARN_COLUMN] ?? "0", 10 ) & 0xff || 0
+		);
+		countryByCodename.set(
+			codename,
+			Number.parseInt( cols[CONTENTS_COUNTRY_COLUMN] ?? "0", 10 ) & 0xff || 0
+		);
+		progressClearByCodename.set(
+			codename,
+			Number.parseInt( cols[CONTENTS_PROGRESS_CLEAR_COLUMN] ?? "0", 10 ) & 0xff || 0
+		);
+	}
 
-  const rows = [];
-  const giveupWarnBytes = [];
-  const countryBytes = [];
-  const progressClearBytes = [];
-  for (const cols of readTextDataRowsSync(questDataPath)) {
-    // The table loader keeps Service==1 rows (CTextParser_ReadInt @0x7f44fd); short
-    // rows would underrun the native parse.
-    if (cols.length < MIN_COLUMN_COUNT || cols[0].trim() !== "1") {
-      continue;
-    }
-    rows.push(PROJECTED_COLUMNS.map((index) => cols[index]).join("\t"));
-    // Unjoined rows keep the SQuestReference_Construct ctor zeroes at payload+0xb1/+0xb0/+0xc0.
-    const codename = cols[QUEST_CODENAME_COLUMN]?.trim();
-    giveupWarnBytes.push(giveupWarnByCodename.get(codename) ?? 0);
-    countryBytes.push(countryByCodename.get(codename) ?? 0);
-    progressClearBytes.push(progressClearByCodename.get(codename) ?? 0);
-  }
+	const rows = [];
+	const giveupWarnBytes = [];
+	const countryBytes = [];
+	const progressClearBytes = [];
+	for ( const cols of readTextDataRowsSync( questDataPath ) ) {
+		// The table loader keeps Service==1 rows (CTextParser_ReadInt @0x7f44fd); short
+		// rows would underrun the native parse.
+		if ( cols.length < MIN_COLUMN_COUNT || cols[0].trim() !== "1" ) {
+			continue;
+		}
+		rows.push( PROJECTED_COLUMNS.map( ( index ) => cols[index] ).join( "\t" ) );
+		// Unjoined rows keep the SQuestReference_Construct ctor zeroes at payload+0xb1/+0xb0/+0xc0.
+		const codename = cols[QUEST_CODENAME_COLUMN]?.trim();
+		giveupWarnBytes.push( giveupWarnByCodename.get( codename ) ?? 0 );
+		countryBytes.push( countryByCodename.get( codename ) ?? 0 );
+		progressClearBytes.push( progressClearByCodename.get( codename ) ?? 0 );
+	}
 
-  // The FULL textquest table (version 2): key column 1, English column 8
-  // (the buildTextCatalog column semantics - Korean defaults fill
-  // authored gaps). The title chain resolves the questdata payload+0x24
-  // codenames; the CIFQuestSlotSub expansion resolves the WIRE-carried
-  // SQuestContents+0x08 symbols (CIFQuest_ResolveContentsText) - both against this one
-  // manager slice, exactly the native CTextStringManager_LoadTextDataFile wholesale boot load.
-  const textEntries = {};
-  for (const cols of readLocalizedTextDataRowsSync(textQuestPath)) {
-    const key = cols[1]?.trim();
-    // Duplicate keys keep the FIRST row (the manager's std::map
-    // insert-if-absent).
-    if (!key || key in textEntries) {
-      continue;
-    }
-    // Retail English, else the authored product completion
-    // (englishCompletions.mjs; coverage-gated for every active row). Korean and
-    // translator-note columns are never shown as English.
-    const english = completedEnglish("textquest.txt", cols);
-    textEntries[key] = (isPlaceholderText(english) ? "" : english).replaceAll("\\n", "\n");
-  }
+	// The FULL textquest table (version 2): key column 1, English column 8
+	// (the buildTextCatalog column semantics - Korean defaults fill
+	// authored gaps). The title chain resolves the questdata payload+0x24
+	// codenames; the CIFQuestSlotSub expansion resolves the WIRE-carried
+	// SQuestContents+0x08 symbols (CIFQuest_ResolveContentsText) - both against this one
+	// manager slice, exactly the native CTextStringManager_LoadTextDataFile wholesale boot load.
+	const textEntries = {};
+	for ( const cols of readLocalizedTextDataRowsSync( textQuestPath ) ) {
+		const key = cols[1]?.trim();
+		// Duplicate keys keep the FIRST row (the manager's std::map
+		// insert-if-absent).
+		if ( !key || key in textEntries ) {
+			continue;
+		}
+		// Retail English, else the authored product completion
+		// (englishCompletions.mjs; coverage-gated for every active row). Korean and
+		// translator-note columns are never shown as English.
+		const english = completedEnglish( "textquest.txt", cols );
+		textEntries[key] = (isPlaceholderText( english ) ? "" : english).replaceAll( "\\n", "\n" );
+	}
 
-  // Native English/English lookup (797240/791F50): keep authored empty and
-  // literal "0" cells. Column 3 contains translator notes, never UI fallback.
-  const guideKeys=new Set(readTextDataRowsSync(guideDataPath).filter(r=>r[0]==='1'&&Number(r[1])>=100000).flatMap(r=>[r[5],r[6]]));
-  const guideTextEntries={};
-  for(const file of [textQuestPath,textHelpPath])for(const fields of readLocalizedTextDataRowsSync(file)){
-    const key=fields[1];if(fields[0]!=='1'||!guideKeys.has(key)||key in guideTextEntries)continue;
-    guideTextEntries[key]=completedEnglish(path.basename(file),fields).replaceAll('\\n','\n');
-  }
-  // Untranslated region-group titles ship as literal "0"/empty English cells
-  // (verified in raw texthelp.txt); completed from the shared attested map.
-  completeGuideTitles(guideTextEntries);
-  const catalog = {
-    sourcePaths: [questDataPath, questContentsDataPath, textQuestPath,textHelpPath,guideDataPath].map((sourcePath) =>
-      path.relative(gameRoot, sourcePath).replaceAll("\\", "/")
-    ),
-    format: "sro-questdata",
-    version: 5,
-    // Source column index per shipped tab-separated field (the contract in
-    // the banner above; decode semantics live in questPlane.ts).
-    columns: PROJECTED_COLUMNS,
-    rows,
-    // PARALLEL to `rows`: the questcontentsdata column-4 byte joined by
-    // codename (payload+0xb1, the CIFQuestReward_ConfirmReward give-up confirm variant).
-    giveupWarnBytes,
-    // PARALLEL to `rows`: the questcontentsdata column-2 byte joined by
-    // codename (payload+0xb0, the QuestReference_CountryAllowed country gate - 3 = both).
-    countryBytes,
-    // PARALLEL to `rows`: the questcontentsdata trailing byte joined by
-    // codename (payload+0xc0, the SQuestInfo_Deserialize progress-sentinel clear -
-    // all zeros in the shipped table, see the VERSION 5 banner note).
-    progressClearBytes,
-    // Additive guide projection: preserves the existing quest-journal schema.
-    guideRecords: questGuideRecords(readTextDataRowsSync(questDataPath),readTextDataRowsSync(questContentsDataPath),configuredGuideLevelCap()),
-    guideTextEntries,
-    textEntries
-  };
+	// The Halloween Day talk rows (SN_TALK_QEV_CH_EVENT_KISAENG_071030_A..E)
+	// live only in textevent.txt, which no catalog reads: So-ok's talk
+	// option is composed by the server, and the client renders whatever
+	// symbol the wire carries through this one text map. Merge exactly
+	// those five rows (additive, format unchanged, version stays 5).
+	// Retail ships all five in English; A and C carry theirs in
+	// multi-line cells (a row-per-line read misses them). A row whose
+	// English ever goes missing is skipped here and fails the
+	// completeness check below instead of shipping blank.
+	// textevent.txt is deliberately NOT added to ENGLISH_COMPLETION_FILES:
+	// its other rows belong to events this build does not run, and the
+	// coverage gate would demand translations for all of them.
+	const HALLOWEEN_TALK_PREFIX = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_";
+	const halloweenTalkFound = new Set();
+	for ( const cols of readLocalizedTextDataRowsSync( textEventPath ) ) {
+		const key = cols[1]?.trim();
+		if ( !key?.startsWith( HALLOWEEN_TALK_PREFIX ) || key in textEntries ) {
+			continue;
+		}
+		const english = cols[8]?.trim() ?? "";
+		if ( isPlaceholderText( english ) ) {
+			continue;
+		}
+		textEntries[key] = english.replaceAll( "\\n", "\n" );
+		halloweenTalkFound.add( key );
+	}
+	for ( const suffix of [ "A", "B", "C", "D", "E" ] ) {
+		if ( !halloweenTalkFound.has( HALLOWEEN_TALK_PREFIX + suffix ) ) {
+			throw new Error(
+				`[questdata] Halloween talk row ${HALLOWEEN_TALK_PREFIX + suffix} missing from textevent.txt`
+			);
+		}
+	}
 
-  const { outPath } = exportDataAsset({ publicRoot, outputFileName: "questData.json", value: catalog });
+	// The helmet rows So-ok sells by name carry the itemdata NameStrID of
+	// the eight event helmets (SN_ITEM_ETC_E050526_*_EGHEAD, textdataname
+	// .txt): the talk list renders those symbols through this same map.
+	// Merge exactly those eight (additive, as above). Retail ships all
+	// eight in English; a missing one fails the completeness check.
+	const HALLOWEEN_HELMET_SYMBOLS = [
+		"SN_ITEM_ETC_E050526_M_EGHEAD",
+		"SN_ITEM_ETC_E050526_M_BLUE_EGHEAD",
+		"SN_ITEM_ETC_E050526_M_RED_EGHEAD",
+		"SN_ITEM_ETC_E050526_M_BLACK_EGHEAD",
+		"SN_ITEM_ETC_E050526_W_EGHEAD",
+		"SN_ITEM_ETC_E050526_W_BLUE_EGHEAD",
+		"SN_ITEM_ETC_E050526_W_RED_EGHEAD",
+		"SN_ITEM_ETC_E050526_W_BLACK_EGHEAD"
+	];
+	const halloweenHelmetWanted = new Set( HALLOWEEN_HELMET_SYMBOLS );
+	const halloweenHelmetFound = new Set();
+	for ( const cols of readLocalizedTextDataRowsSync( textDataNamePath ) ) {
+		const key = cols[1]?.trim();
+		if ( !key || !halloweenHelmetWanted.has( key ) || key in textEntries ) {
+			continue;
+		}
+		const english = cols[8]?.trim() ?? "";
+		if ( isPlaceholderText( english ) ) {
+			continue;
+		}
+		textEntries[key] = english.replaceAll( "\\n", "\n" );
+		halloweenHelmetFound.add( key );
+	}
+	for ( const symbol of HALLOWEEN_HELMET_SYMBOLS ) {
+		if ( !halloweenHelmetFound.has( symbol ) ) {
+			throw new Error( `[questdata] Halloween helmet name ${symbol} missing from textdataname.txt` );
+		}
+	}
 
-  console.log(
-    `[questdata] wrote ${rows.length} projected rows (${Object.keys(textEntries).length} text entries) -> ${path.relative(publicRoot, outPath)}`
-  );
-  return {
-    written: true,
-    rows: rows.length,
-    textEntries: Object.keys(textEntries).length,
-    outPath
-  };
+	// Native English/English lookup (797240/791F50): keep authored empty and
+	// literal "0" cells. Column 3 contains translator notes, never UI fallback.
+	const guideKeys = new Set(
+		readTextDataRowsSync( guideDataPath ).filter( r => r[0] === "1" && Number( r[1] ) >= 100000 ).flatMap(
+			r => [ r[5], r[6] ]
+		)
+	);
+	const guideTextEntries = {};
+	for ( const file of [ textQuestPath, textHelpPath ] ) {
+		for ( const fields of readLocalizedTextDataRowsSync( file ) ) {
+			const key = fields[1];
+			if ( fields[0] !== "1" || !guideKeys.has( key ) || key in guideTextEntries ) {
+				continue;
+			}
+			guideTextEntries[key] = completedEnglish( path.basename( file ), fields ).replaceAll( "\\n", "\n" );
+		}
+	}
+	// Untranslated region-group titles ship as literal "0"/empty English cells
+	// (verified in raw texthelp.txt); completed from the shared attested map.
+	completeGuideTitles( guideTextEntries );
+	const catalog = {
+		sourcePaths: [
+			questDataPath,
+			questContentsDataPath,
+			textQuestPath,
+			textEventPath,
+			textDataNamePath,
+			textHelpPath,
+			guideDataPath
+		]
+			.map( ( sourcePath ) => path.relative( gameRoot, sourcePath ).replaceAll( "\\", "/" ) ),
+		format: "sro-questdata",
+		version: 5,
+		// Source column index per shipped tab-separated field (the contract in
+		// the banner above; decode semantics live in questPlane.ts).
+		columns: PROJECTED_COLUMNS,
+		rows,
+		// PARALLEL to `rows`: the questcontentsdata column-4 byte joined by
+		// codename (payload+0xb1, the CIFQuestReward_ConfirmReward give-up confirm variant).
+		giveupWarnBytes,
+		// PARALLEL to `rows`: the questcontentsdata column-2 byte joined by
+		// codename (payload+0xb0, the QuestReference_CountryAllowed country gate - 3 = both).
+		countryBytes,
+		// PARALLEL to `rows`: the questcontentsdata trailing byte joined by
+		// codename (payload+0xc0, the SQuestInfo_Deserialize progress-sentinel clear -
+		// all zeros in the shipped table, see the VERSION 5 banner note).
+		progressClearBytes,
+		// Additive guide projection: preserves the existing quest-journal schema.
+		guideRecords: questGuideRecords(
+			readTextDataRowsSync( questDataPath ),
+			readTextDataRowsSync( questContentsDataPath ),
+			configuredGuideLevelCap()
+		),
+		guideTextEntries,
+		textEntries
+	};
+
+	const { outPath } = exportDataAsset( { publicRoot, outputFileName: "questData.json", value: catalog } );
+
+	console.log(
+		`[questdata] wrote ${rows.length} projected rows (${Object.keys( textEntries ).length} text entries) -> ${
+			path.relative( publicRoot, outPath )
+		}`
+	);
+	return {
+		written: true,
+		rows: rows.length,
+		textEntries: Object.keys( textEntries ).length,
+		outPath
+	};
 }
 
 // Run directly (node scripts/build/data/buildQuestDataAsset.mjs) or via the
 // resource build aggregator.
-if (isMainScript(import.meta.url)) {
-  buildQuestDataAsset();
+if ( isMainScript( import.meta.url ) ) {
+	buildQuestDataAsset();
 }

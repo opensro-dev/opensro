@@ -171,7 +171,7 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 	if now-h.strikeAt < interval || now-h.ownerAttackAt > interval {
 		return nil
 	}
-	snapshot := rt.characterSnapshot(h.division, c)
+	snapshot := rt.characterSnapshotCombat(h.division, c)
 	if snapshot == nil {
 		return nil
 	}

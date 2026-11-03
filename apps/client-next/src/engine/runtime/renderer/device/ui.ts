@@ -559,8 +559,9 @@ fs
 				if ( count === 0 ) continue;
 				// An absent image is not a solid-color primitive. Keep its draw absent until
 				// the texture arrives; resourceRevision rebuilds the command list then.
-				const maskKey = quad.mask?.texture ?? "",
-					slot = textures.get( quad.texture ),
+				const textureId = quad.texture,
+					maskKey = quad.mask?.texture ?? "",
+					slot = textures.get( textureId ),
 					mask = textures.get( maskKey );
 				if ( !slot || !mask ) {
 					for ( let i = 0; i < count; i++ ) packed[record + i] = undefined;
@@ -568,10 +569,10 @@ fs
 					previous = null;
 					continue;
 				}
-				let textureBindings = bindings.get( quad.texture );
+				let textureBindings = bindings.get( textureId );
 				if ( !textureBindings ) {
 					textureBindings = new Map();
-					bindings.set( quad.texture, textureBindings );
+					bindings.set( textureId, textureBindings );
 				}
 				let maskBindings = textureBindings.get( maskKey );
 				if ( !maskBindings ) {

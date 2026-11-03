@@ -15,6 +15,9 @@ import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
 
 const exchange = await import( "../../src/engine/foundation/gameplay/exchange.ts" );
+const { createInventory } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
+);
 
 // ITEM_ETC_HP_POTION_01 (etc band, one u16 count).
 const POTION = 3630;
@@ -51,12 +54,31 @@ test("the window opens, fills both sides and swaps in slot order", () => {
 
 	const swapped = defined( exchange.exchangeFrame( state, frame( 0x3272, [] ), refs ) );
 	assert.equal( swapped.state.open, false );
+	assert.deepEqual( swapped.message, {
+		key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
 	const bag = new Map( [ [ 13, { slot: 13 } ], [ 20, { slot: 20 } ] ] );
 	const next = exchange.applyExchangeSwap( /** @type {any} */ (bag), defined( swapped.swap ), 13, 45 );
 	// Slot 1's item lands first (slot 14), slot 3's next (15), then 20 empties.
 	assert.deepEqual( [ ...next.keys() ].sort( ( a, b ) => a - b ), [ 13, 14, 15 ] );
 	assert.equal( next.get( 14 )?.quantity, 7 );
 	assert.equal( next.get( 15 )?.quantity, 2 );
+});
+
+test("a successful exchange raises its line once, through the inventory owner (765260)", () => {
+	const inventory = createInventory( () => {} );
+	inventory.bootstrap( {} );
+	assert.equal( inventory.exchangeReceive( frame( 0x3272, [] ) ), 0 );
+	assert.deepEqual( inventory.takeExchangeNotice(), {
+		key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
+	assert.equal( inventory.takeExchangeNotice(), null );
 });
 
 test("refusals and failures carry their category-1 codes", () => {

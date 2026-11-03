@@ -333,13 +333,13 @@ func TestTickerRunsHooksOnTickClock(t *testing.T) {
 	var hookNows []int64
 	despawn := NpcDespawnFrames(DefaultNpcRoster())
 	ticker.Hooks = append(ticker.Hooks,
-		func(nowMs int64) []DivisionFrames {
+		NamedTickHook{Hook: func(nowMs int64) []DivisionFrames {
 			hookNows = append(hookNows, nowMs)
 			return []DivisionFrames{{DivisionID: "DIV_A", Frames: despawn}}
-		},
-		func(int64) []DivisionFrames {
+		}},
+		NamedTickHook{Hook: func(int64) []DivisionFrames {
 			return []DivisionFrames{{DivisionID: "DIV_B", Frames: nil}} // empty: not pushed
-		},
+		}},
 	)
 
 	ticker.RunTick(1000)
@@ -386,12 +386,12 @@ func (p *orderedHookPusher) PushToDivision(divisionID string, frames []Frame, ex
 func TestHookTargetRoutePreservesPublicThenActorPrivateOrder(t *testing.T) {
 	push := &orderedHookPusher{}
 	ticker := newTestTicker(&fakeSource{}, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{
 			{DivisionID: "DIV_A", Frames: []Frame{{Opcode: wire.OpSkillCastResult}}},
 			{DivisionID: "DIV_A", OnlyCharacterID: 7, Frames: []Frame{{Opcode: wire.OpExpUpdate}}},
 		}
-	}}
+	}}}
 	work := []divisionTickWork{{divisionID: "DIV_A", sessions: []SessionSnapshot{
 		{SessionID: "actor", DivisionID: "DIV_A", CharacterID: 7},
 		{SessionID: "peer", DivisionID: "DIV_A", CharacterID: 8},
@@ -410,12 +410,12 @@ func TestHookTargetRoutePreservesPublicThenActorPrivateOrder(t *testing.T) {
 func TestHookTargetRouteFailsClosedWhenMixedWithExclusion(t *testing.T) {
 	push := &orderedHookPusher{}
 	ticker := newTestTicker(&fakeSource{}, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{
 			DivisionID: "DIV_A", OnlyCharacterID: 7, ExceptSessionID: "peer",
 			Frames: []Frame{{Opcode: wire.OpExpUpdate}},
 		}}
-	}}
+	}}}
 	ticker.runHooks(1000, []divisionTickWork{{divisionID: "DIV_A", sessions: []SessionSnapshot{
 		{SessionID: "actor", DivisionID: "DIV_A", CharacterID: 7},
 	}}})
@@ -436,9 +436,9 @@ reaching the very character it excludes.
 func TestExceptCharacterRouteFailsClosedWithoutSource(t *testing.T) {
 	push := &orderedHookPusher{}
 	ticker := newTestTicker(&fakeSource{}, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{DivisionID: "DIV_A", ExceptCharacterID: 7, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}}}
-	}}
+	}}}
 	ticker.runHooks(1000, []divisionTickWork{{divisionID: "DIV_A", sessions: []SessionSnapshot{
 		{SessionID: "owner", DivisionID: "DIV_A", CharacterID: 7},
 	}}})

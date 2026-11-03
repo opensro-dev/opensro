@@ -5,9 +5,10 @@ pettick_copy_bench_test.go - what the pet tick's character reads cost (#1820 I)
 
 Measures the two per-tick character reads near the pet tick on one fixture:
 the owner snapshot advancePet takes for every summoned pet every tick
-(Character.Snapshot, a deep copy), and characterByCosGID, which walks the
-division's characters to find a pet's owner. The fixture owner carries a
-full bag so the copy has a production-like size.
+(Character.Snapshot, a deep copy), and characterByCosGID, which since
+#2138 resolves a pet's owner through the gid index (cosownerindex.go)
+after one authority walk. The fixture owner carries a full bag so the
+copy has a production-like size.
 
 ===========================================================================
 */
@@ -88,7 +89,9 @@ func BenchmarkPetTickOwnerCompanionSnapshot(b *testing.B) {
 ================
 BenchmarkPetTickOwnerByCosGID
 
-characterByCosGID over a division of petTickBenchCharacters, the owner last.
+characterByCosGID over a division of petTickBenchCharacters, the owner
+last: the first lookup pays the authority walk and notes the answer,
+so the loop measures the verified index hit production takes (#2138).
 ================
 */
 func BenchmarkPetTickOwnerByCosGID(b *testing.B) {

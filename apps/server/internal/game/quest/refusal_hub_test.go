@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"sync"
 	"testing"
 	"time"
@@ -58,7 +58,7 @@ func (c *questTestConn) read(t *testing.T) transport.Frame {
 }
 
 func TestQuestRefusalsThroughRegisteredHub(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	character := questCharacter()
 	if _, err := rt.StartQuest(character, "QTUTORIAL_CH"); err != nil {

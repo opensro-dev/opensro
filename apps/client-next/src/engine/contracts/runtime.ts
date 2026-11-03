@@ -330,6 +330,11 @@ export interface Renderer extends Disposable {
 	): void;
 	/** The actor snapshots the last setCharacterActors retained (read-only). */
 	characterActors(): readonly import("./character").CharacterActor[];
+	/**
+	 * The character snapshot owners' non-fatal fault reports since the last
+	 * take (held clocks). The session owner drains them every frame.
+	 */
+	takeDegradations?(): import("./network").Degradation[];
 
 	/** Copies the actual post-collision projection; no GPU readback or camera approximation. */
 	worldView(): WorldViewSnapshot | null;

@@ -120,6 +120,29 @@ type MonsterAttackOperation func(divisionID string, instance monster.Instance, t
 
 /*
 ================
+selectStepConditionalSkill
+
+The step's conditional-skill selection: SelectConditionalSkill's
+consuming call outside a plan; inside one, the selection is only
+read and recorded - the once-only spend lands at commit, so a
+dropped plan keeps the entry (#2205). Repeated selections in one
+step mask the recorded bits, as the serial step's spent row does.
+================
+*/
+func (ops *MonsterMoverOps) selectStepConditionalSkill(divisionID string, gid uint32) (uint32, bool) {
+	if ops.plan == nil {
+		return ops.Monsters.SelectConditionalSkill(divisionID, gid)
+	}
+	skill, slot, selected := ops.Monsters.selectConditionalSkill(divisionID, gid, ops.plan.conditionalUsed(), false)
+	if !selected {
+		return 0, false
+	}
+	ops.plan.conditionals = append(ops.plan.conditionals, legPlanConditional{skill: skill, slot: slot})
+	return skill, true
+}
+
+/*
+================
 selectMonsterAttack
 ================
 */
@@ -134,7 +157,7 @@ func (ops *MonsterMoverOps) selectMonsterAttack(divisionID string, instance mons
 		return ops.AttackPlan(instance, requestedSkillID, AttackPick{})
 	}
 	if ops.Monsters != nil {
-		if skill, selected := ops.Monsters.SelectConditionalSkill(divisionID, instance.Gid); selected {
+		if skill, selected := ops.selectStepConditionalSkill(divisionID, instance.Gid); selected {
 			return ops.AttackPlan(instance, skill, AttackPick{})
 		}
 	}
@@ -246,7 +269,7 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	}
 	mustMoverTransition(&mover, monster.MoverEventAttackStarted, target.Gid)
 	if nowMs < mover.NextAttackMs || ops.BasicAttack == nil {
-		return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover, frames), nil, true
+		return ops.commitSteppedMoverFrames(divisionID, instance.Gid, mover, frames), nil, true
 	}
 	// Admit facing/action ownership BEFORE the callback can commit damage.
 	// Reserve the selected strategy interval, including its native jitter,
@@ -254,10 +277,47 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 	// raw skill cooldown).
 	// Retaliation must retain it if post-cast bookkeeping is superseded.
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
-	if !ops.Monsters.CommitMover(divisionID, instance.Gid, mover) {
+	if !ops.commitSteppedMover(divisionID, instance.Gid, mover) {
 		return nil, nil, true
 	}
+	if ops.plan != nil {
+		// Planning (#2205): the hit leaves as an intent and the step
+		// ends here, exactly as it ends on the executed hit below;
+		// the ordered commit executes it through the same door and
+		// runs finishMonsterAttack on the real result.
+		ops.plan.attack = &legPlanAttack{
+			instance: instance, tactics: tactics, mover: mover, target: target, plan: plan,
+		}
+		return frames, nil, true
+	}
 	result := ops.BasicAttack(divisionID, instance, target.Gid, plan.SkillID, nowMs)
+	frames, targeted := ops.finishMonsterAttack(divisionID, instance, tactics, mover, target, plan, nowMs, frames, result)
+	return frames, targeted, true
+}
+
+/*
+================
+finishMonsterAttack
+
+The post-hit half of tryMonsterAttack: weigh the executed hit's
+result - battle-activity stamp, refusal transitions, the fatal
+target's action ownership, the next attack's retention - against
+the mover the hit was launched from. The serial step runs it on the
+spot; a pooled plan's commit runs it on the intent's real result
+(monsterlegpool.go), at the same point in the actor's leg.
+================
+*/
+func (ops *MonsterMoverOps) finishMonsterAttack(
+	divisionID string,
+	instance monster.Instance,
+	tactics monster.Tactics,
+	mover monster.MoverState,
+	target playerPose,
+	plan MonsterAttackPlan,
+	nowMs int64,
+	frames []Frame,
+	result MonsterAttackResult,
+) ([]Frame, []MonsterPrivateFrames) {
 	if result.Accepted {
 		mover.LastBattleActivityMs = uint32(nowMs)
 	}
@@ -277,12 +337,12 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 				event = monster.MoverEventSkillCommandRejected
 			}
 			mustMoverTransition(&mover, event, target.Gid)
-			ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-			return frames, targeted, true
+			ops.commitSteppedMover(divisionID, instance.Gid, mover)
+			return frames, targeted
 		}
 		return append(frames, ops.startReturnLeg(
 			divisionID, instance, tactics, mover, monster.MoverEventAttackRefused, nowMs,
-		)...), targeted, true
+		)...), targeted
 	}
 	if !result.TargetAlive {
 		// The fatal B245 owns the monster until its authored action finishes.
@@ -290,12 +350,12 @@ func (ops *MonsterMoverOps) tryMonsterAttack(
 		// produces a hit while the monster is already walking away.
 		mover.BehaviorDeadlineMs = nowMs + plan.ActionLifecycleMs
 		mustMoverTransition(&mover, monster.MoverEventTargetDefeated, 0)
-		ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-		return frames, targeted, true
+		ops.commitSteppedMover(divisionID, instance.Gid, mover)
+		return frames, targeted
 	}
 	mover.NextAttackMs = nowMs + int64(mover.AttackIntervalMs)
 	// Select the next authored default action on the next due tick.
 	mover.AttackSkillID = 0
-	ops.Monsters.CommitMover(divisionID, instance.Gid, mover)
-	return frames, targeted, true
+	ops.commitSteppedMover(divisionID, instance.Gid, mover)
+	return frames, targeted
 }

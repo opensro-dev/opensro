@@ -109,7 +109,7 @@ func (rt *Runtime) advanceSkillField(object skillobject.Object, owner *enterworl
 		admitted = append(admitted, c)
 	}
 	rider, _ := rt.skillDurationRider(object.Division, owner, skill)
-	for _, c := range rt.installRecipientEffects(object.Division, admitted, skill, rider, nowMs) {
+	for _, c := range rt.installTickRecipientEffects(object.Division, admitted, skill, rider, nowMs) {
 		kept = append(kept, skillobject.FieldRecipient{Name: c.Name, GID: enterworld.ObjectIDForCharacter(c)})
 	}
 	if !rt.SkillObjects.Track(object.Spawn.GID, kept) {

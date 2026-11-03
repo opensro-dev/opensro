@@ -19,7 +19,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -30,7 +30,7 @@ TestPassiveDefenseNativeWriterVectors
 */
 func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	tier.Long(t, "the 43 pinned native passive-defense writer vectors")
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	b, err := os.ReadFile("testdata/native-defp-vectors.json")
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestPassiveDefenseNativeWriterVectors(t *testing.T) {
 	if report.Schema != "sro-native-defp-vectors-v1" || len(report.Cases) != 43 {
 		t.Fatal("invalid native observations")
 	}
-	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
+	source := enterworld.NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	if err := source.Load(); err != nil {
 		t.Fatal(err)
 	}

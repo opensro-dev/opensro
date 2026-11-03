@@ -135,6 +135,9 @@ func (rt *Runtime) applyInventoryMove(
 	// reads session characters through the store, whose door is not
 	// reentrant, so publishing inside the callback deadlocks the shard.
 	var endedPublic, endedActor []wire.Frame
+	// Companions a committed cape equip retired; published with the
+	// ended effects, after the same door.
+	var dismissed []*enterworld.CharacterCOS
 
 	rt.deps.Update(character, "inv-move", func() bool {
 		if character.DeletePending {
@@ -224,6 +227,32 @@ func (rt *Runtime) applyInventoryMove(
 			}
 		}
 
+		// INFERENCE: the v1.150 client warns that free-battle equipment
+		// unsummons growth pets automatically (its drop handler prints
+		// UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE ahead of the equip) and
+		// composes nothing but this ordinary move, and the v1.188 equip
+		// path traced for #2290 shows no client-composed dismissal, so
+		// the unsummon is the server's part of a committed cape equip:
+		// every summoned growth (attack-band) companion retires, the
+		// mirror of the summon gate that refuses one to a caped owner.
+		// The record only loses its summoned bit, like a cancellation;
+		// a dead record retires too, as the warning counts it as out.
+		if request.DestSlot == jobSuitSlot {
+			if _, cape := rt.playerRelationEquipment(character); cape != 0 {
+				for _, pet := range character.Companions() {
+					if !pet.Summoned {
+						continue
+					}
+					if ref, valid := rt.cosReference(pet); !valid || ref.TidWord>>11 != attackPetBand {
+						continue
+					}
+					pet.Summoned = false
+					pet.StateFlags &^= cosStateSummoned
+					dismissed = append(dismissed, pet)
+				}
+			}
+		}
+
 		// THE M1 CONTRACT: every transfer that touched a socket < 13 appends
 		// its visual pushes behind the 0xB06D row.
 		changes := inv.EquipVisualChanges(request.SourceSlot, request.DestSlot)
@@ -269,6 +298,16 @@ func (rt *Runtime) applyInventoryMove(
 	if len(endedActor) != 0 && rt.PushCharacterFrames != nil {
 		rt.PushCharacterFrames(divisionID, character.Name, endedActor)
 	}
+	// The cape dismissal publishes after the move's own commit, like the
+	// ended effects above: the owner hears the retirement behind the
+	// move answer, the neighbourhood only the despawn.
+	for _, pet := range dismissed {
+		despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()}
+		result.Frames = append(result.Frames, rt.retireCosRuntime(divisionID, character, pet.GID)...)
+		result.Frames = append(result.Frames, cosRemovalNotice(pet.GID), despawn)
+		result.Frames = append(result.Frames, companionItemStateFrames(character, pet)...)
+		result.Broadcast = append(result.Broadcast, despawn)
+	}
 	return result
 }
 
@@ -293,6 +332,12 @@ func (rt *Runtime) applyGroundDrop(
 		}
 
 		inv := bagOf(character)
+
+		// Port-only, not native (halloween.go): a sealed event helmet
+		// never leaves for the ground.
+		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
+			return false
+		}
 
 		// The native type-7 wire has no quantity field: the whole row goes.
 		dropped, fault := inv.Drop(sourceSlot)

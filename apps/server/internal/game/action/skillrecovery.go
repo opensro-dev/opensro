@@ -125,7 +125,12 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 
 		recipient = rt.findCharacterByGid(division, cast.TargetGid)
-		recipientView = rt.characterSnapshot(division, recipient)
+		// The combat copy suffices for the view: every reader below
+		// (the spacing seat, the admission checks, the chain pick's
+		// identity, the resurrection proposal's facts and vitals)
+		// reads record facts, the whole avatar or the equipment band;
+		// the heal amounts themselves run on the live recipient (#2209).
+		recipientView = rt.characterSnapshotCombat(division, recipient)
 		if recipientView == nil {
 			return offensiveRefusal(0x3006), skillCastRefused
 		}
@@ -216,7 +221,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		area := skill.Abnormal.EffectArea
 		var set []*enterworld.Character
 		for _, gid := range rt.partyCureTargets(division, snapshot, area.Radius, area.Select&1 != 0, false, now) {
-			if member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid)); member != nil {
+			// The combat copy suffices for a candidate: the pick reads
+			// its HP ratio through the stats funnel (equipment band,
+			// whole avatar, skills) and the winner's name and identity;
+			// no reader walks a candidate's bag rows (#2209).
+			if member := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, gid)); member != nil {
 				set = append(set, member)
 			}
 		}
@@ -631,7 +640,11 @@ the targeted row, the heal block is the revival vitals and heals nobody now
 func (rt *Runtime) proposePartyResurrection(division string, caster *enterworld.Character, skill enterworld.SkillRow, party []uint32, now int64) []RecipientFrames {
 	var out []RecipientFrames
 	for _, gid := range party {
-		member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid))
+		// The combat copy suffices for a member: the proposal reads
+		// its death and pending facts, its level against the resu
+		// word and its vitals through the stats funnel; no reader
+		// walks a member's bag rows (#2209).
+		member := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, gid))
 		if member == nil || member.ID == caster.ID {
 			continue
 		}

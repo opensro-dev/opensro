@@ -320,10 +320,42 @@ func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFra
 		return nil
 	}
 	var out []simulation.DivisionFrames
+	// One reward roster per division serves the whole pass: the roster
+	// is a division snapshot (membership, poses, parties), and building
+	// it per monster was the abnormal pass's largest allocation (#2029).
+	rosters := make(map[string]*rewardRoster)
 	for _, candidate := range rt.Monsters.AbnormalCandidates() {
-		out = append(out, rt.advanceMonsterAbnormal(candidate.DivisionID, candidate.Instance.Gid, nowMs)...)
+		out = append(out, rt.advanceMonsterAbnormalInPass(candidate.DivisionID, candidate.Instance.Gid, nowMs, rosters)...)
 	}
 	return out
+}
+
+/*
+================
+passRoster
+
+The settling roster for one abnormal candidate. Within a pass the
+first candidate of a division builds the roster and later candidates
+copy it, so the snapshot freezes at the pass's first abnormal - a
+window of one tick. The per-monster verdict (companionKill) is
+written to the copy only, never to the shared snapshot. A nil cache
+(a lone advance outside a pass) always builds fresh.
+
+monsterRewardRoster ignores its actor argument today; if that ever
+changes, this sharing must go.
+================
+*/
+func (rt *Runtime) passRoster(cache map[string]*rewardRoster, division string, character *enterworld.Character, nowMs int64) rewardRoster {
+	if cache != nil {
+		if shared, ok := cache[division]; ok {
+			return *shared
+		}
+	}
+	built := rt.monsterRewardRoster(division, character, nowMs)
+	if cache != nil {
+		cache[division] = &built
+	}
+	return built
 }
 
 /*
@@ -331,9 +363,22 @@ func (rt *Runtime) advanceMonsterAbnormals(nowMs int64) []simulation.DivisionFra
 advanceMonsterAbnormal
 
 Commit periodic damage and rewards together, then publish the resulting life, loot and status changes.
+A lone advance outside a pass always builds its own reward roster.
 ================
 */
 func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int64) []simulation.DivisionFrames {
+	return rt.advanceMonsterAbnormalInPass(division, gid, nowMs, nil)
+}
+
+/*
+================
+advanceMonsterAbnormalInPass
+
+advanceMonsterAbnormal within a pass: rosters carries the pass's
+per-division reward rosters (nil outside a pass).
+================
+*/
+func (rt *Runtime) advanceMonsterAbnormalInPass(division string, gid uint32, nowMs int64, rosters map[string]*rewardRoster) []simulation.DivisionFrames {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	plan, ok := rt.Monsters.PlanAbnormalUpdate(division, gid, nowMs)
@@ -353,7 +398,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 			}
 		}
 	}
-	roster := rt.monsterRewardRoster(division, character, nowMs)
+	roster := rt.passRoster(rosters, division, character, nowMs)
 	// A pet's or COS's burn credits its owner's rewards but no quest kill.
 	roster.companionKill = companion
 	var impact simulation.MonsterDamageResult

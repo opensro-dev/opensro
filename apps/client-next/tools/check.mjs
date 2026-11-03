@@ -74,6 +74,10 @@ function sourceGates() {
 	const tests = [
 		"tools/run-tests.mjs",
 		...architecture,
+		"tests/runtime/lifecycle.test.mjs",
+		"tests/runtime/device-recovery.test.mjs",
+		"tests/runtime/renderer-diagnostics.test.mjs",
+		"tests/runtime/input-network.test.mjs",
 		"tests/runtime/beta-release.test.mjs",
 		"tests/runtime/runtime-text-admission.test.mjs",
 		"tests/runtime/persistent-recovery.test.mjs",
@@ -81,7 +85,8 @@ function sourceGates() {
 		"tests/runtime/application-release.test.mjs",
 		"tests/runtime/cos-item-use.test.mjs",
 		"tests/runtime/cos-hud.test.mjs",
-		"tests/runtime/release-smoke.test.mjs"
+		"tests/runtime/release-smoke.test.mjs",
+		"tests/runtime/terrain-frustum-cull.test.mjs"
 	];
 	return [ [ "source tests", tests ], ...GATES.filter( ( [name] ) => SOURCE_GATE_NAMES.has( name ) ) ];
 }

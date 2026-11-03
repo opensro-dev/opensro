@@ -25,8 +25,8 @@ import (
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -252,7 +252,7 @@ capitals and drops the parenthesis.
 ================
 */
 func TestSealDropNoticeNamesTheSeal(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	for codename, seal := range map[string]string{
 		"ITEM_CH_BLADE_08_A_RARE": "Seal Of Star",
@@ -342,7 +342,7 @@ line too long for the notice keeps its plus and gives up the seal.
 ================
 */
 func TestPlusNoticeNamesTheSeal(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	plus := func(codename string) alchemy.Outcome {
 		return alchemy.Outcome{Success: true, Target: 13,

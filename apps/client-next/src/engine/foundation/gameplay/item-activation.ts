@@ -16,9 +16,9 @@ export function itemActivation(slot:number,inventory:readonly InventoryItem[],ca
  const socket=equipmentSocket(item.typeFlags);
  if(slot<13){
   if(capacity===undefined)return null;
-  for(let destination=13;destination<capacity;destination++)if(!inventory.some(item=>item.slot===destination))return {kind:'inventory-move',source:slot,destination,quantity:0};
+  for(let destination=13;destination<capacity;destination++)if(!inventory.some(item=>item.slot===destination))return {kind:'inventory-move',source:slot,destination,quantity:0,activation:true};
   return null;
  }
- if(socket!==null){const destination=socket===11&&inventory.some(item=>item.slot===11)&&!inventory.some(item=>item.slot===12)?12:socket;return {kind:'inventory-move',source:slot,destination,quantity:0};}
+ if(socket!==null){const destination=socket===11&&inventory.some(item=>item.slot===11)&&!inventory.some(item=>item.slot===12)?12:socket;return {kind:'inventory-move',source:slot,destination,quantity:0,activation:true};}
  return {kind:'item-use',slot};
 }

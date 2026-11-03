@@ -227,6 +227,10 @@ The caller holds the division operation lock.
 ================
 */
 func (rt *Runtime) retireCosRuntime(division string, c *enterworld.Character, gid uint32) []wire.Frame {
+	// The pet leaves the world here on every release path: the gid
+	// index forgets it before any later pet can reuse the gid
+	// (cosownerindex.go).
+	rt.cosOwners.forget(division, gid)
 	var frames []wire.Frame
 	rt.petMu.Lock()
 	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(c.Name), gid: gid}]

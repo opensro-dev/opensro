@@ -24,8 +24,8 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const (
@@ -155,7 +155,7 @@ nests, every point named and inside its field region.
 ================
 */
 func TestReverseMapTableFromShippedData(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
 	if err := rt.ConfigurePortals(dir); err != nil {

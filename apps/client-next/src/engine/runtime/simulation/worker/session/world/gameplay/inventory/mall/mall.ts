@@ -50,6 +50,11 @@ export function createMall() {
 	let request: MallPurchase | "catalog" | null = null;
 	let staged: MallState | undefined;
 	let deadline = 0;
+	// The latest deadline a hold may reach, fixed by the request's first hold.
+	let holdLimit = 0;
+	// When the request's first reference hold arrived (#2148): the timeout
+	// report stamps how long before the deadline it landed.
+	let firstHeldAt: number | undefined;
 	let revision = 0;
 	let expired = false;
 
@@ -64,6 +69,8 @@ export function createMall() {
 			const frame = { opcode: MALL_CATALOG_CONTROL, payload: new Uint8Array() };
 			request = "catalog";
 			deadline = now + REQUEST_TIMEOUT_MS;
+			holdLimit = 0;
+			firstHeldAt = undefined;
 			if ( state ) state = { ...state, pending: true, error: undefined };
 			return frame;
 		},
@@ -86,6 +93,8 @@ export function createMall() {
 			) throw Error( "Mall purchase exceeds current authority" );
 			request = { ...next };
 			deadline = now + REQUEST_TIMEOUT_MS;
+			holdLimit = 0;
+			firstHeldAt = undefined;
 			staged = undefined;
 			state = { ...state, pending: true, error: undefined };
 			const frame = { opcode: ITEM_MOVE_REQUEST, payload };
@@ -171,6 +180,17 @@ export function createMall() {
 		},
 		/*
   ================
+  holdUntil
+  ================
+  */
+		holdUntil( now: number, until: number, limit: number ) {
+			if ( !request ) return;
+			if ( !holdLimit ) firstHeldAt = now;
+			holdLimit ||= limit;
+			deadline = Math.max( deadline, Math.min( until, holdLimit ) );
+		},
+		/*
+  ================
   step
   ================
   */
@@ -179,9 +199,16 @@ export function createMall() {
 			// The purchase lane's answer is an item result: a lost one resumes the
 			// session as an inventory transaction does (world.ts lostAnswer).
 			if ( expired ) {
-				throw Error( "Mall request timed out; reconnect to resynchronize", {
-					cause: INVENTORY_TRANSACTION_TIMEOUT
-				} );
+				throw Error(
+					`Mall request timed out; ${
+						firstHeldAt === undefined ?
+							"held=0" :
+							`held=1 firstHoldAgeMs=${Math.round( now - firstHeldAt )}`
+					}; reconnect to resynchronize`,
+					{
+						cause: INVENTORY_TRANSACTION_TIMEOUT
+					}
+				);
 			}
 		},
 		/*

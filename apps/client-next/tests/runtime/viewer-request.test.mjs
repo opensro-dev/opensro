@@ -4,7 +4,7 @@
 viewer-request.test.mjs - the 3D viewer's query and failure reasons
 
 viewer.html takes exactly one of ?monster= and ?look=, an optional still
-flag and size, and reports only the fixed reasons (docs/VIEWER.md).
+flag and size, and reports only the fixed reasons (docs/guides/VIEWER.md).
 
 ===========================================================================
 */

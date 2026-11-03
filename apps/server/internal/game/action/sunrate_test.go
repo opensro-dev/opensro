@@ -21,7 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 // At level 76 the shipped rare row ends ...3654 (group 25), 3657
@@ -50,7 +50,7 @@ TestSunRateWidensTheRareRoll
 ================
 */
 func TestSunRateWidensTheRareRoll(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, tc := range []struct {
 		name    string
 		sunRate string
@@ -83,7 +83,7 @@ TestSunRateStillLosesToTheEventOnlyExclusion
 ================
 */
 func TestSunRateStillLosesToTheEventOnlyExclusion(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(progression.EnvSunDropRate, "2")
 	t.Setenv(progression.EnvSunEventOnly, "on")
 	rt := sunRateRuntime(t)
