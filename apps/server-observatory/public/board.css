@@ -229,6 +229,17 @@ main > .page-heading .board-actions {
 	color: var(--muted);
 }
 
+/* Seats and evidence chips wrap inside their cell instead of widening it. */
+.board-seats,
+.board-evidence {
+	min-width: 120px;
+}
+
+.board-seats .pill,
+.board-evidence .pill {
+	margin: 0 4px 4px 0;
+}
+
 /* ----- Narrow screens ----- */
 
 @media (max-width: 640px) {

@@ -17,11 +17,13 @@ import {
 	agentTone,
 	checkResult,
 	ciTone,
+	evidenceMarks,
 	freshness,
 	issueURL,
 	priorityTone,
 	prTone,
 	pullURL,
+	seatsText,
 	since,
 	splitPrs,
 	stepTone,
@@ -219,13 +221,26 @@ function paintPrs( body, now ) {
 				{},
 				cell( link( pullURL( body.repo, pr.number ), "#" + pr.number ) ),
 				cell( pr.title ),
-				el( "td", { class: "num" }, pr.approvals + " / " + pr.needed ),
+				el(
+					"td",
+					{ class: "board-seats" },
+					...seatsText( pr ).map( s => pill( s.text, s.met ? "ok" : "warn" ) )
+				),
+				el(
+					"td",
+					{ class: "board-evidence" },
+					...(pr.evidence?.length ?
+						evidenceMarks( pr ).map( m =>
+							el( "span", { class: "pill " + m.tone, title: m.title }, m.text )
+						) :
+						[ pill( "no checklist", "bad" ) ])
+				),
 				cell( pill( pr.ci, ciTone( pr.ci ) ) ),
 				cell( pill( pr.blocker || (pr.ready ? "ready to merge" : "open"), prTone( pr ) ) ),
 				el( "td", { class: "num" }, since( pr.createdAt, now ) )
 			)
 		),
-		6,
+		7,
 		"No agent PR is open."
 	);
 	byID( "forks-count" ).textContent = String( fork.length );

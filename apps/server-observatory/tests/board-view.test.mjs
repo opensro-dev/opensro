@@ -10,6 +10,8 @@ import {
 	agentTone,
 	checkResult,
 	ciTone,
+	evidenceMarks,
+	seatsText,
 	freshness,
 	issueURL,
 	priorityTone,
@@ -22,6 +24,27 @@ import {
 	summary,
 	threadAction
 } from "../public/board-view.js";
+
+test("seats read per reviewer kind, evidence as worded chips", () => {
+	const pr = {
+		approvals: 2,
+		needed: 3,
+		seats: [ { name: "Cursor", have: 2, need: 2 }, { name: "Claude", have: 0, need: 1 } ],
+		evidence: [
+			{ key: "rg", state: "done", note: "" },
+			{ key: "native client", state: "na", note: "console only" },
+			{ key: "subs", state: "missing", note: "" }
+		]
+	};
+	assert.deepEqual( seatsText( pr ), [ { text: "Cursor 2/2", met: true }, { text: "Claude 0/1", met: false } ] );
+	assert.deepEqual( seatsText( { approvals: 1, needed: 2 } ), [ { text: "1 / 2", met: false } ] );
+	assert.deepEqual( evidenceMarks( pr ), [
+		{ tone: "ok", text: "rg ✓", title: "rg: done" },
+		{ tone: "idle", text: "native client n/a", title: "console only" },
+		{ tone: "bad", text: "subs ✗", title: "subs: missing" }
+	] );
+	assert.deepEqual( evidenceMarks( {} ), [] );
+});
 
 test("threads sort fixed first, then close, then reply, most urgent first in each", () => {
 	const threads = [

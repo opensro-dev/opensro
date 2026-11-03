@@ -130,6 +130,42 @@ export function prTone( pr ) {
 
 /*
 ================
+seatsText
+
+A PR's approvals per kind of reviewer, "Cursor 1/2 · Claude 0/1", each
+with whether it is met. A snapshot without seats falls back to the
+plain count.
+================
+*/
+export function seatsText( pr ) {
+	if ( !pr.seats?.length ) return [ { text: pr.approvals + " / " + pr.needed, met: pr.approvals >= pr.needed } ];
+	return pr.seats.map( s => ({ text: s.name + " " + s.have + "/" + s.need, met: s.have >= s.need }) );
+}
+
+// What each Evidence state looks like beside its line's name.
+const EVIDENCE_MARKS = Object.freeze( {
+	done: { tone: "ok", mark: "✓" },
+	na: { tone: "idle", mark: "n/a" },
+	missing: { tone: "bad", mark: "✗" }
+} );
+
+/*
+================
+evidenceMarks
+
+A PR's Evidence checklist as chips, in its order, each with its words so
+no state is colour alone. title carries a not-applicable reason.
+================
+*/
+export function evidenceMarks( pr ) {
+	return (pr.evidence ?? []).map( e => {
+		const mark = EVIDENCE_MARKS[e.state] ?? EVIDENCE_MARKS.missing;
+		return { tone: mark.tone, text: e.key + " " + mark.mark, title: e.note || e.key + ": " + e.state };
+	} );
+}
+
+/*
+================
 agentTone
 
 An agent's state tone: idle grey, a hand-off waiting on someone amber,

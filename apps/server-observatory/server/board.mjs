@@ -33,6 +33,9 @@ const THREAD = /^\d{1,24}$/;
 const STEP_STATES = new Set( [ "done", "running", "waiting", "failed" ] );
 const CI_STATES = new Set( [ "green", "red", "running", "none" ] );
 const THREAD_ACTIONS = new Set( [ "fixed", "close", "reply" ] );
+const EVIDENCE_STATES = new Set( [ "done", "na", "missing" ] );
+const MAX_SEATS = 4;
+const MAX_EVIDENCE = 12;
 
 /*
 ================
@@ -165,11 +168,41 @@ function prRow( p ) {
 		fork: p.fork === true,
 		approvals: count( p.approvals ) ?? 0,
 		needed: count( p.needed ) ?? 0,
+		seats: rows( p.seats, seatRow, MAX_SEATS ),
+		evidence: rows( p.evidence, evidenceRow, MAX_EVIDENCE ),
 		ci: CI_STATES.has( p.ci ) ? p.ci : "none",
 		blocker: text( p.blocker ),
 		ready: p.ready === true,
 		createdAt: time( p.createdAt )
 	};
+}
+
+/*
+================
+seatRow
+
+One kind of reviewer a PR needs (Cursor, Claude): approvals at the head
+against the number the merge rule asks for.
+================
+*/
+function seatRow( s ) {
+	if ( !object( s ) || typeof s.name !== "string" || count( s.have ) === null || count( s.need ) === null ) {
+		return null;
+	}
+	return { name: text( s.name ), have: s.have, need: s.need };
+}
+
+/*
+================
+evidenceRow
+
+One line of the PR's Evidence checklist: done, not applicable (with its
+reason) or missing.
+================
+*/
+function evidenceRow( e ) {
+	if ( !object( e ) || typeof e.key !== "string" || !EVIDENCE_STATES.has( e.state ) ) return null;
+	return { key: text( e.key ), state: e.state, note: text( e.note ) };
 }
 
 /*

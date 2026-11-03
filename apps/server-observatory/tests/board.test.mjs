@@ -143,3 +143,36 @@ test("only the contract's fields pass, each of its type", () => {
 	} );
 	assert.equal( boardBody( { ...SNAPSHOT, release: "x" }, NOW ).release, null );
 });
+
+test("a PR's review seats and evidence lines pass typed; bad rows drop", () => {
+	const body = boardBody( {
+		...SNAPSHOT,
+		prs: [ {
+			...SNAPSHOT.prs[0],
+			seats: [
+				{ name: "Cursor", have: 1, need: 2 },
+				{ name: "Claude", have: 1, need: 1 },
+				{ name: "Bad", have: -1, need: 1 },
+				{ name: 7, have: 0, need: 0 }
+			],
+			evidence: [
+				{ key: "rg", state: "done" },
+				{ key: "native client", state: "na", note: "console only" },
+				{ key: "subs", state: "missing" },
+				{ key: "x", state: "maybe" },
+				"rg"
+			]
+		} ]
+	}, NOW );
+	assert.deepEqual( body.prs[0].seats, [ { name: "Cursor", have: 1, need: 2 }, {
+		name: "Claude",
+		have: 1,
+		need: 1
+	} ] );
+	assert.deepEqual( body.prs[0].evidence, [
+		{ key: "rg", state: "done", note: "" },
+		{ key: "native client", state: "na", note: "console only" },
+		{ key: "subs", state: "missing", note: "" }
+	] );
+	assert.deepEqual( boardBody( SNAPSHOT, NOW ).prs[0].seats, [], "an older snapshot without seats still reads" );
+});

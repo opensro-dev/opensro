@@ -67,8 +67,8 @@
 
 <section class="panel board-panel" aria-labelledby="prs-title">
 <div class="panel-heading"><h2 id="prs-title">Agent PRs</h2><span id="prs-count" class="tag">0</span></div>
-<p class="board-help">Approvals count only reviews that name the PR's current head.</p>
-<div class="board-wrap"><table class="board-table"><thead><tr><th>PR</th><th>Title</th><th>Approvals</th><th>CI</th><th>Blocker</th><th>Age</th></tr></thead><tbody id="prs-body"></tbody></table></div>
+<p class="board-help">A merge needs three approvals at the current head (two Cursor agents and one Claude session, author or not), green CI, and every Evidence line ticked or marked n/a in the PR body: rg blast radius, callers, edge cases, native client and server traces, no unlabelled subs.</p>
+<div class="board-wrap"><table class="board-table"><thead><tr><th>PR</th><th>Title</th><th>Approvals</th><th>Evidence</th><th>CI</th><th>Blocker</th><th>Age</th></tr></thead><tbody id="prs-body"></tbody></table></div>
 </section>
 
 <section class="panel board-panel" aria-labelledby="forks-title">
