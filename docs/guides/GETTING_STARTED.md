@@ -32,6 +32,7 @@ If global `node` version is different, a manager like `fnm` can be utilized like
 fnm install 24
 fnm env --use-on-cd | Out-String | Invoke-Expression
 fnm use 24
+corepack enable
 ```
 
 ### Nomad
@@ -78,9 +79,7 @@ Then, from the checkout:
 
 ```powershell
 $env:SRO_GAME_ROOT = 'D:\Games\Silkroad-v1.150'   # only if the client is elsewhere
-$env:SRO_PROBE_CHROME_PATH = '<path-to-your-chrome-install>' # if google chrome is not installed
-$env:NODE_OPTIONS = '--max-old-space-size=8192'
-corepack enable
+$env:SRO_PROBE_CHROME_EXECUTABLE = '<path-to-your-chrome-install>' # if google chrome is not installed
 corepack pnpm install --frozen-lockfile
 py -3 -m pip install -r scripts/requirements-build.txt
 corepack pnpm assets prepare            # extract the archives, convert the music (a few minutes)

@@ -164,7 +164,7 @@ export const ASSET_TASKS = [
 		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		command: "node",
-		args: [ "scripts/build_outdoor_world_resources.mjs" ]
+		args: [ "--max-old-space-size=8192", "scripts/build_outdoor_world_resources.mjs" ]
 	} ),
 	seriesTask( {
 		name: "assets:build:full",
