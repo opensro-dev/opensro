@@ -281,6 +281,7 @@ import {
 	isValidRenameName,
 	NAME_CHANGE_MAX_LENGTH
 } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind, type CrestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -1685,6 +1686,10 @@ export function createUi(
 		partyOptions = 4;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
+	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
+	// the bag row it asks about, revalidated when Yes answers.
+	let crestDeleteAsk: { readonly slot: number; readonly refObjId: number; readonly kind: CrestDeleteKind; } | null =
+		null;
 	let goldAmount = "",
 		confirmDrop = "",
 		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
@@ -2489,6 +2494,14 @@ export function createUi(
 			if ( item && isNameChangeScrollItem( item.refObjId ) && command.renameName === undefined ) {
 				renameHud.open( item.slot );
 				focusAtEnd( RENAME_TEXT, "" );
+				dirty = true;
+				return;
+			}
+			// 562402/56247C (#2282): a crest delete item asks first (box
+			// 0x16/0x19); the box's Yes judges the crest (crestDeleteYes).
+			const crestKind = item ? crestDeleteKind( item.refObjId ) : undefined;
+			if ( item && crestKind && command.crestDelete === undefined ) {
+				crestDeleteAsk = { slot: command.slot, refObjId: item.refObjId, kind: crestKind };
 				dirty = true;
 				return;
 			}
@@ -4505,6 +4518,23 @@ export function createUi(
 		} else if ( id === "social-confirm-no" ) {
 			confirmSocial = "";
 			grantAsk = null;
+		} else if ( id === "crest-delete-yes" ) {
+			// 6978A1's OK arm (#2282): with no crest it prints the error
+			// line (67A600 type 0) and composes nothing; the crest the
+			// box judges is the local state the display reads. The use
+			// goes out only while one stands - the server judges again.
+			const ask = crestDeleteAsk;
+			crestDeleteAsk = null;
+			const item = ask && view?.gameplay?.inventory.find( row => row.slot === ask.slot );
+			if ( ask && item && item.refObjId === ask.refObjId && item.quantity > 0 ) {
+				const social = view?.gameplay?.social,
+					crest = ask.kind === "guild" ? social?.guild?.crest : social?.allianceCrests?.[1];
+				if ( crest === undefined || crest === 0 || crest === 0xffffffff ) {
+					hudMessages.append( hudCopy( crestDeleteKeys( ask.kind ).refused ) );
+				} else sendGameplay( { kind: "item-use", slot: ask.slot, crestDelete: true } );
+			}
+		} else if ( id === "crest-delete-no" ) {
+			crestDeleteAsk = null;
 		} else if ( id === "guild-create" ) {
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" ) {
@@ -9051,6 +9081,18 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			if ( guildManagerHud.observeVote( next.gameplay?.social?.guild?.votes ?? [] ) ) dirty = true;
 			if ( reverseScrollHud.reconcile( next ) ) dirty = true;
+			// The crest delete box dies with its bag row or the world.
+			const crestAsk = crestDeleteAsk;
+			if (
+				crestAsk &&
+				(next.session?.phase !== "world" || next.travel ||
+					!next.gameplay?.inventory.some(
+						row => row.slot === crestAsk.slot && row.refObjId === crestAsk.refObjId
+					))
+			) {
+				crestDeleteAsk = null;
+				dirty = true;
+			}
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
 				cosHud.reconcileItemTarget(
@@ -23222,6 +23264,18 @@ export function createUi(
 					} ),
 					yes: "social-confirm-yes",
 					no: "social-confirm-no"
+				} );
+			}
+			if ( worldVisible && crestDeleteAsk ) {
+				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
+				// the one-line question whether to delete the emblem.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
+					yes: "crest-delete-yes",
+					no: "crest-delete-no"
 				} );
 			}
 			if ( worldVisible && recallConfirm !== null ) {

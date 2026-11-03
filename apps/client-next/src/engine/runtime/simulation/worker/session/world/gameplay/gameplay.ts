@@ -101,6 +101,7 @@ import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -4853,6 +4854,24 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// 755E40's codename chain: a crest delete's success raises
+				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
+				// title, the DELETE_COMPLETE body), where the register
+				// items would open their 0x1A/0x1B boxes (#2272's half).
+				const crestKind = used ? crestDeleteKind( used.refObjId ) : undefined;
+				if ( used && crestKind ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: {
+							title: "UIIT_STT_CONFIRM_BOX",
+							lines: [ crestDeleteKeys( crestKind ).complete ]
+						},
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				// 755E40: a subtype-4 item's success names the change it made,
 				// on the notice window (67D030), not in chat.
 				if ( used && isStallChangeItem( used.typeFlags ) ) {

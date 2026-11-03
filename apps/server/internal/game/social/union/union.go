@@ -262,6 +262,39 @@ func (a *Authority) Remove(divisionID string, guildID int64) (before domain.Alli
 
 /*
 ================
+ClearCrest
+
+Erases the crest of the union the guild stands in (#2282), saving
+before it returns. cleared=false when the guild stands in no union or
+the union carries no crest; the record is returned as it stands after
+the call either way.
+================
+*/
+func (a *Authority) ClearCrest(divisionID string, guildID int64) (record domain.AllianceRecord, cleared bool, err error) {
+	if a == nil || guildID == 0 {
+		return domain.AllianceRecord{}, false, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state := a.divisionLocked(divisionID)
+	id, ok := state.byGuild[guildID]
+	if !ok {
+		return domain.AllianceRecord{}, false, nil
+	}
+	record = state.unions[id]
+	if record.Crest == 0 {
+		return record, false, nil
+	}
+	record.Crest = 0
+	if err := a.saveLocked(divisionID, record, true); err != nil {
+		return record, false, err
+	}
+	state.unions[id] = record
+	return record, true, nil
+}
+
+/*
+================
 drop
 ================
 */
