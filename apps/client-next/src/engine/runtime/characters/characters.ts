@@ -205,7 +205,7 @@ export function createCharacterPresentation(
 			deathShown: gid => presentationState.idleStates.get( gid )?.deathModel === true
 		}
 	);
-	const dockPreview = createDockPreview( { renderer, resources, scenery, lizardGid } );
+	const dockPreview = createDockPreview( { renderer, resources, scenery, modelEmission, lizardGid } );
 	const displayedDependencies = new Map<number, readonly string[]>();
 	// Appearance topology is independent of pose time. Revalidate resource
 	// readiness each frame, but derive garment/cosmetic parts only on change.
