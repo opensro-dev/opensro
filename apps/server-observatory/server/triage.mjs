@@ -95,6 +95,8 @@ function threadRow( t ) {
 		draft: text( t.draft, MAX_DRAFT ),
 		reply: text( t.reply, MAX_REPLY ),
 		closes: t.closes === true,
+		// Why the owner must decide this one; empty: the coordinator's call, it posts on its own.
+		ask: text( t.ask ),
 		posted: postedRow( t.posted ),
 		decision: decisionRow( t.decision ) ?? { state: "pending", by: "", at: "", note: "" }
 	};

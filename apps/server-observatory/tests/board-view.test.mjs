@@ -166,11 +166,24 @@ test("the Bug reports page says what approving posts, or what was posted", async
 	const { postText } = await import( "../public/triage-view.js" );
 	const pending = { state: "pending" };
 	assert.equal( postText( { reply: "", decision: pending } ).tone, "bad", "no reply cannot be posted" );
+	const ask = "native rule: not a bug";
 	assert.match(
-		postText( { reply: "x", closes: true, decision: pending } ).text,
-		/tags the thread Closed and archives/
+		postText( { reply: "x", closes: true, ask, decision: pending } ).text,
+		/^Flagged: native rule.*tags the thread Closed and archives/
 	);
-	assert.equal( postText( { reply: "x", closes: false, decision: pending } ).text, "Approve posts this reply" );
+	assert.equal(
+		postText( { reply: "x", closes: false, ask, decision: pending } ).text,
+		"Flagged: native rule: not a bug. Approve posts this reply"
+	);
+	assert.match(
+		postText( { reply: "x", decision: pending } ).text,
+		/posts on its own/,
+		"unflagged: the coordinator's call"
+	);
+	const { bucket, counts } = await import( "../public/triage-view.js" );
+	const threads = [ { ask, decision: pending }, { decision: pending }, { decision: { state: "approved" } } ];
+	assert.deepEqual( threads.map( bucket ), [ "pending", "auto", "approved" ] );
+	assert.deepEqual( counts( threads ), { pending: 1, auto: 1, approved: 1, rejected: 0, all: 3 } );
 	assert.match( postText( { reply: "x", decision: { state: "approved" } } ).text, /within a minute/ );
 	assert.equal(
 		postText( { reply: "x", posted: { closed: true }, decision: pending } ).text,
