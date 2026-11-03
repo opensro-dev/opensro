@@ -25,10 +25,10 @@ func compactSparseMap[V any](m map[uint32]V, peak *int, allow bool) map[uint32]V
 // bounds admission, not an individual map copy or GC pause.
 func (state *divisionMonsterState) compactDormantIndexes(deadline time.Time) {
 	allow := len(state.archiveQueue) == 0
-	state.instances.hot = compactSparseMap(state.instances.hot, &state.sparseMapPeaks[0], allow && time.Now().Before(deadline))
+	state.instances.shrinkHotExcess(&state.sparseMapPeaks[0], allow && time.Now().Before(deadline))
 	state.aiTimers = compactSparseMap(state.aiTimers, &state.sparseMapPeaks[1], allow && time.Now().Before(deadline))
 	state.behavior.byGID = compactSparseMap(state.behavior.byGID, &state.sparseMapPeaks[2], allow && time.Now().Before(deadline))
-	if allow && time.Now().Before(deadline) && cap(state.behavior.entries) >= 8192 && len(state.behavior.entries) <= 4096 && len(state.behavior.entries)*4 <= cap(state.behavior.entries) {
-		state.behavior.entries = append([]*behaviorEntry(nil), state.behavior.entries...)
+	if allow && time.Now().Before(deadline) {
+		state.behavior.shrinkExcess()
 	}
 }

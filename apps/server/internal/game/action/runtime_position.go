@@ -85,6 +85,35 @@ func (rt *Runtime) characterSnapshotAdmitted(
 
 /*
 ==================
+characterAdmitted
+
+characterSnapshotAdmitted's door contract without the copy: the
+admission verdict alone, judged on the live record under the one read
+door, for readers that ask only whether the record passes (#2139).
+admit reads record fields only, the same contract as above, so its
+verdict weighs the same inputs the copy would carry.
+==================
+*/
+func (rt *Runtime) characterAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) bool {
+	if character == nil {
+		return false
+	}
+
+	admitted := false
+
+	rt.deps.Read(divisionID, func() {
+		admitted = admit == nil || admit(character)
+	})
+
+	return admitted
+}
+
+/*
+==================
 characterSnapshotEquipment
 
 characterSnapshot for readers that never leave the worn equipment and
@@ -140,6 +169,43 @@ func (rt *Runtime) characterSnapshotCombat(
 
 	rt.deps.Read(divisionID, func() {
 		snapshot = character.SnapshotCombat()
+	})
+
+	return snapshot
+}
+
+/*
+==================
+characterSnapshotCast
+
+characterSnapshot for the skill press, the prepared-cast release
+(#1943) and the entry action-speed read (#2140): the combat rows plus
+every companion-carrying bag row and the whole avatar inventory. The
+press flows resolve the caster's companions through this copy (the
+crow lane walks the bag-row Summon records, at the strike both routes
+reach); the entry read's load-bearing inventory inputs are its slot-8
+suit and cape verdicts, and its stat writers walk the same kept
+companion rows, so the copy keeps exactly those bag rows; a root takes it only when
+every reader of its copy is cleared for the dropped plain bag rows
+root by root, and the cast-copy differential tests pin every root
+against the full copy.
+==================
+*/
+func (rt *Runtime) characterSnapshotCast(
+	divisionID string,
+	character *enterworld.Character,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	if rt.castCopy != nil {
+		return rt.castCopy(divisionID, character)
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		snapshot = character.SnapshotCast()
 	})
 
 	return snapshot

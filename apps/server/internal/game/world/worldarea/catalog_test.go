@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 func TestLiveAuthoredAreaCatalogPinsManyangLabContract(t *testing.T) {
-	publicRoot, err := licensed.ClientPublicRoot()
+	publicRoot, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		t.Fatal(err)
 	}

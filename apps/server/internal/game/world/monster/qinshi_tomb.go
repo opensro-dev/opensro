@@ -13,11 +13,11 @@ rows onto the monster Template.
 
 On Floors 5-6 (regions 0x8003 and 0x8002), the later server's nest rows
 23716..23721, 23723 and 23724 zeroed their max-count column when the
-floors' trigger setup took over spawning 1 live instance ("Count" = "1")
-of each guardian/boss via MobShower.
-In the persistent INS_DEFAULT world, those 8 unique nests restore maxCount=1
-and the Floor 1-3 Tomb unique respawn window (1800..3600s from nests 23055..23061,
-23077).
+floors' trigger setup took over spawning its stages (1 live instance
+("Count" = "1") per guardian/boss on Floor 5; the four compass stages
+on Floor 6, the Medusa pair east and north among them). The TombChain
+(simulation/tomb_chain.go, #2362) owns those spawns; the chain nests
+keep max count 0 below (#2372 Floor 5, #2373 Floor 6).
 
 ===========================================================================
 */
@@ -47,6 +47,48 @@ var qinshiTombHivesTSV string
 
 //go:embed data/qinshi_tomb_tactics.json
 var qinshiTombTacticsJSON []byte
+
+// qinshiTombChainFloor5 names the Floor 5 chain-owned codenames: the
+// four guardians and the Flame Master. The later server's trigger
+// setup spawns them natively (evidence: post-cut/2362-tomb-asm.md);
+// the TombChain spawns them here (#2372).
+var qinshiTombChainFloor5 = map[string]bool{
+	"MOB_TQ_EASTGUARDIAN":  true,
+	"MOB_TQ_SOUTHGUARDIAN": true,
+	"MOB_TQ_WESTGUARDIAN":  true,
+	"MOB_TQ_NORTHGUARDIAN": true,
+	"MOB_TQ_FLAMEMASTER":   true,
+}
+
+// qinshiTombChainFloor6 names the Floor 6 chain-owned codenames: the
+// four stage anchors that carry a nest row in region 0x8002 (the East
+// and North anchors are the Medusa pair). The rest of the Floor 6 wave
+// carries refs only and spawns from the chain's stage points (#2373).
+var qinshiTombChainFloor6 = map[string]bool{
+	"MOB_TQ_BLACKSNAKE":         true,
+	"MOB_TQ_SNAKEGENERAL":       true,
+	"MOB_TQ_TOMBBUGGHOST_CLON2": true,
+	"MOB_TQ_WHITESNAKE":         true,
+}
+
+/*
+================
+qinshiTombChainOwned
+
+Whether the TombChain owns this nest's species on this floor: a
+codename zeroed in one floor's region stays restored in another
+(Snake General nests normally on Floor 3).
+================
+*/
+func qinshiTombChainOwned(region uint16, codename string) bool {
+	switch region {
+	case 0x8003:
+		return qinshiTombChainFloor5[codename]
+	case 0x8002:
+		return qinshiTombChainFloor6[codename]
+	}
+	return false
+}
 
 /*
 ================
@@ -196,6 +238,12 @@ func (t Template) WithQinShiTomb(textdataDir string) (Template, error) {
 		if nest.HasChampionTactics && controls.HasChampion {
 			nest.ChampionTactics.Controls = controls.Champion
 			nest.ChampionTactics.HasControls = true
+		}
+		// The chain nests (Floor 5's guardians and Flame Master, Floor
+		// 6's stage anchors) are spawned by the TombChain, never by the
+		// nest lifecycle: keep the native max count 0 (#2372, #2373).
+		if qinshiTombChainOwned(regionID, ref.Codename) {
+			nest.MaxCount = 0
 		}
 		if capRow, ok := hiveCaps[key]; ok {
 			nest.HiveKey = capRow.Key

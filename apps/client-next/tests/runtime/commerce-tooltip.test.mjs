@@ -12,7 +12,18 @@ gold from an item's reference fields or losing precision through Number.
 import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-const { commerceTooltip } = await import( "../../src/engine/foundation/ui/commerce-tooltip.ts" );
+const { commerceTooltip, mallTooltipRows } = await import( "../../src/engine/foundation/ui/commerce-tooltip.ts" );
+
+// Independent translated labels catch accidental raw-symbol output.
+const mallCopy = { rollOfCloth: "ROLL", silk: "SILK", giftSilk: "GIFT" };
+
+/**
+ * @param {object} [fields]
+ * @returns {any}
+ */
+function mallOffer( fields = {} ) {
+	return { currencyMask: 0, silk: 0, giftSilk: 0, ...fields };
+}
 
 // Independent translated labels catch accidental raw-symbol output.
 const copy = {
@@ -126,4 +137,45 @@ test("a package priced in two currencies prints every price row in payment order
 			"Guild point (GP) : 20000GP"
 		]
 	);
+});
+
+/*
+================
+mallTooltipRows
+
+The item-mall leg of 5592B0 (pane 0xf): the package price object's
+charged-silk and received-silk rows print where their currency bits
+are authored; the object's other native rows cannot occur in the
+mall catalogue (mask bits 2/4/16 only).
+================
+*/
+
+test("charged silk prints under the cloth caption", () => {
+	assert.deepEqual( mallTooltipRows( mallOffer( { currencyMask: 2, silk: 100 } ), mallCopy ), [
+		{ value: " ", color: 0 },
+		{ value: "ROLL : 100SILK", color: 0xffffffff }
+	] );
+});
+
+test("received gift silk prints second, in native order", () => {
+	assert.deepEqual(
+		mallTooltipRows( mallOffer( { currencyMask: 6, silk: 100, giftSilk: 5 } ), mallCopy ).map( row => row.value ),
+		[ " ", "ROLL : 100SILK", "ROLL : 5GIFT" ]
+	);
+});
+
+test("gift silk alone prints without a charged row", () => {
+	assert.deepEqual(
+		mallTooltipRows( mallOffer( { currencyMask: 4, giftSilk: 5 } ), mallCopy ).map( row => row.value ),
+		[ " ", "ROLL : 5GIFT" ]
+	);
+});
+
+test("an authored bit prints at zero; points author no price row", () => {
+	assert.deepEqual(
+		mallTooltipRows( mallOffer( { currencyMask: 2, silk: 0 } ), mallCopy ).map( row => row.value ),
+		[ " ", "ROLL : 0SILK" ]
+	);
+	assert.deepEqual( mallTooltipRows( mallOffer( { currencyMask: 16 } ), mallCopy ), [] );
+	assert.deepEqual( mallTooltipRows( mallOffer(), mallCopy ), [] );
 });

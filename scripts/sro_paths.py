@@ -52,6 +52,19 @@ _MAIN_CHECKOUT_TREES = (
 
 
 # ================
+# _is_junction
+#
+# os.path.isjunction only exists from Python 3.12, and only means
+# anything on Windows; the release hosts run 3.11, where a junction
+# cannot occur and the lexists half of the test already covers
+# symlinks. Absent the function, the answer is no.
+# ================
+def _is_junction(path: Path) -> bool:
+	isjunction = getattr(os.path, "isjunction", None)
+	return isjunction is not None and isjunction(path)
+
+
+# ================
 # worktree_copies
 #
 # The generated trees a linked worktree holds of its own - a copy, a
@@ -64,7 +77,7 @@ def worktree_copies(checkout: Path = REPO_ROOT, main_checkout: Path = MAIN_CHECK
 	return [
 		checkout / tree
 		for tree, override in _MAIN_CHECKOUT_TREES
-		if not env.get(override) and (os.path.lexists(checkout / tree) or os.path.isjunction(checkout / tree))
+		if not env.get(override) and (os.path.lexists(checkout / tree) or _is_junction(checkout / tree))
 	]
 
 

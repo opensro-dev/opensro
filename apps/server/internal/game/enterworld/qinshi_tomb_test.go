@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -40,8 +40,8 @@ TestQinShiTombSkillsAndMonsterDefaultSkills
 */
 func TestQinShiTombSkillsAndMonsterDefaultSkills(t *testing.T) {
 	tier.Long(t, "every Qin-Shi tomb skill and monster default skill resolves")
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 
 	t.Setenv(monster.EnvQinShiTomb, "off")
 	baseSkills := NewTextdataSkills(dir)

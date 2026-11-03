@@ -18,7 +18,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -66,7 +66,7 @@ Malformed and foreign quest identities leave that job intact.
 ================
 */
 func TestGatherCancellationCannotAwardOrCancelAnotherIdentity(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := gatherFixture(t)
 	center := simulation.Spawn{RegionID: ivyGatherRegion, X: 253, Y: 85, Z: 449}
 	frames, admitted := rt.BeginItemUse(c, ivyKnife, center, 0)
@@ -100,7 +100,7 @@ countdown may award material.
 ================
 */
 func TestGatherAdmissionCountdownAndDisconnect(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _ := gatherFixture(t)
 	center := simulation.Spawn{RegionID: ivyGatherRegion, X: 253, Y: 85, Z: 449}
 	outside := center
@@ -159,7 +159,7 @@ The completed material quest remains an NPC supplier while Ivy 1 is active.
 ================
 */
 func TestIvyToolDropCompletionAndDailyResupply(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := gatherFixture(t)
 	day := uint16(7)
 	rt.CalendarNow = func() calendar.Value { return calendar.Value{Day: day} }

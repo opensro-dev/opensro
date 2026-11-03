@@ -88,6 +88,25 @@ type Deps struct {
 	// (SRO_LEVEL_CAP, progression's vocabulary) so the client's level
 	// windows follow it; zero is the native cap and publishes nothing.
 	LevelCap int64
+	// SlowEnterThreshold is the enter-handler duration that earns the
+	// "bootstrap: slow enter world" phase log (register.go): an entry
+	// past it names the gate wait against the total. Zero means the
+	// production default; tests set it so a held gate trips the line
+	// without waiting out that bound.
+	SlowEnterThreshold time.Duration
+	// GateWaitBound caps how long the enter handler waits for the
+	// publication gate before abandoning the entry unanswered
+	// (register.go): the gate is taken before scene admission, so a
+	// parked wait is invisible to both the bootstrap watchdog and the
+	// slow-entry log. Zero means the production default; tests set it
+	// so a held gate trips the abandonment without waiting it out.
+	GateWaitBound time.Duration
+	// EncodeEntryPayload renders the browser entry payload for one
+	// built bootstrap result (browserEntryPayload); nil uses it with
+	// BrowserReferences. A test seam: the entry handler now encodes
+	// after releasing the publication gate, and a test proves the
+	// gate is free while the encoder runs.
+	EncodeEntryPayload func(result *BootstrapResult) ([]byte, error)
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -103,6 +122,10 @@ type Deps struct {
 	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
 	// (action/moonlitthiefsuit.go); false is native.
 	MoonlitThiefSuit bool
+	// RaisedGoldCaps publishes the port-only SRO_RAISED_GOLD_CAPS rule
+	// (action/goldcaps.go): the client's stall price editor and warehouse
+	// deposit dialog raise their native caps; false is native.
+	RaisedGoldCaps bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill
@@ -119,7 +142,12 @@ type Deps struct {
 	NormalizeEntryQuests func(character *Character) error
 	// EntryBetaSilk grants the beta's starter silk once per account
 	// (SRO_BETA_SILK, port-only, action/betasilk.go); nil in native mode.
-	EntryBetaSilk                func(character *Character)
+	EntryBetaSilk func(character *Character)
+	// RemoveExpiredEventBoxes retires a finished event's boxes from every
+	// container (port-only, action/halloween.go); false leaves every row
+	// untouched, so the entry door writes only for a character that
+	// actually held a box past the window's end.
+	RemoveExpiredEventBoxes      func(character *Character) bool
 	AdmitCharacterSession        func(divisionID, characterName string, session uint64) error
 	RetireCharacterSession       func(divisionID, characterName string, session uint64)
 	EntryActionSpeed             func(divisionID, characterName string) float32
@@ -659,6 +687,21 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 
 /*
 ================
+entryPayload
+
+The one browser-entry-payload encode, shared by the enter handler and
+the re-entry prepares; EncodeEntryPayload replaces it in tests.
+================
+*/
+func (d *Deps) entryPayload(result *BootstrapResult) ([]byte, error) {
+	if d != nil && d.EncodeEntryPayload != nil {
+		return d.EncodeEntryPayload(result)
+	}
+	return browserEntryPayload(result, d.BrowserReferences)
+}
+
+/*
+================
 encodeReentry
 ================
 */
@@ -669,7 +712,7 @@ func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 	if len(result.Packets) == 0 || result.Packets[0].NativeOpcode != OpcodeResetClient {
 		return nil, false
 	}
-	payload, err := browserEntryPayload(result, d.BrowserReferences)
+	payload, err := d.entryPayload(result)
 	if err != nil {
 		return nil, false
 	}

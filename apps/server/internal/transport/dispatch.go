@@ -79,6 +79,7 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 	fn := h.handlers.lookup(f.Opcode)
 	if fn == nil {
 		h.metrics.unhandledFrames.Add(1)
+		h.metrics.timing.recordUnhandled(f.Opcode)
 		log.WithFields(log.Fields{"session": s.ID, "opcode": fmt.Sprintf("0x%04X", f.Opcode)}).
 			Debug("transport: unhandled opcode")
 		return

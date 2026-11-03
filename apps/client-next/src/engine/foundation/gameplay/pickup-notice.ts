@@ -5,7 +5,8 @@ pickup-notice.ts - the status line for an item picked up into the bag
 
 CPSMission_ApplyInventoryOperation (756CF0) prints it while applying a
 0xB06D pickup (types 6 and 0x1C resolve to source 0, window 0x46 at
-74EF50). Gold, slot 0xFE, has its own line (UIIT_MSG_STATE_GAIN_GOLD).
+74EF50) or a server grant (type 0xE resolves to source 3). Gold, slot
+0xFE, has its own line (UIIT_MSG_STATE_GAIN_GOLD).
 
 ===========================================================================
 */
@@ -38,16 +39,20 @@ pickupNotice
 before is the bag slot's item ahead of the pickup and after the slot once
 applied. A consumable already in the slot merges, and the line names the
 gained count. Otherwise the new item prints with its whole count,
-or with only its name when it does not stack (757199, 75744C).
+or with only its name when it does not stack (757199, 75744C). A grant
+into a stack already there is silent: 7570DD prints that line for source 0
+only, while 75741B prints a new row for source 0 or 3.
 ================
 */
 export function pickupNotice(
 	before: InventoryItem | undefined,
-	after: InventoryItem | undefined
+	after: InventoryItem | undefined,
+	grant = false
 ): SystemNotice | null {
 	if ( !after ) return null;
 	const name = after.name ?? "";
 	if ( before && consumable( before.typeFlags ) ) {
+		if ( grant ) return null;
 		const gained = after.quantity - before.quantity;
 		return {
 			key: "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE",

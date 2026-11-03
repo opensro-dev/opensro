@@ -17,8 +17,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -60,7 +60,7 @@ building holds service 9 alone (service 8 comes with a link) and the client draw
 ================
 */
 func TestDenGateGrantsOnlyTheReturnPointRow(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	roster, err := simulation.AppendTeleportGates(dir, nil)
 	if err != nil {
@@ -372,7 +372,7 @@ GATE_NPC_EU_SOLDIER_PO2) target the teleport the den rule names.
 ================
 */
 func TestDenLinksTargetTheDenGate(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)

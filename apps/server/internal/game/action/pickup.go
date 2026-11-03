@@ -179,7 +179,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result Op
 		result = rt.routeSharedPickup(result, g)
 		// A granted pickup publishes its scoop; only then does the party learn of it.
 		if len(result.Broadcast) > 0 {
-			result.Recipients = append(result.Recipients, rt.partyLootNotice(divisionID, picker, character, groundItem, rt.Now().UnixMilli())...)
+			result.Recipients = append(result.Recipients, rt.partyLootNotice(divisionID, picker, character, groundItem)...)
 		}
 	}()
 	snapshot := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState {

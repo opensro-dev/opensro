@@ -22,8 +22,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -92,7 +92,7 @@ nothing: one frame, no item references ahead of it.
 ================
 */
 func TestBreakNoticeNamesAliasOrAPlayer(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	ref, ok := items.ItemRefByCodename("ITEM_CH_BLADE_08_C_RARE")
 	if !ok || ref.Name == "" {

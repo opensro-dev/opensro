@@ -120,6 +120,9 @@ const (
 	// announceBreak has its own per-minute bucket and its own channel, so
 	// a run of breaks never starves the other notices.
 	announceBreak
+	// announceHalloweenWave has its own bucket, so a run of drops never
+	// starves a wave's notice (port-only, halloween_waves.go).
+	announceHalloweenWave
 	announceKinds
 )
 
@@ -232,8 +235,10 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, lin
 		frame = wire.BreakNotificationFrame(text)
 	}
 	frames := make([]simulation.Frame, 0, 2)
-	for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
-		frames = append(frames, simulation.Frame{Opcode: ref.Opcode, Payload: ref.Payload})
+	if refObjID != 0 {
+		for _, ref := range rt.itemReferencesByID([]uint32{refObjID}) {
+			frames = append(frames, simulation.Frame{Opcode: ref.Opcode, Payload: ref.Payload})
+		}
 	}
 	frames = append(frames, simulation.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
 	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division, Frames: frames})

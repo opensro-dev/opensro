@@ -3,7 +3,7 @@ package quest
 import (
 	"bytes"
 	"math"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"strings"
 	"testing"
 
@@ -47,7 +47,7 @@ func potionInventory(count int64) []enterworld.InventoryRow {
 }
 
 func TestNewRuntimeRefusesExpRewardWithoutGranter(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	_, err := NewRuntime(&enterworld.Deps{}, loadTestDefinitions(t), nil)
 	if err == nil || !strings.Contains(err.Error(), "QNO_EU_TUTORIAL_1") {
@@ -56,7 +56,7 @@ func TestNewRuntimeRefusesExpRewardWithoutGranter(t *testing.T) {
 }
 
 func TestStartQuestEmitsInsertAndPersists(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -96,7 +96,7 @@ func TestStartQuestEmitsInsertAndPersists(t *testing.T) {
 }
 
 func TestStartCollectQuestCountsHeldItems(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -115,7 +115,7 @@ func TestStartCollectQuestCountsHeldItems(t *testing.T) {
 }
 
 func TestHandleGiveUpAbandons(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -139,7 +139,7 @@ func TestHandleGiveUpAbandons(t *testing.T) {
 }
 
 func TestHandleGiveUpRefusals(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -164,7 +164,7 @@ func TestHandleGiveUpRefusals(t *testing.T) {
 }
 
 func TestHandleRewardSelectTurnsIn(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -190,7 +190,7 @@ func TestHandleRewardSelectTurnsIn(t *testing.T) {
 }
 
 func TestHandleRewardSelectPaysEvidencedRewards(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	// The chef quest pays 475 exp / 375 gold (the shard join). Its
 	// objective is TALK, which this server cannot complete yet - the
@@ -238,7 +238,7 @@ func TestHandleRewardSelectPaysEvidencedRewards(t *testing.T) {
 }
 
 func TestRewardProgressionBroadcastExposesOnlyLevelPresentation(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -266,7 +266,7 @@ func TestRewardProgressionBroadcastExposesOnlyLevelPresentation(t *testing.T) {
 }
 
 func TestHandleRewardSelectRefusals(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -290,7 +290,7 @@ func TestHandleRewardSelectRefusals(t *testing.T) {
 }
 
 func TestNotifyInventoryChangedEmitsProgress(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	rt := testRuntime(t)
 	character := questCharacter()
@@ -345,7 +345,7 @@ func TestNotifyInventoryChangedEmitsProgress(t *testing.T) {
 }
 
 func TestDefaultQuestSeeder(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Parallel()
 	defs := loadTestDefinitions(t)
 	seeder := DefaultQuestSeeder(defs)

@@ -92,7 +92,9 @@ func TestNpcImmediateServiceConsumesTheDialogChoice(t *testing.T) {
 	if refusal != "" || len(frames) != 1 || frames[0].Opcode != 0x3230 || calls != 1 {
 		t.Fatal(frames, refusal, calls)
 	}
-	if _, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{5}); refusal == "" || calls != 1 {
-		t.Fatal("replayed immediate choice", refusal, calls)
+	// The same byte is now the closing answer's Exit row: it may end the talk
+	// but never runs the service twice.
+	if rt.HandleNpcDialogResponse(testDivision, c, []byte{5}); calls != 1 {
+		t.Fatal("replayed immediate choice", calls)
 	}
 }

@@ -137,7 +137,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 			m.BehaviorDeadlineMs = 0
 			pending = true
 		}
-		if !ops.Monsters.commitActivity(division, actor.Gid, before, m, now) {
+		if !ops.commitSteppedActivity(division, actor.Gid, before, m, now) {
 			return nil, m, true
 		}
 	}
@@ -157,7 +157,7 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		if !m.NoteMoveStopped(m.Pose) {
 			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
 		}
-		return ops.Monsters.CommitMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
+		return ops.commitSteppedMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
 	}
 	return nil, m, true
 }
@@ -165,18 +165,57 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 // Clock consumption must not run IDLE's target-ledger entry effects. A
 // concurrent hit invalidates the entire planned suspension, including clock.
 func (s *MonsterState) commitActivity(division string, gid uint32, before, after monster.MoverState, now int64) bool {
+	return s.commitActivityAt(division, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot, before, after, now)
+}
+
+/*
+================
+commitActivityAt
+
+commitActivity through the slots the behaviour batch carried for
+the actor (#2133): the guard read, the death check and the write
+go through the verified hints and fall back to the gid resolve
+whenever a hint no longer names the gid, so the commit lands - or
+is refused - exactly as commitActivity's. The gate runs this once
+per due actor per tick, which is where the profile charged the
+storages' gid-to-slot maps.
+================
+*/
+func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	current, exists := state.movers.lookup(gid)
-	if !exists || current != before || state.instances.isDead(gid) {
+	current, exists := state.movers.lookupAt(slot, gid)
+	if !exists {
+		current, exists = state.movers.lookup(gid)
+	}
+	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
 		return false
 	}
 	if err := after.Validate(); err != nil {
 		panic(err)
 	}
-	state.movers.set(gid, after)
+	if cadenceOnlyWrite(current, after) {
+		state.movers.setActivityAt(slot, gid, after.Activity)
+	} else {
+		state.movers.setAt(slot, gid, after)
+	}
 	state.syncApproachActor(gid, after)
 	s.scheduleBehavior(state, gid, now)
 	return true
+}
+
+/*
+================
+cadenceOnlyWrite
+
+Whether after differs from current only in its activity cadence:
+the gate's idle re-check commit. The new stamp must still be stored
+(the next gate read fires off it) and still re-arms the scheduler,
+but the row itself has nothing to rebuild (#2136).
+================
+*/
+func cadenceOnlyWrite(current, after monster.MoverState) bool {
+	current.Activity, after.Activity = monster.ActivityCadence{}, monster.ActivityCadence{}
+	return current == after
 }

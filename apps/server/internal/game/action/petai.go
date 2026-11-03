@@ -182,6 +182,14 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 		}
 	}
 	rt.petMu.Unlock()
+	// The owner's pets leave the world with the owner: the gid index
+	// forgets them here (cosownerindex.go).
+	for _, state := range retired {
+		if state != nil && state.character != nil {
+			rt.cosOwners.forgetOwner(division, state.character)
+			break
+		}
+	}
 	for key, state := range retired {
 		if key.gid == 0 {
 			rt.deps.Update(state.character, "crow-brood-logout", func() bool {
@@ -502,7 +510,11 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	if state.pickup != nil {
 		q := *state.pickup
 		item, found := rt.characterGround(key.division, snapshot, q.GroundGID)
-		if !found || nowMs >= state.pickupDeadline {
+		pose := state.follower.Position(nowMs)
+		// A target that vanished, timed out, or can never be granted
+		// at arrival (cosPickupTargetRetired) retires the same way:
+		// the refusal answer, no walk, no warning.
+		if !found || nowMs >= state.pickupDeadline || rt.cosPickupTargetRetired(key.division, snapshot, pose, item) {
 			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			frames := state.follower.Stop(nowMs)
 			for _, f := range result.Frames {
@@ -510,7 +522,6 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			}
 			return frames
 		}
-		pose := state.follower.Position(nowMs)
 		target := simulation.Spawn{RegionID: item.Position.RegionID, X: float64(item.Position.X), Y: float64(item.Y), Z: float64(item.Position.Z)}
 		from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
@@ -741,6 +752,10 @@ own state without touching the owner's independent attack and pickup pets.
 */
 func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet *enterworld.CharacterCOS) *petSession {
 	key := petOwnerKey{division: division, name: strings.ToLower(owner.character.Name), gid: pet.GID}
+	// Every summoned pet's runtime life starts at this door (world
+	// entry, summon, mercenary call): the gid index notes its owner
+	// here and nowhere else (cosownerindex.go).
+	rt.cosOwners.note(division, pet.GID, owner.character)
 	rt.petMu.Lock()
 	old := rt.petSessions[key]
 	if old != nil && old.character == owner.character && old.transportCOS == pet {

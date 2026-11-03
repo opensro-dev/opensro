@@ -54,7 +54,7 @@ TestTickWatchdogReportsAStalledHookOnce
 */
 func TestTickWatchdogReportsAStalledHookOnce(t *testing.T) {
 	release := make(chan struct{})
-	ticker := &Ticker{Source: emptySessionSource{}, Push: discardPusher{}, Hooks: []TickHook{stalledTickHook(release)}}
+	ticker := &Ticker{Source: emptySessionSource{}, Push: discardPusher{}, Hooks: []NamedTickHook{{Name: "stalled-hook", Hook: stalledTickHook(release)}}}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -62,10 +62,11 @@ func TestTickWatchdogReportsAStalledHookOnce(t *testing.T) {
 	}()
 
 	wait.Eventually(t, 5*time.Second, "the stalled hook to start", func() bool {
-		return ticker.watch.hook.Load() != 0
+		name, _ := ticker.watch.hookName.Load().(string)
+		return name != ""
 	})
 	report := ticker.watch.check(time.Now().Add(2*time.Second), time.Second)
-	if !strings.Contains(report, "in hooks (hook ") || !strings.Contains(report, "stalledTickHook") {
+	if !strings.Contains(report, "in hooks (hook stalled-hook)") {
 		t.Fatalf("report does not name the phase and hook: %.200s", report)
 	}
 	if !strings.Contains(report, "goroutine ") {

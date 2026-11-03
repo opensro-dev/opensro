@@ -22,14 +22,14 @@ func TestTickerSettlesActionsBeforeDivisionAIInBothExecutionModes(t *testing.T) 
 			})
 		}
 		ticker.Monsters = ops
-		ticker.BeforeHooks = []TickHook{func(now int64) []DivisionFrames {
+		ticker.BeforeHooks = []NamedTickHook{{Hook: func(now int64) []DivisionFrames {
 			if now != 100000 {
 				t.Error("wrong pre-action clock", now)
 			}
 			order = append(order, "settle")
 			return nil
-		}}
-		ticker.Hooks = []TickHook{func(int64) []DivisionFrames { order = append(order, "post"); return nil }}
+		}}}
+		ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames { order = append(order, "post"); return nil }}}
 		if scheduled {
 			ctx, cancel := context.WithCancel(context.Background())
 			inbox := make(chan shardTickBatch)

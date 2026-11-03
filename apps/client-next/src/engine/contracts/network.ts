@@ -38,6 +38,11 @@ export interface NetworkOwner {
 	// Every frame received on the current socket, transport control (pings,
 	// pongs) included: a live link changes it even when no game frame comes.
 	received(): number;
+	// Every inbound byte, counted as it arrives: a record still being
+	// reassembled (the ~1 MB 0x0007 answer) moves this long before
+	// received() can, so the world's stall detector reads a link that
+	// is still streaming as alive (#2311).
+	receivedBytes(): number;
 	// When the last frame arrived, on the event clock (performance.now()),
 	// or -Infinity before the current socket's first frame. The one owner
 	// of the last-inbound time (#1474): the close detail's silence and the

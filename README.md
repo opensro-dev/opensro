@@ -20,7 +20,7 @@ Behaviour is ported from the original game, not guessed: the v1.150 client defin
 
 ## 🚀 Quick start
 
-The full walkthrough, with the exact tool versions, is [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md). In short:
+The full walkthrough, with the exact tool versions, is [docs/guides/GETTING_STARTED.md](docs/guides/GETTING_STARTED.md). In short:
 
 1. **Install the tools:** Go, Node.js 24, pnpm (through Corepack), Python 3.12, and a WebGPU browser (current Chrome or Edge). Nomad is a pinned download.
 2. **Build the game data** from your own v1.150 client:
@@ -54,7 +54,7 @@ Only changing code, not game data? `corepack pnpm check source` runs the CI gate
 
 Local only and ignored: `.generated/` (all generated game data), `.state/` (caches and locks), `.tools/` (pinned binaries such as Nomad), `temp/` (scratch output) and `node_modules/`.
 
-Retail game media is never committed. The asset build reads an extraction of your own client next to the checkout; see [docs/ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md).
+Retail game media is never committed. The asset build reads an extraction of your own client next to the checkout; see [docs/architecture/ASSET_PIPELINE.md](docs/architecture/ASSET_PIPELINE.md).
 
 ---
 
@@ -75,7 +75,7 @@ Retail game media is never committed. The asset build reads an extraction of you
 
 ## 🤝 Contributing
 
-New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-first rule, how to put new ideas behind a flag, and what a good pull request looks like. Then pick an issue labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue) or say hi in #🛠️contributing on [Discord](https://discord.gg/RUua9HY657).
+New here? Start with **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**: setup, the native-first rule, how to put new ideas behind a flag, and what a good pull request looks like. Then pick an issue labelled [good first issue](https://github.com/opensro-dev/opensro/labels/good%20first%20issue) or say hi in #🛠️contributing on [Discord](https://discord.gg/RUua9HY657).
 
 - 🎨 **Code style:** id Software (Quake III Arena): file and function banners, plain data and functions, explicit lifecycles. dprint formats JavaScript/TypeScript and gofmt formats Go.
 - 🤖 **AI coding agents are welcome** and follow the same rules as humans: [AGENTS.md](AGENTS.md).
@@ -85,7 +85,7 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 ## 📚 More
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
-- 🚢 [RELEASE.md](RELEASE.md): the release checklist
-- 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
-- 💬 [SUPPORT.md](SUPPORT.md): getting help
+- 🚢 [RELEASE.md](docs/operations/RELEASE.md): the release checklist
+- 🔒 [SECURITY.md](.github/SECURITY.md): how to report a vulnerability
+- 💬 [SUPPORT.md](.github/SUPPORT.md): getting help
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)

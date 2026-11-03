@@ -61,19 +61,6 @@ func EncodeNpcInteractionRefusal(code uint8) []byte {
 
 /*
 ================
-EncodeNpcDialogSymbol
-
-EncodeNpcDialogSymbol is CPSMission 0x3773 kind 1. The prompt is a text
-symbol from npcchat.txt, carried as the native narrow counted string; the
-client owns localization and dialog row construction.
-================
-*/
-func EncodeNpcDialogSymbol(symbol string) []byte {
-	return encodeNpcDialog(1, symbol, nil)
-}
-
-/*
-================
 EncodeNpcDialogConfirm
 
 EncodeNpcDialogConfirm is native kind 3: a prompt followed by Yes/No rows.
@@ -83,6 +70,9 @@ The response is one choice byte (2=yes, 3=no).
 func EncodeNpcDialogConfirm(promptSymbol string) []byte {
 	return encodeNpcDialog(3, promptSymbol, nil)
 }
+
+// npcDialogExitSymbol is the Exit row of a closing answer.
+const npcDialogExitSymbol = "SN_TALK_COMMON_EXIT"
 
 /*
 ================
@@ -97,6 +87,19 @@ func EncodeNpcDialogOptions(promptSymbol string, optionSymbols []string) []byte 
 		optionSymbols = optionSymbols[:251]
 	}
 	return encodeNpcDialog(4, promptSymbol, optionSymbols)
+}
+
+/*
+================
+EncodeNpcDialogAnswer
+
+A service's closing answer: the line with the one Exit row, kind 4 as the
+native talk events send it. The row comes back as the first row's choice
+with no conversation open, which ends the talk.
+================
+*/
+func EncodeNpcDialogAnswer(promptSymbol string) []byte {
+	return EncodeNpcDialogOptions(promptSymbol, []string{npcDialogExitSymbol})
 }
 
 /*

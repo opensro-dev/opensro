@@ -78,6 +78,9 @@ export interface ExperimentalOptions {
 	readonly enchantSparks: boolean;
 	// Port-only wolf skill tree controls; requires the server's matching opt-in.
 	readonly attackPetTraining: boolean;
+	// Port-only, not native: the Actions window gains Auto Select (action 1005,
+	// select-nearest.ts). Native holds the code but no row or key reaches it.
+	readonly autoSelect: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
@@ -239,6 +242,11 @@ export interface ExperimentalOptions {
 	// the top seal reads differently the moment it lands. Other players'
 	// drops are never marked. Off unless turned on.
 	readonly sunDropMarker: boolean;
+	// Port-only, not native: the portal-out cue (SND_WARP, gatein.wav) when
+	// the world arrives. The native row has no traced caller - the gate at
+	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
+	// native arrival is silent. Off unless turned on.
+	readonly warpArrivalSound: boolean;
 }
 
 /*
@@ -428,6 +436,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
 		attackPetTraining: enabled( "attackPetTraining" ),
+		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),
@@ -443,7 +452,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
-		sunDropMarker: enabled( "sunDropMarker" )
+		sunDropMarker: enabled( "sunDropMarker" ),
+		warpArrivalSound: enabled( "warpArrivalSound" )
 	};
 }
 
@@ -562,6 +572,7 @@ export interface ExperimentalGameplay {
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
+	readonly warpArrivalSound?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -583,6 +594,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
+		warpArrivalSound: options.warpArrivalSound,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

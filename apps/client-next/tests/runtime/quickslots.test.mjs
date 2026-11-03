@@ -32,13 +32,15 @@ test("equipment activation shares native sockets and uses inventory authority, n
 		kind: "inventory-move",
 		source: 20,
 		destination: 12,
-		quantity: 0
+		quantity: 0,
+		activation: true
 	} );
 	assert.deepEqual( itemActivation( 11, inventory, 45, false ), {
 		kind: "inventory-move",
 		source: 11,
 		destination: 13,
-		quantity: 0
+		quantity: 0,
+		activation: true
 	} );
 	assert.equal( itemActivation( 11, inventory, undefined, false ), null );
 	assert.equal( itemActivation( 20, inventory, 45, true ), null );

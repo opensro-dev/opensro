@@ -141,7 +141,7 @@ func (s *MonsterState) createSummonLocked(state *divisionMonsterState, parent mo
 			childMover.BehaviorDeadlineMs = nowMs + monster.NativeIdleDelayMs(s.randomWord)
 			state.movers.set(child.Gid, childMover)
 			state.behavior.set(child.Gid, 0)
-			state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], child.Gid)
+			state.listRegionGid(spawn.RegionID, child.Gid)
 			created = append(created, child)
 		}
 	}

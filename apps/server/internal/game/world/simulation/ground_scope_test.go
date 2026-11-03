@@ -13,9 +13,9 @@ func TestGroundMaintenanceUsesPublishedObjects(t *testing.T) {
 	source := &fakeSource{sessions: []SessionSnapshot{a, b}}
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
-	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(int64) []DivisionFrames {
 		return []DivisionFrames{{DivisionID: "A", SourceGID: gid, Frames: []Frame{{Opcode: wire.OpGroundOwnershipExpired}}}}
-	}}
+	}}}
 	ticker.RunTick(100)
 	if len(peerFramesTo(push, "a", wire.OpGroundOwnershipExpired)) != 1 || len(peerFramesTo(push, "b", wire.OpGroundOwnershipExpired)) != 0 || len(push.toDivision) != 0 {
 		t.Fatal("ground event escaped its published scope")

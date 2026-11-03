@@ -6,7 +6,7 @@ maintenance.go - the server list the edge serves while the Agent is down
 A release stops every job, the Agent included, so the title's server list
 request fails during maintenance. The release deploy writes this list from
 the host's own shard catalog through the Agent's own row mapping
-(agentserver.OfflineServerList): every shard listed, none operating. The
+(agentserver.OfflineServerList): every enabled shard listed, none operating. The
 HTTPS edge serves it for /api/title/servers when the Agent answers 502,
 503 or 504, so the title shows each shard as native "Check".
 

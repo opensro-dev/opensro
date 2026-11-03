@@ -23,7 +23,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/testsupport/alexandriatest"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -32,7 +32,7 @@ TestPharaohTombGateWorldsFollowRegistration
 ================
 */
 func TestPharaohTombGateWorldsFollowRegistration(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	// Two fixture dirs: a catalogue parse is cached per directory (portal.go),
 	// so the refused reading and the accepted one cannot share a directory.
 	// The boot never reparses after registering; only this test does both.

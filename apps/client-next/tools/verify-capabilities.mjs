@@ -43,7 +43,7 @@ const ASYNC_OWNERS = [
 	runtime + "bug-report/archive.ts",
 	runtime + "bug-report/journal.ts",
 	// The 3D viewer's still: one GPU copy mapped back, then encoded to a
-	// PNG and posted to the embedding page (docs/VIEWER.md).
+	// PNG and posted to the embedding page (docs/guides/VIEWER.md).
 	runtime + "renderer/device/portrait-readback.ts",
 	runtime + "viewer/viewer.ts"
 ];
@@ -72,7 +72,7 @@ const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
-// Port-only: the 3D viewer's still readback (docs/VIEWER.md).
+// Port-only: the 3D viewer's still readback (docs/guides/VIEWER.md).
 const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
@@ -116,7 +116,7 @@ export const rules = {
 		bugTrimmer
 	],
 	// The picking mask readback, shared by the renderer and the asset worker.
-	// The viewer encodes its still to a PNG (docs/VIEWER.md).
+	// The viewer encodes its still to a PNG (docs/guides/VIEWER.md).
 	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder, runtime + "viewer/viewer.ts" ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
 	decodeAudioData: [ runtime + "audio/audio.ts" ],
@@ -205,7 +205,7 @@ export const rules = {
 		bugTrimmer,
 		bugTranscode,
 		bugJournal,
-		// The 3D viewer's drag and wheel on its picture canvas (docs/VIEWER.md).
+		// The 3D viewer's drag and wheel on its picture canvas (docs/guides/VIEWER.md).
 		runtime + "viewer/viewer.ts"
 	],
 	fetch: [

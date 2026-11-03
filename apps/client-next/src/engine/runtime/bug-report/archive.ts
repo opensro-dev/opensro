@@ -435,6 +435,25 @@ export function diagnosticUploadBudget( maxBytes: number, advertised: unknown ):
 
 /*
 ================
+diagnosticValue
+
+The one JSON replacer for report data, shared with bug-report.ts: Maps and
+Sets as plain data, binary as its size, bigints as decimal text.
+JSON.stringify throws on a bigint, and report documents carry bigint values
+(the codec's session id among them), so every stringify of report data in
+this module goes through it instead of the bare form.
+================
+*/
+export function diagnosticValue( _key: string, item: unknown ): unknown {
+	if ( item instanceof Map ) return Object.fromEntries( item );
+	if ( item instanceof Set ) return [ ...item ];
+	if ( ArrayBuffer.isView( item ) ) return `[${item.constructor.name}: ${item.byteLength} bytes]`;
+	if ( typeof item === "bigint" ) return item.toString();
+	return item;
+}
+
+/*
+================
 sharedValue
 
 The shared attachment excludes chat, identities and credentials. Numeric cast
@@ -529,7 +548,7 @@ async function diagnosticZip( documents: Record<string, unknown> ): Promise<{ bl
 	const files: ZipFile[] = [];
 	let unpackedBytes = 0;
 	for ( const [name, value] of Object.entries( documents ) ) {
-		const data = new TextEncoder().encode( JSON.stringify( value ) + "\n" );
+		const data = new TextEncoder().encode( JSON.stringify( value, diagnosticValue ) + "\n" );
 		unpackedBytes += data.byteLength;
 		let deflated: Uint8Array | undefined;
 		try {
@@ -681,16 +700,20 @@ export async function createDiagnosticUpload(
 			Array.isArray( entry.document[entry.rows] ) && (entry.document[entry.rows] as unknown[]).length > 0
 		)
 			.sort( ( a, b ) =>
-				JSON.stringify( b.document[b.rows] ).length - JSON.stringify( a.document[a.rows] ).length
+				JSON.stringify( b.document[b.rows], diagnosticValue ).length -
+				JSON.stringify( a.document[a.rows], diagnosticValue ).length
 			);
 		const entry = candidates[0];
 		const key = Object.keys( gameplay ).sort( ( a, b ) =>
-			JSON.stringify( gameplay[b] ).length - JSON.stringify( gameplay[a] ).length
+			JSON.stringify( gameplay[b], diagnosticValue ).length -
+			JSON.stringify( gameplay[a], diagnosticValue ).length
 		)[0];
 		// A large inventory snapshot must not evict a tiny, decisive receipt.
 		if (
 			key &&
-			(!entry || JSON.stringify( gameplay[key] ).length >= JSON.stringify( entry.document[entry.rows] ).length)
+			(!entry ||
+				JSON.stringify( gameplay[key], diagnosticValue ).length >=
+					JSON.stringify( entry.document[entry.rows], diagnosticValue ).length)
 		) {
 			delete gameplay[key];
 			omissions.push( `state.json: omitted gameplay.${key} to fit upload limit` );
@@ -787,7 +810,7 @@ export function createReportArchive(): ReportArchive {
 			const { replay, screenshot, diagnostics, ...details } = row;
 			const files = [ {
 				name: "report.json",
-				data: new TextEncoder().encode( JSON.stringify( details, null, "\t" ) + "\n" )
+				data: new TextEncoder().encode( JSON.stringify( details, diagnosticValue, "\t" ) + "\n" )
 			} ];
 			if ( replay ) files.push( { name: "replay.mp4", data: new Uint8Array( await replay.arrayBuffer() ) } );
 			if ( screenshot ) {

@@ -150,7 +150,7 @@ func (s *MonsterState) SpawnGMMonstersTracked(request GMMonsterSpawn) []uint32 {
 		state.instances.set(actor.Gid, actor)
 		state.movers.set(actor.Gid, mover)
 		state.behavior.set(actor.Gid, 0)
-		state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+		state.listRegionGid(spawn.RegionID, actor.Gid)
 		created = append(created, actor.Gid)
 		// The retail spawn arms every spawned monster's timers, a GM's included.
 		armLifetimeLocked(state, actor, request.NowMs)

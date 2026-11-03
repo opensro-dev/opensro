@@ -4,7 +4,7 @@
 alchemyprocess_test.go - alchemy compound and dissolve through the action handler
 
 The published-dissolution case reads the shipped tables through
-licensed.RequireGameData, so a clean checkout skips it and the full check
+clientdata.RequireGameData, so a clean checkout skips it and the full check
 runs it.
 
 ===========================================================================
@@ -15,8 +15,8 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"sort"
 	"sync"
@@ -33,7 +33,7 @@ Two concurrent dissolutions of one published weapon commit exactly once.
 func TestAlchemyPublishedDissolveCommitsOnceThroughHandler(t *testing.T) {
 	// The shipped tables, as every licensed test reads them: a clean
 	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {
@@ -162,7 +162,7 @@ community vote of 2026-10-24 brought back.
 */
 func TestAlchemyPartsLoopThroughHandler(t *testing.T) {
 	// As above: a clean checkout skips, the full check runs it.
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {

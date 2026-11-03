@@ -22,6 +22,7 @@ import type { UiTexture } from "@/engine/contracts/texture";
 import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
+
 const DEFAULT_ICON = ICON_ROOT + "icon_default.png";
 // Remembered absent paths beyond current demand are dropped past this count.
 const MAX_REMEMBERED_ABSENT = 480;
@@ -177,7 +178,9 @@ export function createUiAssets(
 			trim();
 			for ( const remembered of [ missing, fallback ] ) {
 				for ( const path of remembered ) {
-					if ( !wanted.has( path ) && remembered.size > MAX_REMEMBERED_ABSENT ) remembered.delete( path );
+					if ( !wanted.has( path ) && remembered.size > MAX_REMEMBERED_ABSENT ) {
+						remembered.delete( path );
+					}
 				}
 			}
 			for ( const path of failures.keys() ) {
@@ -233,14 +236,15 @@ export function createUiAssets(
 					(failures.get( path )?.retryAt ?? -Infinity) > now
 				) continue;
 				if ( assets.available() === 0 ) break;
+				const request = fallback.has( path ) ? DEFAULT_ICON : path;
 				try {
 					pending.set(
 						path,
 						assets.request(
-							new URL( fallback.has( path ) ? DEFAULT_ICON : path, base ).href,
-							crest( path ) ? 256 : 4 * 1024 * 1024,
+							new URL( request, base ).href,
+							crest( request ) ? 256 : 4 * 1024 * 1024,
 							// A native texture arrives as its container bytes.
-							crest( path ) ? "crest" : isNativeTexture( path ) ? undefined : "png"
+							crest( request ) ? "crest" : isNativeTexture( request ) ? undefined : "png"
 						)
 					);
 				} catch ( error ) {

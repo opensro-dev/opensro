@@ -9,6 +9,8 @@ package action
 
 import (
 	"math"
+	"sort"
+
 	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -352,9 +354,24 @@ func (rt *Runtime) cancelReturnOnDeathInDoor(division string, c *enterworld.Char
 	return []wire.Frame{teleportState(c, 0)}
 }
 
+// maxReturnScrollCompletionsPerTick bounds the arrivals one tick pays
+// for (#2143): a completion is a full world transfer (store door,
+// membership move, pet relocation, entry-packet rebuild), and a wave
+// of casts landing together used to run every one of them inline -
+// the hook's measured worst is 556 ms over 492 slow calls. Leftovers
+// stay due in returnCasts and drain at this rate on later ticks; a
+// cast waited seconds already, so the added ticks are invisible, and
+// one completion always runs so the queue can never stall.
+const maxReturnScrollCompletionsPerTick = 2
+
 /*
 ================
 advanceReturnScrolls
+
+Complete the due return casts, oldest first, at most
+maxReturnScrollCompletionsPerTick of them; the rest wait for later
+ticks (#2143). The map's own order is random, so the due sort is also
+what makes a waiting wave fair.
 ================
 */
 func (rt *Runtime) advanceReturnScrolls(now int64) {
@@ -366,6 +383,18 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 		}
 		return true
 	})
+	sort.Slice(jobs, func(i, j int) bool {
+		if jobs[i].due != jobs[j].due {
+			return jobs[i].due < jobs[j].due
+		}
+		if jobs[i].division != jobs[j].division {
+			return jobs[i].division < jobs[j].division
+		}
+		return jobs[i].name < jobs[j].name
+	})
+	if len(jobs) > maxReturnScrollCompletionsPerTick {
+		jobs = jobs[:maxReturnScrollCompletionsPerTick]
+	}
 	for _, job := range jobs {
 		frames, peers := rt.completeReturnScrollInDivision(job, now)
 		if len(frames) > 0 && rt.PushCharacterFrames != nil {

@@ -4,12 +4,25 @@
 unique-banner.ts - the warning and notice banners' plate geometry
 
 Centres the measured caption and frames it with the notice chrome. The
-plate normally hugs the caption; padX/padY (port-only, #1976) grow it
-past the caption and plateAlpha raises its opacity at full show.
+plate normally hugs the caption; a BannerPlateStyle (port-only, #1976)
+grows it and sets its opacity at full show. The chrome is always native.
 
 ===========================================================================
 */
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
+
+/*
+================
+BannerPlateStyle
+
+Port-only, not native. Empty is the native plate.
+================
+*/
+export interface BannerPlateStyle {
+	readonly padX?: number;
+	readonly padY?: number;
+	readonly plateAlpha?: number;
+}
 
 /*
 ================
@@ -30,10 +43,9 @@ export function uniqueBannerQuads(
 	size: ( p: string ) => readonly [number, number] | undefined,
 	y = 130,
 	rgb: readonly [number, number, number] = [ 0, 52, 92 ],
-	padX = 0,
-	padY = 0,
-	plateAlpha?: number
+	style: BannerPlateStyle = {}
 ): UiQuad[] {
+	const { padX = 0, padY = 0, plateAlpha } = style;
 	if ( alpha <= 0 || !value ) return [];
 	// 68E841..68E8E2 pushes bottom/top edge, right/left edge2 (right-to-left
 	// arguments). 6FA940 stores its first resource as the left edge at +38C.

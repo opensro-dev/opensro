@@ -87,6 +87,62 @@ test("a pet's ground pickup prints the bag's item line, and its gold prints none
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 3 );
 	assert.equal( owner.take()?.notices?.at( -1 )?.sequence ?? merged?.sequence, merged?.sequence );
 });
+test("a server grant into the pet bag prints a new row and keeps a merge silent (#2258)", () => {
+	// 756CF0's print case is shared by ground (0) and quest (3) sources
+	// (756EEC): a grant (0x15) names a new row, a merge stays silent, and
+	// the gold-shaped row has no line. It settles no client request.
+	const { owner, initial } = fixture();
+	assert.deepEqual( initial.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 30 ], [ 1, 40 ] ] );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 3, ...u32( 8 ), 5, 0 ] ) }, 1 );
+	let s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 30 ], [ 1, 40 ], [
+		3,
+		5
+	] ] );
+	const grantedNotice = s.notices?.at( -1 );
+	assert.deepEqual( [ grantedNotice?.key, grantedNotice?.value ], [ "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE", 5 ] );
+	assert.notEqual( grantedNotice?.sequence, initial.notices?.at( -1 )?.sequence );
+	// A merge into an open stack prints nothing for a grant.
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 0, ...u32( 8 ), 45, 0 ] ) }, 2 );
+	s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 45 ], [ 1, 40 ], [
+		3,
+		5
+	] ] );
+	assert.equal( s.notices?.at( -1 )?.sequence, grantedNotice?.sequence );
+	// The gold-shaped grant (slot 254) carries an amount, never a row.
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 3 );
+	s = owner.take();
+	assert.equal( s.cosRecords[0].inventory.length, 3 );
+	assert.equal( s.notices?.at( -1 )?.sequence, grantedNotice?.sequence );
+	// A result for a pet with no record.
+	assert.throws(
+		() =>
+			owner.receive( {
+				opcode: 0xb06d,
+				payload: Uint8Array.from( [ 1, 0x15, ...u32( 9 ), 3, ...u32( 8 ), 5, 0 ] )
+			}, 5 ),
+		/Absent COS grant owner/
+	);
+});
+test("a quest removal takes the item out of the pet bag silently (#2258)", () => {
+	// 0x16 resolves the COS bag to the quest (74EF50); the quest sink
+	// (758C13) prints nothing.
+	const { owner, initial } = fixture();
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 7 ), 0 ] ) }, 1 );
+	const s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => x.slot ), [ 1 ] );
+	assert.equal( s.notices?.at( -1 )?.sequence, initial.notices?.at( -1 )?.sequence );
+	// A slot the pet no longer holds, and a pet with no record, both refuse.
+	assert.throws(
+		() => owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 7 ), 0 ] ) }, 2 ),
+		/Invalid COS removal source/
+	);
+	assert.throws(
+		() => owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 9 ), 0 ] ) }, 3 ),
+		/Absent COS removal owner/
+	);
+});
 function fixture() {
 	const sent = [], owner = createGameplay( f => sent.push( f ) );
 	owner.bootstrap( {

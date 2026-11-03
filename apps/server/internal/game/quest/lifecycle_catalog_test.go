@@ -14,8 +14,8 @@ package quest
 import (
 	"bytes"
 	"encoding/json"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -37,7 +37,7 @@ Capture objectives must acquire their item and clock through the capture owner.
 ================
 */
 func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(textdata)
 	defs, err := LoadDefinitions(NewCatalog(textdata), items)
@@ -472,7 +472,7 @@ Both login lists have byte-sized counts. Refuse overflow without paying rewards.
 ================
 */
 func TestQuestWireCapacityRefusesBeforeMutation(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	for i := 0; i < 255; i++ {
@@ -520,7 +520,7 @@ Unknown records retain every field through storage, unrelated progress and login
 ================
 */
 func TestUnimplementedCatalogQuestsArePreservedThroughLogin(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	catalog := NewCatalog(textdata)
 	defs, err := LoadDefinitions(catalog, enterworld.NewTextdataItems(textdata))

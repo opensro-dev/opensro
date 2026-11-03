@@ -9,33 +9,81 @@ import (
 // in RefObjChar default-slot registration order. No RNG.
 // No active archive scan: caller names the live actor it is deciding for.
 func (s *MonsterState) SelectConditionalSkill(division string, gid uint32) (uint32, bool) {
+	skill, _, selected := s.selectConditionalSkill(division, gid, 0, true)
+	return skill, selected
+}
+
+/*
+================
+selectConditionalSkill
+
+The selection itself. With consume set, the chosen entry's
+once-only bit is spent on the row at once (the serial step).
+Without it the selection is only read and extraUsed masks bits
+the caller has already chosen elsewhere - a planning step's
+recorded selections (#2205) - and the spend lands at commit via
+consumeConditionalSkill.
+================
+*/
+func (s *MonsterState) selectConditionalSkill(division string, gid uint32, extraUsed uint32, consume bool) (uint32, int, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
-		return 0, false
+		return 0, 0, false
 	}
 	instance := state.instances.hotValue(gid, r)
 	if instance.CurrentHP == 0 {
-		return 0, false
+		return 0, 0, false
 	}
 	for _, skill := range instance.Ref.DefaultSkillIDs {
 		if skill == 0 {
 			continue
 		}
 		for slot, condition := range instance.Nest.ConditionalSkills {
-			if condition.SkillID != skill || condition.ConditionType != 0 || instance.ConditionalUsed&(1<<slot) != 0 {
+			if condition.SkillID != skill || condition.ConditionType != 0 || instance.ConditionalUsed&(1<<slot) != 0 || extraUsed&(1<<slot) != 0 {
 				continue
 			}
 			if monster.ConditionalHealthEligible(instance.CurrentHP, instance.EffectiveMaxHP(), condition.Data) {
-				instance.ConditionalUsed |= 1 << slot
-				state.instances.set(gid, instance)
-				return skill, true
+				if consume {
+					instance.ConditionalUsed |= 1 << slot
+					state.instances.set(gid, instance)
+				}
+				return skill, slot, true
 			}
 		}
 	}
-	return 0, false
+	return 0, 0, false
+}
+
+/*
+================
+consumeConditionalSkill
+
+Spend one conditional entry a planning step selected (#2205), at
+commit. A row that no longer names the entry, or already spent
+it, keeps its bits: the spend only records a selection the step
+already made, and the attack door re-admits on the real row
+either way.
+================
+*/
+func (s *MonsterState) consumeConditionalSkill(division string, gid uint32, skill uint32, slot int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	r, ok := state.instances.hotRow(gid)
+	if !ok {
+		return
+	}
+	instance := state.instances.hotValue(gid, r)
+	if slot < 0 || slot >= len(instance.Nest.ConditionalSkills) ||
+		instance.Nest.ConditionalSkills[slot].SkillID != skill ||
+		instance.ConditionalUsed&(1<<slot) != 0 {
+		return
+	}
+	instance.ConditionalUsed |= 1 << slot
+	state.instances.set(gid, instance)
 }
 
 func (s *MonsterState) InstallMonsterSelfEffect(division string, gid uint32, effect monster.SelfEffect, now int64) bool {
@@ -45,7 +93,7 @@ func (s *MonsterState) InstallMonsterSelfEffect(division string, gid uint32, eff
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
 		return false
 	}
@@ -87,7 +135,7 @@ func (s *MonsterState) InstallMonsterTargetEffect(division string, gid uint32, e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
-	r, ok := state.instances.hot[gid]
+	r, ok := state.instances.hotRow(gid)
 	if !ok {
 		return 0, false
 	}
@@ -158,7 +206,7 @@ func (s *MonsterState) RetireMonsterSelfEffects(now int64) []MonsterSelfEffectRe
 			owners[gid] = true
 		}
 		for gid := range owners {
-			r, ok := state.instances.hot[gid]
+			r, ok := state.instances.hotRow(gid)
 			if !ok {
 				panic("monster effect lost resident owner")
 			}

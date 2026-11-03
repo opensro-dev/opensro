@@ -30,7 +30,9 @@ healOverTime
 
 One installed timed heal. token is the recipient's effect instance: the
 heal pulses exactly as long as that instance lives. caster is the caster's
-snapshot at release, whose weapon (mwmh / mwhh) and HLRU every pulse reads.
+combat copy at release (equipment rows and the avatar only; #2209), whose
+weapon (mwmh / mwhh) and HLRU every pulse reads - no pulse reader walks a
+bag row or resolves a companion from it (combatcopy_test.go).
 ==================
 */
 type healOverTime struct {
@@ -62,7 +64,7 @@ stopped instance stops pulsing.
 ==================
 */
 func (rt *Runtime) installHealsOverTime(division string, caster *enterworld.Character, skill enterworld.SkillRow, recipients []*enterworld.Character, now int64) []wire.Frame {
-	casterView := rt.characterSnapshot(division, caster)
+	casterView := rt.characterSnapshotCombat(division, caster)
 	if casterView == nil {
 		return nil
 	}
