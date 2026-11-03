@@ -200,6 +200,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
+import { createMallUseHud } from "./hud/mall-use-hud";
+import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
 import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
@@ -1399,6 +1401,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const mallUse = createMallUseHud();
 	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
@@ -2505,6 +2508,22 @@ export function createUi(
 				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
 				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
 				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
+				dirty = true;
+				return;
+			}
+			// 52F460 kind 0x1E (opened by 573AD0): a mall item's plain use asks
+			// first; the box's Yes runs the use, its No nothing. Only the bare
+			// use is asked - a use already carrying its target, message or pick
+			// was raised by its own flow and runs at once. The gate is the
+			// recorded inference in foundation/gameplay/mall-use.ts.
+			if (
+				item && isMallUseConfirmItem( item ) && command.targetSlot === undefined &&
+				command.revivalSlot === undefined && command.summonerSlot === undefined &&
+				command.reverseChoice === undefined && command.reverseMapPoint === undefined &&
+				command.message === undefined && command.renameName === undefined &&
+				command.skin === undefined && command.companionGid === undefined
+			) {
+				mallUse.ask( item );
 				dirty = true;
 				return;
 			}
@@ -6861,6 +6880,30 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( mallUse.pending() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "mall-use-cancel"
+				) {
+					mallUse.dismiss();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "mall-use-confirm"
+				) {
+					const slot = mallUse.take();
+					dirty = true;
+					if ( slot !== null && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
+						// The confirmed use is the plain shape sendGameplay asks
+						// about, so it goes through the door underneath it.
+						commands( { kind: "gameplay", command: { kind: "item-use", slot } } );
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
 			if ( cosHud.itemTargetCursor() !== null ) {
 				if ( event.kind === "right-activate" || event.kind === "key" && event.code === "Escape" ) {
 					cosHud.takeTargetUse();
@@ -9054,6 +9097,12 @@ export function createUi(
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
 				cosHud.reconcileItemTarget(
+					next.gameplay?.inventory ?? [],
+					next.session?.phase === "world" && !next.travel
+				)
+			) dirty = true;
+			if (
+				mallUse.reconcile(
 					next.gameplay?.inventory ?? [],
 					next.session?.phase === "world" && !next.travel
 				)
@@ -24297,6 +24346,45 @@ export function createUi(
 				);
 				button(
 					targeted ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( worldVisible && mallUse.pending() !== null ) {
+				// CIFMessageBox type 0x1E (52F460): the same fixed 308x148 box
+				// (5C82D0) as the type-0x1F confirm above, one question line.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets(), ...message.paths );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...message.quads
+				);
+				button(
+					"mall-use-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"mall-use-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

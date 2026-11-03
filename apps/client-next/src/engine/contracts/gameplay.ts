@@ -497,6 +497,7 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	readonly codename?: string;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;
