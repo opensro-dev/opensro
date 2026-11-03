@@ -106,7 +106,24 @@ func (rt *Runtime) combatTargetExists(division string, attacker *enterworld.Char
 	if attacker == nil || gid == 0 {
 		return false
 	}
-	if target, ok := rt.characterMonster(division, attacker, gid); ok {
+	return rt.combatTargetExistsFor(division, attacker.ID, attacker.Name, domain.CharacterWorldInstance(attacker), gid)
+}
+
+/*
+================
+combatTargetExistsFor
+
+combatTargetExists on the attacker's door-read values (id, name and
+world instance), for the waiting cast's copy-free verdict (#2139):
+the same gates in the same order, judged without an attacker record
+in hand.
+================
+*/
+func (rt *Runtime) combatTargetExistsFor(division string, attackerID int64, attackerName string, attackerWorld uint32, gid uint32) bool {
+	if gid == 0 {
+		return false
+	}
+	if target, ok := rt.characterMonsterFor(division, attackerName, attackerWorld, gid); ok {
 		if target.CurrentHP == 0 || rt.Monsters == nil {
 			return false
 		}
@@ -114,19 +131,19 @@ func (rt *Runtime) combatTargetExists(division string, attacker *enterworld.Char
 		return ok
 	}
 	if player := rt.findCharacterByGid(division, gid); player != nil {
-		if player.ID == attacker.ID {
+		if player.ID == attackerID {
 			return false
 		}
 		return rt.characterAdmitted(division, player, func(live *enterworld.Character) bool {
 			return !live.DeletePending && enterworld.CharacterAlive(live) &&
-				domain.CharacterWorldInstance(live) == domain.CharacterWorldInstance(attacker)
+				domain.CharacterWorldInstance(live) == attackerWorld
 		})
 	}
 	owner := rt.characterByCosGID(division, gid)
 	var pet *enterworld.CharacterCOS
 	if !rt.characterAdmitted(division, owner, func(live *enterworld.Character) bool {
-		if live.ID == attacker.ID || live.DeletePending ||
-			domain.CharacterWorldInstance(live) != domain.CharacterWorldInstance(attacker) {
+		if live.ID == attackerID || live.DeletePending ||
+			domain.CharacterWorldInstance(live) != attackerWorld {
 			return false
 		}
 		pet = live.CompanionByGID(gid)

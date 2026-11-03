@@ -223,14 +223,22 @@ test("unsupported attachment scripts reject their own stage without hiding suppo
 	const entities = [ { gid: 7 } ],
 		body = { gid: 7, pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 } },
 		game = { casts: [], attachedEffects: [ { gid: 7, skill: 1, token: 1, phase: 0 } ] };
-	owner.system( 7, 2 );
+	const warnings = [], warn = console.warn;
+	console.warn = ( ...args ) => warnings.push( args.join( " " ) );
 	let rows = [];
-	for ( let i = 0; i < 4; i++ ) {
-		rows = owner.step( entities, game, i / 10, () => true, () => 1, [], undefined, [ body ] );
+	try {
+		owner.system( 7, 2 );
+		for ( let i = 0; i < 4; i++ ) {
+			rows = owner.step( entities, game, i / 10, () => true, () => 1, [], undefined, [ body ] );
+		}
+	} finally {
+		console.warn = warn;
 	}
 	assert.equal( rows.length, 1 );
 	assert.match( rows[0].model, /system_levelup/ );
-	assert.match( owner.error(), /attached:1.*SCT_UNKNOWN/ );
+	// The unsupported stage is rejected and logged; it is never an error (#2440).
+	assert.equal( owner.error(), null );
+	assert.ok( warnings.some( warning => /attached:1.*SCT_UNKNOWN/.test( warning ) ) );
 	owner.dispose();
 });
 

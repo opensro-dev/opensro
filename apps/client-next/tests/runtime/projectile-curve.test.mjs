@@ -176,5 +176,6 @@ test("HWAN survives cast finalization, reset releases it, and population overflo
 	assert.deepEqual( f.step( 3 ), [] );
 	const overflow = fixture( 129 );
 	assert.deepEqual( overflow.step( 1, [ overflow.trigger ] ), [] );
-	assert.match( overflow.effects.error(), /unsupported/i );
+	// A refused effect is skipped and logged, never an error (#2440).
+	assert.equal( overflow.effects.error(), null );
 });

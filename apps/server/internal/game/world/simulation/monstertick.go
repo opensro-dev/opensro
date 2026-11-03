@@ -379,6 +379,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	phaseStarted = time.Now()
 	queueStarted := time.Now()
 	batches := ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID)
+	// The batches die with this leg: their refs backings return to
+	// the scratch pool once every batch below is dispatched (#2030).
+	defer ops.Monsters.releaseBehaviorBatches(batches)
 	stats.queue = time.Since(queueStarted)
 	for _, batch := range batches {
 		divisionID := batch.key.division

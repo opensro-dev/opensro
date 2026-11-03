@@ -154,7 +154,11 @@ type Session struct {
 	// (the legacy HELLO-time verifier) or none is pending.
 	admissionCommit func() error
 	lastRecv        time.Time
-	readCancel      context.CancelFunc
+	// lastSent is when the writer last put a frame on the wire; the
+	// keepalive proves the wire off it when the session goes quiet
+	// outbound (#2148, keepalive.go).
+	lastSent   time.Time
+	readCancel context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
@@ -805,6 +809,9 @@ func (s *Session) writeLoop() {
 			s.detachGen(gen, err)
 			continue
 		}
+		s.mu.Lock()
+		s.lastSent = time.Now()
+		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
 			s.mu.Lock()
