@@ -26,6 +26,7 @@ package simulation
 
 import (
 	"sort"
+	"sync"
 
 	"opensro.online/server/internal/game/world/monster"
 )
@@ -446,11 +447,41 @@ type behaviorActorRef struct {
 /*
 ================
 behaviorBatch
+
+One population's due actors for one leg. actors rides a pooled
+scratch backing (behaviorRefScratch): the leg drops the batch when
+it finishes, and a fresh backing per leg per population was the
+wheel drain's largest steady allocation - the append growth from
+empty, every leg, for every due actor's ref (#2030). The scratch
+returns through MonsterState.releaseBehaviorBatches, which the leg
+(monstertick.go) calls once its batches are dispatched; callers
+that never release (tests, one-shot reads) simply lose the scratch
+to the collector and keep today's caller-owned batches.
 ================
 */
 type behaviorBatch struct {
-	key    populationKey
-	actors []behaviorActorRef
+	key     populationKey
+	actors  []behaviorActorRef
+	scratch *behaviorRefScratch
+}
+
+/*
+================
+behaviorRefScratch
+
+The pooled backing one batch's refs ride on. A ref is three words
+with no pointers, so the backing needs no clearing before reuse.
+================
+*/
+type behaviorRefScratch struct {
+	refs []behaviorActorRef
+}
+
+// behaviorRefScratchPool holds built refs backings, ready for the
+// next batch. A scratch is checked out by behaviorBatchesForDivision
+// and returned by releaseBehaviorBatches once its batch is dead.
+var behaviorRefScratchPool = sync.Pool{
+	New: func() any { return &behaviorRefScratch{} },
 }
 
 /*
@@ -606,8 +637,9 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 			continue
 		}
 		state := s.populationForLease(key.division, key.lease)
-		batch := behaviorBatch{key: key}
-		batch.actors = state.behavior.takeDue(now, batch.actors)
+		scratch := behaviorRefScratchPool.Get().(*behaviorRefScratch)
+		batch := behaviorBatch{key: key, scratch: scratch}
+		batch.actors = state.behavior.takeDue(now, scratch.refs[:0])
 		actors := batch.actors[:0]
 		for _, ref := range batch.actors {
 			gid := ref.gid
@@ -632,6 +664,30 @@ func (s *MonsterState) behaviorBatchesForDivision(now int64, division string) []
 		out = append(out, batch)
 	}
 	return out
+}
+
+/*
+================
+MonsterState.releaseBehaviorBatches
+
+Hands each batch's refs backing back to the scratch pool. The one
+production caller is the leg (monstertick.go), after every batch is
+dispatched: nothing the dispatch or its deferred commits plan from
+keeps a ref - the snapshot and the plans copy the values out - so
+the backings are dead there. A batch whose scratch was already
+returned, or never carried one, is skipped.
+================
+*/
+func (s *MonsterState) releaseBehaviorBatches(batches []behaviorBatch) {
+	for i := range batches {
+		scratch := batches[i].scratch
+		if scratch == nil {
+			continue
+		}
+		scratch.refs = batches[i].actors[:0]
+		batches[i].scratch = nil
+		behaviorRefScratchPool.Put(scratch)
+	}
 }
 
 /*

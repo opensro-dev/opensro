@@ -206,6 +206,43 @@ func TestBehaviorQueueDueSetMatchesLegacyHeap(t *testing.T) {
 
 /*
 ================
+TestBehaviorBatchBuildAllocations
+
+The batch build rides pooled refs backings: warmed, a build plus
+its release allocates a small fixed handful (the batch list, the
+population keys), not a fresh refs backing grown from empty for
+every due actor - the wheel drain's largest steady allocation
+before the pool (#2030; the leg profile charged
+behaviorQueue.filterDue's appends 50 MB of a 6,000-leg window, and
+the unpooled build measures 19 allocations here against the
+pooled 7). The window runs warm first; the pool is only empty once.
+================
+*/
+func TestBehaviorBatchBuildAllocations(t *testing.T) {
+	s, _ := queueBenchmarkState(1024)
+	tick := int64(0)
+	build := func() {
+		got := s.behaviorBatches(tick)
+		tick++
+		if len(got) != 1 || len(got[0].actors) != 1024 {
+			t.Fatalf("batch build lost actors: %d batches", len(got))
+		}
+		s.releaseBehaviorBatches(got)
+	}
+	build()
+	fewest := testing.AllocsPerRun(50, build)
+	for range 2 {
+		if got := testing.AllocsPerRun(50, build); got < fewest {
+			fewest = got
+		}
+	}
+	if fewest > 10 {
+		t.Fatalf("batch build allocates %.2f per run in steady state, want at most 10", fewest)
+	}
+}
+
+/*
+================
 TestBehaviorQueueUnchangedDeadlineStaysSingleCopy
 
 Re-scheduling a live row at the deadline it already holds is the
