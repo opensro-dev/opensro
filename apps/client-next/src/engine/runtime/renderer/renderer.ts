@@ -889,9 +889,11 @@ export function createRenderer(
 				// Slices keep the scene's terrain/transparent boundaries exact.
 				const softOn = experimental.softParticles,
 					weatherLive = preview ? [] : staleDraws.live( "weather", scene.weatherDraws ?? [] ),
-					// Port-only soft particles: the weather sprites leave the main pass
-					// and the split stage redraws them over the copied depth.
-					softDraws = weatherLive,
+					// Port-only soft particles: while the row is on, the weather
+					// sprites leave the main pass entirely and the split stage
+					// redraws them over the copied depth. Left in the pass, their
+					// fade sampled a copy nothing wrote and the weather vanished.
+					softDraws = softOn ? [] : weatherLive,
 					weatherDraws: GeometryDraw[] = [],
 					waterOn = experimental.waterRefraction,
 					waterDraws: GeometryDraw[] = [];
@@ -990,9 +992,13 @@ export function createRenderer(
 						water: refraction && waterDraws.length ?
 							{ draws: waterDraws, stage: refraction } :
 							undefined,
-						softParticles: refraction && weatherDraws.length ?
+						softParticles: refraction && (weatherDraws.length || softOn && weatherLive.length) ?
 							{
-								draws: weatherDraws,
+								// The split's sprites: scene draws the filter pulled out
+								// (a world group carrying the softDepth material) plus
+								// the weather owner's own list, which never passes the
+								// scene slices and rides here while the row is on.
+								draws: [ ...weatherDraws, ...(softOn ? weatherLive : []) ],
 								overlay: ( encoder, target, targetDepth, draws ) =>
 									// Without the water's own encode in the frame, the soft
 									// overlay copies the frame itself first.
