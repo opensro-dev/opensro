@@ -16,6 +16,13 @@ misattributed to the closure field.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { census } from "../../tools/ui-census.mjs";
+import { ts } from "../../tools/project.mjs";
+import {
+	ACTION_CENSUS_FILES,
+	actionCensusClosure,
+	actionCensusInputSet,
+	actionCensusKey
+} from "../../tools/ui-action-census-gate.mjs";
 
 const SOURCE = `
 export function createUi( assets, commands ) {
@@ -90,4 +97,95 @@ test("state: constants are not fields, and writes are told from reads", () => {
 	const stallPage = table.fields.find( field => field.name === "stallPage" );
 	assert.equal( stallPage.buckets.stall.writes, 1 );
 	assert.equal( stallPage.buckets.step.reads, 1 );
+});
+
+// ============================================================================
+// Action census gate: the key watches the census's inputs, nothing else
+// ============================================================================
+
+/*
+================
+actionFixtureModel
+
+A source model in memory: the census's roots over small synthetic files,
+plus one file nothing reaches. Fabricated with the compiler the model
+itself parses with, so the closure walk reads real import edges.
+================
+*/
+function actionFixtureModel() {
+	const file = text => ts.createSourceFile( "fixture.ts", text, ts.ScriptTarget.Latest, true );
+	return new Map( [
+		[
+			"src/engine/runtime/ui/ui.ts",
+			file(
+				'import { view } from "./stall-view";\nimport { panels } from "../../foundation/ui/panels";\n' +
+					'import leftPad from "left-pad";\nexport const ui = view + panels + leftPad;\n'
+			)
+		],
+		[
+			"src/engine/runtime/ui/stall-view.ts",
+			file(
+				'import { stall } from "../../foundation/gameplay/stall";\nexport const view = stall;\n'
+			)
+		],
+		[
+			"src/engine/foundation/ui/panels.ts",
+			file(
+				'import { fort } from "../gameplay/fortress";\nexport const panels = fort;\n'
+			)
+		],
+		[ "src/engine/foundation/gameplay/stall.ts", file( "export const stall = 1;\n" ) ],
+		[
+			"src/engine/foundation/gameplay/fortress.ts",
+			file(
+				'import { prod } from "./fortress-production";\nexport const fort = prod;\n'
+			)
+		],
+		[ "src/engine/foundation/gameplay/fortress-production.ts", file( "export const prod = 1;\n" ) ],
+		[ "src/engine/runtime/world/world.ts", file( "export const world = 1;\n" ) ]
+	] );
+}
+
+test("action gate closure: every transitively imported file, and no other", () => {
+	const closure = actionCensusClosure( actionFixtureModel() );
+	assert.deepEqual( [ ...closure ].sort(), [
+		"src/engine/foundation/gameplay/fortress-production.ts",
+		"src/engine/foundation/gameplay/fortress.ts",
+		"src/engine/foundation/gameplay/stall.ts",
+		"src/engine/foundation/ui/panels.ts",
+		"src/engine/runtime/ui/stall-view.ts",
+		"src/engine/runtime/ui/ui.ts"
+	] );
+});
+
+test("action gate closure: a missing root fails loudly instead of unwatched", () => {
+	const model = actionFixtureModel();
+	model.delete( "src/engine/foundation/ui/panels.ts" );
+	assert.throws( () => actionCensusClosure( model ), /foundation\/ui\/panels\.ts is not in the source model/ );
+});
+
+test("action gate key: moves with a watched input, stands for an unrelated one", () => {
+	const closure = actionCensusClosure( actionFixtureModel() );
+	const inputSet = actionCensusInputSet( closure );
+	// The committed census and the tool are watched alongside the closure.
+	assert.equal( inputSet.has( "apps/client-next/tests/runtime/ui-action-census.json" ), true );
+	assert.equal( ACTION_CENSUS_FILES.includes( "apps/client-next/tools/ui-action-census.mjs" ), true );
+	assert.equal( inputSet.has( "apps/client-next/src/engine/runtime/world/world.ts" ), false );
+	const entries = [
+		[ "apps/client-next/src/engine/runtime/ui/ui.ts", "blob-ui" ],
+		[ "apps/client-next/src/engine/runtime/world/world.ts", "blob-world" ]
+	];
+	const key = actionCensusKey( entries, inputSet );
+	// An unrelated file's new state cannot move the key...
+	const unrelated = actionCensusKey(
+		entries.map( ( [file, state] ) => [ file, file.endsWith( "world.ts" ) ? "blob-world-2" : state ] ),
+		inputSet
+	);
+	assert.equal( unrelated, key );
+	// ...and a watched file's new state must.
+	const watched = actionCensusKey(
+		entries.map( ( [file, state] ) => [ file, file.endsWith( "ui.ts" ) ? "blob-ui-2" : state ] ),
+		inputSet
+	);
+	assert.notEqual( watched, key );
 });
