@@ -174,6 +174,12 @@ type Deps struct {
 	// zero on the client: CIFMagicStateBoard_OnUpdate (6E6AA0) does not retire
 	// a kind-3 pet-skill window solely because its timer reached zero.
 	TrackTimedWindows func(divisionID, characterName string)
+	// TrackMostWanted hands a character holding a Most Wanted streak to
+	// the action runtime's tick sweep (port-only, #1849), which sends
+	// the entry wanted state and enforces the level's seven-day lapse.
+	// Without it a relogged holder's buff-board row would never appear
+	// and a lapsed level would outlive its seven days.
+	TrackMostWanted func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
 	ExtraMagicOptionIDs func() []uint32
@@ -780,6 +786,7 @@ func (d *Deps) Validate() error {
 	require("ExtraRefItemCodenames", d.ExtraRefItemCodenames == nil)
 	require("StaticRefItemCodenames", d.StaticRefItemCodenames == nil)
 	require("TrackTimedWindows", d.TrackTimedWindows == nil)
+	require("TrackMostWanted", d.TrackMostWanted == nil)
 	require("SpawnTerrainHeight", d.SpawnTerrainHeight == nil)
 	require("SpawnSurfaceHeight", d.SpawnSurfaceHeight == nil)
 	require("RelocateStrandedSpawn", d.RelocateStrandedSpawn == nil)

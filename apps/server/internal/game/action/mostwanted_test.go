@@ -28,7 +28,7 @@ TestMostWantedLevelAndBonuses
 func TestMostWantedLevelAndBonuses(t *testing.T) {
 	rt, _ := newTestRuntime(testCharacter(), testItems())
 	c := testCharacter()
-	for streak, want := range map[int64]int64{0: 0, 9: 0, 10: 1, 29: 2, 100: 10, 250: 10} {
+	for streak, want := range map[int64]int64{0: 0, 4: 0, 5: 1, 9: 1, 14: 2, 50: 10, 250: 10} {
 		c.MostWanted = &domain.MostWanted{Streak: streak}
 		if got := mostWantedLevel(c); got != want {
 			t.Fatalf("streak %d: level %d, want %d", streak, got, want)
@@ -39,7 +39,7 @@ func TestMostWantedLevelAndBonuses(t *testing.T) {
 			t.Fatalf("level %d: %v%%, want %v%%", level, got, want)
 		}
 	}
-	c.MostWanted = &domain.MostWanted{Streak: 50}
+	c.MostWanted = &domain.MostWanted{Streak: 25}
 	dressThief(c)
 	if rt.mostWantedWrites(c) != nil || rt.mostWantedSpeedFactor(c) != 1 {
 		t.Fatal("flag off applied a bonus")
@@ -69,7 +69,7 @@ The streak's writes reach the stat block the client is sent.
 */
 func TestMostWantedRaisesTheProjectedStrength(t *testing.T) {
 	rt, _, actor, _ := newCombatTestRuntime(t, 100)
-	actor.MostWanted = &domain.MostWanted{Streak: 30}
+	actor.MostWanted = &domain.MostWanted{Streak: 15}
 	dressForJob(rt, actor, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
 	native, err := rt.PlayerBaseStats(testDivision, actor)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestMostWantedEligibility(t *testing.T) {
 TestMostWantedKillCountsAndPaysTheBounty
 
 Through payPlayerKillInDoor: a counted job kill raises the killer's streak
-(level 1 at 10, with a stat refresh), and killing a level-2 wanted player
+(level 1 at 5, with a stat refresh), and killing a level-2 wanted player
 pays 200,000,000 gold. Off, neither happens.
 ================
 */
@@ -158,8 +158,8 @@ func TestMostWantedKillCountsAndPaysTheBounty(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		rt, _, killer, victim := newPvpPair(t)
 		rt.MostWanted = on
-		killer.MostWanted = &domain.MostWanted{Streak: 9}
-		victim.MostWanted = &domain.MostWanted{Streak: 25}
+		killer.MostWanted = &domain.MostWanted{Streak: 4}
+		victim.MostWanted = &domain.MostWanted{Streak: 10}
 		gold := goldOf(killer)
 		kill := playerKill{kind: pk.DeathJob, mostWantedStrangers: true}.withVictim(killer, victim)
 		actor, _, _ := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
@@ -168,12 +168,12 @@ func TestMostWantedKillCountsAndPaysTheBounty(t *testing.T) {
 			stats = stats || f.Opcode == wire.OpBaseStats
 		}
 		if !on {
-			if killer.MostWanted.Streak != 9 || goldOf(killer) != gold || stats {
+			if killer.MostWanted.Streak != 4 || goldOf(killer) != gold || stats {
 				t.Fatalf("off: streak %d gold %d stats %v", killer.MostWanted.Streak, goldOf(killer)-gold, stats)
 			}
 			continue
 		}
-		if killer.MostWanted.Streak != 10 || mostWantedLevel(killer) != 1 || !stats {
+		if killer.MostWanted.Streak != 5 || mostWantedLevel(killer) != 1 || !stats {
 			t.Fatalf("on: streak %d stats %v", killer.MostWanted.Streak, stats)
 		}
 		if goldOf(killer)-gold != 2*mostWantedBountyPerLevel {
@@ -247,7 +247,7 @@ func TestMostWantedBountyIsTakenFromTheVictim(t *testing.T) {
 		rt, _, killer, victim := newPvpPair(t)
 		rt.MostWanted, rt.MostWantedBountyTransfer = true, true
 		killer.Gold, victim.Gold = testInt64(tc.killerGold), testInt64(tc.victim)
-		victim.MostWanted = &domain.MostWanted{Streak: 25}
+		victim.MostWanted = &domain.MostWanted{Streak: 10}
 		kill := playerKill{kind: pk.DeathPlayer, mostWantedStrangers: true}.withVictim(killer, victim)
 		_, _, after := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
 		if *killer.Gold != tc.killerGold || *victim.Gold != tc.victim || len(after.bounties) != 1 {
@@ -274,7 +274,7 @@ with it off.
 func TestMostWantedBountyTransferNeedsAStranger(t *testing.T) {
 	rt, _, killer, victim := newPvpPair(t)
 	rt.MostWanted, rt.MostWantedBountyTransfer = true, true
-	victim.MostWanted = &domain.MostWanted{Streak: 25}
+	victim.MostWanted = &domain.MostWanted{Streak: 10}
 	kill := playerKill{kind: pk.DeathPlayer}.withVictim(killer, victim)
 	if _, _, after := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0); len(after.bounties) != 0 {
 		t.Fatalf("a related kill owed %+v", after.bounties)
@@ -294,7 +294,7 @@ func TestKillingAWantedPlayerPaysTheBountyFromTheirGold(t *testing.T) {
 	rt.MostWanted, rt.MostWantedBountyTransfer = true, true
 	killer.AccountID, victim.AccountID = "a", "b"
 	killer.Gold, victim.Gold = testInt64(1_000), testInt64(300_000_000)
-	victim.MostWanted = &domain.MostWanted{Streak: 25}
+	victim.MostWanted = &domain.MostWanted{Streak: 10}
 	victim.CurrentHP = testInt64(1)
 	rt.HandleTargetInteract(testDivision, killer, wire.BasicAttackEngage{TargetGid: enterworld.ObjectIDForCharacter(victim)}.Encode())
 	if enterworld.CharacterAlive(victim) {

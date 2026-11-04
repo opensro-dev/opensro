@@ -397,7 +397,7 @@ variable "most_wanted_test" {
 }
 
 # most_wanted_test_kills and most_wanted_test_bounty are the test pacing's
-# kills per wanted level (1, 2, 5 or 10) and gold per level (0..100000000);
+# kills per wanted level (1 or 5; the server refuses anything else) and gold per level (0..100000000);
 # they act only with most_wanted_test on (port-only, game/tunables).
 variable "most_wanted_test_kills" {
   type    = string

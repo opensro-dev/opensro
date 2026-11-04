@@ -33,14 +33,13 @@ func TestMostWantedStreakText(t *testing.T) {
 		streak, step int64
 		want         string
 	}{
-		{1, 1, "Most Wanted: 1/10 to LV 1"},
-		{9, 1, "Most Wanted: 9/10 to LV 1"},
-		{10, 1, "Most Wanted: 0/10 to LV 2"},
-		{37, 1, "Most Wanted: 7/10 to LV 4"},
-		{6, 2, "Most Wanted: 3/5 to LV 1"},
-		{99, 1, "Most Wanted: 9/10 to LV 10"},
-		{100, 1, "Most Wanted: LV 10 (max)"},
-		{140, 2, "Most Wanted: LV 10 (max)"},
+		{1, 1, "Most Wanted: 1/5 to LV 1"},
+		{4, 1, "Most Wanted: 4/5 to LV 1"},
+		{5, 1, "Most Wanted: 0/5 to LV 2"},
+		{37, 1, "Most Wanted: 2/5 to LV 8"},
+		{49, 1, "Most Wanted: 4/5 to LV 10"},
+		{50, 1, "Most Wanted: LV 10 (max)"},
+		{140, 5, "Most Wanted: LV 10 (max)"},
 	} {
 		if got := mostWantedStreakText(tc.streak, tc.step); got != tc.want {
 			t.Fatalf("streak %d step %d: %q, want %q", tc.streak, tc.step, got, tc.want)
@@ -67,7 +66,7 @@ func TestMostWantedStreakNoticeFollowsTheFlag(t *testing.T) {
 		if killer.MostWanted.Streak != 4 {
 			t.Fatalf("on=%v: streak %d, want 4", on, killer.MostWanted.Streak)
 		}
-		want := wire.JobKillNotificationFrame("Most Wanted: 4/10 to LV 1")
+		want := wire.JobKillNotificationFrame("Most Wanted: 4/5 to LV 1")
 		if got := countFrame(actor, want); got != map[bool]int{false: 0, true: 1}[on] {
 			t.Fatalf("on=%v: %d progress notices in %+v", on, got, actor)
 		}

@@ -59,6 +59,7 @@ const preStoredPetCastsVersion = 30
 const preBreakNoticeVersion = 31
 const preRenameVersion = 32
 const preHalloweenVersion = 33
+const preMostWantedExpiryVersion = 34
 const preNameReservationLayoutVersion = 10
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
@@ -210,6 +211,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	case preHalloweenVersion:
 		// Schema 33 ran at layout 11 and has no Halloween box count; its
 		// records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preMostWantedExpiryVersion:
+		// Schema 34 ran at layout 11 and has no wanted-level lapse; its
+		// streaks read unchanged and lapse at their next level.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

@@ -49,7 +49,7 @@ func TestMostWantedCOSKillCountsForTheKiller(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		rt, _, killer, owner := newPvpPair(t)
 		rt.MostWanted, rt.MostWantedCOSKills = true, on
-		owner.MostWanted = &domain.MostWanted{Streak: 25}
+		owner.MostWanted = &domain.MostWanted{Streak: 10}
 		gold := goldOf(killer)
 		kill := playerKill{kind: pk.DeathJob, mostWantedStrangers: true}.withVictim(killer, owner)
 		_, _, after, _ := rt.payCOSKillInDoor(testDivision, killer, owner, kill, 5, 0)

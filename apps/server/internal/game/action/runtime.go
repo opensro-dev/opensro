@@ -475,6 +475,9 @@ type Runtime struct {
 	// pacing (MostWantedTestStreakStepFromEnv); set with MostWantedTest.
 	MostWantedTestStreakStep int64
 	mostWantedPairs          mostWantedPairs
+	// mostWantedHolders tracks the live streak holders the tick sweep
+	// owes an entry state frame or a lapse (mostwantedstate.go).
+	mostWantedHolders mostWantedHolderIndex
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool

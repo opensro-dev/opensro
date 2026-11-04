@@ -46,11 +46,11 @@ const KILLS = {
 	env: "SRO_MOST_WANTED_TEST_KILLS",
 	label: "Test pacing: kills per level",
 	unit: "count",
-	value: 2,
+	value: 1,
 	default: 5,
 	min: 1,
-	max: 10,
-	allowed: [ 1, 2, 5, 10 ],
+	max: 5,
+	allowed: [ 1, 5 ],
 	class: "restart"
 };
 const RIDE = {
@@ -83,7 +83,7 @@ const REPEAT = {
 test("values read in their unit", () => {
 	assert.equal( groupedNumber( 100000000 ), "100,000,000" );
 	assert.equal( currentValue( BOUNTY ), "1,000,000 gold" );
-	assert.equal( currentValue( KILLS ), "2" );
+	assert.equal( currentValue( KILLS ), "1" );
 	assert.equal( currentValue( REPEAT ), "1 minute" );
 	assert.equal( currentValue( { ...REPEAT, value: 10 } ), "10 minutes" );
 	assert.equal( currentValue( { ...BOUNTY, unit: "ms", value: 10000 } ), "10,000 ms" );
@@ -93,7 +93,7 @@ test("values read in their unit", () => {
 });
 
 test("bounds name the exact list, the range, or the factor's off", () => {
-	assert.equal( boundsText( KILLS ), "one of 1, 2, 5, 10" );
+	assert.equal( boundsText( KILLS ), "one of 1, 5" );
 	assert.equal( boundsText( BOUNTY ), "0 gold – 100,000,000 gold" );
 	assert.equal( boundsText( RIDE ), "off, or ×1.00 – ×3.00" );
 });

@@ -314,6 +314,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
@@ -542,6 +543,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
+		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1501,6 +1503,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		uniqueRank.clear();
+		mostWanted.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		levelCap = NATIVE_LEVEL_CAP;
@@ -3859,6 +3862,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( mostWanted.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -5714,6 +5721,7 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				uniqueDamageRank: uniqueRank.current(),
+				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),

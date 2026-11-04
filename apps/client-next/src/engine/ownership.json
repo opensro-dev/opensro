@@ -12,6 +12,7 @@
     "src/engine/runtime/ui/hud/withdrawal.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/beta-map/beta-map.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/unique-rank/unique-rank.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/most-wanted/most-wanted.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/warm/window-warm.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/presentation/effective-hp.ts": "src/engine/runtime/presentation/presentation.ts",
