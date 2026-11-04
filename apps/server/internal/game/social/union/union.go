@@ -38,6 +38,18 @@ var ErrFull = errors.New("union: every slot is taken")
 // ErrMember is a join of a guild already in a union.
 var ErrMember = errors.New("union: guild already in a union")
 
+// CrestRefusal is the closed reason a crest clear made no change (the
+// domain.GuildRefusal posture): the caller still needs to tell a guild
+// standing in no union from one that merely holds no crest.
+type CrestRefusal uint8
+
+const (
+	CrestRefusalNone CrestRefusal = iota
+	CrestRefusalNoUnion
+	CrestRefusalNotMasterGuild
+	CrestRefusalNoCrest
+)
+
 /*
 ================
 Authority
@@ -265,32 +277,36 @@ func (a *Authority) Remove(divisionID string, guildID int64) (before domain.Alli
 ClearCrest
 
 Erases the crest of the union the guild stands in (#2282), saving
-before it returns. cleared=false when the guild stands in no union or
-the union carries no crest; the record is returned as it stands after
-the call either way.
+before it returns. Only the union's master guild (the leading slot)
+may erase it, and only while a crest stands; the refusal names which
+gate held. The record is returned as it stands after the call either
+way.
 ================
 */
-func (a *Authority) ClearCrest(divisionID string, guildID int64) (record domain.AllianceRecord, cleared bool, err error) {
+func (a *Authority) ClearCrest(divisionID string, guildID int64) (record domain.AllianceRecord, refusal CrestRefusal, err error) {
 	if a == nil || guildID == 0 {
-		return domain.AllianceRecord{}, false, nil
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	state := a.divisionLocked(divisionID)
 	id, ok := state.byGuild[guildID]
 	if !ok {
-		return domain.AllianceRecord{}, false, nil
+		return domain.AllianceRecord{}, CrestRefusalNoUnion, nil
 	}
 	record = state.unions[id]
+	if record.Guilds[0] != guildID {
+		return record, CrestRefusalNotMasterGuild, nil
+	}
 	if record.Crest == 0 {
-		return record, false, nil
+		return record, CrestRefusalNoCrest, nil
 	}
 	record.Crest = 0
 	if err := a.saveLocked(divisionID, record, true); err != nil {
-		return record, false, err
+		return record, CrestRefusalNone, err
 	}
 	state.unions[id] = record
-	return record, true, nil
+	return record, CrestRefusalNone, nil
 }
 
 /*
