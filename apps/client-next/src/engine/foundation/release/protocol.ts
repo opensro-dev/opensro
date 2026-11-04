@@ -19,7 +19,9 @@ checks) reads the same numbers the client ships.
 */
 
 // Protocol 12 shows the port-only 0x3FBA most-wanted state on the buff
-// board (most-wanted.ts), which 11 ignored. Protocol 11 reads the 0xB738
+// board (most-wanted.ts); the frame is never offered to an 11 browser,
+// whose release the server refuses with 426 at connect, so no client
+// ignore path exists for it. Protocol 11 reads the 0xB738
 // movement acknowledgement's source block as f32 x/y/z (#1744), which 10
 // read as i16 x10 words that fail its length check and drop every walk.
 // Protocol 10 shows the port-only 0x3667 notice channels 0x80 (job kills)
