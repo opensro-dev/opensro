@@ -534,6 +534,7 @@ func (rt *Runtime) runReturnArrival(job pendingReturn) {
 	}()
 	started := time.Now()
 	release := rt.LockPublication(job.division, "returnArrival")
+	defer release()
 	frames, peers := rt.completeReturnScrollInDivision(job, rt.Now().UnixMilli())
 	if len(frames) > 0 && rt.PushCharacterFrames != nil {
 		rt.PushCharacterFrames(job.division, job.name, frames)
@@ -541,7 +542,6 @@ func (rt *Runtime) runReturnArrival(job pendingReturn) {
 	if len(peers) > 0 && rt.PushDivisionPeerFrames != nil {
 		rt.PushDivisionPeerFrames(job.division, job.name, peers)
 	}
-	release()
 	if elapsed := time.Since(started); elapsed >= simulation.SlowHookThreshold && rt.Steps.Slow != nil {
 		rt.Steps.Slow("returnScrollArrival", elapsed)
 	}

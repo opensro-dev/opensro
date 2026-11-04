@@ -603,3 +603,36 @@ func TestReturnArrivalLaneWaitsOutAHeldDivisionLane(t *testing.T) {
 		t.Fatal("the deferred cast did not complete once the lane freed")
 	}
 }
+
+/*
+================
+TestReturnArrivalPanicReleasesPublicationGate
+
+A panic while an arrival holds its division's publication gate (here
+the frame push panics after the completion has produced frames) is
+recovered by the lane, and the gate must be free afterwards: taking
+the same division's gate must return, not park behind the dead
+arrival (#2143).
+================
+*/
+func TestReturnArrivalPanicReleasesPublicationGate(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 1000)
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {
+		panic("return arrival push panic")
+	}
+	useReturn(rt, c)
+	clock.Advance(2 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	rt.processReturnArrivals()
+
+	acquired := make(chan func(), 1)
+	go func() {
+		acquired <- rt.LockPublication(testDivision, "afterPanic")
+	}()
+	select {
+	case release := <-acquired:
+		release()
+	case <-time.After(10 * time.Second):
+		t.Fatal("a panicking arrival left the publication gate held")
+	}
+}
