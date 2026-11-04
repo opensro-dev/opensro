@@ -195,11 +195,6 @@ export function createAnimationEmission( allocate: () => number ) {
 							loaded = ready( model );
 						const instance = owner.instances.get( particle );
 						if ( !instance || !loaded || out.length >= capacity ) continue;
-						// The frame clock can step back when RAF and maintenance
-						// frames interleave: adopt the sampling clock as the
-						// start, as model emission does, so a published clock
-						// never runs negative (#2561).
-						if ( seconds < instance.started ) instance.started = seconds;
 						out.push( {
 							...instance.actor,
 							attachment: instance.actor.attachment ?
@@ -227,7 +222,6 @@ export function createAnimationEmission( allocate: () => number ) {
 					continue;
 				}
 				if ( out.length < capacity && ready( tail.actor.model ) ) {
-					if ( seconds < tail.started ) tail.started = seconds;
 					out.push( { ...tail.actor, time: seconds - tail.started } );
 				}
 			}

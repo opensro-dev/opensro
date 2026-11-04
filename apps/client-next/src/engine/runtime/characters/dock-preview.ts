@@ -207,8 +207,6 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 								if ( duration <= 0 ) {
 									throw Error( "Missing native deletion transition " + state.transition );
 								}
-								// A rewound frame clock adopts as the new start (#2561).
-								if ( seconds < state.started ) state.started = seconds;
 								if ( seconds - state.started < duration ) {
 									clip = state.transition;
 									time = seconds - state.started;
@@ -283,8 +281,7 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 				if ( lizard && !preview ) {
 					const path = "/assets/character-select/interface_lizard.glb";
 					if ( resources.ready( path ) ) {
-						// A rewound frame clock re-stamps the start (#2561).
-						if ( lizardStarted === null || seconds < lizardStarted ) lizardStarted = seconds;
+						if ( lizardStarted === null ) lizardStarted = seconds;
 						const elapsed = seconds - lizardStarted, duration = resources.duration( path, "move" );
 						// 73a207: PlayAnimation(1,0,200,0,1,1); the animation set
 						// has no enter fade and a 200 ms EXIT fade. Root motion stays in the skeleton.
