@@ -4131,6 +4131,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					dirty = true;
 				}
+				if ( frame.opcode === 0x30c0 ) {
+					// 768530: the Magic Pang win banner. It reads {u32 prize
+					// reference, u16 quantity}, names the prize through the
+					// catalogue and banners UIIT_MSG_GACHA_ANNOUNCE (67D030)
+					// for every client that receives the frame - the %s is the
+					// prize's name, never a player's.
+					if ( frame.payload.length !== 6 ) throw Error( "Invalid gacha announcement" );
+					const reader = new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 );
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_GACHA_ANNOUNCE",
+						value: reader.getUint16( 4, true ),
+						arguments: [ inventory.reference( reader.getUint32( 0, true ) ).name ?? "" ],
+						formatKinds: [ "s", "d" ],
+						notificationBanner: true,
+						bannerOnly: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return false;
+				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
 					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??

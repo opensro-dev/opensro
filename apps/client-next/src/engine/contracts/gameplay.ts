@@ -504,6 +504,10 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	// The reference row's authored itemdata fields (the same record
+	// the tooltip reference carries), so activation rules can read
+	// them - the mall-use gate reads canUse (token 24).
+	readonly nativeFields?: Readonly<Record<string, number>>;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;

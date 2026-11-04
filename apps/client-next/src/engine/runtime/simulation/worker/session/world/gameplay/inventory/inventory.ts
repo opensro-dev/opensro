@@ -251,6 +251,7 @@ present
 			name: names.get( item.refObjId ) ?? item.name,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
+			nativeFields: tooltip?.fields,
 			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass )
 		};
 		presentations.set( item, result );
@@ -750,6 +751,7 @@ bootstrap
 				refItemSnapshot?: {
 					icon?: string;
 					name?: string;
+					codename?: string;
 					nativeFields?: { useCooldownDuration528?: number; };
 					descriptionSymbol?: string;
 					refObjId: number;
