@@ -486,6 +486,9 @@ type Runtime struct {
 	// Most Wanted like a player kill (mostwanted.go; port-only, not
 	// native). False is native.
 	MostWantedCOSKills bool
+	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
+	// job level (jobsuitbuff.go; port-only, not native). False is native.
+	JobSuitTiers bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
