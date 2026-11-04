@@ -79,9 +79,10 @@ groundDivisionDrops, groundDropCache
 One division's drops as of one registry revision: the deep copy and, per
 population, its placement. The registry deep-copies on every read, so the
 per-tick pass paid that copy per population per tick (#1943); the cache
-pays it once per revision. Revision is one counter across divisions, so
-an entry is rebuilt whenever the counter has moved, even by another
-division's edit - correct, at worst an extra copy on a changed tick.
+pays it once per revision. The stamp is the division's own counter
+(Registry.DivisionRevision), so an entry is rebuilt only when its own
+division's drops moved - under the one global counter, a changed tick
+anywhere rebuilt every division's copy (#2030).
 
 The stamp is read BEFORE the copy: a mutation racing the copy raises the
 revision past the stamp, so the next pass rebuilds. The stamp is never
@@ -135,7 +136,7 @@ it and never mutate it.
 ================
 */
 func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops {
-	revision := rt.Ground.Revision()
+	revision := rt.Ground.DivisionRevision(division)
 	rt.groundDrops.mu.Lock()
 	defer rt.groundDrops.mu.Unlock()
 	return rt.groundDivisionLocked(division, revision)
@@ -190,7 +191,7 @@ population.
 ================
 */
 func (rt *Runtime) groundDropBuckets(division string, population grounditem.Population) map[worldgeom.InterestBlock][]placedDrop {
-	revision := rt.Ground.Revision()
+	revision := rt.Ground.DivisionRevision(division)
 	rt.groundDrops.mu.Lock()
 	defer rt.groundDrops.mu.Unlock()
 	entry := rt.groundDivisionLocked(division, revision)

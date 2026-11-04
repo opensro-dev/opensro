@@ -133,6 +133,10 @@ type MonsterState struct {
 	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
 	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
 	tombChain *TombChain
+	// legViews holds dispatched leg-start snapshot views for the next
+	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
+	legViewMu sync.Mutex
+	legViews  []*legSnapshot
 }
 
 /*
