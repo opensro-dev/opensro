@@ -34,6 +34,7 @@ const LOCK_SOURCES = [
 ];
 const NODE_DRIVER = `
 const { withGeneratedAssetsLock } = await import('./scripts/rebuildLock.mjs');
+console.log('TRYING');
 await withGeneratedAssetsLock('test reader or publisher', async () => {
   console.log('ENTERED PID=' + process.pid);
   if (process.env.HOLD === '1') {
@@ -42,10 +43,53 @@ await withGeneratedAssetsLock('test reader or publisher', async () => {
   if (process.env.FAIL === '1') throw new Error('intentional callback failure');
 }, { mode: process.env.MODE || 'write' });
 `;
+// The mutex-race regression child: a loader hook wraps node:fs/promises
+// so the first mutex claim's mkdir removes the lock dir underneath
+// itself - the empty-state release landing between the ensure and the
+// claim, injected deterministically instead of raced. The hook file
+// only forwards to the wrapper source beside it.
+const MUTEX_RACE_HOOK_SOURCE = `import { readFileSync } from "node:fs";
+const WRAPPER_SOURCE = readFileSync( new URL( "./mutexRaceFsWrapper.mjs", import.meta.url ), "utf8" );
+export async function load( url, context, nextLoad ) {
+	if ( url !== "node:fs/promises" ) return nextLoad( url, context );
+	return { format: "module", shortCircuit: true, source: WRAPPER_SOURCE };
+}
+`;
+const MUTEX_RACE_FS_WRAPPER_SOURCE = `import { promises as realFs } from "node:fs";
+import path from "node:path";
+let injected = false;
+export async function mkdir( target, options ) {
+	const text = String( target );
+	if ( !injected && text.endsWith( "mutex" ) ) {
+		injected = true;
+		console.error( "INJECTED lock dir removal before the mutex claim" );
+		await realFs.rm( path.dirname( text ), { recursive: true, force: true } );
+	}
+	return realFs.mkdir( target, options );
+}
+export const readFile = realFs.readFile;
+export const readdir = realFs.readdir;
+export const realpath = realFs.realpath;
+export const rename = realFs.rename;
+export const rm = realFs.rm;
+export const stat = realFs.stat;
+export const writeFile = realFs.writeFile;
+`;
+const MUTEX_RACE_DRIVER = `
+import { register } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+register( pathToFileURL( path.join( process.cwd(), "scripts", "mutexRaceHook.mjs" ) ) );
+const { withGeneratedAssetsLock } = await import('./scripts/rebuildLock.mjs');
+await withGeneratedAssetsLock('mutex race regression', async () => {
+  console.log('ENTERED');
+}, { mode: 'write' });
+`;
 const PYTHON_DRIVER = `
 import os, sys
 sys.path.insert(0, 'scripts')
 from rebuild_lock import generated_assets_lock
+print('TRYING', flush=True)
 with generated_assets_lock('test reader or publisher', mode=os.environ.get('MODE', 'write')):
     print('ENTERED PID=%d' % os.getpid(), flush=True)
     if os.environ.get('HOLD') == '1':
@@ -102,7 +146,7 @@ function start( f, options ) {
 	const env = { ...process.env };
 	for ( const key of LOCK_ENV ) delete env[key];
 	Object.assign( env, {
-		SRO_REBUILD_LOCK_TIMEOUT_MS: "500",
+		SRO_REBUILD_LOCK_TIMEOUT_MS: "30000",
 		SRO_REBUILD_LOCK_POLL_MS: "250",
 		SRO_REBUILD_LOCK_STALE_MS: "60000",
 		...options.env
@@ -110,7 +154,7 @@ function start( f, options ) {
 	const python = options.language === "python";
 	const child = spawn(
 		python ? (process.platform === "win32" ? "py" : "python3") : process.execPath,
-		python ? [ "-B", "-c", PYTHON_DRIVER ] : [ "--input-type=module", "-e", NODE_DRIVER ],
+		python ? [ "-B", "-c", PYTHON_DRIVER ] : [ "--input-type=module", "-e", options.driver || NODE_DRIVER ],
 		{ cwd: options.cwd, env, windowsHide: true, stdio: [ "pipe", "pipe", "pipe" ] }
 	);
 	child.output = "";
@@ -130,12 +174,77 @@ entered
 ================
 */
 async function entered( child ) {
-	const deadline = Date.now() + 10000;
+	const deadline = Date.now() + 120000;
 	while ( !child.output.includes( "ENTERED" ) ) {
 		assert.equal( child.exitCode, null, child.output );
 		assert.ok( Date.now() < deadline, child.output );
 		await new Promise( ( resolve ) => setTimeout( resolve, 20 ) );
 	}
+}
+
+/*
+================
+trying
+
+The child reached its acquire loop (both drivers print TRYING first),
+the signal blockedChild's refusal window starts from.
+================
+*/
+async function trying( child ) {
+	const deadline = Date.now() + 120000;
+	while ( !child.output.includes( "TRYING" ) ) {
+		assert.equal( child.exitCode, null, child.output );
+		assert.ok( Date.now() < deadline, child.output );
+		await new Promise( ( resolve ) => setTimeout( resolve, 20 ) );
+	}
+}
+
+/*
+================
+blockedChild
+
+A contender whose refusal is proven from lock state, the way queued()
+proves it in the Python modes test: its own lock timeout (600 s) is a
+wedged-child bound the pass path never approaches, never the verdict's
+clock. A writer is proven by its waiting marker on disk; anything that
+publishes nothing (a reader, or a contender stuck before it can
+inspect) is proven by TRYING seen, still alive, and no ENTERED across
+a refusal window a correct lock cannot cross however loaded the
+machine is. Returns the live child; the caller kills it, or releases
+its holder and admits it.
+
+Its stale threshold is an hour, not the suite default's 60 s: a
+blocked contender must never reap a holder whose heartbeat merely
+starved on a loaded machine (the suite default would let it enter,
+indistinguishable from a queueing bug). Reaping keeps its own tests,
+with planted records and pid deaths. options.windowMs shortens the
+refusal window where the lock's own grace is shorter than 5 s.
+================
+*/
+async function blockedChild( f, options ) {
+	const child = start( f, {
+		...options,
+		env: {
+			...options.env,
+			HOLD: "1",
+			SRO_REBUILD_LOCK_TIMEOUT_MS: "600000",
+			SRO_REBUILD_LOCK_STALE_MS: "3600000"
+		}
+	} );
+	await trying( child );
+	if ( (options.env?.MODE || "write") === "write" && options.marker !== false ) {
+		await waitingForWriter( f );
+	} else {
+		const end = Date.now() + (options.windowMs ?? 5000);
+		while ( Date.now() < end ) {
+			assert.equal( child.exitCode, null, child.output );
+			assert.ok( !child.output.includes( "ENTERED" ), child.output );
+			await new Promise( ( resolve ) => setTimeout( resolve, 20 ) );
+		}
+	}
+	assert.equal( child.exitCode, null, child.output );
+	assert.ok( !child.output.includes( "ENTERED" ), child.output );
+	return child;
 }
 
 for ( const holderLanguage of [ "node", "python" ] ) {
@@ -145,9 +254,9 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 			const holder = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1" } } );
 			await entered( holder );
 			const shared = { SRO_GENERATED_ROOT: path.join( f.owner, ".generated" ) };
-			const reader = start( f, { cwd: f.redirected, language: readerLanguage, env: shared } );
-			assert.notEqual( await reader.finished, 0, reader.output );
-			assert.match( reader.output, /timed out waiting/ );
+			const reader = await blockedChild( f, { cwd: f.redirected, language: readerLanguage, env: shared } );
+			reader.kill();
+			await reader.finished;
 			holder.stdin.end( "\n" );
 			assert.equal( await holder.finished, 0, holder.output );
 			const nextReader = start( f, { cwd: f.redirected, language: readerLanguage, env: shared } );
@@ -159,10 +268,9 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 			const f = await fixture( t );
 			const holder = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1" } } );
 			await entered( holder );
-			const reader = start( f, { cwd: f.alias, language: readerLanguage } );
-			assert.notEqual( await reader.finished, 0, reader.output );
-			assert.match( reader.output, /timed out waiting/ );
-			assert.doesNotMatch( reader.output, /ENTERED/ );
+			const reader = await blockedChild( f, { cwd: f.alias, language: readerLanguage } );
+			reader.kill();
+			await reader.finished;
 			assert.equal( holder.exitCode, null );
 			holder.stdin.end( "\n" );
 			assert.equal( await holder.finished, 0, holder.output );
@@ -177,10 +285,17 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 		// The transition mutex is the claim whose owner record follows its
 		// mkdir; a bare mutex directory is a claim mid-publish, not litter.
 		await mkdir( path.join( f.lockDir, "mutex" ), { recursive: true } );
-		const reader = start( f, { cwd: f.alias, language: holderLanguage } );
-		assert.notEqual( await reader.finished, 0, reader.output );
-		assert.match( reader.output, /timed out waiting/ );
-		assert.doesNotMatch( reader.output, /ENTERED/ );
+		// The window stays under the locks' 5 s unpublished-mutex grace:
+		// past it the bare claim is stealable by design, before it a
+		// correct lock cannot admit the contender however loaded it is.
+		const reader = await blockedChild( f, {
+			cwd: f.alias,
+			language: holderLanguage,
+			marker: false,
+			windowMs: 2500
+		} );
+		reader.kill();
+		await reader.finished;
 	});
 
 	test(`${holderLanguage} treats a bare state directory as no hold at all`, async ( t ) => {
@@ -242,7 +357,7 @@ queue behind it.
 */
 async function waitingForWriter( f ) {
 	const waiting = path.join( f.lockDir, "waiting" );
-	const deadline = Date.now() + 10000;
+	const deadline = Date.now() + 120000;
 	for ( ;; ) {
 		const names = await readdir( waiting ).catch( () => [] );
 		if ( names.some( ( name ) => name.endsWith( ".json" ) ) ) return;
@@ -269,10 +384,13 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 			const f = await fixture( t );
 			const reader = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1", MODE: "read" } } );
 			await entered( reader );
-			const blocked = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "write" } } );
-			assert.notEqual( await blocked.finished, 0, blocked.output );
-			assert.match( blocked.output, /timed out waiting/ );
-			assert.doesNotMatch( blocked.output, /ENTERED/ );
+			const blocked = await blockedChild( f, {
+				cwd: f.alias,
+				language: contenderLanguage,
+				env: { MODE: "write" }
+			} );
+			blocked.kill();
+			await blocked.finished;
 			reader.stdin.end( "\n" );
 			assert.equal( await reader.finished, 0, reader.output );
 			const writer = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "write" } } );
@@ -287,23 +405,29 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 			const writer = start( f, {
 				cwd: f.alias,
 				language: contenderLanguage,
-				env: { HOLD: "1", MODE: "write", SRO_REBUILD_LOCK_TIMEOUT_MS: "30000" }
+				env: { HOLD: "1", MODE: "write", SRO_REBUILD_LOCK_TIMEOUT_MS: "600000" }
 			} );
 			await waitingForWriter( f );
-			const queued = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
-			assert.notEqual( await queued.finished, 0, queued.output );
-			assert.match( queued.output, /timed out waiting/ );
-			assert.doesNotMatch( queued.output, /ENTERED/ );
+			const queued = await blockedChild( f, {
+				cwd: f.alias,
+				language: contenderLanguage,
+				env: { MODE: "read" }
+			} );
 			reader.stdin.end( "\n" );
 			await entered( writer );
-			const stillQueued = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
-			assert.notEqual( await stillQueued.finished, 0, stillQueued.output );
-			assert.doesNotMatch( stillQueued.output, /ENTERED/ );
+			// While the writer holds, another reader must queue instead of entering.
+			const stillQueued = await blockedChild( f, {
+				cwd: f.alias,
+				language: contenderLanguage,
+				env: { MODE: "read" }
+			} );
+			stillQueued.kill();
+			await stillQueued.finished;
 			writer.stdin.end( "\n" );
 			assert.equal( await writer.finished, 0, writer.output );
-			const last = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
-			assert.equal( await last.finished, 0, last.output );
-			assert.match( last.output, /ENTERED/ );
+			await entered( queued );
+			queued.stdin.end( "\n" );
+			assert.equal( await queued.finished, 0, queued.output );
 		});
 	}
 }
@@ -313,8 +437,9 @@ for ( const [holderLanguage, contenderLanguage] of [ [ "node", "python" ], [ "py
 		const f = await fixture( t );
 		const reader = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1", MODE: "read" } } );
 		await entered( reader );
-		const blocked = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "write" } } );
-		assert.notEqual( await blocked.finished, 0, blocked.output );
+		const blocked = await blockedChild( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "write" } } );
+		blocked.kill();
+		await blocked.finished;
 		reader.kill();
 		await reader.finished;
 		const writer = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "write" } } );
@@ -326,13 +451,45 @@ for ( const [holderLanguage, contenderLanguage] of [ [ "node", "python" ], [ "py
 		const f = await fixture( t );
 		const writer = start( f, { cwd: f.owner, language: holderLanguage, env: { HOLD: "1", MODE: "write" } } );
 		await entered( writer );
-		const blocked = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
-		assert.notEqual( await blocked.finished, 0, blocked.output );
+		const blocked = await blockedChild( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
+		blocked.kill();
+		await blocked.finished;
 		writer.kill();
 		await writer.finished;
 		const reader = start( f, { cwd: f.alias, language: contenderLanguage, env: { MODE: "read" } } );
 		assert.equal( await reader.finished, 0, reader.output );
 		assert.match( reader.output, /ENTERED/ );
+	});
+}
+
+test("a contender whose lock dir is removed before its mutex claim still enters", async ( t ) => {
+	const f = await fixture( t );
+	// The hook and wrapper land in the copied scripts tree the child
+	// imports its lock from; the injection is the removal itself, so
+	// the verdict cannot depend on how the processes are scheduled.
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceHook.mjs" ), MUTEX_RACE_HOOK_SOURCE );
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceFsWrapper.mjs" ), MUTEX_RACE_FS_WRAPPER_SOURCE );
+	const child = start( f, { cwd: f.owner, language: "node", driver: MUTEX_RACE_DRIVER } );
+	assert.equal( await child.finished, 0, child.output );
+	assert.match( child.output, /INJECTED lock dir removal/ );
+	assert.match( child.output, /ENTERED/ );
+});
+
+for ( const language of [ "node", "python" ] ) {
+	test(`a ${language} contender with a short lock timeout expires while its holder never releases`, async ( t ) => {
+		const f = await fixture( t );
+		const holder = start( f, { cwd: f.owner, language, env: { HOLD: "1", MODE: "write" } } );
+		await entered( holder );
+		const blocked = start( f, {
+			cwd: f.alias,
+			language,
+			env: { MODE: "write", SRO_REBUILD_LOCK_TIMEOUT_MS: "500" }
+		} );
+		assert.notEqual( await blocked.finished, 0, blocked.output );
+		assert.match( blocked.output, /timed out waiting/ );
+		assert.doesNotMatch( blocked.output, /ENTERED/ );
+		holder.stdin.end( "\n" );
+		assert.equal( await holder.finished, 0, holder.output );
 	});
 }
 

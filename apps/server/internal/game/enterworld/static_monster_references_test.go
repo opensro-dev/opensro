@@ -17,8 +17,8 @@ import (
 
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -117,7 +117,7 @@ its trade appearance (861720) picks a skin pool by.
 ================
 */
 func TestEveryCreatableMonsterIsPublished(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	template := monster.LoadTemplate(gamedatatest.TextdataDir(t))
 	rows := PublicMonsterRefObjRows(simulation.NewMonsterState(template))
 	byName := map[string]RefObjRow{}

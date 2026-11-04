@@ -946,7 +946,7 @@ export function createEntities(
 		receive( frame: WireFrame, now = 0 ) {
 			journalNow = now;
 			// Port-only position feedback is journaled independently of the retiring clone.
-			if ( frame.opcode === 0x3fba ) {
+			if ( frame.opcode === 0x3fbe ) {
 				const p = frame.payload;
 				if ( p.length !== 18 ) throw Error( "Invalid brood wind length" );
 				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );

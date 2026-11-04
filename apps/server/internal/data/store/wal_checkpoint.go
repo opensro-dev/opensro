@@ -209,7 +209,12 @@ walCheckpointer.logStarved
 
 The starvation line, at most once per walStarvationLogInterval while
 the condition holds: a growing WAL is slower boot replay, and it must
-be discovered here rather than at the next restart.
+be discovered here rather than at the next restart. Two triggers light
+it - a busy streak (a reader pins the WAL) and the WAL's size alone -
+and the line names the one that fired (#2296): the size trigger with a
+zero streak used to print as busy starvation while every checkpoint
+was completing. PASSIVE only copies frames; it never shrinks the
+file, so the size line says that instead of promising a reader's exit.
 ================
 */
 func (c *walCheckpointer) logStarved(walBytes int64) {
@@ -219,8 +224,18 @@ func (c *walCheckpointer) logStarved(walBytes int64) {
 		!c.lastStarvationLogMs.CompareAndSwap(last, nowMs) {
 		return
 	}
-	log.Warnf("store: wal checkpoint starved - %d busy cycle(s) in a row, WAL at %d bytes; boot replay grows until a reader lets go",
-		c.busyStreak.Load(), walBytes)
+	streak := c.busyStreak.Load()
+	switch {
+	case streak >= walBusyStreakToLog && walBytes > walStarvationBytes:
+		log.Warnf("store: wal checkpoint starved (busy cycles and WAL size): %d busy cycle(s) in a row, WAL at %d bytes past the %d-byte line; boot replay grows until a reader lets go",
+			streak, walBytes, int64(walStarvationBytes))
+	case walBytes > walStarvationBytes:
+		log.Warnf("store: wal checkpoint starved (WAL size, not busy): WAL at %d bytes past the %d-byte line, %d busy cycle(s) in a row; checkpoints are completing - PASSIVE copies frames but never shrinks the file, so boot replay stays long",
+			walBytes, int64(walStarvationBytes), streak)
+	default:
+		log.Warnf("store: wal checkpoint starved (busy cycles): %d busy cycle(s) in a row, WAL at %d bytes; boot replay grows until a reader lets go",
+			streak, walBytes)
+	}
 }
 
 /*

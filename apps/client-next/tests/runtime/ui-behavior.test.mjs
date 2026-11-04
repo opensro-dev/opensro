@@ -64,7 +64,11 @@ function assetFixture() {
 		},
 		cancel: id => cancelled.push( id )
 	};
-	const resources = createUiAssets( assets, ( ...args ) => published.push( args ), "https://fixture.invalid/" );
+	const resources = createUiAssets(
+		assets,
+		( ...args ) => published.push( args ),
+		"https://fixture.invalid/"
+	);
 	return { assets, resources, requests, results, cancelled, published };
 }
 /*
@@ -314,85 +318,6 @@ test("UI image disposal drains all releases even when cancellation and renderer 
 
 /*
 ================
-iconAtlasDemand
-
-The icon family's atlas manifest (foundation/ui/icon-atlas.ts): its bytes
-turn icon demand into sheet demand - one request, one residency entry,
-one publish for the whole family - and the renderer hears the mapping. A
-sheet that fails turns the atlas off and the icons fall back to their own
-paths, exactly as without a manifest.
-================
-*/
-test("an installed atlas serves the icon family from its sheet", () => {
-	const f = assetFixture();
-	const a = "/assets/images/Media_extracted/icon/a.png", b = "/assets/images/Media_extracted/icon/b.png";
-	const sheet = "/assets/ui-atlas/sheet-0.png";
-	let installed = 0;
-	const wrapped = { ...f.assets };
-	f.resources.dispose();
-	const resources = createUiAssets(
-		wrapped,
-		( ...args ) => f.published.push( args ),
-		"https://fixture.invalid/",
-		undefined,
-		mapping => {
-			installed++;
-			f.installed = mapping;
-		}
-	);
-	f.resources = resources;
-	resources.step( [ a, b ], 0 );
-	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
-	assert.deepEqual( f.requests.slice( 1 ), [ "https://fixture.invalid" + a, "https://fixture.invalid" + b ] );
-	const manifest = {
-		version: 1,
-		sheets: [ sheet ],
-		sheetSize: [ [ 2048, 2047 ] ],
-		icons: { [a]: [ 0, 2, 2, 32, 32 ], [b]: [ 0, 40, 2, 32, 32 ] }
-	};
-	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
-	resources.step( [ a, b ], 1 );
-	assert.equal( installed, 1, "the mapping reaches the renderer once" );
-	assert.deepEqual( f.cancelled.sort(), [ 2, 3 ], "the per-icon requests cancel" );
-	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet, "one sheet request for both icons" );
-	const image = { width: 2048, height: 2047 };
-	f.results.set( 4, { kind: "image", image } );
-	resources.step( [ a, b ], 2 );
-	assert.deepEqual( f.published, [ [ sheet, image ] ], "the sheet publishes once under its own path" );
-	assert.equal( resources.size( a ), undefined, "an icon holds no residency of its own" );
-	assert.equal( resources.size( sheet )[0], 2048 );
-	for ( let now = 3; now < 60_000; now += 1000 ) resources.step( [ a, b ], now );
-	assert.equal( f.requests.length, 4, "the family never re-requests" );
-	f.resources.dispose();
-});
-
-test("a failed sheet turns the atlas off and the icons take their own paths", () => {
-	const f = assetFixture();
-	const a = "/assets/images/Media_extracted/icon/a.png";
-	const sheet = "/assets/ui-atlas/sheet-0.png";
-	const manifest = {
-		version: 1,
-		sheets: [ sheet ],
-		sheetSize: [ [ 2048, 2047 ] ],
-		icons: { [a]: [ 0, 2, 2, 32, 32 ] }
-	};
-	f.resources.step( [ a ], 0 );
-	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
-	f.resources.step( [ a ], 1 );
-	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + sheet );
-	f.results.set( 3, { kind: "error", error: "HTTP 503", absent: false } );
-	f.resources.step( [ a ], 2 );
-	assert.equal( f.requests.at( -1 ), "https://fixture.invalid" + a, "the icon falls back to its own path" );
-	assert.equal( f.resources.error(), null, "a failed sheet is not an interface failure" );
-	const image = { width: 32, height: 32 };
-	f.results.set( 4, { kind: "image", image } );
-	f.resources.step( [ a ], 3 );
-	assert.deepEqual( f.published, [ [ a, image ] ] );
-	f.resources.dispose();
-});
-
-/*
-================
 absentIconFallback
 
 CIFSlotWithHelp (55B450) loads icon\icon_default.ddj when the requested icon
@@ -401,96 +326,29 @@ without the blocking retry. Any other absent image settles blank, and a
 transient fault on an icon still retries.
 ================
 */
-test("an absent icon's fallback fetches the default itself, not its atlas sheet", () => {
-	// The review's trace: with the atlas installed and icon_default mapped
-	// (it is a published icon), the fallback's request used target() - which
-	// names the whole sheet for a mapped icon - so the sheet was published
-	// under the absent icon's path and drew 2048 px squashed into its quad.
-	// The fallback must fetch the default's own file.
-	const f = assetFixture();
-	const icon = "/assets/images/Media_extracted/icon/item/etc/absent_recipe.png";
-	const fallback = "/assets/images/Media_extracted/icon/icon_default.png";
-	const sheet = "/assets/ui-atlas/sheet-0.png";
-	f.resources.step( [ icon ], 0 );
-	assert.equal( f.requests[0], "https://fixture.invalid/assets/ui-atlas/manifest.json" );
-	const manifest = {
-		version: 1,
-		sheets: [ sheet ],
-		sheetSize: [ [ 2048, 2047 ] ],
-		icons: { [fallback]: [ 0, 2, 2, 32, 32 ] }
-	};
-	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
-	// The icon has no manifest entry, so its own path is still the request;
-	// it arrives absent and joins the fallback set.
-	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
-	f.resources.step( [ icon ], 1 );
-	assert.equal(
-		f.requests.at( -1 ),
-		"https://fixture.invalid" + fallback,
-		"the fallback fetches the default's own file, never the sheet"
-	);
-	assert.equal( f.requests.some( r => r === "https://fixture.invalid" + sheet ), false );
-	const image = { width: 32, height: 32 };
-	f.results.set( 3, { kind: "image", image } );
-	f.resources.step( [ icon ], 2 );
-	assert.deepEqual( f.published, [ [ icon, image ] ], "the default publishes under the icon's own path" );
-	assert.deepEqual( f.resources.size( icon ), [ 32, 32 ], "the default's own size, never the sheet's" );
-	f.resources.dispose();
-});
-
-test("a direct demand for the default icon still takes its atlas sheet", () => {
-	const f = assetFixture();
-	const defaultIcon = "/assets/images/Media_extracted/icon/icon_default.png";
-	const sheet = "/assets/ui-atlas/sheet-0.png";
-	const manifest = {
-		version: 1,
-		sheets: [ sheet ],
-		sheetSize: [ [ 2048, 2047 ] ],
-		icons: { [defaultIcon]: [ 0, 2, 2, 32, 32 ] }
-	};
-	f.resources.step( [ defaultIcon ], 0 );
-	f.results.set( 1, { kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer } );
-	f.resources.step( [ defaultIcon ], 1 );
-	assert.equal(
-		f.requests.at( -1 ),
-		"https://fixture.invalid" + sheet,
-		"the default icon itself is served from the sheet when demanded directly"
-	);
-	const image = { width: 2048, height: 2047 };
-	f.results.set( 3, { kind: "image", image } );
-	f.resources.step( [ defaultIcon ], 2 );
-	assert.deepEqual( f.published, [ [ sheet, image ] ] );
-	f.resources.dispose();
-});
-
 test("an absent slot icon draws icon_default and an absent image settles blank", () => {
 	const f = assetFixture();
 	const icon = "/assets/images/Media_extracted/icon/item/etc/archemy_reinforce_recipe_a.png";
 	const art = "/assets/images/Media_extracted/interface/missing.png";
 	const paths = [ icon, art ];
 	f.resources.step( paths, 0 );
-	// The first icon demand asks for the atlas manifest first (the icon
-	// family's port-only sheet); an absent manifest fails it silently and
-	// every icon keeps its own path.
 	f.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.results.set( 2, { kind: "error", error: "Asset absent from published manifest", absent: true } );
-	f.results.set( 3, { kind: "error", error: "Asset absent from published manifest", absent: true } );
 	f.resources.step( paths, 1 );
 	assert.equal( f.resources.error(), null, "absence never blocks the interface" );
 	assert.deepEqual( f.resources.stats().failed, [] );
 	assert.equal( f.requests.at( -1 ), "https://fixture.invalid/assets/images/Media_extracted/icon/icon_default.png" );
-	assert.equal( f.requests.length, 4, "the blank image is never requested again" );
+	assert.equal( f.requests.length, 3, "the blank image is never requested again" );
 	const image = { width: 32, height: 32 };
-	f.results.set( 4, { kind: "image", image } );
+	f.results.set( 3, { kind: "image", image } );
 	f.resources.step( paths, 2 );
 	assert.deepEqual( f.published, [ [ icon, image ] ], "the default is published under the icon's own path" );
 	for ( let now = 3; now < 60_000; now += 1000 ) f.resources.step( paths, now );
-	assert.equal( f.requests.length, 4 );
+	assert.equal( f.requests.length, 3 );
 	f.resources.dispose();
 	const g = assetFixture();
 	g.resources.step( [ icon ], 0 );
-	g.results.set( 1, { kind: "error", error: "Asset absent from published manifest", absent: true } );
-	g.results.set( 2, { kind: "error", error: "HTTP 503" } );
+	g.results.set( 1, { kind: "error", error: "HTTP 503" } );
 	g.resources.step( [ icon ], 1 );
 	assert.match( g.resources.error(), /503/, "a transient fault keeps the retry" );
 	g.resources.step( [ icon ], 1001 );
@@ -1645,6 +1503,19 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
 		step( 8320 );
 		assert.equal( labelOf( "rebirth-point" ), pointLabel );
+		// 52ff1b is dormant: the native camp-resurrection label tests a
+		// marker no reachable writer sets, so a running flag war never
+		// changes the death box; the team-death label stands (#2428).
+		f.state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				rebirthMode: 2,
+				flagWar: { timerEndsAt: 1, carrierGid: 0 }
+			}
+		};
+		step( 8330 );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "a flag war does not change the death box" );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );
@@ -1975,6 +1846,118 @@ test("chat tabs focus their prefixed draft; missing membership emits native stat
 	}
 });
 
+test("a chat line the chat column bans prints the filter line in red and sends nothing", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		"chatword\t0\t1\t0\t0",
+		"namebad\t2\t0\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		const say = ( text, now ) => {
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: text,
+				start: text.length,
+				end: text.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, now );
+		};
+		// The substring row (type 2 in the chat column) refuses the send
+		// and leaves the filter line in the chat pane (790C70 via 545EF0).
+		say( "you chatbad here", 1100 );
+		assert.equal( chatCommands(), 0 );
+		assert.ok( f.hasText( "Some words or expressions" ) );
+		// The whole-word row (type 1) fires on the word alone...
+		say( "a chatword here", 1200 );
+		assert.equal( chatCommands(), 0 );
+		// ...but not inside a longer word.
+		say( "chatwordx is fine", 1300 );
+		assert.equal( chatCommands(), 1 );
+		// The character-name column is a different list: its row does not
+		// block chat.
+		say( "say namebad now", 1400 );
+		assert.equal( chatCommands(), 2 );
+		// And an ordinary line goes out untouched.
+		say( "a clean line", 1500 );
+		assert.equal( chatCommands(), 3 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a banned line in a missing party or guild prints the membership refusal, not the filter line", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 6AEBD0 refuses on membership (party 6AEFF4, guild 6AF03E)
+		// before the abuse filter is consulted (790C70 at 6AF0B9), so
+		// the banned word in the line never reaches the filter here.
+		for (
+			const [tab, line, refusal] of [ [ 1, "#you chatbad here", "Cannot find the relevant" ], [
+				2,
+				"@you chatbad here",
+				"Cannot carry this function"
+			] ]
+		) {
+			f.ui.event( { kind: "activate", id: "chat-tab:" + tab } );
+			f.ui.step( { ...f.state }, 1100 );
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, 1200 );
+			assert.ok( f.hasText( refusal ) );
+			assert.equal( f.hasText( "Some words or expressions" ), false );
+			assert.equal( chatCommands(), 0 );
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
 test("guild-war notice modal owns input, dismisses locally and reopens only for a new notice", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -2012,6 +1995,31 @@ test("guild-war notice modal owns input, dismisses locally and reopens only for 
 		f.state.gameplay = { ...f.state.gameplay, notices: [ notice, { ...notice, sequence: 2 } ] };
 		scene = f.rawStep( { ...f.state }, 1150 );
 		assert.deepEqual( confirm().rect, original );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the friend-conclusion box formats the two-name line and leaves the acceptance plain", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 52F460 case 0x21: "[%s]and [%s]'s" (UIIT_MSG_YOUNME) takes the
+		// friend's name, then the local player's; the acceptance line
+		// (UIIT_MSG_FRIEND_CONCLUSION) carries no placeholder.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			friends: { conclusion: "Cale" },
+			social: { invitation: null, localName: "Player", members: [] }
+		};
+		const scene = f.ui.step( { ...f.state }, 1100 );
+		assert.ok( scene?.controls.some( c => c.id === "friend-conclusion-confirm" ) );
+		assert.ok( f.hasText( "[Cale]and [Player]'s" ) );
+		assert.ok( f.hasText( "The proposal to make friends is accepted." ) );
+		assert.equal( f.hasText( "%s" ), false, "no raw placeholder reaches the pane" );
+		f.ui.event( { kind: "activate", id: "friend-conclusion-confirm" } );
+		f.ui.step( f.state, 1200 );
+		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "friend-conclusion-close" } } ] );
 	} finally {
 		f.dispose();
 	}
@@ -5630,6 +5638,47 @@ test("world admission failures publish a visible native retry dialog and clear a
 		for ( let i = 40; i < 45; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
 		assert.equal( result.loadingError, undefined );
 		assert.ok( !result.controls.some( c => c.id === "world-load-retry" ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a UI image still retrying in world keeps the game on screen and draws once it arrives (#2444)", () => {
+	const icon = "/assets/images/Media_extracted/interface/targetwindow/tw_icon_giant.png";
+	const published = {};
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {}, published );
+	try {
+		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		// The live stall: the giant grade icon's download makes no progress.
+		published[icon] = { error: "Error: No download progress for 15000 ms" };
+		f.state.entities.push( {
+			gid: 9,
+			regionId: 1,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0,
+			kind: "monster",
+			name: "Giant",
+			level: 1,
+			rarity: 4,
+			maxHp: 100
+		} );
+		f.state.gameplay.target = 9;
+		f.state.gameplay.vitals = [ { gid: 9, hp: 100, abnormal: 0 } ];
+		let result;
+		for ( let i = 20; i < 30; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.includes( icon ), "the target window asked for the grade icon" );
+		assert.equal( result.loadingError, undefined, "a retrying image is not a loading failure" );
+		assert.ok( !f.hasText( "Unable to finish loading" ) );
+		assert.equal( f.ui.resourceError(), null, "a retrying image is not a client error" );
+		// The download recovers: the next retry delivers and the icon draws.
+		delete published[icon];
+		const before = f.requested.filter( path => path === icon ).length;
+		for ( let i = 30; i < 120; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.filter( path => path === icon ).length > before, "the image was retried" );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture === icon ), "the icon draws once it arrives" );
+		assert.equal( result.loadingError, undefined );
 	} finally {
 		f.dispose();
 	}

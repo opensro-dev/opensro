@@ -203,3 +203,113 @@ func TestBehaviorQueueDueSetMatchesLegacyHeap(t *testing.T) {
 		t.Fatalf("only %d actors fired in the walk", fired)
 	}
 }
+
+/*
+================
+TestBehaviorBatchBuildAllocations
+
+The batch build rides pooled refs backings: warmed, a build plus
+its release allocates a small fixed handful (the batch list, the
+population keys), not a fresh refs backing grown from empty for
+every due actor - the wheel drain's largest steady allocation
+before the pool (#2030; the leg profile charged
+behaviorQueue.filterDue's appends 50 MB of a 6,000-leg window, and
+the unpooled build measures 19 allocations here against the
+pooled 7). The window runs warm first; the pool is only empty once.
+================
+*/
+func TestBehaviorBatchBuildAllocations(t *testing.T) {
+	s, _ := queueBenchmarkState(1024)
+	tick := int64(0)
+	build := func() {
+		got := s.behaviorBatches(tick)
+		tick++
+		if len(got) != 1 || len(got[0].actors) != 1024 {
+			t.Fatalf("batch build lost actors: %d batches", len(got))
+		}
+		s.releaseBehaviorBatches(got)
+	}
+	build()
+	fewest := testing.AllocsPerRun(50, build)
+	for range 2 {
+		if got := testing.AllocsPerRun(50, build); got < fewest {
+			fewest = got
+		}
+	}
+	if fewest > 10 {
+		t.Fatalf("batch build allocates %.2f per run in steady state, want at most 10", fewest)
+	}
+}
+
+/*
+================
+TestBehaviorQueueUnchangedDeadlineStaysSingleCopy
+
+Re-scheduling a live row at the deadline it already holds is the
+leg's steady state (every commit-side reschedule of the batch's own
+at recomputes the same value). It must not stack copies on the
+wheel: the copy placed first already names the due, and every
+duplicate is a copy the next drain walks and drops (#2136). The due
+set itself stays the heap oracle's, pinned above.
+================
+*/
+func TestBehaviorQueueUnchangedDeadlineStaysSingleCopy(t *testing.T) {
+	var q behaviorQueue
+	placed := func() int {
+		n := len(q.due) + len(q.far)
+		for _, bucket := range q.buckets {
+			n += len(bucket)
+		}
+		return n
+	}
+	q.set(7, 1000)
+	q.set(7, 1000)
+	q.set(7, 1000)
+	if got := placed(); got != 1 {
+		t.Fatalf("unchanged-deadline reschedules placed %d copies, want 1", got)
+	}
+	if due := q.takeDue(999, nil); len(due) != 0 {
+		t.Fatalf("fired before its deadline: %v", due)
+	}
+	if due := q.takeDue(1000, nil); len(due) != 1 || due[0].gid != 7 {
+		t.Fatalf("deadline fired %v, want gid 7 once", due)
+	}
+	// A fired row re-scheduled at the same value is a fresh due again.
+	q.set(7, 1000)
+	if due := q.takeDue(1000, nil); len(due) != 1 || due[0].gid != 7 {
+		t.Fatalf("revived deadline fired %v, want gid 7 once", due)
+	}
+
+	var deferred behaviorQueue
+	deferred.set(8, 500)
+	deferred.set(8, 1500)
+	if due := deferred.takeDue(1000, nil); len(due) != 0 {
+		t.Fatalf("deferred row fired early: %v", due)
+	}
+	if due := deferred.takeDue(1500, nil); len(due) != 1 || due[0].gid != 8 {
+		t.Fatalf("deferred deadline fired %v, want gid 8 once", due)
+	}
+}
+
+/*
+================
+BenchmarkBehaviorQueueRescheduleUnchanged
+
+The commit-side reschedule pattern: rows already queued, each
+re-set at the very deadline the batch build placed (#2136).
+================
+*/
+func BenchmarkBehaviorQueueRescheduleUnchanged(b *testing.B) {
+	var q behaviorQueue
+	const rows = 256
+	for gid := uint32(1); gid <= rows; gid++ {
+		q.set(gid, 5000)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for gid := uint32(1); gid <= rows; gid++ {
+			q.set(gid, 5000)
+		}
+	}
+}

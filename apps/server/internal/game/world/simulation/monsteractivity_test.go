@@ -125,6 +125,77 @@ func TestCommitActivityCadenceOnlyStampsCadence(t *testing.T) {
 	}
 }
 
+/*
+================
+TestCommitActivityCadenceOnlySkipsApproachSync
+
+Approach membership derives from the mover's mode and target and
+the instance's squad eligibility (monsterapproach.go). A
+cadence-only commit moves none of them - the activity gate, its
+only production source, never holds a chasing or attacking row
+(MaySuspendWander admits wandering, the other gate arm is pending) -
+so it must not re-derive membership: an eligibility flip waits for
+the next full commit, which still syncs (#2136).
+================
+*/
+func TestCommitActivityCadenceOnlySkipsApproachSync(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	s := ops.Monsters
+	approachTarget := func() (uint32, bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		target, ok := s.populationForObject(monsterTestDivision, actor.Gid).approachActors[actor.Gid]
+		return target, ok
+	}
+	setSummoner := func(gid uint32) {
+		s.mu.Lock()
+		state := s.populationForObject(monsterTestDivision, actor.Gid)
+		member := state.instances.get(actor.Gid)
+		member.SummonerGID = gid
+		state.instances.set(actor.Gid, member)
+		s.mu.Unlock()
+	}
+
+	// A squad-eligible chaser, engaged by a full commit, is a member.
+	setSummoner(999)
+	mover, _ := s.Mover(monsterTestDivision, actor.Gid)
+	if mover.Mode() == monster.MoverSpawning {
+		mustMoverTransition(&mover, monster.MoverEventSpawnHoldElapsed, 0)
+	}
+	mustMoverTransition(&mover, monster.MoverEventAggroAcquired, squadTestTarget)
+	if !s.CommitMover(monsterTestDivision, actor.Gid, mover) {
+		t.Fatal("engage commit refused")
+	}
+	if target, ok := approachTarget(); !ok || target != squadTestTarget {
+		t.Fatalf("full commit did not record approach membership: %v %v", target, ok)
+	}
+
+	// Eligibility flips off; the cadence-only commit must not notice.
+	setSummoner(0)
+	before, _ := s.Mover(monsterTestDivision, actor.Gid)
+	after := before
+	after.Activity.LastCheck++
+	if !cadenceOnlyWrite(before, after) {
+		t.Fatal("fixture commit is not cadence-only")
+	}
+	if !s.commitActivity(monsterTestDivision, actor.Gid, before, after, now+1001) {
+		t.Fatal("cadence-only commit rejected")
+	}
+	if target, ok := approachTarget(); !ok || target != squadTestTarget {
+		t.Fatalf("cadence-only commit re-derived approach membership: %v %v", target, ok)
+	}
+
+	// The next full commit syncs again and the membership goes.
+	moved := after
+	moved.Pose.X += 25
+	if !s.commitActivity(monsterTestDivision, actor.Gid, after, moved, now+1001) {
+		t.Fatal("full commit rejected")
+	}
+	if _, ok := approachTarget(); ok {
+		t.Fatal("full commit did not re-derive approach membership")
+	}
+}
+
 func TestActivityProductionTickerRetainsUnobservedDivision(t *testing.T) {
 	ops, actor, now := activityFixture(t)
 	source := &fakeSource{}

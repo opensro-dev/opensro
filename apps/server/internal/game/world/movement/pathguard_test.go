@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -628,7 +628,7 @@ bounds the per-move overhead the guard adds.
 ================
 */
 func BenchmarkValidateMovementPathWarm(b *testing.B) {
-	root, err := licensed.ClientPublicRoot()
+	root, err := clientdata.ClientPublicRoot()
 	if err != nil {
 		b.Fatal(err)
 	}

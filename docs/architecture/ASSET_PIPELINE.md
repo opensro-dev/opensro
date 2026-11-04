@@ -15,7 +15,7 @@ The CP949-named tracks are referenced only by the legacy `resinfo` sound table
 the port does not read. `pnpm assets doctor` checks every input and tool; the
 builds refuse to start while an input is missing
 (`scripts/build/shared/clientInputs.mjs`). Python 3.12 with
-`requirements-build.txt` is used for extraction, image and font conversion.
+`scripts/requirements-build.txt` is used for extraction, image and font conversion.
 
 Lens mip resources are generated automatically before image conversion, and
 by standalone world builds before copying sky assets. This uses Windows'

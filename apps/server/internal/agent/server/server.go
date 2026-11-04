@@ -81,6 +81,24 @@ type sessionEpochAuthority interface {
 
 /*
 ================
+blockAuthority
+
+The staff account block (#2271), optional like sessionEpochAuthority:
+the login path verifies a blocked account's password through
+CredentialAny so the refusal can carry the stored reason and end
+(Block), and clears an expired temporary block before the ordinary
+login proceeds (ClearBlock). A store without it answers a blocked
+account the ordinary credential refusal.
+================
+*/
+type blockAuthority interface {
+	CredentialAny(typedID string) (string, []byte, bool)
+	Block(accountID string) (disabled bool, reason string, untilMs int64, found bool)
+	ClearBlock(ctx context.Context, accountID string) error
+}
+
+/*
+================
 Config
 ================
 */
@@ -97,6 +115,10 @@ type Config struct {
 	HTTPClient              *http.Client
 	Now                     func() time.Time
 	Readiness               *readiness.Gate
+	// MaintenanceMessage names this Agent's not-operating shard refusals
+	// MAINTENANCE instead of SHARD_OFFLINE (SRO_MAINTENANCE_MESSAGE).
+	// Port-only, not native: see agentapi.EnvMaintenanceMessage.
+	MaintenanceMessage bool
 	// BugReports is nil when the operator has not configured bug reports.
 	BugReports *bugreport.Service
 	// BcryptCost is the cost of the unknown-account refusal and of the hashes
@@ -144,7 +166,9 @@ type Server struct {
 	clientKey        []byte
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
-	bugReports       *bugreport.Service
+	// maintenanceMessage mirrors Config.MaintenanceMessage.
+	maintenanceMessage bool
+	bugReports         *bugreport.Service
 	// startedAt is when this Agent was built, for /title/build's uptime.
 	startedAt        time.Time
 	revokedMu        sync.Mutex
@@ -237,6 +261,7 @@ func New(config Config) (*Server, error) {
 		refusalLines:            newLoginLimiter(now),
 		clientKey:               clientKey,
 		readiness:               config.Readiness,
+		maintenanceMessage:      config.MaintenanceMessage,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
 		revokedNonces:           make(map[string]time.Time),

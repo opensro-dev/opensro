@@ -15,7 +15,7 @@ The job file repeats each default in its variable block (for a manual
 
 Port-only beta rules (SRO_BETA_*) default native here (#606): off, rate 1,
 no bands. A deployment names its own beta values in its environment; ours
-are ops/release/shard-settings.json, which deploy.py passes to sro-nomad.
+are config/shard-settings.json, which the release passes to sro-nomad.
 
 ===========================================================================
 */
@@ -128,6 +128,12 @@ var Settings = []Setting{
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
+	// Port-only, not native: maintenance refusals answer MAINTENANCE instead
+	// of SHARD_OFFLINE (#2331). The one value fills both jobs: sro-nomad
+	// passes it to the Agent too (agentVariables), so the two can never
+	// answer different codes in the same window. Both read it with
+	// agentapi.MaintenanceMessageFromEnv (on, 1 or true).
+	{Env: "SRO_MAINTENANCE_MESSAGE", NomadVar: "maintenance_message", Default: "off"},
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
@@ -188,6 +194,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
+	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
+	// (#2475). Off (native) until the carrying release turns it on.
+	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
@@ -264,7 +273,7 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
-	// ops/release/shard-settings.json.
+	// config/shard-settings.json.
 	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
 		Catalogue: true, Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,
@@ -283,8 +292,14 @@ var Settings = []Setting{
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
 	// Owner, 2026-10-15: a fixed ambush per caravan star (2/3/4/7/10).
 	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
-	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
+	// Owner, 2026-10-15: thief and hunter monsters move faster (20% then;
+	// 30% since #2474, 2026-11-04).
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job monsters attack as soon as they
+	// spawn (no spawn hold) and their damage is doubled.
+	{Env: "SRO_JOB_MONSTER_AGGRESSION", NomadVar: "job_monster_aggression", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job trade transports move 30% faster.
+	{Env: "SRO_JOB_TRANSPORT_SPEED", NomadVar: "job_transport_speed", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off").
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},

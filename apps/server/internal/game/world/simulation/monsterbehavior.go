@@ -72,7 +72,15 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 	// this tick. Complete that entry before invoking its first OnTick.
 	if mover.IdleEntryPending() {
 		frames := ops.commitIdleEntry(divisionID, instance, mover, nil, nowMs)
-		mover, ok = ops.Monsters.Mover(divisionID, instance.Gid)
+		// The entry commit advanced the row; the fresh read below is
+		// the step's new base, generation included (#2137 slice 1). A
+		// planning step reads its plan's shadow instead (the commit
+		// is recorded, not yet applied) - stepMoverGeneration.
+		var freshGen uint64
+		mover, freshGen, ok = ops.stepMoverGeneration(divisionID, instance.Gid)
+		if ok {
+			ops.rebaseStepBase(freshGen)
+		}
 		if !ok || mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
 			return frames, nil
 		}
@@ -90,6 +98,12 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 			return frames, nil
 		}
 		mover = gated
+		// The gate's own commit may have advanced the row (a whole
+		// write past the cadence stamp): re-base the step on the
+		// generation the gated value sits at (#2137 slice 1).
+		if _, gen, fresh := ops.stepMoverGeneration(divisionID, instance.Gid); fresh {
+			ops.rebaseStepBase(gen)
+		}
 	}
 	if frames, handled := ops.handleHelp(divisionID, instance, mover, divisionPlayers, nowMs); handled {
 		return frames, nil
@@ -228,7 +242,7 @@ func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance mons
 		mover.From, mover.To = monster.Pose{}, monster.Pose{}
 		mover.DepartMs, mover.ArriveMs = 0, 0
 		if mover.NoteMoveStopped(mover.Pose) {
-			return ops.Monsters.CommitMoverFrames(divisionID, instance.Gid, mover,
+			return ops.commitSteppedMoverFrames(divisionID, instance.Gid, mover,
 				[]Frame{correctionFrame(instance.Gid, mover.Pose)}), nil
 		}
 		mustMoverTransition(&mover, monster.MoverEventSegmentArrived, 0)
@@ -378,7 +392,7 @@ The end event needs no port action: the next scan resumes.
 ==================
 */
 func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
-	events := ops.Monsters.takeAIEvents(divisionID, instance.Gid)
+	events := ops.takeStepAIEvents(divisionID, instance.Gid)
 	battle := mover.Mode() == monster.MoverChasing || mover.Mode() == monster.MoverAttacking
 	for _, event := range events {
 		if event.Event != aiEventStart || !battle || mover.TargetGID() == 0 {

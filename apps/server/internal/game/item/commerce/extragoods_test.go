@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -27,7 +27,7 @@ shippedCatalog
 */
 func shippedCatalog(t *testing.T) (*Catalog, enterworld.ItemRefSource) {
 	t.Helper()
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, e := os.Stat(dir); e != nil {
 		t.Skip("original media unavailable")
 	}
@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 13+28+25+4 {
+	if err != nil || len(on) != 9+28+25+4 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")

@@ -36,6 +36,7 @@ async function load( file ) {
 }
 const { createEntities } = await load( "src/engine/runtime/simulation/worker/session/world/entities/entities.ts" );
 const { createWorldSession } = await load( "src/engine/runtime/simulation/worker/session/world/world.ts" );
+const { outOfMemoryFailure } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
 const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/session/http/http.ts" );
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
@@ -894,6 +895,177 @@ test("a dropped session keeps retrying through the resume grace, then gives up",
 	world.dispose();
 });
 
+test("a maintenance refusal is definitive and explains itself", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			throw new Error( "MAINTENANCE" );
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal(
+		world.status().error,
+		"The server is under maintenance. Please try again later."
+	);
+	// Well past the retry backoff and the whole resume grace the refusal
+	// still stands: no transport ever opened, no mint was ever retried.
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.equal( world.status().phase, "disconnected" );
+	assert.deepEqual( mints, [ "transport" ] );
+	assert.equal( sockets.length, 0 );
+});
+
+test("a coded entry refusal is generic and is not retried", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			throw new Error( "SHARD_OFFLINE" );
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	// The Agent answered with a refusal code that names nothing the
+	// player can act on: the text stays the generic admission failure.
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal( world.status().error, "Admission request failed" );
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.deepEqual( mints, [ "transport" ] );
+	assert.equal( sockets.length, 0 );
+});
+
+test("a maintenance refusal of a resume mint ends the session with its text", async t => {
+	const sockets = socketHarness( t ), mints = [];
+	let inWorld = false;
+	const world = createWorldSession(
+		async kind => {
+			mints.push( kind );
+			if ( inWorld ) throw new Error( "MAINTENANCE" );
+			return "ticket";
+		},
+		undefined,
+		ignoreIncident
+	);
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	assert.equal( world.status().phase, "world" );
+	inWorld = true;
+	first.onclose( { code: 1006, reason: "", wasClean: false } );
+	world.step( 6 );
+	assert.equal( world.status().phase, "reconnecting" );
+	world.step( 256 );
+	await settle();
+	world.step( 257 );
+	// The Agent answered the resume mint with the maintenance refusal:
+	// definitive, with the maintenance text, deep inside the resume
+	// grace where an answerless failure would still be retrying.
+	assert.equal( world.status().phase, "disconnected" );
+	assert.equal(
+		world.status().error,
+		"The server is under maintenance. Please try again later."
+	);
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport" ] );
+	world.step( 60000 );
+	await settle();
+	world.step( 60001 );
+	assert.deepEqual( mints, [ "transport", "enterworld", "transport" ] );
+	assert.equal( sockets.length, 1 );
+});
+
+// INTERNAL is a passing server failure, so it retries like no answer at all.
+for ( const failed of [ "Admission rejected", "INTERNAL" ] ) {
+	test(`a resume mint failing with ${failed} keeps the resume retry`, async t => {
+		const sockets = socketHarness( t ), mints = [];
+		let inWorld = false, failOnce = true;
+		const world = createWorldSession(
+			async kind => {
+				mints.push( kind );
+				if ( inWorld && failOnce && kind === "transport" ) {
+					failOnce = false;
+					throw new Error( failed );
+				}
+				return "ticket";
+			},
+			undefined,
+			ignoreIncident
+		);
+		t.after( () => world.dispose() );
+		world.enter( "fixture", "shard", "http://localhost:9000" );
+		await settle();
+		world.step( 1 );
+		const first = sockets[0];
+		first.onopen();
+		first.receive( 2, welcome() );
+		world.step( 2 );
+		await settle();
+		world.step( 3 );
+		first.receive( 7, entered() );
+		for ( const row of rows ) first.receive( row.opcode, row.payload );
+		world.step( 4 );
+		flush( world );
+		world.step( 5 );
+		assert.equal( world.status().phase, "world" );
+		inWorld = true;
+		first.onclose( { code: 1006, reason: "", wasClean: false } );
+		world.step( 6 );
+		assert.equal( world.status().phase, "reconnecting" );
+		// The first resume mint gets no usable answer: the session stays in
+		// the retry instead of ending, exactly as before coded refusals
+		// became definitive.
+		world.step( 256 );
+		await settle();
+		world.step( 257 );
+		assert.equal( world.status().phase, "reconnecting" );
+		assert.equal( world.status().error, "Admission request failed" );
+		// The next attempt mints again and the session resumes.
+		world.step( 757 );
+		await settle();
+		world.step( 758 );
+		assert.equal( sockets.length, 2 );
+		const second = sockets[1];
+		second.onopen();
+		second.receive( 2, welcome( true ) );
+		world.step( 759 );
+		await settle();
+		world.step( 760 );
+		second.receive( 7, entered() );
+		for ( const row of rows ) second.receive( row.opcode, row.payload );
+		world.step( 761 );
+		flush( world );
+		world.step( 762 );
+		assert.equal( world.status().phase, "world" );
+		assert.deepEqual( mints, [ "transport", "enterworld", "transport", "transport", "enterworld" ] );
+	});
+}
+
 test("a fresh entry retries a stalled admission and enters", async t => {
 	const sockets = socketHarness( t ), mints = [];
 	const world = createWorldSession(
@@ -1634,6 +1806,29 @@ test("movement activity clears on death, revival, teleport and explicit stop", (
 	owner.receive( { opcode: 0x3122, payload: Buffer.from( [ 7, 0, 0, 0, 1, 0 ] ) }, 332 );
 	assert.equal( owner.read( 7 ).moving, false );
 	owner.dispose();
+});
+
+/*
+================
+a world step refuses memory before it blames the simulation
+
+#2299 follow-up: both step catches in world.ts consult the network
+owner's refusal classifier, so a step that only met the heap's limit
+reports out_of_memory with the reload remedy instead of
+simulation_failed. This pins the mapping the catches consult - the two
+refusal shapes name memory, and a plain step error is not a refusal, so
+it keeps the simulation classification. The lost-answer precedence sits
+ahead of the consult and is unchanged.
+================
+*/
+test("the step failure classifier names memory only for an engine refusal", () => {
+	for ( const refusal of [ "out of memory", RangeError( "Array buffer allocation failed" ) ] ) {
+		const reason = outOfMemoryFailure( refusal );
+		assert.equal( reason.code, "out_of_memory" );
+		assert.match( reason.message, /ran out of memory/ );
+	}
+	assert.equal( outOfMemoryFailure( new Error( "step broke" ) ), null );
+	assert.equal( outOfMemoryFailure( RangeError( "Maximum call stack size exceeded" ) ), null );
 });
 
 test("transport loss retains the admitted inventory and entities until explicit logout", async t => {
@@ -2741,7 +2936,10 @@ test("a move unanswered on a live link times out as the movement lane's loss", a
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
 	// The inbound age reads the real event clock (#1474), so a loaded machine
 	// sees a few milliseconds between the last frame and the step.
-	assert.match( incidents[0].message, /command 1, age 11001 ms, pending 1; last inbound \d{1,2} ms ago/ );
+	assert.match(
+		incidents[0].message,
+		/command 1, age 11001 ms, pending 1, gameplay silence 11002 ms; last inbound \d{1,2} ms ago/
+	);
 });
 
 /*
@@ -2944,7 +3142,7 @@ test("an unanswered inventory transaction resumes the session without replaying 
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
 	assert.equal( incidents[0].category, "unknown" );
-	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\)/ );
+	assert.match( incidents[0].message, /Inventory transaction timed out \(0xB06D move 0\); held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -2980,7 +3178,7 @@ test("an unanswered mall request resumes the session without replaying it", asyn
 	assert.equal( world.status().phase, "reconnecting", "a lost answer resumes, it does not disconnect" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
-	assert.match( incidents[0].message, /Mall request timed out/ );
+	assert.match( incidents[0].message, /Mall request timed out; held=0; reconnect/ );
 	world.step( 10260 );
 	await settle();
 	world.step( 10261 );
@@ -3067,14 +3265,17 @@ test("wind burst is ordered feedback independent of a despawned clone", () => {
 	p.writeFloatLE( 12, 6 );
 	p.writeFloatLE( 3, 10 );
 	p.writeFloatLE( 34, 14 );
-	owner.receive( { opcode: 0x3fba, payload: p } );
+	// Main's most-wanted packet belongs to gameplay, not crow-effect parsing.
+	assert.doesNotThrow( () => owner.receive( { opcode: 0x3fba, payload: new Uint8Array( 12 ) } ) );
+	assert.equal( flush( owner ).events[0].kind, "native" );
+	owner.receive( { opcode: 0x3fbe, payload: p } );
 	assert.deepEqual( flush( owner ).events, [ {
 		kind: "pet-crow-effect",
 		source: { regionId: 257, x: 12, y: 3, z: 34 }
 	} ] );
-	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p.subarray( 1 ) } ) );
+	assert.throws( () => owner.receive( { opcode: 0x3fbe, payload: p.subarray( 1 ) } ) );
 	p.writeFloatLE( NaN, 6 );
-	assert.throws( () => owner.receive( { opcode: 0x3fba, payload: p } ) );
+	assert.throws( () => owner.receive( { opcode: 0x3fbe, payload: p } ) );
 });
 
 /*
@@ -3177,6 +3378,7 @@ test("an answer queued behind scene references is not lost while they arrive", a
 	world.step( 35001 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=26001/ );
 });
 
 test("a movement receipt queued behind scene references is not lost while they arrive", async t => {
@@ -3193,6 +3395,7 @@ test("a movement receipt queued behind scene references is not lost while they a
 	world.step( 35100 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 10100 ms/ );
 });
 
 /*
@@ -3219,6 +3422,7 @@ test("a movement receipt behind scene references still trips the ninety-second b
 	world.step( 93000 );
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "movement_receipt_timeout" );
+	assert.match( incidents[0].message, /gameplay silence 0 ms/ );
 });
 
 /*
@@ -3248,4 +3452,324 @@ test("an answer behind endless scene references still reaches its limit", async 
 	}
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /held=1 firstHoldAgeMs=92000/ );
+});
+
+/*
+================
+wtRecord
+
+One WebTransport wire record: [u32 byte count][u16 opcode][payload].
+================
+*/
+function wtRecord( opcode, payload ) {
+	const framed = new Uint8Array( payload.byteLength + 2 );
+	new DataView( framed.buffer ).setUint16( 0, opcode, true );
+	framed.set( payload, 2 );
+	const record = new Uint8Array( framed.byteLength + 4 );
+	new DataView( record.buffer ).setUint32( 0, framed.byteLength, true );
+	record.set( framed, 4 );
+	return record;
+}
+
+/*
+================
+wtHarness
+
+A WebTransport stand-in whose inbound bytes the test pushes one stream
+chunk at a time; the certificate fetch answers "no pin document", so the
+attempt proceeds unpinned, as it does against a public certificate.
+================
+*/
+function wtHarness( t ) {
+	const transports = [];
+	/*
+	================
+	Transport
+	================
+	*/
+	class Transport {
+		ready = Promise.resolve();
+		closed = new Promise( () => {} );
+		sent = [];
+		queued = [];
+		waiting = null;
+		constructor() {
+			transports.push( this );
+		}
+		/*
+		================
+		createBidirectionalStream
+		================
+		*/
+		createBidirectionalStream() {
+			return {
+				writable: {
+					getWriter: () => ({
+						write: bytes => {
+							this.sent.push( bytes.slice() );
+							return Promise.resolve();
+						},
+						close: () => Promise.resolve()
+					})
+				},
+				readable: {
+					getReader: () => ({
+						read: () =>
+							this.queued.length ?
+								Promise.resolve( { done: false, value: this.queued.shift() } ) :
+								new Promise( resolve => {
+									this.waiting = resolve;
+								} ),
+						cancel: () => Promise.resolve()
+					})
+				}
+			};
+		}
+		/*
+		================
+		push
+		================
+		*/
+		push( bytes ) {
+			if ( this.waiting ) {
+				const wake = this.waiting;
+				this.waiting = null;
+				wake( { done: false, value: bytes } );
+			} else this.queued.push( bytes );
+		}
+		/*
+		================
+		close
+		================
+		*/
+		close() {}
+	}
+	const transportGlobal = Object.getOwnPropertyDescriptor( globalThis, "WebTransport" );
+	Object.defineProperty( globalThis, "WebTransport", { value: Transport, configurable: true } );
+	const fetchGlobal = Object.getOwnPropertyDescriptor( globalThis, "fetch" );
+	Object.defineProperty( globalThis, "fetch", {
+		value: async () => ({ ok: false }),
+		configurable: true,
+		writable: true
+	} );
+	t.after( () => {
+		if ( transportGlobal ) Object.defineProperty( globalThis, "WebTransport", transportGlobal );
+		else Reflect.deleteProperty( globalThis, "WebTransport" );
+		if ( fetchGlobal ) Object.defineProperty( globalThis, "fetch", fetchGlobal );
+		else Reflect.deleteProperty( globalThis, "fetch" );
+	} );
+	return transports;
+}
+
+/*
+================
+a slow-streaming EnterWorld record holds the entry open
+
+The EnterWorld answer is one record of about a megabyte (0x0007): a
+link that delivers it in chunks over more than the 10 s entry window
+is streaming, not stalled, so the entry may not demand a finished frame
+before the deadline is allowed to fire (#2311).
+================
+*/
+test("a slow-streaming EnterWorld record holds the entry open", async t => {
+	const transports = wtHarness( t ), sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	world.experimental( { webTransport: true } );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	await settle();
+	assert.equal( transports.length, 1, "entry starts on WebTransport" );
+	assert.equal( sockets.length, 0, "no socket while QUIC is unproven" );
+	const transport = transports[0];
+	transport.push( wtRecord( 2, welcome() ) );
+	await settle();
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	// The answer in thirds, the last third riding with the entry rows:
+	// twelve seconds of delivery against a ten-second window.
+	const answer = wtRecord( 7, entered() );
+	const third = Math.ceil( answer.byteLength / 3 );
+	transport.push( answer.subarray( 0, third ) );
+	await settle();
+	world.step( 4000 );
+	assert.equal( world.status().phase, "entering-world", "first third: still entering, not rejected" );
+	transport.push( answer.subarray( third, third * 2 ) );
+	await settle();
+	world.step( 9000 );
+	assert.equal( world.status().phase, "entering-world", "second third: the deadline slid on bytes" );
+	// Past the armed deadline with the record still incomplete: only the
+	// bytes already streamed can be keeping this entry alive.
+	world.step( 10050 );
+	assert.equal( world.status().phase, "entering-world", "past the deadline on bytes alone" );
+	const tail = rows.reduce(
+		( chunks, row ) => [ ...chunks, wtRecord( row.opcode, row.payload ) ],
+		[ answer.subarray( third * 2 ) ]
+	);
+	const joined = new Uint8Array( tail.reduce( ( total, chunk ) => total + chunk.byteLength, 0 ) );
+	tail.reduce( ( offset, chunk ) => {
+		joined.set( chunk, offset );
+		return offset + chunk.byteLength;
+	}, 0 );
+	transport.push( joined );
+	await settle();
+	world.step( 12000 );
+	let batch;
+	while ( (batch = world.take()) ) world.ack( batch.sequence );
+	world.step( 12001 );
+	world.ready();
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+	assert.equal( transports.length, 1, "the entry never started over" );
+	assert.equal( sockets.length, 0, "no socket fallback was needed" );
+	world.dispose();
+});
+
+/*
+================
+a silent socket still times out
+
+Byte liveness must not keep a dead wire alive: with the EnterWorld
+answer never arriving at all, the entry deadline still fires on the
+socket exactly as before (#2311).
+================
+*/
+test("a silent socket still times out", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	world.step( 9999 );
+	assert.equal( world.status().phase, "entering-world", "inside the window" );
+	world.step( 10010 );
+	assert.equal( world.status().phase, "reconnecting", "silence still fails the entry" );
+	world.dispose();
+});
+
+/*
+================
+a timed-out entry records the bytes and stage it died with
+
+The world_entry_rejected incident names what the wire had done by
+the failure (#2311 item 4): a report that shows bytes arriving
+exonerates the server, and one that shows none convicts the link.
+The counts are the failed attempt's own: the network counters are
+lifetime, so a retry the server never answered must still show a
+silent wire, and the next attempt starts with no evidence at all.
+================
+*/
+test("a timed-out entry records the bytes and stage it died with", async t => {
+	const sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	assert.equal( world.status().phase, "entering-world" );
+	assert.equal( world.status().entryFailure, undefined, "no failure is recorded while the entry lives" );
+	world.step( 10010 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const evidence = world.status().entryFailure;
+	assert.equal( evidence?.stage, "entering-world" );
+	assert.equal( evidence?.framesReceived, 1, "only the WELCOME had landed" );
+	assert.ok( (evidence?.bytesReceived ?? 0) > 0, "the WELCOME's bytes are counted" );
+	// The scheduled retry receives nothing at all. The network counters
+	// are lifetime, so without the per-attempt baseline this attempt
+	// would inherit the first WELCOME and report a streaming wire for a
+	// server that never answered.
+	assert.equal( world.status().phase, "reconnecting" );
+	world.step( 10300 );
+	await settle();
+	world.step( 10301 );
+	await settle();
+	assert.equal( world.status().phase, "connecting", "the retry is under way" );
+	assert.equal( sockets.length, 2, "the retry opened its own socket" );
+	world.step( 21000 );
+	assert.equal( world.status().error, "World connection timed out" );
+	const silent = world.status().entryFailure;
+	assert.equal( silent?.stage, "connecting" );
+	assert.equal( silent?.framesReceived, 0, "nothing arrived on the retry" );
+	assert.equal( silent?.bytesReceived, 0, "nothing arrived on the retry" );
+	// The next attempt starts clean, and a world that binds keeps no
+	// failure evidence.
+	world.step( 21600 );
+	await settle();
+	assert.equal( world.status().entryFailure, undefined, "a fresh attempt carries no evidence" );
+	world.step( 21601 );
+	await settle();
+	const third = sockets[2];
+	third.onopen();
+	third.receive( 2, welcome() );
+	world.step( 21602 );
+	await settle();
+	world.step( 21603 );
+	await settle();
+	third.receive( 7, entered() );
+	for ( const row of rows ) third.receive( row.opcode, row.payload );
+	world.step( 21604 );
+	const batch = world.take();
+	world.ack( batch.sequence );
+	world.step( 21605 );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().entryFailure, undefined, "a bound world carries no failure evidence" );
+	world.dispose();
+});
+
+/*
+================
+a record that stops streaming still times out
+
+Bytes buy time only while they keep coming: one third of the answer
+and then silence leaves the deadline nothing to slide on (#2311).
+================
+*/
+test("a record that stops streaming still times out", async t => {
+	const transports = wtHarness( t ), sockets = socketHarness( t );
+	const world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	world.experimental( { webTransport: true } );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	await settle();
+	const transport = transports[0];
+	transport.push( wtRecord( 2, welcome() ) );
+	await settle();
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	await settle();
+	const answer = wtRecord( 7, entered() );
+	transport.push( answer.subarray( 0, Math.ceil( answer.byteLength / 3 ) ) );
+	await settle();
+	world.step( 4000 );
+	assert.equal( world.status().phase, "entering-world", "the third bought its window" );
+	world.step( 13999 );
+	assert.equal( world.status().phase, "entering-world", "window from the last byte still open" );
+	world.step( 14010 );
+	assert.equal( world.status().phase, "reconnecting", "silence after the bytes still fails" );
+	assert.equal( sockets.length, 0, "the retry has not run yet" );
+	world.dispose();
 });

@@ -97,6 +97,14 @@ count (monstersquad does both), they never inherit one.
 type moverSlot struct {
 	gid uint32
 	rec moverRecord
+	// gen counts whole-value sets of this row (moverStorage.set). A
+	// plan taken from the row at one generation must not commit over
+	// a newer one: the leg snapshot carries the generation it read,
+	// and CommitMoverGen drops a commit whose base has moved (#2137
+	// slice 1). Cadence-only stamps (setActivity, catchUpActivity)
+	// deliberately do not advance it: they merge into an in-flight
+	// plan by design, and commitActivity already value-guards them.
+	gen uint64
 }
 
 /*
@@ -164,6 +172,48 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		s.slots = append(s.slots, moverSlot{gid: gid})
 		s.byGID[gid] = slot
 	}
+	s.setRow(slot, gid, row, exists)
+}
+
+/*
+================
+setAt
+
+set through a slot carried from the step's read, verified against
+the gid before use: when the slot still names gid the write lands
+on that row with no gid resolve; when it does not (the row moved,
+or the hint is the no-slot sentinel), set resolves or creates the
+row exactly as before. The one hot caller (commitActivityAt) has
+just read the row through the same slot, so the verified path is
+the one it takes (#2133).
+================
+*/
+func (s *moverStorage) setAt(slot uint32, gid uint32, row monster.MoverState) {
+	if s == nil {
+		return
+	}
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		s.set(gid, row)
+		return
+	}
+	if s.byGID == nil {
+		s.byGID = make(map[uint32]uint32)
+	}
+	s.blocks.note(gid)
+	s.setRow(slot, gid, row, true)
+}
+
+/*
+================
+setRow
+
+The write set and setAt share once the row's slot is known: bump
+the commit generation, maintain the interest index against the
+bounds the value moves, and fold the value into the slot's record.
+================
+*/
+func (s *moverStorage) setRow(slot uint32, gid uint32, row monster.MoverState, exists bool) {
+	s.slots[slot].gen++
 	old := s.slots[slot].rec
 	after := moverInterestBoundsFor(row)
 	if !exists {
@@ -189,6 +239,45 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	live := new(monster.MoverState)
 	*live = row
 	s.slots[slot].rec = moverRecord{live: live}
+}
+
+/*
+================
+generation
+
+The row's commit generation (see moverSlot.gen); zero when the
+storage holds no row for gid - a not-yet-created row reads as
+generation zero, so a commit planned from a synthesized spawn mover
+drops if a slower lane created the row first.
+================
+*/
+func (s *moverStorage) generation(gid uint32) uint64 {
+	if s == nil {
+		return 0
+	}
+	slot, ok := s.slotOf(gid)
+	if !ok {
+		return 0
+	}
+	return s.slots[slot].gen
+}
+
+/*
+================
+generationAt
+
+generation through a slot carried from the step's read, verified
+against the gid before use; a slot that no longer names gid
+delegates to generation, so the answer is the row's either way -
+zero for a row that does not exist yet, exactly as generation
+(#2133).
+================
+*/
+func (s *moverStorage) generationAt(slot uint32, gid uint32) uint64 {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return s.generation(gid)
+	}
+	return s.slots[slot].gen
 }
 
 /*
@@ -267,7 +356,41 @@ func (s *moverStorage) setActivity(gid uint32, activity monster.ActivityCadence)
 	if !ok {
 		return
 	}
-	rec := &s.slots[slot].rec
+	s.slots[slot].stampActivity(activity)
+}
+
+/*
+================
+setActivityAt
+
+setActivity through a slot carried from the step's read, verified
+against the gid before use; a slot that no longer names gid
+delegates to setActivity, so the stamp lands on gid's row either
+way (#2133).
+================
+*/
+func (s *moverStorage) setActivityAt(slot uint32, gid uint32, activity monster.ActivityCadence) {
+	if s == nil {
+		return
+	}
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		s.setActivity(gid, activity)
+		return
+	}
+	s.slots[slot].stampActivity(activity)
+}
+
+/*
+================
+moverSlot.stampActivity
+
+The cadence write setActivity makes once the row's slot is known:
+the live value in place, or the pending record's own field; a row
+in neither form has no cadence to stamp.
+================
+*/
+func (slot *moverSlot) stampActivity(activity monster.ActivityCadence) {
+	rec := &slot.rec
 	if rec.live != nil {
 		rec.live.Activity = activity
 		return

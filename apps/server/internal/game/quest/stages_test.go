@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"testing"
 
 	"opensro.online/server/internal/game/action"
@@ -157,7 +157,7 @@ func verifyStagedQuestLifecycle(t *testing.T, defs *Definitions, items enterworl
 }
 
 func TestStageRewardInventoryFailureIsAtomic(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := testRuntime(t)
 	c := questCharacter()
 	if _, err := rt.StartQuest(c, "QTUTORIAL_CH"); err != nil {

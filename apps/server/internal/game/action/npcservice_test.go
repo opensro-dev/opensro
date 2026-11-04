@@ -58,7 +58,9 @@ func TestOrdinaryMerchantCannotGrantSpecialTrade(t *testing.T) {
 	rt, c := merchantFixture(t)
 	rt.Selected.Set(testDivision, c.Name, 17)
 	frames, refusal := rt.HandleNpcAction(testDivision, c, npcActionBody(17, simulation.NpcTalkFlagSpecialTrade))
-	if refusal == "" || len(frames) != 0 || rt.Selected.FunctionOpen(testDivision, c.Name, 17) {
+	if refusal == "" || len(frames) != 1 || frames[0].Opcode != wire.OpNpcInteractionAck ||
+		!bytes.Equal(frames[0].Payload, wire.EncodeNpcInteractionRefusal(npcFunctionNotOffered)) ||
+		rt.Selected.FunctionOpen(testDivision, c.Name, 17) {
 		t.Fatalf("ordinary shop granted special trade: %+v %q", frames, refusal)
 	}
 }

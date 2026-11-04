@@ -5,8 +5,8 @@ objectnav_reach_test.go - the reach skip never skips a placement that mattered
 
 The chord scans skip a placement whose reach box the chord misses
 (objectnav_reach.go). If a reach were ever too small, a skipped placement
-would have produced a contact, an entry or a different winner. This scans
-random chords over real authority data both ways, skipping and with every
+would have produced a contact, an entry, a deck stand or a different
+winner. This scans random chords over real authority data both ways, skipping and with every
 placement scanned (a validator built with scanEveryPlacement, the
 brute-force reference), and
 requires identical answers from both scans and from the clip and the owner
@@ -35,6 +35,10 @@ var reachChordRegions = []uint16{0x61A8, 0x6699, 0x694F, 0x6687, 0x6A2C, 0x6E4A}
 
 const reachChordsPerRegion = 20000
 
+// reachStandLift raises the stand probe above the chord's end, so a deck
+// over the terrain is nearer than the ground below it.
+const reachStandLift = 20.0
+
 // reachChordChunks splits each region's chords into parallel subtests.
 const reachChordChunks = 8
 
@@ -55,7 +59,11 @@ func reachScans(v *WaterValidator, from, to simulation.Spawn) string {
 	if stand, at, visit := v.terrainOutlineEntry(fromGrid.X, fromGrid.Z, toGrid.X, toGrid.Z, 0); stand != nil {
 		entry = fmt.Sprintf("%v %v %v %v %v %v %v %v", at, visit, stand.surface.seedRegionID, stand.setDX, stand.setDZ, stand.objectIndex, stand.meshIndex, stand.cellIndex)
 	}
-	return fmt.Sprintf("contact %s | entry %s | walk %+v | clip %+v", contact, entry, walk.spans(), v.ClipMovementPathFrom(from, simulation.NavOwner{}, to))
+	// The deck-stand arbitration skips by point (objectnav_stand.go): the
+	// formation goal probe asks for the surface under a point above the
+	// ground, where a deck over the terrain can win.
+	standY, standOK := v.WalkableSpawnHeightAt(to.RegionID, to.X, to.Y+reachStandLift, to.Z)
+	return fmt.Sprintf("contact %s | entry %s | walk %+v | clip %+v | stand %v %v", contact, entry, walk.spans(), v.ClipMovementPathFrom(from, simulation.NavOwner{}, to), standY, standOK)
 }
 
 /*

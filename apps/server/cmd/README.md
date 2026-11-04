@@ -58,9 +58,8 @@ go build -o agent.exe ./cmd/services/sro-agent
 
 Do not run those binaries directly during normal operation.
 [Getting started](../../../docs/guides/GETTING_STARTED.md) owns the source-checkout build/bootstrap/start
-sequence. [DEPLOYMENT.md](../ops/docs/DEPLOYMENT.md) owns runtime security and
-state contracts. [The Nomad guide](../ops/nomad/README.md) owns production
-fleet operations.
+sequence. Production fleet operations belong to the operator's deployment
+tooling, which is not part of this repository.
 
 ## Provisioning
 

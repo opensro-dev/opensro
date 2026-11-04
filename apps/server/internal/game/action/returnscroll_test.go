@@ -21,9 +21,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
-	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -144,7 +143,7 @@ starter position.
 ================
 */
 func TestFreshCharacterReturnScrollLandsAtJanganGate(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, clock, _ := returnFixture(t, 5000)
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)
@@ -497,15 +496,17 @@ func TestReturnScrollQuestBlockPrecedesConsumptionAndCasting(t *testing.T) {
 
 /*
 ================
-TestCompleteReturnScrollTimesTheDivisionWait
+TestCompleteReturnScrollBoundsTheDivisionWait
 
-While the division lane is held elsewhere, a due return scroll waits;
-that wait is reported as its own slow step (returnScrollDivisionWait),
-not charged to the completion itself (#1820 E). The job here is a ghost:
-once the lane frees, the completion finds no cast and returns.
+While the division lane is held elsewhere, a due return scroll waits
+at most its lane bound: past it no completion is attempted and the
+step names the cut (returnScrollDivisionCut), rather than charging
+the lane holder's time to this hook (#2143, #1820 E). Once the lane
+frees, the same call completes. The job here is a ghost: the
+completion finds no cast and returns.
 ================
 */
-func TestCompleteReturnScrollTimesTheDivisionWait(t *testing.T) {
+func TestCompleteReturnScrollBoundsTheDivisionWait(t *testing.T) {
 	rt, clock, _, _ := newCombatTestRuntime(t, 1)
 	var mu sync.Mutex
 	var steps []string
@@ -515,31 +516,73 @@ func TestCompleteReturnScrollTimesTheDivisionWait(t *testing.T) {
 		mu.Unlock()
 	}
 	unlock := rt.lockDivision(testDivision)
+	_, _, attempted := rt.completeReturnScrollInDivision(
+		pendingReturn{division: testDivision, name: "ghost"}, clock.Now().UnixMilli(), time.Now().Add(time.Millisecond),
+	)
+	if attempted {
+		t.Fatal("completion ran while its division lane stayed held")
+	}
+	mu.Lock()
+	sawCut := false
+	for _, name := range steps {
+		if name == "returnScrollDivisionCut" {
+			sawCut = true
+		}
+	}
+	mu.Unlock()
+	if !sawCut {
+		t.Fatalf("slow steps = %v, want returnScrollDivisionCut among them", steps)
+	}
+	unlock()
+	if _, _, attempted := rt.completeReturnScrollInDivision(
+		pendingReturn{division: testDivision, name: "ghost"}, clock.Now().UnixMilli(), time.Now().Add(5*time.Second),
+	); !attempted {
+		t.Fatal("completion did not run after the lane was released")
+	}
+}
+
+/*
+================
+TestAdvanceReturnScrollsDefersBehindBusyLane
+
+A cast whose division lane is held past the lane bound stays due and
+the tick returns at once (#2143: the live 100-211 ms
+advanceReturnScrolls ticks were two unbounded lane waits); the next
+tick after the lane frees completes it.
+================
+*/
+func TestAdvanceReturnScrollsDefersBehindBusyLane(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 1000)
+	defer func(bound time.Duration) { returnScrollLaneBound = bound }(returnScrollLaneBound)
+	returnScrollLaneBound = time.Millisecond
+	resets := 0
+	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
+		for _, frame := range frames {
+			if frame.Opcode == enterworld.OpcodeResetClient {
+				resets++
+			}
+		}
+	}
+	useReturn(rt, c)
+	key := simulation.WorldKey(testDivision, c.Name)
+	clock.Advance(2 * time.Second)
+	unlock := rt.lockDivision(testDivision)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		rt.completeReturnScrollInDivision(pendingReturn{division: testDivision, name: "ghost"}, clock.Now().UnixMilli())
+		rt.advanceReturnScrolls(clock.NowMs())
 	}()
-	wait.Consistently(t, 500*time.Millisecond, "the completion waits on the division lane", func() bool {
-		select {
-		case <-done:
-			return false
-		default:
-			return true
-		}
-	})
-	unlock()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("return completion did not finish after the lane was released")
+	case <-time.After(10 * time.Second):
+		t.Fatal("advanceReturnScrolls parked behind a held division lane")
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	for _, name := range steps {
-		if name == "returnScrollDivisionWait" {
-			return
-		}
+	if _, pending := rt.returnCasts.Load(key); !pending || c.NativeTeleportMode == 0 || resets != 0 {
+		t.Fatal("the cast completed, or was consumed, behind a held division lane")
 	}
-	t.Fatalf("slow steps = %v, want returnScrollDivisionWait among them", steps)
+	unlock()
+	rt.advanceReturnScrolls(clock.NowMs())
+	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 || resets != 1 {
+		t.Fatal("the deferred cast did not complete once the lane freed")
+	}
 }

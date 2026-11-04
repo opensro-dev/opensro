@@ -93,9 +93,12 @@ Also:
   data, native capture, or inference (stated in a code comment). A claim
   that contradicts an existing comment or research note says so, and the PR
   corrects the old text.
+  The `native-claims` check fails a change whose new source comments cite a
+  client address while this table has no rows.
 - **A player note belongs in a commit message.** Patch notes read the
   `Player-note:` trailer of the merged commit, so a note left only in the pull
-  request's text never reaches players.
+  request's text never reaches players. `Player-note-retract: #<pr>` withdraws
+  every note of that pull request, so restate the ones that stay.
 - **Say whether an open browser tab still copes.** A release that keeps the
   browser protocol leaves every open tab running the old client. A commit
   that changes what a tab receives or decodes carries the trailer
@@ -109,9 +112,8 @@ Also:
   it". When an old tab cannot cope, bump the protocol instead: old tabs then
   get the 426 and load the new release. Tests, comments and client code
   outside the decoders need no trailer. The release-mistakes rules behind
-  this are collected in the ops release README's
-  [Coordinated releases](../apps/server/ops/release/README.md#coordinated-releases)
-  section (F6's COS bag cap broke a strict decoder).
+  this are kept with the operator's release tooling (F6's COS bag cap
+  broke a strict decoder).
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.

@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -41,7 +41,7 @@ an injected necklace for either programme's actual completion path.
 ================
 */
 func TestRahidCompiledQuestChain(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(progression.EnvBetaGrowth, "0")
 	w := newRahid6World(t)
 	rt := w.rt

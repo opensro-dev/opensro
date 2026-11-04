@@ -19,6 +19,7 @@ it, silently, so the installer never shows on a loading screen.
 import { createPersistentAssets } from "./persistent";
 import { createPackIndex, PACK_MAGIC } from "./index/index";
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
+import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
 import { textureVariantPath, type TextureVariant } from "@/engine/foundation/assets/texture-variants";
@@ -116,19 +117,30 @@ export function createPacks(
 					end: 11,
 					total: descriptor.bytes
 				} );
+				// The prefix is unverified network bytes: a garbled identity
+				// or length is a cut or substituted body, not content (#2337).
 				if ( prefix.length !== 12 || new TextDecoder().decode( prefix.subarray( 0, 8 ) ) !== PACK_MAGIC ) {
-					throw Error( "Invalid pack identity" );
+					throw assetFailure( "Invalid pack identity", true );
 				}
 				const length = new DataView( prefix.buffer, prefix.byteOffset, 12 ).getUint32( 8, true );
 				if ( length > (16 << 20) || length + 12 > descriptor.bytes ) {
-					throw Error( "Invalid pack header length" );
+					throw assetFailure( "Invalid pack header length", true );
 				}
 				const bytes = await download( base + descriptor.path, length + 12, lifetime.signal, {
 					start: 0,
 					end: length + 11,
 					total: descriptor.bytes
 				} );
-				return parser.header( bytes, descriptor, true );
+				try {
+					return parser.header( bytes, descriptor, true );
+				} catch ( error ) {
+					// The header bytes are the same unverified ranged read
+					// as the prefix above: a garbled identity, truncation
+					// or unparsable table is a cut or substituted body,
+					// not content (#2337). The whole-pack header parse in
+					// pack() runs on SHA-verified bytes and stays permanent.
+					throw assetFailure( error instanceof Error ? error.message : String( error ), true );
+				}
 			})();
 			headers.set( descriptor.path, header );
 			void header.catch( () => {
@@ -154,8 +166,16 @@ export function createPacks(
 		if ( !entry.stored ) return stored;
 		storedBytes += stored.length;
 		decodedBytes += entry.length;
-		const bytes = await gunzipBytes( stored, entry.length );
-		if ( bytes.length !== entry.length ) throw Error( "Stored member decodes to the wrong length" );
+		let bytes: Uint8Array<ArrayBuffer>;
+		try {
+			bytes = await gunzipBytes( stored, entry.length );
+		} catch ( error ) {
+			// The stored bytes are unverified until the caller's digest
+			// check, which this refusal pre-empts: a gzip that will not
+			// inflate is a cut or substituted body, not content (#2337).
+			throw assetFailure( String( error ), true );
+		}
+		if ( bytes.length !== entry.length ) throw assetFailure( "Stored member decodes to the wrong length", true );
 		return bytes;
 	}
 	/*
@@ -236,7 +256,14 @@ export function createPacks(
 			}
 			const missing = !bytes;
 			bytes ??= await download( base + descriptor.path, descriptor.bytes, lifetime.signal );
-			if ( missing && await sha( bytes ) !== descriptor.sha256 ) throw new Error( "Pack SHA-256 mismatch" );
+			// Wrong bytes, not wrong content: the persistent path above
+			// evicts and refetches this same fact, so a network body cut or
+			// re-framed in transit is transient for the bounded recovery
+			// (#2337). A corrupt origin still ends visible when the
+			// recovery budget runs out.
+			if ( missing && await sha( bytes ) !== descriptor.sha256 ) {
+				throw assetFailure( "Pack SHA-256 mismatch", true );
+			}
 			const loaded = { bytes, start: parser.header( bytes, descriptor ) };
 			if ( disposed ) throw new Error( "Pack owner disposed" );
 			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes );
@@ -341,8 +368,10 @@ export function createPacks(
 				}
 			}
 			if ( disposed || signal.aborted ) throw new Error( "Asset request cancelled" );
-			if ( bytes.length !== entry.length ) throw new Error( "Asset length disagrees with manifest" );
-			if ( !saved && await sha( bytes ) !== entry.sha256 ) throw new Error( "Asset SHA-256 mismatch" );
+			// A short or substituted body again: wrong bytes, marked
+			// transient like the pack digest above (#2337).
+			if ( bytes.length !== entry.length ) throw assetFailure( "Asset length disagrees with manifest", true );
+			if ( !saved && await sha( bytes ) !== entry.sha256 ) throw assetFailure( "Asset SHA-256 mismatch", true );
 			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 			if ( !saved && !cache.has( entry.packPath ) ) {
 				persistent.enqueue( url.origin, entry.sha256, bytes );

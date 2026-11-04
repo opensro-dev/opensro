@@ -2746,7 +2746,8 @@ the next full prepare pass, so this may run between frames.
 				children.push( {
 					actor: { ...child, deferredParticle: undefined },
 					model: childResource.model,
-					images: childResource.images
+					images: childResource.images,
+					effect: true
 				} );
 			}
 			// Port-only (the viewer's riding uniques): a linked ride is the one
@@ -3166,6 +3167,17 @@ the next full prepare pass, so this may run between frames.
 		================
 		*/
 		currentActors: (): readonly CharacterActor[] => actors,
+		/*
+		================
+		takeDegradations
+
+		The snapshot owners' held-clock reports since the last take
+		(#2407), in the Degradation shape every owner hands its reporter.
+		================
+		*/
+		takeDegradations(): import("@/engine/contracts/network").Degradation[] {
+			return [ ...snapshots.takeDegradations(), ...portraitSnapshots.takeDegradations() ];
+		},
 		/*
 		================
 		actors

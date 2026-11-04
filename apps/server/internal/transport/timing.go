@@ -202,6 +202,8 @@ func countSlow(into map[string]*SlowHookStats, slow []SlowHook, at time.Time, ti
 RecordTickPhases
 
 The simulation ticker's per-tick seam (wired by worldsession.NewTicker).
+Also feeds the spike journal's burst attribution (#2295): the record a
+burst closes with names this data, not just a step inside one hook.
 ================
 */
 func (h *Hub) RecordTickPhases(phases TickPhases) {
@@ -210,6 +212,9 @@ func (h *Hub) RecordTickPhases(phases TickPhases) {
 		t.phases[i].Add(elapsed)
 	}
 	t.recordCommit(phases.Commit)
+	if journal := h.metrics.spikes; journal != nil {
+		journal.observePhases(phases)
+	}
 	if len(phases.SlowHooks) == 0 && len(phases.SlowDivisions) == 0 {
 		return
 	}

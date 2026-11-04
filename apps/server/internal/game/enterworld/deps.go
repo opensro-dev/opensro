@@ -101,6 +101,12 @@ type Deps struct {
 	// slow-entry log. Zero means the production default; tests set it
 	// so a held gate trips the abandonment without waiting it out.
 	GateWaitBound time.Duration
+	// EncodeEntryPayload renders the browser entry payload for one
+	// built bootstrap result (browserEntryPayload); nil uses it with
+	// BrowserReferences. A test seam: the entry handler now encodes
+	// after releasing the publication gate, and a test proves the
+	// gate is free while the encoder runs.
+	EncodeEntryPayload func(result *BootstrapResult) ([]byte, error)
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -168,6 +174,12 @@ type Deps struct {
 	// zero on the client: CIFMagicStateBoard_OnUpdate (6E6AA0) does not retire
 	// a kind-3 pet-skill window solely because its timer reached zero.
 	TrackTimedWindows func(divisionID, characterName string)
+	// TrackMostWanted hands a character holding a Most Wanted streak to
+	// the action runtime's tick sweep (port-only, #1849), which sends
+	// the entry wanted state and enforces the level's seven-day lapse.
+	// Without it a relogged holder's buff-board row would never appear
+	// and a lapsed level would outlive its seven days.
+	TrackMostWanted func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
 	ExtraMagicOptionIDs func() []uint32
@@ -255,6 +267,10 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	) []Packet
+	// EntryEventFrames are a running event's notices for a login (not a
+	// re-entry): port-only, action/halloween_waves.go; nil or empty sends
+	// nothing.
+	EntryEventFrames func(divisionID string, character *Character) []Packet
 
 	Letters       LetterStore
 	Guilds        GuildStore
@@ -681,6 +697,21 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 
 /*
 ================
+entryPayload
+
+The one browser-entry-payload encode, shared by the enter handler and
+the re-entry prepares; EncodeEntryPayload replaces it in tests.
+================
+*/
+func (d *Deps) entryPayload(result *BootstrapResult) ([]byte, error) {
+	if d != nil && d.EncodeEntryPayload != nil {
+		return d.EncodeEntryPayload(result)
+	}
+	return browserEntryPayload(result, d.BrowserReferences)
+}
+
+/*
+================
 encodeReentry
 ================
 */
@@ -691,7 +722,7 @@ func (d *Deps) encodeReentry(result *BootstrapResult) ([]Packet, bool) {
 	if len(result.Packets) == 0 || result.Packets[0].NativeOpcode != OpcodeResetClient {
 		return nil, false
 	}
-	payload, err := browserEntryPayload(result, d.BrowserReferences)
+	payload, err := d.entryPayload(result)
 	if err != nil {
 		return nil, false
 	}
@@ -759,6 +790,7 @@ func (d *Deps) Validate() error {
 	require("ExtraRefItemCodenames", d.ExtraRefItemCodenames == nil)
 	require("StaticRefItemCodenames", d.StaticRefItemCodenames == nil)
 	require("TrackTimedWindows", d.TrackTimedWindows == nil)
+	require("TrackMostWanted", d.TrackMostWanted == nil)
 	require("SpawnTerrainHeight", d.SpawnTerrainHeight == nil)
 	require("SpawnSurfaceHeight", d.SpawnSurfaceHeight == nil)
 	require("RelocateStrandedSpawn", d.RelocateStrandedSpawn == nil)

@@ -16,6 +16,7 @@
 | [Asset pipeline](architecture/ASSET_PIPELINE.md) | Building and packaging game data |
 | [Asset delivery](architecture/ASSET_DELIVERY.md) | How game data reaches the browser: sizes, packs, caching |
 | [Profiling](guides/PROFILING.md) | Measuring frame rate and allocations, finding the cost, proving a fix |
+| [Tick tracing](guides/TICK_TRACING.md) | One slow tick as a nested timeline: capturing and opening a Perfetto trace |
 | [3D viewer](guides/VIEWER.md) | The embeddable viewer page |
 | [Server commands](../apps/server/cmd/README.md) | Server command catalog |
 
@@ -23,11 +24,9 @@
 
 | Document | For |
 | --- | --- |
-| [Deployment](../apps/server/ops/docs/DEPLOYMENT.md) | Production topology, security, state and backups |
-| [Nomad operations](../apps/server/ops/nomad/README.md) | Running the cluster |
 | [Hosting the client](../apps/client-next/docs/HOSTING.md) | Serving the browser client behind an edge |
 | [Release checklist](operations/RELEASE.md) | Cutting a release |
-| [Accepted advisories](../apps/server/ops/docs/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability exceptions |
+| [Accepted advisories](security/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability exceptions |
 | [Live item grants](operations/OPERATOR_ITEM_GRANTS.md) | Granting items on a running shard |
 | [GM item picker](operations/GM_ITEM_PICKER.md) | The GM console's F3 picker |
 

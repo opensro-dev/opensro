@@ -284,6 +284,34 @@ test("native login argument is validated, published and cleared on retry and suc
 	assert.equal( session.step().nativeTitleArgument, undefined );
 	session.dispose();
 });
+
+test("blocked login strings are published with the refusal and validated", async t => {
+	let body = {
+		ok: false,
+		nativeTitleStatus: 3,
+		nativeTitleArgument: 1,
+		code: "ACCOUNT_BLOCKED",
+		message: "The account is blocked.",
+		blockReason: "chargeback review",
+		blockEnd: "2030-01-01 00:00:00"
+	};
+	t.mock.method( globalThis, "fetch", async () => Response.json( body ) );
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	const state = session.step();
+	assert.equal( state.phase, "failed" );
+	assert.equal( state.nativeTitleStatus, 3 );
+	assert.equal( state.nativeTitleBlockReason, "chargeback review" );
+	assert.equal( state.nativeTitleBlockEnd, "2030-01-01 00:00:00" );
+	body = { ...body, blockReason: 42 };
+	session.command( command );
+	session.step();
+	await settle();
+	assert.match( session.step().error, /Invalid block detail/ );
+	session.dispose();
+});
 test("authentication commits on a tick and never publishes the bearer", async t => {
 	const requests = [];
 	t.mock.method( globalThis, "fetch", async ( url, options ) => {
@@ -841,6 +869,83 @@ test("entry admission failure returns the authenticated roster without another l
 	assert.equal( value.phase, "character-select" );
 	assert.equal( value.characters, prior.characters );
 	assert.match( value.error, /Admission request failed/ );
+	session.dispose();
+});
+
+test("a maintenance refusal explains itself and is not retried", async t => {
+	const authUrls = [];
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async url => {
+			if ( url.includes( "/auth/" ) ) authUrls.push( url );
+			return Response.json(
+				url.endsWith( "/title/login" ) ? response : url.endsWith( "/character/list" ) ?
+					roster :
+					url.includes( "/auth/" ) ?
+					{ ok: false, code: "MAINTENANCE" } :
+					{ ok: false }
+			);
+		}
+	);
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "roster" } );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	session.step();
+	await settle();
+	const value = session.step();
+	assert.equal( value.phase, "character-select" );
+	assert.equal( value.error, "The server is under maintenance. Please try again later." );
+	// The one refused mint is the whole story: later steps never ask again.
+	await settle();
+	session.step();
+	await settle();
+	session.step();
+	assert.equal( authUrls.length, 1 );
+	session.dispose();
+});
+
+test("a coded refusal without a maintenance name keeps the generic error", async t => {
+	const authUrls = [];
+	t.mock.method(
+		globalThis,
+		"fetch",
+		async url => {
+			if ( url.includes( "/auth/" ) ) authUrls.push( url );
+			return Response.json(
+				url.endsWith( "/title/login" ) ? response : url.endsWith( "/character/list" ) ?
+					roster :
+					url.includes( "/auth/" ) ?
+					{ ok: false, code: "SHARD_OFFLINE" } :
+					{ ok: false }
+			);
+		}
+	);
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "roster" } );
+	session.step();
+	await settle();
+	session.step();
+	session.command( { kind: "enter-world", character: "fixture" } );
+	session.step();
+	await settle();
+	const value = session.step();
+	assert.equal( value.phase, "character-select" );
+	assert.equal( value.error, "Admission request failed" );
+	await settle();
+	session.step();
+	assert.equal( authUrls.length, 1 );
 	session.dispose();
 });
 

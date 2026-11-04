@@ -23,7 +23,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 const (
@@ -44,7 +44,7 @@ ACCESSORY_1 completions times.
 */
 func ktForkFixture(t *testing.T, completions uint32) (*Runtime, *enterworld.Character) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := captureCatalogRuntime(t)
 	c := questCharacter()
 	*c.Level = 70

@@ -190,6 +190,50 @@ func TestCloseStopsTheWALCheckpointer(t *testing.T) {
 
 /*
 ================
+TestWALStarvedLineNamesItsTrigger
+
+Each trigger's line names itself with its numbers (#2296): the size
+trigger at a zero busy streak must not read as busy starvation, and
+the busy trigger must not borrow the size wording.
+================
+*/
+func TestWALStarvedLineNamesItsTrigger(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	line := func(streak, size int64) string {
+		buf.Reset()
+		c := &walCheckpointer{}
+		c.busyStreak.Store(streak)
+		c.logStarved(size)
+		return buf.String()
+	}
+
+	bigWAL := int64(walStarvationBytes) + 1
+	sizeLine := line(0, bigWAL)
+	if !strings.Contains(sizeLine, "WAL size, not busy") ||
+		!strings.Contains(sizeLine, "0 busy cycle(s)") ||
+		!strings.Contains(sizeLine, "67108865 bytes") ||
+		strings.Contains(sizeLine, "(busy cycles)") {
+		t.Fatalf("size-triggered line misreports its trigger: %q", sizeLine)
+	}
+	busyLine := line(walBusyStreakToLog, 1024)
+	if !strings.Contains(busyLine, "(busy cycles)") ||
+		!strings.Contains(busyLine, "3 busy cycle(s)") ||
+		strings.Contains(busyLine, "WAL size") {
+		t.Fatalf("busy-triggered line misreports its trigger: %q", busyLine)
+	}
+	bothLine := line(walBusyStreakToLog, bigWAL)
+	if !strings.Contains(bothLine, "busy cycles and WAL size") ||
+		!strings.Contains(bothLine, "3 busy cycle(s)") ||
+		!strings.Contains(bothLine, "67108865 bytes") {
+		t.Fatalf("both-triggered line misreports its trigger: %q", bothLine)
+	}
+}
+
+/*
+================
 TestSlowCommitNamesItsDoor
 
 A commit over the threshold names its door once; a fast commit and

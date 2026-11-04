@@ -11,9 +11,11 @@ configuration, read once at boot; both ends are UTC.
 
 The sibling event quests that still survive on the reference side fix the
 exchange's shape: one weighted roll, the first row whose running sum is
-not below the roll pays, and the event's three grain gifts pay ten at a
-time. Above that rolled tier sits the prize the 2008 notice's list cannot
-give: the eight event helmets at a flat box price, the exact row chosen.
+not below the roll pays. The rows and weights are the owner's event table
+(#2131), port-only like the rest of the event. Above that rolled tier sits
+the flat-price prize list the 2008 notice's list cannot give: the exact
+row chosen at its stated price — the eight event helmets, and (owner,
+2026-11-04, #2548) the four Elixir A rows a capped character can use.
 How many boxes one rolled gift costs is an inference
 (HalloweenBoxesPerGift): the notice and talk line B read as one box,
 neither states a count. The daily box cap, its 04:00 UTC reset and the
@@ -116,6 +118,16 @@ func (e HalloweenEvent) ActiveAt(now time.Time) bool {
 
 /*
 ================
+HalloweenEvent.EndsAt
+
+The window's end, the first instant the event no longer runs; zero when
+no window is configured.
+================
+*/
+func (e HalloweenEvent) EndsAt() time.Time { return e.endsAt }
+
+/*
+================
 HalloweenEvent.CleanupDueAt
 
 Once a configured window has ended, remaining boxes leave at the first
@@ -142,31 +154,37 @@ type HalloweenGift struct {
 	Weight   float64
 }
 
-// The sibling table's first seven rows (alchemy stones and reinforce
-// recipes, weights 0.3-5) are the rows the avatar gifts replace. These
-// nine keep the sibling weights verbatim; the three potion rows are its
-// grain rows and pay ten each, every other row one.
+// The owner's table (#2131), weights out of 100: buff and 500 scrolls
+// singly, grains in stacks of twenty, the buff scrolls in threes, and one
+// rare band of the four plain Elixirs at 4.5% in all. The band sits on
+// the rows monsters already drop, and the daily box cap bounds it.
 var halloweenConsumableGifts = []HalloweenGift{
-	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 7},
-	{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 10},
-	{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 10},
-	{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 10, Weight: 13},
-	{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 10, Weight: 13},
-	{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 10, Weight: 6},
+	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 1, Weight: 8},
+	{Codename: "ITEM_ETC_E051123_HP500_SCROLL", Count: 1, Weight: 12},
+	{Codename: "ITEM_ETC_E051123_MP500_SCROLL", Count: 1, Weight: 12},
+	{Codename: "ITEM_ETC_HP_SPOTION_01", Count: 20, Weight: 7},
+	{Codename: "ITEM_ETC_MP_SPOTION_01", Count: 20, Weight: 7},
+	{Codename: "ITEM_ETC_ALL_SPOTION_01", Count: 20, Weight: 10},
+	{Codename: "ITEM_ETC_E051123_EVATION_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_HIT_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_SPEED_UP_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_E051123_AGILITY_SCROLL", Count: 3, Weight: 3.875},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Count: 1, Weight: 1.125},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Count: 1, Weight: 1.125},
 }
 
 /*
 ================
 HalloweenGifts
 
-The rolled tier of the exchange: the nine consumables at the sibling
-weights (the table's own total is the roll's range, so the sibling
-ratios hold exactly). The three potion rows are its grain rows and pay
-ten each, every other row one. The mall avatar rows are not gifts: they
-stay buyable with silk, and an event prize silk can buy is not a prize.
+The rolled tier of the exchange. The table's own total is the roll's
+range. The mall avatar rows are not gifts: they stay buyable with silk,
+and an event prize silk can buy is not a prize.
 ================
 */
 func HalloweenGifts() []HalloweenGift {
@@ -186,10 +204,14 @@ func HalloweenGifts() []HalloweenGift {
 //     source counted; the day resets at 04:00 UTC (HalloweenDayKey).
 //   - HalloweenHelmetPrice: boxes one helmet costs, about three days at
 //     the cap, so a regular can finish all four colours inside the run.
+//   - HalloweenElixirPrice: boxes one Elixir costs, half a day at the
+//     cap (owner, 2026-11-04, #2548): the prize a capped main buys
+//     first, priced so a regular can take one home the same day.
 const (
 	HalloweenBoxDropChancePercent = 5
 	HalloweenBoxDailyCap          = 20
 	HalloweenHelmetPrice          = 60
+	HalloweenElixirPrice          = 10
 )
 
 /*
@@ -207,51 +229,62 @@ func HalloweenDayKey(now time.Time) int64 {
 
 /*
 ================
-HalloweenHelmet
+HalloweenPrize
 
-One of the eight event helmets the flat-price tier sells: the exact row
-a player picks, and the sex it is made for.
+One row of the flat-price tier So-ok sells above the rolled gifts: the
+exact item a player picks and its price in boxes. Helmet rows add the
+sex they are made for and sell only to it; every other row sells to
+anyone. The Elixir rows are the four A recipes the rolled table can
+already pay at 4.5% in all — sold, not rolled, at half a day of boxes
+(#2548). No B row: those already sit in the alchemy shop for gold.
 ================
 */
-type HalloweenHelmet struct {
+type HalloweenPrize struct {
 	Codename string
+	Price    uint32
 	Female   bool
+	Helmet   bool
 }
 
-var halloweenHelmets = []HalloweenHelmet{
-	{Codename: "ITEM_ETC_E071030_M_EGHEAD"},
-	{Codename: "ITEM_ETC_E071030_M_BLUE_EGHEAD"},
-	{Codename: "ITEM_ETC_E071030_M_RED_EGHEAD"},
-	{Codename: "ITEM_ETC_E071030_M_BLACK_EGHEAD"},
-	{Codename: "ITEM_ETC_E071030_W_EGHEAD", Female: true},
-	{Codename: "ITEM_ETC_E071030_W_BLUE_EGHEAD", Female: true},
-	{Codename: "ITEM_ETC_E071030_W_RED_EGHEAD", Female: true},
-	{Codename: "ITEM_ETC_E071030_W_BLACK_EGHEAD", Female: true},
-}
-
-/*
-================
-HalloweenHelmets
-
-Every helmet row, in talk-list order (plain, blue, red, black per sex).
-================
-*/
-func HalloweenHelmets() []HalloweenHelmet {
-	return halloweenHelmets
+var halloweenPrizes = []HalloweenPrize{
+	{Codename: "ITEM_ETC_E071030_M_EGHEAD", Price: HalloweenHelmetPrice, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_M_BLUE_EGHEAD", Price: HalloweenHelmetPrice, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_M_RED_EGHEAD", Price: HalloweenHelmetPrice, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_M_BLACK_EGHEAD", Price: HalloweenHelmetPrice, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_W_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_W_BLUE_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_W_RED_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
+	{Codename: "ITEM_ETC_E071030_W_BLACK_EGHEAD", Price: HalloweenHelmetPrice, Female: true, Helmet: true},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", Price: HalloweenElixirPrice},
+	{Codename: "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", Price: HalloweenElixirPrice},
 }
 
 /*
 ================
-HalloweenHelmetByCodename
+HalloweenPrizes
+
+Every flat-price row, in talk-list order: the helmets first (plain,
+blue, red, black per sex, as they have always listed), then the Elixirs.
 ================
 */
-func HalloweenHelmetByCodename(codename string) (HalloweenHelmet, bool) {
-	for _, helmet := range halloweenHelmets {
-		if helmet.Codename == codename {
-			return helmet, true
+func HalloweenPrizes() []HalloweenPrize {
+	return halloweenPrizes
+}
+
+/*
+================
+HalloweenPrizeByCodename
+================
+*/
+func HalloweenPrizeByCodename(codename string) (HalloweenPrize, bool) {
+	for _, prize := range halloweenPrizes {
+		if prize.Codename == codename {
+			return prize, true
 		}
 	}
-	return HalloweenHelmet{}, false
+	return HalloweenPrize{}, false
 }
 
 // EnvHalloweenHelmetSeal seals the eight event helmets at every transfer
@@ -297,12 +330,13 @@ func (s HalloweenHelmetSeal) Enabled() bool { return s.enabled }
 HalloweenHelmetSeal.Sealed
 
 Whether this codename is one of the eight helmets while the seal is on.
+Only the prize list's helmet rows seal; its Elixir rows never do.
 ================
 */
 func (s HalloweenHelmetSeal) Sealed(codename string) bool {
 	if !s.enabled {
 		return false
 	}
-	_, sealed := HalloweenHelmetByCodename(codename)
-	return sealed
+	prize, known := HalloweenPrizeByCodename(codename)
+	return known && prize.Helmet
 }

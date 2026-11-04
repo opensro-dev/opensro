@@ -30,10 +30,10 @@ func TestTickerSurvivesPanickingHook(t *testing.T) {
 	push := &fakePusher{}
 	ticker := newTestTicker(source, push)
 	calls := 0
-	ticker.Hooks = []TickHook{func(nowMs int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(nowMs int64) []DivisionFrames {
 		calls++
 		panic("hook exploded")
-	}}
+	}}}
 
 	ticker.RunTick(1_784_000_000_000)
 	ticker.RunTick(1_784_000_000_250)
@@ -76,10 +76,10 @@ func TestTickerIsolatesPanickingSession(t *testing.T) {
 	push := &panickyPusher{panicOn: "bad"}
 	ticker := newTestTicker(source, push)
 	hookRan := false
-	ticker.Hooks = []TickHook{func(nowMs int64) []DivisionFrames {
+	ticker.Hooks = []NamedTickHook{{Hook: func(nowMs int64) []DivisionFrames {
 		hookRan = true
 		return nil
-	}}
+	}}}
 
 	ticker.RunTick(1_784_000_000_000)
 

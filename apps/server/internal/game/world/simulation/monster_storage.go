@@ -489,6 +489,24 @@ func (s *monsterStorage) contains(gid uint32) bool {
 
 /*
 ================
+containsAt
+
+contains through a slot carried from the behaviour batch build,
+verified against the gid before use: a hit answers from the row's
+place in the slice; a miss (the row moved, went cold, or the hint
+is the no-slot sentinel) delegates to contains, so the answer is
+the storage's either way (#2133).
+================
+*/
+func (s *monsterStorage) containsAt(slot uint32, gid uint32) bool {
+	if slot < uint32(len(s.hot)) && s.hot[slot].gid == gid {
+		return true
+	}
+	return s.contains(gid)
+}
+
+/*
+================
 isDead
 
 get(gid).Ref.MaxHP > 0 && get(gid).CurrentHP == 0 without reconstructing the
@@ -507,6 +525,24 @@ func (s *monsterStorage) isDead(gid uint32) bool {
 
 /*
 ================
+isDeadAt
+
+isDead through a slot carried from the behaviour batch build,
+verified against the gid before use: a hit reads the hot row in
+its slot; a miss delegates to isDead, cold rows included, so the
+answer is the storage's either way (#2133).
+================
+*/
+func (s *monsterStorage) isDeadAt(slot uint32, gid uint32) bool {
+	if slot < uint32(len(s.hot)) && s.hot[slot].gid == gid {
+		row := s.hot[slot].row
+		return row.currentHP == 0 && row.ref.Value().MaxHP > 0
+	}
+	return s.isDead(gid)
+}
+
+/*
+================
 currentHP
 
 lookup(gid).CurrentHP and its existence without reconstructing the full
@@ -521,6 +557,44 @@ func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
 		return r.hp, true
 	}
 	return 0, false
+}
+
+/*
+================
+timerFacts
+
+The AI timer check's facts — current HP and the nest tactics flags
+the first-bank setup reads — without reconstructing the full
+Instance snapshot: the check runs per due actor per leg, and
+expanding the shared catalogue rows dominates its cost (#2029).
+================
+*/
+func (s *monsterStorage) timerFacts(gid uint32) (uint32, uint32, bool) {
+	if r, ok := s.hotRow(gid); ok {
+		return r.currentHP, r.nest.Value().NativeTacticsFlags, true
+	}
+	if r, ok := s.cold[gid]; ok {
+		return r.hp, r.nest.Value().NativeTacticsFlags, true
+	}
+	return 0, 0, false
+}
+
+/*
+================
+timerFactsAt
+
+timerFacts through a slot carried from the behaviour batch build,
+verified against the gid before use: a hit reads the hot row in its
+slot; a miss delegates to timerFacts, cold rows included, so the
+answer is the storage's either way (#2029).
+================
+*/
+func (s *monsterStorage) timerFactsAt(slot uint32, gid uint32) (uint32, uint32, bool) {
+	if slot < uint32(len(s.hot)) && s.hot[slot].gid == gid {
+		row := s.hot[slot].row
+		return row.currentHP, row.nest.Value().NativeTacticsFlags, true
+	}
+	return s.timerFacts(gid)
 }
 
 /*

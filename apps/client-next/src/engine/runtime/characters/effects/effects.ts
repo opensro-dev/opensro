@@ -407,6 +407,20 @@ export function createCharacterEffects(
 	let budgetGaveWay = 0, budgetActors = 0;
 	/*
 	================
+	refuse
+
+	Record an effect this port cannot play, and say so once. A refused
+	effect is skipped, never fatal: one skill's unsupported operation
+	must not end the session for everyone who sees the cast (#2440).
+	================
+	*/
+	function refuse( entry: string ): void {
+		if ( unsupported.has( entry ) ) return;
+		unsupported.add( entry );
+		console.warn( `[SRO effects] skipped unsupported effect: ${entry}` );
+	}
+	/*
+	================
 	adoptCast
 
 	The server's cast takes over its press's prediction: the windup visuals,
@@ -804,7 +818,7 @@ export function createCharacterEffects(
 	function spawnAt( visual: EffectVisual, pose: CharacterActor["pose"], at: number, path?: string ) {
 		const model = path ? modelFor( path ) : undefined;
 		if ( path && !model ) {
-			unsupported.add( path );
+			refuse( path );
 			return;
 		}
 		if ( active.size >= 2048 ) throw Error( "Moving effect residual population exceeds budget" );
@@ -885,7 +899,7 @@ export function createCharacterEffects(
 				stage.move !== "MOV_NONE" || script.kind === "unsupported" ||
 				![ "AT_LOOP", "AT_ONE_FOLLOW", "AT_SOURCE", "AT_TARGET", "AT_TARGET_F" ].includes( stage.action )
 			) {
-				unsupported.add(
+				refuse(
 					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: ${stage.action}/${stage.move}/${
 						script.kind === "unsupported" ? script.operation : script.kind
 					} (${stage.resource})`
@@ -904,13 +918,19 @@ export function createCharacterEffects(
 			if ( !stage.resource ) continue;
 			const model = modelFor( stage.resource );
 			if ( !model ) {
-				unsupported.add( stage.resource );
+				refuse( stage.resource );
 				continue;
 			}
 			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
 				offset = binding.offset;
+			// A shipped stage can carry a batch count the port cannot
+			// instance (the Qin-Shi tomb trap buffs author 0). Skip and
+			// log it; one stage never ends the session (#2440).
 			if ( !Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ) {
-				throw Error( "Invalid attached effect instance count" );
+				refuse(
+					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: invalid count ${stage.count} (${stage.resource})`
+				);
+				continue;
 			}
 			for ( let i = 0; i < stage.count; i++ ) {
 				if ( script.kind === "mover" ) {
@@ -1144,9 +1164,11 @@ export function createCharacterEffects(
 				}
 				return admitted;
 			}
-			// Launch sockets the hold below sampled this step, keyed by callback,
-			// stage and source. The launch reuses them: one sample per launch.
+			// Sockets the hold below sampled this step, keyed by callback, stage
+			// and actor. The admission reuses them: one sample per launch, at
+			// either end of a mover.
 			const launchSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
+			const landingSockets = new Map<string, EffectVisual["actor"]["pose"] | null>();
 			/*
 			================
 			launchKey
@@ -1159,12 +1181,14 @@ export function createCharacterEffects(
 			================
 			moverSourceCold
 
-			True when a mover stage this callback starts launches from a bone on a
+			True when a mover stage this callback starts touches a bone on a
 			resident actor that cannot be posed yet: its model, or the mount it
-			rides, is still loading. The admission below would otherwise drop the
-			mover as unsupported. A returning mover leaves its victims; every other
-			mover leaves the caster. Target sockets are not probed here: they are
-			sampled live at launch and again at each retarget.
+			rides, is still loading. The admission below would otherwise drop
+			the mover as unsupported. A returning mover leaves its victims and
+			lands on the caster; every other mover leaves the caster and lands
+			on its targets. Both ends are probed, because the admission reads
+			the launch bone and captures the landing bone into the flight: a
+			cold bone at either end refuses the mover the same way (#2440).
 			================
 			*/
 			function moverSourceCold(
@@ -1178,19 +1202,37 @@ export function createCharacterEffects(
 				for ( let index = 0; index < record.stages.length; index++ ) {
 					const stage = record.stages[index]!;
 					if ( (stage.phase ?? "SHOT") !== trigger.phase || stage.startEvent !== trigger.event ) continue;
-					if ( !stage.bone || stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ) continue;
+					if ( stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ) continue;
 					const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
 					const mover = returning || stage.action === "AT_MOV_1TAR" || stage.action === "AT_MOV_SPLASH" ||
 						stage.action === "AT_MOV_OPTION";
 					if ( !mover ) continue;
-					const sources = returning ?
-						[ ...new Set( [ cast.target, ...(cast.results?.map( row => row.target ) ?? []) ] ) ] :
-						[ cast.caster ];
-					for ( const gid of sources ) {
-						if ( !byGid.has( gid ) ) continue;
-						const pose = socket( gid, stage.bone, stage.offset, trigger );
-						launchSockets.set( launchKey( trigger, index, gid ), pose );
-						if ( !pose ) cold = true;
+					if ( stage.bone ) {
+						const sources = returning ?
+							[ ...new Set( [ cast.target, ...(cast.results?.map( row => row.target ) ?? []) ] ) ] :
+							[ cast.caster ];
+						for ( const gid of sources ) {
+							if ( !byGid.has( gid ) ) continue;
+							const pose = socket( gid, stage.bone, stage.offset, trigger );
+							launchSockets.set( launchKey( trigger, index, gid ), pose );
+							if ( !pose ) cold = true;
+						}
+					}
+					// A radial mover reads no landing bone; every other mover
+					// captures its launch destination's bone, so a cold landing
+					// bone holds the callback exactly like a cold launch bone
+					// does. Only the launch destination is probed: later chain
+					// hops and distributed rows sample live, as they always did.
+					if ( stage.targetBone && stage.action !== "AT_MOV_OPTION" ) {
+						const destination = returning ? cast.caster : cast.target;
+						if ( byGid.has( destination ) ) {
+							const pose = socket( destination, stage.targetBone, stage.targetOffset ?? [ 0, 0, 0 ], {
+								...trigger,
+								sampleCurrent: true
+							} );
+							landingSockets.set( launchKey( trigger, index, destination ), pose );
+							if ( !pose ) cold = true;
+						}
 					}
 				}
 				return cold;
@@ -1403,7 +1445,7 @@ export function createCharacterEffects(
 							if ( !persistent.has( key ) ) {
 								const record = catalog[String( effectId | 0 )] ?? catalog[String( effectId )];
 								if ( !record ) {
-									unsupported.add( "state:" + effectId.toString( 16 ) );
+									refuse( "state:" + effectId.toString( 16 ) );
 									continue;
 								}
 								const actors: CharacterActor[] = [];
@@ -1528,7 +1570,7 @@ export function createCharacterEffects(
 						seen.add( key );
 						const record = catalog[String( cast.skill )];
 						if ( !record ) {
-							unsupported.add( `skill:${cast.skill}` );
+							refuse( `skill:${cast.skill}` );
 							continue;
 						}
 						for ( let index = 0; index < record.stages.length; index++ ) {
@@ -1667,10 +1709,11 @@ export function createCharacterEffects(
 									undefined;
 								const targetOffset = stage.targetOffset ?? [ 0, 0, 0 ];
 								const targetSocket = flying && !radial && !targetLocal && target && stage.targetBone ?
-									socket?.( target.gid, stage.targetBone, targetOffset, {
-										...trigger,
-										sampleCurrent: true
-									} ) :
+									landingSockets.get( launchKey( trigger, index, target.gid ) ) ??
+										socket?.( target.gid, stage.targetBone, targetOffset, {
+											...trigger,
+											sampleCurrent: true
+										} ) :
 									undefined;
 								const supportedFlight = flying && target &&
 									(targetLocal || !stage.bone || sourceSocket) &&
@@ -1718,7 +1761,7 @@ export function createCharacterEffects(
 											`region-space:${pose.regionId}/${target.regionId}` :
 											null
 									].filter( value => value !== null );
-									unsupported.add(
+									refuse(
 										`${cast.skill}/${trigger.phase}/${trigger.event}/${index}: ${stage.action}/${stage.move}/${
 											script.kind === "unsupported" ? script.operation : script.kind
 										} (${stage.resource})${details.length ? ` [${details.join( ", " )}]` : ""}`
@@ -1753,7 +1796,7 @@ export function createCharacterEffects(
 												victimFacing ?? nativeHeadingYaw( pose.angle )
 											);
 									if ( !source ) {
-										unsupported.add( `anchor-height:${entity.refObjId}` );
+										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
 									}
 									if ( staticTarget ) {
@@ -1768,7 +1811,7 @@ export function createCharacterEffects(
 											nativeHeadingYaw( casterAngle ?? pose.angle )
 										);
 										if ( !anchor ) {
-											unsupported.add( `anchor-height:${entity.refObjId}` );
+											refuse( `anchor-height:${entity.refObjId}` );
 											continue;
 										}
 										source = anchor;
@@ -1779,20 +1822,20 @@ export function createCharacterEffects(
 										holder.height === undefined &&
 										(targetFollow ? stage.targetAddHeight : stage.addHeight)
 									) {
-										unsupported.add( `anchor-height:${entity.refObjId}` );
+										refuse( `anchor-height:${entity.refObjId}` );
 										continue;
 									}
 									if ( rotation && caster ) {
 										const anchor = presentation.get( entity.gid )?.effectAnchor;
 										if ( !anchor ) {
-											unsupported.add( `hit-anchor:${entity.refObjId}` );
+											refuse( `hit-anchor:${entity.refObjId}` );
 											continue;
 										}
 										let [ax, ay, az] = anchor.offset;
 										if ( anchor.bone ) {
 											const joint = socket?.( entity.gid, anchor.bone, [ 0, 0, 0 ], trigger );
 											if ( !joint ) {
-												unsupported.add( `hit-socket:${entity.refObjId}/${anchor.bone}` );
+												refuse( `hit-socket:${entity.refObjId}/${anchor.bone}` );
 												continue;
 											}
 											ax += joint.x - entity.x;
@@ -1815,7 +1858,7 @@ export function createCharacterEffects(
 											}
 										}
 										if ( !projectileSpace( entity.regionId, caster.regionId ) ) {
-											unsupported.add( "hit-anchor:region-space" );
+											refuse( "hit-anchor:region-space" );
 											continue;
 										}
 										const [dx, dz] = worldDelta( entity, caster ),
@@ -1975,7 +2018,7 @@ export function createCharacterEffects(
 											}
 											const child = modelFor( path );
 											if ( !child ) {
-												unsupported.add( path );
+												refuse( path );
 												continue;
 											}
 											const fade = !flight && index === 0 ? 3 : 0;
@@ -2591,7 +2634,7 @@ export function createCharacterEffects(
 					record ??= namedCatalog[reference.codename];
 					if ( !record ) {
 						if ( firework ) {
-							unsupported.add( `item:${reference.codename}: missing retail named effect record` );
+							refuse( `item:${reference.codename}: missing retail named effect record` );
 						}
 						external.delete( id );
 						continue;
@@ -2623,7 +2666,7 @@ export function createCharacterEffects(
 						if ( stage.resource ) {
 							const model = modelFor( stage.resource );
 							if ( !model ) {
-								unsupported.add( stage.resource );
+								refuse( stage.resource );
 								admitted = false;
 							} else if ( !ready( model.glb ) ) admitted = false;
 						}
@@ -3284,7 +3327,7 @@ export function createCharacterEffects(
 												!endpoint || !projectileSpace( sample.pose.regionId, endpoint.regionId )
 											) {
 												if ( entity && !endpoint ) {
-													unsupported.add( `chain-socket:${entity.refObjId}/${route.bone}` );
+													refuse( `chain-socket:${entity.refObjId}/${route.bone}` );
 												}
 												if ( visual.impact ) {
 													impactEvents.push( {
@@ -3379,7 +3422,7 @@ export function createCharacterEffects(
 								}
 								const arrival = flight.arrivalResource ? modelFor( flight.arrivalResource ) : undefined;
 								if ( !arrival?.clips.length ) {
-									if ( flight.arrivalResource ) unsupported.add( flight.arrivalResource );
+									if ( flight.arrivalResource ) refuse( flight.arrivalResource );
 									active.delete( gid );
 									continue;
 								}
@@ -4213,11 +4256,20 @@ export function createCharacterEffects(
 			budgetGaveWay = 0;
 			return taken;
 		},
-		error: () =>
-			loadFailure ?? failure ??
-				(unsupported.size ?
-					`Unsupported native effect resources/operations: ${[ ...unsupported ].join( ", " )}` :
-					null),
+		// Refused effects are skipped and logged by refuse(); they never
+		// surface here. Only a failed load or an explicit failure does.
+		error: () => loadFailure ?? failure ?? null,
+		/*
+		================
+		unsupported
+
+		Every effect refuse() has skipped so far, for diagnostics and
+		probes: what was skipped, and why, without ending the session.
+		================
+		*/
+		unsupported() {
+			return [ ...unsupported ];
+		},
 		/*
 		================
 		reset

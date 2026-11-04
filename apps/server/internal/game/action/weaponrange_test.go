@@ -16,7 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -25,8 +25,8 @@ TestAuthoredBasicWeaponRangesAndCasterPursuit
 ================
 */
 func TestAuthoredBasicWeaponRangesAndCasterPursuit(t *testing.T) {
-	licensed.RequireGameData(t)
-	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	source := enterworld.NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	for _, tc := range []struct {
 		code       string
 		kind       uint8

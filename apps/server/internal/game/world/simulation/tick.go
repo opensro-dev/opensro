@@ -292,6 +292,22 @@ type TickHook func(nowMs int64) []DivisionFrames
 
 /*
 ==================
+NamedTickHook
+
+One tick hook and the name its owner gives it. Slow-hook reports and
+the stall watchdog print this name, never the hook's runtime name: a
+closure registered in a constructor reports as <constructor>.funcN
+(newMissionTicker.func2), which named nothing when a tick stalled
+(#2294). An empty Name falls back to the runtime name, as before.
+==================
+*/
+type NamedTickHook struct {
+	Name string
+	Hook TickHook
+}
+
+/*
+==================
 Ticker
 
 Ticker is the server push tick: the capability the HTTP GET/POST transport
@@ -331,11 +347,11 @@ type Ticker struct {
 	ShardCount int
 	Now        Clock
 	// Hooks run once at the end of every coordinated tick (see TickHook).
-	Hooks []TickHook
+	Hooks []NamedTickHook
 	// BeforeHooks settle already accepted monster actions before division AI
 	// makes another decision at this clock. They run on the coordinator and
 	// use the same scoped publication path as end-of-tick hooks.
-	BeforeHooks []TickHook
+	BeforeHooks []NamedTickHook
 	// Monsters is the monster mover + scope-stream leg (monstertick.go).
 	// Wired whenever the population is enabled, which is the DEFAULT;
 	// nil only under the MISSION_SPAWN_MONSTERS=0 kill switch (then the
@@ -361,6 +377,15 @@ type Ticker struct {
 	// PhaseObserver receives each tick's phase durations and slow hooks
 	// (tick_timing.go); nil records nothing.
 	PhaseObserver func(TickTiming)
+	// Trace, when set, records the tick's zone timeline and hands a
+	// slow tick's rendered trace to TraceSink at tick end
+	// (ticktrace.go, #2301). Nil records nothing - the default, and
+	// the disarmed cost at every zone point. Production wiring arms
+	// it from SRO_TICK_TRACE.
+	Trace *TickTracer
+	// TraceSink receives one slow tick's rendered trace. Nil drops
+	// the render.
+	TraceSink func(TickTrace)
 	// Commit is the authority's per-tick batch (tick_commit.go).
 	Commit TickCommit
 	clock  tickClock
@@ -565,20 +590,27 @@ func (t *Ticker) RunTick(nowMs int64) {
 	t.watch.begin(time.Now())
 	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
+	t.traceBegin()
 	defer t.observePhases()
 	t.beginCommit()
 	defer t.flushCommit()
 
 	tick, work := t.prepareTick()
+	endZone := t.zone("phase:before_hooks")
 	t.runHookList(t.BeforeHooks, nowMs, work)
+	endZone()
 	t.watch.phase.Store(tickPhaseDivisions)
 	t.clock.enterDivisions(t.timingNow())
+	endZone = t.zone("phase:divisions")
 	for _, division := range work {
 		t.runDivision(division, tick, nowMs)
 	}
+	endZone()
 	t.watch.phase.Store(tickPhaseHooks)
 	t.clock.enterHooks(t.timingNow())
+	endZone = t.zone("phase:hooks")
 	t.runHooks(nowMs, work)
+	endZone()
 }
 
 /*
@@ -591,14 +623,18 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	t.watch.begin(time.Now())
 	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
+	t.traceBegin()
 	defer t.observePhases()
 	t.beginCommit()
 	defer t.flushCommit()
 
 	tick, work := t.prepareTick()
+	endZone := t.zone("phase:before_hooks")
 	t.runHookList(t.BeforeHooks, nowMs, work)
+	endZone()
 	t.watch.phase.Store(tickPhaseDivisions)
 	t.clock.enterDivisions(t.timingNow())
+	endZone = t.zone("phase:divisions")
 	batches := make([]shardTickBatch, len(inboxes))
 	for i := range batches {
 		batches[i] = shardTickBatch{tick: tick, nowMs: nowMs, done: make(chan struct{})}
@@ -626,10 +662,13 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	for _, batch := range dispatched {
 		<-batch.done
 	}
+	endZone()
 	if ctx.Err() == nil {
 		t.watch.phase.Store(tickPhaseHooks)
 		t.clock.enterHooks(t.timingNow())
+		endZone = t.zone("phase:hooks")
 		t.runHooks(nowMs, work)
+		endZone()
 	}
 }
 
@@ -677,37 +716,51 @@ func (t *Ticker) runDivision(work divisionTickWork, tick, nowMs int64) {
 	started := t.timingNow()
 	defer func() { t.clock.timeDivision(work.divisionID, t.timingNow().Sub(started)) }()
 
+	defer t.zoneDivision(work.divisionID)()
+
 	live := make(map[string]bool, len(work.sessions))
 	for _, session := range work.sessions {
 		live[session.SessionID] = true
 	}
 	// Each leg is a watchdog step: a starved tick that still finishes legs
 	// is slow, not stuck (tick_watchdog.go).
+	endZone := t.zone("peerVisibility")
 	t.runPeerVisibility(work.state, nowMs, work.sessions, live)
+	endZone()
 	t.watch.step()
+	endZone = t.zone("peerCOSVisibility")
 	t.runPeerCOSVisibility(work.state, nowMs, work.sessions, live)
+	endZone()
 	t.watch.step()
+	endZone = t.zone("playerMap")
 	t.runPlayerMap(work.state, nowMs, work.sessions)
+	endZone()
 	t.watch.step()
+	endZone = t.zone("sessionLegs")
 	for _, session := range work.sessions {
 		t.runSessionLegs(work.state, session, tick, nowMs)
 		t.watch.step()
 	}
+	endZone()
 	for sessionID := range work.state.settled {
 		if !live[sessionID] {
 			delete(work.state.settled, sessionID)
 		}
 	}
+	endZone = t.zone("monsterLeg")
 	work.state.monsters.RunMonsterLeg(nowMs, work.sessions, t.Push)
+	endZone()
 	t.watch.step()
 	// Last, on purpose: the resumed viewer's re-push (resume.go) reads the
 	// shown sets the legs above just refreshed, and its ordered frames land
 	// behind everything this tick already queued for that viewer.
+	endZone = t.zone("repush")
 	for _, session := range work.sessions {
 		if work.resumed[session.SessionID] {
 			t.repushResumedViewer(work, session, tick, nowMs)
 		}
 	}
+	endZone()
 }
 
 /*
@@ -724,15 +777,16 @@ func (t *Ticker) runHooks(nowMs int64, work []divisionTickWork) {
 runHookList
 ================
 */
-func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickWork) {
+func (t *Ticker) runHookList(hooks []NamedTickHook, nowMs int64, work []divisionTickWork) {
 	for _, hook := range hooks {
 		func() {
 			defer recoverTickPanic("hook")
-			t.watch.enterHook(hook)
+			defer t.zoneHook(hook.Name)()
+			t.watch.enterHook(hook.Name)
 			defer t.watch.leaveHook()
 			// The hook's routing and pushes below are part of its time.
 			t.clock.timeHook(hook, t.timingNow, func() {
-				t.routeHookFrames(hook(nowMs), work)
+				t.routeHookFrames(hook.Hook(nowMs), work)
 			})
 		}()
 	}

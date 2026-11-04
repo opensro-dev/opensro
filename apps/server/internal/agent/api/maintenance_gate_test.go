@@ -59,8 +59,13 @@ func TestMaintenanceGateAdmitsOnlyListedAccounts(t *testing.T) {
 ================
 TestEnterWorldTokenRefusedWhileGated
 
-The token route answers MAINTENANCE to an account the gate does not list,
-mints for one it does, and mints for everyone once the gate is removed.
+The token route refuses an account the gate does not list, mints for one
+it does, and mints for everyone once the gate is removed. The refusal
+code is SHARD_OFFLINE by default - not the MAINTENANCE the gate answered
+before the port-only EnvMaintenanceMessage switch existed: no client
+maps SHARD_OFFLINE, so players keep the generic admission failure they
+see today - and MAINTENANCE only with the switch on; the refusal itself
+never mints either way.
 ================
 */
 func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
@@ -74,9 +79,14 @@ func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
 	if err := os.WriteFile(api.maintenanceGatePath, []byte(`{"accounts":["release-probe"]}`), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if minted := mint(); minted["ok"] != false || minted["code"] != "MAINTENANCE" {
+	if minted := mint(); minted["ok"] != false || minted["code"] != "SHARD_OFFLINE" {
 		t.Fatalf("gated mint = %v", minted)
 	}
+	api.maintenanceMessage = true
+	if minted := mint(); minted["ok"] != false || minted["code"] != "MAINTENANCE" {
+		t.Fatalf("gated mint with maintenance message = %v", minted)
+	}
+	api.maintenanceMessage = false
 	if err := os.WriteFile(api.maintenanceGatePath, []byte(`{"accounts":["`+testAccount+`"]}`), 0o640); err != nil {
 		t.Fatal(err)
 	}
@@ -88,5 +98,26 @@ func TestEnterWorldTokenRefusedWhileGated(t *testing.T) {
 	}
 	if minted := mint(); minted["ok"] != true {
 		t.Fatalf("ungated mint = %v", minted)
+	}
+}
+
+/*
+================
+TestMaintenanceMessageReadsTheSwitchSpellings
+
+sro-nomad passes the shard setting through raw to both jobs, so the
+binaries own the spelling: on, 1 or true (any case, trimmed) answers
+MAINTENANCE; off, unset and anything else keep SHARD_OFFLINE.
+================
+*/
+func TestMaintenanceMessageReadsTheSwitchSpellings(t *testing.T) {
+	for value, want := range map[string]bool{
+		"on": true, " ON ": true, "1": true, "true": true,
+		"off": false, "": false, "0": false, "yes": false,
+	} {
+		t.Setenv(EnvMaintenanceMessage, value)
+		if got := MaintenanceMessageFromEnv(); got != want {
+			t.Errorf("%s=%q: got %v, want %v", EnvMaintenanceMessage, value, got, want)
+		}
 	}
 }

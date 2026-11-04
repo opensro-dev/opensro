@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
 const { npcChoiceColor, npcTalkLayout, npcBranchLabel } = await import( "../../src/engine/foundation/ui/npc-talk.ts" );
+const { decodeNpcDialogue } = await import( "../../src/engine/foundation/gameplay/npc-dialogue.ts" );
 const { createNpcPanel } = await import( "../../src/engine/runtime/ui/hud/npc-panel.ts" );
 const { createNpcConversation } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts"
@@ -127,6 +128,54 @@ test("NPC long choice keeps one action across bitmap-wrapped lines and authored 
 		"pressed wrapped choice uses native focus color"
 	);
 	assert.equal( last.controls.filter( c => c.id === "npc-choice:5" ).length, 1 );
+});
+
+test("kind 5 dialogue paints the item name and count into the talk pane prompt", () => {
+	// Real kind-5 wire bytes (763C10 read order): kind, narrow prompt,
+	// row count, narrow rows, wide item codename, u32 count.
+	const narrow = s => {
+		const p = Buffer.from( s ), n = Buffer.alloc( 2 );
+		n.writeUInt16LE( p.length );
+		return Buffer.concat( [ n, p ] );
+	};
+	const wide = s => {
+		const n = Buffer.alloc( 2 );
+		n.writeUInt16LE( s.length );
+		return Buffer.concat( [ n, Buffer.from( s, "utf16le" ) ] );
+	};
+	const count = Buffer.alloc( 4 );
+	count.writeUInt32LE( 60 );
+	const payload = Buffer.concat( [
+		Buffer.from( [ 5 ] ),
+		narrow( "SN_TEST_KIND5" ),
+		Buffer.from( [ 1 ] ),
+		narrow( "SN_TALK_COMMON_EXIT" ),
+		wide( "ITEM_ETC_BOX" ),
+		count
+	] );
+	const texts = {
+		SN_TEST_KIND5: "Trade %s for %d boxes",
+		SN_ITEM_ETC_BOX: "Jewel Box",
+		SN_TALK_COMMON_EXIT: "Exit"
+	};
+	const rows = [];
+	const rendered = npcTalkLayout( {
+		state: { phase: "ready", gid: 7, dialogueRevision: 1, dialogue: decodeNpcDialogue( payload ) },
+		layout,
+		origin: [ 100, 200 ],
+		copy: key => texts[key] ?? key,
+		measure,
+		draw: ( text, rect, clip, color ) => {
+			rows.push( { text, rect, clip, color } );
+			return [];
+		},
+		size: () => [ 16, 16 ],
+		hover: null,
+		pressed: null,
+		top: 0
+	} );
+	assert.ok( rows.some( row => row.text === "Trade Jewel Box for 60 boxes" ), JSON.stringify( rows ) );
+	assert.equal( rendered.controls.filter( c => c.id === "npc-choice:5" ).length, 1 );
 });
 
 test("npcBranchLabel disambiguates duplicate shop group labels for multi-cultural merchants", () => {

@@ -92,11 +92,23 @@ mintWorldToken
 		return http.mint( identity.apiBase, identity.token, kind, character, identity.divisionId, signal ).then(
 			result => {
 				if ( result.status === 401 ) throw new Error( "Authentication required" );
-				const value = result.body as { ok?: boolean; token?: string; };
+				const value = result.body as { ok?: boolean; token?: string; code?: string; };
 				if (
 					!result.httpOk || value?.ok !== true || typeof value.token !== "string" || !value.token ||
 					value.token.length > 512
-				) throw new Error( "Admission rejected" );
+				) {
+					// Port-only, not native (the original has no self-explaining
+					// maintenance refusal): a structured refusal - the Agent
+					// answered with a code - rides out as the error message, so
+					// the world hop can tell an answered refusal from a failure
+					// that never got an answer. It shows the maintenance text
+					// for MAINTENANCE, and the retry rule ends on the codes in
+					// DEFINITIVE_REFUSALS (world.ts); a refusal with no code
+					// keeps the generic error and its old path.
+					throw new Error(
+						typeof value?.code === "string" && value.code ? value.code : "Admission rejected"
+					);
+				}
 				return value.token;
 			}
 		);
@@ -138,12 +150,16 @@ reportClient
 
 A main-thread fault (client-report) as an incident: degraded reports file
 apart from failures; a refused entry files as a software failure with the
-stage it happened in. Each code reports once.
+stage it happened in. Each code reports once - except asset failures,
+which file once per terminal episode: the stream owners hand each out
+exactly once (#2337), so a code dedupe would eat a later episode whole.
 ================
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
-		if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
-		clientReports.add( command.code );
+		if ( command.incidentKind !== "asset" ) {
+			if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+			clientReports.add( command.code );
+		}
 		reportIncident( {
 			id: crypto.randomUUID().replaceAll( "-", "" ),
 			category: command.incidentKind === "degraded" ? "degraded" : "software",
@@ -252,6 +268,7 @@ publishWorld
 				restoringWorld: false,
 				character: undefined,
 				error: value.error,
+				entryFailure: value.entryFailure,
 				disconnectMessage: value.disconnectMessage,
 				incidentID: value.incidentID,
 				incidentDelivery: incidentDelivery.get( value.incidentID )
@@ -269,6 +286,7 @@ publishWorld
 			entityCount: value.entities,
 			pingMs: value.pingMs,
 			error: value.error,
+			entryFailure: value.entryFailure,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
@@ -861,6 +879,10 @@ baseUrl
 									!Number.isInteger( value.nativeTitleArgument ) || value.nativeTitleArgument < 0 ||
 									value.nativeTitleArgument > 0xffffffff)
 							) throw Error( "Invalid native title argument" );
+							if (
+								(value.blockReason !== undefined && typeof value.blockReason !== "string") ||
+								(value.blockEnd !== undefined && typeof value.blockEnd !== "string")
+							) throw Error( "Invalid block detail" );
 							publish( {
 								phase: "failed",
 								code: value.code,
@@ -871,7 +893,11 @@ baseUrl
 										nativeTitleStatus: value.nativeTitleStatus,
 										nativeTitleArgument: value.nativeTitleArgument as number | undefined
 									} :
-									{})
+									{}),
+								...(typeof value.blockReason === "string" ?
+									{ nativeTitleBlockReason: value.blockReason } :
+									{}),
+								...(typeof value.blockEnd === "string" ? { nativeTitleBlockEnd: value.blockEnd } : {})
 							} );
 							if ( !dirty ) {
 								return null;

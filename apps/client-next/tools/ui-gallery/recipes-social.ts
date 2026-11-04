@@ -26,6 +26,7 @@ async function academy( context: RecipeContext, master: boolean ) {
 			entryLevel: 80,
 			model: 1907,
 			offline: false,
+			announced: false,
 			honor: 0,
 			location: "Jangan"
 		}, {
@@ -36,6 +37,7 @@ async function academy( context: RecipeContext, master: boolean ) {
 			entryLevel: 1,
 			model: 1907,
 			offline: false,
+			announced: false,
 			honor: 0,
 			location: "Jangan"
 		} ],

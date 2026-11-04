@@ -95,10 +95,10 @@ function fixtureServerRoot( t, profileValue, registryDefault ) {
 		else process.env.SRO_SERVER_SOURCE_ROOT = ORIGINAL_SERVER_ROOT;
 		fs.rmSync( root, { recursive: true, force: true } );
 	} );
-	fs.mkdirSync( path.join( root, "ops", "release" ), { recursive: true } );
+	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
 	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
 	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
-	fs.writeFileSync( path.join( root, "ops", "release", "shard-settings.json" ), JSON.stringify( profile ) );
+	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
 	fs.writeFileSync(
 		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
 		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n}\n`
@@ -183,7 +183,7 @@ test("a profile or registry flip with the env unset changes the fingerprint and 
 	withTombFlag( t, undefined );
 	fixtureServerRoot( t, "off", "on" );
 	const root = process.env.SRO_SERVER_SOURCE_ROOT;
-	const profilePath = path.join( root, "ops", "release", "shard-settings.json" );
+	const profilePath = path.join( root, "config", "shard-settings.json" );
 	const registryPath = path.join( root, "internal", "config", "shardsettings", "shardsettings.go" );
 	const read = async () => ({
 		fingerprint: (await computeResourceBuildFingerprint()).hash,

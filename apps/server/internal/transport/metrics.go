@@ -22,6 +22,9 @@ type hubMetrics struct {
 	resumeAttempted           atomic.Uint64
 	resumeAccepted            atomic.Uint64
 	resumeFresh               atomic.Uint64
+	// resumeEnded counts resumes of evicted sessions, answered with their
+	// BYE (#2146): a newer login won, so they are not refused resumes.
+	resumeEnded atomic.Uint64
 	// resumeNoPosition and resumeGap count resumes refused into a fresh
 	// session (#1466, #1519): a HELLO with no stream position, and a
 	// position the resume ring cannot serve (dropped past its floor,
@@ -32,6 +35,7 @@ type hubMetrics struct {
 	helloAdmissionRefused  atomic.Uint64
 	detaches               atomic.Uint64
 	detachesIdle           atomic.Uint64
+	detachesRingPark       atomic.Uint64
 	detachesOther          atomic.Uint64
 
 	sessOpened            atomic.Uint64
@@ -65,6 +69,9 @@ type hubMetrics struct {
 	// spikes is the tick-overrun spike journal (tick_spikes.go); nil
 	// until Hub.EnableTickSpikeJournal installs one.
 	spikes *tickSpikeJournal
+	// traces is the slow-tick Perfetto trace writer (tick_trace.go);
+	// nil until Hub.EnableTickTrace installs one.
+	traces *tickTraceWriter
 }
 
 // Metrics is a point-in-time snapshot of the hub's transport counters.
@@ -98,12 +105,14 @@ type Metrics struct {
 	ResumeAttempted           uint64  `json:"resume_attempted"`
 	ResumeAccepted            uint64  `json:"resume_accepted"`
 	ResumeFresh               uint64  `json:"resume_fresh"`
+	ResumeEnded               uint64  `json:"resume_ended"`
 	ResumeNoPosition          uint64  `json:"resume_no_position"`
 	ResumeGap                 uint64  `json:"resume_gap"`
 	HelloAdmissionAccepted    uint64  `json:"hello_admission_accepted"`
 	HelloAdmissionRefused     uint64  `json:"hello_admission_refused"`
 	Detaches                  uint64  `json:"detaches"`
 	DetachesIdle              uint64  `json:"detaches_idle"`
+	DetachesRingPark          uint64  `json:"detaches_ring_park"`
 	DetachesOther             uint64  `json:"detaches_other"`
 
 	// Session lifecycle since boot. The closed breakdown is deliberately
@@ -151,6 +160,11 @@ type Metrics struct {
 	TickSpikes           []TickSpike `json:"tick_spikes,omitempty"`
 	TickSpikeDropped     uint64      `json:"tick_spike_dropped"`
 	TickSpikeWriteErrors uint64      `json:"tick_spike_write_errors"`
+	// TickTraces mirrors the slow-tick trace writer's counters
+	// (tick_trace.go, #2301); zero while the capture is off.
+	TickTracesWritten    uint64 `json:"tick_traces_written"`
+	TickTraceDropped     uint64 `json:"tick_trace_dropped"`
+	TickTraceWriteErrors uint64 `json:"tick_trace_write_errors"`
 	// Request handler and tick phase histograms (timing.go).
 	HandlerMs map[string]Histogram `json:"handler_ms"`
 	// UnhandledOpcodes splits unhandled_opcode_frames by opcode, up to
@@ -291,12 +305,14 @@ func (h *Hub) Metrics() Metrics {
 		ResumeAttempted:           h.metrics.resumeAttempted.Load(),
 		ResumeAccepted:            h.metrics.resumeAccepted.Load(),
 		ResumeFresh:               h.metrics.resumeFresh.Load(),
+		ResumeEnded:               h.metrics.resumeEnded.Load(),
 		ResumeNoPosition:          h.metrics.resumeNoPosition.Load(),
 		ResumeGap:                 h.metrics.resumeGap.Load(),
 		HelloAdmissionAccepted:    h.metrics.helloAdmissionAccepted.Load(),
 		HelloAdmissionRefused:     h.metrics.helloAdmissionRefused.Load(),
 		Detaches:                  h.metrics.detaches.Load(),
 		DetachesIdle:              h.metrics.detachesIdle.Load(),
+		DetachesRingPark:          h.metrics.detachesRingPark.Load(),
 		DetachesOther:             h.metrics.detachesOther.Load(),
 
 		SessionsOpened:             h.metrics.sessOpened.Load(),
@@ -329,6 +345,9 @@ func (h *Hub) Metrics() Metrics {
 	h.metrics.timing.snapshotInto(&metrics)
 	if journal := h.metrics.spikes; journal != nil {
 		metrics.TickSpikes, metrics.TickSpikeDropped, metrics.TickSpikeWriteErrors = journal.snapshot()
+	}
+	if writer := h.metrics.traces; writer != nil {
+		metrics.TickTracesWritten, metrics.TickTraceDropped, metrics.TickTraceWriteErrors = writer.snapshot()
 	}
 	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
 		metrics.MonsterNavigation = (*read)()

@@ -17,7 +17,6 @@ served yet (its shape follows with the trade ledger reasons).
 package economy
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -99,7 +98,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	at, blocks := s.snapshotAt, s.distribution
+	at, blocks, entries := s.snapshotAt, s.distribution, s.rollup
 	s.mu.Unlock()
 	if at.IsZero() {
 		writeError(w, http.StatusServiceUnavailable, queryError{"no_snapshot", "no snapshot has been taken yet"})
@@ -124,29 +123,14 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	db, err := openSnapshot(filepath.Join(s.dir, SnapshotFile))
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	defer db.Close()
 	switch route {
 	case "series":
-		s.serveSeries(w, db, q.Get("metric"), win)
+		s.serveSeries(w, entries, q.Get("metric"), win)
 	case "flows":
-		groups, err := readGroups(db, win)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		buckets, reasons := foldFlows(win, groups)
+		buckets, reasons := foldFlows(win, rollupGroups(entries, win))
 		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
 	case "flags":
-		flags, err := netMintFlags(db, win, win.division)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
+		flags := netMintFlags(entries, win, win.division)
 		if flags == nil {
 			flags = []Flag{}
 		}
@@ -191,7 +175,7 @@ func (s *Service) serveMeta(w http.ResponseWriter) {
 Service.serveSeries
 ================
 */
-func (s *Service) serveSeries(w http.ResponseWriter, db *sql.DB, metric string, win window) {
+func (s *Service) serveSeries(w http.ResponseWriter, entries []rollupEntry, metric string, win window) {
 	var points []Point
 	switch {
 	case metric == "gold_total":
@@ -201,12 +185,7 @@ func (s *Service) serveSeries(w http.ResponseWriter, db *sql.DB, metric string, 
 			return
 		}
 	case ledgerMetric(metric):
-		groups, err := readGroups(db, win)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		points = foldSeries(metric, groups)
+		points = foldSeries(metric, rollupGroups(entries, win))
 	default:
 		writeError(w, http.StatusBadRequest, queryError{"bad_metric", "unknown metric"})
 		return

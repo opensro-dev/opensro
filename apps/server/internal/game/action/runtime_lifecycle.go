@@ -35,8 +35,16 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		// Monster casts and skill finalizes commit deaths and EXP; their
 		// private tails are captured under the gate (sealTickPrivate).
-		unlock := rt.lockTickPublication()
-		defer unlock()
+		// The wait is the tick gate's bounded wait (#2294): a cut hook
+		// settles nothing this tick — summons release on an absolute
+		// ReleaseAtMs, self-effects retire on expiry, casts release on
+		// releaseAtMs and finalizes on dueAtMs, so the next served pass
+		// settles the same work before that tick's division AI. Only
+		// completion shifts by a tick while the gate is held.
+		if !rt.acquireTickGate() {
+			return nil
+		}
+		defer rt.releaseTickGate()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 		}
@@ -179,6 +187,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
 		step("advancePetSkillWindows", func() { rt.advancePetSkillWindows(nowMs) })
+		// Port-only (#1849): entry wanted states and the seven-day lapse
+		// for tracked holders; a no-op while SRO_MOST_WANTED is off.
+		step("advanceMostWanted", func() { rt.advanceMostWanted(nowMs) })
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		// Port-only (killstats.go): online-time accrual and the rollup
 		// flush; a no-op while SRO_KILL_STATS is off.

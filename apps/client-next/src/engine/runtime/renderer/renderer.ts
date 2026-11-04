@@ -29,6 +29,7 @@ import { createCharacters } from "./characters/characters";
 import { createWorldRenderer } from "./world/world";
 import { copyGeometry } from "@/engine/foundation/rendering/geometry";
 import type { Geometry } from "@/engine/contracts/geometry";
+import { createDeviceRecovery } from "@/engine/foundation/rendering/device-recovery";
 import { createDevice } from "./device/device";
 import { createSurface } from "./surface/surface";
 import { createFrame } from "./frame/frame";
@@ -113,7 +114,8 @@ export function createRenderer(
 	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters( random );
-	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
+	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+	const deviceRecovery = createDeviceRecovery();
 	// The texture features of the first device that learns them; the variant
 	// is chosen once per page. A device lost before it learned them hands over
 	// to its replacement (followFeatures); once no device will, they are empty,
@@ -452,18 +454,6 @@ export function createRenderer(
 			else uiTextures.delete( id );
 			dirtyUi.add( id );
 		},
-		/*
-		================
-		setUiAtlas
-
-		Port-only, not native: the icon atlas mapping the interface's image
-		owner installed (foundation/ui/icon-atlas.ts); the UI device's quad
-		packer reads it every prepare.
-		================
-		*/
-		setUiAtlas( mapping ) {
-			device.uiAtlas( mapping );
-		},
 		characterParticleSnapshot: characters.particleSnapshot,
 		characterParticleTime: characters.particleTime,
 		presentationNight: () => world.night(),
@@ -473,6 +463,23 @@ export function createRenderer(
 		retainCharacterModels: characters.retain,
 		setCharacterAssembly: characters.assembly,
 		characterStats: characters.stats,
+		/*
+		================
+		takeDegradations
+
+		Every character snapshot owner's held-clock reports since the last
+		take: the world's rows and each portrait preview's.
+		================
+		*/
+		takeDegradations() {
+			return [
+				...characters.takeDegradations(),
+				...portrait.takeDegradations(),
+				...partyPortraits.flatMap( child => child.takeDegradations() ),
+				...doll.takeDegradations(),
+				...doll2.takeDegradations()
+			];
+		},
 		presentationCamera: () => presentationCamera,
 		audioListener: () => soundListener,
 		setWeather: value => world.weather( value ),
@@ -567,7 +574,16 @@ export function createRenderer(
 			...(device.gpuTiming() ??
 				{ supported: false, skipped: 0, failed: 0, attempted: 0, completed: 0, omittedPasses: 0, samples: [] })
 		}),
-		phase: () => disposed ? "disposed" : failure ? "failed" : device.phase(),
+		// A failure with attempts left is a device still starting: the runtime
+		// ends the session on "failed", and the simulation is fine (#2337).
+		phase: () =>
+			disposed ?
+				"disposed" :
+				failure ?
+				"failed" :
+				device.phase() === "failed" && device.recoverable() && deviceRecovery.pending() ?
+				"starting" :
+				device.phase(),
 		error: () => failure ?? device.error(),
 		/*
 		================
@@ -587,7 +603,8 @@ export function createRenderer(
 			// outlives the command buffers that name it (device/retirement.ts).
 			let open: ReturnType<typeof createDevice> | null = null;
 			try {
-				if ( device.phase() === "failed" && device.recoverable() && recoveries < 3 ) {
+				const nowMs = performance.now();
+				if ( device.phase() === "failed" && device.recoverable() && deviceRecovery.due( nowMs ) ) {
 					// Only renderer state restarts. The runtime's simulation and assets remain owned and live.
 					portraitDepth?.dispose();
 					portraitDepth = null;
@@ -607,19 +624,22 @@ export function createRenderer(
 					characters.invalidate();
 					world.invalidate();
 					device.dispose();
-					recoveries++;
+					deviceRecovery.began();
 					residentUi.clear();
 					residentUiProduct = null;
-					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false, true );
 					followFeatures( device );
 					device.textureOptions( video.records[video.active][8] === 1, video.records[video.active][9]! );
 					device.experimentalVideo( experimental );
 					for ( const id of uiTextures.keys() ) dirtyUi.add( id );
 				}
-				if ( device.phase() === "failed" ) settleFeatures( [] );
+				if ( device.phase() === "failed" && !(device.recoverable() && deviceRecovery.pending()) ) {
+					settleFeatures( [] );
+				}
 				if ( device.phase() !== "running" ) {
 					return;
 				}
+				deviceRecovery.running( nowMs );
 				open = device;
 				open.beginFrame();
 				if ( !surface ) {
@@ -800,6 +820,10 @@ export function createRenderer(
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				const doll2Input = uiProduct?.doll2;
+				// The pet window's doll pauses as the inventory's does: without it,
+				// reopening the window advanced its glows through the whole closed
+				// interval in one frame.
+				if ( !doll2Input ) doll2.pause();
 				if ( doll2Input ) {
 					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
 						w2 = Math.max( 1, Math.ceil( r[2] ) ),

@@ -144,6 +144,7 @@ func newGameplayPlane(
 	// windows to the same sweep that retires them.
 	deps.Now = func() time.Time { return items.Now() }
 	deps.TrackTimedWindows = items.TrackTimedWindows
+	deps.TrackMostWanted = items.TrackMostWanted
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
 	deps.RetireCharacterSession = items.ForgetCharacterSession
@@ -566,6 +567,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}
+	// Port-only, not native: a worn job suit's bonus tiered by job level.
+	game.items.JobSuitTiers = action.JobSuitTiersFromEnv()
+	if game.items.JobSuitTiers {
+		log.Infof("job: suit tiers by job level ON (%s)", action.EnvJobSuitTiers)
+	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
 	step, err := action.MostWantedTestStreakStepFromEnv()
@@ -790,6 +796,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
 	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.EntryEventFrames = game.items.HalloweenEntryFrames
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}

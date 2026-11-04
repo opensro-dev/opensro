@@ -572,7 +572,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if payout.character.ID != c.ID {
 				setGold(payout.character, goldOf(payout.character)+uint64(payout.Gold))
 			}
-			experience, _ := rt.addJobExperience(payout.character, payout.Experience)
+			experience, _ := rt.addJobExperience(division, payout.character, payout.Experience)
 			if payout.character.ID == c.ID {
 				frames = append(frames, experience...)
 			} else {

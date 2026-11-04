@@ -201,18 +201,28 @@ func DecodeFrame(b []byte) (Frame, error) {
 	}, nil
 }
 
-// WriteStreamFrame writes one length-prefixed frame to a WT stream:
+// EncodeStreamFrame renders one length-prefixed WT stream record:
 // uint32 LE length of (opcode+payload), then the frame.
-func WriteStreamFrame(w io.Writer, f Frame) error {
+func EncodeStreamFrame(f Frame) ([]byte, error) {
 	n := f.EncodedLen()
 	if n > MaxFrameBytes {
-		return ErrFrameTooLarge
+		return nil, ErrFrameTooLarge
 	}
 	buf := make([]byte, streamLenPrefixSize+n)
 	binary.LittleEndian.PutUint32(buf[0:4], uint32(n))
 	binary.LittleEndian.PutUint16(buf[4:6], f.Opcode)
 	copy(buf[6:], f.Payload)
-	_, err := w.Write(buf)
+	return buf, nil
+}
+
+// WriteStreamFrame writes one length-prefixed frame to a WT stream:
+// uint32 LE length of (opcode+payload), then the frame.
+func WriteStreamFrame(w io.Writer, f Frame) error {
+	buf, err := EncodeStreamFrame(f)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(buf)
 	return err
 }
 

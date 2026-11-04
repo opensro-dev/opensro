@@ -460,6 +460,36 @@ test("reported beginner speed scroll uses native effect level and measured toolt
 	assert.equal( bubble.lines[0].rect[0], x );
 });
 
+test("a scroll buff's marked-up description paints as text in both tooltips", () => {
+	// The published description carries raw PML (<sml2>, <br>, <font>).
+	// Natively the composer keeps it raw and the tooltip painter routes
+	// it through the markup interpreter (Text_HasSml2Markup), so no tag
+	// may reach the screen from either the buff or the skill tooltip.
+	const row = [ ...catalog.values() ].find( r =>
+		r.tooltipDescriptionSymbol === "SN_ITEM_ETC_E051123_EVATION_SCROLL_TT_DESC"
+	);
+	assert.ok( row );
+	const raw = text( row.tooltipDescriptionSymbol );
+	assert.ok( raw.includes( "<sml2>" ) && raw.includes( "<font" ), "published text carries the raw markup" );
+	const game = {
+		localGid: 1,
+		attachedEffects: [ { gid: 1, skill: row.id, token: 7, phase: 2, remainingMs: 2516000, receivedAtMs: 1000 } ]
+	};
+	const buffValues = buffTooltip( { kind: "buff", gid: 1, skill: row.id, token: 7 }, game, 1000, catalog, text )
+		.map( r => r.value );
+	const skillValues = skillTooltip(
+		{ id: row.id, catalog, learned: [], progression: { level: 1, skillPoints: 0, masteries: [] } },
+		text,
+		id => String( id )
+	).map( r => r.value );
+	for ( const values of [ buffValues, skillValues ] ) {
+		const joined = values.join( "\n" );
+		assert.ok( !/<\/?(sml2|br|font|strong)>/.test( joined ), joined );
+		assert.ok( joined.includes( "Dodging ability will increase" ), joined );
+		assert.ok( joined.includes( "Dodging ratio 30% increase" ), joined );
+	}
+});
+
 /*
 ================
 assertSameBytes

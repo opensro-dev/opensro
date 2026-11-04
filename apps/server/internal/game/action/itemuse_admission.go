@@ -59,6 +59,7 @@ const (
 	itemUseStallDecoration
 	itemUseReverseReturn
 	itemUseNameChange
+	itemUseCrestDelete
 )
 
 /*
@@ -166,6 +167,16 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// The composite scroll (UIU1 param jobs).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 14} {
 		return itemUseComposite
+	}
+	// The crest delete items (#2282, crestdelete.go): the four crest
+	// items share type 3/3/12/2 and split on their params - param1
+	// 1 guild / 2 union, param2 1 register / 2 delete. Only a delete
+	// is admitted; the register rows stay unsupported until #2272
+	// settles where a crest image comes from.
+	if ref.TypeIDs == [4]int64{3, 3, 12, 2} {
+		if param2, _ := ref.NativeFields.Lookup("itemParam2_2a0"); param2 == 2 {
+			return itemUseCrestDelete
+		}
 	}
 	// The native COS item use, and the v1.150 client appends the COS gid for TID4 4/5/7
 	// (client 6963CF) and for the TID3 2 TID4 7 cure (696336). TID4 6 is the

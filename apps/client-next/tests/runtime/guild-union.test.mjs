@@ -142,3 +142,312 @@ test("the rights panel drafts changes and caps union chat at twelve", () => {
 	hud.close();
 	assert.equal( hud.isOpen(), false );
 });
+
+/*
+================
+writer
+
+Frame builder for the guild update arms (mirrors guild-war.test.mjs).
+================
+*/
+function writer() {
+	const bytes = [];
+	return {
+		u8( value ) {
+			bytes.push( value );
+			return this;
+		},
+		u32( value ) {
+			bytes.push( value & 255, value >>> 8 & 255, value >>> 16 & 255, value >>> 24 );
+			return this;
+		},
+		str( value ) {
+			const raw = new TextEncoder().encode( value );
+			bytes.push( raw.length & 255, raw.length >>> 8, ...raw );
+			return this;
+		},
+		frame( opcode ) {
+			return { opcode, payload: Uint8Array.from( bytes ) };
+		}
+	};
+}
+
+/*
+================
+memberRow
+
+One guildMember() row: grade 10, level 1, no war record, model 1907.
+================
+*/
+function memberRow( w, id, name, offline ) {
+	return w.u32( id ).str( name ).u8( 10 ).u8( 1 ).u32( 0 ).u32( 0xffffffff ).u32( 0 ).u32( 0 ).u32( 0 )
+		.str( "" ).u32( 1907 ).u8( 0 ).u8( offline );
+}
+
+/** @type {import("../../src/engine/foundation/gameplay/social.ts").SocialState} */
+const rosterState = {
+	...guildState,
+	guild: {
+		...defined( guildState.guild, "seed guild" ),
+		members: [
+			{
+				id: 1,
+				name: "Echo",
+				grade: 0,
+				level: 1,
+				donated: 0,
+				permissions: -1,
+				grant: "",
+				model: 1907,
+				role: 0,
+				offline: 1
+			},
+			{
+				id: 2,
+				name: "Bravo",
+				grade: 10,
+				level: 3,
+				donated: 0,
+				permissions: 0,
+				grant: "",
+				model: 1907,
+				role: 0,
+				offline: 1
+			},
+			{
+				id: 3,
+				name: "Charlie",
+				grade: 10,
+				level: 2,
+				donated: 0,
+				permissions: 0,
+				grant: "",
+				model: 1907,
+				role: 0,
+				offline: 0
+			}
+		]
+	}
+};
+
+/** @type {import("../../src/engine/foundation/gameplay/social.ts").Guild} */
+const rosterGuild = defined( rosterState.guild, "roster guild" );
+
+test("sub-op 6 mask legs follow 5E9D20: &1 is level, &2 is offline", () => {
+	const leveled = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 2 ).u8( 1 ).u8( 9 ).frame( 0x3b29 )
+	);
+	const bravo = leveled.guild?.members.find( m => m.id === 2 );
+	assert.equal( bravo?.level, 9 );
+	assert.equal( bravo?.offline, 1 );
+	const offlined = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 3 ).u8( 2 ).u8( 1 ).frame( 0x3b29 )
+	);
+	const charlie = offlined.guild?.members.find( m => m.id === 3 );
+	assert.equal( charlie?.offline, 1 );
+	assert.equal( charlie?.level, 2 );
+});
+
+test("member delta flips print connect, disconnect and the self notice (5F3340)", () => {
+	const connected = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 2 ).u8( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.deepEqual(
+		connected.notices?.map( n => [ n.key, n.nativeType, n.arguments ] ),
+		[ [ "UIIT_MSG_GUILD_CONNECT", 0, [ "Bravo" ] ] ]
+	);
+	assert.equal( connected.guild?.members.find( m => m.id === 2 )?.offline, 0 );
+	const noticed = {
+		...rosterState,
+		guild: { ...rosterGuild, subject: "Hello guild" }
+	};
+	const selfConnected = socialPacketOf(
+		noticed,
+		writer().u8( 6 ).u32( 1 ).u8( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.deepEqual(
+		selfConnected.notices?.map( n => [ n.key, n.arguments ] ),
+		[ [ "UIIT_MSG_GUILD_CONNECT_NOTICE", [ "Hello guild" ] ] ]
+	);
+	const silentSelf = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 1 ).u8( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.equal( silentSelf.notices, undefined );
+	const disconnected = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 3 ).u8( 2 ).u8( 1 ).frame( 0x3b29 )
+	);
+	assert.deepEqual(
+		disconnected.notices?.map( n => [ n.key, n.arguments ] ),
+		[ [ "UIIT_MSG_GUILD_DISCONNECT", [ "Charlie" ] ] ]
+	);
+	const selfGone = socialPacketOf(
+		{
+			...rosterState,
+			guild: {
+				...rosterGuild,
+				members: rosterGuild.members.map( m => m.id === 1 ? { ...m, offline: 0 } : m )
+			}
+		},
+		writer().u8( 6 ).u32( 1 ).u8( 2 ).u8( 1 ).frame( 0x3b29 )
+	);
+	assert.equal( selfGone.notices, undefined );
+	const levelOnly = socialPacketOf(
+		rosterState,
+		writer().u8( 6 ).u32( 2 ).u8( 1 ).u8( 8 ).frame( 0x3b29 )
+	);
+	assert.equal( levelOnly.notices, undefined );
+	assert.equal( levelOnly.notice, undefined );
+});
+
+test("the 0x16 batch prints one line per flipped member", () => {
+	const state = socialPacketOf(
+		rosterState,
+		writer().u8( 0x16 ).u8( 2 ).u8( 2 ).u32( 1 ).u8( 0 ).u32( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	// Echo's own flip prints the notice-text line only when a notice
+	// exists; rosterState has none, so only Bravo's connect line lands.
+	assert.deepEqual(
+		state.notices?.map( n => [ n.key, n.arguments ] ),
+		[ [ "UIIT_MSG_GUILD_CONNECT", [ "Bravo" ] ] ]
+	);
+	const both = {
+		...rosterState,
+		guild: {
+			...rosterGuild,
+			members: rosterGuild.members.map( m => m.id === 1 ? { ...m, name: "Other" } : m )
+		},
+		localName: "Echo"
+	};
+	const flipped = socialPacketOf(
+		both,
+		writer().u8( 0x16 ).u8( 2 ).u8( 2 ).u32( 1 ).u8( 0 ).u32( 2 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.deepEqual(
+		flipped.notices?.map( n => n.arguments?.[0] ),
+		[ "Other", "Bravo" ]
+	);
+});
+
+test("member removal prints by kind (762040 slot 3)", () => {
+	const left = socialPacketOf( rosterState, writer().u8( 3 ).u32( 1 ).u8( 1 ).frame( 0x3b29 ) );
+	assert.equal( left.notice?.key, "UIIT_MSG_GUILD_EXIT_RESULT" );
+	assert.deepEqual( left.notice?.arguments, [ "Alpha" ] );
+	assert.equal( left.guild, null );
+	const otherLeft = socialPacketOf( rosterState, writer().u8( 3 ).u32( 2 ).u8( 1 ).frame( 0x3b29 ) );
+	assert.equal( otherLeft.notice, undefined );
+	assert.equal( otherLeft.guild?.members.length, 2 );
+	const kicked = socialPacketOf( rosterState, writer().u8( 3 ).u32( 2 ).u8( 2 ).frame( 0x3b29 ) );
+	assert.equal( kicked.notice?.key, "UIIT_MSG_GUILD_EXPULSION_RESULT" );
+	assert.deepEqual( kicked.notice?.arguments, [ "Bravo" ] );
+	const selfKicked = socialPacketOf( rosterState, writer().u8( 3 ).u32( 1 ).u8( 2 ).frame( 0x3b29 ) );
+	assert.equal( selfKicked.notice?.key, "UIIT_MSG_GUILD_EXPULSION_RESULT" );
+	assert.deepEqual( selfKicked.notice?.arguments, [ "Echo" ] );
+	assert.equal( selfKicked.guild, null );
+	const odd = socialPacketOf( rosterState, writer().u8( 3 ).u32( 2 ).u8( 3 ).frame( 0x3b29 ) );
+	assert.equal( odd.notice, undefined );
+	assert.equal( odd.guild?.members.length, 2 );
+});
+
+test("guild break prints on both channels (762040)", () => {
+	const state = socialPacketOf( rosterState, writer().u8( 1 ).frame( 0x3b29 ) );
+	assert.equal( state.notice?.key, "UIIT_MSG_GUILD_BREAK_RESULT" );
+	assert.equal( state.notice?.nativeType, 0 );
+	assert.equal( state.notice?.notificationBanner, true );
+	assert.equal( state.notice?.bannerOnly, undefined );
+	assert.deepEqual( state.notice?.arguments, [ "Alpha" ] );
+	assert.equal( state.guild, null );
+});
+
+test("a member append prints the join line only when online (5F3340)", () => {
+	const joined = socialPacketOf(
+		guildState,
+		memberRow( writer().u8( 2 ), 5, "Newbie", 0 ).frame( 0x3b29 )
+	);
+	assert.equal( joined.notice?.key, "UIIT_MSG_GUILD_JOIN_RESULT" );
+	assert.deepEqual( joined.notice?.arguments, [ "Newbie" ] );
+	assert.equal( joined.guild?.members.length, 2 );
+	const offline = socialPacketOf(
+		guildState,
+		memberRow( writer().u8( 2 ), 5, "Newbie", 1 ).frame( 0x3b29 )
+	);
+	assert.equal( offline.notice, undefined );
+	// The local player's own row never prints: native reaches the join
+	// line only for the member the join event just cached (76239A ->
+	// 5F3340 name compare), and the self row arrives with the roster.
+	const self = socialPacketOf(
+		guildState,
+		memberRow( writer().u8( 2 ), 6, "Echo", 0 ).frame( 0x3b29 )
+	);
+	assert.equal( self.notice, undefined );
+	assert.equal( self.guild?.members.length, 2 );
+});
+
+test("sub-op 5 &0x10 banners the notice update; &4 still levels (5E4710)", () => {
+	const updated = socialPacketOf(
+		guildState,
+		writer().u8( 5 ).u8( 16 ).str( "Subj" ).str( "Body" ).frame( 0x3b29 )
+	);
+	assert.equal( updated.notice?.key, "UIIT_MSG_GUILD_COMMON_KNOW_REMIND_UPDATE" );
+	assert.equal( updated.notice?.notificationBanner, true );
+	assert.equal( updated.notice?.bannerOnly, true );
+	assert.equal( updated.guild?.subject, "Subj" );
+	assert.equal( updated.guild?.contents, "Body" );
+	const leveled = socialPacketOf(
+		guildState,
+		writer().u8( 5 ).u8( 4 ).u8( 3 ).frame( 0x3b29 )
+	);
+	assert.equal( leveled.notice?.key, "UIIT_MSG_GUILD_LEVEL_UP_RESULT" );
+	assert.deepEqual( leveled.notice?.arguments, [ "3" ] );
+	assert.equal( leveled.guild?.level, 3 );
+});
+
+test("ally join and removal modes print their lines (5FAFF0, 762040 slot 8)", () => {
+	const joined = socialPacketOf(
+		guildState,
+		writer().u8( 0x0d ).u32( 9 ).str( "Delta" ).u8( 1 ).str( "Boss" ).u32( 1907 ).u8( 0 ).frame( 0x3b29 )
+	);
+	assert.equal( joined.notice?.key, "UIIT_MSG_GUILD_ALLY_JOIN_RESULT" );
+	assert.deepEqual( joined.notice?.arguments, [ "Delta" ] );
+	const allied = {
+		...guildState,
+		alliances: [
+			{ id: 7, name: "Alpha", level: 2, master: "Echo", model: 1907, flags: 1 },
+			{ id: 8, name: "Bravo", level: 3, master: "Fox", model: 1907, flags: 4 },
+			{ id: 9, name: "Charlie", level: 1, master: "Golf", model: 1907, flags: 0 }
+		],
+		allianceMaster: 7
+	};
+	const exited = socialPacketOf( allied, writer().u8( 0x12 ).u8( 1 ).u32( 8 ).frame( 0x3b29 ) );
+	assert.equal( exited.notice?.key, "UIIT_MSG_GUILD_ALLY_EXIT_RESULT" );
+	assert.deepEqual( exited.notice?.arguments, [ "Bravo" ] );
+	assert.deepEqual( exited.alliances?.map( a => a.name ), [ "Alpha", "Charlie" ] );
+	const expelled = socialPacketOf( allied, writer().u8( 0x12 ).u8( 2 ).u32( 9 ).frame( 0x3b29 ) );
+	assert.equal( expelled.notice?.key, "UIIT_MSG_GUILD_RESPECT_ALLY_EXPEL_RESULT" );
+	assert.deepEqual( expelled.notice?.arguments, [ "Charlie" ] );
+	const broken = socialPacketOf( allied, writer().u8( 0x12 ).u8( 3 ).frame( 0x3b29 ) );
+	assert.equal( broken.notice?.key, "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_BREAKUP" );
+	assert.deepEqual( broken.alliances, [] );
+});
+
+test("create and notice-edit acks print (75F9B0, 75C950)", () => {
+	const created = socialPacketOf(
+		guildState,
+		memberRow(
+			writer().u8( 1 ).u32( 7 ).str( "Alpha" ).u8( 2 ).u32( 0 ).str( "" ).str( "" ).u32( 0 ).u8( 0 ).u8( 1 ),
+			1,
+			"Echo",
+			0
+		).u8( 0 ).frame( 0xb663 )
+	);
+	assert.equal( created.notice?.key, "UIIT_MSG_GUILD_CREATE_RESULT" );
+	assert.deepEqual( created.notice?.arguments, [ "Alpha" ] );
+	assert.equal( created.guild?.name, "Alpha" );
+	const reminded = socialPacketOf( guildState, { opcode: 0xb77a, payload: Uint8Array.of( 1 ) } );
+	assert.equal( reminded.notice?.key, "UIIT_MSG_GUILD_COMMON_KNOW_REMIND_UPDATE" );
+	assert.equal( reminded.notice?.bannerOnly, true );
+});

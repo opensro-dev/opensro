@@ -17,7 +17,12 @@ import (
 // spawnObjectDeckStand resolves the object cell a seed-frame spawn point
 // stands on, mirroring the native nearest-Y arbitration. It searches the
 // point sector and adjacent placement anchors so an overhanging deck is
-// owned by its mesh rather than the terrain below.
+// owned by its mesh rather than the terrain below. The formation goal
+// probe resolves a surface point up to fifty times per follow step, so
+// the scan first asks each set's and placement's reach (objectnav_reach.go)
+// whether the point can touch it at all: a missed reach holds no mesh
+// whose bounds contain the point, so skipping it cannot change the
+// arbitration.
 /*
 ================
 spawnObjectDeckStand
@@ -52,12 +57,18 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 			return
 		}
 		checked = append(checked, key)
-		set := v.objectNavSetForOffset(candidate, dx, dz)
 		anchorRegion := worldgeom.RegionIDForSectors(anchorX, anchorZ)
 		anchorLocal := worldgeom.LocalFromGrid(anchorRegion, gridPoint)
 		localX, localZ := anchorLocal.X, anchorLocal.Z
+		set, setReach := v.objectNavSetReach(candidate, dx, dz)
+		if setReach.missedBy(localX, localZ, localX, localZ) {
+			return
+		}
 
 		for i := range set {
+			if set[i].reach.missedBy(localX, localZ, localX, localZ) {
+				continue
+			}
 			placement := set[i].placement
 			// Inverse of the forward yaw+translate transform: object-local
 			// point = R(-yaw) * (region point - origin); Y is untouched.

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -161,6 +162,9 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	rowCommit := characterRowCommit{tx: tx, scratch: &s.encodeScratch, committed: s.committedDigests,
 		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode],
 		committedRows: s.committedRows, stagedRows: stagedRows}
+	// The attempt's prepared character upsert (#1943 W3) goes back
+	// with the attempt, committed or rolled back.
+	defer rowCommit.close()
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
@@ -483,11 +487,14 @@ characterRowCommit
 
 The character-row half of one commit attempt: the transaction, the
 encoder scratch, the committed and staged digests, the row counts and
-the encode clock every upsertTimedTx call of the attempt shares.
+the encode clock every upsertTimedTx call of the attempt shares. It
+also owns the attempt's one prepared character upsert (#1943 W3),
+written through writeRow and released by close.
 ================
 */
 type characterRowCommit struct {
 	tx        *sql.Tx
+	upsert    *sql.Stmt
 	scratch   *jsonscratch.Scratch
 	committed map[committedCharacterKey][32]byte
 	staged    map[committedCharacterKey][32]byte
@@ -499,6 +506,47 @@ type characterRowCommit struct {
 	// copies a skip reads, and the fresh copies this attempt stages.
 	committedRows map[committedCharacterKey]*domain.Character
 	stagedRows    map[committedCharacterKey]*domain.Character
+}
+
+/*
+================
+characterRowCommit::writeRow
+
+One character row through the attempt's prepared upsert, prepared on
+the first row written: a commit that writes no character row prepares
+nothing (a skipped row never reaches here). Before W3 every row paid
+tx.Exec's prepare again; on the real driver prepare-once took a
+16-row write from 625us to 235us (opensro3's probe, #1943).
+================
+*/
+func (w *characterRowCommit) writeRow(division string, c *domain.Character, record []byte) error {
+	if w.upsert == nil {
+		stmt, err := w.tx.Prepare(upsertCharacterSQL)
+		if err != nil {
+			return err
+		}
+		w.upsert = stmt
+	}
+	// string(record) is load-bearing: a []byte argument binds as a
+	// blob and the row reads back wrong (the same binding
+	// writeCharacterTx makes for the one-row doors).
+	_, err := w.upsert.Exec(division, c.ID, strings.ToLower(c.Name), string(record))
+	return err
+}
+
+/*
+================
+characterRowCommit::close
+
+Releases the prepared upsert; commitTxLocked defers it for every
+attempt, written rows or none.
+================
+*/
+func (w *characterRowCommit) close() {
+	if w.upsert != nil {
+		_ = w.upsert.Close()
+		w.upsert = nil
+	}
 }
 
 /*
@@ -544,7 +592,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		w.rows.skipped++
 		return nil
 	}
-	if err := writeCharacterTx(w.tx, division, c, record); err != nil {
+	if err := w.writeRow(division, c, record); err != nil {
 		return err
 	}
 	w.staged[key] = digest

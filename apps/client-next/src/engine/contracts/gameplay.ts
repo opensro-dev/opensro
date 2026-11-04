@@ -225,6 +225,7 @@ export type GameplayCommand =
 	| { readonly kind: "friend-request"; readonly name: string; }
 	| { readonly kind: "friend-answer"; readonly accept: boolean; }
 	| { readonly kind: "friend-delete"; readonly jid: number; }
+	| { readonly kind: "friend-conclusion-close"; }
 	| { readonly kind: "letter-send"; readonly receiver: string; readonly body: string; }
 	| { readonly kind: "letter-read"; readonly index: number; }
 	| { readonly kind: "letter-close"; }
@@ -429,6 +430,10 @@ export type GameplayCommand =
 		readonly source: number;
 		readonly destination: number;
 		readonly quantity: number;
+		// An item activation (567290, double-click) composes the same
+		// equip move directly; only an equipment drop passes the
+		// drop-action gate (594980) that owns the free-battle warning.
+		readonly activation?: boolean;
 	}
 	| {
 		readonly kind: "item-use";
@@ -448,6 +453,9 @@ export type GameplayCommand =
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
+		// The crest delete's confirmed use (#2282): the confirm box
+		// (0x16/0x19) already asked, so the use goes out as composed.
+		readonly crestDelete?: boolean;
 	}
 	| {
 		readonly kind: "navigation";
@@ -458,6 +466,7 @@ export type GameplayCommand =
 	| { readonly kind: "auto-potion-input"; readonly blocked: boolean; readonly itemMallOpen?: boolean; }
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
+	| { readonly kind: "npc-withdraw"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
@@ -495,6 +504,10 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	// The reference row's authored itemdata fields (the same record
+	// the tooltip reference carries), so activation rules can read
+	// them - the mall-use gate reads canUse (token 24).
+	readonly nativeFields?: Readonly<Record<string, number>>;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;
@@ -765,6 +778,8 @@ export interface GameplayState extends MoverPublication {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	// Port-only most-wanted state of the local player (most-wanted.ts).
+	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];

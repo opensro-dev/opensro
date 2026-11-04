@@ -24,6 +24,10 @@ All five character records were restored byte-for-byte from the pre-test
 backup; database integrity passed. Temporary fixtures and captures remain
 local and are not included in Git. No test GM access remains.
 
-Protocol 12 requires a coordinated client/server release: older strict pet
+Protocol 13 requires a coordinated client/server release: older strict pet
 state and Bond decoders cannot accept the expanded payloads. Existing
-protocol-11 servers must be updated with the matching client.
+protocol-11/12 servers must be updated with the matching client.
+
+Merge validation: protocol 13 also preserves main's most-wanted state on
+0x3FBA. Crow clone wind feedback now uses 0x3FBE; both client consumers
+and the server encoder were updated together.

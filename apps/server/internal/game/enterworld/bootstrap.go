@@ -538,6 +538,11 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	if (len(character.PetSkillWindows) > 0 || len(character.ParamJobs) > 0) && deps.TrackTimedWindows != nil {
 		deps.TrackTimedWindows(divisionID, character.Name)
 	}
+	// Port-only (#1849): a streak holder joins the Most Wanted sweep,
+	// which sends its entry state and watches the level's lapse.
+	if character.MostWanted != nil && deps.TrackMostWanted != nil {
+		deps.TrackMostWanted(divisionID, character.Name)
+	}
 	return packets, nil
 }
 
@@ -590,6 +595,24 @@ func buildRefItemSnapshot(deps *Deps, divisionID string, character *Character) [
 		// A param job's board row resolves its icon from the internal item.
 		for _, job := range character.ParamJobs {
 			collector.add(job.Codename, nil)
+		}
+		// A premium package's board slot and its limited rows resolve from
+		// the package and the target items. Neither needs a bag row - the
+		// package is spent on use and a limited item runs without one - so
+		// the references ride this snapshot, or the board loses them at the
+		// world-entry reference reset. Other composite works own no board
+		// row and seed nothing. The collector keeps one row per item, so a
+		// target the bag also carries is not repeated.
+		for _, job := range character.CompositeJobs {
+			if job.Kind != domain.CompositeUsedItemLimit {
+				continue
+			}
+			if deps.Items != nil {
+				if pkg, ok := deps.Items.ItemRefByID(job.PackageRefObjID); ok && pkg != nil {
+					collector.add(pkg.Codename, nil)
+				}
+			}
+			collector.add(job.TargetCodename, nil)
 		}
 		if character.AvatarInventory != nil {
 			// Avatar rows ride the SAME snapshot: the client's entered

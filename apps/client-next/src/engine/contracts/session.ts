@@ -65,11 +65,12 @@ export type SessionCommand =
 	| { readonly kind: "reconnect"; }
 	| { readonly kind: "world-ready"; readonly travelRevision?: number; }
 	// A main-thread fault the session reports to the Agent: a non-fatal
-	// degradation (an asset cancellation never acknowledged) or a refused
-	// world entry the player sees as "(S2)".
+	// degradation (an asset cancellation never acknowledged), a refused
+	// world entry the player sees as "(S2)", or a terminal asset failure
+	// a stream gave up retrying (#2337).
 	| {
 		readonly kind: "client-report";
-		readonly incidentKind: "degraded" | "runtime";
+		readonly incidentKind: "degraded" | "runtime" | "asset";
 		readonly code: string;
 		readonly message: string;
 	}
@@ -116,9 +117,23 @@ export type SessionState = Readonly<{
 	huntingGuide?: import("./hunting-guide").HuntingGuideSource;
 	divisionId?: string;
 	error?: string;
+	// The last world failure's evidence, for the
+	// world_entry_rejected incident (#2311 item 4): the world phase
+	// that failed (a mid-world drop reports "world") and how much wire
+	// arrived on the attempt that failed.
+	entryFailure?: {
+		readonly stage: string;
+		readonly bytesReceived: number;
+		readonly framesReceived: number;
+	};
 	code?: string;
 	nativeTitleStatus?: number;
 	nativeTitleArgument?: number;
+	// The blocked login's two appended strings (#2271): the Agent sends
+	// them only with the status 3 argument 1 refusal, after the password
+	// verified.
+	nativeTitleBlockReason?: string;
+	nativeTitleBlockEnd?: string;
 	servers?: readonly ServerRecord[];
 	characters?: readonly CharacterRecord[];
 }>;

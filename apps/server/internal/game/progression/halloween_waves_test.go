@@ -35,14 +35,18 @@ func TestWavesRunTwiceADayClearOfTheResetAndBackup(t *testing.T) {
 			continue
 		}
 		waves++
-		end := moment.Wave.At.Add(HalloweenWaveLifetime)
+		end := moment.Wave.At.Add(HalloweenWaveSpan())
 		for _, at := range []time.Time{moment.Wave.At, end} {
 			if hour := at.Hour(); hour >= 3 && hour < 6 {
 				t.Fatalf("wave at %v runs into the reset or the backup", moment.Wave.At)
 			}
 		}
-		if moment.Wave.Low == "" || moment.Wave.High == "" || moment.Wave.Low == moment.Wave.High {
-			t.Fatalf("wave lacks its two fields: %+v", moment.Wave)
+		seen := map[string]bool{}
+		for _, field := range moment.Wave.Fields {
+			if field.Codename == "" || field.Area == "" || seen[field.Codename] {
+				t.Fatalf("wave lacks its three distinct named fields: %+v", moment.Wave)
+			}
+			seen[field.Codename] = true
 		}
 	}
 	if waves != 14*halloweenWavesPerDay {
@@ -55,10 +59,10 @@ func TestWavesRunTwiceADayClearOfTheResetAndBackup(t *testing.T) {
 
 /*
 ================
-TestWavePairAndRotatingHourMove
+TestWaveTrioAndRotatingHourMove
 ================
 */
-func TestWavePairAndRotatingHourMove(t *testing.T) {
+func TestWaveTrioAndRotatingHourMove(t *testing.T) {
 	event, start := waveTestEvent(t, 3)
 	var waves []HalloweenWave
 	for _, moment := range event.WaveMomentsBetween(start, start.Add(3*24*time.Hour)) {
@@ -70,8 +74,8 @@ func TestWavePairAndRotatingHourMove(t *testing.T) {
 		if !waves[i].At.After(waves[i-1].At) {
 			t.Fatalf("not oldest first: %v", waves)
 		}
-		if waves[i].Low == waves[i-1].Low {
-			t.Fatalf("the same pair twice running: %+v then %+v", waves[i-1], waves[i])
+		if waves[i].Fields == waves[i-1].Fields {
+			t.Fatalf("the same trio twice running: %+v then %+v", waves[i-1], waves[i])
 		}
 	}
 	if waves[0].At.Hour() == waves[2].At.Hour() {

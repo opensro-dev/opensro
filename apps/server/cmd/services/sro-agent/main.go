@@ -127,6 +127,7 @@ func main() {
 		Catalog:                 catalog,
 		Directory:               directory,
 		SessionSigner:           sessionSigner,
+		MaintenanceMessage:      agentapi.MaintenanceMessageFromEnv(),
 		ControlIdentityVerifier: controlVerifier,
 		ControlNamespace:        nomadNamespace,
 		AllowedOrigins:          splitCSV(os.Getenv(envOrigins)),

@@ -107,6 +107,29 @@ func (st *WorldStore) Snapshot(key string, seed func() WorldState) WorldState {
 
 /*
 ================
+SnapshotExisting
+
+SnapshotExisting is Snapshot without the seed: it answers only for an
+actor the store already holds. A caller that must not read a character
+record outside the character door (the judged pet tick, #2139) takes
+the owner world here and falls back when it is missing, instead of
+seeding from the live record the way Snapshot's seed would.
+================
+*/
+func (st *WorldStore) SnapshotExisting(key string) (WorldState, bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state, ok := st.states[key]
+	if !ok {
+		return WorldState{}, false
+	}
+	st.advanceGroundWalk(key, state)
+	return CloneWorldState(*state), true
+}
+
+/*
+================
 MovementCurrent
 
 MovementCurrent validates a queued movement at delivery, without seeding a

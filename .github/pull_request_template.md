@@ -30,6 +30,21 @@ branch and repeat it here, write "Protocol bump" when old tabs cannot cope,
 or "Not affected". See .github/CONTRIBUTING.md section 6.
 -->
 
+## Evidence
+
+<!--
+Tick each line once it is done and shown in this PR, or end the line with
+"n/a - <reason>" (a console-only change has no native trace, for example).
+Keep each line's first word: the work board reads them.
+-->
+
+- [ ] rg: blast radius pasted
+- [ ] callers: every caller and test of each changed function mapped
+- [ ] edge cases: mapped, each with a test or a reason
+- [ ] native client: traced in the v1.150 client
+- [ ] native server: traced in the v1.188 server binary
+- [ ] subs: no unlabelled subs left in what was read
+
 ## Native claims
 
 | Claim | Native evidence | Checked by | Status |
