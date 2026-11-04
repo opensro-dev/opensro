@@ -391,8 +391,9 @@ type Runtime struct {
 
 	// DropCap bounds the ordinary items one kill leaves once DropPassRate has
 	// grown its capacity: a uniform random subset survives. Gold heaps and a
-	// unique's prepass are never cut. 0 leaves every planned item (port-only,
-	// not native; the closed-beta growth switch sets it).
+	// unique's own first round (prepass plus its native assigned round) are
+	// never cut. 0 leaves every planned item (port-only, not native; the
+	// closed-beta growth switch sets it).
 	DropCap int
 
 	// DropMix gives named item families their own beta drop rate in place
