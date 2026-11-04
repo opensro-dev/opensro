@@ -1652,7 +1652,7 @@ export function createEntities(
 					// the rider's surface, so it re-seats the wire height at the
 					// terrain below a deck the rider stands on (#2574).
 					const localMount = frame.opcode === 0xb2f5 && !localMover &&
-						[ ...entities.values() ].some( e => e.kind === "local-player" && e.mountedOn === entity.gid );
+						entities.get( ownGid )?.mountedOn === entity.gid;
 					if ( (localMover || localMount) && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
 					apply( {
 						kind: "state",
