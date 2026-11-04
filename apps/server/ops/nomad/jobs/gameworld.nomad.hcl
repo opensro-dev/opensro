@@ -542,6 +542,14 @@ variable "job_suit_hides_armor" {
   default = "off"
 }
 
+# job_suit_tiers grants a worn job suit a bonus tiered by the wearer's
+# job level (grades 1/2/3/5/7; port-only, not native; owner decision
+# 2026-11-04). "off" is native; the carrying release turns it on.
+variable "job_suit_tiers" {
+  type    = string
+  default = "off"
+}
+
 # moonlit_thief_suit draws the level-20 thief suits in the Moonlit Ash
 # look (port-only, not native; owner decision 2026-10-15). "off" is native.
 variable "moonlit_thief_suit" {
@@ -1310,6 +1318,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_TRADE_ROUTE_SAMARKAND_PERCENT       = var.trade_route_samarkand_percent
         SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT  = var.trade_route_constantinople_percent
         SRO_JOB_SUIT_HIDES_ARMOR                = var.job_suit_hides_armor
+        SRO_JOB_SUIT_TIERS                      = var.job_suit_tiers
         SRO_MOONLIT_THIEF_SUIT                  = var.moonlit_thief_suit
         SRO_DEN_NO_TRANSPORT_SUMMON             = var.den_no_transport_summon
         SRO_GACHA_POOL_V2                       = var.gacha_pool_v2

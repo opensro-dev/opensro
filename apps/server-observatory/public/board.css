@@ -250,3 +250,14 @@ main > .page-heading .board-actions {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+/* ----- Release scope ----- */
+
+.board-dim td {
+	color: var(--muted);
+}
+
+.board-detail {
+	color: var(--muted);
+	font-size: 12px;
+}

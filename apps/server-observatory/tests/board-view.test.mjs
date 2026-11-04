@@ -17,8 +17,11 @@ import {
 	priorityTone,
 	prTone,
 	pullURL,
+	pageChanged,
+	scopeStage,
 	since,
 	sortThreads,
+	splitNeeds,
 	splitPrs,
 	stepTone,
 	summary,
@@ -46,16 +49,17 @@ test("seats read per reviewer kind, evidence as worded chips", () => {
 	assert.deepEqual( evidenceMarks( {} ), [] );
 });
 
-test("threads sort fixed first, then close, then reply, most urgent first in each", () => {
+test("threads sort live fixes first, then fixes in flight, close, reply, most urgent first in each", () => {
 	const threads = [
 		{ thread: "1", action: "reply", priority: "Low" },
 		{ thread: "2", action: "reply", priority: "High" },
 		{ thread: "3", action: "fixed", priority: "Medium" },
 		{ thread: "4", action: "close", priority: "Low" },
 		{ thread: "5", action: "fixed", priority: "High" },
-		{ thread: "6", action: "reply", priority: "High" }
+		{ thread: "6", action: "reply", priority: "High" },
+		{ thread: "7", action: "live", priority: "Low" }
 	];
-	assert.deepEqual( sortThreads( threads ).map( t => t.thread ), [ "5", "3", "4", "2", "6", "1" ] );
+	assert.deepEqual( sortThreads( threads ).map( t => t.thread ), [ "7", "5", "3", "4", "2", "6", "1" ] );
 	assert.equal( threads[0].thread, "1", "the snapshot's own list is left as it was" );
 });
 
@@ -118,7 +122,8 @@ test("tones: CI, PR blockers, agents, steps, priorities and thread actions", () 
 		"idle",
 		"idle"
 	] );
-	assert.equal( threadAction( "fixed" ).text, "Fixed by this release" );
+	assert.equal( threadAction( "live" ).text, "Fixed and live: reply, close" );
+	assert.equal( threadAction( "fixed" ).text, "Fixed by the release in flight" );
 	assert.equal( threadAction( "anything" ).text, "Reply only" );
 });
 
@@ -131,7 +136,90 @@ test("PRs split into agent and fork, by number, and the plaques count them", () 
 	const { agent, fork } = splitPrs( prs );
 	assert.deepEqual( agent.map( p => p.number ), [ 3, 5 ] );
 	assert.deepEqual( fork.map( p => p.number ), [ 9 ] );
-	const tiles = summary( { prs, needs: [ {} ], threads: [], issues: { open: 7 } } );
-	assert.deepEqual( tiles.map( t => t.value ), [ 1, "1 / 2", 1, 0, 7 ] );
+	const tiles = summary( { prs, needs: [ {} ], threads: [], issues: { open: 7 }, scope: [] } );
+	assert.deepEqual( tiles.map( t => t.value ), [ 1, "0 / 0", "1 / 2", 1, 0, 7 ] );
 	assert.equal( tiles[0].tone, "warn", "anything waiting on the owner is amber" );
+});
+
+test("needs split by who they wait on, and only the owner's count on the plaque", () => {
+	const needs = [
+		{ what: "Fork PRs", detail: "", who: "owner" },
+		{ what: "Coordinator", detail: "", who: "coordinator" },
+		{ what: "Next release", detail: "", who: "owner" }
+	];
+	const { owner, coordinator } = splitNeeds( needs );
+	assert.deepEqual( [ owner.map( n => n.what ), coordinator.map( n => n.what ) ], [
+		[ "Fork PRs", "Next release" ],
+		[ "Coordinator" ]
+	] );
+	const body = { needs, prs: [], threads: [], issues: { open: 0 } };
+	assert.equal( summary( body )[0].value, 2 );
+});
+
+test("an open tab reloads only when the served page code differs from what it loaded", () => {
+	assert.equal( pageChanged( "100", "200" ), true );
+	assert.equal( pageChanged( "100", "100" ), false );
+	assert.equal( pageChanged( undefined, "100" ), false, "the first read only learns the version" );
+	assert.equal( pageChanged( "100", "" ), false, "an unreadable version never reloads" );
+});
+
+test("the Bug reports page says what approving posts, or what was posted", async () => {
+	const { postText } = await import( "../public/triage-view.js" );
+	const pending = { state: "pending" };
+	assert.equal( postText( { reply: "", decision: pending } ).tone, "bad", "no reply cannot be posted" );
+	const ask = "native rule: not a bug";
+	assert.match(
+		postText( { reply: "x", closes: true, ask, decision: pending } ).text,
+		/^Flagged: native rule.*tags the thread Closed and archives/
+	);
+	assert.equal(
+		postText( { reply: "x", closes: false, ask, decision: pending } ).text,
+		"Flagged: native rule: not a bug. Approve posts this reply"
+	);
+	assert.match(
+		postText( { reply: "x", decision: pending } ).text,
+		/posts on its own/,
+		"unflagged: the coordinator's call"
+	);
+	const { bucket, counts } = await import( "../public/triage-view.js" );
+	const threads = [ { ask, decision: pending }, { decision: pending }, { decision: { state: "approved" } } ];
+	assert.deepEqual( threads.map( bucket ), [ "pending", "auto", "approved" ] );
+	assert.deepEqual( counts( threads ), { pending: 1, auto: 1, approved: 1, rejected: 0, all: 3 } );
+	assert.match( postText( { reply: "x", decision: { state: "approved" } } ).text, /within a minute/ );
+	assert.match(
+		postText( { reply: "x", waits: "new messages since the read", decision: pending } ).text,
+		/^waits for the coordinator: new messages/
+	);
+	assert.equal(
+		postText( { reply: "x", posted: { closed: true }, decision: pending } ).text,
+		"posted, tagged Closed, archived"
+	);
+});
+
+test("a release-scope issue reads where it stands, from the PR it cites back to nobody", () => {
+	const prs = [ { number: 40, ready: true }, { number: 41, ready: false, blocker: "CI red" } ];
+	const row = over => ({ number: 1, epic: false, carried: false, pr: null, task: null, ...over });
+	assert.equal( scopeStage( row( { pr: 40 } ), prs ).label, "ready" );
+	assert.deepEqual( [ scopeStage( row( { pr: 41 } ), prs ).label, scopeStage( row( { pr: 41 } ), prs ).detail ], [
+		"in review",
+		"CI red"
+	] );
+	const task = { id: 57, assignee: "opensro1", state: "claimed", step: "investigate" };
+	assert.equal( scopeStage( row( { task } ), prs ).detail, "T57 opensro1, investigate" );
+	assert.equal(
+		scopeStage( row( { task: { ...task, state: "queued" } } ), prs ).detail,
+		"T57 opensro1, not claimed yet"
+	);
+	assert.equal( scopeStage( row( { carried: true } ), prs ).label, "in release" );
+	assert.equal( scopeStage( row( { epic: true } ), prs ).label, "epic" );
+	assert.equal( scopeStage( row(), prs ).tone, "bad", "nobody holds it" );
+	const tiles = summary( {
+		prs: [],
+		needs: [],
+		threads: [],
+		issues: { open: 3 },
+		scope: [ row( { pr: 40 } ), row( {} ), row( { epic: true } ), row( { carried: true } ) ]
+	} );
+	assert.equal( tiles[1].value, "1 / 2", "epics and carried issues are not work" );
+	assert.equal( tiles[1].tone, "warn", "an unowned issue is amber" );
 });

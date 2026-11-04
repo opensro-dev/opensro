@@ -130,6 +130,7 @@ to every observer; shares are the job EXP its party members still earn.
 ================
 */
 func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, after jobKillPayout) {
+	after.division = division
 	if killer == nil || victim == nil {
 		return nil, nil, after
 	}
@@ -180,7 +181,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			after.notices = append(after.notices, notice)
 		}
 		if party == nil {
-			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
+			if frames, ok := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
 				actor = append(actor, frames...)
 			}
 		} else {
@@ -191,7 +192,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 					after.shares = append(after.shares, share)
 					continue
 				}
-				if frames, ok := rt.addJobExperience(killer, share.exp); ok {
+				if frames, ok := rt.addJobExperience(division, killer, share.exp); ok {
 					actor = append(actor, frames...)
 				}
 			}
@@ -232,6 +233,7 @@ its door, as a player kill's is.
 ================
 */
 func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.Character, kill playerKill, cosLevel uint8, now int64) (actor, public []wire.Frame, after jobKillPayout, war domain.GuildWarCombat) {
+	after.division = division
 	if killer == nil || owner == nil {
 		return nil, nil, after, war
 	}
@@ -259,7 +261,7 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 		}
 		party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 		if party == nil {
-			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
+			if frames, ok := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
 				actor = append(actor, frames...)
 			}
 			break
@@ -271,7 +273,7 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 				after.shares = append(after.shares, share)
 				continue
 			}
-			if frames, ok := rt.addJobExperience(killer, share.exp); ok {
+			if frames, ok := rt.addJobExperience(division, killer, share.exp); ok {
 				actor = append(actor, frames...)
 			}
 		}
@@ -303,6 +305,7 @@ Nothing here runs when the kill's commit rolls back.
 ================
 */
 type jobKillPayout struct {
+	division string
 	shares   []jobKillShare
 	notices  []jobKillNotice
 	wanted   []mostWantedNotice
@@ -344,7 +347,7 @@ func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 		var frames []wire.Frame
 		rt.deps.Update(share.member, "job-kill-share", func() bool {
 			var ok bool
-			frames, ok = rt.addJobExperience(share.member, share.exp)
+			frames, ok = rt.addJobExperience(after.division, share.member, share.exp)
 			return ok
 		})
 		if len(frames) > 0 {
@@ -545,14 +548,23 @@ func (rt *Runtime) grantKillExperience(c *enterworld.Character, exp int64, sourc
 ================
 addJobExperience
 
-The reference server's job EXP grant, through the progression owner.
+The reference server's job EXP grant, through the progression owner. A
+grant that crosses a worn suit's tier boundary also re-sends the stat
+block and the speeds (jobsuitbuff.go), so the new tier shows at once
+instead of at the next projection.
 ================
 */
-func (rt *Runtime) addJobExperience(c *enterworld.Character, exp int64) ([]wire.Frame, bool) {
+func (rt *Runtime) addJobExperience(division string, c *enterworld.Character, exp int64) ([]wire.Frame, bool) {
 	if rt.UpdateJobExperience == nil || exp == 0 {
 		return nil, false
 	}
-	return rt.UpdateJobExperience(c, exp)
+	before := rt.jobSuitTier(c)
+	frames, ok := rt.UpdateJobExperience(c, exp)
+	if ok && rt.jobSuitTier(c) != before {
+		private, public := rt.jobSuitBuffRefresh(division, c, rt.Now().UnixMilli())
+		frames = append(append(frames, private...), public...)
+	}
+	return frames, ok
 }
 
 /*
@@ -584,13 +596,13 @@ func (rt *Runtime) payMonsterJobKillInDoor(division string, killer *enterworld.C
 	level := int64(victim.Ref.Level)
 	party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 	if party == nil {
-		frames, _ := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, level))
+		frames, _ := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, level))
 		return frames, nil
 	}
 	fallen := jobKillVictim{level: level, world: domain.CharacterWorldInstance(killer),
 		at: simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}}
 	for _, share := range rt.jobKillShares(division, killer, fallen, party, now) {
-		frames, ok := rt.addJobExperience(share.member, share.exp)
+		frames, ok := rt.addJobExperience(division, share.member, share.exp)
 		if !ok {
 			continue
 		}

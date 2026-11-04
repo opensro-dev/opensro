@@ -194,6 +194,9 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
+	// Owner, 2026-11-04: a worn job suit's bonus tiered by job level
+	// (#2475). Off (native) until the carrying release turns it on.
+	{Env: "SRO_JOB_SUIT_TIERS", NomadVar: "job_suit_tiers", Default: "off"},
 	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
