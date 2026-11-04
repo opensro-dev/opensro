@@ -122,8 +122,9 @@ halloweenEventRow
 
 The Halloween Day event's row, or nil while the shard does not run it.
 The box is a per-kill drop on ordinary kills (a Gourd kill always pays
-its box); the exchange pays one weighted roll per box and sells its eight
-helmets at a flat box price.
+its box); the exchange pays one weighted roll per box and sells its
+flat-price tier (the helmets, then the Elixir recipes) at a box price
+each.
 ================
 */
 func halloweenEventRow(itemID func(string) uint32, now time.Time) *EventRow {
@@ -151,13 +152,13 @@ func halloweenEventRow(itemID func(string) uint32, now time.Time) *EventRow {
 		row.Gifts = append(row.Gifts, EventGift{ItemID: id, Codename: gift.Codename,
 			Count: gift.Count, Weight: gift.Weight})
 	}
-	for _, helmet := range progression.HalloweenHelmets() {
-		id := itemID(helmet.Codename)
+	for _, prize := range progression.HalloweenPrizes() {
+		id := itemID(prize.Codename)
 		if id == 0 {
 			continue
 		}
-		row.Prizes = append(row.Prizes, EventGift{ItemID: id, Codename: helmet.Codename,
-			Count: 1, BoxPrice: progression.HalloweenHelmetPrice})
+		row.Prizes = append(row.Prizes, EventGift{ItemID: id, Codename: prize.Codename,
+			Count: 1, BoxPrice: int(prize.Price)})
 	}
 	return &row
 }

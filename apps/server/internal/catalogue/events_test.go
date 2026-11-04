@@ -119,13 +119,15 @@ func TestEventsPublishHalloweenOnlyWhileItRuns(t *testing.T) {
 			if weight != 100 {
 				t.Fatalf("gift weights sum to %v, want 100", weight)
 			}
-			// The flat-price tier: the eight helmets at the helmet price.
-			if len(event.Prizes) != len(progression.HalloweenHelmets()) {
-				t.Fatalf("prizes = %d, want %d", len(event.Prizes), len(progression.HalloweenHelmets()))
+			// The flat-price tier: every prize row at its own box price
+			// (the helmets at HalloweenHelmetPrice, the Elixirs at theirs).
+			if len(event.Prizes) != len(progression.HalloweenPrizes()) {
+				t.Fatalf("prizes = %d, want %d", len(event.Prizes), len(progression.HalloweenPrizes()))
 			}
-			for _, prize := range event.Prizes {
-				if prize.ItemID == 0 || prize.BoxPrice != progression.HalloweenHelmetPrice {
-					t.Fatalf("prize = %+v, want a helmet at %d boxes", prize, progression.HalloweenHelmetPrice)
+			for i, prize := range event.Prizes {
+				want := progression.HalloweenPrizes()[i]
+				if prize.ItemID == 0 || prize.BoxPrice != int(want.Price) || prize.Codename != want.Codename {
+					t.Fatalf("prize %d = %+v, want %s at %d boxes", i, prize, want.Codename, want.Price)
 				}
 			}
 		})
