@@ -6,9 +6,9 @@ halloween.go - the Halloween Day event: box drops, So-ok's exchange, cleanup
 Port-only, not native (progression/halloween.go owns the switch, window
 and gift table). While the window runs, ordinary monsters drop jewelry
 boxes and So-ok (NPC_CH_EVENT_KISAENG1) offers extra talk rows: one
-exchanges a box for a weighted random gift, and one row per helmet of
-the character's sex sells that exact helmet at the flat box price. The
-exchange's shape follows the sibling event quests: refusals answer
+exchanges a box for a weighted random gift, and the flat-price rows sell
+exact prizes — the four Elixirs to anyone, one row per helmet of
+the character's sex. The exchange's shape follows the sibling event quests: refusals answer
 first and remove nothing, the roll picks the first gift whose running
 sum is not below it, and the box removal and gift grant commit as one
 step (the older sibling grants before it removes; that order is not
@@ -46,10 +46,10 @@ import (
 // quest.ResuscitationService.
 const HalloweenExchangeService = "QEV_CH_EVENT_KISAENG_071030:exchange"
 
-// HalloweenHelmetServicePrefix routes one helmet row the same way; the
-// helmet's codename follows the prefix, so the exact row a player picks
-// is the row the exchange grants.
-const HalloweenHelmetServicePrefix = "QEV_CH_EVENT_KISAENG_071030:helmet:"
+// HalloweenPrizeServicePrefix routes one flat-price row the same way;
+// the prize's codename follows the prefix, so the exact row a player
+// picks is the row the sale grants.
+const HalloweenPrizeServicePrefix = "QEV_CH_EVENT_KISAENG_071030:prize:"
 
 // halloweenSoOkCodename is the event's host (character id 3861).
 const halloweenSoOkCodename = "NPC_CH_EVENT_KISAENG1"
@@ -68,10 +68,10 @@ const (
 	halloweenTalkNoBox   = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_E"
 
 	// The top banners. Port-only, not native; no shipped text carries them.
-	halloweenGiftsDoneBanner   = "Exchanged your Jewel Boxes: %d gift(s) received."
-	halloweenGiftsLeftBanner   = "%d gift(s) received. Your bag is full, %d Jewel Box(es) left."
-	halloweenHelmetDoneBanner  = "Exchanged %d Jewel Boxes for a helmet."
-	halloweenHelmetShortBanner = "A helmet costs %d Jewel Boxes. You have %d."
+	halloweenGiftsDoneBanner  = "Exchanged your Jewel Boxes: %d gift(s) received."
+	halloweenGiftsLeftBanner  = "%d gift(s) received. Your bag is full, %d Jewel Box(es) left."
+	halloweenPrizeDoneBanner  = "Exchanged %d Jewel Boxes for a prize."
+	halloweenPrizeShortBanner = "That prize costs %d Jewel Boxes. You have %d."
 )
 
 /*
@@ -79,10 +79,11 @@ const (
 Runtime.HalloweenTalkOptions
 
 The rows So-ok offers while the event runs: the rolled exchange first,
-then one row per helmet made for the character's sex (the exact row is
-the prize; the other sex's rows are never offered). Appended after the
-NPC's quest rows, so Capture the Flag and every quest row keep their
-places; the zero posture appends nothing and talk is native.
+then the flat-price prize rows — the helmets made for the character's
+sex (the other sex's rows are never offered) and the Elixirs for
+anyone. Appended after the NPC's quest rows, so Capture the Flag and
+every quest row keep their places; the zero posture appends nothing
+and talk is native.
 ================
 */
 func (rt *Runtime) HalloweenTalkOptions(npcCodename string, character *enterworld.Character) []NpcQuestOption {
@@ -95,16 +96,16 @@ func (rt *Runtime) HalloweenTalkOptions(npcCodename string, character *enterworl
 	}}
 	female := enterworld.ResolveCharacterGenderIndex(character) == enterworld.GenderFemale
 	refs := rt.deps.ItemReferences()
-	for _, helmet := range progression.HalloweenHelmets() {
-		if helmet.Female != female {
+	for _, prize := range progression.HalloweenPrizes() {
+		if prize.Helmet && prize.Female != female {
 			continue
 		}
-		title := "SN_" + helmet.Codename
-		if ref, ok := refs.ItemRefByCodename(helmet.Codename); ok && ref != nil && ref.NameStrID != "" {
+		title := "SN_" + prize.Codename
+		if ref, ok := refs.ItemRefByCodename(prize.Codename); ok && ref != nil && ref.NameStrID != "" {
 			title = ref.NameStrID
 		}
 		out = append(out, NpcQuestOption{
-			Codename: HalloweenHelmetServicePrefix + helmet.Codename, TitleSymbol: title,
+			Codename: HalloweenPrizeServicePrefix + prize.Codename, TitleSymbol: title,
 			PromptSymbol: halloweenTalkPrompt, Immediate: true,
 		})
 	}
@@ -220,48 +221,49 @@ func addHalloweenGrant(grant []inventory.ItemAmount, codename string, count uint
 
 /*
 ================
-Runtime.ExchangeHalloweenHelmet
+Runtime.ExchangeHalloweenPrize
 
-One helmet sale: the flat box price buys the exact helmet the picked
-row names. Too few boxes answer the no-box line and the banner names the
-price and what the bag holds, which no native line carries; a helmet that
-cannot fit the bag as it stands answers the bag-full line; only then do
-removal and grant commit together. A row for the other sex is never
-offered, and asking for one anyway is refused the same as no box.
+One flat-price sale: the row's stated price in boxes buys the exact
+prize the picked row names. Too few boxes answer the no-box line and
+the banner names the price and what the bag holds, which no native
+line carries; a prize that cannot fit the bag as it stands answers
+the bag-full line; only then do removal and grant commit together.
+A helmet row for the other sex is never offered, and asking for one
+anyway is refused the same as no box.
 ================
 */
-func (rt *Runtime) ExchangeHalloweenHelmet(character *enterworld.Character, npcCodename, service string) ([]wire.Frame, error) {
+func (rt *Runtime) ExchangeHalloweenPrize(character *enterworld.Character, npcCodename, service string) ([]wire.Frame, error) {
 	if npcCodename != halloweenSoOkCodename || !rt.Halloween.ActiveAt(rt.Now()) {
-		return nil, fmt.Errorf("halloween helmet sale is not offered at %s", npcCodename)
+		return nil, fmt.Errorf("halloween prize sale is not offered at %s", npcCodename)
 	}
-	helmet, known := progression.HalloweenHelmetByCodename(strings.TrimPrefix(service, HalloweenHelmetServicePrefix))
+	prize, known := progression.HalloweenPrizeByCodename(strings.TrimPrefix(service, HalloweenPrizeServicePrefix))
 	if !known {
-		return nil, fmt.Errorf("halloween helmet sale names no helmet: %s", service)
+		return nil, fmt.Errorf("halloween prize sale names no prize: %s", service)
 	}
 	answer := ""
 	committed := false
 	banner := ""
 	var frames []wire.Frame
-	rt.deps.Update(character, "halloween-helmet", func() bool {
+	rt.deps.Update(character, "halloween-prize", func() bool {
 		female := enterworld.ResolveCharacterGenderIndex(character) == enterworld.GenderFemale
-		if helmet.Female != female {
+		if prize.Helmet && prize.Female != female {
 			answer = halloweenTalkNoBox
 			return false
 		}
-		if held := halloweenBagBoxes(character); held < progression.HalloweenHelmetPrice {
+		if held := halloweenBagBoxes(character); held < prize.Price {
 			answer = halloweenTalkNoBox
-			banner = fmt.Sprintf(halloweenHelmetShortBanner, progression.HalloweenHelmetPrice, held)
+			banner = fmt.Sprintf(halloweenPrizeShortBanner, prize.Price, held)
 			return false
 		}
-		grant := []inventory.ItemAmount{{Codename: helmet.Codename, Count: 1}}
-		answer, frames, committed = rt.commitHalloweenExchange(character, progression.HalloweenHelmetPrice, grant)
+		grant := []inventory.ItemAmount{{Codename: prize.Codename, Count: 1}}
+		answer, frames, committed = rt.commitHalloweenExchange(character, prize.Price, grant)
 		return committed
 	})
 	if !committed && (answer == "" || answer == halloweenTalkGranted) {
-		return nil, fmt.Errorf("halloween helmet sale could not commit")
+		return nil, fmt.Errorf("halloween prize sale could not commit")
 	}
 	if committed {
-		banner = fmt.Sprintf(halloweenHelmetDoneBanner, progression.HalloweenHelmetPrice)
+		banner = fmt.Sprintf(halloweenPrizeDoneBanner, prize.Price)
 	}
 	if banner != "" {
 		frames = append(frames, halloweenBanner(banner))

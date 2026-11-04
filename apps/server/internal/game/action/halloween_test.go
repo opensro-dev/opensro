@@ -59,6 +59,10 @@ func halloweenTestItems() staticItemSource {
 		NameStrID:    "SN_ITEM_ETC_E050526_W_EGHEAD",
 		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 1, "canTrade": 1, "canSell": 1, "canBorrow": 255}),
 	}
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"] = etc(3911, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A"] = etc(3912, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A"] = etc(3913, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", 50)
+	items["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A"] = etc(3914, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", 50)
 	return items
 }
 
@@ -256,18 +260,19 @@ func TestHalloweenEventIsInvisibleWhileOffOrAway(t *testing.T) {
 		t.Fatal("cleanup ran with no window configured")
 	}
 
-	// On, inside the window: So-ok offers the exchange row and the four
-	// helmets of the (default male) fixture's sex; others do not.
+	// On, inside the window: So-ok offers the exchange row, the four
+	// helmets of the (default male) fixture's sex and the four Elixirs;
+	// others do not.
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
 	options := rt.HalloweenTalkOptions(halloweenSoOkCodename, c)
-	if len(options) != 5 {
+	if len(options) != 9 {
 		t.Fatal("halloween talk options", options)
 	}
 	option := options[0]
 	if !option.Immediate || option.TitleSymbol != halloweenTalkOption || option.PromptSymbol != halloweenTalkPrompt {
 		t.Fatal("halloween exchange row", option)
 	}
-	if options[1].Codename != HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_M_EGHEAD" ||
+	if options[1].Codename != HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_M_EGHEAD" ||
 		options[1].TitleSymbol != "SN_ITEM_ETC_E050526_M_EGHEAD" {
 		t.Fatal("halloween helmet row", options[1])
 	}
@@ -674,18 +679,18 @@ same way, and a fit grant consumes the price and lands the helmet.
 ================
 */
 func TestHalloweenHelmetExchange(t *testing.T) {
-	service := HalloweenHelmetServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
+	service := HalloweenPrizeServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
 
 	// Too few boxes: the no-box line, nothing moved.
 	c := testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 59)}
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
 	if err != nil || len(frames) != 2 ||
 		!bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("short helmet exchange", frames, err)
 	}
-	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice("A helmet costs 60 Jewel Boxes. You have 59.")) {
+	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice("That prize costs 60 Jewel Boxes. You have 59.")) {
 		t.Fatal("short helmet banner", frames[0])
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 59 {
@@ -696,7 +701,7 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60), halloweenBoxRow(21, 5)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, service)
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
 	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatal("helmet exchange", frames, err)
 	}
@@ -709,7 +714,7 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c = testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, 60)}
 	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err = rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD")
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_W_EGHEAD")
 	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
 		t.Fatal("cross-sex helmet exchange", frames, err)
 	}
@@ -717,8 +722,106 @@ func TestHalloweenHelmetExchange(t *testing.T) {
 	c.Gender = &female
 	c.ModelCodename = "CHAR_CH_WOMAN_ADVENTURER"
 	options := rt.HalloweenTalkOptions(halloweenSoOkCodename, c)
-	if len(options) != 5 || options[1].Codename != HalloweenHelmetServicePrefix+"ITEM_ETC_E071030_W_EGHEAD" {
+	if len(options) != 9 || options[1].Codename != HalloweenPrizeServicePrefix+"ITEM_ETC_E071030_W_EGHEAD" {
 		t.Fatal("female helmet rows", options)
+	}
+}
+
+/*
+================
+TestHalloweenElixirPrizeSale
+
+Ten boxes (half a day at the cap) buy the exact Elixir the picked row
+names: short of the price the refusal's banner names the price and the
+bag is untouched, a full bag refuses the same untouched way, and the
+rows carry no sex filter — a female character buys one too (#2548).
+================
+*/
+func TestHalloweenElixirPrizeSale(t *testing.T) {
+	service := HalloweenPrizeServicePrefix + "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"
+	price := int64(progression.HalloweenElixirPrice)
+
+	// Short of the price: the no-box line, the banner names the price,
+	// nothing moved.
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price-1)}
+	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkNoBox)) {
+		t.Fatal("short Elixir sale", frames, err)
+	}
+	want := fmt.Sprintf(halloweenPrizeShortBanner, progression.HalloweenElixirPrice, price-1)
+	if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice(want)) {
+		t.Fatalf("short Elixir sale banner %q, want %q", frames[0].Payload, want)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != int(price-1) ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		t.Fatal("short Elixir sale touched the bag", c.MissionInventory)
+	}
+
+	// At the price: ten leave, the Elixir lands, the banner names ten.
+	c = testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price+5)}
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("Elixir sale", frames, err)
+	}
+	if !bytes.Equal(frames[len(frames)-2].Payload,
+		chat.EncodeChatNotice(fmt.Sprintf(halloweenPrizeDoneBanner, progression.HalloweenElixirPrice))) {
+		t.Fatal("Elixir sale spent banner", frames)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != 5 ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+		t.Fatal("Elixir sale bag", c.MissionInventory)
+	}
+
+	// A full bag refuses with the boxes untouched (the grant is planned
+	// against the bag as it stands, boxes still in it).
+	c = testCharacter()
+	c.MissionInventory = nil
+	potion := halloweenTestItems()["ITEM_ETC_HP_SPOTION_01"]
+	end := inventory.BagEnd(c)
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(end); slot++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: slot, RefObjID: potion.RefObjID, Codename: potion.Codename,
+			TypeFlags: potion.TypeFlags(), StackCount: 50,
+		})
+	}
+	c.MissionInventory[0] = halloweenBoxRow(c.MissionInventory[0].Slot, price)
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkBagFull)) {
+		t.Fatal("full-bag Elixir sale", frames, err)
+	}
+	if bagCount(c, progression.HalloweenBoxCodename) != int(price) ||
+		bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 0 {
+		t.Fatal("full-bag Elixir refusal touched the bag", c.MissionInventory)
+	}
+
+	// No sex filter on the Elixir rows: a female character is offered
+	// them and can buy.
+	female := int64(enterworld.GenderFemale)
+	c = testCharacter()
+	c.Gender = &female
+	c.ModelCodename = "CHAR_CH_WOMAN_ADVENTURER"
+	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, price)}
+	rt, _ = halloweenRuntime(t, c, halloweenTestWindow)
+	offered := false
+	for _, option := range rt.HalloweenTalkOptions(halloweenSoOkCodename, c) {
+		if option.Codename == service {
+			offered = true
+		}
+	}
+	if !offered {
+		t.Fatal("Elixir row not offered to a female character")
+	}
+	frames, err = rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, service)
+	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
+		t.Fatal("female Elixir sale", frames, err)
+	}
+	if bagCount(c, "ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A") != 1 {
+		t.Fatal("female Elixir sale bag", c.MissionInventory)
 	}
 }
 
@@ -734,7 +837,7 @@ banner above it). Nothing moves on a refusal.
 ================
 */
 func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
-	helmetService := HalloweenHelmetServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
+	helmetService := HalloweenPrizeServicePrefix + "ITEM_ETC_E071030_M_EGHEAD"
 
 	// Helmet rows, short of the price: the banner states the price and
 	// the holding, the no-box line closes, the bag is untouched.
@@ -744,11 +847,11 @@ func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
 			c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, held)}
 		}
 		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-		frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, helmetService)
+		frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, helmetService)
 		if err != nil || len(frames) != 2 {
 			t.Fatalf("helmet at %d boxes: %v %v", held, frames, err)
 		}
-		want := fmt.Sprintf(halloweenHelmetShortBanner, progression.HalloweenHelmetPrice, held)
+		want := fmt.Sprintf(halloweenPrizeShortBanner, progression.HalloweenHelmetPrice, held)
 		if !bytes.Equal(frames[0].Payload, chat.EncodeChatNotice(want)) {
 			t.Fatalf("helmet at %d boxes: banner %q, want %q", held, frames[0].Payload, want)
 		}
@@ -768,11 +871,11 @@ func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
 	c := testCharacter()
 	c.MissionInventory = []enterworld.InventoryRow{halloweenBoxRow(20, progression.HalloweenHelmetPrice)}
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-	frames, err := rt.ExchangeHalloweenHelmet(c, halloweenSoOkCodename, helmetService)
+	frames, err := rt.ExchangeHalloweenPrize(c, halloweenSoOkCodename, helmetService)
 	if err != nil || !bytes.Equal(lastDialogue(t, frames), wire.EncodeNpcDialogAnswer(halloweenTalkGranted)) {
 		t.Fatalf("helmet at the price: %v %v", frames, err)
 	}
-	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenHelmetDoneBanner, progression.HalloweenHelmetPrice))) {
+	if !bytes.Equal(frames[len(frames)-2].Payload, chat.EncodeChatNotice(fmt.Sprintf(halloweenPrizeDoneBanner, progression.HalloweenHelmetPrice))) {
 		t.Fatal("helmet at the price: the spent banner is missing", frames)
 	}
 	if bagCount(c, progression.HalloweenBoxCodename) != 0 || bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 1 {

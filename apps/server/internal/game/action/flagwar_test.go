@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -134,6 +135,70 @@ func TestFlagWarRegisterTogglesAndAnswers(t *testing.T) {
 
 	if result := rt.HandleFlagWarRegister(testDivision, character, []byte{1}); result.DiagnosticRefusal == "" || len(result.Frames) != 0 {
 		t.Fatalf("a non-empty body answered %+v, want a silent refusal", result)
+	}
+}
+
+/*
+================
+TestFlagWarRegisterRefusesTheUnadmitted
+
+The native registration path runs the same entry admission as the
+match-start batch (flagWarCanEnter): a dead or mounted character is
+answered the entered error and never queues.
+================
+*/
+func TestFlagWarRegisterRefusesTheUnadmitted(t *testing.T) {
+	dead := rebirthTestCharacter(20, 0)
+	rt, clock := newTestRuntime(dead, testItems())
+	clock.now = flagWarStart().Add(-5 * time.Minute)
+	if subtype := flagWarAnswerSubtype(t, rt.HandleFlagWarRegister(testDivision, dead, nil)); subtype != wire.FlagWarEnteredError {
+		t.Fatalf("dead answer subtype %d, want %d", subtype, wire.FlagWarEnteredError)
+	}
+	if rt.flagWarRegistered(testDivision, dead.Name) {
+		t.Fatal("a refused dead registration queued")
+	}
+
+	mounted := rebirthTestCharacter(20, 100)
+	mounted.Name = "Mounted"
+	mounted.ActiveCOS = &enterworld.CharacterCOS{Summoned: true, Mounted: true}
+	rt2, clock2 := newTestRuntime(mounted, testItems())
+	clock2.now = flagWarStart().Add(-5 * time.Minute)
+	if subtype := flagWarAnswerSubtype(t, rt2.HandleFlagWarRegister(testDivision, mounted, nil)); subtype != wire.FlagWarEnteredError {
+		t.Fatalf("mounted answer subtype %d, want %d", subtype, wire.FlagWarEnteredError)
+	}
+	if rt2.flagWarRegistered(testDivision, mounted.Name) {
+		t.Fatal("a refused mounted registration queued")
+	}
+}
+
+/*
+================
+TestFlagWarRegisterCancelSkipsAdmission
+
+The native register body checks the queue before any gate: a
+registrant who dies or mounts after joining still cancels with the
+ordinary join-result answer, and the queue shrinks.
+================
+*/
+func TestFlagWarRegisterCancelSkipsAdmission(t *testing.T) {
+	character := rebirthTestCharacter(20, 100)
+	rt, clock := newTestRuntime(character, testItems())
+	clock.now = flagWarStart().Add(-5 * time.Minute)
+
+	if subtype := flagWarAnswerSubtype(t, rt.HandleFlagWarRegister(testDivision, character, nil)); subtype != wire.FlagWarJoinResult {
+		t.Fatalf("join answer subtype %d, want %d", subtype, wire.FlagWarJoinResult)
+	}
+	if !rt.flagWarRegistered(testDivision, character.Name) {
+		t.Fatal("the join did not queue the character")
+	}
+
+	*character.CurrentHP = 0
+	character.ActiveCOS = &enterworld.CharacterCOS{Summoned: true, Mounted: true}
+	if subtype := flagWarAnswerSubtype(t, rt.HandleFlagWarRegister(testDivision, character, nil)); subtype != wire.FlagWarJoinResult {
+		t.Fatalf("cancel answer subtype %d, want %d", subtype, wire.FlagWarJoinResult)
+	}
+	if rt.flagWarRegistered(testDivision, character.Name) {
+		t.Fatal("the gated cancel left the character queued")
 	}
 }
 
