@@ -180,6 +180,14 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Richer glow and sparks on reinforced gear."
 			},
 			{
+				// #2496: this tab holds the other item-look row and has
+				// room; the window fits seven rows a tab.
+				key: "sealUnderHeading",
+				id: "experimental-seal-under-heading",
+				label: "Seal line under item name",
+				description: "Show a rare item's seal right under its name."
+			},
+			{
 				key: "dungeonCharacterPvs",
 				id: "experimental-dungeon-character-pvs",
 				label: "Dungeon character PVS",

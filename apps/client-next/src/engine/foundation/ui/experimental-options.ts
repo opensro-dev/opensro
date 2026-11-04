@@ -243,6 +243,11 @@ export interface ExperimentalOptions {
 	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
 	// native arrival is silent. Off unless turned on.
 	readonly warpArrivalSound: boolean;
+	// Port-only, not native (#2496): a rare item's seal line sits under the
+	// item name. 558FF0 appends it after the requirement rows (the 56B099
+	// call in FormatWeapon, after 568500). Off unless turned on; off is the
+	// native place.
+	readonly sealUnderHeading: boolean;
 }
 
 /*
@@ -448,7 +453,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
-		warpArrivalSound: enabled( "warpArrivalSound" )
+		warpArrivalSound: enabled( "warpArrivalSound" ),
+		sealUnderHeading: enabled( "sealUnderHeading" )
 	};
 }
 
