@@ -102,19 +102,21 @@ The existing attack-pet server flag owns whether a roar emote can be emitted.
 ================
 */
 export function withBearRoar( model: CharacterModel ): CharacterModel {
-	const RISE = [ 0, .08, .8, 1, 1, .96, 1, .9, .45, 0 ];
-	const JAW = [ 0, 0, 4, 25, 36, 24, 34, 16, 0, 0 ];
+	const RISE = [ 0, -.10, .75, 1, 1, .98, .85, .4, 0 ];
+	const JAW = [ 0, 0, 4, 18, 36, 32, 20, 4, 0 ];
 	return withPitchClip(
 		model,
 		"pet-roar",
-		[ 0, .2, .65, .85, 1, 1.18, 1.38, 1.6, 1.85, 2.2 ],
+		[ 0, .10, .25, .40, .50, .75, 1, 1.20, 1.40 ],
 		[ "Bip01 Pelvis", "Bip01 L Thigh", "Bip01 R Thigh", "Bip01 Head", "Bone01" ],
 		( bone, frame ) => {
 			if ( bone === "Bip01 Pelvis" ) return -70 * RISE[frame]!;
 			if ( /Bip01 [LR] Thigh/.test( bone ) ) return 70 * RISE[frame]!;
 			if ( bone === "Bip01 Neck" ) return 35 * RISE[frame]!;
 			if ( bone === "Bip01 Head" ) return 20 * RISE[frame]!;
-			if ( /Bip01 [LR] UpperArm/.test( bone ) ) return -20 * RISE[frame]!;
+			if ( /Bip01 [LR] UpperArm/.test( bone ) ) {
+				return [ -28 * RISE[frame]!, (bone.includes( " L " ) ? -18 : 18) * RISE[frame]! ];
+			}
 			return bone === "Bone01" ? JAW[frame]! : 0;
 		}
 	);
