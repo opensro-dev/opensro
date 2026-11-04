@@ -1,10 +1,10 @@
 /*
 ===========================================================================
-main.mjs - loopback observatory, authenticated player recovery, invite keys, economy, shard rules and work board reads
+main.mjs - loopback observatory, authenticated player recovery, invite keys, economy, shard rules, work board and #bug-reports drafts
 ===========================================================================
 */
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
@@ -14,6 +14,7 @@ import { createHistory } from "./history.mjs";
 import { createEconomy } from "./economy.mjs";
 import { createSettings } from "./settings.mjs";
 import { createBoard } from "./board.mjs";
+import { createTriage } from "./triage.mjs";
 import { createInviteKeys, siteAdminURL } from "./invite-keys.mjs";
 import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
@@ -51,6 +52,9 @@ const settings = createSettings( shards, token );
 // The work board (board.mjs): a collector's snapshot file and the GitHub
 // repository its numbers belong to; either absent, the page says it is off.
 const board = createBoard( config.boardSnapshotFile, config.boardRepo );
+// The #bug-reports drafts (triage.mjs): the collector's drafts snapshot and
+// the decisions file staff approvals and rejections append to.
+const triage = createTriage( config.triageSnapshotFile, config.triageDecisionsFile );
 // The website's invite keys (opensro-web /internal/admin/invites), with the
 // console's own secret; absent, the Invite keys page says it is off.
 const siteAdmin = config.siteAdmin ?? null;
@@ -59,6 +63,27 @@ const inviteKeys = createInviteKeys( siteAdmin ? siteAdminURL( siteAdmin.url ) :
 const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
 const INVITE_REVEAL = /^\/api\/invites\/([0-9a-f-]{36})\/reveal$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
+// The board page's own files: their modification times name the page code
+// a tab runs, so an open tab reloads itself when they change (board.js).
+const BOARD_PAGE_FILES = [ "board.html", "board.js", "board-view.js", "board.css", "request.js" ];
+
+/*
+================
+boardPageVersion
+
+The newest modification time of the board page's files, in milliseconds
+as text; empty when one cannot be read (the page then never reloads).
+================
+*/
+async function boardPageVersion() {
+	try {
+		const times = await Promise.all( BOARD_PAGE_FILES.map( f => stat( new URL( f, publicRoot ) ) ) );
+		return String( Math.max( ...times.map( s => Math.trunc( s.mtimeMs ) ) ) );
+	} catch {
+		return "";
+	}
+}
+
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
 // Fixed paths only; a checkout without built client assets answers 404 and
 // theme.css paints its gradient fallback.
@@ -106,7 +131,11 @@ for (
 		"board.html",
 		"board.js",
 		"board-view.js",
-		"board.css"
+		"board.css",
+		"triage.html",
+		"triage.js",
+		"triage-view.js",
+		"triage.css"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -117,6 +146,19 @@ respondJSON
 function respondJSON( response, status, body ) {
 	response.writeHead( status, { "Content-Type": "application/json" } );
 	response.end( JSON.stringify( body ) );
+}
+/*
+================
+canDecide
+
+Who may approve or reject a draft: anyone on loopback or behind the single
+basic-auth account (that is the owner), and only the approver role behind
+Discord sign-in.
+================
+*/
+function canDecide( req ) {
+	if ( !edge || edge.identity !== "discord" ) return true;
+	return edgeIdentity( req, edge )?.role === "approver";
 }
 /*
 ================
@@ -237,6 +279,28 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
+		// The one triage write: approve or reject a draft. Same-origin
+		// staff; behind Discord sign-in, approvers only.
+		if ( url.pathname === "/api/triage/decision" && req.method === "POST" ) {
+			if ( !allowedMutation( req, port, edge ) ) {
+				res.writeHead( 403 );
+				res.end( "Same-origin console request required" );
+				return;
+			}
+			if ( !canDecide( req ) ) {
+				respondJSON( res, 403, { error: "Only an approver decides drafts" } );
+				return;
+			}
+			let body;
+			try {
+				body = await readBody( req );
+			} catch {
+				body = null;
+			}
+			const result = await triage.decide( edge ? edgeIdentity( req, edge )?.name ?? "" : LOCAL_OPERATOR, body );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
 		if ( req.method !== "GET" ) {
 			res.writeHead( 405 );
 			res.end( "Method not allowed" );
@@ -251,6 +315,8 @@ async function handleRequest( req, res ) {
 				economy: economy.enabled,
 				settings: settings.enabled,
 				board: board.enabled,
+				triage: triage.enabled,
+				canDecide: canDecide( req ),
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );
@@ -280,6 +346,15 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/board" ) {
 			const result = await board.request();
+			respondJSON(
+				res,
+				result.status,
+				result.status === 200 ? { ...result.body, page: await boardPageVersion() } : result.body
+			);
+			return;
+		}
+		if ( url.pathname === "/api/triage" ) {
+			const result = await triage.request();
 			respondJSON( res, result.status, result.body );
 			return;
 		}

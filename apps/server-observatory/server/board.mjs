@@ -32,10 +32,13 @@ const SHA = /^[0-9a-f]{7,40}$/;
 const THREAD = /^\d{1,24}$/;
 const STEP_STATES = new Set( [ "done", "running", "waiting", "failed" ] );
 const CI_STATES = new Set( [ "green", "red", "running", "none" ] );
-const THREAD_ACTIONS = new Set( [ "fixed", "close", "reply" ] );
-const EVIDENCE_STATES = new Set( [ "done", "na", "missing" ] );
+// live: a live release carries the fix; fixed: the release in flight will.
+const THREAD_ACTIONS = new Set( [ "live", "fixed", "close", "reply" ] );
+const EVIDENCE_STATES = new Set( [ "done", "na", "working", "missing" ] );
 const MAX_SEATS = 4;
 const MAX_EVIDENCE = 12;
+const SCOPE_PRIORITIES = new Set( [ "critical", "high", "medium", "low" ] );
+const TASK_STATES = new Set( [ "queued", "claimed", "submitted" ] );
 
 /*
 ================
@@ -117,6 +120,16 @@ function releaseRow( r ) {
 		name: text( r.name ),
 		freeze: typeof r.freeze === "string" && SHA.test( r.freeze ) ? r.freeze : "",
 		why: text( r.why ),
+		// A scoped release (critical and high, owner 11-03): the collector
+		// computes its one-line summary and open issues every snapshot.
+		summary: text( r.summary ),
+		issues: numbers( r.issues ),
+		scope: rows( r.scope, p => (SCOPE_PRIORITIES.has( p ) ? p : null), 4 ),
+		// live: the host serves the freeze on every component (the collector reads it).
+		live: r.live === true,
+		// assembling: the list is decided, nothing is frozen; waiting is the part still open.
+		assembling: r.assembling === true,
+		waiting: numbers( r.waiting ),
 		steps: rows( r.steps, s =>
 			object( s ) && typeof s.step === "string" ?
 				{ step: text( s.step ), state: STEP_STATES.has( s.state ) ? s.state : "waiting" } :
@@ -134,7 +147,10 @@ needRow
 ================
 */
 function needRow( n ) {
-	return object( n ) && typeof n.what === "string" ? { what: text( n.what ), detail: text( n.detail ) } : null;
+	if ( !object( n ) || typeof n.what !== "string" ) return null;
+	// who: the owner unless the collector names the coordinator (a dead or
+	// late coordinator session must show on the board, not hide in a log).
+	return { what: text( n.what ), detail: text( n.detail ), who: n.who === "coordinator" ? "coordinator" : "owner" };
 }
 
 /*
@@ -196,8 +212,8 @@ function seatRow( s ) {
 ================
 evidenceRow
 
-One line of the PR's Evidence checklist: done, not applicable (with its
-reason) or missing.
+One kind of a PR's evidence: done, not applicable (with its reason),
+working (a task is held; the note names it) or missing.
 ================
 */
 function evidenceRow( e ) {
@@ -240,6 +256,32 @@ function issuesRow( i ) {
 
 /*
 ================
+scopeRow
+
+One critical or high issue of the release scope (owner 11-03: all of
+them ship in the next release): the agent task that holds it, if any,
+and the open PR that cites it, if any.
+================
+*/
+function scopeRow( r ) {
+	if ( !object( r ) || !count( r.number ) || !SCOPE_PRIORITIES.has( r.priority ) ) return null;
+	const t = r.task;
+	const task = object( t ) && count( t.id ) && TASK_STATES.has( t.state ) ?
+		{ id: t.id, assignee: text( t.assignee ), state: t.state, step: text( t.step ) } :
+		null;
+	return {
+		number: r.number,
+		title: text( r.title ),
+		priority: r.priority,
+		epic: r.epic === true,
+		carried: r.carried === true,
+		pr: count( r.pr ) || null,
+		task
+	};
+}
+
+/*
+================
 mergedRow
 ================
 */
@@ -274,6 +316,7 @@ export function boardBody( body, now ) {
 		agents: rows( body.agents, agentRow, MAX_LIST ),
 		prs: rows( body.prs, prRow ),
 		threads: rows( body.threads, threadRow ),
+		scope: rows( body.scope, scopeRow ),
 		issues: issuesRow( body.issues ),
 		merged: rows( body.merged, mergedRow, MAX_LIST )
 	};
