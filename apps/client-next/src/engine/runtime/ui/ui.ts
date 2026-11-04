@@ -1654,7 +1654,14 @@ export function createUi(
 		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
 	}
 	const localization = createLocalization( assets, base );
-	let titleNotice: { status?: number; argument?: number; until: number; } | null = null, uiNow = 0;
+	let titleNotice: {
+			status?: number;
+			argument?: number;
+			blockReason?: string;
+			blockEnd?: string;
+			until: number;
+		} | null = null,
+		uiNow = 0;
 	let nextPoll = 0,
 		lastSessionRevision = -1,
 		serversRequested = false,
@@ -9854,6 +9861,8 @@ export function createUi(
 					titleNotice = {
 						status: next.session.nativeTitleStatus,
 						argument: next.session.nativeTitleArgument,
+						blockReason: next.session.nativeTitleBlockReason,
+						blockEnd: next.session.nativeTitleBlockEnd,
 						until: now + 15000
 					};
 					sound( "message" );
@@ -11494,7 +11503,12 @@ export function createUi(
 				(next.frontend && titleNotice ?
 					(titleNotice.status === undefined ?
 						"UIO_MSG_ERROR_CITATION" :
-						titleStatusMessage( titleNotice.status, titleNotice.argument, title.catalog )) :
+						titleStatusMessage(
+							titleNotice.status,
+							titleNotice.argument,
+							title.catalog,
+							{ reason: titleNotice.blockReason, end: titleNotice.blockEnd }
+						)) :
 					message) ??
 				"";
 			const titlePending = pending || next.frontend?.entryPending === true || phase === "listing-servers" ||
