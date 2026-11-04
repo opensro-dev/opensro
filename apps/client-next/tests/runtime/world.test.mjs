@@ -2859,10 +2859,14 @@ for ( const queuedReceipt of [ true, false ] ) {
 		assert.equal( world.status().phase, "reconnecting" );
 		assert.equal( incidents.length, 1 );
 		// Nothing at all arrived for 12 s while the move waited: the link
-		// stalled (#1418), so the incident names the link, not the move.
+		// stalled (#1418), so the incident names the link and the lane
+		// that waited (#2148), not the move's own watchdog.
 		assert.equal( incidents[0].code, "transport_stalled" );
 		assert.equal( incidents[0].category, "unknown" );
-		assert.match( incidents[0].message, /Transport stalled: a request waited 12001 ms with no frame arriving/ );
+		assert.match(
+			incidents[0].message,
+			/Transport stalled: the movement lane waited 12001 ms with no frame arriving/
+		);
 		assert.throws( () => world.command( { kind: "move", destination } ), /not ready/ );
 		world.step( 12256 );
 		await settle();
@@ -2981,7 +2985,7 @@ test("a stalled link is named and resumed at 8 s, before the receipt watchdog", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8000 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8000 ms with no frame arriving/ );
 });
 
 /*
@@ -3030,7 +3034,7 @@ test("a frozen tab's backlog ages on the event clock in the stall incident", asy
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 	const age = /last inbound (\d+) ms ago/.exec( incidents[0].message );
 	assert.ok( age, "the incident ages the last frame" );
 	assert.ok(
@@ -3073,7 +3077,7 @@ test("a frame landing in the request's own step does not prove the link alive", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 });
 
 /*
