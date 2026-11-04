@@ -3,11 +3,12 @@
 
 queries.go - the ledger's bucketed series, flows and flags (contract v1)
 
-Every answer reads the newest snapshot's economy_ledger, grouped by
-bucket, reason and direction in one query; the metric is folded from
-those groups here. A mint sums the gains of mint reasons, a burn the
-losses of burn reasons; transfers and unattributed changes count in
-neither. Amounts are decimal strings.
+Every answer folds the newest snapshot's hourly rollup (rollup.go) by
+bucket, reason and direction; the metric is folded from those groups
+here. readGroups is the same grouping asked of the ledger directly,
+kept as the fold's reference. A mint sums the gains of mint reasons, a
+burn the losses of burn reasons; transfers and unattributed changes
+count in neither. Amounts are decimal strings.
 
 ===========================================================================
 */
@@ -103,7 +104,9 @@ parseWindow
 
 The bucket (default 1d), to (default now), from (default: the most
 buckets that end at to), refused when the buckets it touches exceed
-maxBuckets.
+maxBuckets. The contract is whole buckets: from is floored to its
+bucket's first second and to raised to its bucket's last, so every
+answer counts the buckets it touches whole, never a cut of one.
 ================
 */
 func parseWindow(bucket, from, to, division string, now time.Time) (window, error) {
@@ -130,6 +133,10 @@ func parseWindow(bucket, from, to, division string, now time.Time) (window, erro
 	if w.from > w.to {
 		return window{}, queryError{"bad_bucket", "from is after to"}
 	}
+	// Whole buckets are the contract (see the banner): align before
+	// the width check counts the buckets the window touches.
+	w.from = w.from / w.size * w.size
+	w.to = (w.to/w.size+1)*w.size - 1
 	if w.to/size-w.from/size+1 > maxBuckets {
 		return window{}, queryError{"range_too_wide", fmt.Sprintf("more than %d buckets", maxBuckets)}
 	}
@@ -402,13 +409,9 @@ rule acts. The day nets come from 1d groups starting netMintWindow days
 before the window.
 ================
 */
-func netMintFlags(db *sql.DB, w window, division string) ([]Flag, error) {
+func netMintFlags(entries []rollupEntry, w window, division string) []Flag {
 	days := window{bucket: "1d", size: bucketSeconds["1d"], from: w.from - netMintWindow*bucketSeconds["1d"], to: w.to, division: division}
-	groups, err := readGroups(db, days)
-	if err != nil {
-		return nil, err
-	}
-	points := foldSeries("gold_net", groups)
+	points := foldSeries("gold_net", rollupGroups(entries, days))
 	var flags []Flag
 	for i, point := range points {
 		if point.T < w.from || i < netMintWindow {
@@ -430,7 +433,7 @@ func netMintFlags(db *sql.DB, w window, division string) ([]Flag, error) {
 			Division: division, Value: point.Sum, Threshold: decimal(threshold),
 		})
 	}
-	return flags, nil
+	return flags
 }
 
 /*

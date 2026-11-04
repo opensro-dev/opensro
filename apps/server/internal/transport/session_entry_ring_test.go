@@ -30,9 +30,9 @@ import (
 // whole byte bound, inside MaxFrameBytes.
 const entryAnswerBytes = streamRingMaxBytes + 731271
 
-// slowEntryParkBound stands in for RingParkBound. A loaded machine only
-// delays the watchdog past it, never fires it early, so three bounds of
-// quiet are a safe "still attached" window in the passing direction.
+// slowEntryParkBound stands in for RingParkBound on the manual clock
+// (#2445): three advanced bounds are a "still attached" window whose
+// length no scheduler can stretch or shrink.
 const slowEntryParkBound = 200 * time.Millisecond
 
 /*
@@ -44,9 +44,9 @@ was sent a live-sized EnterWorld answer and the three scene frames behind
 it, and acks nothing more: it is still downloading the answer.
 ================
 */
-func enterSlowly(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeConn) {
+func enterSlowly(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeConn, *manualClock) {
 	t.Helper()
-	hub, sess, fc := parkBoundSession(t, bound)
+	hub, sess, fc, clock := parkBoundSession(t, bound)
 	if err := sess.Send(ringTestOp, []byte{1}); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func enterSlowly(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeConn) 
 			t.Fatal(err)
 		}
 	}
-	return hub, sess, fc
+	return hub, sess, fc, clock
 }
 
 /*
@@ -79,15 +79,20 @@ behind it as it was before #2338.
 */
 func TestSlowEntryDownloadIsNotParkDetached(t *testing.T) {
 	t.Parallel()
-	hub, sess, fc := enterSlowly(t, slowEntryParkBound)
+	hub, sess, fc, clock := enterSlowly(t, slowEntryParkBound)
 	wait.Eventually(t, 5*time.Second, "the scene behind the answer is written", func() bool {
 		return len(dataFrames(fc.written())) == 1+1+3
 	})
-	wait.Consistently(t, 3*slowEntryParkBound, "a downloading client stays attached", func() bool {
-		sess.mu.Lock()
-		defer sess.mu.Unlock()
-		return sess.attached
-	})
+	// Three park bounds pass on the manual clock (#2445); one more
+	// tick proves the watchdog's checks for them have run.
+	clock.Advance(3 * slowEntryParkBound)
+	clock.Advance(0)
+	sess.mu.Lock()
+	attached := sess.attached
+	sess.mu.Unlock()
+	if !attached {
+		t.Fatal("a client still downloading its entry was park-detached")
+	}
 	if got := hub.metrics.detachesRingPark.Load(); got != 0 {
 		t.Fatalf("detaches_ring_park = %d, want 0 for a client still downloading its entry", got)
 	}
@@ -105,7 +110,7 @@ for a new entry on every resume, supersededEntryLocked).
 */
 func TestResumeBeforeAnUnappliedEntryIsServed(t *testing.T) {
 	t.Parallel()
-	_, sess, fc := enterSlowly(t, time.Hour)
+	_, sess, fc, _ := enterSlowly(t, time.Hour)
 	wait.Eventually(t, 5*time.Second, "the scene behind the answer is written", func() bool {
 		return len(dataFrames(fc.written())) == 1+1+3
 	})
@@ -118,4 +123,57 @@ func TestResumeBeforeAnUnappliedEntryIsServed(t *testing.T) {
 	wait.Consistently(t, 300*time.Millisecond, "nothing of the superseded entry is re-sent", func() bool {
 		return len(dataFrames(second.written())) == 0
 	})
+}
+
+/*
+================
+TestResumeDropsAnEntryStillQueued
+
+The live #2443 shape: a teleport's re-entry [reset, EnterWorld answer,
+scene] was queued behind a parked writer and never written when the
+link dropped. The resumed browser asks for a new entry, so the queued
+answer is as superseded as one in the ring: re-sent, it is applied in
+place of the new one, and the new answer then lands on a client already
+in the world ("Unexpected EnterWorld result"). The resume drops the
+queued answer and every counted frame behind it; what came before it
+still goes out.
+================
+*/
+func TestResumeDropsAnEntryStillQueued(t *testing.T) {
+	t.Parallel()
+	_, sess, fc, _ := parkBoundSession(t, time.Hour)
+	if err := sess.Send(ringTestOp, []byte{1}); err != nil {
+		t.Fatal(err)
+	}
+	writtenCount(t, fc, 1)
+	sess.detachGen(sess.gen, errRingParkBound)
+	detached(t, sess)
+	// Queued while detached: the reset that opens the re-entry, its
+	// answer and the scene behind it.
+	for _, f := range []Frame{
+		{Opcode: ringTestOp, Payload: []byte{2}},
+		{Opcode: OpEnterWorldResult, Payload: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0}},
+		{Opcode: ringTestOp, Payload: []byte{3}},
+		{Opcode: ringTestOp, Payload: []byte{4}},
+	} {
+		if err := sess.Send(f.Opcode, f.Payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	second := newFakeConn(false)
+	if err := sess.attach(second, true, 1); err != nil {
+		t.Fatalf("resume past the applied frame: %v", err)
+	}
+	wait.Eventually(t, 5*time.Second, "the frame before the answer is written", func() bool {
+		return len(dataFrames(second.written())) >= 1
+	})
+	wait.Consistently(t, 300*time.Millisecond, "nothing from the queued answer on is written", func() bool {
+		written := dataFrames(second.written())
+		return len(written) == 1 && written[0].Payload[0] == 2
+	})
+	for _, f := range second.written() {
+		if f.Opcode == OpEnterWorldResult {
+			t.Fatal("the superseded EnterWorld answer was written after the resume")
+		}
+	}
 }

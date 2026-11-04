@@ -37,6 +37,8 @@ func TestEconomyRowReasonSplitsASettlement(t *testing.T) {
 		// Other doors keep their one reason per direction, id or not.
 		{"shop-transaction", 42, true, "npc_sale"},
 		{"guild-level-up 1/7", 42, false, "guild_fee"},
+		{"quest-reward", 42, true, "quest_reward"},
+		{"quest-reward", 42, false, "quest_fee"},
 	}
 	for _, tc := range cases {
 		if got := EconomyRowReason(tc.label, tc.charID, tc.gain); got != tc.want {

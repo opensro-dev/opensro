@@ -25,20 +25,21 @@ import (
 ================
 parkBoundSession
 
-An attached session on a hub whose park bound and keepalive tick are
-short enough for a test to watch the watchdog work. The outbound
-queue is oversized: a resume over a full ring re-queues the whole
-ring beside what is still queued, and this test's own Sends should
-never be the thing that trips the producer bound.
+An attached session on a hub whose park bound the test drives by
+hand: the hub runs on a manual clock (#2445), so the watchdog sees
+time pass only when the test advances it. The outbound queue is
+oversized: a resume over a full ring re-queues the whole ring beside
+what is still queued, and this test's own Sends should never be the
+thing that trips the producer bound.
 ================
 */
-func parkBoundSession(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeConn) {
+func parkBoundSession(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeConn, *manualClock) {
 	t.Helper()
 	cfg := testCfg()
 	cfg.KeepaliveInterval = 20 * time.Millisecond
 	cfg.RingParkBound = bound
 	cfg.OutboundQueue = 16384
-	hub := newHub(cfg)
+	hub, clock := manualClockHub(t, cfg)
 	sess, err := hub.createSession()
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +49,10 @@ func parkBoundSession(t *testing.T, bound time.Duration) (*Hub, *Session, *fakeC
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(sess, nil) })
-	return hub, sess, fc
+	wait.Eventually(t, 5*time.Second, "the keepalive loop holds its ticker", func() bool {
+		return clock.tickerCount() == 1
+	})
+	return hub, sess, fc, clock
 }
 
 /*
@@ -92,11 +96,10 @@ must be served the unapplied tail by the ordinary ring machinery.
 ================
 */
 func TestRingParkedWriterDetachesAtBoundAndResumeRuns(t *testing.T) {
-	// The bound is a second, not the minimum that can pass: the
-	// resume half of this test acks from wait-driven polling, and on
-	// a loaded machine a sub-second bound lets the watchdog mistake
-	// scheduler lag for a wedged applier mid-delivery.
-	hub, sess, fc := parkBoundSession(t, time.Second)
+	// The bound is a second of manual time: the watchdog cannot
+	// mistake scheduler lag for a wedged applier, because its clock
+	// moves only when this test advances it (#2445).
+	hub, sess, fc, clock := parkBoundSession(t, time.Second)
 	const extra = 64
 	const applied = streamRingMaxFrames / 8
 
@@ -112,8 +115,10 @@ func TestRingParkedWriterDetachesAtBoundAndResumeRuns(t *testing.T) {
 	// A second burst refills the ring and parks again - and this
 	// time no ack ever comes. A full ring on top of the applied
 	// prefix means applied+streamRingMaxFrames written in all.
+	// Advancing the clock past the bound is what arms the watchdog.
 	sendBurst(t, sess, fc, bytePayloads(applied))
 	writtenCount(t, fc, applied+streamRingMaxFrames)
+	clock.Advance(2 * time.Second)
 
 	detached(t, sess)
 	wait.Eventually(t, 3*time.Second, "the park detach is counted on its own counter", func() bool {
@@ -158,17 +163,20 @@ absence of ack progress arms the bound.
 ================
 */
 func TestRingParkAckingPeerIsNotCut(t *testing.T) {
-	// The bound must clear the flood that fills the ring (acks only
-	// start after it) and the acking span below must outlast it; on
-	// a loaded machine both halves need the headroom.
-	hub, sess, fc := parkBoundSession(t, 3*time.Second)
+	// Manual time below advances eight bounds in all; only the acks
+	// landing before each advance keep the peer alive, so the span
+	// needs no wall-clock headroom on any machine (#2445).
+	hub, sess, fc, clock := parkBoundSession(t, 3*time.Second)
 	const extra = 64
 	sendBurst(t, sess, fc, bytePayloads(streamRingMaxFrames+extra))
 	writtenCount(t, fc, streamRingMaxFrames)
 
 	// Refill as fast as the acks free the ring, for longer than the
 	// bound: the ring sits at its bound under pressure the whole
-	// time, but ack progress never stops.
+	// time, but ack progress never stops. Each cycle waits until
+	// the ack has actually landed (the applied position reaches
+	// it) before letting time pass, so the watchdog always judges
+	// a fresh ack stamp, never scheduler lag.
 	const cycles = 32
 	const perCycle = 512
 	acked := uint32(0)
@@ -182,13 +190,15 @@ func TestRingParkAckingPeerIsNotCut(t *testing.T) {
 		sent += perCycle
 		acked += perCycle
 		sendStreamAck(fc, acked)
-		// Real time passes across the park bound while the acks advance.
-		wait.Consistently(t, 100*time.Millisecond, "peer stays attached", func() bool {
+		wait.Eventually(t, 5*time.Second, "the cycle's ack lands before time passes", func() bool {
 			sess.mu.Lock()
 			defer sess.mu.Unlock()
-			return sess.attached
+			return sess.streamPos-uint32(len(sess.ring)) >= acked
 		})
+		clock.Advance(750 * time.Millisecond)
 	}
+	// One more tick proves the last advance's checks have run.
+	clock.Advance(0)
 
 	sess.mu.Lock()
 	attached := sess.attached

@@ -10,6 +10,7 @@ package action
 import (
 	"math"
 	"sort"
+	"time"
 
 	"opensro.online/server/internal/domain"
 
@@ -360,9 +361,19 @@ func (rt *Runtime) cancelReturnOnDeathInDoor(division string, c *enterworld.Char
 // of casts landing together used to run every one of them inline -
 // the hook's measured worst is 556 ms over 492 slow calls. Leftovers
 // stay due in returnCasts and drain at this rate on later ticks; a
-// cast waited seconds already, so the added ticks are invisible, and
-// one completion always runs so the queue can never stall.
+// cast waited seconds already, so the added ticks are invisible. A
+// cast whose lane stays held past returnScrollLaneBound is skipped for
+// this tick only; the lane holder always finishes, so the queue drains
+// on a later tick and never stalls.
 const maxReturnScrollCompletionsPerTick = 2
+
+// returnScrollLaneBound bounds one tick's total wait for division
+// lanes in advanceReturnScrolls (#2143): a cast whose lane stays held
+// past the bound stays due for the next tick instead of parking the
+// hook behind the lane's holder - the measured 100-211 ms hook times
+// were two such waits, each too short to name on its own. A var so a
+// test can shrink the bound.
+var returnScrollLaneBound = 5 * time.Millisecond
 
 /*
 ================
@@ -371,7 +382,10 @@ advanceReturnScrolls
 Complete the due return casts, oldest first, at most
 maxReturnScrollCompletionsPerTick of them; the rest wait for later
 ticks (#2143). The map's own order is random, so the due sort is also
-what makes a waiting wave fair.
+what makes a waiting wave fair. A cast whose division lane is held
+past returnScrollLaneBound is skipped without consuming a completion
+slot and stays due, so a busy lane delays arrivals by a tick instead
+of parking this hook behind the lane's holder.
 ================
 */
 func (rt *Runtime) advanceReturnScrolls(now int64) {
@@ -392,11 +406,17 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 		}
 		return jobs[i].name < jobs[j].name
 	})
-	if len(jobs) > maxReturnScrollCompletionsPerTick {
-		jobs = jobs[:maxReturnScrollCompletionsPerTick]
-	}
+	deadline := time.Now().Add(returnScrollLaneBound)
+	completed := 0
 	for _, job := range jobs {
-		frames, peers := rt.completeReturnScrollInDivision(job, now)
+		if completed >= maxReturnScrollCompletionsPerTick {
+			break
+		}
+		frames, peers, attempted := rt.completeReturnScrollInDivision(job, now, deadline)
+		if !attempted {
+			continue
+		}
+		completed++
 		if len(frames) > 0 && rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(job.division, job.name, frames)
 		}
@@ -409,19 +429,32 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 /*
 ================
 completeReturnScrollInDivision
+
+Runs one completion under its division lane. The lane wait is timed
+as its own step (returnScrollDivisionWait), outside the completion's
+work: a job queued behind a long lane holder used to charge that
+wait to whatever named it (#1820 E, the tickPublicationGate rule).
+The wait is bounded by the caller's deadline (#2143): past it the
+cast stays due for the next tick, the step names the cut
+(returnScrollDivisionCut, as tickGateCut names the gate's), and the
+third result reports that no completion was attempted.
 ================
 */
-func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
-	// The wait for the division lane is timed as its own step
-	// (returnScrollDivisionWait), outside the completion's work: a job
-	// queued behind a long lane holder used to charge that wait to
-	// whatever named it (#1820 E, the tickPublicationGate rule).
+func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64, deadline time.Time) ([]wire.Frame, []wire.Frame, bool) {
 	var unlock func()
+	attempted := false
 	rt.Steps.Time("returnScrollDivisionWait", func() {
-		unlock = rt.lockDivision(job.division)
+		unlock, attempted = rt.tryLockDivision(job.division, deadline)
 	})
+	if !attempted {
+		if rt.Steps.Slow != nil {
+			rt.Steps.Slow("returnScrollDivisionCut", returnScrollLaneBound)
+		}
+		return nil, nil, false
+	}
 	defer unlock()
-	return rt.completeReturnScroll(job, now)
+	frames, peers := rt.completeReturnScroll(job, now)
+	return frames, peers, true
 }
 
 /*

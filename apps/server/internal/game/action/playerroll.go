@@ -40,7 +40,7 @@ the attacker contributes its level and object ID, the victim its side.
 ==================
 */
 func (rt *Runtime) rollCreatureOnPlayer(division string, source uint32, level uint8, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
-	if params == nil || !params.Present() {
+	if params == nil || !params.Present() && !params.Stone.Present {
 		return nil, nil
 	}
 	in := playerVictimRollInput(params, target, defender, wall)
@@ -49,6 +49,9 @@ func (rt *Runtime) rollCreatureOnPlayer(division string, source uint32, level ui
 	in.SourceGID = source
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: source}}
 	records := abnormal.Roll(in, random)
+	if record, ok := stoneRecord(in, params); ok {
+		records = append(records, record)
+	}
 	return records, random.err
 }
 
@@ -62,7 +65,7 @@ monster's hit, the caster's level and learned setv dictionary
 ==================
 */
 func (rt *Runtime) rollPlayerOnPlayer(division string, caster *enterworld.Character, casterStats combat.Stats, params *abnormal.SkillParams, target *enterworld.Character, defender combat.Stats, wall *enterworld.SkillWall) ([]abnormal.Record, error) {
-	if params == nil || !params.Present() {
+	if params == nil || !params.Present() && !params.Stone.Present {
 		return nil, nil
 	}
 	values := casterStats.SkillParameters
@@ -80,7 +83,29 @@ func (rt *Runtime) rollPlayerOnPlayer(division string, caster *enterworld.Charac
 	in.SourceName = caster.Name
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, character: caster.Name}}
 	records := abnormal.Roll(in, random)
+	if record, ok := stoneRecord(in, params); ok {
+		records = append(records, record)
+	}
 	return records, random.err
+}
+
+/*
+================
+stoneRecord
+
+The stone-curse record one landed hit appends beside the roll's
+records, under the roll's own hit-level guards: a skipped hit group,
+an immune target and a wall lane that swallows the statuses swallow
+the curse with them. No shipped player skill carries snts, so the
+player-caster wrapper never mints one today; the creature wrapper is
+the White Snake's curse path.
+================
+*/
+func stoneRecord(in abnormal.RollInput, params *abnormal.SkillParams) (abnormal.Record, bool) {
+	if in.SkipGroup || in.TargetImmune || in.WallMask != nil && *in.WallMask&8 != 0 && !params.Stun() {
+		return abnormal.Record{}, false
+	}
+	return params.StoneRecord(in.SourceGID, in.TargetGID, in.SourceName)
 }
 
 /*

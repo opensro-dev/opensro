@@ -12,6 +12,7 @@ import (
 	"math"
 	"testing"
 
+	"opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -243,6 +244,52 @@ func TestLineOfSightReplayReporterAnchors(t *testing.T) {
 			t.Fatalf("anchor %+v frozen in all 8 directions: the unreachable-deck exclusion fires", anchor)
 		}
 		t.Logf("anchor (%.3f,%.3f): frozen %d/8 directions", anchor.X, anchor.Z, frozen)
+	}
+}
+
+/*
+================
+TestLineOfSightOpenDeckExit
+
+The Fertile Temple deck (region 0x6687) leaves through an open outline
+edge: the walk steps off the rim and lands on the floor (the fertile
+deck pins). A mob standing just off that edge is in plain sight of a
+player on the deck, so the line test must agree with the walk. The exit
+leg continues onto the terrain; if its report carries the failure bit,
+the line test refuses the cast with 0x3010 even though the second leg
+arrives - the report BR-261031-1337-33A7's "Cannot attack due to an
+obstacle" at the temple ramps. The 5.22 height step also puts every
+deck-to-floor pair past the settle distance, so the chain, not the
+settle, has to clear them.
+================
+*/
+func TestLineOfSightOpenDeckExit(t *testing.T) {
+	validator := realAuthorityValidator(t)
+	rt := &Runtime{ClientClip: &ClientClip{Mode: ClipApply, Validator: validator}}
+
+	deck := simulation.Spawn{RegionID: 0x6687, X: 284.08, Y: -35.18, Z: 483.24}
+	deckOwner, _, ok := validator.ResolveNavOwner(deck, simulation.NavOwner{})
+	if !ok || deckOwner.Kind != world.NavOwnerObject {
+		t.Fatalf("fixture: %+v does not stand on the deck (%+v)", deck, deckOwner)
+	}
+	floors := []simulation.Spawn{
+		{RegionID: 0x6687, X: 283.93, Y: -40.40, Z: 486.81},
+		{RegionID: 0x6687, X: 289.00, Y: -40.40, Z: 488.44},
+	}
+	for _, floor := range floors {
+		floorOwner, _, ok := validator.ResolveNavOwner(floor, simulation.NavOwner{})
+		if !ok || floorOwner.Kind != world.NavOwnerTerrain {
+			t.Fatalf("fixture: %+v does not stand on the floor (%+v)", floor, floorOwner)
+		}
+		if walk := validator.ClipMovementPathFrom(deck, deckOwner, floor); walk.Outcome != ClipArrived {
+			t.Fatalf("fixture: the walk off the deck to %+v is %s, want arrived", floor, walk.Outcome)
+		}
+		if !rt.LineOfSight(deck, deckOwner, floor) {
+			t.Fatalf("deck %+v cannot see the floor stand %+v past the open edge", deck, floor)
+		}
+		if !rt.LineOfSight(floor, floorOwner, deck) {
+			t.Fatalf("floor %+v cannot see the deck stand %+v past the open edge", floor, deck)
+		}
 	}
 }
 

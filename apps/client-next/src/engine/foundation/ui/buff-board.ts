@@ -21,6 +21,7 @@ import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
+import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
 export const buffTimerRoot = "/assets/images/Media_extracted/icon/stateodd/";
 
 /*
@@ -46,6 +47,7 @@ export function buffBoard(
 		| "petGuidance"
 		| "petGuidance"
 		| "petTraining"
+		| "mostWanted"
 		| "skillCatalog"
 		| "skillIndex"
 	>,
@@ -53,7 +55,8 @@ export function buffBoard(
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
 	showPetTraining = true,
-	copy: ( key: string ) => string = key => key
+	copy: ( key: string ) => string = key => key,
+	showMostWanted = false
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -199,6 +202,19 @@ export function buffBoard(
 				fraction: tailwind.stacks / 10
 			} );
 		}
+	}
+	// Port-only (#1849): the streak holder's own wanted row, opted into
+	// in the Experimental window. It wears the dressed job's icon (the
+	// row waits while the suit is off, as its bonuses do).
+	const wantedRow = showMostWanted ? mostWantedRow( game.mostWanted, timeMs ) : null;
+	if ( wantedRow ) {
+		primary.push( {
+			id: "most-wanted",
+			path: wantedRow.path,
+			label: wantedRow.label,
+			helpText: wantedRow.helpText,
+			fraction: wantedRow.fraction
+		} );
 	}
 	for ( const row of abnormalBuffIcons( game.vitals?.find( v => v.gid === game.localGid )?.abnormal ?? 0 ) ) {
 		const record = game.abnormalRecords?.find( item => item.bit === Number( row.id.slice( 9 ) ) );

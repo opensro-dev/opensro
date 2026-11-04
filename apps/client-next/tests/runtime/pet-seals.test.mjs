@@ -36,7 +36,10 @@ test("all seals keep the pet footer, scale whites and use yellow rare headings a
 		};
 		const rows = itemTooltip( item, { masteries: [] }, key => key );
 		assert.equal( rows[0].color, 0xffffd953 );
-		assert.equal( rows[2].value, [ "", "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][seal] );
+		assert.equal(
+			rows.find( row => row.value.startsWith( "PARAM_RARE_" ) )?.value,
+			[ "", "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][seal]
+		);
 		assert.equal( rows.at( -1 )?.value, "Pet" );
 		assert.ok(
 			itemSlotOverlays( item, [ 0, 0, 32, 32 ], 0, 0 ).some( overlay =>

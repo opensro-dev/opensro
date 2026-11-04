@@ -267,7 +267,8 @@ Admission is the native one (gachaNpcAdmission, then gacha set, bag limit,
 ticket row, entry lookup); every refusal answers one B053 [2][u8 code],
 the native answer the client's waiting phase ends on. On commit the ticket
 row becomes a native win/loss result card; 0x3645 reaches the client before
-B053 so CIFGhaCha_ApplyResult observes the new ref and reward map.
+B053 so CIFGhaCha_ApplyResult observes the new ref and reward map. A
+committed win also publishes the shard-wide 0x30C0 banner (#2425).
 ================
 */
 func (rt *Runtime) HandleGachaRoll(
@@ -417,6 +418,19 @@ func (rt *Runtime) HandleGachaRoll(
 		}
 		log.Infof("gacha pool v2: %s rolled entry %d at NPC %d: %s, reward %d x%d",
 			character.Name, request.SelectedEntryID, npc.RefObjID, outcome, rolledReward, rolledQuantity)
+	}
+	if rolledWin {
+		// The win is announced to the whole shard (#2425): the winner
+		// reads the banner at the tail of their own burst, every other
+		// session through the shard push, as for a Global Chatting line.
+		// A loss announces nothing, and a refused roll never reaches
+		// here, so no uncommitted win is ever published.
+		announce := wire.Frame{Opcode: gacha.OpWinAnnounce,
+			Payload: gacha.EncodeWinAnnounce(rolledReward, uint16(rolledQuantity))}
+		frames = append(frames, announce)
+		if rt.PushShardPeerFrames != nil {
+			rt.PushShardPeerFrames(divisionID, character.Name, []wire.Frame{announce})
+		}
 	}
 	return frames, ""
 }

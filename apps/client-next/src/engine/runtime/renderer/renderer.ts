@@ -463,6 +463,23 @@ export function createRenderer(
 		retainCharacterModels: characters.retain,
 		setCharacterAssembly: characters.assembly,
 		characterStats: characters.stats,
+		/*
+		================
+		takeDegradations
+
+		Every character snapshot owner's held-clock reports since the last
+		take: the world's rows and each portrait preview's.
+		================
+		*/
+		takeDegradations() {
+			return [
+				...characters.takeDegradations(),
+				...portrait.takeDegradations(),
+				...partyPortraits.flatMap( child => child.takeDegradations() ),
+				...doll.takeDegradations(),
+				...doll2.takeDegradations()
+			];
+		},
 		presentationCamera: () => presentationCamera,
 		audioListener: () => soundListener,
 		setWeather: value => world.weather( value ),
@@ -803,6 +820,10 @@ export function createRenderer(
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;
 				const doll2Input = uiProduct?.doll2;
+				// The pet window's doll pauses as the inventory's does: without it,
+				// reopening the window advanced its glows through the whole closed
+				// interval in one frame.
+				if ( !doll2Input ) doll2.pause();
 				if ( doll2Input ) {
 					const r = uiProduct!.scene.quads.find( quad => quad.texture === DOLL2_TEXTURE )!.rect,
 						w2 = Math.max( 1, Math.ceil( r[2] ) ),

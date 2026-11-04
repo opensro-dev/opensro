@@ -5,16 +5,16 @@ mostwantednotice.go - the killer's own Most Wanted progress line
 
 Port-only, not native (owner decision 2026-10-24, after a player reported
 that Most Wanted "isn't working": nothing shows until the tenth counted
-kill). SRO_MOST_WANTED_STREAK_NOTICE sends the killer, and only the
-killer, one notice for every counted kill:
+kill; the pacing is five since #1849). SRO_MOST_WANTED_STREAK_NOTICE sends
+the killer, and only the killer, one notice for every counted kill:
 
-	Most Wanted: N/10 to LV L     (N kills toward the next level L)
+	Most Wanted: N/5 to LV L     (N kills toward the next level L)
 	Most Wanted: LV 10 (max)      (at the cap)
 
 The notice is the job-kill channel's notification frame (the one the
 shard's Most Wanted notices use), in the kill's actor frames: it reaches
-no other session and no chat feed, and has no per-minute cap. Under the
-test pacing the count is in kills, so it reads N/5.
+no other session and no chat feed, and has no per-minute cap. The count
+reads in kills under the test pacing as well.
 
 It does nothing unless SRO_MOST_WANTED is on. Off, the default here, is
 the current rule: a streak says nothing until it makes a level.

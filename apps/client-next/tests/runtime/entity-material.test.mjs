@@ -201,6 +201,35 @@ test("production modifier clocks consume capped native frame milliseconds withou
 	assert.equal( owner.bytes(), 0 );
 });
 
+test("two animated-material models on one owner id step one row without throwing, and strict owners keep the assertion", async () => {
+	const { createModelMaterialClocks } = await load( "src/engine/foundation/animation/model-material-clock.ts" );
+	const material = {
+		color: [ 1, 1, 1, 1 ],
+		colorTimeline: {
+			duration: 10000,
+			mode: 2,
+			flags: 2,
+			colors: [ { time: 0, value: [ 1, 0, 0, 1 ] }, { time: 10000, value: [ 0, 1, 0, 1 ] } ]
+		},
+		uvVelocity: [ 0, 0, 0, 0, 1, 0 ]
+	};
+	const model = { primitives: [ { geometry: { material } } ] },
+		body = { gid: 41, modifierId: -7, model: "body" },
+		copy = { gid: -8, modifierId: -7, model: "body" };
+	// #2438: a fading despawn copy and the same gid's respawned body once
+	// shared one owner id and the throw ended the session. The renderer
+	// steps the owner's row once and carries on; both actors read it.
+	const owner = createModelMaterialClocks();
+	owner.step( [ body, copy ], 0, () => model );
+	owner.step( [ body, copy ], .5, () => model );
+	assert.ok( owner.get( body )?.[0] );
+	assert.equal( owner.get( body ), owner.get( copy ) );
+	// A duplicate owner stays a producer bug a test can pin: strict owners
+	// keep the assertion the renderer no longer throws.
+	const strict = createModelMaterialClocks( true );
+	assert.throws( () => strict.step( [ body, copy ], 0, () => model ), /Duplicate material instance owner/ );
+});
+
 test("production animation material queue retains clocks through blends, applies LOD, and restores the base pipeline", () => {
 	const base = { color: [ 1, 1, 1, 1 ], ambient: [ 1, 1, 1 ], alphaCutoff: 0, blend: false, doubleSided: true };
 	const make = ( state, colors ) => ({

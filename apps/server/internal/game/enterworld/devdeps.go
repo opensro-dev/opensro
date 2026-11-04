@@ -245,11 +245,11 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		if monster.JobMonsterSpeedFromEnv() {
-			// Port-only, not native: thief and hunter monsters move 20%
+			// Port-only, not native: thief and hunter monsters move 30%
 			// faster (monster/jobmonsterspeed.go).
 			var scaled int
 			template, scaled = template.WithJobMonsterSpeed()
-			log.Infof("bootstrap: %d job monster types move 20%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
+			log.Infof("bootstrap: %d job monster types move 30%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
 		}
 		monsters = simulation.NewMonsterState(template)
 		if monster.QinShiTombFromEnv() {

@@ -54,6 +54,8 @@ type Accounts interface {
 	Verify(ctx context.Context, accountID, password string) (bool, error)
 	SetPassword(ctx context.Context, accountID, password string) error
 	SetDisabled(ctx context.Context, accountID string, disabled bool) error
+	SetBlock(ctx context.Context, accountID, reason string, untilMs int64) error
+	ClearBlock(ctx context.Context, accountID string) error
 }
 
 // Server is one provisioning API instance.
@@ -90,6 +92,8 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/accounts/{id}/verify", server.handleVerify)
 	mux.HandleFunc("PUT /v1/accounts/{id}/password", server.handlePassword)
 	mux.HandleFunc("PUT /v1/accounts/{id}/disabled", server.handleDisabled)
+	mux.HandleFunc("PUT /v1/accounts/{id}/block", server.handleBlock)
+	mux.HandleFunc("DELETE /v1/accounts/{id}/block", server.handleBlockClear)
 	return server.authorize(mux)
 }
 
@@ -122,6 +126,24 @@ type accountDocument struct {
 	ID        string    `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	Disabled  bool      `json:"disabled"`
+	// The staff block detail (#2271), present only while blocked.
+	BlockReason  string `json:"blockReason,omitempty"`
+	BlockUntilMs int64  `json:"blockUntilMs,omitempty"`
+}
+
+/*
+================
+documentOf
+================
+*/
+func documentOf(info auth.AccountInfo) accountDocument {
+	return accountDocument{
+		ID:           info.ID,
+		CreatedAt:    info.CreatedAt,
+		Disabled:     info.Disabled,
+		BlockReason:  info.BlockReason,
+		BlockUntilMs: info.BlockUntilMs,
+	}
 }
 
 /*
@@ -142,7 +164,7 @@ func (server *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, accountDocument{ID: info.ID, CreatedAt: info.CreatedAt, Disabled: info.Disabled})
+	writeJSON(w, http.StatusCreated, documentOf(info))
 }
 
 /*
@@ -156,7 +178,7 @@ func (server *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, accountDocument{ID: info.ID, CreatedAt: info.CreatedAt, Disabled: info.Disabled})
+	writeJSON(w, http.StatusOK, documentOf(info))
 }
 
 /*
@@ -224,6 +246,42 @@ func (server *Server) handleDisabled(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/*
+================
+handleBlock
+
+Sets the staff block (#2271): a required reason and an optional end
+(untilMs absent or 0 is a permanent block).
+================
+*/
+func (server *Server) handleBlock(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Reason  string `json:"reason"`
+		UntilMs int64  `json:"untilMs"`
+	}
+	if !decode(w, r, &request) {
+		return
+	}
+	if err := server.accounts.SetBlock(r.Context(), r.PathValue("id"), request.Reason, request.UntilMs); err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+/*
+================
+handleBlockClear
+================
+*/
+func (server *Server) handleBlockClear(w http.ResponseWriter, r *http.Request) {
+	if err := server.accounts.ClearBlock(r.Context(), r.PathValue("id")); err != nil {
+		writeAccountError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 //============================================================================
 
 /*
@@ -262,6 +320,8 @@ func writeAccountError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "INVALID_ID", "account id is invalid")
 	case errors.Is(err, auth.ErrPasswordInvalid):
 		writeError(w, http.StatusBadRequest, "INVALID_PASSWORD", auth.ErrPasswordInvalid.Error())
+	case errors.Is(err, auth.ErrBlockInvalid):
+		writeError(w, http.StatusBadRequest, "INVALID_BLOCK", auth.ErrBlockInvalid.Error())
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		writeError(w, http.StatusServiceUnavailable, "BUSY", "the account authority is busy")
 	default:

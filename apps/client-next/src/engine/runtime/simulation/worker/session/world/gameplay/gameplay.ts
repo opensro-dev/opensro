@@ -101,6 +101,7 @@ import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -314,6 +315,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
@@ -542,6 +544,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
+		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1501,6 +1504,7 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		uniqueRank.clear();
+		mostWanted.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		levelCap = NATIVE_LEVEL_CAP;
@@ -3859,6 +3863,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( mostWanted.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -4122,6 +4130,26 @@ Packet handling must not depend on which HUD panel is currently open.
 						}
 					}
 					dirty = true;
+				}
+				if ( frame.opcode === 0x30c0 ) {
+					// 768530: the Magic Pang win banner. It reads {u32 prize
+					// reference, u16 quantity}, names the prize through the
+					// catalogue and banners UIIT_MSG_GACHA_ANNOUNCE (67D030)
+					// for every client that receives the frame - the %s is the
+					// prize's name, never a player's.
+					if ( frame.payload.length !== 6 ) throw Error( "Invalid gacha announcement" );
+					const reader = new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 );
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_GACHA_ANNOUNCE",
+						value: reader.getUint16( 4, true ),
+						arguments: [ inventory.reference( reader.getUint32( 0, true ) ).name ?? "" ],
+						formatKinds: [ "s", "d" ],
+						notificationBanner: true,
+						bannerOnly: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return false;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
@@ -4889,6 +4917,24 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// 755E40's codename chain: a crest delete's success raises
+				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
+				// title, the DELETE_COMPLETE body), where the register
+				// items would open their 0x1A/0x1B boxes (#2272's half).
+				const crestKind = used ? crestDeleteKind( used.refObjId ) : undefined;
+				if ( used && crestKind ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: {
+							title: "UIIT_STT_CONFIRM_BOX",
+							lines: [ crestDeleteKeys( crestKind ).complete ]
+						},
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				// 755E40: a subtype-4 item's success names the change it made,
 				// on the notice window (67D030), not in chat.
 				if ( used && isStallChangeItem( used.typeFlags ) ) {
@@ -5714,6 +5760,7 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				uniqueDamageRank: uniqueRank.current(),
+				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),

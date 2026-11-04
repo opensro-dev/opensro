@@ -32,7 +32,8 @@ export function uiFixture(
 	saveOptions = () => {},
 	extensions = {},
 	// published is path -> bytes served in place of the generated tree's file,
-	// for a catalog the shared tree has not published yet.
+	// for a catalog the shared tree has not published yet, or path ->
+	// { error } for a load that fails transiently (a stalled download).
 	published = {}
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
@@ -44,7 +45,9 @@ export function uiFixture(
 				const bytes = pending.get( id );
 				if ( bytes?.path && hold( bytes.path ) ) return null;
 				pending.delete( id );
-				return bytes?.absent ?
+				return bytes?.error ?
+					{ kind: "error", id, error: bytes.error } :
+					bytes?.absent ?
 					{ kind: "error", id, error: "absent", absent: true } :
 					bytes?.image ?
 					{ kind: "image", id, image: bytes.image } :
@@ -59,6 +62,10 @@ export function uiFixture(
 			request: url => {
 				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
 				requested.push( path );
+				if ( published[path]?.error ) {
+					pending.set( id, { path, error: published[path].error } );
+					return id;
+				}
 				try {
 					const bytes = published[path] ?? readFileSync( CLIENT_PUBLIC_ROOT + path );
 					// A native .texture is container bytes the UI decodes itself (#414).

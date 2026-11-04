@@ -154,7 +154,11 @@ type Session struct {
 	// (the legacy HELLO-time verifier) or none is pending.
 	admissionCommit func() error
 	lastRecv        time.Time
-	readCancel      context.CancelFunc
+	// lastSent is when the writer last put a frame on the wire; the
+	// keepalive proves the wire off it when the session goes quiet
+	// outbound (#2148, keepalive.go).
+	lastSent   time.Time
+	readCancel context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
@@ -171,6 +175,11 @@ type Session struct {
 	// frames, and the mission bridge skips it — the BYE drain is all that
 	// remains. Atomic so no reader ever needs s.mu or h.mu.
 	evicted atomic.Bool
+	// evictReason is the BYE reason the eviction closes with (Replaced or
+	// Unauthorized), stored before the latch so a reader that sees evicted
+	// also sees why. The hub keeps it past teardown (endedResume) so the
+	// evicted client's resume is told, not handed a fresh session (#2146).
+	evictReason atomic.Uint32
 
 	done chan struct{} // closed exactly once at final teardown
 
@@ -221,6 +230,22 @@ func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 	go s.writeLoop()
 	go s.keepaliveLoop()
 	return s
+}
+
+/*
+================
+now
+
+The session's clock: its hub's (the wall clock unless a test drove
+it manual, #2445). A session a test built without a hub reads the
+wall clock, as every stamp did before the hub had one.
+================
+*/
+func (s *Session) now() time.Time {
+	if s.hub == nil || s.hub.now == nil {
+		return time.Now()
+	}
+	return s.hub.now()
 }
 
 // Kind reports the current transport ("webtransport", "websocket") or
@@ -296,14 +321,18 @@ Done
 */
 func (s *Session) Done() <-chan struct{} { return s.done }
 
-// markEvicted flips the session into lame-duck mode. One-way; called by
-// Hub.BindExclusive when another session takes this session's bind key.
+// markEvicted flips the session into lame-duck mode. One-way; called when
+// another session takes this session's bind key or account slot (reason
+// ByeReasonReplaced) or the account is evicted (ByeReasonUnauthorized).
 /*
 ================
 markEvicted
 ================
 */
-func (s *Session) markEvicted() { s.evicted.Store(true) }
+func (s *Session) markEvicted(reason uint8) {
+	s.evictReason.Store(uint32(reason))
+	s.evicted.Store(true)
+}
 
 // Evicted reports whether the session lost its bind key to a replacement
 // (single-session bind, BYE Replaced) and is now a lame duck: inbound game
@@ -513,10 +542,10 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	// previous connection reported says nothing about this one (#1449).
 	s.transport = conn.Kind()
 	s.fallback = ""
-	s.lastRecv = time.Now()
+	s.lastRecv = s.now()
 	// The new attachment starts with a clean ack clock: it gets the
 	// full park bound to acknowledge what the ring re-sends.
-	s.lastStreamAck = time.Now()
+	s.lastStreamAck = s.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
 	s.pushFront(Frame{Opcode: OpWelcome, Payload: EncodeWelcome(Welcome{
@@ -796,6 +825,9 @@ func (s *Session) writeLoop() {
 			s.detachGen(gen, err)
 			continue
 		}
+		s.mu.Lock()
+		s.lastSent = s.now()
+		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
 			s.mu.Lock()
@@ -845,7 +877,7 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 		s.mu.Lock()
 		current := !s.closed && gen == s.gen
 		if current {
-			s.lastRecv = time.Now()
+			s.lastRecv = s.now()
 		}
 		s.mu.Unlock()
 		if !current {

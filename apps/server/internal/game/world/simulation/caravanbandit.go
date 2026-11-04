@@ -111,6 +111,12 @@ func (s *MonsterState) SpawnCaravanBandit(request CaravanBanditSpawn) bool {
 	}
 	actor.CurrentHP = actor.EffectiveMaxHP()
 	mover := monster.NewSpawnMover(actor, request.NowMs)
+	if monster.JobMonsterAggressionFromEnv() {
+		// Port-only, not native (#2474): a job monster attacks as soon
+		// as it spawns - its mover holds no spawn hold, so the first AI
+		// leg can acquire and strike. Off, the native 3 s hold stands.
+		mover.BehaviorDeadlineMs = request.NowMs
+	}
 	mover.Activity = monster.NewActivityCadence(uint32(request.NowMs), s.randomWord())
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)

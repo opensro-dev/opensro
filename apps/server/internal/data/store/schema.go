@@ -106,7 +106,11 @@ func isVersionMismatch(err error) bool {
 // Version 34 adds the optional Halloween daily box count (halloweenBoxDay,
 // halloweenBoxCount; port-only, SRO_HALLOWEEN_EVENT). The offline upgrade
 // rewrites no record.
-const CurrentVersion = 34
+// Version 35 adds the optional wanted-level lapse (mostWanted.expiresAtMs,
+// port-only, #1849): the time a suited player's wanted level lapses.
+// Streaks saved earlier carry none and lapse at their next level. The
+// offline upgrade rewrites no record.
+const CurrentVersion = 35
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

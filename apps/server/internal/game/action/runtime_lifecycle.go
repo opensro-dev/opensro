@@ -187,6 +187,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
 		step("advancePetSkillWindows", func() { rt.advancePetSkillWindows(nowMs) })
+		// Port-only (#1849): entry wanted states and the seven-day lapse
+		// for tracked holders; a no-op while SRO_MOST_WANTED is off.
+		step("advanceMostWanted", func() { rt.advanceMostWanted(nowMs) })
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		// Port-only (killstats.go): online-time accrual and the rollup
 		// flush; a no-op while SRO_KILL_STATS is off.

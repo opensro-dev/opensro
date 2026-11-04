@@ -200,6 +200,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
+import { createMallUseHud } from "./hud/mall-use-hud";
+import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
 import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
@@ -281,6 +283,7 @@ import {
 	isValidRenameName,
 	NAME_CHANGE_MAX_LENGTH
 } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind, type CrestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -1399,6 +1402,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const mallUse = createMallUseHud();
 	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
@@ -1512,6 +1516,11 @@ export function createUi(
 	const text = createUiText( assets, base ),
 		resources = createUiAssets( assets, texture, base );
 	let diagnosticError: string | null = null;
+	// The world was on screen at the last step. A UI image still retrying
+	// then draws nothing until it arrives: it is neither a loading failure
+	// nor a client error (#2444). Before the world shows, entry waits on
+	// the interface baseline, so a retry there still names itself.
+	let worldShown = false;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;
 	let deathLifeAt = 0, deathStateAt: number | null = null, rebirthDue = false, deathRequested = false;
@@ -1598,6 +1607,7 @@ export function createUi(
 		catalog: unknown;
 		country: number | undefined;
 		sex: number | undefined;
+		sealUnderHeading: boolean;
 		rows: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
@@ -1685,6 +1695,10 @@ export function createUi(
 		partyOptions = 4;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
+	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
+	// the bag row it asks about, revalidated when Yes answers.
+	let crestDeleteAsk: { readonly slot: number; readonly refObjId: number; readonly kind: CrestDeleteKind; } | null =
+		null;
 	let goldAmount = "",
 		confirmDrop = "",
 		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
@@ -2492,6 +2506,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// 562402/56247C (#2282): a crest delete item asks first (box
+			// 0x16/0x19); the box's Yes judges the crest (crestDeleteYes).
+			const crestKind = item ? crestDeleteKind( item.refObjId ) : undefined;
+			if ( item && crestKind && command.crestDelete === undefined ) {
+				crestDeleteAsk = { slot: command.slot, refObjId: item.refObjId, kind: crestKind };
+				dirty = true;
+				return;
+			}
 			// 6971B0 case 0x1E: the reverse return scroll asks for its point
 			// first; the row's pick runs the use with that byte.
 			if ( item && isReverseReturnScroll( item.typeFlags ) && command.reverseChoice === undefined ) {
@@ -2505,6 +2527,23 @@ export function createUi(
 				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
 				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
 				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
+				dirty = true;
+				return;
+			}
+			// 52F460 kind 0x1F (the bag activation 561D50 opens it at
+			// 562177): a gated item's plain use asks first; the box's Yes
+			// runs the use, its No nothing. Only the bare use is asked -
+			// a use already carrying its target, message or pick was
+			// raised by its own flow and runs at once. The gate is the
+			// native rule in foundation/gameplay/mall-use.ts.
+			if (
+				item && isMallUseConfirmItem( item ) && command.targetSlot === undefined &&
+				command.revivalSlot === undefined && command.summonerSlot === undefined &&
+				command.reverseChoice === undefined && command.reverseMapPoint === undefined &&
+				command.message === undefined && command.renameName === undefined &&
+				command.skin === undefined && command.companionGid === undefined
+			) {
+				mallUse.ask( item );
 				dirty = true;
 				return;
 			}
@@ -4505,6 +4544,23 @@ export function createUi(
 		} else if ( id === "social-confirm-no" ) {
 			confirmSocial = "";
 			grantAsk = null;
+		} else if ( id === "crest-delete-yes" ) {
+			// 6978A1's OK arm (#2282): with no crest it prints the error
+			// line (67A600 type 0) and composes nothing; the crest the
+			// box judges is the local state the display reads. The use
+			// goes out only while one stands - the server judges again.
+			const ask = crestDeleteAsk;
+			crestDeleteAsk = null;
+			const item = ask && view?.gameplay?.inventory.find( row => row.slot === ask.slot );
+			if ( ask && item && item.refObjId === ask.refObjId && item.quantity > 0 ) {
+				const social = view?.gameplay?.social,
+					crest = ask.kind === "guild" ? social?.guild?.crest : social?.allianceCrests?.[1];
+				if ( crest === undefined || crest === 0 || crest === 0xffffffff ) {
+					hudMessages.append( hudCopy( crestDeleteKeys( ask.kind ).refused ) );
+				} else sendGameplay( { kind: "item-use", slot: ask.slot, crestDelete: true } );
+			}
+		} else if ( id === "crest-delete-no" ) {
+			crestDeleteAsk = null;
 		} else if ( id === "guild-create" ) {
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" ) {
@@ -6017,8 +6073,8 @@ export function createUi(
 		================
 		*/
 		resourceError: () =>
-			resources.error() ?? hud.error() ?? text.error() ?? guideResources.error() ?? minimapResources.error() ??
-				null,
+			(worldShown ? null : resources.error()) ?? hud.error() ?? text.error() ?? guideResources.error() ??
+				minimapResources.error() ?? null,
 		/*
 		================
 		entryReady
@@ -6857,6 +6913,30 @@ export function createUi(
 						sendGameplay( command );
 					}
 					dirty = true;
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( mallUse.pending() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "mall-use-cancel"
+				) {
+					mallUse.dismiss();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "mall-use-confirm"
+				) {
+					const slot = mallUse.take();
+					dirty = true;
+					if ( slot !== null && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
+						// The confirmed use is the plain shape sendGameplay asks
+						// about, so it goes through the door underneath it.
+						commands( { kind: "gameplay", command: { kind: "item-use", slot } } );
+					}
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -9051,9 +9131,27 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			if ( guildManagerHud.observeVote( next.gameplay?.social?.guild?.votes ?? [] ) ) dirty = true;
 			if ( reverseScrollHud.reconcile( next ) ) dirty = true;
+			// The crest delete box dies with its bag row or the world.
+			const crestAsk = crestDeleteAsk;
+			if (
+				crestAsk &&
+				(next.session?.phase !== "world" || next.travel ||
+					!next.gameplay?.inventory.some(
+						row => row.slot === crestAsk.slot && row.refObjId === crestAsk.refObjId
+					))
+			) {
+				crestDeleteAsk = null;
+				dirty = true;
+			}
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
 				cosHud.reconcileItemTarget(
+					next.gameplay?.inventory ?? [],
+					next.session?.phase === "world" && !next.travel
+				)
+			) dirty = true;
+			if (
+				mallUse.reconcile(
 					next.gameplay?.inventory ?? [],
 					next.session?.phase === "world" && !next.travel
 				)
@@ -11481,6 +11579,7 @@ export function createUi(
 			);
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
+			worldShown = worldVisible;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -12039,7 +12138,8 @@ export function createUi(
 							boardSuppressed,
 							ownerPet,
 							experimental.state().saved.attackPetTraining,
-							hudCopy
+							hudCopy,
+							experimental.state().saved.mostWantedBuff
 						)
 					) {
 						if ( !icon.path ) continue;
@@ -23224,6 +23324,18 @@ export function createUi(
 					no: "social-confirm-no"
 				} );
 			}
+			if ( worldVisible && crestDeleteAsk ) {
+				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
+				// the one-line question whether to delete the emblem.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
+					yes: "crest-delete-yes",
+					no: "crest-delete-no"
+				} );
+			}
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
@@ -24301,6 +24413,45 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( worldVisible && mallUse.pending() !== null ) {
+				// CIFMessageBox kind 0x1F (52F460): the same fixed 308x148 box
+				// (5C82D0) as the kind-0x1F confirm above, one question line.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets(), ...message.paths );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...message.quads
+				);
+				button(
+					"mall-use-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"mall-use-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const teleportShown = mapTeleport.pending();
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
@@ -25067,7 +25218,7 @@ export function createUi(
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
 				minimapResources.error();
-			const assetFailure = next.worldError ?? fatalAssetFailure ?? resources.error();
+			const assetFailure = next.worldError ?? fatalAssetFailure ?? (worldVisible ? null : resources.error());
 			let nativeLoadError = false;
 			if ( assetFailure && phase !== "disconnected" ) {
 				const dw = Math.min( 600, w - 20 ),
@@ -26567,16 +26718,22 @@ export function createUi(
 						const country = game.guide?.country,
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
-							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined;
+							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
+							sealUnderHeading = experimental.state().saved.sealUnderHeading;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
 						) tooltip = tooltipMemo.rows;
 						else {
 							tooltip = item ?
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } ) :
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								) :
 								skillTooltip(
 									{
 										id: skill,
@@ -26595,12 +26752,18 @@ export function createUi(
 								catalog: hudData.tooltipSkills,
 								country,
 								sex,
+								sealUnderHeading,
 								rows: tooltip
 							};
 						}
 						if ( items.length > 1 ) {
 							tooltip = items.flatMap( item =>
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } )
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								)
 							);
 						}
 						// Price belongs to the current offer, outside the item-property memo.

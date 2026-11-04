@@ -107,6 +107,7 @@ func TestPlayerAbnormalGates(t *testing.T) {
 		{abnormal.Sleep, true, true},
 		{abnormal.Root, true, false},
 		{abnormal.Stun, true, true},
+		{abnormal.Petrify, true, true},
 		{abnormal.Slow, false, false},
 	}
 	for _, tc := range cases {
@@ -398,5 +399,55 @@ func assertPublicBatchesSourceGID(t *testing.T, label string, batches []simulati
 	}
 	if !sawPublic {
 		t.Fatalf("%s produced no public DivisionFrames: %+v", label, batches)
+	}
+}
+
+/*
+================
+TestStoneCursePetrifiesPlayer
+
+The White Snake's curse at the action layer: a monster hit carrying
+snts mints the petrify record beside the roll, the record blocks
+movement and casting while it lasts and rides the 0x36C7 snapshot
+mask to the client, and its expiry frees the player.
+================
+*/
+func TestStoneCursePetrifiesPlayer(t *testing.T) {
+	rt, clock, c, attacker := newCombatTestRuntime(t, 100)
+	now := clock.NowMs()
+	params := abnormal.SkillParams{Stone: abnormal.StoneCurse{
+		Present: true, DelayMs: 5000, Percent: 12, PeriodMs: 5000, DurationMs: 20000,
+	}}
+	defender, _, err := rt.playerCombatStats(testDivision, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := rt.rollMonsterOnPlayer(testDivision, attacker, &params, c, defender, nil)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("curse roll: %+v, %v", records, err)
+	}
+	record := records[0]
+	if record.Status != abnormal.Petrify || record.SourceGID != attacker.Gid ||
+		record.DurationMs != 20000 || record.Param38 != 12 {
+		t.Fatalf("curse record %+v", record)
+	}
+	owner := rt.applyPlayerAbnormalInDoor(testDivision, c, false, records, now)
+	if owner == nil || !owner.block.Has(abnormal.Petrify) {
+		t.Fatal("the curse did not petrify the player")
+	}
+	if !rt.PlayerMovementBlocked(testDivision, c.Name) || !rt.playerCastBlocked(testDivision, c.Name) ||
+		!rt.casterDisabled(testDivision, c) {
+		t.Fatal("a petrified player can still move or cast")
+	}
+	payload := playerAbnormalSnapshotPayload(rt.playerAbnormal(testDivision, c.Name), now)
+	if got := binary.LittleEndian.Uint32(payload); got != abnormal.Petrify.Bit() {
+		t.Fatalf("snapshot mask %#x, want the petrify bit %#x", got, abnormal.Petrify.Bit())
+	}
+	owner.now = now + 20001
+	owner.block.Update(owner, owner.now)
+	owner.commit()
+	if rt.PlayerMovementBlocked(testDivision, c.Name) || rt.playerCastBlocked(testDivision, c.Name) ||
+		rt.casterDisabled(testDivision, c) {
+		t.Fatal("an expired curse still holds the player")
 	}
 }

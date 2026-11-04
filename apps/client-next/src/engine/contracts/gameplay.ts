@@ -453,6 +453,9 @@ export type GameplayCommand =
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
+		// The crest delete's confirmed use (#2282): the confirm box
+		// (0x16/0x19) already asked, so the use goes out as composed.
+		readonly crestDelete?: boolean;
 	}
 	| {
 		readonly kind: "navigation";
@@ -501,6 +504,10 @@ export interface InventoryItem {
 	};
 	readonly transformRefObjId?: number;
 	readonly name?: string;
+	// The reference row's authored itemdata fields (the same record
+	// the tooltip reference carries), so activation rules can read
+	// them - the mall-use gate reads canUse (token 24).
+	readonly nativeFields?: Readonly<Record<string, number>>;
 	readonly slot: number;
 	readonly refObjId: number;
 	readonly typeFlags: number;
@@ -750,6 +757,8 @@ export interface GameplayState extends MoverPublication {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	// Port-only most-wanted state of the local player (most-wanted.ts).
+	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];

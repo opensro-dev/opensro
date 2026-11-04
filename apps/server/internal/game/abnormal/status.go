@@ -34,7 +34,7 @@ const (
 	Fear
 	Myopia
 	Bleeding
-	unused12
+	Petrify
 	Dark
 	Stun
 	Disease
@@ -108,7 +108,8 @@ type Source struct {
 }
 
 // Sources lists the 23 parameter blocks in the roll's evaluation order.
-// tagRefSkill offsets: 30C..320 then 430..474 (448 is stns, not a status).
+// tagRefSkill offsets: 30C..320 then 430..474 (448 is snts, the stone
+// curse: carried by SkillParams.Stone and never rolled, as natively).
 var Sources = [...]Source{
 	{0x667a, Freeze, 0x01000000, -1, 2},
 	{0x6662, Frostbite, 0x02000000, -1, 2},
@@ -209,6 +210,56 @@ type SkillParams struct {
 	// Rmut is the rmut tag (0x726D7574, RefSkill+0x4AC): the skill a
 	// resurrected player starts with on accepting the resurrection.
 	Rmut uint32
+	// Stone is the snts block (0x73746E73, tagRefSkill+0x448): the stone
+	// curse. The native roll never reads +0x448, so no Source names it;
+	// hit drivers append its record beside the rolled ones (StoneRecord).
+	Stone StoneCurse
+}
+
+/*
+================
+StoneCurse
+
+StoneCurse is the snts block at tagRefSkill+0x448, the one parameter
+block the abnormal roll never evaluates: the delay before the first
+damage pulse, the percent of the victim's maximum HP each pulse deals
+and the pulse period, with the curse's lifetime from the skill's dura
+block. The reference server installs the curse through its skill
+instance modifier pass (the manager's standing stone record, cleared
+when the instance retires), not through the status roll; the port
+carries it as slot 12 of the abnormal block.
+================
+*/
+type StoneCurse struct {
+	Present    bool
+	DelayMs    uint32 // +00: first pulse delay
+	Percent    uint32 // +04: maximum-HP percent per pulse
+	PeriodMs   uint32 // +08: pulse period
+	DurationMs uint32 // the skill's dura block
+}
+
+/*
+================
+StoneRecord
+
+StoneRecord mints the petrify record for one landed hit. Roll never
+returns it (the native roll skips +0x448); the hit drivers append it
+beside the rolled records so the curse lands with its hit. The delay
+rides in Chance and the percent in Param38, the record's curse
+magnitude; grade 1 admits the slot, and a same-grade record never
+replaces an active one, so a second landed curse does not refresh
+the first.
+================
+*/
+func (p *SkillParams) StoneRecord(sourceGID, targetGID uint32, sourceName string) (Record, bool) {
+	if p == nil || !p.Stone.Present || p.Stone.DurationMs == 0 {
+		return Record{}, false
+	}
+	return Record{
+		Status: Petrify, DurationMs: p.Stone.DurationMs, PeriodMs: p.Stone.PeriodMs,
+		Chance: p.Stone.DelayMs, Grade: 1, Param38: p.Stone.Percent,
+		SourceGID: sourceGID, TargetGID: targetGID, SourceName: sourceName,
+	}, true
 }
 
 /*

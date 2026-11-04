@@ -179,6 +179,7 @@ test("borrowed portrait keeps socket children, retires old models and never clos
 			return { x: 0, y: 10, z: 0 };
 		},
 		invalidate() {},
+		takeDegradations: () => [],
 		/*
 		================
 		dispose

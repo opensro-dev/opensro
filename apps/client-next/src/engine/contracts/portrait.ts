@@ -14,12 +14,16 @@ import type { WorldTexture } from "./texture";
 /*
 ================
 PortraitPart
+
+effect marks a worn item's glow. It runs its own clock from the frame the
+preview first shows it, where a model part follows the body's clock.
 ================
 */
 export interface PortraitPart {
 	readonly actor: CharacterActor;
 	readonly model: CharacterModel;
 	readonly images: readonly WorldTexture[];
+	readonly effect?: boolean;
 }
 
 /*

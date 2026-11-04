@@ -462,12 +462,14 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 				const members = [ ...guild.members, row ];
 				assertUniqueRosterRows( members, 250 );
 				guild = { ...guild, members };
-				// 5F3340 @5f34ce: a member first seen online prints the join
-				// line (guide 67a600 @5f353a). Native discriminates through
-				// its seen-names set (832330/8323f0) on the repaint path;
-				// the port's append is the same player-visible event
-				// (2281-plan section 4).
-				if ( row.offline === 0 ) {
+				// 5F3340 @5f34ce: the join line prints for the member whose
+				// name the join event just cached (762040 @76239a writes it
+				// via 8323F0 before the insert; the repaint's compare
+				// @5f347e hits and prints @5f353a). The local player's own
+				// row never goes through that event - it arrives with the
+				// cold roster - so a self append stays silent, and a later
+				// online flip prints CONNECT on the type-6 arm instead.
+				if ( row.offline === 0 && row.name !== next.localName ) {
 					next = {
 						...next,
 						notice: {

@@ -1,11 +1,12 @@
 # Getting started
 
-From a fresh checkout to playing locally: build the game data, run the server
-cluster, run the browser client, log in.
+From a fresh checkout to playing locally: build the game data, run the game,
+log in. One command runs the whole stack on your machine - no deployment
+tooling, nothing to install beyond the prerequisites below.
 
 Local development targets one Windows 10/11 workstation; macOS (Apple Silicon)
-also works, see [Developing on macOS](#developing-on-macos). Production
-deployment is described in [DEPLOYMENT.md](../../apps/server/ops/docs/DEPLOYMENT.md).
+also works, see [Developing on macOS](#developing-on-macos). The production
+deployment tooling is not part of this repository.
 
 ## 1. Prerequisites
 
@@ -17,7 +18,6 @@ deployment is described in [DEPLOYMENT.md](../../apps/server/ops/docs/DEPLOYMENT
 | Python | 3.12 (`py -3`) with `py -3 -m pip install -r scripts/requirements-build.txt`: client extraction, image and font conversion, cursor extraction |
 | ffmpeg | Any current build on `PATH`; `assets prepare` converts the client's OGG music to MP3 with it |
 | DirectX End-User Runtime | Install [Microsoft's runtime](https://www.microsoft.com/en-us/download/details.aspx?id=35); lens mip generation uses its 32-bit `d3dx9_39.dll`. Windows' built-in DirectX alone does not supply this library. |
-| Nomad | 2.0.7 at `.tools/nomad/2.0.7/nomad.exe` (see below) |
 | Browser | Current Chrome or Edge with WebGPU |
 
 ```powershell
@@ -26,33 +26,14 @@ go version; node --version; corepack pnpm --version
 
 ### Node managers
 
-If global `node` version is different, a manager like `fnm` can be utilized like so:
+If your global `node` is another version, a version manager such as `fnm` can supply Node 24 for this
+checkout. A Node it installs has no Corepack shims yet, so enable them once:
 
 ```powershell
 fnm install 24
 fnm env --use-on-cd | Out-String | Invoke-Expression
 fnm use 24
 corepack enable
-```
-
-### Nomad
-
-The server processes run under HashiCorp Nomad, even locally. Install the
-pinned binary into the repository's ignored `.tools/` folder, verifying
-HashiCorp's published checksum:
-
-```powershell
-$Version = '2.0.7'
-$File = "nomad_${Version}_windows_amd64.zip"
-$Dir = ".tools\nomad\$Version"
-$Zip = Join-Path $env:TEMP $File
-New-Item -ItemType Directory -Force $Dir | Out-Null
-Invoke-WebRequest "https://releases.hashicorp.com/nomad/$Version/$File" -OutFile $Zip
-$Sums = Invoke-WebRequest "https://releases.hashicorp.com/nomad/$Version/nomad_${Version}_SHA256SUMS"
-$Expected = ($Sums.Content -split "`n" | Where-Object { $_ -match [regex]::Escape($File) }) -split '\s+' | Select-Object -First 1
-if ((Get-FileHash -Algorithm SHA256 $Zip).Hash.ToLower() -ne $Expected) { throw 'Nomad checksum mismatch' }
-Expand-Archive $Zip -DestinationPath $Dir -Force
-& "$Dir\nomad.exe" version
 ```
 
 ## 2. Game data
@@ -79,7 +60,7 @@ Then, from the checkout:
 
 ```powershell
 $env:SRO_GAME_ROOT = 'D:\Games\Silkroad-v1.150'   # only if the client is elsewhere
-$env:SRO_PROBE_CHROME_EXECUTABLE = '<path-to-your-chrome-install>' # if google chrome is not installed
+$env:SRO_PROBE_CHROME_EXECUTABLE = '<path-to-your-chrome-install>' # only if Google Chrome is not installed
 corepack pnpm install --frozen-lockfile
 py -3 -m pip install -r scripts/requirements-build.txt
 corepack pnpm assets prepare            # extract the archives, convert the music (a few minutes)
@@ -112,88 +93,89 @@ This prepares data for the browser client and the Go server. The original
 `SRO_Client.exe` does not connect to this server: the server speaks to
 browsers over WebTransport/WebSocket.
 
-## 3. Server cluster
+## 3. Run the game
 
-Use three terminals, all opened in `rebuild`.
-
-**Terminal A: local Nomad.** Leave it running.
+One command, from the checkout:
 
 ```powershell
-go -C apps/server run ./cmd/operations/sro-nomad dev-agent
+corepack pnpm local
 ```
 
-It starts one loopback Nomad server and client with the pinned binary, reuses a
-compatible agent that is already running, and refuses a mismatched one. Do not
-start `nomad agent -dev` by hand.
+That is the whole recipe. The command builds the Agent and GameWorld
+binaries (the Go build cache makes repeats take seconds), provisions the
+development world on first run - cluster credentials, the shared
+development account, an empty authority for the enabled shard - and then
+runs three processes as its own children, each prefixed in the output:
 
-**Terminal B: provision once, then deploy.**
+- the **Agent** on <http://127.0.0.1:8787> (logins, shard directory),
+- one **GameWorld** for the shard `LOCAL_SHARD_ID` names (default
+  `global-official` in `apps/server/config/shards.json`), transport on
+  <http://127.0.0.1:8788>, control on <http://127.0.0.1:8791>,
+- the **Vite** dev server on <http://127.0.0.1:5180>, which proxies
+  `/api` to the Agent and `/shards/<id>` to the GameWorld so the browser
+  only talks to its own origin.
 
-```powershell
-go -C apps/server run ./cmd/operations/sro-bootstrap-development
-go -C apps/server run ./cmd/operations/sro-nomad deploy -build
-go -C apps/server run ./cmd/operations/sro-nomad status
-```
-
-`sro-bootstrap-development` creates the local credentials and an empty world
-for each enabled shard under `apps/server/.state/`, using the development
-account in `apps/server/config/dev-account.env`. It never overwrites a valid
-existing world. `deploy -build` builds the Agent and GameWorld binaries and
-rolls them out; re-running it is the normal update path.
-
-`status` should report the Agent and one GameWorld per enabled shard in
-`apps/server/config/shards.json` (by default only `global-official`):
+When everything answers its readiness check the runner prints the line
 
 ```text
-sro-agent                        configured=true  status=running
-sro-gameworld-global-official    configured=true  status=running
+Local game is ready: open http://127.0.0.1:5180/ and log in as tester / 123123 (...)
 ```
 
-Both processes also answer readiness checks:
+and waits. Open the URL and log in with the development account from
+`apps/server/config/dev-account.env`. A new world has no characters;
+create one on `global-official`. Press **Ctrl+C** in the runner's
+terminal to stop: on Windows the children share the runner's console and
+each closes its own store; elsewhere the runner forwards SIGTERM. A
+process that outlives a 30-second grace period is killed, and if one of
+the three exits early the runner stops the rest - nothing is left
+orphaned either way.
 
-```powershell
-Invoke-WebRequest http://127.0.0.1:8787/readyz            # Agent
-Invoke-WebRequest http://127.0.0.1:8788/transport/readyz  # GameWorld global-official
-```
+The first boot of a fresh world fills the world population and can take
+a few minutes on a slower machine (seconds on a warm one); the runner
+keeps waiting and says what it is waiting for. If a prerequisite is
+missing - Go, unbuilt game data, a port already in use - the runner
+names it and its fix before starting anything. `pnpm local --doctor`
+runs exactly those checks without starting anything.
 
-## 4. Browser client
+Two flags change the run:
 
-**Terminal C:**
+- `pnpm local --doctor` - the prerequisite checks only, each with its fix.
+- `pnpm local --reset` - asks, then moves the local world (accounts,
+  characters, cluster state under `apps/server/.state`) to
+  `apps/server/.state/backups/local-reset-<timestamp>` and starts fresh.
+  It never deletes; delete the backup yourself once the new world is good.
 
-```powershell
-corepack pnpm dev
-```
+Settings for the run live in the checked-in
+`apps/server/config/local.env`: `LOCAL_SHARD_ID` picks the shard,
+`LOCAL_AGENT_ADDR` the Agent's listen address, and any other `KEY=VALUE`
+line is passed to both server processes as environment (server tuning
+flags such as `SRO_TICK_RATE` go there - see `apps/server/AGENTS.md`).
 
-Open <http://127.0.0.1:5180/> and log in as `tester` / `123123`. A new world
-has no characters; create one on `global-official`.
-
-The development server proxies `/api` to the Agent and `/shards/<id>` to each
-GameWorld, so the browser only talks to its own origin. `pnpm dev:https`
-serves the same client over TLS for other devices on your network; see
+`pnpm dev:https` serves the same client over TLS for other devices on
+your network, once the stack is up; see
 [HOSTING.md](../../apps/client-next/docs/HOSTING.md).
 
-## 5. Daily workflow
-
-1. Terminal A: `go -C apps/server run ./cmd/operations/sro-nomad dev-agent`
-2. Terminal B: `go -C apps/server run ./cmd/operations/sro-nomad deploy -build`
-3. Terminal C: `corepack pnpm dev`
-
-To stop, run `go -C apps/server run ./cmd/operations/sro-nomad stop`, wait for
-it to finish, then press Ctrl+C in terminal A. Stopping Nomad first can cut off
-a GameWorld's graceful database shutdown.
-
-## 6. Resetting the local world
-
-With the fleet stopped and Nomad closed, move the old state aside instead of
-deleting it, then repeat step 3:
+## 4. Daily workflow
 
 ```powershell
-$Backup = "apps\server\.state\backups\dev-reset-$(Get-Date -Format yyyyMMdd-HHmmss)"
-New-Item -ItemType Directory -Force $Backup | Out-Null
-foreach ($Path in 'cluster', 'shards', 'nomad\dev-agent') {
-  $Full = "apps\server\.state\$Path"
-  if (Test-Path $Full) { Move-Item $Full $Backup }
-}
+corepack pnpm local
 ```
+
+Edit, stop with Ctrl+C, run it again. Re-running reuses the world under
+`apps/server/.state`; only `--reset` starts over. Server and client code
+changes need nothing else: the binaries are rebuilt on every run, and
+Vite serves client edits as you save.
+
+Contributors changing the local stack itself can verify it end to end
+without a browser:
+
+```powershell
+node scripts/local/smoke.mjs
+```
+
+The smoke starts the real stack, logs the development account in over
+the wire, checks GameWorld readiness, stops everything, and asserts no
+port is left bound.
 
 ## Developing on macOS
 
@@ -221,35 +203,16 @@ atlas is rasterized with FreeType from the system Arial (`SRO_FONT_ARIAL` and
 platform as a warning, not a failure. Character mip caches are keyed by
 generator, so Windows and macOS builds never share entries.
 
-**Nomad.** Install the pinned darwin build where the Windows binary lives;
-`dev-agent` prefers it over `PATH`:
-
-```sh
-V=2.0.7 F=nomad_${V}_darwin_arm64.zip
-mkdir -p .tools/nomad/$V
-curl -fsSLO https://releases.hashicorp.com/nomad/$V/$F
-curl -fsSL https://releases.hashicorp.com/nomad/$V/nomad_${V}_SHA256SUMS | grep " $F\$" | shasum -a 256 -c
-unzip -o $F -d .tools/nomad/$V && rm $F
-```
-
-On Apple Silicon `dev-agent` also writes and loads
-`apps/server/.state/nomad/dev-agent-platform.hcl`: Nomad fingerprints those
-cores at a few MHz, so it declares the real core count at a nominal per-core
-compute; without it no job can be placed (`cannot place task groups`, CPU
-exhausted). Linux on arm64 gets the same
-file, because a virtual machine without a CPU frequency reads as zero compute.
-
 **Known gaps.** Native verification tools that execute the retail PE
 (`apps/client-next/tools/verify-*`, `audit-*`) still need Windows, and
 `ui-glyphs` parity tests compare against GDI glyph metrics.
 
-## 7. Troubleshooting
+## 5. Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| `nomad.exe` missing | Install it as in step 1, or pass `-nomad-binary <path>` to `dev-agent` (only 2.0.7 is accepted). |
-| Port 4647 already in use | Another Nomad is running. Stop it from the terminal or service that owns it, then rerun `dev-agent`. |
-| Jobs slow to become healthy after a rebuild | Antivirus may be scanning the new `agent.exe`/`gameworld.exe`. Wait; the jobs allow several minutes. Check with `sro-nomad status`. |
+| A `MISS` line from `pnpm local` | It names the prerequisite and its fix; `pnpm local --doctor` reruns the same checks without starting anything. |
+| Port 5180, 8787, 8788 or 8791 already in use | Another `pnpm local` (or a leftover from a crashed one) is running. Stop it; on Windows `Get-NetTCPConnection -State Listen -LocalPort 5180` names the owning process. |
 | Missing game-data or asset file | Run `pnpm assets doctor`, then rerun `pnpm assets build full` and `pnpm task build server-game-data`, and clear any `SRO_SERVER_GAME_DATA_*` environment overrides. |
-| `INVALID_CREDENTIALS` at login | Use `tester` / `123123`; rerun `sro-bootstrap-development`. If you changed `dev-account.env`, reset the local world (step 6). |
-| A job keeps restarting | `.tools\nomad\2.0.7\nomad.exe alloc logs <alloc-id> gameworld` (with `NOMAD_ADDR=http://127.0.0.1:4646`), fix the reported prerequisite, then `deploy` again. |
+| `INVALID_CREDENTIALS` at login | Use the account in `apps/server/config/dev-account.env` (default `tester` / `123123`). If you changed that file after provisioning, reset the local world (`pnpm local --reset`). |
+| A process exits early during a run | The runner prints its last output lines after the failure and stops the rest. Antivirus scanning a freshly built server binary is the usual cause on Windows; rerun and give it a few minutes. |

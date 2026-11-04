@@ -565,6 +565,16 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 			if owner, y, ok := v.ResolveNavOwner(report.Rest, simulation.TerrainOwner()); ok {
 				report.RestOwner, report.Rest.Y = owner, y
 			}
+			if report.continuation {
+				// The leg leaves the object and continues on the terrain,
+				// so it carries the continuation bits like a linked
+				// transfer - not the reflect branch's failure bit, which
+				// the native outline step returns only for the blocked
+				// exit below. With the failure bit set, the line-of-sight
+				// test refused targets just past an open edge that the
+				// walk reaches (#2368).
+				report.NativeResult = nativeLinkedResult | nativeContinueResult
+			}
 			return report
 		}
 		// client 403FB0 tests the terrain tile under the exit point before it hands

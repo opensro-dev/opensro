@@ -176,6 +176,18 @@ const (
 	// check returns 0x18C5): a guild-point-priced package the buyer's
 	// guild points cannot pay.
 	ErrCodeNotEnoughGuildPoints uint8 = 0xC5
+	// ErrCodeCrestGuildLevelTooLow is UIIT_MSG_GUILD_ITEM_RIGHT_LIMIT
+	// (01:BB, banner): a crest delete item used from a guild below the
+	// level its crest requires (guild 4, union 5). Client notice
+	// contract; not a claim about later-server error numbering.
+	ErrCodeCrestGuildLevelTooLow uint8 = 0xBB
+	// ErrCodeCrestNotMaster is the same notice (01:BC, banner): the
+	// crest delete user is not the guild master, or - for the union
+	// item - their guild is not the union's master guild.
+	ErrCodeCrestNotMaster uint8 = 0xBC
+	// ErrCodeCrestNoUnion is UIIT_MSG_UNION_NOT_ERROR (01:BD, banner):
+	// the union crest delete item used by a guild standing in no union.
+	ErrCodeCrestNoUnion uint8 = 0xBD
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
 	// honor-priced package the character's honor points cannot pay.

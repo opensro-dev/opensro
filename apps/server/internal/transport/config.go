@@ -70,6 +70,10 @@ type Config struct {
 	GracePeriod time.Duration
 	// KeepaliveInterval is how often a quiet attached client is pinged.
 	KeepaliveInterval time.Duration
+	// WireProofInterval is how long a live session may stay silent
+	// outbound before the keepalive proves the wire with a PING (#2148).
+	// It must stay inside the client's stall window (7 s + 1 s confirm).
+	WireProofInterval time.Duration
 	// IdleTimeout detaches a client that answered nothing at all.
 	IdleTimeout time.Duration
 	// EntryBootstrapBound caps how long a scene admission may sit with
@@ -164,6 +168,7 @@ func DefaultConfig() Config {
 		HelloTimeout:          10 * time.Second,
 		GracePeriod:           30 * time.Second,
 		KeepaliveInterval:     20 * time.Second,
+		WireProofInterval:     4 * time.Second,
 		IdleTimeout:           60 * time.Second,
 		EntryBootstrapBound:   30 * time.Second,
 		RingParkBound:         30 * time.Second,
@@ -196,6 +201,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.KeepaliveInterval == 0 {
 		c.KeepaliveInterval = d.KeepaliveInterval
+	}
+	if c.WireProofInterval == 0 {
+		c.WireProofInterval = d.WireProofInterval
 	}
 	if c.IdleTimeout == 0 {
 		c.IdleTimeout = d.IdleTimeout

@@ -31,7 +31,6 @@ apps/client-next/src/engine/foundation/animation/impact-source.ts
 apps/client-next/src/engine/foundation/animation/item-effect-clock.ts
 apps/client-next/src/engine/foundation/animation/locomotion-blend.ts
 apps/client-next/src/engine/foundation/animation/model-animation.ts
-apps/client-next/src/engine/foundation/animation/model-material-clock.ts
 apps/client-next/src/engine/foundation/animation/native-clip.ts
 apps/client-next/src/engine/foundation/animation/one-shot-layers.ts
 apps/client-next/src/engine/foundation/animation/orb-mover.ts
@@ -105,7 +104,6 @@ apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
-apps/client-next/src/engine/foundation/ui/bar.ts
 apps/client-next/src/engine/foundation/ui/button-state.ts
 apps/client-next/src/engine/foundation/ui/catalog-message.ts
 apps/client-next/src/engine/foundation/ui/character-status.ts
@@ -317,15 +315,6 @@ apps/client-next/tools/verify-bsr-transforms.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
-apps/server-observatory/public/item-model.js
-apps/server-observatory/public/items.js
-apps/server-observatory/public/model.js
-apps/server-observatory/server/source.mjs
-apps/server-observatory/tests/model.test.mjs
-apps/server-observatory/tests/operations.test.mjs
-apps/server-observatory/tests/security.test.mjs
-apps/server-observatory/tools/browser-probe.mjs
-apps/server-observatory/tools/items-browser-probe.mjs
 scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs

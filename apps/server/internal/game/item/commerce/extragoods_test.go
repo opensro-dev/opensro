@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 13+28+25+4 {
+	if err != nil || len(on) != 9+28+25+4 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
