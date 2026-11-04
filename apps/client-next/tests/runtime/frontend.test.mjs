@@ -730,7 +730,7 @@ session the caller sets. A failing fixture answers every asset request with
 an error, so the title stage fails and the frontend fails with it.
 ================
 */
-function entryFixture( failing = false ) {
+function entryFixture( failing = false, send = undefined ) {
 	let serial = 0, sceneId = "";
 	const jobs = new Map();
 	const manifest = {
@@ -779,7 +779,7 @@ function entryFixture( failing = false ) {
 		setWorldCamera() {},
 		characterStats: () => ({ actors: 1 })
 	};
-	const frontend = createFrontend( assets, renderer, "http://fixture.invalid" );
+	const frontend = createFrontend( assets, renderer, "http://fixture.invalid", send );
 	const fixture = {
 		frontend,
 		now: 0,

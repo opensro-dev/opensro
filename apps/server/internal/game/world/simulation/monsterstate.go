@@ -45,7 +45,16 @@ type divisionMonsterState struct {
 	abnormalActive   map[uint32]struct{}          // active-only abnormal tick index; blocks live on instances
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
-	instances        monsterStorage
+	// followLeaderMemo is one leg's resolved leader reading per
+	// summoner gid (monsterfollow_transaction.go): the followers of
+	// one leader share the first follower's reading within the leg,
+	// stamped by followLeaderStamp. The follow commit re-reads the
+	// leader, so a leader that moved mid-leg rejects the late
+	// followers' commits rather than being followed from a stale
+	// row; the next leg's stamp re-reads fresh.
+	followLeaderMemo  map[uint32]followLeaderFacts
+	followLeaderStamp int64
+	instances         monsterStorage
 	// interestMemo holds populationInterestGIDs results per viewer
 	// interest block (interestMemoEntry). Reconciled block membership
 	// has already absorbed the instant, so an entry lives until a

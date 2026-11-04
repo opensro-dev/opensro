@@ -111,26 +111,33 @@ func (ops *MonsterMoverOps) activityBlockFor(gid uint32, at Spawn) (worldgeom.Me
 // A missing navigation answer is not an empty native message block.
 // The returned mover is the value the caller continues with: the gate's
 // own copy, which any commit it made has already carried into storage -
-// the caller must not re-read the row it just gated.
-func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool) {
+// the caller must not re-read the row it just gated. The last answer
+// says whether a commit here advanced the row's generation: a pure
+// cadence re-check stamps the cadence in place (monsteractivity.go's
+// cadenceOnlyWrite) and leaves the generation, so the caller's chain
+// base still names the row; every other commit rewrites the row and
+// the caller must re-read before chaining generation-guarded commits
+// off it. The answer is load-bearing only on the unhandled return.
+func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Instance, m monster.MoverState, now int64) ([]Frame, monster.MoverState, bool, bool) {
 	if ops.activity == nil {
-		return nil, m, false
+		return nil, m, false, false
 	}
 	pending := m.Mode() == monster.MoverPending
 	if !pending && !monster.MaySuspendWander(actor.Nest.NativeTacticsFlags, m.ControllerGID() != 0, m.Mode()) {
-		return nil, m, false
+		return nil, m, false, false
 	}
 	if m.Activity.Interval == 0 {
 		panic("monster activity cadence was not initialized at activation")
 	}
 	before := m
+	generationAdvanced := false
 	if m.Activity.Due(uint32(now)) {
 		b, ok := ops.activityBlockFor(actor.Gid, poseToSpawn(m.LivePoseAt(now, ops.GroundHeight)))
 		resolved := ok && !ops.activity.unresolved[ops.activity.world]
 		active := resolved && ops.activity.counts[activityBucket{ops.activity.world, b}] != 0
 		if pending && active {
 			mustMoverTransition(&m, monster.MoverEventActivityResumed, 0)
-			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), m, true
+			return ops.startWanderLeg(division, actor, ops.resolveTactics(actor), m, now), m, true, true
 		}
 		if !pending && resolved && !active {
 			mustMoverTransition(&m, monster.MoverEventActivityLost, 0)
@@ -138,17 +145,18 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 			pending = true
 		}
 		if !ops.commitSteppedActivity(division, actor.Gid, before, m, now) {
-			return nil, m, true
+			return nil, m, true, false
 		}
+		generationAdvanced = !cadenceOnlyWrite(before, m)
 	}
 	if !pending {
-		return nil, m, false
+		return nil, m, false, generationAdvanced
 	}
 	// The retail server's strategy clear clears the strategy target, but never stops the movement
 	// channel. Arrival runs the PENDING callback without entering IDLE.
 	if navigationNeedsContinuation(m, now) {
 		goal, _ := m.NavigationGoal()
-		return ops.commitSegment(division, actor, m, goal, actor.WalkSpeed(), currentChannel(m.Channel), now), m, true
+		return ops.commitSegment(division, actor, m, goal, actor.WalkSpeed(), currentChannel(m.Channel), now), m, true, true
 	}
 	if m.ArriveMs > m.DepartMs && !m.InFlight(now) {
 		m.Pose = m.To
@@ -157,9 +165,9 @@ func (ops *MonsterMoverOps) runActivityGate(division string, actor monster.Insta
 		if !m.NoteMoveStopped(m.Pose) {
 			mustMoverTransition(&m, monster.MoverEventSegmentArrived, 0)
 		}
-		return ops.commitSteppedMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true
+		return ops.commitSteppedMoverFrames(division, actor.Gid, m, []Frame{correctionFrame(actor.Gid, m.Pose)}), m, true, true
 	}
-	return nil, m, true
+	return nil, m, true, generationAdvanced
 }
 
 // Clock consumption must not run IDLE's target-ledger entry effects. A
