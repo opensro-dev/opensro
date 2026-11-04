@@ -601,11 +601,6 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 
 /*
 ================
-WeekRankings
-================
-*/
-/*
-================
 HalloweenAccount
 
 Production supplies the authority's account record. The in-memory
@@ -628,6 +623,11 @@ func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
 	return record
 }
 
+/*
+================
+WeekRankings
+================
+*/
 func (d *Deps) WeekRankings(divisionID string) domain.JobRankings {
 	if d.JobRankings != nil {
 		return d.JobRankings(divisionID)
