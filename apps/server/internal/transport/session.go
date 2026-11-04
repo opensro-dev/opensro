@@ -232,6 +232,22 @@ func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 	return s
 }
 
+/*
+================
+now
+
+The session's clock: its hub's (the wall clock unless a test drove
+it manual, #2445). A session a test built without a hub reads the
+wall clock, as every stamp did before the hub had one.
+================
+*/
+func (s *Session) now() time.Time {
+	if s.hub == nil || s.hub.now == nil {
+		return time.Now()
+	}
+	return s.hub.now()
+}
+
 // Kind reports the current transport ("webtransport", "websocket") or
 // "detached".
 /*
@@ -526,10 +542,10 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	// previous connection reported says nothing about this one (#1449).
 	s.transport = conn.Kind()
 	s.fallback = ""
-	s.lastRecv = time.Now()
+	s.lastRecv = s.now()
 	// The new attachment starts with a clean ack clock: it gets the
 	// full park bound to acknowledge what the ring re-sends.
-	s.lastStreamAck = time.Now()
+	s.lastStreamAck = s.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
 	s.pushFront(Frame{Opcode: OpWelcome, Payload: EncodeWelcome(Welcome{
@@ -810,7 +826,7 @@ func (s *Session) writeLoop() {
 			continue
 		}
 		s.mu.Lock()
-		s.lastSent = time.Now()
+		s.lastSent = s.now()
 		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
@@ -861,7 +877,7 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 		s.mu.Lock()
 		current := !s.closed && gen == s.gen
 		if current {
-			s.lastRecv = time.Now()
+			s.lastRecv = s.now()
 		}
 		s.mu.Unlock()
 		if !current {

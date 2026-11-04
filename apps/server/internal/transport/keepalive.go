@@ -55,6 +55,47 @@ func keepalivePingDue(since, cadence, tick time.Duration) bool {
 	return since >= cadence-tick/2
 }
 
+/*
+================
+ticker
+
+The keepalive loop's tick source: the wall clock in production, a
+manual clock in the watchdog tests (#2445).
+================
+*/
+type ticker interface {
+	C() <-chan time.Time
+	Stop()
+}
+
+// realTicker is the wall clock's ticker.
+type realTicker struct {
+	inner *time.Ticker
+}
+
+/*
+================
+newRealTicker
+================
+*/
+func newRealTicker(d time.Duration) ticker {
+	return realTicker{inner: time.NewTicker(d)}
+}
+
+/*
+================
+realTicker.C
+================
+*/
+func (t realTicker) C() <-chan time.Time { return t.inner.C }
+
+/*
+================
+realTicker.Stop
+================
+*/
+func (t realTicker) Stop() { t.inner.Stop() }
+
 // keepaliveLoop pings an attached-but-quiet client and detaches one that
 // has gone silent past the idle timeout, giving it the resume grace window.
 // While a scene is loading the ping cadence shortens to
@@ -75,7 +116,12 @@ func (s *Session) keepaliveLoop() {
 	if tick > wireProof {
 		tick = wireProof
 	}
-	ticker := time.NewTicker(tick)
+	makeTicker := s.hub.newTicker
+	if makeTicker == nil {
+		// A hub a test built without newHub: the wall clock, as before.
+		makeTicker = newRealTicker
+	}
+	ticker := makeTicker(tick)
 	defer ticker.Stop()
 	var lastPing time.Time
 	lastGen := -1
@@ -83,7 +129,7 @@ func (s *Session) keepaliveLoop() {
 		select {
 		case <-s.done:
 			return
-		case now := <-ticker.C:
+		case now := <-ticker.C():
 			s.mu.Lock()
 			if s.closed {
 				s.mu.Unlock()

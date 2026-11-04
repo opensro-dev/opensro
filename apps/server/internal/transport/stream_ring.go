@@ -56,7 +56,6 @@ package transport
 
 import (
 	"errors"
-	"time"
 )
 
 // errResumeGap refuses a resume whose stream position the ring cannot serve.
@@ -193,7 +192,7 @@ func (s *Session) ackLocked(pos uint32) {
 	}
 	s.ring = s.ring[n:]
 	if n > 0 {
-		s.lastStreamAck = time.Now()
+		s.lastStreamAck = s.now()
 		s.cond.Broadcast()
 	}
 }

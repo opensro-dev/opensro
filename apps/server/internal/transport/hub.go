@@ -40,6 +40,15 @@ type Hub struct {
 	History HistoryObserver
 	cfg     Config
 
+	// now and newTicker are the hub's one clock. Production reads the
+	// wall clock (newHub's defaults); a test installs a manual clock so
+	// the keepalive watchdogs prove their bounds as ordering, never as
+	// scheduler speed (#2445). Only the stamps the keepalive loop
+	// compares (lastRecv, lastSent, lastStreamAck, sceneLoadingSince)
+	// read this clock.
+	now       func() time.Time
+	newTicker func(time.Duration) ticker
+
 	// activity is the one subscriber told about every dispatched game frame
 	// (OnSessionActivity); an atomic pointer, so the hot path takes no lock.
 	activity atomic.Pointer[func(account string)]
@@ -130,6 +139,8 @@ newHub
 func newHub(cfg Config) *Hub {
 	return &Hub{
 		cfg:             cfg,
+		now:             time.Now,
+		newTicker:       newRealTicker,
 		sessions:        make(map[uint64]*Session),
 		byToken:         make(map[[ResumeTokenLen]byte]*Session),
 		ended:           make(map[[ResumeTokenLen]byte]endedToken),
