@@ -1747,9 +1747,10 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/world.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
 			"functions": [
+				"outstandingLane",
 				"outstandingSince"
 			],
-			"reason": "The world session's stall detector reads when the oldest unanswered request left (through core), to tell a stalled link from a lost answer (#1418)."
+			"reason": "The world session's stall detector reads when the oldest unanswered request left (through core), to tell a stalled link from a lost answer (#1418), and which lane it belongs to, so a stall incident names the stuck lane (#2148)."
 		},
 		{
 			"consumer": "src/engine/foundation/ui/item-tooltip-recovery.ts",

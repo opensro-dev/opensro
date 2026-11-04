@@ -329,11 +329,14 @@ stepStall
 
 A request has waited TRANSPORT_STALL_MS with nothing at all arriving since
 it left, and still so TRANSPORT_STALL_CONFIRM_MS later: the link stalled.
-Resume now (the lost-answer path), naming the link instead of the request.
+Resume now (the lost-answer path), naming the link and the lane that
+waited: one lane stuck while the world streams is not a silent link,
+and the incident must say which lane it was (#2148).
 ================
 	*/
 	function stepStall() {
 		const since = core.outstandingSince();
+		const lane = core.outstandingLane() ?? "request";
 		if ( since === undefined ) {
 			stallSince = undefined;
 			stallSeenAtMs = undefined;
@@ -357,7 +360,7 @@ Resume now (the lost-answer path), naming the link instead of the request.
 		if ( now - stallSeenAtMs < TRANSPORT_STALL_CONFIRM_MS ) return;
 		stallSeenAtMs = undefined;
 		onNetworkFailure(
-			`Transport stalled: a request waited ${
+			`Transport stalled: the ${lane} lane waited ${
 				Math.round( now - since )
 			} ms with no frame arriving; ${inboundAge()}`,
 			undefined,
