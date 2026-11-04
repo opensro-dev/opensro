@@ -267,6 +267,10 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	) []Packet
+	// EntryEventFrames are a running event's notices for a login (not a
+	// re-entry): port-only, action/halloween_waves.go; nil or empty sends
+	// nothing.
+	EntryEventFrames func(divisionID string, character *Character) []Packet
 
 	Letters       LetterStore
 	Guilds        GuildStore

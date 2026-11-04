@@ -24,6 +24,18 @@ deployment tooling is not part of this repository.
 go version; node --version; corepack pnpm --version
 ```
 
+### Node managers
+
+If your global `node` is another version, a version manager such as `fnm` can supply Node 24 for this
+checkout. A Node it installs has no Corepack shims yet, so enable them once:
+
+```powershell
+fnm install 24
+fnm env --use-on-cd | Out-String | Invoke-Expression
+fnm use 24
+corepack enable
+```
+
 ## 2. Game data
 
 Retail game media is not in this repository. You need a Silkroad Online
@@ -48,6 +60,7 @@ Then, from the checkout:
 
 ```powershell
 $env:SRO_GAME_ROOT = 'D:\Games\Silkroad-v1.150'   # only if the client is elsewhere
+$env:SRO_PROBE_CHROME_EXECUTABLE = '<path-to-your-chrome-install>' # only if Google Chrome is not installed
 corepack pnpm install --frozen-lockfile
 py -3 -m pip install -r scripts/requirements-build.txt
 corepack pnpm assets prepare            # extract the archives, convert the music (a few minutes)

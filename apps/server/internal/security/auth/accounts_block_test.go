@@ -308,3 +308,44 @@ func TestBlockColumnsToleratedByV1Statements(t *testing.T) {
 		t.Fatalf("v1 enable: %v", err)
 	}
 }
+
+/*
+================
+TestCredentialAnyFindsBlockedAccount
+
+The login flow's block check (#2271): Credential hides a blocked
+account, CredentialAny still resolves its real hash - folded like
+Credential - so the password can be proven before the block shows.
+================
+*/
+func TestCredentialAnyFindsBlockedAccount(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "accounts.db")
+	accounts, err := OpenAccountsWith(path, testAccountsOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = accounts.Close() })
+	if _, err := accounts.Create(ctx, "mallory", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found := accounts.CredentialAny("MALLORY"); !found {
+		t.Fatal("enabled account not found by CredentialAny")
+	}
+	if err := accounts.SetBlock(ctx, "mallory", "chargeback review", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found := accounts.Credential("mallory"); found {
+		t.Fatal("blocked account resolves through Credential")
+	}
+	id, hash, found := accounts.CredentialAny("mallory")
+	if !found || id != "mallory" || len(hash) == 0 {
+		t.Fatalf("CredentialAny(blocked) = %q %d bytes %v", id, len(hash), found)
+	}
+	if bcrypt.CompareHashAndPassword(hash, []byte("password1")) != nil {
+		t.Fatal("CredentialAny hash does not match the account password")
+	}
+	if _, _, found := accounts.CredentialAny("nobody"); found {
+		t.Fatal("unknown id resolves through CredentialAny")
+	}
+}

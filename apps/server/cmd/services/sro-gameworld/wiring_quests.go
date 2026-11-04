@@ -94,9 +94,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 				})
 			}
 			// The Halloween rows (port-only): the rolled exchange and
-			// the helmet rows, appended last and only while the event
-			// runs, so So-ok's quest rows (Capture the Flag among
-			// them) keep their order and places.
+			// the flat-price prize rows, appended last and only while
+			// the event runs, so So-ok's quest rows (Capture the Flag
+			// among them) keep their order and places.
 			out = append(out, game.items.HalloweenTalkOptions(npcCodename, character)...)
 			return out
 		},
@@ -108,9 +108,9 @@ func (game *gameplayPlane) wireQuestDoors(quests *quest.Runtime) {
 			if codename == action.HalloweenExchangeService {
 				return game.items.ExchangeHalloweenBox(character, npcCodename)
 			}
-			if len(codename) > len(action.HalloweenHelmetServicePrefix) &&
-				codename[:len(action.HalloweenHelmetServicePrefix)] == action.HalloweenHelmetServicePrefix {
-				return game.items.ExchangeHalloweenHelmet(character, npcCodename, codename)
+			if len(codename) > len(action.HalloweenPrizeServicePrefix) &&
+				codename[:len(action.HalloweenPrizeServicePrefix)] == action.HalloweenPrizeServicePrefix {
+				return game.items.ExchangeHalloweenPrize(character, npcCodename, codename)
 			}
 			if codename == quest.ResuscitationService {
 				result, err := quests.OpenResuscitation(character, npcCodename)

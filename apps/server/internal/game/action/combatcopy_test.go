@@ -8,7 +8,7 @@ release, the periodic pulse, the pulse area, the skill-object owner
 pass, the attacking hawk's strike tick, the heal-over-time pulse's
 retained caster view, the targeted recovery cast's recipient view,
 the lowest-party-heal candidate copies, the party-resurrection
-member copies, the Scream Mask's member snapshot and attacker view,
+member copies, the recovery effect's recipient copies, the Scream Mask's member snapshot and attacker view,
 and the support-cast walker's tick and completion copies take the
 narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
@@ -582,6 +582,40 @@ func targetedHealTrace(t *testing.T, full bool) string {
 
 /*
 ================
+recoveryEffectTrace
+
+One targeted Healing cast on a bag-loaded party mate, through the
+recovery effect's recipient pick. The pick detaches one copy per
+vector entry and reads only its aliveness; the token-0 effect add
+for the mate is the pick's visible output, so the trace holds the
+result, the batches and that add's presence. A pick that read the
+mate's bag rows or resolved the mate's companions through its copy
+would diverge or drop the add.
+================
+*/
+func recoveryEffectTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
+	affordable(&skill)
+	p := newSupportPair(t, skill)
+	loadCombatBag(p.m)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.m)})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	mateGID := enterworld.ObjectIDForCharacter(p.m)
+	adds := effectAdds(t, skill, r, batches)
+	if len(adds) != 1 || adds[0] != mateGID {
+		t.Fatalf("recovery effect adds = %v, want the mate %d once; the trace would agree vacuously", adds, mateGID)
+	}
+	if *p.m.CurrentHP <= 1 {
+		t.Fatal("the targeted heal never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("matehp=%d adds=%v rows=%s", *p.m.CurrentHP, adds, combatRowsView(p.m))
+}
+
+/*
+================
 lowestHealTrace
 
 One Healing Division cast over a party whose lowest-ratio member is
@@ -767,7 +801,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}, {"scream mask (monster attacker)", screamMaskMonsterTrace}, {"scream mask (player attacker)", screamMaskPlayerTrace}, {"support-cast walker (heal)", supportHealWalkTrace}, {"support-cast walker (guard)", supportGuardWalkTrace}, {"support-cast walker (duplicate)", supportDuplicateWalkTrace}, {"support-cast walker (discord)", supportDiscordWalkTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}, {"recovery effect", recoveryEffectTrace}, {"scream mask (monster attacker)", screamMaskMonsterTrace}, {"scream mask (player attacker)", screamMaskPlayerTrace}, {"support-cast walker (heal)", supportHealWalkTrace}, {"support-cast walker (guard)", supportGuardWalkTrace}, {"support-cast walker (duplicate)", supportDuplicateWalkTrace}, {"support-cast walker (discord)", supportDiscordWalkTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {

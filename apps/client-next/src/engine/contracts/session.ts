@@ -129,6 +129,11 @@ export type SessionState = Readonly<{
 	code?: string;
 	nativeTitleStatus?: number;
 	nativeTitleArgument?: number;
+	// The blocked login's two appended strings (#2271): the Agent sends
+	// them only with the status 3 argument 1 refusal, after the password
+	// verified.
+	nativeTitleBlockReason?: string;
+	nativeTitleBlockEnd?: string;
 	servers?: readonly ServerRecord[];
 	characters?: readonly CharacterRecord[];
 }>;
