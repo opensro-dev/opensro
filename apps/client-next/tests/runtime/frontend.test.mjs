@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
+import { entryFixture } from "../helpers/entry-fixture.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -725,102 +726,6 @@ test("entry admission retains the dock through connecting and rejection, and lea
 });
 /*
 ================
-entryFixture
-
-A frontend over instant fixture assets, stepped 100 ms at a time against a
-session the caller sets. A failing fixture answers every asset request with
-an error, so the title stage fails and the frontend fails with it.
-================
-*/
-function entryFixture( failing = false, sent = undefined ) {
-	let serial = 0, sceneId = "";
-	const jobs = new Map();
-	const manifest = {
-		camera: [ {
-			timeSeconds: 0,
-			sectorX: 81,
-			sectorY: 105,
-			position: { x: 0, y: 0, z: 0 },
-			rotation: { x: 0, y: 0, z: 0 },
-			mode: 30
-		} ],
-		cameraControllerTargetTimeSeconds: 0,
-		regionBundlePublicPath: "/assets/fixture-world.json"
-	};
-	const assets = {
-		available: () => 8,
-		request: ( url, size, kind ) => {
-			const id = ++serial;
-			jobs.set(
-				id,
-				failing ?
-					{ kind: "error", error: "fixture failure" } :
-					kind === "frontend-world" ?
-					{ kind: "world", world: { sceneId: "fixture" } } :
-					{ kind: "bytes", buffer: new TextEncoder().encode( JSON.stringify( manifest ) ).buffer }
-			);
-			return id;
-		},
-		take: id => {
-			const result = jobs.get( id );
-			jobs.delete( id );
-			return result;
-		},
-		cancel: id => jobs.delete( id )
-	};
-	const renderer = {
-		cancelWorldUpdate() {},
-		settleWorld: () => false,
-		setWorld() {},
-		adoptWorld( world ) {
-			sceneId = world.sceneId;
-		},
-		setWorldTexture() {},
-		neededWorldTextures: () => [],
-		worldStats: () => ({ sceneId, pendingGroups: 0, pendingTextures: 0 }),
-		setWorldCamera() {},
-		characterStats: () => ({ actors: 1 })
-	};
-	const frontend = createFrontend(
-		assets,
-		renderer,
-		"http://fixture.invalid",
-		sent ? command => sent.push( command ) : undefined
-	);
-	const fixture = {
-		frontend,
-		now: 0,
-		session: { phase: "signed-out", revision: 1, characters: [] },
-		step: () => frontend.step( fixture.session, fixture.now += 100 ),
-		/*
-		================
-		toDock
-
-		Signs in to a one-character roster and waits for the dock to settle.
-		================
-		*/
-		toDock() {
-			fixture.selectRoster();
-			for ( let i = 0; i < 30 && frontend.snapshot().phase !== "dock"; i++ ) fixture.step();
-			assert.equal( frontend.snapshot().phase, "dock" );
-		},
-		selectRoster() {
-			fixture.session = {
-				phase: "character-select",
-				revision: 2,
-				characters: [ { id: 1, name: "fixture", deletePending: false, visualLoadout: { heightScale: 1 } } ]
-			};
-		},
-		bind( phase ) {
-			fixture.session = { ...fixture.session, phase, revision: fixture.session.revision + 1 };
-			return fixture.step();
-		}
-	};
-	for ( let i = 0; i < 20 && ![ "intro", "failed" ].includes( frontend.snapshot().phase ); i++ ) fixture.step();
-	return fixture;
-}
-/*
-================
 sessionDrivenEntry
 
 A launcher sends enter-world to the session without pressing Start. The
@@ -872,43 +777,6 @@ test("a bound world neither cuts a Start departure short nor resumes a failed fr
 	for ( let i = 0; i < 3; i++ ) assert.equal( failed.step().phase, "failed" );
 	assert.equal( failed.frontend.snapshot().error, failure.error );
 	failed.frontend.dispose();
-});
-/*
-================
-entryTabHiddenTime
-
-A tab hidden while its entry is in flight reads as a client that went
-silent: whether it happened, and for how long, is the difference
-between a throttled background tab and a stalled device, so the
-rejection report carries the entry's hidden time (#2558).
-================
-*/
-test("a rejected entry reports how long the tab was hidden during it", t => {
-	const page = { hidden: false };
-	Object.defineProperty( globalThis, "document", { value: page, configurable: true } );
-	t.after( () => Reflect.deleteProperty( globalThis, "document" ) );
-	const sent = [];
-	const f = entryFixture( false, sent );
-	f.toDock();
-	f.frontend.select( "fixture" );
-	for ( let i = 0; i < 30; i++ ) f.step();
-	assert.equal( f.frontend.start(), true );
-	f.bind( "connecting" );
-	// Hidden for one second of the entry (ten 100 ms steps), then back.
-	page.hidden = true;
-	for ( let i = 0; i < 10; i++ ) f.step();
-	page.hidden = false;
-	f.step();
-	f.session = { ...f.session, phase: "character-select", revision: f.session.revision + 1, error: "offline" };
-	f.step();
-	const reports = sent.filter( command => command.kind === "client-report" );
-	assert.equal( reports.length, 1 );
-	assert.equal( reports[0].code, "world_entry_rejected" );
-	assert.ok(
-		reports[0].tabHiddenMs >= 900 && reports[0].tabHiddenMs <= 1100,
-		`tabHiddenMs = ${reports[0].tabHiddenMs}`
-	);
-	f.frontend.dispose();
 });
 const { frontendCameraView } = await load( "src/engine/foundation/rendering/frontend-camera.ts" );
 const { viewProjection } = await load( "src/engine/foundation/rendering/world-math.ts" );
