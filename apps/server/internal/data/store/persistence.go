@@ -143,6 +143,13 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 			return err
 		}
 	}
+	if record, err := halloweenBoxesRecord(s.meta.HalloweenBoxes); err != nil {
+		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, record); err != nil {
+			return err
+		}
+	}
 
 	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
