@@ -26,6 +26,7 @@ apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; s
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-presentation.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-resources.test.mjs # test file; split by feature
+apps/client-next/tests/runtime/frontend.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/gameplay.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every window; split per window
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
