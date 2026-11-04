@@ -490,9 +490,9 @@ test("Iron Hide tooltips and shieldGauge scale health + shield like League of Le
 	assert.match( t2, /Also shields party members within 20 m\./ );
 	assert.doesNotMatch( t2, /explodes/ );
 	assert.match( t3, /explodes within 8 m for 40% of its remaining value/ );
-	assert.equal( petSkillDesign( 19 ).value, 20 );
-	assert.equal( petSkillDesign( 20 ).value, 35 );
-	assert.equal( petSkillDesign( 21 ).value, 50 );
+	assert.equal( defined( petSkillDesign( 19 ) ).value, 20 );
+	assert.equal( defined( petSkillDesign( 20 ) ).value, 35 );
+	assert.equal( defined( petSkillDesign( 21 ) ).value, 50 );
 	for ( const id of [ 19, 20, 21 ] ) {
 		const design = petSkillDesign( id );
 		assert.ok( design );

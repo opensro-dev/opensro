@@ -6,6 +6,7 @@ pet-public-buffs.test.mjs - observer buff isolation and paid Bond feedback
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 const { createPetTraining } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts"
 );
@@ -33,7 +34,7 @@ test("public recipient buffs preserve local state and clear on expiry/removal", 
 	v.setUint16( 5, 5000, true );
 	v.setUint32( 7, 8000, true );
 	owner.receive( { opcode: 0x3fbd, payload: p }, 100, 1 );
-	assert.equal( owner.tailwind().stacks, 2 );
+	assert.equal( defined( owner.tailwind() ).stacks, 2 );
 	const game = { petRecipientBuffs: owner.recipients() };
 	assert.deepEqual( targetPetBuffs( game, 2, 200 ).map( r => r.id ).sort(), [
 		"pet-guidance",
@@ -41,7 +42,7 @@ test("public recipient buffs preserve local state and clear on expiry/removal", 
 		"pet-tailwind"
 	] );
 	assert.equal(
-		targetPetBuffs( game, 2, 200 ).find( r => r.id === "pet-tailwind" ).label,
+		defined( targetPetBuffs( game, 2, 200 ).find( r => r.id === "pet-tailwind" ) ).label,
 		"Tailwind: 10/10 - Stun ready"
 	);
 	assert.equal( targetPetBuffs( game, 999, 200 ).length, 0 );
@@ -57,7 +58,17 @@ test("public recipient buffs preserve local state and clear on expiry/removal", 
 	assert.equal( owner.recipients().length, 0 );
 });
 test("paid Bond damage is yellow feedback without another HP debit", () => {
-	const bear = { gid: 2, kind: "cos", regionId: 24744, x: 1, y: 2, z: 3 };
+	const bear = {
+		gid: 2,
+		refObjId: 23729,
+		name: "TestBear",
+		heading: 0,
+		kind: "cos",
+		regionId: 24744,
+		x: 1,
+		y: 2,
+		z: 3
+	};
 	const combat = createCombat( gid => gid === 2 ? bear : undefined );
 	combat.seed( 2, { hp: 80, mp: 0, maxHp: 100, maxMp: 0 } );
 	const p = new Uint8Array( 13 ), v = new DataView( p.buffer );
@@ -69,12 +80,16 @@ test("paid Bond damage is yellow feedback without another HP debit", () => {
 	const event = combat.state().environmentalDamage[0];
 	assert.equal( event.damage, 20 );
 	assert.equal( event.linked, true );
-	assert.equal( combat.state().vitals.find( v => v.gid === 2 ).hp, 80 );
-	assert.deepEqual( damageText( bear, { type: 0, flags: 1, damage: 20 }, 0, true, event.linked ).color, [
-		1,
-		211 / 255,
-		58 / 255
-	] );
+	assert.equal( defined( combat.state().vitals.find( v => v.gid === 2 ) ).hp, 80 );
+	assert.deepEqual(
+		damageText( bear, { type: 0, flags: 1, damage: 20, fatal: false, secondaryAmount: 0 }, 0, true, event.linked )
+			.color,
+		[
+			1,
+			211 / 255,
+			58 / 255
+		]
+	);
 	combat.receive( 0x3fb4, p.slice( 0, 9 ), 200 );
 	assert.equal( combat.state().environmentalDamage.length, 1 );
 	p[8] = 2;
