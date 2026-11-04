@@ -45,6 +45,14 @@ type Conn interface {
 	RemoteAddr() string
 }
 
+// datagramSendFailureReporter is the optional Conn extension for a
+// datagram lane that counts, after accepting a frame, the sends its
+// peer went on to refuse (the WebTransport drain, conn_wt.go).
+// Hub.Metrics sums the live connections' counts.
+type datagramSendFailureReporter interface {
+	DatagramSendFailures() uint64
+}
+
 // streamWriteChunk is the piece size writeAllWithinStall offers a
 // connection per deadline arming. It sits below the flow-control
 // windows a reading peer advertises, so a piece is accepted as fast

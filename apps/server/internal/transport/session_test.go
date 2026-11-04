@@ -405,6 +405,42 @@ func TestUnreliableDropIsCountedNotRerouted(t *testing.T) {
 	}
 }
 
+// TestUnreliableRefusalGoesReliable pins the other half of the
+// contract: when the connection refuses a frame outright
+// (ErrFrameTooLarge, the synchronous size refusal), the frame still
+// matters - it is delivered on the reliable lane - and nothing
+// counts it as sent or dropped.
+func TestUnreliableRefusalGoesReliable(t *testing.T) {
+	hub := newHub(testCfg())
+	sess, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := newFakeConn(false)
+	fc.supportsDgram = true
+	fc.dgramErr = ErrFrameTooLarge
+	if err := sess.attach(fc, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(sess, nil) })
+
+	if err := sess.SendUnreliable(OpObjectSourceMove, []byte{0x01}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.SendUnreliableKeyed(OpObjectSourceCorrection, 42, []byte{0x02}); err != nil {
+		t.Fatal(err)
+	}
+
+	frames := waitWritten(t, fc, 3)
+	if len(frames) != 3 || frames[1].Opcode != OpObjectSourceMove || frames[2].Opcode != OpObjectSourceCorrection {
+		t.Fatalf("reliable frames = %v, want WELCOME + both refused frames", frames)
+	}
+	metrics := hub.Metrics()
+	if metrics.DatagramsOut != 0 || metrics.DatagramsDropped != 0 {
+		t.Fatalf("datagram metrics = %d out, %d dropped, want 0/0 (a refusal is neither)", metrics.DatagramsOut, metrics.DatagramsDropped)
+	}
+}
+
 // TestMetricsCountAttachesByKind verifies the wt_ok / ws_ok
 // counters move on completed handshakes, keyed by transport kind.
 func TestMetricsCountAttachesByKind(t *testing.T) {

@@ -138,7 +138,11 @@ type Metrics struct {
 	// DatagramsDropped counts loss-tolerant frames dropped at a full
 	// per-connection datagram queue (#2142); DatagramsOut counts the
 	// frames the datagram lane accepted.
-	DatagramsDropped      uint64 `json:"datagrams_dropped"`
+	DatagramsDropped uint64 `json:"datagrams_dropped"`
+	// DatagramsSendFailed counts, over the live connections, the
+	// datagram sends a peer refused after its frame was accepted
+	// (the drain in conn_wt.go): loss the drop counter cannot see.
+	DatagramsSendFailed   uint64 `json:"datagrams_send_failed"`
 	WriteErrors           uint64 `json:"write_errors"`
 	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
 	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
@@ -281,8 +285,9 @@ func (h *Hub) Metrics() Metrics {
 	detached := 0
 	queueDepth := 0
 	queueBytes := 0
+	datagramSendFailures := uint64(0)
 	for _, session := range sessions {
-		isAttached, depth, bytes := session.metricsSnapshot()
+		isAttached, depth, bytes, failures := session.metricsSnapshot()
 		if isAttached {
 			attached++
 		} else {
@@ -290,6 +295,7 @@ func (h *Hub) Metrics() Metrics {
 		}
 		queueDepth += depth
 		queueBytes += bytes
+		datagramSendFailures += failures
 	}
 	metrics := Metrics{
 		WTOk:                   h.metrics.wtOK.Load(),
@@ -335,6 +341,7 @@ func (h *Hub) Metrics() Metrics {
 		DatagramsOut:               h.metrics.datagramsOut.Load(),
 		DatagramBytesOut:           h.metrics.datagramBytesOut.Load(),
 		DatagramsDropped:           h.metrics.datagramsDropped.Load(),
+		DatagramsSendFailed:        datagramSendFailures,
 		WriteErrors:                h.metrics.writeErrors.Load(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),

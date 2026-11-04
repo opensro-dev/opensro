@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/webtransport-go"
@@ -36,6 +37,18 @@ const wtStreamAcceptTimeout = 15 * time.Second
 // never fills it. Only a stalled peer does, and then WriteUnreliable
 // drops the frame (errDatagramDropped) instead of parking its caller.
 const wtDatagramQueueLen = 256
+
+// wtMaxDatagramPayload is the largest payload WriteUnreliable accepts
+// onto the datagram lane. A QUIC datagram must fit one packet on the
+// path: QUIC's path floor is 1200 bytes, and the packet, frame and
+// WebTransport headers come out of it, so the payload ceiling sits
+// well below that. The lane carries scene position updates of a few
+// dozen bytes, so a larger frame never belonged on it. Before the
+// queue existed, the QUIC send refused such frames synchronously and
+// the caller delivered them reliably; the ceiling keeps that refusal
+// synchronous, so an oversized frame still goes reliable instead of
+// being counted as sent and then vanishing in the drain.
+const wtMaxDatagramPayload = 1024
 
 // errWTConnClosed reports a write on a WebTransport connection that has
 // already closed.
@@ -59,6 +72,12 @@ type wtConn struct {
 	// sendDatagram is the QUIC session's datagram send, held in a field
 	// so a test can stand a stalled or recording peer in for a session.
 	sendDatagram func([]byte) error
+
+	// sendFailures counts the sends the drain's peer refused (a frame
+	// over the size the path negotiates, a session dying mid-queue):
+	// frames accepted by WriteUnreliable that never reached the wire.
+	// Hub.Metrics sums them over the live connections.
+	sendFailures atomic.Uint64
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -175,8 +194,9 @@ blocks its caller once 32 frames are waiting, so it must only ever be
 touched from here: WriteUnreliable enqueues onto w.dgrams without
 blocking, and a peer that stopped reading parks this goroutine — never
 a game goroutine — until the connection closes. Frames leave in
-enqueue order. A refused send (an oversized frame, a dying session)
-drops the frame: datagrams are loss-tolerant by contract, and the
+enqueue order. A refused send (a frame over what the path negotiated,
+a dying session) drops the frame and counts the refusal in
+sendFailures: datagrams are loss-tolerant by contract, and the
 control stream pump, not this lane, decides connection death.
 ================
 */
@@ -185,11 +205,27 @@ func (w *wtConn) datagramDrain() {
 	for {
 		select {
 		case buf := <-w.dgrams:
-			_ = w.sendDatagram(buf)
+			if err := w.sendDatagram(buf); err != nil {
+				w.sendFailures.Add(1)
+			}
 		case <-w.closed:
 			return
 		}
 	}
+}
+
+/*
+================
+DatagramSendFailures
+
+The drain's refused sends so far (see sendFailures). Hub.Metrics reads
+it through the Conn it finds attached, so the loss this lane can still
+suffer - a frame under the synchronous ceiling but over what the path
+negotiated - is counted, never silent.
+================
+*/
+func (w *wtConn) DatagramSendFailures() uint64 {
+	return w.sendFailures.Load()
 }
 
 func (w *wtConn) setReadErr(err error) {
@@ -266,13 +302,15 @@ This used to call the QUIC datagram send directly, which blocks once
 the peer stops draining its queue; a monster leg publishing movement
 from inside the division lane parked there for 4.7 s (#2142). A full
 queue now reports errDatagramDropped and the frame is lost, which the
-loss-tolerant lane allows by contract. The oversized check stays
-first: a frame too large for a datagram is a refusal, not a drop, and
-the caller still delivers it reliably.
+loss-tolerant lane allows by contract. The size checks stay first and
+synchronous: a frame too large for a datagram (past the lane ceiling,
+wtMaxDatagramPayload) is a refusal, not a drop, and the caller still
+delivers it reliably, exactly as it did when the QUIC send itself
+refused the frame.
 ================
 */
 func (w *wtConn) WriteUnreliable(f Frame) error {
-	if f.EncodedLen() > MaxFrameBytes {
+	if f.EncodedLen() > MaxFrameBytes || len(f.Payload) > wtMaxDatagramPayload {
 		return ErrFrameTooLarge
 	}
 	select {

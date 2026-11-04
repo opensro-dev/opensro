@@ -9,9 +9,11 @@ monster leg publishing movement from inside a division lane parked
 there for 4.7 s. These tests stand fake peers in for the QUIC session
 through the sendDatagram field: a peer that never reads cannot make
 WriteUnreliable block, a full queue drops and says so, frames keep
-their order while the peer drains, and the drain goroutine exits when
-the connection closes. No test sleeps; every wait is a channel with a
-deadline, so a regression fails fast instead of hanging the suite.
+their order while the peer drains, an oversized frame is refused
+before it is queued, sends the peer refuses are counted, and the
+drain goroutine exits when the connection closes. No test sleeps;
+every wait is a channel with a deadline, so a regression fails fast
+instead of hanging the suite.
 
 ===========================================================================
 */
@@ -163,6 +165,94 @@ func TestWTWriteUnreliableKeepsOrderWhileThePeerDrains(t *testing.T) {
 	case <-w.dgramDone:
 	case <-time.After(testWTDeadline):
 		t.Fatal("drain did not exit on close")
+	}
+}
+
+/*
+================
+TestWTWriteUnreliableRefusesOversizedFrames
+
+A frame too large for one datagram is refused synchronously with
+ErrFrameTooLarge, so the caller delivers it reliably; it is never
+queued for the drain and the recording peer never sees it. A frame
+exactly at the ceiling still travels.
+================
+*/
+func TestWTWriteUnreliableRefusesOversizedFrames(t *testing.T) {
+	sent := make(chan []byte, 4)
+	w := newTestWTConn(2, func(buf []byte) error {
+		sent <- append([]byte(nil), buf...)
+		return nil
+	})
+
+	oversized := Frame{Opcode: OpObjectSourceMove, Payload: make([]byte, wtMaxDatagramPayload+1)}
+	if err := w.WriteUnreliable(oversized); !errors.Is(err, ErrFrameTooLarge) {
+		t.Fatalf("oversized write = %v, want ErrFrameTooLarge", err)
+	}
+	atCeiling := Frame{Opcode: OpObjectSourceMove, Payload: make([]byte, wtMaxDatagramPayload)}
+	if err := w.WriteUnreliable(atCeiling); err != nil {
+		t.Fatalf("at-ceiling write: %v", err)
+	}
+	select {
+	case buf := <-sent:
+		f, err := DecodeFrame(buf)
+		if err != nil {
+			t.Fatalf("sent frame does not decode: %v", err)
+		}
+		if len(f.Payload) != wtMaxDatagramPayload {
+			t.Fatalf("peer received a %d-byte payload; the refused %d-byte frame must never reach it", len(f.Payload), wtMaxDatagramPayload+1)
+		}
+	case <-time.After(testWTDeadline):
+		t.Fatal("at-ceiling frame never reached the peer")
+	}
+
+	close(w.closed)
+	select {
+	case <-w.dgramDone:
+	case <-time.After(testWTDeadline):
+		t.Fatal("drain did not exit on close")
+	}
+}
+
+/*
+================
+TestWTDatagramDrainCountsSendFailures
+
+A frame can pass the synchronous ceiling and still be refused at
+send time (over what the path negotiated, a dying session). The
+caller already moved on, so the drain counts each refusal: the loss
+is visible in the metrics, never silent.
+================
+*/
+func TestWTDatagramDrainCountsSendFailures(t *testing.T) {
+	errPeer := errors.New("peer refused the datagram")
+	refused := make(chan struct{}, 4)
+	w := newTestWTConn(4, func([]byte) error {
+		refused <- struct{}{}
+		return errPeer
+	})
+
+	for i := 0; i < 3; i++ {
+		if err := w.WriteUnreliable(Frame{Opcode: OpObjectSourceMove, Payload: []byte{byte(i)}}); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		select {
+		case <-refused:
+		case <-time.After(testWTDeadline):
+			t.Fatalf("peer saw %d sends, want 3", i)
+		}
+	}
+
+	close(w.closed)
+	select {
+	case <-w.dgramDone:
+	case <-time.After(testWTDeadline):
+		t.Fatal("drain did not exit on close")
+	}
+	if got := w.DatagramSendFailures(); got != 3 {
+		t.Fatalf("drain counted %d send failures, want 3", got)
 	}
 }
 

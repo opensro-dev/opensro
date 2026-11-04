@@ -300,17 +300,20 @@ func (s *Session) RemoteAddr() string {
 	return s.conn.RemoteAddr()
 }
 
-// metricsSnapshot returns the two session-local gauges used by Hub.Metrics.
+// metricsSnapshot returns the session-local gauges used by Hub.Metrics.
 // It deliberately exposes no mutable queue storage.
 /*
 ================
 metricsSnapshot
 ================
 */
-func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int) {
+func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int, datagramSendFailures uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes
+	if reporter, ok := s.conn.(datagramSendFailureReporter); ok {
+		datagramSendFailures = reporter.DatagramSendFailures()
+	}
+	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes, datagramSendFailures
 }
 
 // Done is closed when the session is torn down for good.
