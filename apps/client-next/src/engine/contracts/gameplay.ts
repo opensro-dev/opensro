@@ -453,6 +453,9 @@ export type GameplayCommand =
 		// The name-change scroll's new name (#1689, port-only): the entry
 		// window's text, carried raw in the use tail.
 		readonly renameName?: string;
+		// The crest delete's confirmed use (#2282): the confirm box
+		// (0x16/0x19) already asked, so the use goes out as composed.
+		readonly crestDelete?: boolean;
 	}
 	| {
 		readonly kind: "navigation";
