@@ -981,6 +981,34 @@ export function createWorldRenderer(
 	function retainedBytes() {
 		return imageBytes + residency.retained();
 	}
+	/*
+	================
+	evictForAdmission
+
+	Admission past the residency budget sheds the scenes the renderer
+	already displaced, farthest from the incoming scene first, instead
+	of failing the load: the budget is a target. Only the residency
+	accounting moves early; prepare still releases the displaced
+	scenes' GPU draws, and images no live scene uses go at the next
+	collect. What fits nowhere is admitted anyway.
+	================
+	*/
+	function evictForAdmission( incoming: number, limit: number, originRegion: number ) {
+		if ( retainedBytes() + incoming <= limit ) return;
+		const anchorX = originRegion & 255, anchorZ = originRegion >>> 8;
+		const farthestFirst = [ ...retired ].sort( ( a, b ) => {
+			const ax = (a.originRegion & 255) - anchorX, az = (a.originRegion >>> 8) - anchorZ;
+			const bx = (b.originRegion & 255) - anchorX, bz = (b.originRegion >>> 8) - anchorZ;
+			return bx * bx + bz * bz - (ax * ax + az * az);
+		} );
+		for ( const scene of farthestFirst ) {
+			if ( retainedBytes() + incoming <= limit ) break;
+			// The freed groups are recomputed at release; this drops the
+			// accounting now, prepare frees the draws as for any retiree.
+			residency.release( scene, [ current, pending, ...retired ] );
+		}
+		prune = true;
+	}
 	let terrainEnd = 0, transparentStart = 0;
 	let selected: GeometryDraw[] = [], rebuilds = 0, triangles = 0;
 	let prune = false;
@@ -1451,16 +1479,14 @@ export function createWorldRenderer(
 					groups: [ ...replacement.groups, ...terrain.flatMap( part => part.groups ) ]
 				};
 			}
-			if (
-				whole > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
-				retainedBytes() + residency.incoming( size, terrain ) > capacity( replacement )
-			) {
+			if ( whole > (replacement.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ) {
 				throw new Error(
 					`World CPU residency budget exceeded (incoming ${size}, retained ${retainedBytes()}, images ${imageBytes}, capacity ${
 						capacity( replacement )
 					})`
 				);
 			}
+			evictForAdmission( residency.incoming( size, terrain ), capacity( replacement ), replacement.originRegion );
 			lostSceneId = null;
 			if ( pending ) retired.push( pending );
 			residency.hold( replacement, size, terrain );
@@ -1492,10 +1518,10 @@ export function createWorldRenderer(
 				};
 			}
 			const size = worldSceneBytes( scene );
-			if (
-				size > (scene?.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ||
-				retainedBytes() + size > capacity( scene )
-			) throw new Error( "World CPU residency budget exceeded" );
+			if ( size > (scene?.residency === "frontend" ? FRONTEND_SCENE_BYTES : WORLD_SCENE_BYTES) ) {
+				throw new Error( "World CPU residency budget exceeded" );
+			}
+			evictForAdmission( size, capacity( scene ), scene?.originRegion ?? current?.originRegion ?? 0 );
 			const replacement = scene ?
 				copyWorldScene( scene ) :
 				{ id: "empty", originRegion: 0, groups: [], warnings: [] };
@@ -1574,10 +1600,11 @@ export function createWorldRenderer(
 				return;
 			}
 			const bytes = image.width * image.height * 5;
-			if ( !Number.isSafeInteger( bytes ) || bytes <= 0 || retainedBytes() + bytes > capacity() ) {
+			if ( !Number.isSafeInteger( bytes ) || bytes <= 0 ) {
 				if ( !("kind" in image) ) image.close();
 				throw new Error( "World texture residency budget exceeded" );
 			}
+			evictForAdmission( bytes, capacity(), current?.originRegion ?? pending?.originRegion ?? 0 );
 			imageBytes += bytes;
 			images.set( path, { source: image } );
 			// A mask decoded with the texture spares the main-thread readback.

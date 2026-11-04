@@ -148,16 +148,69 @@ func (f NativeFields) Without(key string) NativeFields {
 /*
 ================
 MarshalJSON
+
+Writes the present fields as one JSON object, byte for byte what
+json.Marshal of a map[string]float64 holding them writes: the schema
+names are sorted and plain ASCII, so the object is the names in schema
+order with no escaping, and each value is formatted as encoding/json
+formats a float64 (appendJSONFloat).
+
+Every item row of an entry blob carries one of these. Building a map
+and letting encoding/json sort and reflect over it cost most of a
+return-scroll arrival's encode on the live tick (#2143).
 ================
 */
 func (f NativeFields) MarshalJSON() ([]byte, error) {
-	values := make(map[string]float64)
-	for _, key := range nativeFieldNames {
-		if v, ok := f.Lookup(key); ok {
-			values[key] = v
+	out := make([]byte, 0, nativeFieldsJSONGuess)
+	out = append(out, '{')
+	for i, key := range nativeFieldNames {
+		if len(f) == 0 || f[i/8]&(1<<uint(i%8)) == 0 {
+			continue
+		}
+		offset := nativeFieldHeader() + i*8
+		v := math.Float64frombits(binary.LittleEndian.Uint64([]byte(f[offset : offset+8])))
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, fmt.Errorf("native item field %s: unsupported value %v", key, v)
+		}
+		if len(out) > 1 {
+			out = append(out, ',')
+		}
+		out = append(out, '"')
+		out = append(out, key...)
+		out = append(out, '"', ':')
+		out = appendJSONFloat(out, v)
+	}
+	return append(out, '}'), nil
+}
+
+// nativeFieldsJSONGuess sizes the object buffer: an item row carries
+// about a dozen present fields of about 20 bytes each.
+const nativeFieldsJSONGuess = 256
+
+/*
+================
+appendJSONFloat
+
+encoding/json's float64 format: the shortest round-trip decimal, in
+exponent form only below 1e-6 or from 1e21 up, with a two-digit
+negative exponent shortened (e-07 becomes e-7) as encoding/json does.
+================
+*/
+func appendJSONFloat(out []byte, v float64) []byte {
+	abs := math.Abs(v)
+	format := byte('f')
+	if abs != 0 && (abs < 1e-6 || abs >= 1e21) {
+		format = 'e'
+	}
+	out = strconv.AppendFloat(out, v, format, -1, 64)
+	if format == 'e' {
+		n := len(out)
+		if n >= 4 && out[n-4] == 'e' && out[n-3] == '-' && out[n-2] == '0' {
+			out[n-2] = out[n-1]
+			out = out[:n-1]
 		}
 	}
-	return json.Marshal(values)
+	return out
 }
 
 /*

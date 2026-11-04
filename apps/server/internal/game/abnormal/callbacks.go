@@ -184,6 +184,16 @@ func callback(b *Block, o Owner, event int, slot *Slot) {
 			b.removeModifier(6, abnormalSource)
 			o.ParamsChanged(false)
 		}
+	case Petrify: // stone curse: held fast, then maximum-HP pulses
+		switch event {
+		case eventStart:
+			o.CancelActions(true)
+			o.SetMotion(9, 0xff, 0)
+		case eventUpdate:
+			stoneCurseTick(o, slot)
+		case eventEnd:
+			o.SetMotion(0, 0xff, 0)
+		}
 	case Dark: // hit rate cut
 		switch event {
 		case eventStart:
@@ -311,4 +321,38 @@ func damageOverTime(o Owner, slot *Slot, damage func() uint32, period uint32, le
 		credited = lethalCheck && value >= o.CurrentHP()
 	}
 	o.Hit(slot.SourceGID, credited, value, 2, slot.Status)
+}
+
+/*
+================
+stoneCurseTick
+
+stoneCurseTick is the stone curse's damage pulse: nothing until the
+snts delay has passed since admission, then one pulse per snts period
+dealing the snts percent of the victim's maximum HP (the reference
+server scales the curse by the victim's MaxHP, vfunc +0x110). A dead
+source latches like the other damage ticks; only a lethal pulse keeps
+its credit.
+================
+*/
+func stoneCurseTick(o Owner, slot *Slot) {
+	now := o.Now()
+	next := slot.StartedAt + int64(slot.Chance)
+	if slot.LastTickAt != 0 {
+		next = slot.LastTickAt + int64(slot.PeriodMs)
+	}
+	if now < next {
+		return
+	}
+	slot.LastTickAt = now
+	damage := uint32(uint64(o.MaxHP()) * uint64(slot.Param38) / 100)
+	if damage == 0 {
+		return
+	}
+	credited := o.SourceExists(slot.SourceGID)
+	if slot.SourceDied || credited && o.SourceDead(slot.SourceGID) {
+		slot.SourceDied = true
+		credited = damage >= o.CurrentHP()
+	}
+	o.Hit(slot.SourceGID, credited, damage, 2, slot.Status)
 }

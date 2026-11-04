@@ -308,6 +308,62 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 }
 
 /*
+================
+petTickFacts
+
+The facts one pet tick judges on, read as values under one store
+read door (#2139): whether the companion exists at all, whether this
+tick admits pet action (the admitted seam's own verdict), whether
+the owner has fallen, and - only when admitted - the companion's
+record itself, detached without its container and rental rows (its
+only deep children, CloneCOS; neither is a tick fact). A tick that
+can finish on these values pays no owner copy; advancePetJudged
+abstains the moment a tick must commit through the record, and the
+companion copy judges exactly as before.
+================
+*/
+type petTickFacts struct {
+	companionSeen bool
+	admitted      bool
+	ownerDead     bool
+	pet           enterworld.CharacterCOS
+}
+
+/*
+================
+readPetTickFacts
+================
+*/
+func (rt *Runtime) readPetTickFacts(
+	divisionID string,
+	character *enterworld.Character,
+	gid uint32,
+) petTickFacts {
+	var facts petTickFacts
+	if character == nil {
+		return facts
+	}
+
+	rt.deps.Read(divisionID, func() {
+		pet := character.CompanionByGID(gid)
+		if pet == nil {
+			return
+		}
+		facts.companionSeen = true
+		facts.ownerDead = enterworld.CurrentHP(character) == 0
+		facts.admitted = !character.DeletePending && !facts.ownerDead &&
+			pet.Summoned && !pet.Mounted && pet.CurrentHP != 0
+		if facts.admitted {
+			facts.pet = *pet
+			facts.pet.Container = nil
+			facts.pet.Rentals = nil
+		}
+	})
+
+	return facts
+}
+
+/*
 ==================
 characterLifeState
 

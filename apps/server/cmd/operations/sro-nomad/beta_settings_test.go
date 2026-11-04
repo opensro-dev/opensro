@@ -120,14 +120,14 @@ func TestBetaSettingsDeploymentDefaults(t *testing.T) {
 ================
 TestBetaSettingsProductionProfile
 
-Our deployment's beta values (ops/release/shard-settings.json, which
-deploy.py passes as sro-nomad's environment) name only table-filled
+Our deployment's beta values (config/shard-settings.json, which the
+release passes as sro-nomad's environment) name only table-filled
 settings, pass the deployer's validation and reach the job unchanged.
 ================
 */
 func TestBetaSettingsProductionProfile(t *testing.T) {
 	clearShardSettingsEnv(t)
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "ops", "release", "shard-settings.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "shard-settings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

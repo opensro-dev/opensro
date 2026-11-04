@@ -40,6 +40,12 @@ export interface AcademyMember {
 	readonly entryLevel: number;
 	readonly model: number;
 	readonly offline: boolean;
+	// 5C54F0: the announced latch (record +0x4d8, sibling roster
+	// copy +0x4b8), clear in a fresh roster record. A connect byte
+	// prints only while it is clear and sets it; a disconnect byte
+	// clears it. Kept beside the stored offline byte (+0x74), which
+	// is written either way and gates nothing.
+	readonly announced: boolean;
 	readonly honor: number;
 	readonly location: string;
 	readonly war?: number;
@@ -116,6 +122,26 @@ Native 671a50 checks current level, independently of the under-40 entry icon.
 export function academyCanJoin( state: AcademyState, id: number, level: number | undefined ): boolean {
 	return !state.member && level !== undefined && Number.isInteger( level ) && level > 0 && level < 60 &&
 		state.rows.some( r => r.id === id );
+}
+/*
+================
+academyJoinLabel
+
+62E540: the matching window's status label (child 5, the surface the
+JOIN_PROGRESS node authors). Mode 1 formats
+UIIT_STT_PARTYMATCH_JOIN_PROGRESS with the applicant and the camp
+names while an application runs - the pair this returns. Mode 2's
+UIIT_MSG_TC_JOIN_ERROR_DUPLE hangs on a window-side duplicate state
+(672280) with no port counterpart yet; it is held, not painted over
+the normal pending window.
+================
+*/
+export function academyJoinLabel(
+	state: AcademyState
+): { readonly key: string; readonly campName: string; } | null {
+	if ( state.request?.kind !== "join" ) return null;
+	const row = state.rows.find( r => r.id === state.request?.id );
+	return { key: "UIIT_STT_PARTYMATCH_JOIN_PROGRESS", campName: row?.name ?? "" };
 }
 /*
 ================
@@ -200,7 +226,23 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 			z = signed(),
 			location = str( false );
 		if ( !id || kind > 2 ) throw Error( "Invalid academy member" );
-		return { id, name, kind, entryLevel, level, model, offline, honor, location, war, regionId, x, y, z };
+		return {
+			id,
+			name,
+			kind,
+			entryLevel,
+			level,
+			model,
+			offline,
+			announced: false,
+			honor,
+			location,
+			war,
+			regionId,
+			x,
+			y,
+			z
+		};
 	};
 	// 774B5F (case 6 => wire subtype 7) updates only the two notice fields.
 	if ( frame.opcode === 0x3ac5 && p[0] === 7 ) {
@@ -263,8 +305,12 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 		u( 1 );
 		const id = u( 4 ), flag = u( 1 );
 		let patch: Partial<AcademyMember> = {};
-		if ( flag === 1 ) patch = { offline: u( 1 ) === 1 };
-		else if ( flag === 2 ) patch = { level: u( 1 ) };
+		if ( flag === 1 ) {
+			// 5C54F0: the offline byte is stored (+0x74) either way;
+			// the announced latch follows the leg - set by a connect
+			// byte, cleared by a disconnect byte.
+			patch = u( 1 ) === 1 ? { offline: true, announced: false } : { offline: false, announced: true };
+		} else if ( flag === 2 ) patch = { level: u( 1 ) };
 		else if ( flag === 3 ) patch = { honor: u( 4 ) };
 		else if ( flag === 6 ) patch = { entryLevel: u( 1 ) };
 		if ( at !== p.length ) throw Error( "Trailing academy status bytes" );

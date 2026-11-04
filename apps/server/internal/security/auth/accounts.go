@@ -17,6 +17,13 @@ A disabled account keeps its row (its characters still have an owner) but
 cannot log in: PasswordHash reports it absent, which also ends its browser
 sessions at their next check (browser_session.go).
 
+A blocked account is a disabled account with a staff reason and an
+optional end time (block_reason / block_until_ms, added by
+ensureAccountBlock): the client shows both after the password verifies
+(#2271). The columns are additive and the schema stamp stays at
+version 1, so an older Agent opens a database that carries them and
+simply never reads them.
+
 ===========================================================================
 */
 package auth
@@ -32,6 +39,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -70,13 +78,22 @@ var (
 	ErrAccountNotFound  = errors.New("account not found")
 	ErrAccountIDInvalid = errors.New("account id is invalid")
 	ErrPasswordInvalid  = fmt.Errorf("password must be %d to %d bytes", MinPasswordBytes, MaxPasswordBytes)
+	ErrBlockInvalid     = errors.New("block reason must be 1 to 200 characters without '#', and its end must not be negative")
 )
+
+// MaxBlockReasonChars bounds a staff block reason: the native client
+// renders it into a fixed message box after the ACCOUNT_STOP line.
+const MaxBlockReasonChars = 200
 
 // AccountInfo is the public view of one account: never its hash.
 type AccountInfo struct {
 	ID        string
 	CreatedAt time.Time
 	Disabled  bool
+	// The staff block's reason and end (0 = permanent), #2271. Both
+	// stay empty unless the account was blocked with detail.
+	BlockReason  string
+	BlockUntilMs int64
 }
 
 // Accounts is the SQLite-backed account authority.
@@ -119,6 +136,8 @@ CREATE TABLE IF NOT EXISTS accounts (
 	password_hash BLOB    NOT NULL,
 	created_at_ms INTEGER NOT NULL,
 	disabled      INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1)),
+	block_reason  TEXT    NOT NULL DEFAULT '',
+	block_until_ms INTEGER NOT NULL DEFAULT 0,
 	session_epoch INTEGER NOT NULL DEFAULT 1
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_folded_id ON accounts (lower(id));
@@ -202,6 +221,10 @@ func OpenAccountsWith(path string, options AccountsOptions) (*Accounts, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := ensureAccountBlock(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version=%d", accountsSchemaVersion)); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -252,6 +275,39 @@ func ensureAccountSessionEpoch(db *sql.DB) error {
 		`ALTER TABLE accounts ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 1`,
 	); err != nil {
 		return fmt.Errorf("account schema session_epoch: %w", err)
+	}
+	return nil
+}
+
+/*
+================
+ensureAccountBlock
+
+Adds the #2271 block columns to an existing accounts.db. Deliberately
+not a user_version bump: Open refuses a newer stamp, so a bumped
+database would crash-loop a reverted Agent. Additive columns with
+defaults are invisible to the older binary, whose queries all name
+their columns, so a rollback keeps opening the same file.
+================
+*/
+func ensureAccountBlock(db *sql.DB) error {
+	for _, column := range []struct{ name, ddl string }{
+		{"block_reason", `ALTER TABLE accounts ADD COLUMN block_reason TEXT NOT NULL DEFAULT ''`},
+		{"block_until_ms", `ALTER TABLE accounts ADD COLUMN block_until_ms INTEGER NOT NULL DEFAULT 0`},
+	} {
+		var count int
+		if err := db.QueryRow(
+			`SELECT count(*) FROM pragma_table_info('accounts') WHERE name = ?`,
+			column.name,
+		).Scan(&count); err != nil {
+			return fmt.Errorf("account schema inspect: %w", err)
+		}
+		if count > 0 {
+			continue
+		}
+		if _, err := db.Exec(column.ddl); err != nil {
+			return fmt.Errorf("account schema %s: %w", column.name, err)
+		}
 	}
 	return nil
 }
@@ -429,12 +485,32 @@ A missing or disabled account, or a database error, reports false.
 ================
 */
 func (accounts *Accounts) Credential(typedID string) (string, []byte, bool) {
+	return accounts.credential(typedID, false)
+}
+
+/*
+================
+CredentialAny
+
+Credential without the enabled filter: the login flow verifies a
+blocked account's password against its real hash so the block refusal
+can follow (#2271). A hit is NOT an enabled account - callers check
+Block before treating it as one.
+================
+*/
+func (accounts *Accounts) CredentialAny(typedID string) (string, []byte, bool) {
+	return accounts.credential(typedID, true)
+}
+
+// credential is the shared resolve behind Credential and CredentialAny.
+func (accounts *Accounts) credential(typedID string, anyState bool) (string, []byte, bool) {
+	query := `SELECT id, password_hash FROM accounts WHERE lower(id) = lower(?)`
+	if !anyState {
+		query += ` AND disabled = 0`
+	}
 	var id string
 	var hash []byte
-	err := accounts.db.QueryRow(
-		`SELECT id, password_hash FROM accounts WHERE lower(id) = lower(?) AND disabled = 0`,
-		typedID,
-	).Scan(&id, &hash)
+	err := accounts.db.QueryRow(query, typedID).Scan(&id, &hash)
 	if err != nil {
 		return "", nil, false
 	}
@@ -492,21 +568,20 @@ Lookup
 func (accounts *Accounts) Lookup(accountID string) (AccountInfo, error) {
 	var createdAt int64
 	var disabled int
+	info := AccountInfo{ID: accountID}
 	err := accounts.db.QueryRow(
-		`SELECT created_at_ms, disabled FROM accounts WHERE id = ?`,
+		`SELECT created_at_ms, disabled, block_reason, block_until_ms FROM accounts WHERE id = ?`,
 		accountID,
-	).Scan(&createdAt, &disabled)
+	).Scan(&createdAt, &disabled, &info.BlockReason, &info.BlockUntilMs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AccountInfo{}, ErrAccountNotFound
 	}
 	if err != nil {
 		return AccountInfo{}, err
 	}
-	return AccountInfo{
-		ID:        accountID,
-		CreatedAt: time.UnixMilli(createdAt).UTC(),
-		Disabled:  disabled == 1,
-	}, nil
+	info.CreatedAt = time.UnixMilli(createdAt).UTC()
+	info.Disabled = disabled == 1
+	return info, nil
 }
 
 /*
@@ -632,9 +707,14 @@ func (accounts *Accounts) SetDisabled(ctx context.Context, accountID string, dis
 	if disabled {
 		flag = 1
 	}
+	statement := `UPDATE accounts SET disabled = ?, session_epoch = session_epoch + 1 WHERE id = ?`
+	if !disabled {
+		// Enabling clears any block detail: an enabled account carries none.
+		statement = `UPDATE accounts SET disabled = ?, block_reason = '', block_until_ms = 0, session_epoch = session_epoch + 1 WHERE id = ?`
+	}
 	result, err := accounts.db.ExecContext(
 		ctx,
-		`UPDATE accounts SET disabled = ?, session_epoch = session_epoch + 1 WHERE id = ?`,
+		statement,
 		flag, accountID,
 	)
 	if err != nil {
@@ -647,6 +727,87 @@ func (accounts *Accounts) SetDisabled(ctx context.Context, accountID string, dis
 		accounts.notifyRevoke(accountID, epoch)
 	}
 	return nil
+}
+
+/*
+================
+SetBlock
+
+Blocks the account with the staff reason and optional end (untilMs 0
+is permanent) the title screen shows after the password verifies
+(#2271). Blocking disables the account and revokes its sessions,
+exactly like SetDisabled(true). The '#' is refused because the native
+client splits a reason on it into structured fields.
+================
+*/
+func (accounts *Accounts) SetBlock(ctx context.Context, accountID, reason string, untilMs int64) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" || strings.ContainsRune(reason, '#') ||
+		utf8.RuneCountInString(reason) > MaxBlockReasonChars || untilMs < 0 {
+		return ErrBlockInvalid
+	}
+	result, err := accounts.db.ExecContext(
+		ctx,
+		`UPDATE accounts SET disabled = 1, block_reason = ?, block_until_ms = ?, session_epoch = session_epoch + 1 WHERE id = ?`,
+		reason, untilMs, accountID,
+	)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return ErrAccountNotFound
+	}
+	if epoch, err := accounts.readEpoch(ctx, accountID); err == nil {
+		accounts.notifyRevoke(accountID, epoch)
+	}
+	return nil
+}
+
+/*
+================
+ClearBlock
+
+Lifts a block: the account is enabled and its block detail is gone.
+================
+*/
+func (accounts *Accounts) ClearBlock(ctx context.Context, accountID string) error {
+	result, err := accounts.db.ExecContext(
+		ctx,
+		`UPDATE accounts SET disabled = 0, block_reason = '', block_until_ms = 0, session_epoch = session_epoch + 1 WHERE id = ?`,
+		accountID,
+	)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return ErrAccountNotFound
+	}
+	if epoch, err := accounts.readEpoch(ctx, accountID); err == nil {
+		accounts.notifyRevoke(accountID, epoch)
+	}
+	return nil
+}
+
+/*
+================
+Block
+
+The account's disabled flag and block detail exactly as stored, for
+the login flow (#2271 PR-B): the caller verifies the password first
+and only then reads this, so a block is never revealed to a wrong
+password. Whether an end time has passed is the caller's judgment.
+================
+*/
+func (accounts *Accounts) Block(accountID string) (disabled bool, reason string, untilMs int64, found bool) {
+	var off int
+	err := accounts.db.QueryRow(
+		`SELECT disabled, block_reason, block_until_ms FROM accounts WHERE id = ?`,
+		accountID,
+	).Scan(&off, &reason, &untilMs)
+	if err != nil {
+		return false, "", 0, false
+	}
+	return off == 1, reason, untilMs, true
 }
 
 /*

@@ -12,7 +12,6 @@ package transport
 
 import (
 	"slices"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -126,7 +125,7 @@ func (s *Session) BeginSceneAdmission() {
 	s.mu.Lock()
 	s.sceneRevision++
 	s.sceneLoading = true
-	s.sceneLoadingSince = time.Now()
+	s.sceneLoadingSince = s.now()
 	s.sceneBootstrapEnqueued = false
 	s.sceneSnapshotBuilt = false
 	s.dropPendingReceiptsLocked()

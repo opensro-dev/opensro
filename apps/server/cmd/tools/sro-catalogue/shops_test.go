@@ -57,7 +57,7 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	priced := map[string]uint64{
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
+		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09":         2000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,

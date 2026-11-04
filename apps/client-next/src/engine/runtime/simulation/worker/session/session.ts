@@ -879,6 +879,10 @@ baseUrl
 									!Number.isInteger( value.nativeTitleArgument ) || value.nativeTitleArgument < 0 ||
 									value.nativeTitleArgument > 0xffffffff)
 							) throw Error( "Invalid native title argument" );
+							if (
+								(value.blockReason !== undefined && typeof value.blockReason !== "string") ||
+								(value.blockEnd !== undefined && typeof value.blockEnd !== "string")
+							) throw Error( "Invalid block detail" );
 							publish( {
 								phase: "failed",
 								code: value.code,
@@ -889,7 +893,11 @@ baseUrl
 										nativeTitleStatus: value.nativeTitleStatus,
 										nativeTitleArgument: value.nativeTitleArgument as number | undefined
 									} :
-									{})
+									{}),
+								...(typeof value.blockReason === "string" ?
+									{ nativeTitleBlockReason: value.blockReason } :
+									{}),
+								...(typeof value.blockEnd === "string" ? { nativeTitleBlockEnd: value.blockEnd } : {})
 							} );
 							if ( !dirty ) {
 								return null;

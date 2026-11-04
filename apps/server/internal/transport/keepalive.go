@@ -31,6 +31,15 @@ import (
 // game handlers, and counts it as the liveness it is.
 const sceneLoadingPingInterval = 2 * time.Second
 
+// Config.WireProofInterval is how long the wire may stay silent
+// outbound before the keepalive proves it with a PING on a live session.
+// The client's stall watchdog names the link after seconds of inbound
+// silence, and its lane watchdogs follow soon after; a live world in a
+// quiet place sends nothing for far longer than that, so without this
+// proof a healthy silent session reads as a stalled link and resumes for
+// nothing (#2148). The default four seconds lands the proof inside the
+// client's window on the loop's two-second tick, with slack.
+
 /*
 ================
 keepalivePingDue
@@ -45,6 +54,47 @@ that tick is skipped and the 2 s loading cadence silently becomes 4 s
 func keepalivePingDue(since, cadence, tick time.Duration) bool {
 	return since >= cadence-tick/2
 }
+
+/*
+================
+ticker
+
+The keepalive loop's tick source: the wall clock in production, a
+manual clock in the watchdog tests (#2445).
+================
+*/
+type ticker interface {
+	C() <-chan time.Time
+	Stop()
+}
+
+// realTicker is the wall clock's ticker.
+type realTicker struct {
+	inner *time.Ticker
+}
+
+/*
+================
+newRealTicker
+================
+*/
+func newRealTicker(d time.Duration) ticker {
+	return realTicker{inner: time.NewTicker(d)}
+}
+
+/*
+================
+realTicker.C
+================
+*/
+func (t realTicker) C() <-chan time.Time { return t.inner.C }
+
+/*
+================
+realTicker.Stop
+================
+*/
+func (t realTicker) Stop() { t.inner.Stop() }
 
 // keepaliveLoop pings an attached-but-quiet client and detaches one that
 // has gone silent past the idle timeout, giving it the resume grace window.
@@ -62,7 +112,16 @@ func (s *Session) keepaliveLoop() {
 	if tick > sceneLoadingPingInterval {
 		tick = sceneLoadingPingInterval
 	}
-	ticker := time.NewTicker(tick)
+	wireProof := s.hub.cfg.WireProofInterval
+	if tick > wireProof {
+		tick = wireProof
+	}
+	makeTicker := s.hub.newTicker
+	if makeTicker == nil {
+		// A hub a test built without newHub: the wall clock, as before.
+		makeTicker = newRealTicker
+	}
+	ticker := makeTicker(tick)
 	defer ticker.Stop()
 	var lastPing time.Time
 	lastGen := -1
@@ -70,7 +129,7 @@ func (s *Session) keepaliveLoop() {
 		select {
 		case <-s.done:
 			return
-		case now := <-ticker.C:
+		case now := <-ticker.C():
 			s.mu.Lock()
 			if s.closed {
 				s.mu.Unlock()
@@ -81,6 +140,8 @@ func (s *Session) keepaliveLoop() {
 				continue
 			}
 			idle := now.Sub(s.lastRecv)
+			sentQuiet := now.Sub(s.lastSent)
+			sentYet := !s.lastSent.IsZero()
 			gen := s.gen
 			loading := s.sceneLoading
 			// A scene whose bootstrap (or refusal) never reached the
@@ -134,7 +195,16 @@ func (s *Session) keepaliveLoop() {
 			if loading {
 				cadence = sceneLoadingPingInterval
 			} else if idle < interval {
-				continue
+				// The plain rule waits for the client's own silence,
+				// which can run far past the client's stall window
+				// while the server has an answer outstanding: prove
+				// the wire on outbound silence alone (#2148). A
+				// session that has written nothing yet is still
+				// attaching; its WELCOME is the first proof.
+				if !sentYet || sentQuiet < wireProof {
+					continue
+				}
+				cadence = wireProof
 			}
 			if !keepalivePingDue(now.Sub(lastPing), cadence, tick) {
 				continue

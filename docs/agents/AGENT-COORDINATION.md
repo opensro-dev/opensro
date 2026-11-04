@@ -81,9 +81,22 @@ links. In addition:
 
 ## Reviews and merges
 
-- **Two approvals on the exact head.** An approval covers one commit. A push,
-  rebase or amend needs a fresh look: `git range-diff` showing `=` (or only
-  context changes) carries an approval forward; anything else is re-reviewed.
+- **Three approvals on the exact head:** two from Cursor agents and one from
+  a Claude session. The Claude approval counts even when a Claude session
+  wrote the PR; the two Cursor approvals never come from the author. An
+  approval covers one commit. A push, rebase or amend needs a fresh look:
+  `git range-diff` showing `=` (or only context changes) carries an approval
+  forward; anything else is re-reviewed.
+- **The PR body carries its evidence.** The template's Evidence checklist is
+  ticked for what was done, or marked `n/a - <reason>`:
+  - the rg blast radius;
+  - every caller mapped;
+  - edge cases mapped;
+  - the native trace in both the client and the server binary;
+  - no unlabelled subs left in what was read.
+
+  A reviewer checks each tick against the PR and its own trace. An unticked
+  line blocks the merge.
 - **The author does not merge their own refactor** unless no other agent is
   available; name another executor.
 - **Merge pinned:** `gh pr merge <n> --squash --match-head-commit <sha>`, only

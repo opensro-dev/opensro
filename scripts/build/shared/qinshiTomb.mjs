@@ -30,7 +30,7 @@ const QINSHI_TOMB_ENV = "SRO_QINSHI_TOMB";
 
 // A degree-10 compound branch: heavy_10_aa.bsr, spear_10.bsr.
 const DEGREE_10_BRANCH = /_10(?=(?:_[a-z]+)?\.bsr$)/i;
-const SHARD_PROFILE = path.join( "ops", "release", "shard-settings.json" );
+const SHARD_PROFILE = path.join( "config", "shard-settings.json" );
 const SHARD_REGISTRY = path.join( "internal", "config", "shardsettings", "shardsettings.go" );
 
 /*

@@ -3,11 +3,12 @@
 
 cos-status-lines.test.mjs - the COS status lines' worker behaviour
 
-#2290: the specialty refusal at the COS move commands, the merchant
-refusal for a non-transport COS bag, the HGP 30%-fall line on both
-satiety packets, and the free-battle cape warning on the equip move.
-Each refusal prints its key into the notice queue and sends nothing;
-the warning prints and the equip still sends.
+#2290: the specialty refusal at the COS move commands and at bag
+activation, the merchant refusal for a non-transport COS bag, the
+HGP 30%-fall line on both satiety packets, and the free-battle cape
+warning on the equip move. Each refusal prints its key into the
+notice queue and sends nothing; the warning prints and the equip
+still sends.
 
 ===========================================================================
 */
@@ -37,7 +38,7 @@ const CAPE_WARNING = "UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE";
 
 /**
  * @typedef {{ slot: number, refObjId: number, typeFlags: number }} BagRow
- * @typedef {{ gid: number, refObjId: number, band: number, satiety?: number, status?: number, items?: BagRow[] }} CompanionRow
+ * @typedef {{ gid: number, refObjId: number, band: number, satiety?: number, status?: number, dead?: boolean, items?: BagRow[] }} CompanionRow
  */
 
 /*
@@ -69,7 +70,7 @@ bag and the trailing flags of its band.
 ================
 */
 /** @param {CompanionRow} row */
-function cosSpawn( { gid, refObjId, band, satiety, status = 0, items = [] } ) {
+function cosSpawn( { gid, refObjId, band, satiety, status = 0, dead = false, items = [] } ) {
 	const bytes = [ ...u32( gid ), ...u32( refObjId ), ...u32( 100 ), ...u32( 50 ) ];
 	if ( band === 3 ) bytes.push( ...u32( 0 ), ...u32( 0 ), 1, ...u16( satiety ?? 10000 ) );
 	if ( band === 3 || band === 4 ) bytes.push( ...u32( 0 ), ...u16( 0 ) );
@@ -78,7 +79,7 @@ function cosSpawn( { gid, refObjId, band, satiety, status = 0, items = [] } ) {
 		bytes.push( items.length );
 		for ( const item of items ) bytes.push( item.slot, ...itemBody( item.refObjId, item.typeFlags ) );
 	}
-	if ( band !== 1 && band !== 5 && band !== 6 ) bytes.push( ...u32( 0 ) );
+	if ( band !== 1 && band !== 5 && band !== 6 ) bytes.push( ...u32( dead ? 1 : 0 ) );
 	if ( band === 3 || band === 4 ) bytes.push( 13 );
 	return Uint8Array.from( bytes );
 }
@@ -92,9 +93,25 @@ bag rows. Bag rows are {slot, refObjId, typeFlags}; companions are
 cosSpawn rows keyed by their own refObjId/band.
 ================
 */
-/** @param {{ companions?: CompanionRow[], bagItems?: BagRow[] }} [options] */
-function world( { companions = [], bagItems = [] } = {} ) {
-	const sent = [], game = createGameplay( f => sent.push( f ) );
+/** @param {{ companions?: CompanionRow[], bagItems?: BagRow[], capeReqGender?: number, wearerSex?: number }} [options] */
+function world( { companions = [], bagItems = [], capeReqGender, wearerSex } = {} ) {
+	const sent = [],
+		readEntity = wearerSex === undefined ?
+			undefined :
+			(gid =>
+				gid === 1 ?
+					{ gid: 1, refObjId: 500, kind: "player", regionId: 1, x: 0, y: 0, z: 0, heading: 0, name: "" } :
+					undefined),
+		game = createGameplay( f => sent.push( f ), () => {}, () => {}, readEntity );
+	if ( wearerSex !== undefined ) {
+		game.bindReferences( {
+			country: () => 0,
+			playerModels: () => [ { refObjId: 500, sex: wearerSex } ],
+			item: () => undefined,
+			monster: () => undefined,
+			npcs: () => []
+		} );
+	}
 	game.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
@@ -106,7 +123,11 @@ function world( { companions = [], bagItems = [] } = {} ) {
 		refItemSnapshot: [
 			{ refObjId: 8, typeFlags: TRADE_GOODS, nativeFields: { maxStack: 50 } },
 			{ refObjId: 9, typeFlags: POTION, nativeFields: { maxStack: 50 } },
-			{ refObjId: 10, typeFlags: CAPE }
+			{
+				refObjId: 10,
+				typeFlags: CAPE,
+				...(capeReqGender === undefined ? {} : { nativeFields: { reqGender: capeReqGender } })
+			}
 		],
 		equipItems: bagItems.map( item => ({
 			slot: item.slot,
@@ -114,7 +135,15 @@ function world( { companions = [], bagItems = [] } = {} ) {
 			body: itemBody( item.refObjId, item.typeFlags )
 		}) )
 	} );
-	game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	game.seed( {
+		gid: 1,
+		regionId: 1,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		...(wearerSex === undefined ? {} : { countryByte9c: 0 })
+	} );
 	for ( const row of companions ) game.receive( { opcode: 0x3158, payload: cosSpawn( row ) }, 0 );
 	return { game, sent };
 }
@@ -163,7 +192,8 @@ test("rearranging a specialty good inside a non-transport bag is refused the sam
 		null
 	);
 	assert.equal( pickup.sent.length, 0 );
-	assert.deepEqual( noticeKeys( pickup.game ), [ SPECIALTY ] );
+	const pickupNotices = pickup.game.take()?.notices ?? [];
+	assert.deepEqual( pickupNotices.map( notice => notice.key ), [ SPECIALTY ] );
 	const transport = world( { companions: [ pet( 2, { items: goods } ) ] } );
 	const frame = transport.game.command(
 		{ kind: "cos-inventory-move", gid: 7, source: 0, destination: 1, quantity: 5 },
@@ -172,6 +202,48 @@ test("rearranging a specialty good inside a non-transport bag is refused the sam
 	);
 	assert.equal( frame.opcode, 0x706d );
 	assert.deepEqual( noticeKeys( transport.game ), [] );
+	// The refusal is a plain system line: 67A600 type 0 at every site
+	// (56762F/570222/59B39B/6A87D2), never the centre banner.
+	assert.equal( pickupNotices[0].nativeType, 0 );
+	assert.equal( pickupNotices[0].notificationBanner, undefined );
+});
+
+test("activating a specialty good moves it into the active transport's bag", () => {
+	// 567290's kind-0xF arm: 550300 tests the item, 830410 compares
+	// the active record's class byte against 1; a transport means
+	// the activation composes the COS-bag move (kind 0x7A, move
+	// type 0xF) instead of a use.
+	const { game, sent } = world( {
+		companions: [ pet( 2 ) ],
+		bagItems: [ { slot: 20, refObjId: 8, typeFlags: TRADE_GOODS } ]
+	} );
+	const frame = game.command( { kind: "item-use", slot: 20 }, 1 );
+	assert.equal( frame.opcode, 0x706d );
+	assert.equal( sent.length, 1 );
+	assert.deepEqual( noticeKeys( game ), [] );
+});
+
+test("activating a specialty good with no transport active prints the line and sends nothing", () => {
+	const bagItems = [ { slot: 20, refObjId: 8, typeFlags: TRADE_GOODS } ];
+	const pickup = world( { companions: [ pet( 4 ) ], bagItems } );
+	assert.equal( pickup.game.command( { kind: "item-use", slot: 20 }, 1 ), null );
+	assert.equal( pickup.sent.length, 0 );
+	const notices = pickup.game.take()?.notices ?? [];
+	assert.deepEqual( notices.map( notice => notice.key ), [ SPECIALTY ] );
+	assert.equal( notices[0].nativeType, 0 );
+	const alone = world( { bagItems } );
+	assert.equal( alone.game.command( { kind: "item-use", slot: 20 }, 1 ), null );
+	assert.equal( alone.sent.length, 0 );
+	assert.deepEqual( noticeKeys( alone.game ), [ SPECIALTY ] );
+});
+
+test("activating an ordinary item still uses it, with no specialty line", () => {
+	const { game } = world( {
+		companions: [ pet( 2 ) ],
+		bagItems: [ { slot: 21, refObjId: 9, typeFlags: POTION } ]
+	} );
+	game.command( { kind: "item-use", slot: 21 }, 1 );
+	assert.deepEqual( noticeKeys( game ), [] );
 });
 
 /*
@@ -254,7 +326,12 @@ test("selling from a pickup pet at a shop prints the trade-shop line and sends n
 	// only the specialty good above keeps its own line.
 	assert.equal( game.command( { kind: "cos-shop-buy", gid: 7, tab: 0, slot: 1, quantity: 1 }, 6, cosEntity ), null );
 	assert.equal( sent.length, before );
-	assert.deepEqual( noticeKeys( game ), [ TRADE_SHOP, TRADE_SHOP ] );
+	const notices = game.take()?.notices ?? [];
+	assert.deepEqual( notices.map( notice => notice.key ), [ TRADE_SHOP, TRADE_SHOP ] );
+	// 5B2630/5B6CA0 print on system type 0 (67A600 at 5B2772) and
+	// raise the centre banner with the same text (67D030 at 5B278D).
+	assert.equal( notices[0].nativeType, 0 );
+	assert.equal( notices[0].notificationBanner, true );
 });
 
 test("selling from a transport at a shop sends the sale", () => {
@@ -330,10 +407,31 @@ test("equipping a free-battle cape warns while a growth pet is out, and still eq
 	const withPet = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
 	const frame = withPet.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
 	assert.equal( frame.opcode, 0x706d, "the warning never blocks the equip" );
-	assert.deepEqual( noticeKeys( withPet.game ), [ CAPE_WARNING ] );
+	// 594980 prints on both of the original's surfaces: the guide lane
+	// (67A600 type 5, 594AE5) and the centre banner (67D030, 594B00).
+	const notices = withPet.game.take()?.notices ?? [];
+	assert.deepEqual( notices.map( notice => notice.key ), [ CAPE_WARNING ] );
+	assert.equal( notices[0].nativeType, 5 );
+	assert.equal( notices[0].notificationBanner, true );
 	const alone = world( { bagItems } );
 	alone.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
 	assert.deepEqual( noticeKeys( alone.game ), [] );
+});
+
+test("activating a free-battle cape by double-click equips it without the warning", () => {
+	// 594980 is the equipment drop action alone: the key is pushed
+	// nowhere else (594AA9) and a double-click activation (567290)
+	// composes the same equip straight into the socket (destination
+	// kind 0x46 at 5678B0), so the activation stays silent while the
+	// move still sends.
+	const bagItems = [ { slot: 20, refObjId: 10, typeFlags: CAPE } ];
+	const clicked = world( { companions: [ pet( 3, { status: 0 } ) ], bagItems } );
+	const frame = clicked.game.command(
+		{ kind: "inventory-move", source: 20, destination: 8, quantity: 0, activation: true },
+		1
+	);
+	assert.equal( frame.opcode, 0x706d, "the activation equip still sends" );
+	assert.deepEqual( noticeKeys( clicked.game ), [] );
 });
 
 test("the cape warning yields to a guild soldier and to non-cape moves", () => {
@@ -365,4 +463,32 @@ test("swapping a cape onto a worn cape socket does not warn", () => {
 	const frame = worn.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
 	assert.equal( frame.opcode, 0x706d, "the swap itself still sends" );
 	assert.deepEqual( noticeKeys( worn.game ), [] );
+});
+
+test("a dead growth pet still counts as out for the cape warning", () => {
+	// 82EF30 finds the class-3 entry in the manager's list and tests
+	// nothing else: a pet killed but not yet dismissed still warns.
+	const bagItems = [ { slot: 20, refObjId: 10, typeFlags: CAPE } ];
+	const dead = world( { companions: [ pet( 3, { status: 0, dead: true } ) ], bagItems } );
+	dead.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
+	assert.deepEqual( noticeKeys( dead.game ), [ CAPE_WARNING ] );
+});
+
+test("the cape warning obeys the cape's gender requirement", () => {
+	const bagItems = [ { slot: 20, refObjId: 10, typeFlags: CAPE } ];
+	const companions = [ pet( 3, { status: 0 } ) ];
+	// 789C60 with mask 0x40: a female-only cape (ReqGender 0) on a male
+	// wearer (selector 1) fails the leg, so 594980 prints nothing; the
+	// equip itself still sends.
+	const wrong = world( { companions, bagItems, capeReqGender: 0, wearerSex: 1 } );
+	const frame = wrong.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
+	assert.equal( frame.opcode, 0x706d, "the equip itself still sends" );
+	assert.deepEqual( noticeKeys( wrong.game ), [] );
+	const match = world( { companions, bagItems, capeReqGender: 0, wearerSex: 0 } );
+	match.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
+	assert.deepEqual( noticeKeys( match.game ), [ CAPE_WARNING ] );
+	// ReqGender 2 is cut for both sexes and warns for either wearer.
+	const both = world( { companions, bagItems, capeReqGender: 2, wearerSex: 1 } );
+	both.game.command( { kind: "inventory-move", source: 20, destination: 8, quantity: 0 }, 1 );
+	assert.deepEqual( noticeKeys( both.game ), [ CAPE_WARNING ] );
 });

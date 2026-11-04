@@ -140,7 +140,7 @@ import { createGmHelper, GM_HELPER_HEIGHT, GM_HELPER_ROWS, GM_HELPER_ROW_HEIGHT 
 import type { GmCatalog } from "@/engine/foundation/gameplay/gm-command";
 import { gmLocalCommand } from "@/engine/foundation/gameplay/gm-local-commands";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
-import { ACADEMY_OPEN_LEVEL, academyRank } from "@/engine/foundation/gameplay/academy";
+import { ACADEMY_OPEN_LEVEL, academyJoinLabel, academyRank } from "@/engine/foundation/gameplay/academy";
 import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
@@ -200,6 +200,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
+import { createMallUseHud } from "./hud/mall-use-hud";
+import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
 import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
@@ -281,6 +283,7 @@ import {
 	isValidRenameName,
 	NAME_CHANGE_MAX_LENGTH
 } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind, type CrestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -387,6 +390,7 @@ import {
 	REVERSE_RETURN_LAST_RECALL
 } from "@/engine/foundation/gameplay/count-job";
 import { partyChatCommand, partyChatOrder } from "@/engine/foundation/gameplay/party-chat-command";
+import { cosChatCommand, cosChatStance, type CosChatCommand } from "@/engine/foundation/gameplay/cos-chat-command";
 import {
 	AVATAR_MAGIC_OPTION_FUNCTION,
 	avatarMagicOptionCount,
@@ -399,6 +403,7 @@ import {
 	guildLevelUpPrice,
 	guildManagerRows,
 	guildTransferRefusal,
+	guildTransferTargetMissing,
 	guildSoldierRows,
 	guildSoldierPrompt,
 	MASTER_RELEASE_VOTE
@@ -519,7 +524,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
-import { commerceTooltip } from "@/engine/foundation/ui/commerce-tooltip";
+import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
 import { skillTooltip } from "@/engine/foundation/ui/skill-tooltip";
@@ -812,7 +817,7 @@ import {
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
-import { noticeDialog } from "@/engine/foundation/ui/notice-dialog";
+import { noticeDialog, noticeDialogLines } from "@/engine/foundation/ui/notice-dialog";
 import { rebirthDialog } from "@/engine/foundation/ui/rebirth-dialog";
 import {
 	createResurrectionPrompt,
@@ -1397,6 +1402,7 @@ export function createUi(
 		questBanner = createQuestBanner( createUniqueBanner() ),
 		questTimers = createQuestTimers();
 	const cosHud = createCosHud();
+	const mallUse = createMallUseHud();
 	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
@@ -1510,6 +1516,11 @@ export function createUi(
 	const text = createUiText( assets, base ),
 		resources = createUiAssets( assets, texture, base );
 	let diagnosticError: string | null = null;
+	// The world was on screen at the last step. A UI image still retrying
+	// then draws nothing until it arrives: it is neither a loading failure
+	// nor a client error (#2444). Before the world shows, entry waits on
+	// the interface baseline, so a retry there still names itself.
+	let worldShown = false;
 	let minimapQueryKey = "";
 	let deathIdentity = 0, deathDismissed = false, deathPosition: readonly [number, number] | null = null;
 	let deathLifeAt = 0, deathStateAt: number | null = null, rebirthDue = false, deathRequested = false;
@@ -1578,7 +1589,12 @@ export function createUi(
 		invitePosition: readonly [number, number] | null = null,
 		disconnectPosition: readonly [number, number] | null = null;
 	let noticeDialogSequence = 0,
-		activeNoticeDialog: import("@/engine/foundation/gameplay/system-notices").SystemNotice["dialog"],
+		activeNoticeDialog: {
+			readonly title: string;
+			readonly lines: readonly string[];
+			readonly arguments?: readonly string[];
+			readonly localizedArguments?: readonly (string | null)[];
+		} | undefined,
 		noticeDialogPosition: readonly [number, number] | null = null,
 		noticeDialogFrame: UiRect | null = null;
 	let systemX: number | null = null, systemY: number | null = null;
@@ -1591,6 +1607,7 @@ export function createUi(
 		catalog: unknown;
 		country: number | undefined;
 		sex: number | undefined;
+		sealUnderHeading: boolean;
 		rows: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
@@ -1637,7 +1654,14 @@ export function createUi(
 		return (carried.avatar ? game?.avatarInventory : game?.inventory)?.find( row => row.slot === carried.slot );
 	}
 	const localization = createLocalization( assets, base );
-	let titleNotice: { status?: number; argument?: number; until: number; } | null = null, uiNow = 0;
+	let titleNotice: {
+			status?: number;
+			argument?: number;
+			blockReason?: string;
+			blockEnd?: string;
+			until: number;
+		} | null = null,
+		uiNow = 0;
 	let nextPoll = 0,
 		lastSessionRevision = -1,
 		serversRequested = false,
@@ -1678,6 +1702,10 @@ export function createUi(
 		partyOptions = 4;
 	// The nickname box 0x17 asks about (5E35E0): the member and the nickname.
 	let grantAsk: { readonly id: number; readonly member: string; readonly name: string; } | null = null;
+	// The crest delete's confirm box (52F460 types 0x16/0x19, #2282):
+	// the bag row it asks about, revalidated when Yes answers.
+	let crestDeleteAsk: { readonly slot: number; readonly refObjId: number; readonly kind: CrestDeleteKind; } | null =
+		null;
 	let goldAmount = "",
 		confirmDrop = "",
 		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
@@ -1915,6 +1943,24 @@ export function createUi(
 	*/
 	function canLeavePanel() {
 		return panel !== "Magic Pang" || ![ "rolling", "waiting" ].includes( view?.gameplay?.gacha?.phase ?? "" );
+	}
+	/*
+	================
+	closePanelByPlayer
+
+	The player closes the drawn window, by its close control or by Escape.
+	Closing the shop or the warehouse, or the inventory or transport bag
+	beside either, ends the NPC interaction: CIFMainFrame_OnCloseButton
+	(5B0D20) and the close every window shares (CGInterface_CloseWindowByClass,
+	53D480, reached by Escape too) call CGInterface_SetNpcShopVisible( 0 ),
+	which hides the talk menus and releases the NPC target (69FB95). Escape
+	once closed the panel without that release and left the player held by
+	the NPC, unable to move.
+	================
+	*/
+	function closePanelByPlayer() {
+		if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
+		setPanel( "" );
 	}
 	/*
 	================
@@ -2467,6 +2513,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// 562402/56247C (#2282): a crest delete item asks first (box
+			// 0x16/0x19); the box's Yes judges the crest (crestDeleteYes).
+			const crestKind = item ? crestDeleteKind( item.refObjId ) : undefined;
+			if ( item && crestKind && command.crestDelete === undefined ) {
+				crestDeleteAsk = { slot: command.slot, refObjId: item.refObjId, kind: crestKind };
+				dirty = true;
+				return;
+			}
 			// 6971B0 case 0x1E: the reverse return scroll asks for its point
 			// first; the row's pick runs the use with that byte.
 			if ( item && isReverseReturnScroll( item.typeFlags ) && command.reverseChoice === undefined ) {
@@ -2480,6 +2534,23 @@ export function createUi(
 				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
 				if ( !game?.playerModels?.length || !local || !setPanel( SKIN_PANEL ) ) return;
 				skinHud.open( item.slot, game.playerModels, local.refObjId, local.bodyShape ?? 0xff );
+				dirty = true;
+				return;
+			}
+			// 52F460 kind 0x1F (the bag activation 561D50 opens it at
+			// 562177): a gated item's plain use asks first; the box's Yes
+			// runs the use, its No nothing. Only the bare use is asked -
+			// a use already carrying its target, message or pick was
+			// raised by its own flow and runs at once. The gate is the
+			// native rule in foundation/gameplay/mall-use.ts.
+			if (
+				item && isMallUseConfirmItem( item ) && command.targetSlot === undefined &&
+				command.revivalSlot === undefined && command.summonerSlot === undefined &&
+				command.reverseChoice === undefined && command.reverseMapPoint === undefined &&
+				command.message === undefined && command.renameName === undefined &&
+				command.skin === undefined && command.companionGid === undefined
+			) {
+				mallUse.ask( item );
 				dirty = true;
 				return;
 			}
@@ -3425,6 +3496,44 @@ export function createUi(
 	}
 	/*
 	================
+	runCosChatCommand
+
+	A pet chat command (6AD990) on the COS the command bar would use.
+	The shared modes ride executeCosCommand; stance is explicit here
+	(6A2350 case 6 sends only on a change), and charm is the quickslot
+	action 5000 (695420), never a command-bar mode.
+	================
+	*/
+	function runCosChatCommand( kind: CosChatCommand["kind"] ) {
+		switch ( kind ) {
+			case "attack":
+				executeCosCommand( COS_COMMAND_ATTACK );
+				return;
+			case "return":
+				executeCosCommand( COS_COMMAND_CANCEL );
+				return;
+			case "ride":
+				executeCosCommand( COS_COMMAND_RIDE );
+				return;
+			case "clean":
+				executeCosCommand( COS_COMMAND_CLEAN );
+				return;
+			case "follow":
+				executeCosCommand( COS_COMMAND_FOLLOW );
+				return;
+			case "charm":
+				sendGameplay( { kind: "action-command", id: 5000 } );
+				return;
+			case "aggressive":
+			case "defensive": {
+				const order = cosChatStance( kind, cosCommandContext() );
+				if ( order ) sendGameplay( order );
+				return;
+			}
+		}
+	}
+	/*
+	================
 	activate
 	================
 	*/
@@ -3436,6 +3545,9 @@ export function createUi(
 		// A party chat command (6AD990), parsed once from the line being sent.
 		const partyLine = id === "chat-send" ?
 			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
+			null;
+		const cosLine = id === "chat-send" ?
+			cosChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
 			null;
 		if ( id.startsWith( "gm-helper-row:" ) ) {
 			gmHelper.select( Number( id.slice( "gm-helper-row:".length ) ) );
@@ -4439,6 +4551,23 @@ export function createUi(
 		} else if ( id === "social-confirm-no" ) {
 			confirmSocial = "";
 			grantAsk = null;
+		} else if ( id === "crest-delete-yes" ) {
+			// 6978A1's OK arm (#2282): with no crest it prints the error
+			// line (67A600 type 0) and composes nothing; the crest the
+			// box judges is the local state the display reads. The use
+			// goes out only while one stands - the server judges again.
+			const ask = crestDeleteAsk;
+			crestDeleteAsk = null;
+			const item = ask && view?.gameplay?.inventory.find( row => row.slot === ask.slot );
+			if ( ask && item && item.refObjId === ask.refObjId && item.quantity > 0 ) {
+				const social = view?.gameplay?.social,
+					crest = ask.kind === "guild" ? social?.guild?.crest : social?.allianceCrests?.[1];
+				if ( crest === undefined || crest === 0 || crest === 0xffffffff ) {
+					hudMessages.append( hudCopy( crestDeleteKeys( ask.kind ).refused ) );
+				} else sendGameplay( { kind: "item-use", slot: ask.slot, crestDelete: true } );
+			}
+		} else if ( id === "crest-delete-no" ) {
+			crestDeleteAsk = null;
 		} else if ( id === "guild-create" ) {
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" ) {
@@ -5061,6 +5190,17 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
+		} else if ( cosLine ) {
+			// 6AD990: the pet commands act on the active COS; they are
+			// never sent as chat. Each route gates itself the way
+			// 6F2520 does: no pet, no answer, no line.
+			runCosChatCommand( cosLine.kind );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
 		} else if ( id.startsWith( "premium-reverse:" ) ) {
 			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
 		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
@@ -5202,12 +5342,7 @@ export function createUi(
 		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
-			// Closing the shop or the warehouse, or the inventory or transport bag
-			// beside either, ends the NPC interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
-			// store's own close (53D4BC) call CGInterface_SetNpcShopVisible( 0 ),
-			// which hides the talk menus and releases the NPC target (69FB95).
-			if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
-			setPanel( "" );
+			closePanelByPlayer();
 			inventorySlot = -1;
 		} else if ( id === "select-window:Character-stats" ) setPanel( "Character", "select" );
 		// Window ids carry the panel name as text; only registered panels open.
@@ -5947,8 +6082,8 @@ export function createUi(
 		================
 		*/
 		resourceError: () =>
-			resources.error() ?? hud.error() ?? text.error() ?? guideResources.error() ?? minimapResources.error() ??
-				null,
+			(worldShown ? null : resources.error()) ?? hud.error() ?? text.error() ?? guideResources.error() ??
+				minimapResources.error() ?? null,
 		/*
 		================
 		entryReady
@@ -6498,6 +6633,15 @@ export function createUi(
 					} else if ( entry?.member ) {
 						// 5F1D60 opens 5D3EB0's named confirmation before sending.
 						const guild = view.gameplay?.social?.guild;
+						if ( guildTransferTargetMissing( guild ?? null, entry.member ) ) {
+							// 5D3EB0: the named successor is not in the roster;
+							// the line prints and nothing is sent.
+							sendGameplay( {
+								kind: "local-notice",
+								notice: { key: "UIIT_MSG_MLEAVEERR_USERNOTEXIST", value: 0, nativeType: 0 }
+							} );
+							return;
+						}
 						const member = guild?.members.find( m => m.id === entry.member );
 						const master = guildSelf( view.gameplay?.social )?.grade === 0;
 						if ( member && member.grade !== 0 && master ) {
@@ -6778,6 +6922,30 @@ export function createUi(
 						sendGameplay( command );
 					}
 					dirty = true;
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( mallUse.pending() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "mall-use-cancel"
+				) {
+					mallUse.dismiss();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "mall-use-confirm"
+				) {
+					const slot = mallUse.take();
+					dirty = true;
+					if ( slot !== null && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
+						// The confirmed use is the plain shape sendGameplay asks
+						// about, so it goes through the door underneath it.
+						commands( { kind: "gameplay", command: { kind: "item-use", slot } } );
+					}
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -8647,7 +8815,15 @@ export function createUi(
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const cancel = buffBoard( view.gameplay, view.simulationTimeMs ?? 0 ).find( row => row.id === event.id )
+				const cancel = buffBoard(
+					view.gameplay,
+					view.simulationTimeMs ?? 0,
+					undefined,
+					undefined,
+					undefined,
+					hudCopy
+				)
+					.find( row => row.id === event.id )
 					?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
@@ -8816,7 +8992,8 @@ export function createUi(
 					confirmDrop = "";
 					closeServer();
 					confirmAbandon = false;
-					setPanel( panel ? "" : view?.session?.phase === "world" ? "System" : "" );
+					if ( panel ) closePanelByPlayer();
+					else if ( view?.session?.phase === "world" ) setPanel( "System" );
 					inventorySlot = -1;
 					dirty = true;
 				} else if (
@@ -8963,9 +9140,27 @@ export function createUi(
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
 			if ( guildManagerHud.observeVote( next.gameplay?.social?.guild?.votes ?? [] ) ) dirty = true;
 			if ( reverseScrollHud.reconcile( next ) ) dirty = true;
+			// The crest delete box dies with its bag row or the world.
+			const crestAsk = crestDeleteAsk;
+			if (
+				crestAsk &&
+				(next.session?.phase !== "world" || next.travel ||
+					!next.gameplay?.inventory.some(
+						row => row.slot === crestAsk.slot && row.refObjId === crestAsk.refObjId
+					))
+			) {
+				crestDeleteAsk = null;
+				dirty = true;
+			}
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
 				cosHud.reconcileItemTarget(
+					next.gameplay?.inventory ?? [],
+					next.session?.phase === "world" && !next.travel
+				)
+			) dirty = true;
+			if (
+				mallUse.reconcile(
 					next.gameplay?.inventory ?? [],
 					next.session?.phase === "world" && !next.travel
 				)
@@ -9555,7 +9750,11 @@ export function createUi(
 						noticeDialogSequence = notice.sequence;
 						if ( notice.dialog ) {
 							dirty = true;
-							activeNoticeDialog = notice.dialog;
+							activeNoticeDialog = {
+								...notice.dialog,
+								arguments: notice.arguments,
+								localizedArguments: notice.localizedArguments
+							};
 							noticeDialogPosition = null;
 							focus = null;
 							composing = false;
@@ -9664,6 +9863,8 @@ export function createUi(
 					titleNotice = {
 						status: next.session.nativeTitleStatus,
 						argument: next.session.nativeTitleArgument,
+						blockReason: next.session.nativeTitleBlockReason,
+						blockEnd: next.session.nativeTitleBlockEnd,
 						until: now + 15000
 					};
 					sound( "message" );
@@ -11304,7 +11505,12 @@ export function createUi(
 				(next.frontend && titleNotice ?
 					(titleNotice.status === undefined ?
 						"UIO_MSG_ERROR_CITATION" :
-						titleStatusMessage( titleNotice.status, titleNotice.argument, title.catalog )) :
+						titleStatusMessage(
+							titleNotice.status,
+							titleNotice.argument,
+							title.catalog,
+							{ reason: titleNotice.blockReason, end: titleNotice.blockEnd }
+						)) :
 					message) ??
 				"";
 			const titlePending = pending || next.frontend?.entryPending === true || phase === "listing-servers" ||
@@ -11389,6 +11595,7 @@ export function createUi(
 			);
 			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
+			worldShown = worldVisible;
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
 			const warming = windowWarm.begin(
@@ -11946,7 +12153,9 @@ export function createUi(
 							next.simulationTimeMs ?? 0,
 							boardSuppressed,
 							ownerPet,
-							experimental.state().saved.attackPetTraining
+							experimental.state().saved.attackPetTraining,
+							hudCopy,
+							experimental.state().saved.mostWantedBuff
 						)
 					) {
 						if ( !icon.path ) continue;
@@ -21611,6 +21820,30 @@ export function createUi(
 					quads.push( ...projected.quads );
 					paths.push( ...projected.paths );
 					controls.push( ...projected.controls );
+					const joinLabel = academyJoinLabel( academy );
+					const progressNode = joinLabel ? guideData.mentor.GDR_MENTORMATCH_JOIN_PROGRESS : undefined;
+					if ( joinLabel && progressNode ) {
+						// 62E540 mode 1: while the join application runs,
+						// the matching window's status label (the
+						// JOIN_PROGRESS surface) formats the progress
+						// text with the applicant and camp names, the
+						// party window's substitution.
+						const r = authoredRect( progressNode, ax, ay ),
+							copy = hudCopy( joinLabel.key ).replace(
+								"%s",
+								next.session?.character ?? ""
+							).replace( "%s", joinLabel.campName ),
+							out = text.guide( guideTokens( copy ), r, r, white, resources.size, {
+								align: progressNode.hAlign === 1 ?
+									"center" :
+									progressNode.hAlign === 2 ?
+									"right" :
+									"left",
+								vAlign: progressNode.vAlign
+							} );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+					}
 					endWindow( admission );
 				}
 			}
@@ -23107,6 +23340,18 @@ export function createUi(
 					no: "social-confirm-no"
 				} );
 			}
+			if ( worldVisible && crestDeleteAsk ) {
+				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
+				// the one-line question whether to delete the emblem.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
+					yes: "crest-delete-yes",
+					no: "crest-delete-no"
+				} );
+			}
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
@@ -24184,6 +24429,45 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( worldVisible && mallUse.pending() !== null ) {
+				// CIFMessageBox kind 0x1F (52F460): the same fixed 308x148 box
+				// (5C82D0) as the kind-0x1F confirm above, one question line.
+				const layout = guildProposalLayout( w, h ),
+					message = text.guide(
+						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
+						[ layout.frame[0] + 4, layout.frame[1] + 48, 300, 49 ],
+						full,
+						white,
+						resources.size
+					);
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets(), ...message.paths );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...message.quads
+				);
+				button(
+					"mall-use-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"mall-use-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
 			const teleportShown = mapTeleport.pending();
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
@@ -24950,7 +25234,7 @@ export function createUi(
 			const fatalAssetFailure = next.frontend?.error ?? next.resourceError ?? hud.error() ?? text.error() ??
 				guideResources.error() ??
 				minimapResources.error();
-			const assetFailure = next.worldError ?? fatalAssetFailure ?? resources.error();
+			const assetFailure = next.worldError ?? fatalAssetFailure ?? (worldVisible ? null : resources.error());
 			let nativeLoadError = false;
 			if ( assetFailure && phase !== "disconnected" ) {
 				const dw = Math.min( 600, w - 20 ),
@@ -25022,7 +25306,7 @@ export function createUi(
 				const layout = noticeDialog(
 					w,
 					h,
-					activeNoticeDialog.lines.map( key => hudCopy( key ) ).join( "\n" ),
+					noticeDialogLines( hudCopy, activeNoticeDialog ),
 					value => text.run( value ).width,
 					noticeDialogPosition
 				);
@@ -26076,7 +26360,7 @@ export function createUi(
 								},
 								mx,
 								my,
-								hudCopy( "UIIT_STT_PRICE" )
+								hudCopy( layout.totalCaption! )
 							);
 							authoredText(
 								{
@@ -26410,7 +26694,12 @@ export function createUi(
 						if ( offer ) {
 							tooltip = [
 								{ value: lookup( offer.name ), color: 0xffffffff, heading: true },
-								...tooltipDescription( lookup( offer.description ) )
+								...tooltipDescription( lookup( offer.description ) ),
+								...mallTooltipRows( offer, {
+									rollOfCloth: lookup( "UIIT_STT_ROLL_OF_CLOTH" ),
+									silk: lookup( "UIIT_STT_SILKMALL_SILK" ),
+									giftSilk: lookup( "UIIT_CTL_SILK_INQUIRY_GET_SILK" )
+								} )
 							];
 						}
 					}
@@ -26445,16 +26734,22 @@ export function createUi(
 						const country = game.guide?.country,
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
-							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined;
+							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
+							sealUnderHeading = experimental.state().saved.sealUnderHeading;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
 						) tooltip = tooltipMemo.rows;
 						else {
 							tooltip = item ?
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } ) :
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								) :
 								skillTooltip(
 									{
 										id: skill,
@@ -26473,12 +26768,18 @@ export function createUi(
 								catalog: hudData.tooltipSkills,
 								country,
 								sex,
+								sealUnderHeading,
 								rows: tooltip
 							};
 						}
 						if ( items.length > 1 ) {
 							tooltip = items.flatMap( item =>
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } )
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								)
 							);
 						}
 						// Price belongs to the current offer, outside the item-property memo.

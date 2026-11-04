@@ -189,6 +189,28 @@ var playerStatsMemo = statsCache{entries: make(map[int64][]*statsEntry), order: 
 
 /*
 ================
+LookupMemoizedPlayerStats
+
+The memoised result of an identical PlayerStatsWithModifiers call,
+without computing or storing. The comparison walks the character in
+place and allocates nothing; the caller owns the record's read
+discipline (a store read door for a live record, none for a detached
+copy). A miss changes nothing: the full call still computes and
+memoises, so a reader that cannot hold a copy (the waiting cast,
+#2139) abstains on a miss and lets the full call judge.
+================
+*/
+func LookupMemoizedPlayerStats(
+	character *domain.Character,
+	catalogs Catalogs,
+	modifiers []paramkeeper.Write,
+	block *abnormal.Block,
+) (Stats, Loadout, error, bool) {
+	return playerStatsMemo.lookup(character, catalogs, modifiers, block)
+}
+
+/*
+================
 statsCache.lookup
 
 The memoised stats of an identical call. The comparison walks the

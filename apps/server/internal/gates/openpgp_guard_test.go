@@ -10,7 +10,7 @@
 // Deliberately narrow: only the openpgp subtree is guarded. Genuine future
 // advisories against other x/crypto packages must keep flagging in scans.
 //
-// Full write-up for scanner-runners: ops/docs/ACCEPTED_ADVISORIES.md.
+// Full write-up for scanner-runners: docs/security/ACCEPTED_ADVISORIES.md.
 package gates
 
 import (
@@ -79,7 +79,7 @@ func TestNoOpenpgpImportInSource(t *testing.T) {
 		for _, imp := range file.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			if isOpenpgpImport(importPath) {
-				t.Errorf("%s imports %s: golang.org/x/crypto/openpgp is unmaintained and unsafe by design (GO-2026-5932, no fixed version exists). Remove the import; see ops/docs/ACCEPTED_ADVISORIES.md", path, importPath)
+				t.Errorf("%s imports %s: golang.org/x/crypto/openpgp is unmaintained and unsafe by design (GO-2026-5932, no fixed version exists). Remove the import; see docs/security/ACCEPTED_ADVISORIES.md", path, importPath)
 			}
 		}
 		return nil
@@ -138,7 +138,7 @@ func TestNoOpenpgpImportInBuildClosure(t *testing.T) {
 	for scanner.Scan() {
 		pkg := strings.TrimSpace(scanner.Text())
 		if isOpenpgpImport(pkg) {
-			t.Errorf("build closure contains %s: golang.org/x/crypto/openpgp is unmaintained and unsafe by design (GO-2026-5932, no fixed version exists). Find and remove whatever pulls it in; see ops/docs/ACCEPTED_ADVISORIES.md", pkg)
+			t.Errorf("build closure contains %s: golang.org/x/crypto/openpgp is unmaintained and unsafe by design (GO-2026-5932, no fixed version exists). Find and remove whatever pulls it in; see docs/security/ACCEPTED_ADVISORIES.md", pkg)
 		}
 	}
 	if err := scanner.Err(); err != nil {

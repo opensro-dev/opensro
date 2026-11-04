@@ -85,6 +85,23 @@ type MonsterMoverOps struct {
 	// the helpers fall back to the plain commits of before.
 	stepBaseGen  uint64
 	stepGenArmed bool
+	// stepSlot and stepMonsterSlot are the running step actor's
+	// dense storage slots, armed and cleared with stepGenArmed
+	// (#2133): the step's door funnels (monsterpublish.go) read and
+	// commit through these gid-verified hints while armed.
+	stepSlot        uint32
+	stepMonsterSlot uint32
+	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
+	// #2205): the zero value (everywhere but production wiring) runs
+	// the serial leg; >= 1 plans each batch on a pool - one worker
+	// included - and commits it in the serial order. Port-only
+	// concurrency, not native.
+	LegWorkers int
+	// plan is the running plan's sink while one batch actor is being
+	// planned on a pool worker (#2205): the commit funnels record
+	// into it instead of applying. Nil outside a pooled plan, where
+	// every funnel behaves exactly as before.
+	plan *legPlan
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -336,7 +353,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	var dispatch struct {
 		division string
 		key      populationKey
-		ref      behaviorActorRef
+		index    int
 		players  []playerPose
 		view     *legSnapshot
 	}
@@ -352,7 +369,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		// step's whole-value commits drop instead of overwriting it -
 		// the #2047 overwrite hazard is now carried by the generation
 		// guard rather than by resolve-inside-the-lock timing.
-		actor, ok := dispatch.view.actor(dispatch.ref)
+		actor, ok := dispatch.view.actorAt(dispatch.index)
 		if !ok {
 			return
 		}
@@ -362,6 +379,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	phaseStarted = time.Now()
 	queueStarted := time.Now()
 	batches := ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID)
+	// The batches die with this leg: their refs backings return to
+	// the scratch pool once every batch below is dispatched (#2030).
+	defer ops.Monsters.releaseBehaviorBatches(batches)
 	stats.queue = time.Since(queueStarted)
 	for _, batch := range batches {
 		divisionID := batch.key.division
@@ -380,7 +400,12 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
-		for _, ref := range batch.actors {
+		if ops.pooledLeg() && len(batch.actors) > 1 {
+			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
+			view.release()
+			continue
+		}
+		for index, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
 			// All dispatch decides is that the actor is still there: a
 			// despawn between scheduling and dispatch drops it here. Its
@@ -401,7 +426,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.key, dispatch.ref, dispatch.players, dispatch.view = divisionID, batch.key, ref, players, view
+				dispatch.division, dispatch.key, dispatch.index, dispatch.players, dispatch.view = divisionID, batch.key, index, players, view
 				advanceBefore := stats.advance
 				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
@@ -413,12 +438,13 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				}
 				continue
 			}
-			actor, ok := view.actor(ref)
+			actor, ok := view.actorAt(index)
 			if !ok {
 				continue
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
+		view.release()
 	}
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped
@@ -574,9 +600,17 @@ nothing.
 ================
 */
 func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+	if ops.plan != nil {
+		// Planning (#2205): record the transaction's result; the
+		// commit re-prepares the admission against the row then, the
+		// moment the serial call reads it, so the plan-time admission
+		// is deliberately not carried over.
+		ops.plan.recordNavigation(next, frames)
+		return frames
+	}
 	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
 	if ops.stepGenArmed {
-		if mover, gen, ok := ops.Monsters.MoverGeneration(divisionID, before.instance.Gid); ok && mover == next {
+		if mover, gen, ok := ops.Monsters.MoverGenerationAt(divisionID, before.instance.Gid, ops.stepSlot, ops.stepMonsterSlot); ok && mover == next {
 			ops.stepBaseGen = gen
 		}
 	}

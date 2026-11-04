@@ -252,6 +252,20 @@ test("rebirth remains retryable after silence and still gates local life and lev
 	assert.equal( sent.length, 5 );
 	game.dispose();
 });
+test("flag-war rebirth accept prints the go-to-zone line only in a live match", async () => {
+	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
+	const local = { ...pose, gid: 7, heading: 0, appearanceState: [ 2, 0, 0 ] };
+	const goToZone = () => (game.take()?.notices ?? []).filter( n => n.key === "UIIT_MSG_FLAGWAR_GO_TO_ZONE" ).length;
+	game.bootstrap( { character: { level: 20 } } );
+	game.seed( local );
+	game.command( { kind: "rebirth", choice: 1 }, 1000, undefined, local );
+	assert.equal( goToZone(), 0 );
+	game.receive( { opcode: 0x30a9, payload: Uint8Array.of( 0x08, 1, 0 ) }, 2000 );
+	game.command( { kind: "rebirth", choice: 1 }, 3000, undefined, local );
+	assert.deepEqual( sent.map( f => [ f.opcode, ...f.payload ] ), [ [ 0x32dc, 1 ], [ 0x32dc, 1 ] ] );
+	assert.equal( goToZone(), 1 );
+	game.dispose();
+});
 test("inventory icons survive baseline, reference replacement, item movement and reset", () => {
 	const owner = createInventory( () => {} );
 	owner.bootstrap( {

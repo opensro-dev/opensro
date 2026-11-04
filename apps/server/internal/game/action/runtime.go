@@ -60,6 +60,7 @@ type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
 	cosRefusalLog    sync.Map // cosground.go: cosRefusalKey -> *cosRefusalWindow (refusal log rollup)
+	cosRefusalTotals sync.Map // cosground.go: cause string -> *atomic.Uint64 (refusal metric)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	// instanceWorlds tracks the instanced layers opened on demand
 	// (instance_world.go): the owning lease and deadline per layer.
@@ -474,6 +475,9 @@ type Runtime struct {
 	// pacing (MostWantedTestStreakStepFromEnv); set with MostWantedTest.
 	MostWantedTestStreakStep int64
 	mostWantedPairs          mostWantedPairs
+	// mostWantedHolders tracks the live streak holders the tick sweep
+	// owes an entry state frame or a lapse (mostwantedstate.go).
+	mostWantedHolders mostWantedHolderIndex
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool
@@ -485,6 +489,9 @@ type Runtime struct {
 	// Most Wanted like a player kill (mostwanted.go; port-only, not
 	// native). False is native.
 	MostWantedCOSKills bool
+	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
+	// job level (jobsuitbuff.go; port-only, not native). False is native.
+	JobSuitTiers bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field

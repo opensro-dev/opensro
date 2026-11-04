@@ -3,15 +3,17 @@
 
 objectnav_reach.go - where one resolved placement can matter to a chord
 
-The two chord scans (objectChordFirstContact and terrainOutlineEntry) visit
-every placement of the object sets around a chord, and nearly all of them
-are far from it. A placement's reach is a conservative box, in its anchor
-region's frame, around everything those scans consult for it: the rotated
-bounds of each of its nav meshes (every outline and internal edge, every
-cell and contact point lies inside its mesh's vertex bounds) and the union
-box of the terrain cells it is registered in. A chord whose own box misses
-the reach cannot cross, enter, exit or contact any of the placement's
-meshes, so skipping it leaves both scans' results unchanged.
+The two chord scans (objectChordFirstContact and terrainOutlineEntry) and
+the deck-stand point arbitration (spawnObjectDeckStand) visit every
+placement of the object sets around a chord or a point, and nearly all of
+them are far from it. A placement's reach is a conservative box, in its
+anchor region's frame, around everything those scans consult for it: the
+rotated bounds of each of its nav meshes (every outline and internal edge,
+every cell and contact point lies inside its mesh's vertex bounds) and the
+union box of the terrain cells it is registered in. A chord or point whose
+own box misses the reach cannot cross, enter, exit or contact any of the
+placement's meshes, nor stand inside one, so skipping it leaves the scans'
+results unchanged.
 
 ===========================================================================
 */

@@ -77,6 +77,8 @@ const OFF = Object.freeze( {
 	breakNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
+	// Off by default: each player opts in to the Most Wanted buff row (#1849).
+	mostWantedBuff: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
@@ -128,7 +130,10 @@ const OFF = Object.freeze( {
 	sunDropMarker: false,
 	// Off by default: port-only portal-out cue on arrival; the native
 	// gate has no traced caller, so silence is the native default.
-	warpArrivalSound: false
+	warpArrivalSound: false,
+	// Off by default (#2496): the seal line under the item name instead of
+	// after the requirement rows (558FF0 at 56B099).
+	sealUnderHeading: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -318,14 +323,14 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Jobs" ]
 	);
 	// Lighting keeps the direct-light stages, the moving sun among them;
 	// render scale joins Image without changing the indices used to reopen
 	// the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "dungeonCharacterPvs" ]
+		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "sealUnderHeading", "dungeonCharacterPvs" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

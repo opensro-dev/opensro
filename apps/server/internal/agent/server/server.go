@@ -81,6 +81,24 @@ type sessionEpochAuthority interface {
 
 /*
 ================
+blockAuthority
+
+The staff account block (#2271), optional like sessionEpochAuthority:
+the login path verifies a blocked account's password through
+CredentialAny so the refusal can carry the stored reason and end
+(Block), and clears an expired temporary block before the ordinary
+login proceeds (ClearBlock). A store without it answers a blocked
+account the ordinary credential refusal.
+================
+*/
+type blockAuthority interface {
+	CredentialAny(typedID string) (string, []byte, bool)
+	Block(accountID string) (disabled bool, reason string, untilMs int64, found bool)
+	ClearBlock(ctx context.Context, accountID string) error
+}
+
+/*
+================
 Config
 ================
 */

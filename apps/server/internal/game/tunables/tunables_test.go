@@ -69,12 +69,12 @@ func TestAcceptedValues(t *testing.T) {
 		}
 	}
 	s, err := Parse(env(map[string]string{
-		"SRO_MOST_WANTED_TEST_KILLS": "2", "SRO_MOST_WANTED_TEST_BOUNTY": "0", "SRO_JOB_KILL_NOTICES_PER_MINUTE": " 30 ",
+		"SRO_MOST_WANTED_TEST_KILLS": "1", "SRO_MOST_WANTED_TEST_BOUNTY": "0", "SRO_JOB_KILL_NOTICES_PER_MINUTE": " 30 ",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Int(MostWantedTestKills) != 2 || s.Int(MostWantedTestBounty) != 0 || s.Int(JobKillNoticesPerMinute) != 30 {
+	if s.Int(MostWantedTestKills) != 1 || s.Int(MostWantedTestBounty) != 0 || s.Int(JobKillNoticesPerMinute) != 30 {
 		t.Fatalf("values %+v", s.values)
 	}
 	if s.Value(MostWantedTestKills).Source != "env" {
@@ -109,7 +109,7 @@ func TestRefusedValuesNameTheVariableAndTheRange(t *testing.T) {
 		!strings.Contains(err.Error(), "SRO_JOB_KILL_REPEAT_MINUTES") {
 		t.Fatalf("both refusals not reported: %v", err)
 	}
-	if _, err := Parse(env(map[string]string{"SRO_MOST_WANTED_TEST_KILLS": "3"})); !strings.Contains(err.Error(), "one of 1, 2, 5, 10") {
+	if _, err := Parse(env(map[string]string{"SRO_MOST_WANTED_TEST_KILLS": "3"})); !strings.Contains(err.Error(), "one of 1, 5") {
 		t.Fatalf("allowed list not named: %v", err)
 	}
 }

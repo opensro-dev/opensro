@@ -57,7 +57,7 @@ TestUnsetSettingsTakeTheDeploymentDefaults
 With every setting the catalogue reads left unset, the readers see what
 sro-nomad deploys: native reinforcement ceiling (no +11 cap), native beta
 rules (no growth, seal rates or shop-only degree 9, #606; our shard's beta
-values reach the catalogue from ops/release/shard-settings.json through
+values reach the catalogue from config/shard-settings.json through
 buildCatalogue.mjs), and the elixir rule. An operator's explicit value
 still overrides the deployment default.
 ================
@@ -180,7 +180,7 @@ func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
 	}
 	wantPrices := map[uint32]uint64{}
 	for codename, price := range map[string]uint64{
-		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A": 1000000,
+		"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B": 1000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_09":   25000000,
 		"ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_09":      50000000,
 	} {

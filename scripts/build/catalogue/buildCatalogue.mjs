@@ -45,7 +45,7 @@ const repositoryRoot = fileURLToPath( new URL( "../../../", import.meta.url ) );
 const serverRoot = path.join( repositoryRoot, "apps", "server" );
 // Our deployment's shard settings (#606): the site describes the shard it
 // links to, whose beta values deploy.py passes from this file.
-const SHARD_SETTINGS = path.join( serverRoot, "ops", "release", "shard-settings.json" );
+const SHARD_SETTINGS = path.join( serverRoot, "config", "shard-settings.json" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
 const WEBP_CACHE = path.join( repositoryRoot, ".state", "catalogue-webp-cache" );

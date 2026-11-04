@@ -373,6 +373,14 @@ test("Academy and matching title bars cover their middle without stretching the 
 	assert.equal( out.quads.reduce( ( sum, q ) => sum + q.rect[2], 0 ), 326 );
 	assert.ok( out.quads.some( q => q.texture === "/bar_mid.png" ) );
 	assert.equal( defined( out.quads.at( -1 ) ).uv[2], 14 / 24 );
+	// The pieces tile edge to edge and sample nearest, as the stretch-ring
+	// chrome does: the area sampler fades a tiled piece's edge pixels, so
+	// ordinary sampling leaves every seam partly see-through (#2437).
+	const byX = [ ...out.quads ].sort( ( a, b ) => a.rect[0] - b.rect[0] );
+	for ( const [i, q] of byX.entries() ) {
+		assert.equal( q.sampling, "nearest", q.texture );
+		if ( i ) assert.equal( q.rect[0], byX[i - 1].rect[0] + byX[i - 1].rect[2], "pieces share an edge" );
+	}
 });
 test("Skills selects Create and MainSkillWnd without importing Withdrawal overrides", () => {
 	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifskill.json", "utf8" ) );

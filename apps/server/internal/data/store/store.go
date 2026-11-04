@@ -15,7 +15,7 @@ import (
 	"opensro.online/server/internal/platform/jsonscratch"
 )
 
-// Env configuration (documented in ops/docs/DEPLOYMENT.md).
+// Env configuration (documented in the operator's deployment guide).
 const (
 	// EnvStateDir overrides the authority directory.
 	EnvStateDir = "SRO_AUTHORITY_STATE_DIR"

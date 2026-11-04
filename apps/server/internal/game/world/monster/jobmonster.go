@@ -49,6 +49,19 @@ func (r MonsterRef) TradeAppearance() bool {
 
 /*
 ================
+Instance.JobMonster
+
+A thief or hunter monster: the job system's own NPCs (the trade-run
+ambushers the port-only job rules scale, jobmonsterspeed.go and
+jobmonsteraggression.go).
+================
+*/
+func (i Instance) JobMonster() bool {
+	return i.ThiefMonster() || i.HunterMonster()
+}
+
+/*
+================
 ThiefMonster
 ================
 */

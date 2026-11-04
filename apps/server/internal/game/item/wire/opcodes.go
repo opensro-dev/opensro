@@ -137,6 +137,11 @@ const (
 	// ErrCodeStorageFull is UIIT_MSG_STRGERR_INVENTORY_FULL (01:07): the bag
 	// genuinely has no free slot.
 	ErrCodeStorageFull uint8 = 0x07
+	// ErrCodeCannotEnterCosBag is UIIT_MSG_COSPETERR_CANT_MOVETO_SUMITEM
+	// (01:B1, a banner): an item class that never enters a companion's
+	// bag. The generic code leaves such a refusal silent; this names the
+	// banner the client shows for it.
+	ErrCodeCannotEnterCosBag uint8 = 0xB1
 	// ErrCodePartyInventoryFull is UIIT_MSG_STRGERR_PARTY_INVENTORY_FULL
 	// (01:DA, 689420 index 0xDA): the server's ground-pickup executor
 	// returns 0x18DA to the picker after sending 0x1807
@@ -171,6 +176,18 @@ const (
 	// check returns 0x18C5): a guild-point-priced package the buyer's
 	// guild points cannot pay.
 	ErrCodeNotEnoughGuildPoints uint8 = 0xC5
+	// ErrCodeCrestGuildLevelTooLow is UIIT_MSG_GUILD_ITEM_RIGHT_LIMIT
+	// (01:BB, banner): a crest delete item used from a guild below the
+	// level its crest requires (guild 4, union 5). Client notice
+	// contract; not a claim about later-server error numbering.
+	ErrCodeCrestGuildLevelTooLow uint8 = 0xBB
+	// ErrCodeCrestNotMaster is the same notice (01:BC, banner): the
+	// crest delete user is not the guild master, or - for the union
+	// item - their guild is not the union's master guild.
+	ErrCodeCrestNotMaster uint8 = 0xBC
+	// ErrCodeCrestNoUnion is UIIT_MSG_UNION_NOT_ERROR (01:BD, banner):
+	// the union crest delete item used by a guild standing in no union.
+	ErrCodeCrestNoUnion uint8 = 0xBD
 	// ErrCodeNotEnoughHonor is UIIT_MSG_TC_LACK_HONOR_POINT (01:D4,
 	// CGInterface_ShowSystemNotification 689CDE: table index 0xD1 + 3): an
 	// honor-priced package the character's honor points cannot pay.

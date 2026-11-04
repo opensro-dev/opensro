@@ -891,9 +891,16 @@ type TimedSkillJob struct {
 MostWanted
 
 A suited player's streak of counted job kills (port-only, not native;
-action/mostwanted.go). Death or taking the suit off clears it.
+action/mostwanted.go). Death clears it; the wanted level also lapses
+when ExpiresAtMs passes. Taking the suit off keeps it: only the
+bonuses shelve while the suit is off.
 ================
 */
 type MostWanted struct {
 	Streak int64 `json:"streak"`
+	// ExpiresAtMs is when the wanted level lapses (Unix milliseconds),
+	// stamped when a counted kill raises the level. Streaks saved
+	// before the field existed carry zero: no lapse until their next
+	// level stamps one.
+	ExpiresAtMs int64 `json:"expiresAtMs,omitempty"`
 }

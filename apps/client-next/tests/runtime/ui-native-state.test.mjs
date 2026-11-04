@@ -101,6 +101,30 @@ test("native title statuses preserve packed argument order and every simple mess
 		titleStatusMessage( 3, 1, resolve ),
 		loadEnglishCompletions( "textuisystem.txt" ).UIO_MSG_ERROR_ACCOUNT_STOP?.english
 	);
+	// #2271: the blocked case appends STOP_BLOCK + reason and
+	// BLOCK_TIME + end in the native order. A part appends only when it
+	// arrived, so a permanent block shows no BLOCK_TIME line, and the
+	// detail never leaks into another status or subtype.
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		`${catalog.UIO_MSG_ERROR_ACCOUNT_STOP}\n${catalog.UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK}chargeback review\n${catalog.UIO_MSG_ERROR_ACCOUNT_BLOCK_TIME}2030-01-01 00:00:00`
+	);
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, { reason: "botting" } ),
+		`${catalog.UIO_MSG_ERROR_ACCOUNT_STOP}\n${catalog.UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK}botting`
+	);
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, {} ),
+		loadEnglishCompletions( "textuisystem.txt" ).UIO_MSG_ERROR_ACCOUNT_STOP?.english
+	);
+	assert.equal(
+		titleStatusMessage( 3, 2, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		catalog[titleStatusKey( 3, 2 )]
+	);
+	assert.equal(
+		titleStatusMessage( 2, undefined, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		"Invalid ID or password."
+	);
 	for ( const subtype of [ 1, 2, 3, 4 ] ) {
 		const key = titleStatusKey( 3, subtype );
 		assert.ok( key );
@@ -108,7 +132,25 @@ test("native title statuses preserve packed argument order and every simple mess
 	}
 	for ( const subtype of [ 2, 3, 4 ] ) assert.ok( titleStatusMessage( 3, subtype, resolve ) );
 	for ( const subtype of [ 0, 5, 65536 ] ) assert.equal( titleStatusMessage( 3, subtype, resolve ), undefined );
-	for ( const status of [ undefined, 0, 1, 17, 255 ] ) {
+	// Dispatch table 0x74a0c8 entries 17-20 exist but the cmp 0xF guard
+	// at 0x749635 makes them unreachable: statuses 17-20 have no message.
+	for ( const status of [ 17, 18, 19, 20 ] ) {
+		assert.equal( titleStatusKey( status, undefined ), undefined );
+		assert.equal( titleStatusMessage( status, undefined, resolve ), undefined );
+	}
+	// The retail web-address strings are never a title refusal here.
+	for ( let status = 0; status <= 32; status++ ) {
+		for ( const argument of [ undefined, 0, 1, 2, 3, 4, 5 ] ) {
+			const key = titleStatusKey( status, argument );
+			assert.ok(
+				key !== "UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE" &&
+					key !== "UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE_1",
+				`status ${status} argument ${argument} resolved ${key}`
+			);
+		}
+	}
+	for ( const status of [ undefined, 0, 1, 17, 18, 19, 20, 21, 255 ] ) {
 		assert.equal( titleStatusMessage( status, 0, resolve ), undefined );
 	}
 	assert.equal(

@@ -52,6 +52,15 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
 		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
 	}
+	// Each action step is also a zone on the tick's timeline (#2301);
+	// the ticker is composed below, so the seam resolves it per step.
+	// Unarmed, Ticker.TraceZone answers the shared no-op.
+	game.items.Steps.Zone = func(name string) func() {
+		if ticker == nil {
+			return func() {}
+		}
+		return ticker.TraceZone(name)
+	}
 	// A slow publication-gate hold names its holder there too
 	// (publication_holds), so a waiting step is not mistaken for the stall.
 	game.items.PublicationHold = game.hub.RecordPublicationHold
@@ -165,6 +174,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			FirstAttackGuard: game.items.FirstAttackGuard,
 			// The server's target picker: a candidate player's companions are weighed with it.
 			Companions: game.items.CompanionTargets,
+		}
+		// Port-only, not native: the monster leg's worker pool
+		// (#2205). Unset keeps the serial leg; the pool only changes
+		// which goroutine plans, never what commits.
+		ticker.Monsters.LegWorkers = simulation.MonsterLegWorkersFromEnv()
+		if ticker.Monsters.LegWorkers >= 1 {
+			log.Infof(
+				"simulation: monster leg worker pool ON, up to %d workers (%s)",
+				ticker.Monsters.LegWorkers, simulation.EnvMonsterLegWorkers,
+			)
 		}
 		log.Infof(
 			"simulation: monster mover wired with %d template nest row(s)",
