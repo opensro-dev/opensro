@@ -24,7 +24,7 @@ Keep the real preview owner, replacing only its GPU device capabilities.
 */
 function fixture() {
 	const characters = createCharacters(), handles = new Set();
-	let calls = 0, closes = 0, failRelease = false, actorTime = 0;
+	let calls = 0, closes = 0, failRelease = false, actorTime = 0, actorTimes = new Map();
 	/*
 	================
 	upload
@@ -64,6 +64,7 @@ function fixture() {
 		*/
 		actors( actors ) {
 			actorTime = actors[0]?.time ?? 0;
+			actorTimes = new Map( actors.map( actor => [ actor.gid, actor.time ] ) );
 			characters.actors( actors );
 		},
 		/*
@@ -136,6 +137,7 @@ function fixture() {
 		calls: () => calls,
 		closes: () => closes,
 		actorTime: () => actorTime,
+		timeOf: gid => actorTimes.get( gid ),
 		/*
 		================
 		failNextRelease
@@ -372,4 +374,44 @@ test("a warmed doll starts its clock when the window first draws it, not at the 
 	assert.equal( f.actorTime(), 0 );
 	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 5001 } );
 	assert.equal( f.actorTime(), 1 );
+});
+test("a glow that appears on a long-drawn doll starts its own clock, not the doll's", () => {
+	// Equipping a rare item attaches a fresh itemrare effect (ApplyWeaponGlow
+	// 8EA960). Handing it the doll's age replayed that whole age in one frame.
+	const f = fixture();
+	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
+	f.characters.borrowModel( glowModel, f.source.model, f.source.images );
+	/** @type {import("../../src/engine/contracts/portrait.ts").PortraitPart} */
+	const glow = {
+		actor: {
+			...f.source.actor,
+			gid: 9,
+			model: glowModel,
+			time: 7200,
+			attachment: { gid: 1, bone: "equipment:6:EQ0:ai_end", root: false, offset: [ 0, 0, 0 ], basis: "bsr" }
+		},
+		model: f.source.model,
+		images: f.source.images,
+		effect: true
+	};
+	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 10 } );
+	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 3610 } );
+	const worn = { ...f.source, children: [ glow ] };
+	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3611 } );
+	assert.equal( f.actorTime(), 3601, "the body keeps the doll clock" );
+	assert.equal( f.timeOf( 9 ), 0, "the new glow starts at its own zero" );
+	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3611.5 } );
+	assert.equal( f.timeOf( 9 ), 0.5 );
+	// Missing for a frame (the world's particle budget), it is the same glow:
+	// it keeps its own clock instead of restarting.
+	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 3612 } );
+	f.preview.prepare( worn, f.geometry, f.images, { yaw: 0, seconds: 3613 } );
+	assert.equal( f.timeOf( 9 ), 2 );
+	// Taken off and worn again, the world hands it a new gid (model-emission.ts):
+	// a fresh attachment that starts at its own zero once more.
+	const rewornGlow = { ...glow, actor: { ...glow.actor, gid: 10 } };
+	f.preview.prepare( f.source, f.geometry, f.images, { yaw: 0, seconds: 3614 } );
+	f.preview.prepare( { ...f.source, children: [ rewornGlow ] }, f.geometry, f.images, { yaw: 0, seconds: 3620 } );
+	assert.equal( f.timeOf( 10 ), 0 );
+	f.preview.dispose( f.geometry, f.images );
 });

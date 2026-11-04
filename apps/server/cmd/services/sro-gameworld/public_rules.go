@@ -390,6 +390,12 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
 				Now:    "Trader and hunter suits hide worn armour too.",
 				Why:    "Requested for the beta, so every job suit reads clearly; the original look returns with one setting."},
+			{Flag: action.EnvJobSuitTiers, On: action.JobSuitTiersFromEnv(),
+				Native: "A job suit shows your job and gates job play; it grants no stats.",
+				Now: "While you wear a job suit, your job level grants a tier: tier 1 at job level 1, then at 2, 3, 5 and 7. " +
+					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
+					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
+				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
 			{Flag: action.EnvMoonlitThiefSuit, On: action.MoonlitThiefSuitFromEnv(),
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",

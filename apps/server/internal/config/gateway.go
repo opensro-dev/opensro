@@ -22,7 +22,7 @@ const LogLevel = "log.level"
 // viper 1.20 removed HCL, INI and Java-properties support, and a contract
 // defined as "whatever viper parses this month" turns such removals into
 // silently-ignored config files. Grow this list only as a deliberate,
-// documented decision (ops/docs/DEPLOYMENT.md §2).
+// documented decision (the operator's deployment guide, section 2).
 var acceptedConfigExts = []string{"yaml", "yml", "json", "toml"}
 
 // unsupportedConfigExts are recognizable config filenames outside the
@@ -108,7 +108,7 @@ func discoverConfigFile(paths []string) (string, error) {
 	}
 	if len(unsupported) > 0 {
 		return "", fmt.Errorf(
-			"unsupported config file(s): %s; the gateway accepts only config.{yaml|yml|json|toml} or environment variables (ops/docs/DEPLOYMENT.md section 2)",
+			"unsupported config file(s): %s; the gateway accepts only config.{yaml|yml|json|toml} or environment variables",
 			strings.Join(unsupported, ", "))
 	}
 	return chosen, nil

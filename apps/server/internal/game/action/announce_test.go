@@ -768,15 +768,15 @@ func TestMostWantedNoticesFollowTheFlag(t *testing.T) {
 	}
 	for _, on := range []bool{false, true} {
 		for _, tc := range []kill{
-			{true, 9, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2", "[leChiffre] is MOST WANTED LV 1"}},
-			{true, 10, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2"}},
+			{true, 4, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2", "[leChiffre] is MOST WANTED LV 1"}},
+			{true, 5, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2"}},
 			{false, 0, []string{"Bounty of [ES_Tip] MOST WANTED LV 2 was claimed"}},
 		} {
 			rt, _, killer, victim := newPvpPair(t)
 			rt.MostWanted, rt.Announce.MostWanted = true, on
 			dressForJob(rt, victim, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
 			victim.Job.Alias = "ES_Tip"
-			victim.MostWanted = &domain.MostWanted{Streak: 25}
+			victim.MostWanted = &domain.MostWanted{Streak: 10}
 			kind := pk.DeathPlayer
 			if tc.dressed {
 				dressForJob(rt, killer, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)

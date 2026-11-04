@@ -538,6 +538,11 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 	if (len(character.PetSkillWindows) > 0 || len(character.ParamJobs) > 0) && deps.TrackTimedWindows != nil {
 		deps.TrackTimedWindows(divisionID, character.Name)
 	}
+	// Port-only (#1849): a streak holder joins the Most Wanted sweep,
+	// which sends its entry state and watches the level's lapse.
+	if character.MostWanted != nil && deps.TrackMostWanted != nil {
+		deps.TrackMostWanted(divisionID, character.Name)
+	}
 	return packets, nil
 }
 

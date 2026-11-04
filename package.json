@@ -9,6 +9,7 @@
     },
     "scripts": {
         "dev": "pnpm --filter @sro/client-next dev",
+        "local": "node scripts/local/run.mjs",
         "dev:lag": "pnpm --filter @sro/client-next dev:lag",
         "preview": "pnpm --filter @sro/client-next preview",
         "build": "node scripts/task.mjs build",

@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+lifecycle.go - the Agent control listener's life: start, shutdown
+
+Start binds synchronously and retains the server for Shutdown, so a
+successful return owns the listener. The address policy is checked
+before any socket is bound (checkControlListenAddress).
+
+===========================================================================
+*/
 package agentapi
 
 import (
@@ -29,9 +40,15 @@ const (
 	agentMaxHeaderBytes    = 16 << 10
 )
 
-// Start binds synchronously, retains the server for Shutdown, and only then
-// launches its serve goroutine. A successful return therefore closes the
-// startup/shutdown race: the listener is already owned by this API.
+/*
+================
+API.Start
+
+Binds synchronously, retains the server for Shutdown, and only then
+launches its serve goroutine. A successful return therefore closes the
+startup/shutdown race: the listener is already owned by this API.
+================
+*/
 func (api *API) Start(addr string) (<-chan error, error) {
 	if addr == "" {
 		addr = os.Getenv(EnvAddr)
@@ -39,14 +56,8 @@ func (api *API) Start(addr string) (<-chan error, error) {
 	if addr == "" {
 		addr = DefaultAddr
 	}
-	if !isLoopbackAddress(addr) && !api.privateNetwork {
-		return nil, fmt.Errorf("agentapi: non-loopback control listen requires an explicit private-network deployment")
-	}
-	if !isLoopbackAddress(addr) {
-		log.Warnf(
-			"agentapi: private-network control listener %s; never publish this plaintext port",
-			addr,
-		)
+	if err := checkControlListenAddress(addr, api.privateNetwork); err != nil {
+		return nil, err
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -75,6 +86,35 @@ func (api *API) Start(addr string) (<-chan error, error) {
 	return serveError, nil
 }
 
+/*
+================
+checkControlListenAddress
+
+The control listener's address policy, applied before any socket is
+bound: loopback always serves. A non-loopback address serves only in
+an explicit private-network deployment, and taking one is always
+logged, because the control surface is plaintext.
+================
+*/
+func checkControlListenAddress(addr string, privateNetwork bool) error {
+	if isLoopbackAddress(addr) {
+		return nil
+	}
+	if !privateNetwork {
+		return fmt.Errorf("agentapi: non-loopback control listen requires an explicit private-network deployment")
+	}
+	log.Warnf(
+		"agentapi: private-network control listener %s; never publish this plaintext port",
+		addr,
+	)
+	return nil
+}
+
+/*
+================
+isLoopbackAddress
+================
+*/
 func isLoopbackAddress(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {

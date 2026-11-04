@@ -151,14 +151,14 @@ TestApprovedRestartChangeWaitsForTheNextBoot
 */
 func TestApprovedRestartChangeWaitsForTheNextBoot(t *testing.T) {
 	service, store := newService(t)
-	p, err := service.Propose(alice, tunables.MostWantedTestKills, "2", "faster test")
+	p, err := service.Propose(alice, tunables.MostWantedTestKills, "1", "faster test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result, err := service.Approve(bob, p.ID); err != nil || result != ResultQueued {
 		t.Fatalf("approve %q %v", result, err)
 	}
-	if tunables.Current().Int(tunables.MostWantedTestKills) != 5 || store.overrides[tunables.MostWantedTestKills] != "2" {
+	if tunables.Current().Int(tunables.MostWantedTestKills) != 5 || store.overrides[tunables.MostWantedTestKills] != "1" {
 		t.Fatal("a restart value changed the running shard, or was not stored")
 	}
 }
@@ -330,8 +330,8 @@ func TestRestartQueuedComparesValuesNotSpelling(t *testing.T) {
 	if row().RestartQueued != nil {
 		t.Fatal(`"05" read as queued against a running 5`)
 	}
-	store.overrides[tunables.MostWantedTestKills] = "2"
-	if q := row().RestartQueued; q == nil || *q != "2" {
+	store.overrides[tunables.MostWantedTestKills] = "1"
+	if q := row().RestartQueued; q == nil || *q != "1" {
 		t.Fatalf("a different stored value is not queued: %v", q)
 	}
 }

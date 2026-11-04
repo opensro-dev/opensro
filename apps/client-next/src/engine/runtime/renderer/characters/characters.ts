@@ -2746,7 +2746,8 @@ the next full prepare pass, so this may run between frames.
 				children.push( {
 					actor: { ...child, deferredParticle: undefined },
 					model: childResource.model,
-					images: childResource.images
+					images: childResource.images,
+					effect: true
 				} );
 			}
 			// Port-only (the viewer's riding uniques): a linked ride is the one

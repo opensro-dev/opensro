@@ -1603,6 +1603,7 @@ export function createUi(
 		catalog: unknown;
 		country: number | undefined;
 		sex: number | undefined;
+		sealUnderHeading: boolean;
 		rows: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
@@ -12045,7 +12046,8 @@ export function createUi(
 							boardSuppressed,
 							ownerPet,
 							experimental.state().saved.attackPetTraining,
-							hudCopy
+							hudCopy,
+							experimental.state().saved.mostWantedBuff
 						)
 					) {
 						if ( !icon.path ) continue;
@@ -26573,16 +26575,22 @@ export function createUi(
 						const country = game.guide?.country,
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
-							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined;
+							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
+							sealUnderHeading = experimental.state().saved.sealUnderHeading;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
 						) tooltip = tooltipMemo.rows;
 						else {
 							tooltip = item ?
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } ) :
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								) :
 								skillTooltip(
 									{
 										id: skill,
@@ -26601,12 +26609,18 @@ export function createUi(
 								catalog: hudData.tooltipSkills,
 								country,
 								sex,
+								sealUnderHeading,
 								rows: tooltip
 							};
 						}
 						if ( items.length > 1 ) {
 							tooltip = items.flatMap( item =>
-								itemTooltip( item, game.progression ?? { masteries: [] }, lookup, { country, sex } )
+								itemTooltip(
+									item,
+									game.progression ?? { masteries: [] },
+									lookup,
+									{ country, sex, sealUnderHeading }
+								)
 							);
 						}
 						// Price belongs to the current offer, outside the item-property memo.

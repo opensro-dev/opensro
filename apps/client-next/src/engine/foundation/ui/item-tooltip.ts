@@ -3,9 +3,9 @@
 
 item-tooltip.ts - ordered item identity, properties and requirement rows
 
-Native 564230 and 558FF0 select bold name and seal text. The seal sits below
-its heading by requested presentation policy (referencesox.png); v1.150's
-56B099 call instead appends it after requirements.
+Native 564230 and 558FF0 select bold name and seal text. The 56B099 call
+appends the seal after the requirement rows; the under-heading place
+(referencesox.png) is the Experimental sealUnderHeading row (#2496).
 
 ===========================================================================
 */
@@ -30,7 +30,7 @@ export function itemTooltip(
 	item: InventoryItem,
 	progression: Progression,
 	text: ( symbol: string ) => string,
-	identity?: { readonly country?: number; readonly sex?: number; }
+	viewer?: { readonly country?: number; readonly sex?: number; readonly sealUnderHeading?: boolean; }
 ): readonly TooltipRow[] {
 	if ( item.name === undefined ) return [];
 	const f = item.tooltip?.fields,
@@ -71,13 +71,17 @@ export function itemTooltip(
 	const space = () => rows.push( { value: " ", color: 0 } );
 	if ( !f ) return rows;
 	space();
-	if ( rare && f.itemClass ) {
-		rows.push( {
+	// 558FF0 picks the seal text by (class - 1) % 3 (789350) and colours it
+	// like the name. Native appends it after the requirements; the
+	// under-heading place is the Experimental sealUnderHeading row (#2496).
+	const seal = rare && f.itemClass ?
+		{
 			value: text( [ "PARAM_RARE_FIRST", "PARAM_RARE_SECOND", "PARAM_RARE_THIRD" ][(f.itemClass - 1) % 3]! ),
 			color: nameColor,
 			strong: true
-		} );
-	}
+		} :
+		undefined;
+	if ( seal && viewer?.sealUnderHeading ) rows.push( seal );
 
 	if ( petItem && petDegree ) {
 		add( `${text( "UIIT_STT_ARMOR_POSITION" ) || "Mounting part"}: ${petItem.slot}` );
@@ -226,18 +230,24 @@ export function itemTooltip(
 	if ( f.reqGender === 0 || f.reqGender === 1 ) {
 		requirement(
 			text( f.reqGender === 0 ? "UIO_NEWCHAR_CTL_FEMALE" : "UIO_NEWCHAR_CTL_MALE" ),
-			identity?.sex === f.reqGender
+			viewer?.sex === f.reqGender
 		);
 	}
 	if ( f.country === 0 || f.country === 1 || f.country === 2 ) {
 		requirement(
 			text( [ "UIO_NEWCHAR_CTL_CHINESE", "UIO_NEWCHAR_CTL_EUROPEAN", "UIO_NEWCHAR_CTL_ARABIAN" ][f.country]! ),
-			identity?.country === f.country
+			viewer?.country === f.country
 		);
 	}
 	if ( requirements.length ) {
 		space();
 		rows.push( ...requirements );
+	}
+	// 56B099: the seal follows the requirements, ahead of the magic rows;
+	// 558FF0 opens with its own blank line.
+	if ( seal && !viewer?.sealUnderHeading ) {
+		space();
+		rows.push( seal );
 	}
 	const magic = itemTooltipMagic( item, text );
 	if ( magic.length ) {

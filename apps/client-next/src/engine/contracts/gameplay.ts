@@ -750,6 +750,8 @@ export interface GameplayState extends MoverPublication {
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
+	// Port-only most-wanted state of the local player (most-wanted.ts).
+	readonly mostWanted?: import("./most-wanted").MostWantedState;
 	// Port-only wolf skill tree of the pet window's wolf (pet-training.ts).
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];
