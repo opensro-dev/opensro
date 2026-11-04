@@ -86,6 +86,49 @@ func TestBlockRoundTrip(t *testing.T) {
 
 /*
 ================
+TestBlockRevokesSessions
+
+Blocking and clearing both advance the session epoch and notify the
+revoke observer, exactly like the plain disable switch: live sessions
+die on the block and stay dead after it lifts.
+================
+*/
+func TestBlockRevokesSessions(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "accounts.db")
+	accounts, err := OpenAccountsWith(path, testAccountsOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = accounts.Close() })
+	if _, err := accounts.Create(ctx, "hero", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	var observed []uint64
+	accounts.SetRevokeObserver(func(accountID string, epoch uint64) {
+		if accountID == "hero" {
+			observed = append(observed, epoch)
+		}
+	})
+	if err := accounts.SetBlock(ctx, "hero", "chargeback review", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := accounts.SessionEpoch("hero"); ok {
+		t.Fatal("blocked account reported an active SessionEpoch")
+	}
+	if err := accounts.ClearBlock(ctx, "hero"); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, ok := accounts.SessionEpoch("hero"); !ok || epoch != 3 {
+		t.Fatalf("after ClearBlock SessionEpoch = (%d, %v), want (3, true)", epoch, ok)
+	}
+	if len(observed) != 2 || observed[0] != 2 || observed[1] != 3 {
+		t.Fatalf("observed epochs = %v, want [2 3] (block bumps, clear bumps)", observed)
+	}
+}
+
+/*
+================
 TestBlockValidation
 ================
 */
