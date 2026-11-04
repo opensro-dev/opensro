@@ -3,11 +3,12 @@
 
 queries.go - the ledger's bucketed series, flows and flags (contract v1)
 
-Every answer reads the newest snapshot's economy_ledger, grouped by
-bucket, reason and direction in one query; the metric is folded from
-those groups here. A mint sums the gains of mint reasons, a burn the
-losses of burn reasons; transfers and unattributed changes count in
-neither. Amounts are decimal strings.
+Every answer folds the newest snapshot's hourly rollup (rollup.go) by
+bucket, reason and direction; the metric is folded from those groups
+here. readGroups is the same grouping asked of the ledger directly,
+kept as the fold's reference. A mint sums the gains of mint reasons, a
+burn the losses of burn reasons; transfers and unattributed changes
+count in neither. Amounts are decimal strings.
 
 ===========================================================================
 */
@@ -402,13 +403,9 @@ rule acts. The day nets come from 1d groups starting netMintWindow days
 before the window.
 ================
 */
-func netMintFlags(db *sql.DB, w window, division string) ([]Flag, error) {
+func netMintFlags(entries []rollupEntry, w window, division string) []Flag {
 	days := window{bucket: "1d", size: bucketSeconds["1d"], from: w.from - netMintWindow*bucketSeconds["1d"], to: w.to, division: division}
-	groups, err := readGroups(db, days)
-	if err != nil {
-		return nil, err
-	}
-	points := foldSeries("gold_net", groups)
+	points := foldSeries("gold_net", rollupGroups(entries, days))
 	var flags []Flag
 	for i, point := range points {
 		if point.T < w.from || i < netMintWindow {
@@ -430,7 +427,7 @@ func netMintFlags(db *sql.DB, w window, division string) ([]Flag, error) {
 			Division: division, Value: point.Sum, Threshold: decimal(threshold),
 		})
 	}
-	return flags, nil
+	return flags
 }
 
 /*
