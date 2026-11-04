@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/agent/provisioning"
+	"opensro.online/server/internal/testsupport/opstree"
 )
 
 // wantDefaultProvisioningPort pins the value the web site's provisioning
@@ -71,6 +72,8 @@ sro-nomad, but it must still equal provisioning.DefaultPort.
 ================
 */
 func TestAgentJobProvisioningDefaultMatchesTheOwner(t *testing.T) {
+	// The agent job template is in the private ops tree.
+	opstree.Require(t)
 	options, err := parseOptions("deploy", nil)
 	if err != nil {
 		t.Fatal(err)

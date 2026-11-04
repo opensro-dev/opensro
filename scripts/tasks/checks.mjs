@@ -66,7 +66,7 @@ export const CHECK_TASKS = [
 	} ),
 	commandTask( {
 		name: "check:release",
-		description: "Test release admission, publication recovery and monitoring",
+		description: "Hold the client build to the release declaration (compatibility.json)",
 		kind: "check",
 		ci: true,
 		requires: [],

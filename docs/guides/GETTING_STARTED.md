@@ -5,8 +5,8 @@ log in. One command runs the whole stack on your machine - no deployment
 tooling, nothing to install beyond the prerequisites below.
 
 Local development targets one Windows 10/11 workstation; macOS (Apple Silicon)
-also works, see [Developing on macOS](#developing-on-macos). Production
-deployment is described in [DEPLOYMENT.md](../../apps/server/ops/docs/DEPLOYMENT.md).
+also works, see [Developing on macOS](#developing-on-macos). The production
+deployment tooling is not part of this repository.
 
 ## 1. Prerequisites
 

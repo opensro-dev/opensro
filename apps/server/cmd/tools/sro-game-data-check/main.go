@@ -3,7 +3,7 @@
 
 main.go - sro-game-data-check: will this server release start on this data?
 
-Shipped in the server release bundle (ops/release/bundle.py). The release
+Shipped in the server release bundle. The release
 deploy runs it with SRO_SERVER_GAME_DATA_ROOT naming the archive the new
 GameWorld will open, before any notice or stop; a non-zero exit refuses
 the release while the old server keeps running. See gamedatacheck.
