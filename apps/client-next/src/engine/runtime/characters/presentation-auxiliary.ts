@@ -271,6 +271,9 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				if ( state.started === undefined ) {
 					state.started = seconds;
 					state.activation = animationActivation( seconds );
+				} else if ( seconds < state.started ) {
+					// A rewound frame clock adopts as the new start (#2561).
+					state.started = seconds;
 				}
 				const clip = resource.clips.includes( "stand" ) ? "stand" : "";
 				const layers: NonNullable<CharacterActor["layers"]> = clip ?
@@ -441,6 +444,8 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 					state = { gid: allocateActor(), started: seconds };
 					hwanHairActors.set( entity.gid, state );
 				}
+				// A rewound frame clock adopts as the new start (#2561).
+				if ( seconds < state.started ) state.started = seconds;
 				// AB5870 cancels the parent bind rotation and keeps its sampled position.
 				// A missing hair marker retains the renderer's existing parent fallback.
 				next.set( state.gid, {
@@ -553,7 +558,9 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 						model: entry.glb,
 						pose: owner.pose,
 						clip: child.motion.clip,
-						time: seconds - child.motion.started,
+						// The blend owns this stamp and clamps its layer ages
+						// at zero; the scalar clock publishes at that floor.
+						time: Math.max( 0, seconds - child.motion.started ),
 						loop: true,
 						layers,
 						scale: 1,

@@ -145,3 +145,53 @@ test("particle wrappers reject endpoint/LOD/daylight keys, retain inactive insta
 	);
 	assert.equal( actors.length, 0 );
 });
+test("a rewound frame clock re-stamps a particle start instead of publishing a negative clock", () => {
+	let serial = -1;
+	const owner = createAnimationEmission( () => serial-- ),
+		sets = modelAnimationParticles( [ {
+			...raw,
+			entries: [ { ...raw.entries[0], effectPath: "system/cos_p_gold_pig_etc.efp" } ]
+		} ] );
+	const body = {
+		gid: 1,
+		modifierId: 9,
+		model: "body",
+		pose: { regionId: 257, x: 0, y: 0, z: 0, yaw: 0 },
+		clip: "stand",
+		time: 0,
+		loop: true,
+		scale: 1
+	};
+	const frame = ( from, to, restarted = [] ) => ({
+		selected: selector,
+		revision: 0,
+		restarted,
+		dispatch: [ { selector, ranges: [ [ from, to ] ] } ]
+	});
+	const matrix = () => ({
+		regionId: 257,
+		matrix: Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 12, 34, 56, 1 )
+	});
+	const step = ( time, modelAnimation ) =>
+		owner.step(
+			[ { actor: { ...body, modelAnimation, animationLod: { fraction: 0, crowded: false } }, sets } ],
+			time,
+			() => true,
+			20,
+			true,
+			matrix,
+			() => 0,
+			() => 1
+		);
+	const first = step( 10, frame( 100, 101 ) );
+	assert.equal( first.length, 1 );
+	assert.equal( first[0].time, 0 );
+	// The pig's effect started on a frame clock that then stepped back:
+	// sampling it at 9.5 must not publish -0.5, and the start adopts the
+	// sampling clock, so 9.75 reads 0.25 rather than a clamped 0.
+	assert.equal( step( 9.5, frame( 101, 102 ) )[0].time, 0 );
+	assert.equal( step( 9.75, frame( 101, 102 ) )[0].time, .25 );
+	// The detached tail the restart leaves behind follows the same rule.
+	assert.equal( step( 9.8, frame( 0, 50, [ selector ] ) ).length, 1 );
+	assert.equal( step( 9.25, frame( 101, 102 ) )[0].time, 0 );
+});

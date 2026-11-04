@@ -293,6 +293,75 @@ test("missing owners and full actor budgets do not publish orphan booths or cons
 	assert.equal( defined( f.step( 2 ).children[0] ).time, 0 );
 });
 
+test("a rewound frame clock re-stamps the booth start instead of publishing a negative clock", () => {
+	const f = fixture();
+	assert.equal( defined( f.step( 5 ).children[0] ).time, 0 );
+	assert.equal( defined( f.step( 4.5 ).children[0] ).time, 0 );
+	const after = defined( f.step( 4.75 ).children[0] );
+	assert.equal( after.time, .25 );
+	assert.equal( after.layers?.[0]?.time, .25 );
+});
+
+test("an auxiliary stand clock stays at zero on a rewound frame clock", () => {
+	let nextId = -1;
+	const auxiliary = createAuxiliaryPresentation( () => nextId-- );
+	const owner = {
+		gid: 7,
+		model: "character",
+		pose: { regionId: 257, x: 10, y: 20, z: 30, yaw: radians( 0 ) },
+		clip: "stand",
+		time: 0,
+		loop: true,
+		scale: 1
+	};
+	const entity = {
+		gid: 7,
+		refObjId: 1,
+		name: "Auxiliary owner",
+		kind: /** @type {const} */ ("player"),
+		regionId: 257,
+		x: 10,
+		y: 20,
+		z: 30,
+		heading: 0,
+		appearanceState: [ 1, 0, 0, 0, 0, 0, 0 ]
+	};
+	/** @type {Parameters<typeof auxiliary.step>[1]} */
+	const bindings = {
+		resourceFor: () => undefined,
+		dress: {},
+		resources: { ready: () => true },
+		ridesByRider: new Map(),
+		riderModes: new Map(),
+		committedAuxiliary: new Map( [
+			[ 7, [ {
+				id: 1,
+				entry: { glb: "/assets/item/aux.glb", parts: [], clips: [ "stand" ], bone: "", particleModifiers: [] }
+			} ] ]
+		] )
+	};
+	const step = ( /** @type {number} */ seconds ) => {
+		const next = new Map( [ [ owner.gid, owner ] ] );
+		/** @type {Parameters<typeof auxiliary.step>[0]} */
+		const frame = {
+			entities: [ entity ],
+			seconds,
+			next,
+			gameplay: null,
+			localMover: () => false,
+			castByActor: new Map(),
+			particleHolders: []
+		};
+		auxiliary.step( frame, bindings );
+		return [ ...next.values() ].find( actor => actor.gid < 0 );
+	};
+	assert.equal( step( 10 )?.time, 0 );
+	assert.equal( step( 9.5 )?.time, 0 );
+	const after = step( 69.5 );
+	assert.equal( after?.clip, "stand" );
+	assert.equal( after?.time, 59.5 );
+});
+
 test("malformed booth publications are rejected atomically and disposal releases the booth catalog", () => {
 	const f = fixture(), original = f.published.boothModels.get( CHINA );
 	for (
