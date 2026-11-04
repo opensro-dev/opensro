@@ -229,11 +229,12 @@ func (rt *Runtime) mostWantedWrites(c *enterworld.Character) []paramkeeper.Write
 statModifierWrites
 
 Every parameter write a character's stat projection reads: its installed
-effects, then the streak's (port-only).
+effects, then the streak's and the worn suit tier's (both port-only).
 ================
 */
 func (rt *Runtime) statModifierWrites(division string, c *enterworld.Character) []paramkeeper.Write {
 	writes := append(rt.effects.ModifierWrites(division, c.Name), rt.mostWantedWrites(c)...)
+	writes = append(writes, rt.jobSuitWrites(c)...)
 	writes = append(writes, rt.wolfHowlWrites(division, c)...)
 	writes = append(writes, rt.wolfBloodWrites(division, c)...)
 	return append(writes, rt.penguinMagicWrites(division, c)...)

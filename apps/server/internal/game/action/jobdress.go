@@ -514,6 +514,13 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 			// label (alias while suited, real name once bare).
 			rt.reloadJobDress(dress.division, c, now, &result)
 			rt.refreshCompanionOwnerLabels(dress.division, c)
+			// Port-only, not native: the suit tier starts or stops with
+			// the suit, so the stat block and speeds follow the change.
+			if rt.JobSuitTiers {
+				private, public := rt.jobSuitBuffRefresh(dress.division, c, now)
+				result.Frames = append(result.Frames, private...)
+				result.Broadcast = append(result.Broadcast, public...)
+			}
 		}
 		// Port-only, not native: taking the suit off clears the streak.
 		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
