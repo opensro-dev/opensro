@@ -490,6 +490,35 @@ test("a scroll buff's marked-up description paints as text in both tooltips", ()
 	}
 });
 
+test("every published scroll description renders without raw markup (#2571)", () => {
+	// The done-when of BUG-090 over the built text data: every scroll
+	// description the item, skill and buff tooltips can publish - the
+	// item-side SN_ITEM_*SCROLL*_TT_DESC entries and the scroll rows of
+	// the skill catalogue, whose descriptions all funnel through
+	// tooltipDescription - renders as text, never as raw PML tags, and
+	// none of them makes the interpreter throw.
+	const descriptions = new Map();
+	for ( const [symbol, value] of Object.entries( strings ) ) {
+		if ( symbol.includes( "SCROLL" ) && symbol.endsWith( "_TT_DESC" ) && value ) descriptions.set( symbol, value );
+	}
+	for ( const row of catalog.values() ) {
+		const value = text( row.tooltipDescriptionSymbol );
+		if ( (row.nameSymbol.includes( "SCROLL" ) || row.tooltipDescriptionSymbol.includes( "SCROLL" )) && value ) {
+			descriptions.set( row.tooltipDescriptionSymbol, value );
+		}
+	}
+	// The sweep must not go quietly empty, and the published scroll
+	// text does carry markup it has to survive.
+	assert.ok( descriptions.size >= 50, `scroll descriptions swept: ${descriptions.size}` );
+	assert.ok( [ ...descriptions.values() ].some( value => value.includes( "<sml2>" ) ) );
+	const rawTag = /<\/?(sml2|br|font|strong|p|left|center|right|img)\b[^>]*>/i;
+	for ( const [symbol, value] of descriptions ) {
+		const rows = tooltipDescription( value );
+		assert.ok( rows.length > 0, `${symbol}: description rendered no rows` );
+		for ( const row of rows ) assert.ok( !rawTag.test( row.value ), `${symbol}: raw tag in ${row.value}` );
+	}
+});
+
 /*
 ================
 assertSameBytes
