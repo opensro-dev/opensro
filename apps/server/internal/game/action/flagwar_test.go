@@ -173,6 +173,37 @@ func TestFlagWarRegisterRefusesTheUnadmitted(t *testing.T) {
 
 /*
 ================
+TestFlagWarRegisterCancelSkipsAdmission
+
+The native register body checks the queue before any gate: a
+registrant who dies or mounts after joining still cancels with the
+ordinary join-result answer, and the queue shrinks.
+================
+*/
+func TestFlagWarRegisterCancelSkipsAdmission(t *testing.T) {
+	character := rebirthTestCharacter(20, 100)
+	rt, clock := newTestRuntime(character, testItems())
+	clock.now = flagWarStart().Add(-5 * time.Minute)
+
+	if subtype := flagWarAnswerSubtype(t, rt.HandleFlagWarRegister(testDivision, character, nil)); subtype != wire.FlagWarJoinResult {
+		t.Fatalf("join answer subtype %d, want %d", subtype, wire.FlagWarJoinResult)
+	}
+	if !rt.flagWarRegistered(testDivision, character.Name) {
+		t.Fatal("the join did not queue the character")
+	}
+
+	*character.CurrentHP = 0
+	character.ActiveCOS = &enterworld.CharacterCOS{Summoned: true, Mounted: true}
+	if subtype := flagWarAnswerSubtype(t, rt.HandleFlagWarRegister(testDivision, character, nil)); subtype != wire.FlagWarJoinResult {
+		t.Fatalf("cancel answer subtype %d, want %d", subtype, wire.FlagWarJoinResult)
+	}
+	if rt.flagWarRegistered(testDivision, character.Name) {
+		t.Fatal("the gated cancel left the character queued")
+	}
+}
+
+/*
+================
 TestFlagWarSelectByte
 ================
 */

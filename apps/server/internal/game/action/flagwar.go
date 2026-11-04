@@ -265,11 +265,12 @@ func (rt *Runtime) flagWarCanEnter(character *enterworld.Character) bool {
 HandleFlagWarRegister
 
 HandleFlagWarRegister answers the empty C->S 0x7753: it toggles the
-bound character's registration while sign-up is open. Below the
-native level gate the answer is [0xFF, 0x05]; outside the window, or
-for a character the entry admission refuses (dead, mounted, in a
-free battle, inside an instanced world), [0xFF, 0x15]; a toggle
-answers [0xFF, 0x00].
+bound character's registration while sign-up is open. A queued
+character cancels first, ungated, exactly as the native register
+body orders it; on the join path below the native level gate the
+answer is [0xFF, 0x05]; outside the window, or for a character the
+entry admission refuses (dead, mounted, in a free battle, inside an
+instanced world), [0xFF, 0x15]; a toggle answers [0xFF, 0x00].
 ================
 */
 func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworld.Character, payload []byte) OpResult {
@@ -299,6 +300,14 @@ func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworl
 	})
 	if deletePending {
 		return OpResult{DiagnosticRefusal: "deletePending"}
+	}
+	// The native register body checks the queue first: a queued
+	// character cancels with no level or admission gate in the way,
+	// so a registrant who dies or mounts after joining can still
+	// leave the queue (match start re-checks admission anyway).
+	if rt.flagWarRegistered(divisionID, character.Name) {
+		rt.flagWarToggle(divisionID, character)
+		return answer(wire.FlagWarJoinResult)
 	}
 	if !rt.flagWarSettings().signupOpen(rt.Now()) {
 		return answer(wire.FlagWarEnteredError)
