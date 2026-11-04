@@ -5542,7 +5542,9 @@ export function createUi(
 			// Drop gold (59A260) when no NPC interaction is active (59A27D).
 			const g = view.gameplay,
 				stallOpen = g?.stall?.phase === "owner" || g?.stall?.phase === "visitor",
-				shopOpen = panel === "Shop" || !!g?.shop,
+				// 69B060 reads the shop-open byte at +0x795; 6A007E clears it.
+				// The retained merchant catalog cannot stand for that open state.
+				shopOpen = panel === "Shop",
 				storageOpen = panel === "Storage" || g?.storage?.phase === "open";
 			if ( g?.exchange?.open || stallOpen || shopOpen || (!storageOpen && !!g?.npcConversation) ) return;
 			goldDialog = storageOpen ? "deposit" : "drop";
