@@ -40,7 +40,7 @@ const TYPE_TID3_MALL = 0x680;
 const TYPE_TID4_SHIFT = 11;
 const TYPE_TID4_MASK = 31;
 // TID4 kinds that open the target picker (cursor mode 0xA6) instead.
-const PICKER_TID4 = [ 8, 12, 15 ];
+const PICKER_TID4: readonly number[] = [ 8, 12, 15 ] as const;
 // CanUse (ItemData+0xAC) must carry both bits for the ask.
 const CAN_USE_ASK_BITS = 0x81;
 
