@@ -24352,8 +24352,8 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && mallUse.pending() !== null ) {
-				// CIFMessageBox type 0x1E (52F460): the same fixed 308x148 box
-				// (5C82D0) as the type-0x1F confirm above, one question line.
+				// CIFMessageBox kind 0x1F (52F460): the same fixed 308x148 box
+				// (5C82D0) as the kind-0x1F confirm above, one question line.
 				const layout = guildProposalLayout( w, h ),
 					message = text.guide(
 						guideTokens( "<center>" + hudCopy( "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE" ) + "</center>" ),
