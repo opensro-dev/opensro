@@ -228,13 +228,48 @@ func (rt *Runtime) flagWarSettings() FlagWarSettings {
 
 /*
 ================
+flagWarCanEnter
+
+The native entry admission (the reference server's flag-war entry
+check; research/docs/reverse-engineering/server/FlagWarServer.md
+checkpoint 1 and the #2426 server trace), which the gameserver runs
+at registration (its try-enter path) and again in the batch
+admission before a registrant is teleported into the arena. Of its
+queries, the ones a bound character record can answer:
+the life state is alive (native life byte == 1), the ride state byte
+is 0 (not mounted on a COS), the player is not in a free battle, and
+the player stands in the open world, not an instanced one (the port's
+region test). The object-exists and IsPlayer queries are true by
+construction for a bound character. The action-state byte (native
+refuses {7, 4, 6, 2}), the job-state == 4 query and the operation
+mask 0x40000 have no counterpart readable on the port's character
+record - that state lives in session lanes this admission cannot
+see - so they are recorded here, not guessed.
+================
+*/
+func (rt *Runtime) flagWarCanEnter(character *enterworld.Character) bool {
+	if character == nil || !enterworld.CharacterAlive(character) {
+		return false
+	}
+	if domain.CharacterWorldInstance(character) != domain.DefaultWorldInstance {
+		return false
+	}
+	if character.ActiveCOS != nil && character.ActiveCOS.Mounted {
+		return false
+	}
+	return !rt.inFreeBattle(character)
+}
+
+/*
+================
 HandleFlagWarRegister
 
 HandleFlagWarRegister answers the empty C->S 0x7753: it toggles the
 bound character's registration while sign-up is open. Below the
 native level gate the answer is [0xFF, 0x05]; outside the window, or
-for a character already inside an instanced world, [0xFF, 0x15]; a
-toggle answers [0xFF, 0x00].
+for a character the entry admission refuses (dead, mounted, in a
+free battle, inside an instanced world), [0xFF, 0x15]; a toggle
+answers [0xFF, 0x00].
 ================
 */
 func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworld.Character, payload []byte) OpResult {
@@ -255,13 +290,12 @@ func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworl
 	defer unlock()
 
 	level := int64(1)
-	deletePending, instanced := false, false
+	deletePending := false
 	rt.deps.Read(divisionID, func() {
 		deletePending = character.DeletePending
 		if character.Level != nil {
 			level = *character.Level
 		}
-		instanced = domain.CharacterWorldInstance(character) != domain.DefaultWorldInstance
 	})
 	if deletePending {
 		return OpResult{DiagnosticRefusal: "deletePending"}
@@ -272,7 +306,7 @@ func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworl
 	if level < flagWarLevelMinimum {
 		return answer(wire.FlagWarLevelError)
 	}
-	if instanced {
+	if !rt.flagWarCanEnter(character) {
 		return answer(wire.FlagWarEnteredError)
 	}
 	rt.flagWarToggle(divisionID, character)

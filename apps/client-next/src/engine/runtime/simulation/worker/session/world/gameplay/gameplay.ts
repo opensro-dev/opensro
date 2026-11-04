@@ -2500,6 +2500,20 @@ state here before a command can claim a native wire conversation.
 				// The server serializes revival and rejects already-living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
+				// 5260DE: accepting the kind-3 box while the local
+				// flag-war team byte is set (a live match, in port
+				// terms) also opens the CIFTimedNotice line
+				// UIIT_MSG_FLAGWAR_GO_TO_ZONE (window 0x7530, kind
+				// 0x11): the warp to camp is server-driven, so the
+				// line is the whole client side of the accept. The
+				// port presents it on the notice lane.
+				if ( flagWarTeam !== null && flagWarTimerEndsAt > now ) {
+					notices = [
+						...notices.slice( -99 ),
+						{ key: "UIIT_MSG_FLAGWAR_GO_TO_ZONE", value: 0, sequence: ++noticeSequence }
+					];
+					dirty = true;
+				}
 				return frame;
 			}
 			if (
