@@ -127,6 +127,35 @@ func TestCommitActivityCadenceOnlyStampsCadence(t *testing.T) {
 
 /*
 ================
+TestActivityGateReportsGenerationAdvance
+
+The step chains its generation-guarded commits off the gate's
+last answer (#2136): a due re-check that suspends rewrites the
+row - the stored generation moves and the answer must say so,
+or the step would chain off the generation it read at dispatch.
+The settled re-check beside a viewer is pinned cadence-only by
+the golden leg test; this pins the rewriting half.
+================
+*/
+func TestActivityGateReportsGenerationAdvance(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	_, genBefore, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	ops.activity = ops.captureActivity(nil, now+1001)
+	current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	_, gated, handled, generationAdvanced := ops.runActivityGate(monsterTestDivision, actor, current, now+1001)
+	if !handled || gated.Mode() != monster.MoverPending {
+		t.Fatalf("unobserved actor was not suspended: %v", gated.Mode())
+	}
+	if !generationAdvanced {
+		t.Fatal("suspension rewrote the row but the gate denied advancing the generation")
+	}
+	if _, genAfter, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid); genAfter == genBefore {
+		t.Fatal("suspension did not advance the stored generation")
+	}
+}
+
+/*
+================
 TestCommitActivityCadenceOnlySkipsValidate
 
 A cadence-only commit moves nothing Validate guards: the stored
@@ -291,7 +320,7 @@ func TestSummonFactoryBindsControllerAndExemptsActivity(t *testing.T) {
 	m.BehaviorDeadlineMs = now + 10000
 	ops.Monsters.CommitMover("summon", child.Gid, m)
 	ops.activity = ops.captureActivity(nil, now+1001)
-	frames, _, handled := ops.runActivityGate("summon", child, m, now+1001)
+	frames, _, handled, _ := ops.runActivityGate("summon", child, m, now+1001)
 	after, _ := ops.Monsters.Mover("summon", child.Gid)
 	if handled || len(frames) != 0 || after != m {
 		t.Fatal("controlled actor ran unobserved suspension/cadence")
