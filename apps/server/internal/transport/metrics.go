@@ -51,6 +51,7 @@ type hubMetrics struct {
 	bytesOut              atomic.Uint64
 	datagramsOut          atomic.Uint64
 	datagramBytesOut      atomic.Uint64
+	datagramsDropped      atomic.Uint64
 	writeErrors           atomic.Uint64
 	enterWorldAuthRefused atomic.Uint64
 	unhandledFrames       atomic.Uint64
@@ -128,12 +129,20 @@ type Metrics struct {
 
 	// FramesIn counts every inbound frame accepted by a session read loop,
 	// including frames later dropped by rate limiting.
-	FramesIn              uint64 `json:"frames_in"`
-	BytesIn               uint64 `json:"bytes_in"`
-	FramesOut             uint64 `json:"frames_out"`
-	BytesOut              uint64 `json:"bytes_out"`
-	DatagramsOut          uint64 `json:"datagrams_out"`
-	DatagramBytesOut      uint64 `json:"datagram_bytes_out"`
+	FramesIn         uint64 `json:"frames_in"`
+	BytesIn          uint64 `json:"bytes_in"`
+	FramesOut        uint64 `json:"frames_out"`
+	BytesOut         uint64 `json:"bytes_out"`
+	DatagramsOut     uint64 `json:"datagrams_out"`
+	DatagramBytesOut uint64 `json:"datagram_bytes_out"`
+	// DatagramsDropped counts loss-tolerant frames dropped at a full
+	// per-connection datagram queue (#2142); DatagramsOut counts the
+	// frames the datagram lane accepted.
+	DatagramsDropped uint64 `json:"datagrams_dropped"`
+	// DatagramsSendFailed counts, over the live connections, the
+	// datagram sends a peer refused after its frame was accepted
+	// (the drain in conn_wt.go): loss the drop counter cannot see.
+	DatagramsSendFailed   uint64 `json:"datagrams_send_failed"`
 	WriteErrors           uint64 `json:"write_errors"`
 	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
 	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
@@ -276,8 +285,9 @@ func (h *Hub) Metrics() Metrics {
 	detached := 0
 	queueDepth := 0
 	queueBytes := 0
+	datagramSendFailures := uint64(0)
 	for _, session := range sessions {
-		isAttached, depth, bytes := session.metricsSnapshot()
+		isAttached, depth, bytes, failures := session.metricsSnapshot()
 		if isAttached {
 			attached++
 		} else {
@@ -285,6 +295,7 @@ func (h *Hub) Metrics() Metrics {
 		}
 		queueDepth += depth
 		queueBytes += bytes
+		datagramSendFailures += failures
 	}
 	metrics := Metrics{
 		WTOk:                   h.metrics.wtOK.Load(),
@@ -329,6 +340,8 @@ func (h *Hub) Metrics() Metrics {
 		BytesOut:                   h.metrics.bytesOut.Load(),
 		DatagramsOut:               h.metrics.datagramsOut.Load(),
 		DatagramBytesOut:           h.metrics.datagramBytesOut.Load(),
+		DatagramsDropped:           h.metrics.datagramsDropped.Load(),
+		DatagramsSendFailed:        datagramSendFailures,
 		WriteErrors:                h.metrics.writeErrors.Load(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),
