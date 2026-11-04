@@ -39,6 +39,7 @@ import net from "node:net";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { resolveServerGameDataRoot } from "../build/world/paths.mjs";
 import { resolveGeneratedRoot, resolveMainCheckout } from "../lib/generatedRoot.mjs";
 
 const repoRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
@@ -195,8 +196,10 @@ async function doctor( settings, verbose ) {
 		"restore apps/server/config/shards.json from the checkout"
 	);
 
+	// The resolvers own both trees (AGENTS.md "Worktrees"), overrides included:
+	// the Go server reads SRO_SERVER_GAME_DATA_ROOT, so the doctor must too.
 	const mainCheckout = resolveMainCheckout( repoRoot );
-	const serverData = path.join( mainCheckout, "apps", "server", ".generated", "game-data", "1.150", "server" );
+	const serverData = resolveServerGameDataRoot( process.env, mainCheckout );
 	check(
 		existsSync( serverData ) && statSync( serverData ).isDirectory(),
 		"server game data is built",
