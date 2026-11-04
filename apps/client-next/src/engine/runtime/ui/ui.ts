@@ -12046,7 +12046,8 @@ export function createUi(
 							boardSuppressed,
 							ownerPet,
 							experimental.state().saved.attackPetTraining,
-							hudCopy
+							hudCopy,
+							experimental.state().saved.mostWantedBuff
 						)
 					) {
 						if ( !icon.path ) continue;

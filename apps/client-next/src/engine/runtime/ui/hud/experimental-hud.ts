@@ -44,7 +44,8 @@ frame-wide stages and scene resolution, World the
 atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
 filter's kinds (#841); it is appended last so the existing tabs keep the
-indices a reopening window relies on.
+indices a reopening window relies on. Jobs (#1849) is appended after it for
+the same reason.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -396,6 +397,16 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
+		} ]
+	},
+	{
+		title: "Jobs",
+		section: "Job buffs",
+		rows: [ {
+			key: "mostWantedBuff",
+			id: "experimental-most-wanted-buff",
+			label: "Most Wanted buff",
+			description: "Show your wanted level on the buff board."
 		} ]
 	}
 ];

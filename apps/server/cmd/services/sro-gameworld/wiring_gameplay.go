@@ -143,6 +143,7 @@ func newGameplayPlane(
 	// windows to the same sweep that retires them.
 	deps.Now = func() time.Time { return items.Now() }
 	deps.TrackTimedWindows = items.TrackTimedWindows
+	deps.TrackMostWanted = items.TrackMostWanted
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
 	deps.RetireCharacterSession = items.ForgetCharacterSession

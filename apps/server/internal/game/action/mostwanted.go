@@ -7,14 +7,25 @@ Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 With SRO_MOST_WANTED on:
 
 Streak. Each counted job kill (pk.DeathJob) adds one to the killer's
-streak; its wanted level is streak / 10, at most 10. A kill counts unless
+streak; its wanted level is streak / 5, at most 10 (#1849: five counted
+kills per level, the owner's pacing; it was ten before). A kill counts unless
 the victim shares the killer's account, party, guild or guild union, and a
 killer counts the same victim at most 3 times in any 60 minutes (kept in
 memory: a restart forgets the window, never the streak). There is no level
 window and no distinct-victims rule (the advisor's answers). The streak is
 saved on the character (domain.MostWanted, store schema 24).
 
-Reset. Death of any kind, or taking the job suit off, clears the streak.
+Reset. Death of any kind clears the streak. The wanted level also lapses
+seven days after it was last raised (domain.MostWanted.ExpiresAtMs, store
+schema 35): a counted kill that raises the level restamps the lapse, and
+one at the cap renews it too (a capped streak can gain no level, so
+without the renewal its most active holder would lapse first - an
+inference, recorded here). Taking the job suit off no longer clears
+anything (#1849): the streak waits, and only the bonuses below shelve
+while the suit is off, because mostWantedWrites and mostWantedSpeedFactor
+already gate on the dressed job. The lapse is enforced where a door
+holds the record: the next counted kill, the victim's death, and the
+tick sweep for tracked holders (mostwantedstate.go).
 
 Bonuses, per wanted level: +1 STR, +1 INT and +1% movement speed on foot;
 damage dealt +1% and taken -1% from level 3, 2% from 5, 3% at 10, while
@@ -81,9 +92,12 @@ const mostWantedBountyDoor = "most-wanted-bounty"
 
 const (
 	// mostWantedKillsPerLevel counted kills make one wanted level.
-	mostWantedKillsPerLevel = 10
+	mostWantedKillsPerLevel = 5
 	// mostWantedMaxLevel caps the wanted level.
 	mostWantedMaxLevel = 10
+	// mostWantedLapseMs is how long a raised wanted level lasts: seven
+	// days from the kill that raised it (domain.MostWanted.ExpiresAtMs).
+	mostWantedLapseMs = 7 * 24 * 60 * 60_000
 	// mostWantedPairLimit and mostWantedPairWindowMs: one killer counts one
 	// victim at most this often in the window.
 	mostWantedPairLimit    = 3
@@ -166,7 +180,7 @@ type mostWantedBounty struct {
 ================
 mostWantedLevel
 
-A streak's wanted level: streak / 10, at most 10.
+A streak's wanted level: streak / 5, at most 10.
 ================
 */
 func mostWantedLevel(c *enterworld.Character) int64 {
@@ -174,6 +188,19 @@ func mostWantedLevel(c *enterworld.Character) int64 {
 		return 0
 	}
 	return min(c.MostWanted.Streak/mostWantedKillsPerLevel, mostWantedMaxLevel)
+}
+
+/*
+================
+mostWantedExpired
+
+Whether a streak's wanted level has lapsed by nowMs. A streak saved
+before the lapse existed carries no stamp and never lapses until its
+next level stamps one.
+================
+*/
+func mostWantedExpired(c *enterworld.Character, nowMs int64) bool {
+	return c != nil && c.MostWanted != nil && c.MostWanted.ExpiresAtMs > 0 && nowMs >= c.MostWanted.ExpiresAtMs
 }
 
 /*
@@ -355,22 +382,36 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	if !rt.MostWanted || killer == nil || victim == nil {
 		return nil, nil, nil, nil
 	}
-	if kill.victimWanted > 0 && kill.mostWantedStrangers {
-		notices = rt.mostWantedBountyNotice(division, killer, victim, kill.victimWanted, now)
+	// A lapsed level pays nothing. The victim's record is already
+	// cleared by its death, so the lapse is judged from the snapshot
+	// withVictim took (the live record is checked too, for doors that
+	// did not go through a death first).
+	victimWanted := kill.victimWanted
+	if kill.victimWantedLapse > 0 && now >= kill.victimWantedLapse || mostWantedExpired(victim, now) {
+		victimWanted = 0
 	}
-	if kill.victimWanted > 0 && kill.mostWantedStrangers && rt.MostWantedBountyTransfer {
-		owed = append(owed, mostWantedBounty{division: division, killer: killer, victim: victim, wanted: kill.victimWanted,
-			gold: rt.mostWantedBountyGold(kill.victimWanted)})
-	} else if kill.victimWanted > 0 && kill.mostWantedStrangers {
-		bounty := rt.mostWantedBountyGold(kill.victimWanted)
+	if victimWanted > 0 && kill.mostWantedStrangers {
+		notices = rt.mostWantedBountyNotice(division, killer, victim, victimWanted, now)
+	}
+	if victimWanted > 0 && kill.mostWantedStrangers && rt.MostWantedBountyTransfer {
+		owed = append(owed, mostWantedBounty{division: division, killer: killer, victim: victim, wanted: victimWanted,
+			gold: rt.mostWantedBountyGold(victimWanted)})
+	} else if victimWanted > 0 && kill.mostWantedStrangers {
+		bounty := rt.mostWantedBountyGold(victimWanted)
 		setGold(killer, goldOf(killer)+bounty)
 		actor = append(actor, goldFrame(killer))
 		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
-			"wanted": kill.victimWanted, "gold": bounty}).Info("most wanted: bounty paid")
+			"wanted": victimWanted, "gold": bounty}).Info("most wanted: bounty paid")
 	}
 	if kill.kind != pk.DeathJob || !kill.mostWantedStrangers || !enterworld.CharacterAlive(killer) ||
 		!rt.countMostWantedPair(division, killer.Name, victim.Name, now) {
 		return actor, nil, owed, notices
+	}
+	// A lapsed streak restarts from this kill: the clear's refresh and
+	// state frames ride this kill's, then the count below is the first.
+	if mostWantedExpired(killer, now) {
+		private, open := rt.clearMostWantedInDoor(division, killer, "lapsed", now)
+		actor, public = append(actor, private...), append(public, open...)
 	}
 	before := mostWantedLevel(killer)
 	if killer.MostWanted == nil {
@@ -381,10 +422,20 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
 	actor = append(actor, rt.mostWantedStreakNotice(killer)...)
 	if level := mostWantedLevel(killer); level != before {
+		// A raised level restamps the seven-day lapse (#1849).
+		killer.MostWanted.ExpiresAtMs = now + mostWantedLapseMs
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
 		notices = append(notices, rt.mostWantedLevelNotice(division, killer, level, now)...)
+	} else if before >= mostWantedMaxLevel {
+		// At the cap no level can rise; a counted kill renews the lapse
+		// instead (see the file banner's inference).
+		killer.MostWanted.ExpiresAtMs = now + mostWantedLapseMs
 	}
+	// The holder's wanted state follows every counted kill (progress
+	// moved), for the buff-board row (mostwantedstate.go).
+	actor = append(actor, rt.mostWantedStateFrame(killer))
+	rt.mostWantedHolders.note(petOwnerKey{division: division, name: killer.Name}, killer.MostWanted.ExpiresAtMs)
 	return actor, public, owed, notices
 }
 
@@ -431,8 +482,9 @@ func (rt *Runtime) payMostWantedBounty(owed mostWantedBounty) []RecipientFrames 
 ================
 Runtime.clearMostWantedInDoor
 
-Death or taking the suit off clears the streak; the caller holds c's door.
-private goes to c, public to its observers.
+Death or the lapse clears the streak; the caller holds c's door.
+private goes to c, public to its observers. The cleared wanted state
+rides private, so the holder's buff-board row drops with the streak.
 ================
 */
 func (rt *Runtime) clearMostWantedInDoor(division string, c *enterworld.Character, reason string, now int64) (private, public []wire.Frame) {
@@ -443,10 +495,12 @@ func (rt *Runtime) clearMostWantedInDoor(division string, c *enterworld.Characte
 	log.WithFields(log.Fields{"division": division, "character": c.Name, "streak": c.MostWanted.Streak, "reason": reason}).
 		Info("most wanted: streak cleared")
 	c.MostWanted = nil
+	rt.mostWantedHolders.forget(petOwnerKey{division: division, name: c.Name})
 	if level == 0 {
-		return nil, nil
+		return []wire.Frame{rt.mostWantedStateFrame(c)}, nil
 	}
-	return rt.mostWantedRefresh(division, c, now)
+	private, public = rt.mostWantedRefresh(division, c, now)
+	return append(private, rt.mostWantedStateFrame(c)), public
 }
 
 /*

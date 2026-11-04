@@ -73,7 +73,7 @@ func TestMostWantedTestPacingPaysASmallBounty(t *testing.T) {
 	for _, test := range []bool{false, true} {
 		rt, _, killer, victim := newPvpPair(t)
 		rt.MostWanted, rt.MostWantedTest = true, test
-		victim.MostWanted = &domain.MostWanted{Streak: 25}
+		victim.MostWanted = &domain.MostWanted{Streak: 10}
 		gold := goldOf(killer)
 		kill := playerKill{kind: pk.DeathPlayer, mostWantedStrangers: true}.withVictim(killer, victim)
 		rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
