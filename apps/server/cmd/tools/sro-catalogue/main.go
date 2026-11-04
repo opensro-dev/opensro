@@ -342,8 +342,14 @@ func run(out, release, textdata string) error {
 	// on the shard, so its chances leave the published drop lists; every
 	// other item keeps its own chance (action/sunevent.go).
 	sun := progression.SunEventOnlyFromEnv()
+	// SRO_HALLOWEEN_EVENT (port-only, not native): the timed event's
+	// window, box drop and exchange are published while it runs (#2540).
+	halloweenActive := progression.HalloweenEventFromEnv().ActiveAt(time.Now().UTC())
 	dropItemID := func(codename string) uint32 {
 		if ref, ok := itemSource.ItemRefByCodename(codename); ok && action.SunExcludes(sun, ref) {
+			return 0
+		}
+		if codename == progression.HalloweenBoxCodename && !halloweenActive {
 			return 0
 		}
 		return itemID(codename)
@@ -437,6 +443,7 @@ func run(out, release, textdata string) error {
 		"levels.json":     catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery, levelCap),
 		"trade.json":      catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(), Quotes: tradeQuotes},
 		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
+		"events.json":     catalogue.BuildEvents(header, itemID, time.Now().UTC()),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
 	}
@@ -446,6 +453,7 @@ func run(out, release, textdata string) error {
 		"quests.schema.json":     catalogue.Schema("quests.json", catalogue.QuestsFile{}),
 		"monsters.schema.json":   catalogue.Schema("monsters.json", catalogue.MonstersFile{}),
 		"droptables.schema.json": catalogue.Schema("droptables.json", catalogue.DropTablesFile{}),
+		"events.schema.json":     catalogue.Schema("events.json", catalogue.EventsFile{}),
 		"skills.schema.json":     catalogue.Schema("skills.json", catalogue.SkillsFile{}),
 		"regions.schema.json":    catalogue.Schema("regions.json", catalogue.RegionsFile{}),
 		"npcs.schema.json":       catalogue.Schema("npcs.json", catalogue.NpcsFile{}),
