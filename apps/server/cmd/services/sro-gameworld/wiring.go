@@ -306,6 +306,7 @@ func newGameWorldApplication(
 	if err := installSealBoard(application, gameplay, ownedShard.ID); err != nil {
 		return nil, err
 	}
+	installSunDropCount(gameplay)
 	gameplay.installSessionLifecycle(ts.Hub, authority.store)
 	if gameplay.deps.MonsterState != nil {
 		if err := gameplay.deps.MonsterState.EnableDormantStorage(); err != nil {

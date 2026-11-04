@@ -494,6 +494,10 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// hunted, so it never counts either, however it died.
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
+			// The Sun counting hook (sundrops.go) counts the same
+			// committed loot the same way, Sun tier only and with the
+			// item named, for the #2538 measurement cycle.
+			rt.countSunDrops(a.character, drops, now)
 		}
 		// The Halloween daily cap (halloween.go) counts the same
 		// committed loot the same way: every minted box, GM-spawned

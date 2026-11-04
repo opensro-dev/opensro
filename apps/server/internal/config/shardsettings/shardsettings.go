@@ -222,6 +222,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Decision record, 2026-11-04 (#2538): one counting-only cycle
+	// measures Sun drops and their recipients before any Sun knob is
+	// considered. Count-only and off by default: nothing counts.
+	{Env: "SRO_SUN_DROP_COUNT", NomadVar: "sun_drop_count", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
 	// +11 and above. Off is the plain line, byte for byte.
