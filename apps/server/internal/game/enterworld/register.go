@@ -210,6 +210,9 @@ func encodeEnterWorld(deps *Deps, result *BootstrapResult, session string) Enter
 		// table, which is keyed by division + character id.
 		seeds = deps.CommunitySeedFramesFor(result.DivisionID, result.Character)
 	}
+	if deps.EntryEventFrames != nil {
+		seeds = append(seeds, deps.EntryEventFrames(result.DivisionID, result.Character)...)
+	}
 	if len(seeds) > 0 {
 		combined := make([]Packet, 0, len(frames)+len(seeds))
 		combined = append(combined, frames...)
