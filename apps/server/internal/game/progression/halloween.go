@@ -116,6 +116,16 @@ func (e HalloweenEvent) ActiveAt(now time.Time) bool {
 
 /*
 ================
+HalloweenEvent.EndsAt
+
+The window's end, the first instant the event no longer runs; zero when
+no window is configured.
+================
+*/
+func (e HalloweenEvent) EndsAt() time.Time { return e.endsAt }
+
+/*
+================
 HalloweenEvent.CleanupDueAt
 
 Once a configured window has ended, remaining boxes leave at the first

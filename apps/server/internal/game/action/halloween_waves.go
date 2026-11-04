@@ -4,9 +4,14 @@
 halloween_waves.go - the Halloween Day event's Gourd waves
 
 Port-only, not native (#2124; SRO_HALLOWEEN_EVENT, default off). At a
-timetabled moment (progression/halloween_waves.go) many Gourds land in two
-fields with a denser ring of the field's own mobs, after a notice ten
-minutes ahead. Waves go through the quest spawn path, never the GM one: a
+timetabled moment (progression/halloween_waves.go) many Gourds land in
+three fields, one per level band, with a denser ring of the field's own
+mobs, after notices ten minutes ahead. Every notice names the area and
+the field's level and says what a Gourd is (#2545): the first live run
+named only the field monster ("around the White Tiger and Yeti fields"),
+on the channel the unique notices use, and players read it as a unique
+spawning. A character entering the world while the event runs is told it
+is on and where the next wave lands. Waves go through the quest spawn path, never the GM one: a
 GM-spawned kill is conjured, not hunted, and would pay no box. Each wave
 monster has no nest, so it never respawns, and leaves on its own timer.
 
@@ -19,8 +24,11 @@ the spawns take only the monster owner's lock.
 package action
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
@@ -29,10 +37,17 @@ import (
 // halloweenWaveCheckEvery keeps the idle step to one clock compare a tick.
 const halloweenWaveCheckEvery = time.Second
 
-// halloweenWaveNoticeLead and halloweenWaveNoticeNow are the two notices.
+// The notices, each inside the notification's 100-unit budget
+// (noticeMaxUnits) with the longest field area: one line per field at the
+// warning and at the landing, then the line that says what a Gourd is. The
+// entry notices name the window's end and the next wave.
 const (
-	halloweenWaveNoticeLead = "Halloween: Gourds land in 10 minutes around the "
-	halloweenWaveNoticeNow  = "Halloween: the Gourds have landed around the "
+	halloweenWaveNoticeLead = "Halloween: Gourds land near %s in 10 minutes"
+	halloweenWaveNoticeNow  = "Halloween: Gourds have landed near %s"
+	halloweenWaveNoticeHow  = "Gourds are event monsters: each drops a Jewel Box. So-ok in town trades boxes for gifts."
+	halloweenEntryNoticeOn  = "The Halloween event runs until %s UTC."
+	halloweenEntryNoticeAt  = "Next Gourd wave %s UTC: %s"
+	halloweenEntryTimeShape = "Jan 2 15:04"
 )
 
 /*
@@ -64,8 +79,9 @@ func (rt *Runtime) advanceHalloweenWaves() {
 				rt.announceHalloweenWave(population.Division, halloweenWaveNoticeLead, moment.Wave, now.UnixMilli())
 				continue
 			}
-			rt.spawnHalloweenField(population, moment.Wave.Low, now.UnixMilli())
-			rt.spawnHalloweenField(population, moment.Wave.High, now.UnixMilli())
+			for _, field := range moment.Wave.Fields {
+				rt.spawnHalloweenField(population, field.Codename, now.UnixMilli())
+			}
 			rt.announceHalloweenWave(population.Division, halloweenWaveNoticeNow, moment.Wave, now.UnixMilli())
 		}
 	}
@@ -75,17 +91,67 @@ func (rt *Runtime) advanceHalloweenWaves() {
 ================
 Runtime.announceHalloweenWave
 
-Names both fields by their own monsters' names, as a player finds them.
+One line per field (area and level), then what a Gourd is: four notices,
+inside the per-minute cap of six for this kind. A field whose monster the
+data lacks is left out of the notice, as spawnHalloweenField leaves it out
+of the wave.
 ================
 */
 func (rt *Runtime) announceHalloweenWave(division, lead string, wave progression.HalloweenWave, nowMs int64) {
-	low, lowFound := rt.Monsters.ReferenceByCodename(wave.Low)
-	high, highFound := rt.Monsters.ReferenceByCodename(wave.High)
-	if !lowFound || !highFound {
-		return
+	for _, field := range wave.Fields {
+		if place, ok := rt.halloweenFieldPlace(field); ok {
+			rt.announce(division, announceHalloweenWave, fmt.Sprintf(lead, place), wire.NoticeLink{}, 0, nowMs)
+		}
 	}
-	text := lead + low.Name + " and " + high.Name + " fields"
-	rt.announce(division, announceHalloweenWave, text, wire.NoticeLink{}, 0, nowMs)
+	rt.announce(division, announceHalloweenWave, halloweenWaveNoticeHow, wire.NoticeLink{}, 0, nowMs)
+}
+
+/*
+================
+Runtime.halloweenFieldPlace
+
+A field as a notice names it: the area and the field monster's level, so
+a player knows where to ride and whether the field suits them.
+================
+*/
+func (rt *Runtime) halloweenFieldPlace(field progression.HalloweenField) (string, bool) {
+	ref, found := rt.Monsters.ReferenceByCodename(field.Codename)
+	if !found {
+		return "", false
+	}
+	return fmt.Sprintf("%s (Lv %d field)", field.Area, ref.Level), true
+}
+
+/*
+================
+Runtime.HalloweenEntryFrames
+
+The notices a character entering the world gets while the event runs:
+that it is on and until when, where and when the next wave lands, and
+what a Gourd is. Sent once per login (enterworld's login outcome, not a
+teleport's re-entry); the event off sends nothing.
+================
+*/
+func (rt *Runtime) HalloweenEntryFrames(_ string, character *enterworld.Character) []enterworld.Packet {
+	now := rt.Now()
+	if character == nil || rt.Monsters == nil || !rt.Halloween.ActiveAt(now) {
+		return nil
+	}
+	lines := []string{fmt.Sprintf(halloweenEntryNoticeOn, rt.Halloween.EndsAt().UTC().Format(halloweenEntryTimeShape))}
+	if wave, ok := rt.Halloween.NextWave(now); ok {
+		areas := make([]string, 0, len(wave.Fields))
+		for _, field := range wave.Fields {
+			areas = append(areas, field.Area)
+		}
+		lines = append(lines, fmt.Sprintf(halloweenEntryNoticeAt, wave.At.UTC().Format(halloweenEntryTimeShape), strings.Join(areas, ", ")))
+	}
+	lines = append(lines, halloweenWaveNoticeHow)
+	packets := make([]enterworld.Packet, 0, len(lines))
+	for _, line := range lines {
+		frame := wire.DropPlusNotificationFrame(clampNotice(line), wire.NoticeLink{})
+		packets = append(packets, enterworld.NewPacket(frame.Opcode, frame.Payload))
+	}
+	return packets
 }
 
 /*
