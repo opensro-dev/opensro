@@ -28,7 +28,13 @@ const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) 
 const node = process.execPath;
 const SOURCE_FLAG = "--source";
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
-const SOURCE_GATE_NAMES = new Set( [ "verify:test-types", "typecheck", "typecheck:gallery", "verify:layout" ] );
+const SOURCE_GATE_NAMES = new Set( [
+	"verify:test-types",
+	"typecheck",
+	"typecheck:gallery",
+	"verify:layout",
+	"verify:ui-census"
+] );
 
 // Longest first, so the critical path starts immediately.
 const GATES = [
@@ -49,6 +55,8 @@ const GATES = [
 	] ],
 	[ "verify:execution", [ "tools/generate-execution-map.mjs" ] ],
 	[ "verify:ownership", [ "tools/verify-ownership.mjs" ] ],
+	[ "verify:ui-census", [ "tools/ui-census.mjs" ] ],
+	[ "verify:ui-action-census", [ "tools/ui-action-census.mjs" ] ],
 	[ "verify:capabilities", [ "tools/verify-capabilities.mjs" ] ],
 	[ "verify:layout", [ "tools/verify-layout.mjs" ] ],
 	[ "verify:retail-panels", [ "tools/audit-retail-panels.mjs" ] ],
