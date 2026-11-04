@@ -83,6 +83,9 @@ var unlistedSettings = map[string]string{
 	// Staff telemetry (#1691): name-free seal counts by degree and tier
 	// for the staff console; players never meet it.
 	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
+	// Staff telemetry (#2538): the Sun counting cycle measures supply
+	// before any Sun knob; players never meet it.
+	action.EnvSunDropCount: "staff Sun drop counting for one measurement cycle, not a rule players meet",
 }
 
 /*
