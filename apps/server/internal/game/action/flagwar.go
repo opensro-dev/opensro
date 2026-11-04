@@ -291,12 +291,16 @@ func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworl
 	defer unlock()
 
 	level := int64(1)
-	deletePending := false
+	deletePending, admitted := false, false
+	// The admission reads life, mount, equipment and world: record
+	// fields the store's writers change under the door, so they are read
+	// under it with the level, as the instance test was.
 	rt.deps.Read(divisionID, func() {
 		deletePending = character.DeletePending
 		if character.Level != nil {
 			level = *character.Level
 		}
+		admitted = rt.flagWarCanEnter(character)
 	})
 	if deletePending {
 		return OpResult{DiagnosticRefusal: "deletePending"}
@@ -315,7 +319,7 @@ func (rt *Runtime) HandleFlagWarRegister(divisionID string, character *enterworl
 	if level < flagWarLevelMinimum {
 		return answer(wire.FlagWarLevelError)
 	}
-	if !rt.flagWarCanEnter(character) {
+	if !admitted {
 		return answer(wire.FlagWarEnteredError)
 	}
 	rt.flagWarToggle(divisionID, character)

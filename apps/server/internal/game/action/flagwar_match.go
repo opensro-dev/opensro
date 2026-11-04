@@ -554,8 +554,10 @@ func (rt *Runtime) flagWarStartDivision(division string, registrants []FlagWarRe
 		character := rt.findCharacter(division, registrant.Name)
 		admitted := false
 		if character != nil {
-			participant.level = flagWarLevelOf(character.Level)
-			admitted = rt.flagWarCanEnter(character)
+			rt.deps.Read(division, func() {
+				participant.level = flagWarLevelOf(character.Level)
+				admitted = rt.flagWarCanEnter(character)
+			})
 		}
 		unlock()
 		if character == nil {
