@@ -56,6 +56,9 @@ and passes it to each phase that writes it.
 export interface PresentationOutput {
 	displayed: Map<number, CharacterActor>;
 	failure: string | null;
+	// The thrown value behind failure, when a phase caught one: the
+	// incident report needs its stack, the HUD line only its text (#2559).
+	failureCause: unknown;
 	cameraTarget: FollowCameraTarget | null;
 	cameraFade: ({ gid: number; time: number; } & CharacterFade) | null;
 	previewReady: boolean;

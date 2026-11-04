@@ -109,6 +109,9 @@ mixGain
 		disposed = false,
 		epoch = 0,
 		failure: string | null = null,
+		// The asset the standing failure came from, when it names one:
+		// a decode error without its file cannot be acted on (#2559).
+		failurePath: string | null = null,
 		job: {
 			id: number;
 			path: string;
@@ -514,6 +517,7 @@ unlock
 			}
 			context.resume().catch( error => {
 				failure = String( error );
+				failurePath = null;
 			} );
 		},
 		/*
@@ -596,6 +600,7 @@ step
 									uiRetryAt.set( path, clock + 2 );
 								}
 								failure = String( error );
+								failurePath = path;
 								for ( const [id, event] of pending ) {
 									if ( event.path === path ) {
 										pending.delete( id );
@@ -652,6 +657,7 @@ step
 							uiRetryAt.set( path, clock + 2 );
 						}
 						failure = result.error;
+						failurePath = path;
 						for ( const [id, event] of pending ) {
 							if ( event.path === path ) {
 								pending.delete( id );
@@ -764,6 +770,16 @@ snapshot
 		},
 		error: () => preparation.error() ?? failure ?? ambientFailure ?? music.error(),
 		/*
+		================
+		failure
+
+		The standing decode/take failure with the asset that produced
+		it (#2559): error() keeps the bare text for the HUD line, this
+		names the file for the incident report.
+		================
+		*/
+		failure: () => failure ? { path: failurePath, message: failure } : null,
+		/*
 ================
 captureAudio
 
@@ -797,6 +813,7 @@ reset
 			pending.clear();
 			seen.clear();
 			failure = null;
+			failurePath = null;
 			for ( const source of voices ) {
 				source.stop();
 			}

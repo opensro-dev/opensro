@@ -73,6 +73,11 @@ export type SessionCommand =
 		readonly incidentKind: "degraded" | "runtime" | "asset";
 		readonly code: string;
 		readonly message: string;
+		// A thrown error's stack, when the reporter caught one (#2559):
+		// the message is capped far below a useful stack, so the stack
+		// rides its own field (ClientIncident.stack) and is bounded by
+		// the session when it files.
+		readonly stack?: string;
 	}
 	| LoginCommand
 	| {

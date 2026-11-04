@@ -6084,6 +6084,17 @@ export function createUi(
 				minimapResources.error() ?? null,
 		/*
 		================
+		resourceFailure
+
+		The facts behind resourceError for the incident report (#2559),
+		in the same precedence: only the demand resources keep path and
+		attempt facts; the other families report their bare text, so
+		they hand back nothing here.
+		================
+		*/
+		resourceFailure: () => (worldShown ? null : resources.failure()) ?? null,
+		/*
+		================
 		entryReady
 
 		Basic HUD and Help artwork must be decoded before releasing world entry.
