@@ -289,8 +289,14 @@ var Settings = []Setting{
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
 	// Owner, 2026-10-15: a fixed ambush per caravan star (2/3/4/7/10).
 	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
-	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
+	// Owner, 2026-10-15: thief and hunter monsters move faster (20% then;
+	// 30% since #2474, 2026-11-04).
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job monsters attack as soon as they
+	// spawn (no spawn hold) and their damage is doubled.
+	{Env: "SRO_JOB_MONSTER_AGGRESSION", NomadVar: "job_monster_aggression", Default: "on"},
+	// Owner, 2026-11-04 (#2474): job trade transports move 30% faster.
+	{Env: "SRO_JOB_TRANSPORT_SPEED", NomadVar: "job_transport_speed", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-15 follow setting; the
 	// deployment default stays native ("off").
 	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "off"},

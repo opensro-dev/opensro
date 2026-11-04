@@ -908,9 +908,27 @@ variable "caravan_star_ambush" {
 }
 
 # job_monster_speed makes the job system's thief and hunter monsters walk
-# and run 20% faster (port-only, not native; owner decision 2026-10-15).
-# "off" is their original speed.
+# and run 30% faster (port-only, not native; owner decision 2026-10-15 at
+# 20%, raised 2026-11-04, #2474). "off" is their original speed.
 variable "job_monster_speed" {
+  type    = string
+  default = "on"
+}
+
+# job_monster_aggression makes the job system's thief and hunter monsters
+# attack as soon as they spawn (no spawn hold) and deal double damage
+# (port-only, not native; owner request 2026-11-04, #2474). "off" is the
+# native spawn hold and their authored damage.
+variable "job_monster_aggression" {
+  type    = string
+  default = "on"
+}
+
+# job_transport_speed makes job trade transports walk and run 30% faster
+# (port-only, not native; owner request 2026-11-04, #2474). The Item Mall
+# transports keep their own mall_transport_speed rule. "off" is their
+# original speed.
+variable "job_transport_speed" {
   type    = string
   default = "on"
 }
@@ -1374,6 +1392,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CARAVAN_BANDIT_CAP                  = var.caravan_bandit_cap
         SRO_CARAVAN_STAR_AMBUSH                 = var.caravan_star_ambush
         SRO_JOB_MONSTER_SPEED                   = var.job_monster_speed
+        SRO_JOB_MONSTER_AGGRESSION              = var.job_monster_aggression
+        SRO_JOB_TRANSPORT_SPEED                 = var.job_transport_speed
         SRO_TRANSPORT_FOLLOW                    = var.transport_follow
         SRO_TRANSPORT_FOLLOW_TETHER             = var.transport_follow_tether
         SRO_JOB_GOODS_TELEPORT                  = var.job_goods_teleport
