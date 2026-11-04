@@ -9,8 +9,9 @@ structs. This file proves the assembled thing a real process boots:
 shard catalog plus TRANSPORT_* environment plus the public switch,
 through loadOwnedShard and gameWorldTransportServer - the one assembly
 main() boots with - all the way to a WELCOME over the UDP listener
-bound on a non-loopback address. It also proves the refusals hold at
-this level:
+under the public posture (the started listener binds loopback; the
+public bind itself is accepted, unbound, while assembling). It also
+proves the refusals hold at this level:
 a bind change without the switch, the switch without a key file, and
 the switch without allowed origins each build nothing, and a forged
 admission ticket never reaches WELCOME.
@@ -106,16 +107,18 @@ func setWtPublicCatalog(t *testing.T) {
 setWtPublicEnv
 
 Pin every environment value the assembled posture reads, so a value
-leaking from the host shell cannot change what a case proves. The UDP
-listener binds 0.0.0.0 - the non-loopback shape that is public the
-moment the switch allows it; the TCP listener stays on loopback, as
-behind a TLS edge.
+leaking from the host shell cannot change what a case proves. wtAddr
+is the UDP listener's shape: the cases that start the server pass
+loopback, the cases that only assemble pass the 0.0.0.0 public shape -
+never bound, because a non-loopback bind is what makes Windows
+Firewall prompt for the test binary. The TCP listener stays on
+loopback, as behind a TLS edge.
 ================
 */
-func setWtPublicEnv(t *testing.T, certFile, keyFile, allowedOrigins string, public bool) {
+func setWtPublicEnv(t *testing.T, wtAddr, certFile, keyFile, allowedOrigins string, public bool) {
 	t.Helper()
 	setWtPublicCatalog(t)
-	t.Setenv("TRANSPORT_WT_ADDR", "0.0.0.0:0")
+	t.Setenv("TRANSPORT_WT_ADDR", wtAddr)
 	t.Setenv("TRANSPORT_WS_ADDR", "127.0.0.1:0")
 	t.Setenv("TRANSPORT_CERT_FILE", certFile)
 	t.Setenv("TRANSPORT_CERT_DIR", t.TempDir())
@@ -165,7 +168,7 @@ func startPublicTransport(t *testing.T) *transport.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setWtPublicEnv(t, certificate.CertPath, certificate.KeyPath, wtPublicOrigin, true)
+	setWtPublicEnv(t, "127.0.0.1:0", certificate.CertPath, certificate.KeyPath, wtPublicOrigin, true)
 	srv, err := assembleGameWorldTransport(t)
 	if err != nil {
 		t.Fatalf("assembling the public posture: %v", err)
@@ -228,8 +231,8 @@ dialAndWelcome
 One WebTransport admission against the assembled listener: normal PKI
 verification against the fixture pair, narrowed by the pin to the
 certificate the server was assembled with, then HELLO and the read for
-WELCOME. The dial goes to the loopback interface of the 0.0.0.0 bind -
-a public bind is what the posture promises, not a routable address.
+WELCOME. The dial goes to the listener's loopback bind: the assembled
+posture is what is proven public, not a routable address.
 ================
 */
 func dialAndWelcome(ctx context.Context, srv *transport.Server, ticket string) (*transport.Welcome, error) {
@@ -305,8 +308,10 @@ func dialAndWelcome(ctx context.Context, srv *transport.Server, ticket string) (
 ================
 TestGameWorldServesPublicWebTransport
 
-A fresh ticket earns WELCOME over the publicly bound UDP listener, and
-the certificate served there is the one the TCP endpoint advertises -
+A fresh ticket earns WELCOME over the public posture's UDP listener
+(bound on loopback in this test; the public bind itself is accepted,
+unbound, in TestGameWorldAssemblesPublicWebTransportBind), and the
+certificate served there is the one the TCP endpoint advertises -
 everything reached through the GameWorld's own catalog and environment.
 ================
 */
@@ -354,7 +359,7 @@ func TestGameWorldRefusesUnsafeWebTransportPostures(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setWtPublicEnv(t, tc.cert, tc.key, tc.origins, tc.public)
+			setWtPublicEnv(t, "0.0.0.0:0", tc.cert, tc.key, tc.origins, tc.public)
 			srv, err := assembleGameWorldTransport(t)
 			if err == nil {
 				t.Fatalf("unsafe posture assembled (server %v)", srv)
@@ -373,4 +378,25 @@ func TestGameWorldRefusesUnsafeWebTransportPostures(t *testing.T) {
 			t.Fatal("forged ticket reached WELCOME on the public posture")
 		}
 	})
+}
+
+/*
+================
+TestGameWorldAssemblesPublicWebTransportBind
+
+With the switch on, a public (non-loopback) bind is accepted while
+assembling. The acceptance is proven here, unbound: the started
+posture tests bind loopback, and a wildcard bind in a test is what
+makes Windows Firewall prompt for every fresh test binary.
+================
+*/
+func TestGameWorldAssemblesPublicWebTransportBind(t *testing.T) {
+	certificate, err := transport.LoadCertificate("", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	setWtPublicEnv(t, "0.0.0.0:0", certificate.CertPath, certificate.KeyPath, wtPublicOrigin, true)
+	if _, err := assembleGameWorldTransport(t); err != nil {
+		t.Fatalf("public bind refused while assembling: %v", err)
+	}
 }
