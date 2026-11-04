@@ -105,6 +105,17 @@ func (e HalloweenEvent) WindowValid() bool { return !e.startsAt.IsZero() && e.en
 
 /*
 ================
+HalloweenEvent.Window
+
+The configured window, and whether it is usable.
+================
+*/
+func (e HalloweenEvent) Window() (startsAt, endsAt time.Time, valid bool) {
+	return e.startsAt, e.endsAt, e.WindowValid()
+}
+
+/*
+================
 HalloweenEvent.ActiveAt
 
 The event runs from the window's start up to (not including) its end.
