@@ -456,6 +456,12 @@ type Runtime struct {
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
 
+	// SunDrops counts Sun drops for the #2538 measurement cycle
+	// (sundrops.go; port-only, not native, count-only). Nil, the
+	// default, counts nothing; the composition root installs the
+	// counter only when EnvSunDropCount is on.
+	SunDrops SunDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool
