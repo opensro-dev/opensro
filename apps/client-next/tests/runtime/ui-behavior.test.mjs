@@ -1503,31 +1503,19 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
 		step( 8320 );
 		assert.equal( labelOf( "rebirth-point" ), pointLabel );
-		// 52ff1b: an entered flag-war participant's first button offers
-		// the camp resurrection ahead of even the team-death label.
+		// 52ff1b is dormant: the native camp-resurrection label tests a
+		// marker no reachable writer sets, so a running flag war never
+		// changes the death box; the team-death label stands (#2428).
 		f.state = {
 			...f.state,
 			gameplay: {
 				...f.state.gameplay,
 				rebirthMode: 2,
-				flagWar: { timerEndsAt: 1, carrierGid: 0, entered: true }
+				flagWar: { timerEndsAt: 1, carrierGid: 0 }
 			}
 		};
 		step( 8330 );
-		const revivalLabel = labelOf( "rebirth-point" );
-		assert.ok(
-			revivalLabel && revivalLabel !== pointLabel && revivalLabel !== standingLabel,
-			"an entered flag-war death offers the camp resurrection"
-		);
-		f.state = {
-			...f.state,
-			gameplay: {
-				...f.state.gameplay,
-				flagWar: { timerEndsAt: 0, carrierGid: 0, entered: false }
-			}
-		};
-		step( 8340 );
-		assert.equal( labelOf( "rebirth-point" ), standingLabel, "leaving the match restores the team-death label" );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "a flag war does not change the death box" );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );

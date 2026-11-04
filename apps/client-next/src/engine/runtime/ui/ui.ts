@@ -24916,19 +24916,10 @@ export function createUi(
 				// fell, so the first button reads "standing"; the server's
 				// rebirth (50FEE0) revives it there whatever the choice.
 				const team = game?.rebirthMode === TEAM_DEATH_MODE;
-				// 52FF1B: an entered flag-war participant's first button
-				// offers the camp resurrection ahead of the team-death
-				// standing label; the configure tests the entered marker
-				// ([0xCE883C] != 0xFF) before the mode-2 case (52FF33).
-				const flagWar = game?.flagWar?.entered === true;
 				for (
 					const [id, key, r] of [ [
 						"rebirth-point",
-						flagWar ?
-							"UIIT_MSG_FLAGWAR_GO_TO_REVIVAL" :
-							team ?
-							"UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" :
-							"UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON",
+						team ? "UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" : "UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON",
 						layout.point
 					], [
 						"rebirth-alternate",

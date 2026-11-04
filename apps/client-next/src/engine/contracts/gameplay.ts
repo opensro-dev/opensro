@@ -843,14 +843,7 @@ export interface GameplayState extends MoverPublication {
 	// The selected NPC's flag-war row mode (1 sign-up, 2 cancel).
 	readonly targetFlagWarMode?: number;
 	// The flag-war timer and carrier, owned by the gameplay worker.
-	// entered: the local player holds a team in the running match
-	// (missionStart taken, gameStart not yet seen); the death box
-	// reads it for the camp-resurrection label (52ff1b).
-	readonly flagWar?: {
-		readonly timerEndsAt: number;
-		readonly carrierGid: number;
-		readonly entered: boolean;
-	};
+	readonly flagWar?: { readonly timerEndsAt: number; readonly carrierGid: number; };
 	readonly targetTaxRate?: number;
 	// targetGateRows is a quest exit gate's rows (talk bit 0x8000000):
 	// each a row of action 0x2A whose click sends 0x7495 type 3.
