@@ -459,16 +459,22 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				return false
 			}
 			// Port-only, not native (halloween.go): a sealed event
-			// helmet is never sold, however sellable its row is.
+			// helmet is never sold, however sellable its row is. The
+			// refusal is the one an unsellable row gets from the
+			// merchant (ErrCodeCannotDealAtShop).
 			if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+				refusal = wire.ErrCodeCannotDealAtShop
 				return false
 			}
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false
 			}
-			admitted := commerceSaleAdmitted(ref)
-			if !admitted || !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
+			if !commerceSaleAdmitted(ref) {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
+			if !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
 				return false
 			}
 			if code := rt.tradeAdmission(division, c, npc, item); code != 0 {
