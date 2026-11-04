@@ -178,7 +178,9 @@ go through the verified hints and fall back to the gid resolve
 whenever a hint no longer names the gid, so the commit lands - or
 is refused - exactly as commitActivity's. The gate runs this once
 per due actor per tick, which is where the profile charged the
-storages' gid-to-slot maps.
+storages' gid-to-slot maps. Validation rides only the full write:
+a cadence-only commit differs from the validated stored row in
+the stamp alone (#2029).
 ================
 */
 func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
@@ -192,12 +194,16 @@ func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monst
 	if !exists || current != before || state.instances.isDeadAt(monsterSlot, gid) {
 		return false
 	}
-	if err := after.Validate(); err != nil {
-		panic(err)
-	}
 	if cadenceOnlyWrite(current, after) {
+		// No Validate here: the pair differs only in the cadence
+		// stamp, and the stored row passed validation when its own
+		// commit wrote it, so the check would re-prove the row the
+		// guard just read. The full write below keeps it (#2029).
 		state.movers.setActivityAt(slot, gid, after.Activity)
 	} else {
+		if err := after.Validate(); err != nil {
+			panic(err)
+		}
 		state.movers.setAt(slot, gid, after)
 		// Approach membership derives from mode, target and instance
 		// eligibility, none of which a cadence-only write moves (and
