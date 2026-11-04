@@ -277,10 +277,14 @@ export function createFrontend(
 			) {
 				// The player sees only "(S2)": report the stage and the session's
 				// reason, so a refused entry is never silent (client-report).
+				// A maintenance refusal is a designed answer, not an incident:
+				// the typed refusal the mint carried files it apart (#2557).
 				send( {
 					kind: "client-report",
 					incidentKind: "runtime",
-					code: "world_entry_rejected",
+					code: session.entryFailure?.refusal === "MAINTENANCE" ?
+						"world_entry_maintenance" :
+						"world_entry_rejected",
 					message:
 						`Entry rejected (S2) at ${flow.snapshot().phase}/${
 							entryPending ? "pending" : entering ? "entering" : "loading"

@@ -358,3 +358,83 @@ test("a refused entry files its incident with the entering character", async t =
 	const rejection = reports.find( report => report.code === "world_entry_rejected" );
 	assert.equal( rejection?.character, "fixture" );
 });
+
+/*
+================
+mintRefusalPublishesTypedRefusal
+
+The EnterWorld mint's structured refusal reaches the published state
+as the typed refusal on the entry failure, so the frontend can file a
+maintenance refusal apart from a real rejection without matching the
+error text (#2557). The world files no incident of its own for an
+answered mint refusal.
+================
+*/
+test("a mint refusal publishes its typed refusal on the entry failure", async t => {
+	for (
+		const [code, errorPattern] of /** @type {[string, RegExp][]} */ ([
+			[ "MAINTENANCE", /under maintenance/ ],
+			[ "UNKNOWN_CHARACTER", /^Admission request failed$/ ]
+		])
+	) {
+		/** @type {{ onopen: () => void; receive: ( op: number, payload: Uint8Array ) => void; } | undefined} */
+		let socket;
+		const reports = [];
+		class Socket {
+			static OPEN = 1;
+			readyState = 1;
+			bufferedAmount = 0;
+			/** @type {(( event: { data: ArrayBuffer; } ) => void) | undefined} */
+			onmessage;
+			constructor() {
+				socket = /** @type {any} */ (this);
+			}
+			send() {}
+			close() {}
+			/** @param {number} op @param {Uint8Array} payload */
+			receive( op, payload ) {
+				const bytes = new Uint8Array( payload.length + 2 );
+				new DataView( bytes.buffer ).setUint16( 0, op, true );
+				bytes.set( payload, 2 );
+				this.onmessage?.( { data: bytes.buffer } );
+			}
+		}
+		const descriptor = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
+		Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true } );
+		t.after( () => {
+			if ( descriptor ) Object.defineProperty( globalThis, "WebSocket", descriptor );
+			else Reflect.deleteProperty( globalThis, "WebSocket" );
+		} );
+		t.mock.method( globalThis, "fetch", async url => {
+			if ( url.endsWith( "/client/incident" ) ) {
+				reports.push( url );
+				return Response.json( { ok: true, id: "fixture" } );
+			}
+			if ( url.endsWith( "/auth/enterworld-token" ) ) return Response.json( { ok: false, code } );
+			return Response.json( url.endsWith( "/title/login" ) ? response : { ok: true, token: "fixture-ticket" } );
+		} );
+		const session = createSession();
+		session.command( command );
+		session.step( 0 );
+		await settle();
+		session.step( 1 );
+		session.command( { kind: "enter-world", character: "fixture" } );
+		await settle();
+		session.step( 2 );
+		defined( socket ).onopen();
+		const welcome = new Uint8Array( 27 );
+		welcome[0] = 2;
+		welcome[10] = 16;
+		welcome.fill( 7, 11 );
+		defined( socket ).receive( 2, welcome );
+		session.step( 3 );
+		await settle();
+		const bounced = session.step( 4 );
+		await settle();
+		assert.equal( bounced?.phase, "character-select", code );
+		assert.equal( bounced?.entryFailure?.refusal, code, code );
+		assert.match( String( bounced?.error ), errorPattern, code );
+		assert.equal( reports.length, 0, code );
+		session.dispose();
+	}
+});
