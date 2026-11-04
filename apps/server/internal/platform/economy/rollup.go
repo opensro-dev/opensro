@@ -89,8 +89,8 @@ The window's groups from the folded entries: filtered by division,
 folded into the window's buckets (an exact fold at both contract
 sizes, since both divide the day into whole hours), oldest bucket
 first, settled like readGroups settles. The window counts whole
-buckets, which is the shape every caller sends (a bucket-aligned
-from, a to at or after the snapshot's newest row).
+buckets: parseWindow aligns every window to its buckets before a
+caller sees it, so the fold and the ledger query count the same rows.
 ================
 */
 func rollupGroups(entries []rollupEntry, w window) []group {

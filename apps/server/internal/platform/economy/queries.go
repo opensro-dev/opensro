@@ -104,7 +104,9 @@ parseWindow
 
 The bucket (default 1d), to (default now), from (default: the most
 buckets that end at to), refused when the buckets it touches exceed
-maxBuckets.
+maxBuckets. The contract is whole buckets: from is floored to its
+bucket's first second and to raised to its bucket's last, so every
+answer counts the buckets it touches whole, never a cut of one.
 ================
 */
 func parseWindow(bucket, from, to, division string, now time.Time) (window, error) {
@@ -131,6 +133,10 @@ func parseWindow(bucket, from, to, division string, now time.Time) (window, erro
 	if w.from > w.to {
 		return window{}, queryError{"bad_bucket", "from is after to"}
 	}
+	// Whole buckets are the contract (see the banner): align before
+	// the width check counts the buckets the window touches.
+	w.from = w.from / w.size * w.size
+	w.to = (w.to/w.size+1)*w.size - 1
 	if w.to/size-w.from/size+1 > maxBuckets {
 		return window{}, queryError{"range_too_wide", fmt.Sprintf("more than %d buckets", maxBuckets)}
 	}

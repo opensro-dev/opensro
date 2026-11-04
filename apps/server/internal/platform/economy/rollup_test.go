@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 )
 
 /*
@@ -171,6 +172,83 @@ func TestRollupMatchesReadGroups(t *testing.T) {
 		if division != "d2" && len(got) == 0 {
 			t.Fatalf("division %q: the day-8 spike raised no flag", division)
 		}
+	}
+}
+
+/*
+================
+TestParseWindowCountsWholeBuckets
+
+Whole buckets are the contract, not the caller's habit: a parsed
+window with an unaligned from, and the default window with neither
+bound sent, both land on bucket edges, and on those aligned windows
+the fold and the ledger query still agree - series, flows, and the
+flags, whose lookback from an aligned from is whole days on both
+paths by construction.
+================
+*/
+func TestParseWindowCountsWholeBuckets(t *testing.T) {
+	db := seedRollupLedger(t)
+	entries, err := readRollup(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics := []string{"gold_minted", "gold_burned", "gold_net", "reason:monster_gold", "reason:stall_sale"}
+	now := time.Unix(dayStart+9*86400+13*3600+42*60+17, 0)
+	cases := []struct {
+		name     string
+		bucket   string
+		from, to string
+		wantFrom int64
+		wantTo   int64
+	}{
+		{"unaligned from and to", "1h",
+			strconv.FormatInt(dayStart+2*86400+5*3600+301, 10), strconv.FormatInt(dayStart+2*86400+13*3600+301, 10),
+			dayStart + 2*86400 + 5*3600, dayStart + 2*86400 + 14*3600 - 1},
+		{"default window", "1h", "", "",
+			(now.Unix() - 3600*(maxBuckets-1)) / 3600 * 3600, (now.Unix()/3600+1)*3600 - 1},
+		{"unaligned from, a day window", "1d",
+			strconv.FormatInt(dayStart+7*86400+3600, 10), "",
+			dayStart + 7*86400, dayStart + 10*86400 - 1},
+	}
+	for _, tc := range cases {
+		parsed, err := parseWindow(tc.bucket, tc.from, tc.to, "", now)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if parsed.from != tc.wantFrom || parsed.to != tc.wantTo {
+			t.Fatalf("%s: window %d..%d, want whole buckets %d..%d", tc.name, parsed.from, parsed.to, tc.wantFrom, tc.wantTo)
+		}
+		for _, division := range []string{"", "d1", "d2"} {
+			w := parsed
+			w.division = division
+			want, err := readGroups(db, w)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := rollupGroups(entries, w)
+			for _, metric := range metrics {
+				if a, b := foldSeries(metric, want), foldSeries(metric, got); !reflect.DeepEqual(a, b) {
+					t.Fatalf("%s %s %s division %q: series differ\nwant %+v\ngot  %+v", tc.name, w.bucket, metric, division, a, b)
+				}
+			}
+			wantBuckets, wantReasons := foldFlows(w, want)
+			gotBuckets, gotReasons := foldFlows(w, got)
+			if !reflect.DeepEqual(wantBuckets, gotBuckets) || !reflect.DeepEqual(wantReasons, gotReasons) {
+				t.Fatalf("%s %s division %q: flows differ", tc.name, w.bucket, division)
+			}
+		}
+	}
+	// The day case's flags on the aligned window: both paths hold the
+	// day-8 spike against the same whole earlier days.
+	w, err := parseWindow("1d", strconv.FormatInt(dayStart+7*86400+3600, 10), "", "d1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := referenceFlags(t, db, w, "d1")
+	got := netMintFlags(entries, w, "d1")
+	if !reflect.DeepEqual(want, got) || len(got) == 0 {
+		t.Fatalf("flags on the aligned window differ or never fired\nwant %+v\ngot  %+v", want, got)
 	}
 }
 
