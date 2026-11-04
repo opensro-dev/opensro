@@ -90,8 +90,12 @@ type gameWorldApplication struct {
 	controlErrors   <-chan error
 	reporter        *shard.Reporter
 	ticker          *simulation.Ticker
-	readiness       *readiness.Gate
-	leaseOwned      bool
+	// returnArrivals is the action runtime's return lane
+	// (RunReturnArrivals): it completes the return-scroll arrivals
+	// the tick hands off, beside the ticker in Run.
+	returnArrivals func(context.Context)
+	readiness      *readiness.Gate
+	leaseOwned     bool
 	// population and shardID let Run hold admission until the boot fill.
 	population *simulation.MonsterState
 	shardID    string
@@ -368,6 +372,7 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("peer item references: %w", err)
 	}
 	application.ticker = gameplay.newMissionTicker(peerReferences)
+	application.returnArrivals = gameplay.items.RunReturnArrivals
 	application.ticker.Commit = tickCommit(authority.store)
 	configureReadiness(ts, authority.store, application.readiness, application.ticker)
 	gameplay.installFollowFixture(authority.agentAPI, application.ticker)
@@ -546,6 +551,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 		application.ticker.Run(groupContext)
 		return nil
 	})
+	if application.returnArrivals != nil {
+		group.Go(func() error {
+			application.returnArrivals(groupContext)
+			return nil
+		})
+	}
 	if application.economy != nil {
 		group.Go(func() error {
 			application.economy.Run(groupContext)

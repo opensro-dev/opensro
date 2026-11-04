@@ -12,7 +12,6 @@ import (
 	"encoding/binary"
 	"math"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/wait"
 )
 
 /*
@@ -48,6 +48,19 @@ useReturn
 */
 func useReturn(rt *Runtime, c *enterworld.Character) OpResult {
 	return rt.HandleItemUse(testDivision, c, []byte{21, 0xec, 9})
+}
+
+/*
+================
+advanceAndDrainReturns
+
+One due tick plus the return lane's drain: the pair every completion
+test drives now that the arrival runs off the tick (#2143).
+================
+*/
+func advanceAndDrainReturns(rt *Runtime, now int64) {
+	rt.advanceReturnScrolls(now)
+	rt.processReturnArrivals()
 }
 
 /*
@@ -117,6 +130,10 @@ func TestReturnScrollCommitsConsumptionAndServerTimedReentry(t *testing.T) {
 			}
 			clock.Advance(time.Millisecond)
 			rt.TickHook()(clock.NowMs())
+			if len(sent) != 0 {
+				t.Fatal("arrival completed on the tick instead of the return lane")
+			}
+			rt.processReturnArrivals()
 			if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 				t.Fatalf("missing native reentry: %+v", sent)
 			}
@@ -159,6 +176,7 @@ func TestFreshCharacterReturnScrollLandsAtJanganGate(t *testing.T) {
 	useReturn(rt, c)
 	clock.Advance(5000 * time.Millisecond)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("return scroll did not re-enter: %+v", sent)
 	}
@@ -237,7 +255,7 @@ func TestReturnDeathCancelsTheCast(t *testing.T) {
 	hp := int64(100)
 	c.CurrentHP = &hp
 	clock.Advance(10 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != before {
 		t.Fatalf("the revived character was teleported to %+v", got)
 	}
@@ -260,7 +278,7 @@ func TestReturnBerserkCompletesAndEntryFailureRollsBack(t *testing.T) {
 	key := simulation.WorldKey(testDivision, c.Name)
 	c.NativeBodyStatus = 1
 	clock.Advance(5 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 {
 		t.Fatal("berserk held the teleport past its cast timer")
 	}
@@ -278,7 +296,7 @@ func TestReturnBerserkCompletesAndEntryFailureRollsBack(t *testing.T) {
 	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
 	rt.deps = &failedWarpEntry{rt.deps.(*enterworld.Deps)}
 	clock.Advance(5 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	if _, pending := rt.returnCasts.Load(key); pending {
 		t.Fatal("failed entry left the cast pending instead of completing it")
 	}
@@ -302,7 +320,7 @@ func TestReturnCorpseIsNeverTeleported(t *testing.T) {
 	zero := int64(0)
 	c.CurrentHP = &zero
 	clock.Advance(5 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	if _, pending := rt.returnCasts.Load(simulation.WorldKey(testDivision, c.Name)); pending || c.NativeTeleportMode != 0 ||
 		missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
 		t.Fatal("a corpse was teleported or left pending")
@@ -311,17 +329,17 @@ func TestReturnCorpseIsNeverTeleported(t *testing.T) {
 
 /*
 ================
-TestReturnScrollWaveDrainsAcrossTicks
+TestReturnScrollWaveHandsOffToTheLane
 
-A wave of casts coming due on the same tick no longer runs every
-arrival inline (#2143): one advance completes at most
-maxReturnScrollCompletionsPerTick jobs, oldest first, and the rest
-stay due for later ticks. The phantom jobs name characters the
-division does not hold, so each processed job shows up as a removed
-cast; the real cast behind them must still complete, one tick late.
+A wave of casts coming due on the same tick runs no arrival on the
+tick at all (#2143): one advance queues every due cast and completes
+none, and the return lane then drains the queue oldest first. The
+phantom jobs name characters the division does not hold, so each one
+shows up as a removed cast; the real cast behind them must still
+arrive, and a cast not yet due is not even queued.
 ================
 */
-func TestReturnScrollWaveDrainsAcrossTicks(t *testing.T) {
+func TestReturnScrollWaveHandsOffToTheLane(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 5000)
 	want := simulation.Spawn{RegionID: 25416, X: 703, Y: 42, Z: 1575, Angle: 12345}
 	c.World.RebirthPoint = worldSpawnFromMission(want)
@@ -330,6 +348,8 @@ func TestReturnScrollWaveDrainsAcrossTicks(t *testing.T) {
 		rt.returnCasts.Store(simulation.WorldKey(testDivision, name),
 			pendingReturn{division: testDivision, name: name, due: planted})
 	}
+	rt.returnCasts.Store(simulation.WorldKey(testDivision, "wave-late"),
+		pendingReturn{division: testDivision, name: "wave-late", due: planted + 60000})
 	useReturn(rt, c)
 	key := simulation.WorldKey(testDivision, c.Name)
 
@@ -337,19 +357,57 @@ func TestReturnScrollWaveDrainsAcrossTicks(t *testing.T) {
 	rt.advanceReturnScrolls(clock.NowMs())
 	remaining := 0
 	rt.returnCasts.Range(func(_, _ any) bool { remaining++; return true })
-	if remaining != 2 {
-		t.Fatalf("casts left after one advance = %d, want 2 (one phantom plus the real cast)", remaining)
+	if remaining != 5 {
+		t.Fatalf("casts left after the handing-off tick = %d, want 5 (nothing completed)", remaining)
 	}
 	if _, pending := rt.returnCasts.Load(key); !pending || c.NativeTeleportMode != 1 {
-		t.Fatal("the real cast completed inside the wave's first tick")
+		t.Fatal("the tick completed a wave arrival inline")
 	}
 
-	rt.advanceReturnScrolls(clock.NowMs())
+	rt.processReturnArrivals()
 	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 {
-		t.Fatal("the queued cast did not complete on the next tick")
+		t.Fatal("the lane did not complete the queued cast")
 	}
 	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != want {
 		t.Fatalf("queued completion arrived at %+v, want %+v", got, want)
+	}
+	remaining = 0
+	rt.returnCasts.Range(func(_, _ any) bool { remaining++; return true })
+	if remaining != 1 {
+		t.Fatalf("casts left after the drain = %d, want 1 (the cast not yet due)", remaining)
+	}
+}
+
+/*
+================
+TestReturnScrollArrivalLeavesTheTick
+
+The tick hands a due arrival to the return lane instead of running the
+world transfer inline (#2143): after the due tick the cast is still
+pending, the character unmoved and no frame pushed. The lane's side of
+the contract (the drain completes what the tick queued, oldest first)
+is covered by TestReturnScrollWaveHandsOffToTheLane.
+================
+*/
+func TestReturnScrollArrivalLeavesTheTick(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 5000)
+	want := simulation.Spawn{RegionID: 25416, X: 703, Y: 42, Z: 1575, Angle: 12345}
+	c.World.RebirthPoint = worldSpawnFromMission(want)
+	var sent []wire.Frame
+	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
+	useReturn(rt, c)
+	key := simulation.WorldKey(testDivision, c.Name)
+	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
+	clock.Advance(5 * time.Second)
+	rt.TickHook()(clock.NowMs())
+	if _, pending := rt.returnCasts.Load(key); !pending || c.NativeTeleportMode != 1 {
+		t.Fatal("the due tick completed the arrival inline instead of handing it to the lane")
+	}
+	if len(sent) != 0 {
+		t.Fatalf("the due tick pushed arrival frames inline: %+v", sent)
+	}
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got == want || got != before {
+		t.Fatalf("the due tick moved the character to %+v", got)
 	}
 }
 
@@ -422,7 +480,7 @@ func TestReturnCompanionBranchesAndNewWorldProjection(t *testing.T) {
 			t.Fatal("pet blocked return or snapshot mutated")
 		}
 		clock.Advance(5 * time.Second)
-		rt.advanceReturnScrolls(clock.NowMs())
+		advanceAndDrainReturns(rt, clock.NowMs())
 		if c.NativeTeleportMode != 0 || !c.ActiveCOS.Summoned || c.ActiveCOS.GID != gid {
 			t.Fatal("pet identity lost")
 		}
@@ -496,65 +554,18 @@ func TestReturnScrollQuestBlockPrecedesConsumptionAndCasting(t *testing.T) {
 
 /*
 ================
-TestCompleteReturnScrollBoundsTheDivisionWait
+TestReturnArrivalLaneWaitsOutAHeldDivisionLane
 
-While the division lane is held elsewhere, a due return scroll waits
-at most its lane bound: past it no completion is attempted and the
-step names the cut (returnScrollDivisionCut), rather than charging
-the lane holder's time to this hook (#2143, #1820 E). Once the lane
-frees, the same call completes. The job here is a ghost: the
-completion finds no cast and returns.
+A cast whose division lane is held elsewhere waits on the return
+lane, never on the tick (#2143: the live 100-211 ms
+advanceReturnScrolls ticks were unbounded lane waits and inline
+arrival work). The tick queues the cast and returns at once; the
+lane's drain parks behind the held lane without completing or
+consuming the cast, and completes it once the lane frees.
 ================
 */
-func TestCompleteReturnScrollBoundsTheDivisionWait(t *testing.T) {
-	rt, clock, _, _ := newCombatTestRuntime(t, 1)
-	var mu sync.Mutex
-	var steps []string
-	rt.Steps.Slow = func(name string, elapsed time.Duration) {
-		mu.Lock()
-		steps = append(steps, name)
-		mu.Unlock()
-	}
-	unlock := rt.lockDivision(testDivision)
-	_, _, attempted := rt.completeReturnScrollInDivision(
-		pendingReturn{division: testDivision, name: "ghost"}, clock.Now().UnixMilli(), time.Now().Add(time.Millisecond),
-	)
-	if attempted {
-		t.Fatal("completion ran while its division lane stayed held")
-	}
-	mu.Lock()
-	sawCut := false
-	for _, name := range steps {
-		if name == "returnScrollDivisionCut" {
-			sawCut = true
-		}
-	}
-	mu.Unlock()
-	if !sawCut {
-		t.Fatalf("slow steps = %v, want returnScrollDivisionCut among them", steps)
-	}
-	unlock()
-	if _, _, attempted := rt.completeReturnScrollInDivision(
-		pendingReturn{division: testDivision, name: "ghost"}, clock.Now().UnixMilli(), time.Now().Add(5*time.Second),
-	); !attempted {
-		t.Fatal("completion did not run after the lane was released")
-	}
-}
-
-/*
-================
-TestAdvanceReturnScrollsDefersBehindBusyLane
-
-A cast whose division lane is held past the lane bound stays due and
-the tick returns at once (#2143: the live 100-211 ms
-advanceReturnScrolls ticks were two unbounded lane waits); the next
-tick after the lane frees completes it.
-================
-*/
-func TestAdvanceReturnScrollsDefersBehindBusyLane(t *testing.T) {
+func TestReturnArrivalLaneWaitsOutAHeldDivisionLane(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 1000)
-	defer func(bound time.Duration) { returnScrollLaneBound = bound }(returnScrollLaneBound)
-	returnScrollLaneBound = time.Millisecond
 	resets := 0
 	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
 		for _, frame := range frames {
@@ -567,21 +578,27 @@ func TestAdvanceReturnScrollsDefersBehindBusyLane(t *testing.T) {
 	key := simulation.WorldKey(testDivision, c.Name)
 	clock.Advance(2 * time.Second)
 	unlock := rt.lockDivision(testDivision)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		rt.advanceReturnScrolls(clock.NowMs())
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("advanceReturnScrolls parked behind a held division lane")
-	}
-	if _, pending := rt.returnCasts.Load(key); !pending || c.NativeTeleportMode == 0 || resets != 0 {
-		t.Fatal("the cast completed, or was consumed, behind a held division lane")
-	}
-	unlock()
 	rt.advanceReturnScrolls(clock.NowMs())
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		rt.processReturnArrivals()
+	}()
+	wait.Consistently(t, 100*time.Millisecond, "the arrival stays queued behind the held lane", func() bool {
+		select {
+		case <-drained:
+			return false
+		default:
+		}
+		_, pending := rt.returnCasts.Load(key)
+		return pending && c.NativeTeleportMode != 0 && resets == 0
+	})
+	unlock()
+	select {
+	case <-drained:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the lane did not complete the arrival once the division lane freed")
+	}
 	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 || resets != 1 {
 		t.Fatal("the deferred cast did not complete once the lane freed")
 	}
