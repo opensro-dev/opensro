@@ -26,15 +26,16 @@ import (
 ================
 bootstrapBoundSession
 
-An attached session on a hub whose entry bound is short enough for a
-test to watch the watchdog fire.
+An attached session on a hub whose entry bound the test drives by
+hand: the hub runs on a manual clock (#2445), so the watchdog sees
+the bound pass only when the test advances it.
 ================
 */
-func bootstrapBoundSession(t *testing.T, bound time.Duration) *Session {
+func bootstrapBoundSession(t *testing.T, bound time.Duration) (*Session, *manualClock) {
 	t.Helper()
 	cfg := testCfg()
 	cfg.EntryBootstrapBound = bound
-	hub := newHub(cfg)
+	hub, clock := manualClockHub(t, cfg)
 	sess, err := hub.createSession()
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +44,10 @@ func bootstrapBoundSession(t *testing.T, bound time.Duration) *Session {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hub.closeSession(sess, nil) })
-	return sess
+	wait.Eventually(t, 5*time.Second, "the keepalive loop holds its ticker", func() bool {
+		return clock.tickerCount() == 1
+	})
+	return sess, clock
 }
 
 /*
@@ -58,8 +62,10 @@ keep postponing forever.
 */
 func TestSceneBootstrapStuckClosesAtEntryBound(t *testing.T) {
 	hook := logtest.NewGlobal()
-	sess := bootstrapBoundSession(t, 150*time.Millisecond)
+	sess, clock := bootstrapBoundSession(t, 150*time.Millisecond)
 	sess.BeginSceneAdmission()
+	// The bound passes only now, by the test's own hand.
+	clock.Advance(200 * time.Millisecond)
 	wait.Eventually(t, 6*time.Second, "the watchdog closes the unenqueued admission", func() bool {
 		select {
 		case <-sess.Done():
@@ -89,15 +95,16 @@ because a slow client-side scene load is not a wedged entry.
 ================
 */
 func TestSceneBootstrapEnqueuedSurvivesEntryBound(t *testing.T) {
-	sess := bootstrapBoundSession(t, 150*time.Millisecond)
+	sess, clock := bootstrapBoundSession(t, 150*time.Millisecond)
 	sess.BeginSceneAdmission()
 	sess.MarkSceneBootstrapEnqueued()
-	wait.Consistently(t, 3*time.Second, "an enqueued bootstrap is never watchdog-closed", func() bool {
-		select {
-		case <-sess.Done():
-			return false
-		default:
-			return true
-		}
-	})
+	// Twenty bounds pass, then one more tick proves the watchdog's
+	// checks for them have all run: the session must still stand.
+	clock.Advance(3 * time.Second)
+	clock.Advance(0)
+	select {
+	case <-sess.Done():
+		t.Fatal("an enqueued bootstrap was watchdog-closed past the entry bound")
+	default:
+	}
 }
