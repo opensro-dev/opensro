@@ -107,8 +107,8 @@ jobs:
       - name: Pet design
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:pet-design
-      # ops/release's receivers and compatibility.json are server files; on
-      # Linux this also runs the POSIX-only tests Windows skips.
+      # The client protocol against config/compatibility.json, the release
+      # declaration the server ships.
       - name: Release
         if: ${{ !cancelled() }}
         run: node scripts/task.mjs check:release
