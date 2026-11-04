@@ -252,11 +252,11 @@ test("Enter confirms only when the chat box does not own the key", () => {
 });
 
 test("the pending ask reconciles away with its row or the world", () => {
-	const hud = createMallUseHud(), row = { slot: 13, refObjId: 1 };
+	const hud = createMallUseHud(), row = defined( mallBag().inventory[0] );
 	hud.ask( row );
 	assert.equal( hud.reconcile( [ row ], true ), false, "an unchanged row keeps the ask" );
 	assert.ok( hud.pending() !== null );
-	assert.equal( hud.reconcile( [ { slot: 13, refObjId: 2 } ], true ), true, "a changed row drops it" );
+	assert.equal( hud.reconcile( [ { ...row, refObjId: 2 } ], true ), true, "a changed row drops it" );
 	assert.equal( hud.pending(), null );
 	hud.ask( row );
 	assert.equal( hud.reconcile( [], true ), true, "a row that left the bag drops it" );
