@@ -39,7 +39,7 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
-// Env configuration (documented in ops/docs/DEPLOYMENT.md).
+// Env configuration (documented in the operator's deployment guide).
 const (
 	// EnvAddr overrides the listen address. The default is the retired
 	// Node launcher's address, so the client needs no configuration

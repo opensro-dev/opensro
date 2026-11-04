@@ -4,7 +4,7 @@
 growthbands_curve_test.go - the live shard's growth bands keep a smooth
 level curve on the retail level table
 
-The live shard's SRO_BETA_GROWTH_BANDS (ops/release/shard-settings.json,
+The live shard's SRO_BETA_GROWTH_BANDS (config/shard-settings.json,
 #606; the public default is native) is port-only tuning. What
 it must never do is what the first bands did: make one level cost 84 times
 the level before it (59 -> 60) or put 90 -> 110 thousands of hours away.
@@ -41,7 +41,7 @@ const (
 )
 
 // shardProfile is the live shard's settings, relative to this package.
-var shardProfile = filepath.Join("..", "..", "..", "ops", "release", "shard-settings.json")
+var shardProfile = filepath.Join("..", "..", "..", "config", "shard-settings.json")
 
 /*
 ================

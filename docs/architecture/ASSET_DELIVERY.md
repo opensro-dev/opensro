@@ -477,14 +477,9 @@ at the commit being released:
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
    member against the manifest.
-5. Stage: `python apps/server/ops/release/data_release.py <package> <output>
-   --origin https://<origin> --ssh-target <stage user>@<host> --identity
-   <stage key>`. It reads the live release, uploads in batches only the
-   content the live site lacks (keyed by sha256), and prints the
-   `candidate` and `commit` for approval. Interrupted uploads resume.
-6. Approve the candidate in the operator's release workflow.
-   [apps/server/ops/release/README.md](../../apps/server/ops/release/README.md)
-   describes what the host checks and how rollback works.
+5. Stage and approve: the operator's release tooling (not part of this
+   repository) reads the live release, uploads only the content the live
+   site lacks (keyed by sha256), and approves the candidate.
 
 Bumping `ASSET_SCHEMA` (`scripts/build/assetSchema.mjs`) makes old clients
 refuse the new data; ship the rebuilt data and the matching client
