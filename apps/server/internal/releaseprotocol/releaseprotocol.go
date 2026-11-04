@@ -52,7 +52,9 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 11
+	// Protocol 12 reloads older pet decoders before passive cooldowns,
+	// paid Bond damage and public recipient buffs reach them.
+	Current = 12
 	// The movement contract: 1 carries the 0xB738 acknowledgement's
 	// source block as [f32 x][f32 y][f32 z] on every floor (#1744). The
 	// retail i16 x10 source words cap at +-3276.7 units, which the
@@ -87,11 +89,12 @@ const (
 	// the packet but cannot sustain the stream, which is a protocol change
 	// all the same.
 	EffectsContract = 1
-	// The companion contract: 2 lifts the COS bag capacity bound to its
+	// The companion contract: 3 adds expanded pet-training cooldowns,
+	// paid Bond feedback and public recipient buffs; 2 lifts the COS bag capacity bound to its
 	// one wire byte (#801), so an item-mall transport's 141 to 177 slots
 	// decode; 1 added populated summoners and concurrent COS lifetimes and
 	// refused a bag over 140.
-	CompanionsContract = 2
+	CompanionsContract = 3
 	BootstrapContract  = 2 // the EnterWorld DTO
 	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
 	// The reference file: 3 adds every creatable monster's row
@@ -112,6 +115,7 @@ var history = map[int]Contracts{
 	8:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
 	9:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1},
 	10: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1},
+	11: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract},
 }

@@ -527,7 +527,7 @@ import { tooltipColor, type TooltipRow } from "@/engine/foundation/ui/tooltip-ro
 import { latticeCells } from "@/engine/foundation/ui/inventory-layout";
 import { sameUiQuads, sameUiSemantics } from "@/engine/foundation/ui/ui-equality";
 import { createRetainedLayout } from "@/engine/foundation/ui/retained-layout";
-import { buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
+import { targetPetBuffs, buffBoard, buffTimerRoot } from "@/engine/foundation/ui/buff-board";
 import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
@@ -915,7 +915,7 @@ const FORTRESS_TAX_TRAVEL = 234;
 // CIFJobRank and CIFJobContributionRank share one panel (job-hud.ts).
 const JOB_RANK_PANEL = "Job ranking";
 // The guild window's command button 102 and the notice the window's ban
-// raises for the master or oneself (5E4C30 â†’ 703DD0: 0x10/0x1F).
+// raises for the master or oneself (5E4C30 Ã¢â€ â€™ 703DD0: 0x10/0x1F).
 const GUILD_AUTHORITY_BUTTON = 102;
 
 /*
@@ -924,7 +924,7 @@ authorityLabel
 
 CIFGuildMember_RefreshButtons (5E1E80) relabels the authority button: the
 master gives authority (UIIT_CTL_GUILD_UNION_CHAT_GRANT), a member checks
-it (â€¦_CONFIRM); the layout's UIIT_CTL_AUTHORITY_GRANT never shows.
+it (Ã¢â‚¬Â¦_CONFIRM); the layout's UIIT_CTL_AUTHORITY_GRANT never shows.
 ================
 */
 function authorityLabel( master: boolean ): string {
@@ -4389,7 +4389,7 @@ export function createUi(
 			// The social window's leave asks nothing, as the party window's does.
 			sendGameplay( { kind: id } );
 		} else if ( id === "guild-kick" ) {
-			// 5E4C30 slot 2 â†’ 703DD0 sends the ban on the click. With no member
+			// 5E4C30 slot 2 Ã¢â€ â€™ 703DD0 sends the ban on the click. With no member
 			// selected nothing happens; the worker refuses the master or oneself
 			// (guildBanRefused) with its 0x10 notice, before any question.
 			// Port-only, not native: the Experimental "Confirm guild ban" row
@@ -12415,6 +12415,25 @@ export function createUi(
 								tx,
 								ty + output.height + 1
 							);
+							if ( experimental.state().saved.attackPetTraining && target.kind === "player" ) {
+								const bottom = controls.slice( buffStart ).reduce(
+									( bottom, control ) => Math.max( bottom, control.rect[1] + control.rect[3] + 5 ),
+									ty + output.height + 1
+								);
+								for ( const icon of targetPetBuffs( game, target.gid, next.simulationTimeMs ?? 0 ) ) {
+									const r: UiRect = [ tx + icon.x, bottom + icon.y, 20, 20 ];
+									paths.push( icon.path );
+									if ( resources.has( icon.path ) ) rect( r, white, icon.path, icon.uv );
+									controls.push( {
+										id: "target-" + icon.id,
+										label: icon.label,
+										helpText: icon.helpText,
+										kind: "region",
+										rect: r
+									} );
+									blocks.push( r );
+								}
+							}
 							for ( let i = buffStart; i < controls.length; i++ ) {
 								compactTelemetryTop = Math.max(
 									compactTelemetryTop,
@@ -18261,11 +18280,11 @@ export function createUi(
 										rect: r,
 										kind: "button",
 										disabled: busy || !action || !skill.live || skill.level === 0 ||
-											(action && !skill.queued && !!petRowCooldown( state!, i, quickslotTime )),
-										selected: skill.queued || skill.slotted,
+											(action && !!petRowCooldown( state!, i, quickslotTime )),
+										selected: skill.slotted,
 										draggable: skill.action && skill.live && skill.level > 0
 									} );
-									if ( action && skill.level > 0 ) {
+									if ( skill.level > 0 && (action || skill.slotted) ) {
 										const timer = petCooldownQuads( state!, i, quickslotTime, r, full );
 										for ( const q of timer ) if ( q.texture ) paths.push( q.texture );
 										quads.push( ...timer.filter( q => !q.texture || resources.has( q.texture ) ) );
@@ -18290,13 +18309,6 @@ export function createUi(
 									const stacks = petStackQuads( petSkillStack( state!, design, skill ), r, full );
 									for ( const q of stacks ) if ( q.texture ) paths.push( q.texture );
 									quads.push( ...stacks.filter( q => !q.texture || resources.has( q.texture ) ) );
-									if ( skill.queued ) {
-										quads.push(
-											...text.quads( "next", [ r[0], r[1] - 1, 32, 10 ], full, white, {
-												hAlign: 1
-											} )
-										);
-									}
 								} );
 							} );
 						}
@@ -25077,7 +25089,7 @@ export function createUi(
 							mallText( price, [ dx, dy + 36, dw, 40 ] );
 							mallButton(
 								"item-mall-quantity-down",
-								"âˆ’",
+								"Ã¢Ë†â€™",
 								[ dx, dy + 80, touch, touch ],
 								busy || state.quantity <= 1
 							);

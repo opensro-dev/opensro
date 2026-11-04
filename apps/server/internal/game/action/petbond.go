@@ -209,7 +209,9 @@ func (rt *Runtime) commitPetBond(plan *petBondPlan) []wire.Frame {
 	}
 	plan.state.bond.spent += paid
 	rt.petMu.Unlock()
-	return []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(plan.bear, 0, hp)}, petBondFrame(plan.recipient, plan.bear, 1)}
+	pulse := petBondFrame(plan.recipient, plan.bear, 1)
+	pulse.Payload = append(pulse.Payload, wire.NewWriter(4).U32(paid).Payload()...)
+	return []wire.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(plan.bear, 0, hp)}, pulse}
 }
 
 /*

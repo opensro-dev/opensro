@@ -8,6 +8,7 @@ coscancel_test.go - companion cancellation authority and retained pet state
 package action
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,6 +18,35 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+/*
+================
+TestAttackPetCancellationRejectsActivePetAttack
+================
+*/
+func TestAttackPetCancellationRejectsActivePetAttack(t *testing.T) {
+	rt, _, c, mob := newPetCombatRuntime(t, 10000, attackPetBand)
+	rt.AttackPetExpansion = true
+	c.BattleUntilMs = 0
+	pet := c.ActiveCOS
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(pet.GID, mob.Gid))
+	state := rt.petSessionFor(testDivision, c.Name, pet.GID)
+	attack := state.combat
+	if attack == nil {
+		t.Fatal("pet attack was not admitted")
+	}
+	body := wire.NewWriter(4).U32(pet.GID).Payload()
+	before := c.Snapshot()
+	result := rt.HandleCosCancel(testDivision, c, body)
+	if !bytes.Equal(result.Frames[0].Payload, []byte{2, cosSummonInBattle}) || !reflect.DeepEqual(before, c.Snapshot()) || state.combat != attack {
+		t.Fatal("dismissal changed an attacking pet", result)
+	}
+	rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(pet.GID).U8(9).Payload())
+	result = rt.HandleCosCancel(testDivision, c, body)
+	if result.Frames[0].Payload[0] != 1 {
+		t.Fatal("idle pet could not be dismissed", result)
+	}
+}
 
 /*
 ================

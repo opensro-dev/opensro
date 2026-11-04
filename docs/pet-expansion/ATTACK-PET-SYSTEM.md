@@ -63,12 +63,13 @@ and shield portions scale together to fit the existing bar; actual HP and max HP
 stay unchanged.
 
 Tier III retains the party protection. On natural expiry, each protected
-**player and the Bear** with shield remaining releases an **8 m** burst, dealing **50% of
+**player and the Bear** with shield remaining releases an **8 m** burst, dealing **40% of
 that remaining shield** to monsters in range. Each explosion is centred on that recipient. Depleting a shield, death, unsummoning, logout, town or instance entry
 cancel it without a burst. No player-versus-player splash damage is added.
 Iron Hide cannot be cast in town and retains the second active row's shared
-cooldown. Current balance uses the existing Iron Hide rank values; tuning is
-still needed.
+cooldown. Base shield starts at 20% / 35% / 50% maximum HP for books I / II / III
+(pet levels 10 / 40 / 90), with +1.5 percentage points per learned rank. Existing
+gear-rank and Unbroken Spirit empowerment bonuses still apply.
 
 | Pet | Role | Active families | Passive families |
 | --- | --- | --- | --- |
@@ -124,7 +125,8 @@ row is always active automatically; older books are replaced and cannot be
 manually selected. Their effects do not stack.
 
 Skills, gear and recharge persist with the pet's summon item.
-Recall the pet and leave combat before changing gear/training if refused.
+Skill upgrades and gear swaps are allowed during combat. Skill resets still
+require leaving combat; normal point, level and prerequisite checks apply.
 Low HGP affects performance; a pet above its owner's level cannot normally
 be summoned. Preserve those rules when testing.
 
@@ -171,7 +173,27 @@ level/country/rank tables, level-gap admission, general rate and ordinary item
 cap. Each eligible admitted piece independently gives a chance for one extra
 pet piece **of the same degree**. The original item remains. Pet slot selection
 is random among the three slots. Gold, consumables, NPC stock and unsupported
-degrees do not create pet gear. NPCs must not sell these items.
+degrees do not create pet gear. Monsters supply rolled blues and sealed gear.
+
+Basic, unsealed gear without blues is also sold in the **Pet** tab of stables
+when `SRO_ATTACK_PET_EXPANSION` is enabled:
+
+| Town | Degrees |
+| --- | --- |
+| Jangan, Constantinople | D1–D3 |
+| Donwhang, Samarkand | D3–D5 |
+| Hotan | D5–D9 |
+
+All three slots cost `5,000 × degree²` gold each. Normal shop taxes apply.
+Stock bands and prices live in `apps/server/internal/game/action/petstable.go`.
+Gear can be equipped or removed during combat without a hit penalty; ordinary
+bag-space, pet-level, stall and exchange checks still apply. Guardian’s Bond
+shows its remaining resurrection cooldown on the learned passive icon.
+
+Chance-to-cast gear effects trigger from **pet** attacks or incoming damage,
+according to the blue's wording. They share the configured internal proc
+cooldown; extra proc damage cannot trigger further procs. A chance roll is not
+a guaranteed activation, and a dead primary target cannot take another hit.
 
 `petGearDropFactor` is a fraction, not a percentage from 0 to 100:
 
@@ -601,11 +623,12 @@ references and saved rolls are unchanged. Sealed codenames append `_STAR`,
 
 ### Drop configuration
 
-Pet equipment still drops only from monsters, through the existing
+Rolled and sealed pet equipment drops from monsters, through the existing
 `pet_gear_drop_factor` policy described in [PET-LOOT-DB-CONFIG.md](PET-LOOT-DB-CONFIG.md).
 It inherits the triggering normal-equipment drop's degree and seal tier.
 Thus native monster loot tables control seal rarity; there is no second,
-independent seal roll and no NPC source. Changing the pet factor changes the
+independent seal roll and no NPC source for seals. Stables sell only plain,
+unsealed gear. Changing the pet factor changes the
 number of pet drops, not their relative seal odds.
 
 ### Elemental blues
@@ -645,3 +668,52 @@ same owned icons and models; original PK2 archives are unchanged.
 - `scripts/build/shared/portItemRows.mjs`: gear item rows and text.
 - Client: worker `pet-training.ts`, `foundation/ui/pet-training.ts`, `ui.ts`
   pet window, tooltips.
+
+
+### Triggered gear spell damage by degree
+
+Both damage-dealt and damage-taken versions use these ranges. Each activation
+rolls its damage once; Blizzard divides that total over four ticks. Matching
+chances add, while power uses the strongest contributing gear. These spells share
+a 2-second internal cooldown and cannot recursively trigger themselves.
+
+Normal unsealed gear:
+
+| Degree | Fire Burst (immediate) | Chain Lightning (first hit) | Blizzard (4-tick total) |
+|---|---:|---:|---:|
+| D1 | 100 | 100 | 100 |
+| D2 | 213–463 | 275–338 | 213–275 |
+| D3 | 325–825 | 450–575 | 325–450 |
+| D4 | 438–1,188 | 625–813 | 438–625 |
+| D5 | 550–1,550 | 800–1,050 | 550–800 |
+| D6 | 663–1,913 | 975–1,288 | 663–975 |
+| D7 | 775–2,275 | 1,150–1,525 | 775–1,150 |
+| D8 | 888–2,638 | 1,325–1,763 | 888–1,325 |
+| D9 | 1,000–3,000 | 1,500–2,000 | 1,000–1,500 |
+
+- Fire hits within 3 m and attempts a native burn on each surviving damaged
+  target (25% chance). Burn lasts up to 6 seconds and ticks using the pet's native
+  burn-damage level; this extra damage is separate from the immediate roll.
+- Chain hits up to five distinct targets with 8 m hops, retaining 80% of the
+  previous hit on each bounce.
+- Blizzard hits within 5 m across four ticks. Each pulse attempts a 3-second
+  frostbite slow; the final pulse also has a 10% freeze attempt, up to about
+  2 seconds. Native resistance, immunity and cures still apply.
+- Poison is unchanged: D1–D9 totals are 100, 213, 325, 438, 550, 663, 775,
+  888 and 1,000 over four ticks. Mend still heals 5% of owner maximum HP.
+
+Seals retain their existing stat multipliers: Star x1.5, Moon x2, Sun x2.5,
+including these damage ranges. They can therefore exceed the normal D9 values.
+Existing items automatically use their degree's new power; no reroll is needed.
+For operator tuning, `petdesign.json` stores each degree's `procRanges` as
+`[Chain, Blizzard, Fire]`, each `[minimum, maximum]`. `procDamage` remains the
+Poison power. Run `python scripts/tools/pet_design_export.py` after editing.
+
+Shatter's bonus includes frostbitten, frozen, stunned and rooted enemies. Book III
+kills of frozen, stunned or rooted enemies burst within 5 m: each of up to five
+nearby monsters takes 50% of the final killing attack's damage. A 1,000-damage
+killing attack bursts for 500 per target, not 50% of enemy HP or a 50% chance.
+Pet summoning and dismissal are blocked during active owner/pet attacks and the
+owner's existing 20-second post-hit battle timeout. Scrolls and the pet toolbar
+enforce the same restriction. Casting, teleport, sitting and ownership checks
+still apply. Pet skill upgrades and gear swaps remain allowed during combat.

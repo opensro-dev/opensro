@@ -116,6 +116,7 @@ func newGameplayPlane(
 		return captureObjectFrames(ts.Hub, division, gid)
 	}
 	items.PetPolicies = companion.PoliciesFromEnv()
+	items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
 	if err := items.ValidateLootReferences(); err != nil {
@@ -724,7 +725,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta total mastery allowance %d for both races (%s)", masteryOverride, progression.EnvBetaMastery)
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
-	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
 	if stats.Growth.Enabled {
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate

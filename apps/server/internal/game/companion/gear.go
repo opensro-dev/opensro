@@ -249,7 +249,7 @@ func ModifiersFor(p *domain.CharacterCOS) Modifiers {
 		m.GearStats.add(d.Items[slot].BaseStats)
 		for _, o := range g.Options {
 			if a, v, ok := DecodeAffix(o); ok && a.Status == "Implemented" {
-				if !m.addProc(a.Group, float64(v), d.ProcDamage) {
+				if !m.addProc(a.Group, float64(v), d) {
 					m.addAffix(a, float64(v), pet)
 				}
 			}

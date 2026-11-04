@@ -3566,7 +3566,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( petTraining.receive( frame, now ) ) {
+				if ( petTraining.receive( frame, now, localGid ) ) {
 					dirty = true;
 					return true;
 				}
@@ -5220,6 +5220,9 @@ The published plane when something changed since the last take, else null.
 			}
 			dirty = false;
 			const m = movement.state(), i = inventory.state(), c = combat.state();
+			for ( const row of petTraining.recipients() ) {
+				if ( row.gid !== localGid && !readEntity( row.gid ) ) petTraining.removeRecipient( row.gid );
+			}
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
@@ -5322,6 +5325,8 @@ The published plane when something changed since the last take, else null.
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),
+				petHowl: petTraining.howl(),
+				petRecipientBuffs: petTraining.recipients(),
 				unlimitedItems,
 				error: m.error ?? i.error ?? c.error ?? targeting.error() ?? progression.error ??
 					training.state().trainingError ?? social.error ?? cosError ?? moveReservation.error() ?? null

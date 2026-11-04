@@ -121,16 +121,18 @@ type GearItem struct {
 }
 
 type GearDegree struct {
-	ProcDamage  uint32     `json:"procDamage"`
-	Degree      int        `json:"degree"`
-	MinPetLevel uint8      `json:"minPetLevel"`
-	DropChance  float64    `json:"dropChance"`
-	MagicChance float64    `json:"magicChance"`
-	RareChance  float64    `json:"rareChance"`
-	RareWeights []float64  `json:"rareWeights"`
-	MaxBlues    int        `json:"maxBlues"`
-	RollFloor   float64    `json:"rollFloor"`
-	Items       []GearItem `json:"items"`
+	// Chain, Blizzard, Fire ranges; poison retains ProcDamage.
+	ProcRanges  [3][2]uint32 `json:"procRanges"`
+	ProcDamage  uint32       `json:"procDamage"`
+	Degree      int          `json:"degree"`
+	MinPetLevel uint8        `json:"minPetLevel"`
+	DropChance  float64      `json:"dropChance"`
+	MagicChance float64      `json:"magicChance"`
+	RareChance  float64      `json:"rareChance"`
+	RareWeights []float64    `json:"rareWeights"`
+	MaxBlues    int          `json:"maxBlues"`
+	RollFloor   float64      `json:"rollFloor"`
+	Items       []GearItem   `json:"items"`
 }
 
 /*
@@ -191,6 +193,11 @@ func mustDesign(raw []byte) Design {
 	}
 	ids := map[uint8]bool{}
 	for i, g := range d.Gear {
+		for _, span := range g.ProcRanges {
+			if span[0] == 0 || span[1] < span[0] {
+				panic(fmt.Sprintf("companion: petdesign.json degree %d proc range is invalid", g.Degree))
+			}
+		}
 		if g.Degree != i+1 || g.MaxBlues < 1 || g.MaxBlues > d.Rules.MaxBlues || g.RollFloor < 0 || g.RollFloor > 1 || len(g.RareWeights) != 4 {
 			panic(fmt.Sprintf("companion: petdesign.json degree %d is invalid", g.Degree))
 		}

@@ -639,6 +639,7 @@ left on a counter of kind ("Attacks", "Hits taken", "Kills", "Spells").
 ================
 */
 export interface PetTrainingRow {
+	readonly durationMs?: number;
 	readonly timerMs: number;
 	readonly left: number;
 	readonly kind: string;
@@ -652,6 +653,12 @@ an empty slot), from the latest server state.
 ================
 */
 export interface PetTraining {
+	readonly howl?: {
+		readonly gid: number;
+		readonly book: number;
+		readonly speedPercent: number;
+		readonly expiresAtMs: number;
+	};
 	readonly guidance?: {
 		readonly gid: number;
 		readonly book: number;
@@ -739,7 +746,21 @@ Worker publications may omit unchanged catalog, social and shop values.
 Presentation owns the derived skillIndex; it never travels back to simulation.
 ================
 */
+/*
+================
+PetRecipientBuffs
+
+Port-only public buff metadata, separate from the owner-only training profile.
+================
+*/
+export interface PetRecipientBuffs {
+	readonly gid: number;
+	readonly tailwind?: PetTraining["tailwind"];
+	readonly guidance?: PetTraining["guidance"];
+	readonly howl?: PetTraining["howl"];
+}
 export interface GameplayState extends MoverPublication {
+	readonly petRecipientBuffs?: readonly PetRecipientBuffs[];
 	readonly itemMall?: import("./item-mall").MallState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
@@ -748,6 +769,7 @@ export interface GameplayState extends MoverPublication {
 	readonly petTraining?: PetTraining;
 	readonly petTailwind?: PetTraining["tailwind"];
 	readonly petGuidance?: PetTraining["guidance"];
+	readonly petHowl?: PetTraining["howl"];
 	/** RefObjIDs the server never spends (the beta starter kit), drawn as unlimited. */
 	readonly unlimitedItems?: readonly number[];
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;

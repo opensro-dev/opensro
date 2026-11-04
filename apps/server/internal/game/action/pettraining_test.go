@@ -204,9 +204,23 @@ func TestPetTrainingAdmission(t *testing.T) {
 		t.Fatalf("learn: level %d points %d skills %d", companion.Level(c.ActiveCOS, bite), points, skills)
 	}
 	rt.HandleCosCommand(testDivision, c, petAttackOrder(gid, m.Gid))
+	c.BattleUntilMs = rt.Now().UnixMilli() + 10000
+	state := rt.petSessionFor(testDivision, c.Name, gid)
+	combat := state.combat
+	if combat == nil {
+		t.Fatal("fixture pet is not fighting")
+	}
+	beforePoints := companion.TrainingPoints(c.ActiveCOS)
 	train(rt, c, petTrainingLearn, bite.ID)
-	if companion.Level(c.ActiveCOS, bite) != 1 {
-		t.Fatal("combat allowed training")
+	if companion.Level(c.ActiveCOS, bite) != 2 || companion.TrainingPoints(c.ActiveCOS) != beforePoints-1 {
+		t.Fatal("combat did not allow a paid skill upgrade")
+	}
+	if state.combat != combat {
+		t.Fatal("skill upgrade interrupted the pet attack")
+	}
+	train(rt, c, petTrainingRefund, 0)
+	if companion.Level(c.ActiveCOS, bite) != 2 {
+		t.Fatal("combat allowed a skill reset")
 	}
 	train(rt, c, petTrainingUse, bite.ID)
 	if c.ActiveCOS.Training.Queued != bite.ID {
@@ -226,6 +240,8 @@ func TestPetGearKeepsItsBlues(t *testing.T) {
 	rt, _, c, _ := newPetCombatRuntime(t, 10000, attackPetBand)
 	makeTrainedPet(rt, c, "COS_P_BEAR_030", 30)
 	rt.AttackPetExpansion = true
+	c.BattleUntilMs = rt.Now().UnixMilli() + 10000
+	beforeHP := c.ActiveCOS.CurrentHP
 	d := companion.D.Gear[0]
 	blue := companion.EncodeAffix(companion.D.Affixes[0].Code, 7)
 	grantGear(t, rt, c, d.Items[0].ID, blue)
@@ -248,6 +264,9 @@ func TestPetGearKeepsItsBlues(t *testing.T) {
 	train(rt, c, petTrainingUnequip, 0)
 	if c.ActiveCOS.Training.Gear[0].RefObjID != 0 {
 		t.Fatal("unequip left the collar on")
+	}
+	if c.ActiveCOS.CurrentHP != beforeHP {
+		t.Fatal("combat gear swap applied a hit penalty")
 	}
 	train(rt, c, petTrainingEquip, 0)
 	if c.ActiveCOS.Training.Gear[0].RefObjID != 0 {

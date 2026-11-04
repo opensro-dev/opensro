@@ -188,7 +188,22 @@ and the port-only job-kill, drop/plus and item-break channels laid out the same 
 ================
 */
 export function serverNotification( opcode: number, p: Uint8Array ): SystemNotice | null {
-	if ( opcode !== 0x3667 || !isServerNoticeChannel( p[0] ) ) return null;
+	if ( opcode !== 0x3667 ) return null;
+	// Port-only trainer receipts belong to the system log, never player chat.
+	const trainer = p[0] === 2 && p.length >= 14 && p[1] === 11 && p[2] === 0 &&
+		new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 3, 14 ) ) === "Pet trainer";
+	if ( trainer ) {
+		if ( p.length < 16 ) throw Error( "Truncated pet trainer receipt" );
+		const length = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 14, true );
+		if ( length > 100 || p.length !== 16 + length * 2 ) throw Error( "Invalid pet trainer receipt length" );
+		return {
+			key: "",
+			value: 0,
+			nativeType: 5,
+			text: new TextDecoder( "utf-16le", { fatal: true } ).decode( p.subarray( 16 ) )
+		};
+	}
+	if ( !isServerNoticeChannel( p[0] ) ) return null;
 	if ( p.length < 3 ) throw Error( "Truncated server notification" );
 	const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 1, true );
 	// Port-only: a drop/plus notice may carry its links after the text

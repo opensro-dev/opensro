@@ -150,11 +150,11 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 	if operation == petTrainingUse && len(payload) == petTrainingLength+4 {
 		return rt.manualPetSkill(division, c, snapshot, gid, arg, binary.LittleEndian.Uint32(payload[7:]), nowMs)
 	}
-	if operation != petTrainingUse && operation != petTrainingSlot &&
-		(snapshot.BattleUntilMs > nowMs || state != nil && state.combat != nil) {
-		return petTrainingReceipt("Recall the pet and leave combat before changing its skills or gear.")
-	}
 	gear := operation == petTrainingEquip || operation == petTrainingUnequip
+	if operation == petTrainingRefund &&
+		(snapshot.BattleUntilMs > nowMs || state != nil && state.combat != nil) {
+		return petTrainingReceipt("Leave combat before resetting pet skills.")
+	}
 	if gear && (rt.Stalls.Keeping(division, c.Name) || rt.Exchanges.Trading(division, c.Name)) {
 		return petTrainingReceipt("Close the stall or exchange before moving pet gear.")
 	}
@@ -273,9 +273,16 @@ func (rt *Runtime) petTrainingStateFrames(pet *domain.CharacterCOS, nowMs int64)
 		CooldownPercent:     uint16(m.CooldownPct),
 	}
 	for row := companion.ActiveRowCount; row < companion.RowCount; row++ {
+		index := row - companion.ActiveRowCount
+		remaining := uint32(max(int64(0), t.PassiveReadyAtMs[index]-nowMs))
+		state.PassiveCooldownMs[index], state.PassiveDurationMs[index] = remaining, remaining
 		state.Slotted[row-companion.ActiveRowCount] = 0
 		if active, ok := companion.SlottedPassive(pet, row); ok {
 			state.Slotted[row-companion.ActiveRowCount] = uint8(active.Option)
+			if active.EffectName() == "Guardian's Bond" && remaining > 0 {
+				_, duration := companion.GuardianRevival(pet)
+				state.PassiveDurationMs[index] = uint32(max(int64(remaining), duration))
+			}
 		}
 	}
 	if ref, ok := rt.cosReference(pet); ok {

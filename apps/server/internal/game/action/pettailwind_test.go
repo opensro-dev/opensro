@@ -280,3 +280,39 @@ func TestPetPassiveStateIgnoresSavedLowerTier(t *testing.T) {
 		t.Fatal("old client downgraded passive")
 	}
 }
+
+/*
+================
+TestPetRecipientBuffSelectionAndPublicUpdates
+================
+*/
+func TestPetRecipientBuffSelectionAndPublicUpdates(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 3)
+	rt.drainMonsterLegRecipients()
+	chargeTailwind(rt, clock, key, 2)
+	gid := enterworld.ObjectIDForCharacter(c)
+	found := false
+	for _, batch := range rt.drainMonsterLegRecipients() {
+		for _, frame := range batch.Frames {
+			if frame.Opcode == tailwindOpcode && batch.SourceGID == gid && batch.OnlyCharacterID == 0 {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("Tailwind was not published to observers")
+	}
+	snapshot := rt.petRecipientBuffFrames(testDivision, gid, clock.NowMs())
+	if len(snapshot) != 3 || snapshot[0].Payload[4] != 57 || snapshot[0].Payload[5] != 2 {
+		t.Fatal("selection missed active Tailwind", snapshot)
+	}
+	rt.clearTailwindSource(key, clock.NowMs())
+	snapshot = rt.petRecipientBuffFrames(testDivision, gid, clock.NowMs())
+	if snapshot[0].Payload[5] != 0 {
+		t.Fatal("expired stacks survived selection")
+	}
+	rt.AttackPetExpansion = false
+	if rt.petRecipientBuffFrames(testDivision, gid, clock.NowMs()) != nil {
+		t.Fatal("extension leaked while disabled")
+	}
+}

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-petloot_test.go - monster-only pet gear creation, publication and pickup
+petloot_test.go - rolled pet loot, publication and restricted shop admission
 
 ===========================================================================
 */
@@ -172,10 +172,10 @@ func TestPetGearFactorAndNativeParentRestrictions(t *testing.T) {
 
 /*
 ================
-TestPetGearCannotBeBoughtFromNPCs
+TestPetGearCannotBeBoughtFromUnrelatedNPCs
 ================
 */
-func TestPetGearCannotBeBoughtFromNPCs(t *testing.T) {
+func TestPetGearCannotBeBoughtFromUnrelatedNPCs(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		for _, bundled := range []bool{false, true} {
 			rt, c := merchantFixture(t)

@@ -496,6 +496,31 @@ export function createCombat(
 			}
 			// 74D9FD -> 74FE80: periodic damage is display-only. HP and
 			// death remain owned by 33A6; this packet never debits HP again.
+			// Port-only: Bond reports its committed debit, without striking the bear again.
+			if ( op === 0x3fb4 ) {
+				if ( p.length !== 9 && p.length !== 13 ) throw Error( "Invalid pet bond pulse length" );
+				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
+				if (
+					!v.getUint32( 0, true ) || !v.getUint32( 4, true ) || (p[8] !== 1 && p[8] !== 2) ||
+					(p.length === 13 && p[8] !== 1)
+				) throw Error( "Invalid pet bond pulse" );
+				if ( p.length === 13 ) {
+					const gid = v.getUint32( 4, true ), damage = v.getUint32( 9, true );
+					if ( readEntity( gid ) && damage ) {
+						if ( environmentalDamage.length >= 2048 ) {
+							throw Error( "Environmental feedback capacity exceeded" );
+						}
+						environmentalDamage = [ ...environmentalDamage, {
+							sequence: ++feedbackSequence,
+							gid,
+							damage,
+							atMs: now,
+							linked: true
+						} ];
+					}
+				}
+				return true;
+			}
 			if ( op === 0x3128 ) {
 				if ( p.length !== 8 ) throw Error( "Invalid periodic damage notification" );
 				const v = new DataView( p.buffer, p.byteOffset, p.byteLength ),

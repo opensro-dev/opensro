@@ -18,6 +18,8 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
+// Protocol 12 reads pet passive cooldowns, paid Bond damage and public
+// recipient buffs. Older strict decoders require a coordinated reload.
 // Protocol 11 reads the 0xB738 movement acknowledgement's source block as
 // f32 x/y/z (#1744), which 10 read as i16 x10 words that fail its length
 // check and drop every walk. Protocol 10 shows the port-only 0x3667 notice channels 0x80 (job kills)
@@ -31,7 +33,7 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 11;
+export const RELEASE_PROTOCOL = 12;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

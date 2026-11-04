@@ -4,7 +4,7 @@
 petgeardrop.go - monsters drop attack-pet gear with rolled blue options
 
 Port-only, not native (companion/gear.go, SRO_ATTACK_PET_EXPANSION). Pet
-gear has no shop: actual normal equipment drops independently yield an
+Basic gear is sold at stables; normal equipment drops independently yield an
 extra same-degree pet item at the DB-configured factor. Native tables own
 the monster/degree/rank/level-gap probabilities. The summoned pet raises blue odds with
 Lucky Feather or "of Fortune" blues.
@@ -28,8 +28,7 @@ import (
 ================
 petGearShopOffer
 
-Port-only pet equipment is monster loot, including when a shop package
-or operator-added offer accidentally references it.
+Identifies pet equipment packages; the merchant admits only plain stable stock.
 ================
 */
 func petGearShopOffer(offer commerce.Offer) bool {

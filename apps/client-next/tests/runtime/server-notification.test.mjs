@@ -23,6 +23,37 @@ const {
 	notificationBannerPaths
 } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
 const { chatLineText, chatLineColor } = await import( "../../src/engine/foundation/ui/chat-presentation.ts" );
+test("pet trainer receipts reach the system log without entering chat or banners", async () => {
+	const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
+	const name = Buffer.from( "Pet trainer" ), text = "This row is on cooldown.";
+	const payload = Buffer.concat( [
+		Buffer.from( [ 2, name.length, 0 ] ),
+		name,
+		Buffer.from( [ text.length, 0 ] ),
+		Buffer.from( text, "utf16le" )
+	] );
+	const game = createGameplay( () => {} );
+	game.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( game.take() );
+	assert.equal( state.chat?.lines.some( line => line.name === "Pet trainer" ), false );
+	const notice = defined( state.notices?.at( -1 ) );
+	assert.equal( notice.text, text );
+	assert.equal( notice.notificationBanner, undefined );
+	assert.equal( createHudMessages( () => 0 ).step( 100, [], 1, 0, [ notice ], () => "", false )[0]?.value, text );
+	assert.throws( () => serverNotification( 0x3667, payload.subarray( 0, payload.length - 1 ) ) );
+	assert.equal(
+		serverNotification(
+			0x3667,
+			Buffer.concat( [
+				Buffer.from( [ 2, 3, 0 ] ),
+				Buffer.from( "Bob" ),
+				Buffer.from( [ text.length, 0 ] ),
+				Buffer.from( text, "utf16le" )
+			] )
+		),
+		null
+	);
+});
 test("server refusal reaches the independent native red notice and pink chat log", () => {
 	const text = "This skill is not implemented yet.",
 		bytes = Buffer.from( text, "utf16le" ),
