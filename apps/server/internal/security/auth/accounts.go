@@ -485,12 +485,32 @@ A missing or disabled account, or a database error, reports false.
 ================
 */
 func (accounts *Accounts) Credential(typedID string) (string, []byte, bool) {
+	return accounts.credential(typedID, false)
+}
+
+/*
+================
+CredentialAny
+
+Credential without the enabled filter: the login flow verifies a
+blocked account's password against its real hash so the block refusal
+can follow (#2271). A hit is NOT an enabled account - callers check
+Block before treating it as one.
+================
+*/
+func (accounts *Accounts) CredentialAny(typedID string) (string, []byte, bool) {
+	return accounts.credential(typedID, true)
+}
+
+// credential is the shared resolve behind Credential and CredentialAny.
+func (accounts *Accounts) credential(typedID string, anyState bool) (string, []byte, bool) {
+	query := `SELECT id, password_hash FROM accounts WHERE lower(id) = lower(?)`
+	if !anyState {
+		query += ` AND disabled = 0`
+	}
 	var id string
 	var hash []byte
-	err := accounts.db.QueryRow(
-		`SELECT id, password_hash FROM accounts WHERE lower(id) = lower(?) AND disabled = 0`,
-		typedID,
-	).Scan(&id, &hash)
+	err := accounts.db.QueryRow(query, typedID).Scan(&id, &hash)
 	if err != nil {
 		return "", nil, false
 	}

@@ -101,6 +101,30 @@ test("native title statuses preserve packed argument order and every simple mess
 		titleStatusMessage( 3, 1, resolve ),
 		loadEnglishCompletions( "textuisystem.txt" ).UIO_MSG_ERROR_ACCOUNT_STOP?.english
 	);
+	// #2271: the blocked case appends STOP_BLOCK + reason and
+	// BLOCK_TIME + end in the native order. A part appends only when it
+	// arrived, so a permanent block shows no BLOCK_TIME line, and the
+	// detail never leaks into another status or subtype.
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		`${catalog.UIO_MSG_ERROR_ACCOUNT_STOP}\n${catalog.UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK}chargeback review\n${catalog.UIO_MSG_ERROR_ACCOUNT_BLOCK_TIME}2030-01-01 00:00:00`
+	);
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, { reason: "botting" } ),
+		`${catalog.UIO_MSG_ERROR_ACCOUNT_STOP}\n${catalog.UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK}botting`
+	);
+	assert.equal(
+		titleStatusMessage( 3, 1, resolve, {} ),
+		loadEnglishCompletions( "textuisystem.txt" ).UIO_MSG_ERROR_ACCOUNT_STOP?.english
+	);
+	assert.equal(
+		titleStatusMessage( 3, 2, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		catalog[titleStatusKey( 3, 2 )]
+	);
+	assert.equal(
+		titleStatusMessage( 2, undefined, resolve, { reason: "chargeback review", end: "2030-01-01 00:00:00" } ),
+		"Invalid ID or password."
+	);
 	for ( const subtype of [ 1, 2, 3, 4 ] ) {
 		const key = titleStatusKey( 3, subtype );
 		assert.ok( key );

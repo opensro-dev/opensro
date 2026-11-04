@@ -8,30 +8,27 @@ CPSTitle_OnPacketReceived (0x749550; status dispatch table 0x74a0c8).
 Transport failures stay distinct from native credential failures; there
 is no invented retry count.
 
-Recorded beside the table (#2271): native strings this flow cannot show.
+Recorded beside the table (#2271): the blocked case and the native
+strings this flow cannot show.
 
-- UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME (#2271 PR-A,
-verified on the pinned client): the blocked case is this table's
-status 3, argument 1 (handler 0x749550, status table 0x74a0c8,
-argument table 0x74a108). After the status/argument pair the answer
-carries two length-prefixed packet strings (read at 0x749726, each
-widened by 0x4b6870): the block reason, then the block-end text. A
-reason containing '#' (token test 0x741b00 at 0x74979d) is split into
-structured fields and its datetime is parsed and converted before
-display; a plain reason and the end
-text append raw. The box heads the ACCOUNT_STOP line with a
-"[Block Detail]" caption and formats it "%s\n%s%s\n%s%s"
-(0x749a33): ACCOUNT_STOP, STOP_BLOCK + reason, BLOCK_TIME + end.
-Our login answer carries only a status and a uint32 argument
-(session.ts admits no string field) and the Agent has no
-blocked-account refusal to send (handlers.go never emits status 3;
-the account authority exposes only id + password hash), so there
-is no reason or time to append. Adoption is the #2271 split, not a
-client mapping: PR-D stores the block (account scope; reason as
-free text; until optional, blank is permanent), PR-B answers
-status 3 argument 1 with the two strings only after the password
-verifies (wrong-password and unknown-id answers stay identical),
-PR-C renders the appended lines here.
+- UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK / _BLOCK_TIME (shipped): the
+blocked case is this table's status 3, argument 1 (handler 0x749550,
+status table 0x74a0c8, argument table 0x74a108). After the
+status/argument pair the native answer carries two length-prefixed
+packet strings (read at 0x749726, each widened by 0x4b6870): the block
+reason, then the block-end text. A reason containing '#' (token test
+0x741b00 at 0x74979d) is split into structured fields and its datetime
+parsed and converted before display; a plain reason and the end text
+append raw. The native box heads the ACCOUNT_STOP line with a
+"[Block Detail]" caption and formats it "%s\n%s%s\n%s%s" (0x749a33):
+ACCOUNT_STOP, STOP_BLOCK + reason, BLOCK_TIME + end. The port mirrors
+the composition: the Agent stores the block (#2429), answers status 3
+argument 1 with the two strings only after the password verifies
+(wrong-password and unknown-id answers stay identical), and
+titleStatusMessage appends the same lines; the caption board is the
+native title's detail chrome, which the port's single notice box does
+not model. The store refuses '#' in reasons, so the structured-field
+branch never fires here.
 - UIO_MSG_ERROR_ACCOUNT_BLOCK_LINK and
 UIO_MSG_ERROR_NO_ACCOUNT_INFO_GOTO_HOMEPAGE / _1: retail web
 addresses. Never shown, here or natively in this flow (status 3
@@ -110,14 +107,18 @@ export function titleStatusKey( status: number | undefined, argument?: number ):
 titleStatusMessage
 
 The resolved refusal message: status 2 packs the failed/total password
-counters into the argument's two halves (native order), and the connect
-failures carry their native (C<status>) suffix.
+counters into the argument's two halves (native order), the blocked
+case (status 3, argument 1) appends the block reason and end lines in
+the native "%s\n%s%s\n%s%s" shape, and the connect failures carry their
+native (C<status>) suffix. A block part appends only when it arrived,
+so a permanent block shows no BLOCK_TIME line.
 ================
 */
 export function titleStatusMessage(
 	status: number | undefined,
 	argument: number | undefined,
-	resolve: ( key: string ) => string
+	resolve: ( key: string ) => string,
+	block?: { reason?: string; end?: string; }
 ): string | undefined {
 	const key = titleStatusKey( status, argument );
 	if ( !key ) return;
@@ -126,6 +127,10 @@ export function titleStatusMessage(
 		const values = [ argument & 0xffff, argument >>> 16 ];
 		let index = 0;
 		message = message.replace( /%d/g, () => String( values[index++] ) );
+	}
+	if ( status === 3 && argument === 1 && block ) {
+		if ( block.reason ) message += "\n" + resolve( "UIO_MSG_ERROR_ACCOUNT_STOP_BLOCK" ) + block.reason;
+		if ( block.end ) message += "\n" + resolve( "UIO_MSG_ERROR_ACCOUNT_BLOCK_TIME" ) + block.end;
 	}
 	if ( status === 5 || status === 7 || status === 8 || status === 9 || status === 10 ) message += `(C${status})`;
 	return message;
