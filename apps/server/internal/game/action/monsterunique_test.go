@@ -270,6 +270,7 @@ func TestSpecialReturnScrollPickupAndTimedActivation(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) { sent = append(sent, frames...) }
 	clock.Advance(time.Minute)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if c.NativeTeleportMode != 0 || !saw(sent, enterworld.OpcodeResetClient) {
 		t.Fatal("special return did not complete")
 	}
