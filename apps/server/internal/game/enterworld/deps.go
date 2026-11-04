@@ -227,7 +227,15 @@ type Deps struct {
 	QueueRename func(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error)
 	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
 	fixtureJobRankings map[string]domain.JobRankings
-	ReadCharacter      func(divisionID string, read func())
+	// HalloweenAccountRecord is the account's daily Halloween box count
+	// (store halloweenboxes.go, port-only #2547): the live record, read
+	// or mutated only inside a write door. Nil keeps the records in
+	// fixtureHalloweenBoxes below.
+	HalloweenAccountRecord func(accountID string) *domain.HalloweenBoxAccount
+	// fixtureHalloweenBoxes is HalloweenAccount's store when no authority
+	// is wired.
+	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
+	ReadCharacter         func(divisionID string, read func())
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
@@ -592,6 +600,30 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 WeekRankings
 ================
 */
+/*
+================
+HalloweenAccount
+
+Production supplies the authority's account record. The in-memory
+fallback is for isolated gameplay fixtures, which do not run a durable
+authority; it keeps one record per account id for the fixture's life.
+================
+*/
+func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
+	if d.HalloweenAccountRecord != nil {
+		return d.HalloweenAccountRecord(accountID)
+	}
+	if d.fixtureHalloweenBoxes == nil {
+		d.fixtureHalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
+	}
+	record := d.fixtureHalloweenBoxes[accountID]
+	if record == nil {
+		record = &domain.HalloweenBoxAccount{}
+		d.fixtureHalloweenBoxes[accountID] = record
+	}
+	return record
+}
+
 func (d *Deps) WeekRankings(divisionID string) domain.JobRankings {
 	if d.JobRankings != nil {
 		return d.JobRankings(divisionID)

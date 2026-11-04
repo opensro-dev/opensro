@@ -12,10 +12,12 @@ exchange's shape follows the sibling event quests: refusals answer
 first and remove nothing, the roll picks the first gift whose running
 sum is not below it, and the box removal and gift grant commit as one
 step (the older sibling grants before it removes; that order is not
-copied). Boxes mint under a per-character daily cap that every source
-counts toward (the owner's rule, 2026-10-31); a Gourd kill always pays
-its box past the level gap, still under the cap. After the window, the
-first world entry takes the remaining boxes.
+copied). Boxes mint under a daily cap that counts per account (#2547),
+every source counting toward it; a Gourd kill always pays its box past
+the level gap, still under the cap, and pays one to every character who
+damaged the Gourd, each under their own account's cap. The character
+whose mint reaches the cap is told so once that day. After the window,
+the first world entry takes the remaining boxes.
 
 ===========================================================================
 */
@@ -23,9 +25,11 @@ package action
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -368,24 +372,58 @@ func halloweenBagBoxes(character *enterworld.Character) uint32 {
 
 /*
 ================
+Runtime.halloweenBoxAccount
+
+The account record a character mints against (#2547): every character
+of the account shares the one daily count, so an alt adds no boxes.
+Only inside a settlement door; a runtime without the account store
+wired mints nothing (the event is inert without its deps, as a nil
+DropRoll never rolls).
+================
+*/
+func (rt *Runtime) halloweenBoxAccount(character *enterworld.Character) *domain.HalloweenBoxAccount {
+	if rt == nil || rt.deps == nil || character == nil {
+		return nil
+	}
+	return rt.deps.HalloweenAccount(character.AccountID)
+}
+
+/*
+================
+halloweenBoxDayCount
+
+The account's count on now's 04:00-UTC day: a record still holding an
+older day counts as zero (the day restarts when the next box lands, in
+countHalloweenBoxes).
+================
+*/
+func halloweenBoxDayCount(account *domain.HalloweenBoxAccount, now time.Time) int64 {
+	if account == nil || account.Day != progression.HalloweenDayKey(now) {
+		return 0
+	}
+	return account.Count
+}
+
+/*
+================
 Runtime.halloweenBoxDrop
 
 The kill's event drop: one box while the window runs and the winner's
-day still has room under the cap, rolled on the same 15-bit draw as
-every other drop. A Gourd kill skips the draw and pays past the level
-gap; the cap still gates it. The caller appends the drop after
+account still has room under the daily cap, rolled on the same 15-bit
+draw as every other drop. A Gourd kill skips the draw and pays past the
+level gap; the cap still gates it. The caller appends the drop after
 admission and the drop cap, like the unique ticket, so neither can
-take it. The winner snapshot's count is the gate: kills settle one at
-a time, and countHalloweenBoxes lands each minted box on the live
-character before the next kill plans.
+take it. The account record is the gate: kills settle one at a time,
+and countHalloweenBoxes lands each minted box on the account before
+the next kill plans.
 ================
 */
 func (rt *Runtime) halloweenBoxDrop(winner *enterworld.Character, defeated monster.Instance, at simulation.Spawn, owner string, now time.Time) (grounditem.Item, bool) {
 	if !rt.Halloween.ActiveAt(now) || winner == nil {
 		return grounditem.Item{}, false
 	}
-	if winner.HalloweenBoxDay == progression.HalloweenDayKey(now) &&
-		winner.HalloweenBoxCount >= progression.HalloweenBoxDailyCap {
+	account := rt.halloweenBoxAccount(winner)
+	if account == nil || halloweenBoxDayCount(account, now) >= progression.HalloweenBoxDailyCap {
 		return grounditem.Item{}, false
 	}
 	if defeated.Ref.Codename != halloweenGourdCodename {
@@ -404,36 +442,139 @@ func (rt *Runtime) halloweenBoxDrop(winner *enterworld.Character, defeated monst
 ================
 Runtime.countHalloweenBoxes
 
-Counts the boxes one committed kill settlement minted for its winner,
-from every source (the rolled drop and the Gourd alike), under the
-04:00-UTC day key. Runs inside the settlement's door, so the winner's
-fields move directly and the door commits them; a GM-spawned kill is
-conjured, not hunted, and its caller never counts it. A day that has
-rolled over restarts the count before this kill's boxes land.
+Counts the boxes one committed kill settlement minted, each against
+its owner's account (#2547): a minted box carries its owner's JID, and
+owners resolves those JIDs to the settlement's characters. From every
+source (the rolled drop and the Gourd alike), under the 04:00-UTC day
+key. Runs inside the settlement's door, so the account records move
+directly and the door commits them; a GM-spawned kill is conjured, not
+hunted, and its caller never counts it. A day that has rolled over
+restarts the count before this kill's boxes land. Returns the owners
+whose account reached the cap with this settlement (an account is
+named once), for the once-a-day cap message.
 ================
 */
-func (rt *Runtime) countHalloweenBoxes(winner *enterworld.Character, drops []grounditem.Item, nowMs int64) {
-	if rt == nil || winner == nil || winner.ID <= 0 {
-		return
+func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, drops []grounditem.Item, nowMs int64) []*enterworld.Character {
+	if rt == nil || len(drops) == 0 {
+		return nil
 	}
 	now := time.UnixMilli(nowMs).UTC()
 	if !rt.Halloween.ActiveAt(now) {
-		return
+		return nil
 	}
-	var boxes int64
+	key := progression.HalloweenDayKey(now)
+	var reached []*enterworld.Character
+	announced := map[*domain.HalloweenBoxAccount]bool{}
 	for _, drop := range drops {
-		if drop.Codename == progression.HalloweenBoxCodename {
-			boxes++
+		if drop.Codename != progression.HalloweenBoxCodename {
+			continue
+		}
+		owner := owners[drop.OwnerJID]
+		account := rt.halloweenBoxAccount(owner)
+		if account == nil {
+			continue
+		}
+		if account.Day != key {
+			account.Day, account.Count = key, 0
+		}
+		before := account.Count
+		account.Count++
+		if before < progression.HalloweenBoxDailyCap &&
+			account.Count >= progression.HalloweenBoxDailyCap && !announced[account] {
+			announced[account] = true
+			reached = append(reached, owner)
 		}
 	}
-	if boxes == 0 {
-		return
+	return reached
+}
+
+// halloweenBoxCapBanner is the once-a-day word to a character whose
+// mint reached the account's daily cap (#2547): the cap stops being
+// silent, and the reset time is in the line.
+const halloweenBoxCapBanner = "You have reached today's Jewel Box limit (%d). It resets at 04:00 UTC."
+
+/*
+================
+halloweenBoxCapFrame
+
+The cap message, in the event banner's own shape (halloweenBanner).
+================
+*/
+func halloweenBoxCapFrame() wire.Frame {
+	return halloweenBanner(fmt.Sprintf(halloweenBoxCapBanner, progression.HalloweenBoxDailyCap))
+}
+
+/*
+================
+Runtime.halloweenGourdBoxes
+
+Port-only, not native (#2547): a Gourd's box goes to every character
+who damaged it, not only the killer - one area attack used to clear a
+field's Gourds and pay every box to the killing blow. One assigned box
+per damager still under their account's daily cap, prepared exactly
+like the winner's own box so the caller can append them to the plan
+after admission and the drop cap, where neither can take them. The
+winner is skipped: its box came from halloweenBoxDrop. Boxes the plan
+already carries count against their account here, so two characters
+of one account cannot both be promised the account's last box in one
+kill. Contributions are visited in CreditGID order (the reward
+groups' own order), which makes that race deterministic. A GM-spawned
+Gourd pays nobody: a conjured kill is not hunted, the same rule the
+winner's counting follows.
+================
+*/
+func (rt *Runtime) halloweenGourdBoxes(winner *enterworld.Character, defeated monster.Instance, planned []grounditem.Item, contributions []simulation.MonsterContribution, actors map[uint32]rewardActor, at simulation.Spawn, now time.Time) []grounditem.Item {
+	if !rt.Halloween.ActiveAt(now) || defeated.GMSpawned || defeated.Ref.Codename != halloweenGourdCodename {
+		return nil
 	}
-	if key := progression.HalloweenDayKey(now); winner.HalloweenBoxDay != key {
-		winner.HalloweenBoxDay = key
-		winner.HalloweenBoxCount = 0
+	promised := map[*domain.HalloweenBoxAccount]int64{}
+	for _, plannedDrop := range planned {
+		if plannedDrop.Codename != progression.HalloweenBoxCodename {
+			continue
+		}
+		if account := rt.halloweenBoxAccount(ownersCharacter(actors, plannedDrop.OwnerJID)); account != nil {
+			promised[account]++
+		}
 	}
-	winner.HalloweenBoxCount += boxes
+	rows := append([]simulation.MonsterContribution(nil), contributions...)
+	sort.Slice(rows, func(i, j int) bool { return rows[i].CreditGID < rows[j].CreditGID })
+	winnerGID := enterworld.ObjectIDForCharacter(winner)
+	var boxes []grounditem.Item
+	for _, row := range rows {
+		if row.Damage == 0 || row.CreditGID == winnerGID {
+			continue
+		}
+		a, ok := actors[row.CreditGID]
+		if !ok || a.character == nil || a.character.DeletePending {
+			continue
+		}
+		account := rt.halloweenBoxAccount(a.character)
+		if account == nil || halloweenBoxDayCount(account, now)+promised[account] >= progression.HalloweenBoxDailyCap {
+			continue
+		}
+		box, ok := rt.prepareSelectedDrop(loot.DropItem{Codename: progression.HalloweenBoxCodename, Count: 1, Assigned: true}, at, a.character.Name, now)
+		if !ok {
+			continue
+		}
+		box.OwnerJID = enterworld.ObjectIDForCharacter(a.character)
+		promised[account]++
+		boxes = append(boxes, rt.scatterMonsterDrop(box, at, defeated.Rarity()))
+	}
+	return boxes
+}
+
+/*
+================
+ownersCharacter
+
+The roster character behind one ground item's owner JID, or nil.
+================
+*/
+func ownersCharacter(actors map[uint32]rewardActor, gid uint32) *enterworld.Character {
+	if a, ok := actors[gid]; ok {
+		return a.character
+	}
+	return nil
 }
 
 /*
