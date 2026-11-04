@@ -437,6 +437,13 @@ func (s *Session) SendUnreliable(opcode uint16, payload []byte) error {
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
 			return nil
 		}
+		if errors.Is(err, errDatagramDropped) {
+			// The peer is not draining its datagram queue. The frame is
+			// loss-tolerant, so it drops here; rerouting it onto the
+			// reliable lane would queue it behind the same stall (#2142).
+			s.hub.metrics.datagramsDropped.Add(1)
+			return nil
+		}
 		// Datagram refused (too big for the path MTU, or transient): the
 		// frame still matters, deliver it reliably.
 	}

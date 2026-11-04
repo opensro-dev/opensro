@@ -1,3 +1,16 @@
+/*
+===========================================================================
+
+conn_wt.go - the WebTransport connection: stream and datagram lanes
+
+A wtConn adapts one WebTransport session to the Conn contract. Inbound,
+a stream pump and a datagram pump merge frames into one queue. Outbound,
+the session's write loop owns the control stream, and one datagram drain
+goroutine owns the QUIC datagram queue, so no caller ever blocks on a
+peer that stopped reading (#2142).
+
+===========================================================================
+*/
 package transport
 
 import (
@@ -16,6 +29,18 @@ import (
 // one only keeps WriteFrame from waiting on a stream that never comes.
 const wtStreamAcceptTimeout = 15 * time.Second
 
+// wtDatagramQueueLen bounds the encoded datagrams waiting for the drain
+// goroutine to hand them to the QUIC session. The QUIC datagram queue
+// itself holds 32 frames and then blocks its writer; this queue sits in
+// front of it at eight times that depth, so a peer that keeps reading
+// never fills it. Only a stalled peer does, and then WriteUnreliable
+// drops the frame (errDatagramDropped) instead of parking its caller.
+const wtDatagramQueueLen = 256
+
+// errWTConnClosed reports a write on a WebTransport connection that has
+// already closed.
+var errWTConnClosed = errors.New("transport: webtransport connection closed")
+
 // wtConn adapts a WebTransport session to Conn. The client opens one
 // bidirectional stream (the control stream) carrying length-prefixed frames
 // — the reliable, ordered channel. Datagrams carry bare frames and merge
@@ -24,6 +49,16 @@ type wtConn struct {
 	sess   *webtransport.Session
 	frames chan Frame
 	closed chan struct{}
+
+	// dgrams is the bounded outbound datagram queue; datagramDrain is
+	// its only reader and the only goroutine that touches the QUIC
+	// datagram queue. dgramDone closes when the drain has exited.
+	dgrams    chan []byte
+	dgramDone chan struct{}
+
+	// sendDatagram is the QUIC session's datagram send, held in a field
+	// so a test can stand a stalled or recording peer in for a session.
+	sendDatagram func([]byte) error
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -38,19 +73,32 @@ type wtConn struct {
 	closeOnce sync.Once
 }
 
+/*
+================
+newWTConn
+
+Wires a WebTransport session into a wtConn and starts its goroutines:
+the stream pump and datagram pump inbound, the datagram drain outbound.
+All three exit when the connection closes.
+================
+*/
 func newWTConn(sess *webtransport.Session) *wtConn {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &wtConn{
-		sess:      sess,
-		frames:    make(chan Frame, 16),
-		closed:    make(chan struct{}),
-		ctx:       ctx,
-		ctxCancel: cancel,
-		strReady:  make(chan struct{}),
-		readDone:  make(chan struct{}),
+		sess:         sess,
+		frames:       make(chan Frame, 16),
+		closed:       make(chan struct{}),
+		dgrams:       make(chan []byte, wtDatagramQueueLen),
+		dgramDone:    make(chan struct{}),
+		sendDatagram: sess.SendDatagram,
+		ctx:          ctx,
+		ctxCancel:    cancel,
+		strReady:     make(chan struct{}),
+		readDone:     make(chan struct{}),
 	}
 	go w.streamPump()
 	go w.datagramPump()
+	go w.datagramDrain()
 	return w
 }
 
@@ -118,6 +166,32 @@ func (w *wtConn) datagramPump() {
 	}
 }
 
+/*
+================
+datagramDrain
+
+The one goroutine that talks to the QUIC datagram queue. That queue
+blocks its caller once 32 frames are waiting, so it must only ever be
+touched from here: WriteUnreliable enqueues onto w.dgrams without
+blocking, and a peer that stopped reading parks this goroutine — never
+a game goroutine — until the connection closes. Frames leave in
+enqueue order. A refused send (an oversized frame, a dying session)
+drops the frame: datagrams are loss-tolerant by contract, and the
+control stream pump, not this lane, decides connection death.
+================
+*/
+func (w *wtConn) datagramDrain() {
+	defer close(w.dgramDone)
+	for {
+		select {
+		case buf := <-w.dgrams:
+			_ = w.sendDatagram(buf)
+		case <-w.closed:
+			return
+		}
+	}
+}
+
 func (w *wtConn) setReadErr(err error) {
 	w.readErrMu.Lock()
 	if w.readErr == nil {
@@ -168,7 +242,7 @@ func (w *wtConn) WriteFrame(f Frame) error {
 	select {
 	case <-w.strReady:
 	case <-w.closed:
-		return errors.New("transport: webtransport connection closed")
+		return errWTConnClosed
 	case <-w.readDone:
 		return w.getReadErr()
 	}
@@ -183,11 +257,35 @@ func (w *wtConn) WriteFrame(f Frame) error {
 
 func (w *wtConn) SupportsUnreliable() bool { return true }
 
+/*
+================
+WriteUnreliable
+
+Enqueues the encoded frame for the datagram drain and returns at once.
+This used to call the QUIC datagram send directly, which blocks once
+the peer stops draining its queue; a monster leg publishing movement
+from inside the division lane parked there for 4.7 s (#2142). A full
+queue now reports errDatagramDropped and the frame is lost, which the
+loss-tolerant lane allows by contract. The oversized check stays
+first: a frame too large for a datagram is a refusal, not a drop, and
+the caller still delivers it reliably.
+================
+*/
 func (w *wtConn) WriteUnreliable(f Frame) error {
 	if f.EncodedLen() > MaxFrameBytes {
 		return ErrFrameTooLarge
 	}
-	return w.sess.SendDatagram(f.Encode())
+	select {
+	case <-w.closed:
+		return errWTConnClosed
+	default:
+	}
+	select {
+	case w.dgrams <- f.Encode():
+		return nil
+	default:
+		return errDatagramDropped
+	}
 }
 
 func (w *wtConn) Close(reason string) error {

@@ -2,8 +2,18 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"io"
 )
+
+// errDatagramDropped reports a WriteUnreliable frame dropped because the
+// connection's bounded datagram queue was full. It is not a failure: the
+// frame is loss-tolerant by contract, and dropping it keeps a stalled
+// peer from parking the caller (the monster leg held the division lane
+// for 4.7 s that way, #2142). Callers count the drop and move on; they
+// must not reroute the frame onto the reliable lane, whose backpressure
+// is exactly what the drop avoids.
+var errDatagramDropped = errors.New("transport: datagram queue full, frame dropped")
 
 // Conn is one live client connection, either a WebTransport session or a
 // WebSocket. Both implementations pump inbound frames on an internal
@@ -11,7 +21,7 @@ import (
 //
 // WriteFrame is not safe for concurrent use; the session's single write
 // loop is the only caller. WriteUnreliable IS safe from any goroutine on
-// connections that support it (QUIC datagrams).
+// connections that support it (QUIC datagrams) and never blocks.
 type Conn interface {
 	// ReadFrame blocks until a frame arrives, the context is done, or the
 	// connection dies. After an error the connection is unusable.
@@ -22,7 +32,10 @@ type Conn interface {
 	// unreliable-datagram based on this connection.
 	SupportsUnreliable() bool
 	// WriteUnreliable sends a frame as a datagram, best effort. Only valid
-	// when SupportsUnreliable.
+	// when SupportsUnreliable. It never blocks: a connection whose
+	// datagram queue is full drops the frame and reports
+	// errDatagramDropped. ErrFrameTooLarge still reports a frame that can
+	// never travel as a datagram at all.
 	WriteUnreliable(f Frame) error
 	// Close tears the connection down. reason is best-effort diagnostics.
 	Close(reason string) error
