@@ -1,5 +1,5 @@
 packages:
-  # Product applications only: client-next, server-observatory. The Go server
+  # Product applications only: client-next. The Go server
   # (apps/server) is not a pnpm package. The native-reconstruction corpus,
   # legacy client and its packages live in the sibling research/ repository.
   - "apps/*"
