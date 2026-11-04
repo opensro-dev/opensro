@@ -227,6 +227,12 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
+	// The server's session id from the latest WELCOME (transportSessionId()).
+	// It survives the link's end on purpose: the failure it ends in is
+	// reported after disconnect() ran, and names this session so the
+	// incident joins the transport's log lines (#2558). The next
+	// WELCOME replaces it; a resume keeps the same server session.
+	let transportSession: string | undefined;
 	// The current link's open and last-inbound times (performance.now());
 	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
 	let openedAt = -Infinity, receivedAt = -Infinity;
@@ -422,10 +428,12 @@ export function createNetwork(
 				if ( frame.opcode !== 2 ) {
 					throw new Error( "Expected transport welcome" );
 				}
-				if ( !codec.welcome( frame.payload ).resumed ) {
+				const welcome = codec.welcome( frame.payload );
+				if ( !welcome.resumed ) {
 					streamPosition = 0;
 					largeFrameUnacked = false;
 				}
+				transportSession = welcome.sessionId.toString();
 				welcomed = true;
 				clearWelcomeDeadline();
 				send( codec.transportReport( transportFallback ) );
@@ -923,6 +931,18 @@ export function createNetwork(
 			return receivedAt;
 		},
 		/*
+		================
+		transportSessionId
+
+		The server's session id from the latest WELCOME (#2558), kept
+		past the link's end so a failure report can name the session
+		the transport's log lines carry.
+		================
+		*/
+		transportSessionId() {
+			return transportSession;
+		},
+		/*
   ================
   pingMs
 
@@ -958,8 +978,13 @@ export function createNetwork(
 			if ( endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:" ) {
 				throw new Error( "Invalid transport URL" );
 			}
-			// Without a resume token the server starts a fresh stream.
-			if ( !resume?.length ) streamPosition = 0;
+			// Without a resume token the server starts a fresh stream:
+			// the old session's id dies with its stream, so a failure
+			// before this connect's WELCOME cannot name it (#2558).
+			if ( !resume?.length ) {
+				streamPosition = 0;
+				transportSession = undefined;
+			}
 			const hello = codec.hello( admission, resume, streamPosition );
 			disconnect();
 			attempt = { endpoint, hello, fellBack: false };

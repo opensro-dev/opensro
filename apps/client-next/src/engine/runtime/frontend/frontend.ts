@@ -11,10 +11,28 @@ import { createFrontendStage } from "./stage/stage";
 import { createCharacterDialog } from "./dialog/dialog";
 import { createCreation } from "./creation/creation";
 import { characterStatus } from "@/engine/foundation/ui/character-status";
+import {
+	createEntryVisibility,
+	entryVisibilityBegin,
+	entryVisibilityEnd,
+	entryVisibilitySetHidden,
+	entryVisibilityTotal
+} from "@/engine/foundation/session/entry-visibility";
 import { selectedDockCamera } from "@/engine/foundation/rendering/dock-camera";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SessionState, CharacterOperationCommand, SessionCommand } from "@/engine/contracts/session";
+/*
+================
+pageHidden
+
+Whether the page is hidden right now; a runtime without a document
+(tests) is never hidden.
+================
+*/
+function pageHidden(): boolean {
+	return globalThis.document?.hidden === true;
+}
 /*
 ================
 createFrontend
@@ -33,6 +51,9 @@ export function createFrontend(
 		camera = createFrontendCamera(),
 		stage = createFrontendStage( assets, renderer, base );
 	const dialog = createCharacterDialog( send );
+	// How long the page was hidden during the current entry attempt
+	// (entry-visibility.ts), for the world_entry_rejected incident (#2558).
+	const visibility = createEntryVisibility();
 	let status: ReturnType<typeof characterStatus> | undefined, statusUntil = 0;
 	const creation = createCreation( assets, base, send, messageSound );
 	let race: 0 | 1 = 0;
@@ -271,6 +292,16 @@ export function createFrontend(
 				flow.resumeWorld();
 			}
 			if ( session?.phase === "connecting" || session?.phase === "entering-world" ) entering = true;
+			// The entry's hidden time runs on the step clock: steps stop
+			// while the page is hidden, so a span closes at the first
+			// visible step - within a frame of the truth, and exact
+			// enough to tell a backgrounded tab from a stalled device.
+			if ( (entering || entryPending) && !visibility.tracking ) {
+				entryVisibilityBegin( visibility, now, pageHidden() );
+			} else if ( !(entering || entryPending) && visibility.tracking ) {
+				entryVisibilityEnd( visibility, now );
+			}
+			if ( visibility.tracking ) entryVisibilitySetHidden( visibility, pageHidden(), now );
 			if (
 				(entering || entryPending || flow.snapshot().phase === "loading-world") && session?.error &&
 				session.revision > entryRevision && session.phase === "character-select"
@@ -287,8 +318,10 @@ export function createFrontend(
 						}: ${session.error}` +
 						(session.entryFailure ?
 							` (stage ${session.entryFailure.stage}; ${session.entryFailure.bytesReceived} bytes in ${session.entryFailure.framesReceived} frames received)` :
-							"")
+							""),
+					tabHiddenMs: Math.round( entryVisibilityTotal( visibility, now ) )
 				} );
+				entryVisibilityEnd( visibility, now );
 				entryPending = false;
 				entering = false;
 				flow.entryRejected();

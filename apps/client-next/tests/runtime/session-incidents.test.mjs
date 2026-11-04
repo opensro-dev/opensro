@@ -333,6 +333,8 @@ test("a refused entry files its incident with the entering character", async t =
 	welcome[0] = 2;
 	welcome[10] = 16;
 	welcome.fill( 7, 11 );
+	// The WELCOME's session id is the join key to the transport's logs (#2558).
+	new DataView( welcome.buffer ).setBigUint64( 2, 123456789n, true );
 	defined( socket ).receive( 2, welcome );
 	session.step( 3 );
 	await settle();
@@ -349,7 +351,8 @@ test("a refused entry files its incident with the entering character", async t =
 		kind: "client-report",
 		incidentKind: "runtime",
 		code: "world_entry_rejected",
-		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0"
+		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0",
+		tabHiddenMs: 42000
 	} );
 	session.step( 5 );
 	await settle();
@@ -357,4 +360,11 @@ test("a refused entry files its incident with the entering character", async t =
 	// rejection report is the one triage matches by character (#1855).
 	const rejection = reports.find( report => report.code === "world_entry_rejected" );
 	assert.equal( rejection?.character, "fixture" );
+	// The rejection joins to its transport session by id, names why the
+	// transport ended and how long the tab was hidden (#2558).
+	assert.equal( rejection?.transportSession, "123456789" );
+	assert.equal( rejection?.closeReason, "packet_application_failed" );
+	assert.equal( rejection?.tabHiddenMs, 42000 );
+	const failure = reports.find( report => report.code === "packet_application_failed" );
+	assert.equal( failure?.transportSession, "123456789" );
 });

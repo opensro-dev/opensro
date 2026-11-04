@@ -73,6 +73,9 @@ export type SessionCommand =
 		readonly incidentKind: "degraded" | "runtime" | "asset";
 		readonly code: string;
 		readonly message: string;
+		// How long the page was hidden during the entry a report names
+		// (entry-visibility.ts), for the world_entry_rejected incident.
+		readonly tabHiddenMs?: number;
 	}
 	| LoginCommand
 	| {
@@ -120,12 +123,19 @@ export type SessionState = Readonly<{
 	// The last world failure's evidence, for the
 	// world_entry_rejected incident (#2311 item 4): the world phase
 	// that failed (a mid-world drop reports "world") and how much wire
-	// arrived on the attempt that failed.
+	// arrived on the attempt that failed. closeReason is the failure's
+	// code (server_bye_3 when the server's BYE named the end), absent
+	// when the failure named none (#2558).
 	entryFailure?: {
 		readonly stage: string;
 		readonly bytesReceived: number;
 		readonly framesReceived: number;
+		readonly closeReason?: string;
 	};
+	// The transport session the world is on (NetworkOwner
+	// .transportSessionId): the world_entry_rejected incident joins
+	// itself to the transport's session log lines by it (#2558).
+	transportSessionId?: string;
 	code?: string;
 	nativeTitleStatus?: number;
 	nativeTitleArgument?: number;

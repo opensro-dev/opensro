@@ -49,6 +49,11 @@ export interface NetworkOwner {
 	// world session's stall wording both read this stamp, never a second
 	// clock's dating of it.
 	receivedAt(): number;
+	// The server's transport session id from the latest WELCOME, kept
+	// past the link's end: an incident names it to join the client's
+	// report to the transport's session log lines (#2558). Undefined
+	// before the first WELCOME.
+	transportSessionId(): string | undefined;
 	connect( url: string, admission: string, resume?: Uint8Array ): void;
 	// Experimental (#1448): attempt WebTransport (QUIC) before the socket
 	// on connect, the socket the fallback when the path fails. Applies
@@ -79,6 +84,17 @@ the frame being applied; payloadSize is its full length.
 export interface ClientIncident {
 	readonly id?: string;
 	readonly session?: string;
+	// The transport session a failure happened on (NetworkOwner
+	// .transportSessionId), when a WELCOME arrived: the join key to
+	// the server's transport session log lines (#2558).
+	readonly transportSession?: string;
+	// Why the transport ended, as the failure's code (server_bye_3 is
+	// the server's idle-timeout BYE): present when the close named one.
+	readonly closeReason?: string;
+	// How long the page was hidden during a world entry attempt, in
+	// milliseconds (frontend.ts): a throttled background tab reads
+	// very differently from a stalled device. 0 means never hidden.
+	readonly tabHiddenMs?: number;
 	readonly code?: string;
 	readonly category?: NetworkFailure["category"] | "degraded";
 	readonly stack?: string;
