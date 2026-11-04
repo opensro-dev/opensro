@@ -164,6 +164,15 @@ func openAuthorityPlane(
 		}
 		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
 	}
+	// Port-only, not native (#2474): the job trade transports move 1.3
+	// times as fast (malltransport's families keep their own 1.5 rule).
+	if enterworld.JobTransportSpeedFromEnv() {
+		scaled, err := textdata.Items.ApplyJobTransportSpeed()
+		if err != nil {
+			return authorityPlane{}, err
+		}
+		log.Infof("cos: %s scaled %d job transport(s) (port-only, not native)", enterworld.EnvJobTransportSpeed, scaled)
+	}
 	// Port-only, not native: the Item Mall vehicles and pets move faster
 	// (1.3 times by default, game/tunables).
 	rideFactor, rideOn, err := enterworld.MallRideSpeedFromEnv()
