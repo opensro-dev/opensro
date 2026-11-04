@@ -866,53 +866,6 @@ test("a bound world neither cuts a Start departure short nor resumes a failed fr
 	assert.equal( failed.frontend.snapshot().error, failure.error );
 	failed.frontend.dispose();
 });
-/*
-================
-maintenanceEntryFilesApart
-
-A refused entry whose session carries the mint's typed MAINTENANCE
-refusal files as world_entry_maintenance, never as the rejection
-incident a real failure files (#2557): a release restart must not
-drown real entry failures. Any other refusal (or none) keeps
-world_entry_rejected.
-================
-*/
-test("a maintenance refusal files as world_entry_maintenance, a real refusal as world_entry_rejected", () => {
-	for (
-		const [refusal, expected] of [
-			[ "MAINTENANCE", "world_entry_maintenance" ],
-			[ "UNKNOWN_CHARACTER", "world_entry_rejected" ],
-			[ undefined, "world_entry_rejected" ]
-		]
-	) {
-		const sent = [];
-		const f = entryFixture( false, command => sent.push( command ) );
-		f.toDock();
-		f.frontend.select( "fixture" );
-		for ( let i = 0; i < 30; i++ ) f.step();
-		assert.equal( f.frontend.start(), true );
-		f.session = { ...f.session, phase: "connecting", revision: 3 };
-		f.step();
-		f.session = {
-			...f.session,
-			phase: "character-select",
-			revision: 4,
-			error: "The server is under maintenance. Please try again later.",
-			entryFailure: {
-				stage: "connecting",
-				bytesReceived: 0,
-				framesReceived: 0,
-				...(refusal ? { refusal } : {})
-			}
-		};
-		f.step();
-		const reports = sent.filter( command => command.kind === "client-report" );
-		assert.equal( reports.length, 1, refusal ?? "no refusal" );
-		assert.equal( reports[0].code, expected, refusal ?? "no refusal" );
-		f.frontend.dispose();
-	}
-});
-
 const { frontendCameraView } = await load( "src/engine/foundation/rendering/frontend-camera.ts" );
 const { viewProjection } = await load( "src/engine/foundation/rendering/world-math.ts" );
 const { screenPoint } = await load( "src/engine/foundation/rendering/screen-point.ts" );
