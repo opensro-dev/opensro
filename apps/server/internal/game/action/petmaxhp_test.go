@@ -213,6 +213,50 @@ func TestRestoredAttackPetPublishesEffectiveMax(t *testing.T) {
 
 /*
 ================
+TestRelocatedAttackPetRepublishesEffectiveMax
+
+A portal, return or rebirth re-entry retires the client's training
+state while the pet session survives, so nothing the client holds
+afterwards carries the effective max: until the next potion, growth
+or training spend its window divides by the native catalog max
+again (#2564). The relocation republishes the state to its owner;
+with the expansion off nothing is queued.
+================
+*/
+func TestRelocatedAttackPetRepublishesEffectiveMax(t *testing.T) {
+	for _, expansion := range []bool{true, false} {
+		rt, c, pet := petMaxRuntime(t, expansion)
+		rt.BindPetSession(testDivision, c, 42)
+		rt.drainMonsterLegRecipients()
+		rt.relocateReturningPet(testDivision, c, simulation.Spawn{RegionID: caravanBattlefield, X: 100, Y: 20, Z: 100})
+		batches := rt.drainMonsterLegRecipients()
+		if !expansion {
+			if len(batches) != 0 {
+				t.Fatalf("queued frames without the expansion: %+v", batches)
+			}
+			continue
+		}
+		if len(batches) != 1 || batches[0].OnlyCharacterID != c.ID {
+			t.Fatalf("relocation batches %+v, want one for the owner", batches)
+		}
+		var payload []byte
+		for _, frame := range batches[0].Frames {
+			if frame.Opcode == wire.OpPetTrainingState {
+				payload = frame.Payload
+			}
+		}
+		if payload == nil {
+			t.Fatalf("no state push in relocation batch %+v", batches[0].Frames)
+		}
+		want := rt.petTrainingStateFrames(pet, rt.Now().UnixMilli())
+		if len(want) == 0 || string(payload) != string(want[len(want)-1].Payload) {
+			t.Fatalf("republished state %v, want the pet's current state frame", payload)
+		}
+	}
+}
+
+/*
+================
 TestAttackPetLevelUpPublishesEffectiveMax
 
 The growth gain that changes the pet's form also publishes the new

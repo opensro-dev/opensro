@@ -873,6 +873,21 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 			state.transportWorld = simulation.WorldState{Spawn: pose}
 		}
 	}
+	// The crossing retires the client's training state while the pet
+	// session survives, so nothing it holds afterwards carries the
+	// effective max: its pet window falls back to the native catalog
+	// max until the next potion, growth or training spend (#2564).
+	// Publish the state again to the owner on the new side.
+	nowMs := rt.Now().UnixMilli()
+	var republished []simulation.Frame
+	for _, key := range keys {
+		if cos := c.CompanionByGID(key.gid); cos != nil && cos.Summoned {
+			republished = append(republished, simFrames(rt.petEffectiveMaxFrames(cos, nowMs))...)
+		}
+	}
+	if len(republished) > 0 {
+		rt.queueMonsterLegFrames([]simulation.DivisionFrames{{DivisionID: division, OnlyCharacterID: c.ID, Frames: republished}})
+	}
 	return previous
 }
 
