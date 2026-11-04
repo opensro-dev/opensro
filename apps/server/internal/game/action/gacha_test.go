@@ -101,8 +101,12 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 			if reason != "" {
 				t.Fatal(reason)
 			}
-			assertOpcodes(t, frames, 0x3645, 0xb053)
 			win := roll < 5000
+			if win {
+				assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
+			} else {
+				assertOpcodes(t, frames, 0x3645, 0xb053)
+			}
 			want := uint32(902)
 			code := byte(0)
 			if win {
@@ -132,6 +136,58 @@ func TestGachaCommitResultOrderAndReplay(t *testing.T) {
 			// The spent row is a result card now, not a ticket: 0x1806.
 			assertGachaRefusal(t, again, gacha.OpResult, 0x1806)
 		})
+	}
+}
+
+/*
+================
+TestGachaWinAnnouncesToTheShard
+
+A committed win is announced to the whole shard as
+0x30C0 [prizeRef:u32][qty:u16] (#2425): the winner reads it at the tail
+of their own burst and every other session through the shard push,
+carrying the same frame. A loss, and a refused replay of the spent
+ticket, announce nothing. The payload is a literal on purpose: the test
+pins the wire values, not the server's names for them.
+================
+*/
+func TestGachaWinAnnouncesToTheShard(t *testing.T) {
+	rt, c, p := gachaFixture(t)
+	except, pushes := "", 0
+	var shard []wire.Frame
+	rt.PushShardPeerFrames = func(_ string, name string, frames []wire.Frame) {
+		pushes++
+		except, shard = name, frames
+	}
+	rt.GachaRoll = func() (uint32, error) { return 0, nil }
+	frames, reason := rt.HandleGachaRoll(testDivision, c, p)
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
+	announce := frames[2]
+	if want := []byte{0xC3, 0x2C, 0x00, 0x00, 0x01, 0x00}; !reflect.DeepEqual(announce.Payload, want) {
+		t.Fatalf("announce payload %v, want %v", announce.Payload, want)
+	}
+	if pushes != 1 || except != c.Name || len(shard) != 1 || !reflect.DeepEqual(shard[0], announce) {
+		t.Fatalf("shard pushes=%d except=%q frames=%+v, want the one announce", pushes, except, shard)
+	}
+	// The spent ticket refuses its replay: nothing more is announced.
+	if _, reason := rt.HandleGachaRoll(testDivision, c, p); reason == "" || pushes != 1 {
+		t.Fatalf("replay announced: reason=%q pushes=%d", reason, pushes)
+	}
+
+	rt, c, p = gachaFixture(t)
+	pushes = 0
+	rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushes++ }
+	rt.GachaRoll = func() (uint32, error) { return 9999, nil }
+	frames, reason = rt.HandleGachaRoll(testDivision, c, p)
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	assertOpcodes(t, frames, 0x3645, 0xb053)
+	if pushes != 0 {
+		t.Fatalf("a loss announced %d times", pushes)
 	}
 }
 
@@ -238,7 +294,7 @@ func TestGachaRollIgnoresTheSelection(t *testing.T) {
 			if reason != "" {
 				t.Fatal(reason)
 			}
-			assertOpcodes(t, frames, 0x3645, 0xb053)
+			assertOpcodes(t, frames, 0x3645, 0xb053, 0x30c0)
 			if c.MissionInventory[0].RefObjID != rt.GachaCatalog.WinCard.RefObjID {
 				t.Fatalf("roll did not land: %+v", c.MissionInventory)
 			}
