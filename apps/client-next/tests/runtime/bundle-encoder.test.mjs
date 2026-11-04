@@ -89,7 +89,7 @@ test("recording forwards until finish, and is refused after it", () => {
 			return bundle;
 		}
 	});
-	const encoder = createSingleUseBundleEncoder( raw );
+	const encoder = /** @type {any} */ (createSingleUseBundleEncoder( raw ));
 	assert.equal( encoder.label, "retained-scene" );
 	encoder.label = "renamed";
 	assert.equal( raw.label, "renamed" );

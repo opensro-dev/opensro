@@ -26,8 +26,10 @@ One fake device whose staging buffer's map the test settles by hand.
 ================
 */
 function fixture( t ) {
-	const previous = [ "GPUBufferUsage", "GPUMapMode" ].map(
-		k => [ k, Object.getOwnPropertyDescriptor( globalThis, k ) ]
+	const previous = /** @type {[string, PropertyDescriptor | undefined][]} */ (
+		[ "GPUBufferUsage", "GPUMapMode" ].map(
+			k => [ k, Object.getOwnPropertyDescriptor( globalThis, k ) ]
+		)
 	);
 	t.after( () => {
 		for ( const [k, v] of previous ) {
@@ -35,8 +37,8 @@ function fixture( t ) {
 			else delete globalThis[k];
 		}
 	} );
-	globalThis.GPUBufferUsage = { MAP_READ: 1, COPY_DST: 2 };
-	globalThis.GPUMapMode = { READ: 1 };
+	globalThis.GPUBufferUsage = /** @type {any} */ ({ MAP_READ: 1, COPY_DST: 2 });
+	globalThis.GPUMapMode = /** @type {any} */ ({ READ: 1 });
 	const pendingMaps = [];
 	const retired = [];
 	const device = /** @type {any} */ ({

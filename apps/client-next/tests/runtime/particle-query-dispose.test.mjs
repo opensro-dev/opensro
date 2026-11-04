@@ -28,8 +28,10 @@ test armed.
 ================
 */
 function fixture( t ) {
-	const previous = [ "GPUBufferUsage", "GPUMapMode" ].map(
-		k => [ k, Object.getOwnPropertyDescriptor( globalThis, k ) ]
+	const previous = /** @type {[string, PropertyDescriptor | undefined][]} */ (
+		[ "GPUBufferUsage", "GPUMapMode" ].map(
+			k => [ k, Object.getOwnPropertyDescriptor( globalThis, k ) ]
+		)
 	);
 	t.after( () => {
 		for ( const [k, v] of previous ) {
@@ -37,15 +39,15 @@ function fixture( t ) {
 			else delete globalThis[k];
 		}
 	} );
-	globalThis.GPUBufferUsage = {
+	globalThis.GPUBufferUsage = /** @type {any} */ ({
 		STORAGE: 1,
 		COPY_DST: 2,
 		UNIFORM: 4,
 		QUERY_RESOLVE: 8,
 		COPY_SRC: 16,
 		MAP_READ: 32
-	};
-	globalThis.GPUMapMode = { READ: 1 };
+	});
+	globalThis.GPUMapMode = /** @type {any} */ ({ READ: 1 });
 	const pendingMaps = [];
 	let samples = new BigUint64Array( [ 0n ] );
 	const device = /** @type {any} */ ({
