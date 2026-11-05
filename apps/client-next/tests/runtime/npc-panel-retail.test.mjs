@@ -216,7 +216,9 @@ test("the Christmas exchange row rides capability 0x40000 ahead of the withdrawa
 		ids = both.map( c => c.id );
 	// 5D96BD appends row 0x15 immediately before the 0x16 test (5D96D6).
 	assert.ok( ids.indexOf( "npc-event-exchange" ) < ids.indexOf( "npc-withdraw" ) );
-	assert.ok( defined( both.find( c => c.id === "npc-event-exchange" ) ).label.includes( "UIIT_MSG_XMAS_EVENT_CHANGE" ) );
+	assert.ok(
+		defined( both.find( c => c.id === "npc-event-exchange" ) ).label.includes( "UIIT_MSG_XMAS_EVENT_CHANGE" )
+	);
 });
 
 test("a teleport gate lists the reverse return's two destinations only with its capability", () => {
