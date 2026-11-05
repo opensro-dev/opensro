@@ -5675,9 +5675,12 @@ export function createUi(
 			// (69AF00), Stall (67AF00) or Shop (69B060) is active; otherwise it
 			// opens Storage deposit (59A430) when Storage is active (69B080) or
 			// Drop gold (59A260) when no NPC interaction is active (59A27D).
+			// The shop gate is the open panel: the byte the native checks is
+			// the shop being open, and a retained catalog from a closed
+			// merchant is not an open shop (#2552).
 			const g = view.gameplay,
 				stallOpen = g?.stall?.phase === "owner" || g?.stall?.phase === "visitor",
-				shopOpen = panel === "Shop" || !!g?.shop,
+				shopOpen = panel === "Shop",
 				storageOpen = panel === "Storage" || g?.storage?.phase === "open";
 			if ( g?.exchange?.open || stallOpen || shopOpen || (!storageOpen && !!g?.npcConversation) ) return;
 			goldDialog = storageOpen ? "deposit" : "drop";
