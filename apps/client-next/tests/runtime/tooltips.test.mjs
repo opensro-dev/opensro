@@ -772,8 +772,13 @@ function paramRow( blocks ) {
 test("native tooltip lines the port dropped render from their parameters (#2273)", () => {
 	const direct = skillParameterFormatters( text ).direct;
 	// stns: a start delay prints _01; the periodic shape prints _02 with the
-	// interval in seconds and the damage percent.
+	// interval in seconds and the damage percent. The two are independent
+	// (0x803bb5 falls through to 0x803bba): with both set, both print.
 	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 5000, 25, 3000 ] ] ] ) ), [
+		"Damage starts [5] second(s) after petrification",
+		"Every [3] second(s): [25]% damage"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 5000, 0, 3000 ] ] ] ) ), [
 		"Damage starts [5] second(s) after petrification"
 	] );
 	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 25, 3000 ] ] ] ) ), [

@@ -924,26 +924,31 @@ projectedNativeRowsForBlock
 				return rows;
 			}
 			// CSkillParameters_AppendLocalizedTooltip @0x7ffe70..0x7fff2d: dmgt prints
-			// one absorb-rate line per nonzero value.
+			// one absorb-rate line per nonzero value. The native tests are unsigned
+			// (jbe at 0x7ffe86, 0x7ffedb): any nonzero value prints.
 			case 0x1a0: {
 				const rows: string[] = [];
-				if ( (v[0] ?? 0) > 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[0]}%` );
-				if ( (v[1] ?? 0) > 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[1]}%` );
+				if ( (v[0] ?? 0) !== 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[0]}%` );
+				if ( (v[1] ?? 0) !== 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[1]}%` );
 				return rows;
 			}
-			// CSkillParameters_AppendLocalizedTooltip @0x803b5e..0x803c03: stns prints
+			// CSkillParameters_AppendLocalizedTooltip @0x803b5e..0x803c1d: stns prints
 			// _01 (the damage starts values[0]/1000 seconds after petrification) when a
-			// start delay is set, else _02 every values[2]/1000 seconds for values[1]%.
+			// start delay is set, and then, independently, _02 every values[2]/1000
+			// seconds for values[1]%: the _01 path falls through (0x803bb5 -> 0x803bba)
+			// into the _02 test, so both print when all three values are set. The
+			// tests are unsigned (jbe): any nonzero value counts.
 			case 0x070: {
-				if ( (v[0] ?? 0) > 0 ) {
-					return [ format( text( "UIIT_TOOLTIP_CURSING_STONE_01" ), Math.floor( (v[0] ?? 0) / 1000 ) ) ];
+				const rows: string[] = [];
+				if ( (v[0] ?? 0) !== 0 ) {
+					rows.push( format( text( "UIIT_TOOLTIP_CURSING_STONE_01" ), Math.floor( (v[0] ?? 0) / 1000 ) ) );
 				}
-				if ( (v[1] ?? 0) > 0 && (v[2] ?? 0) > 0 ) {
-					return [
+				if ( (v[2] ?? 0) !== 0 && (v[1] ?? 0) !== 0 ) {
+					rows.push(
 						format( text( "UIIT_TOOLTIP_CURSING_STONE_02" ), Math.floor( (v[2] ?? 0) / 1000 ), v[1] ?? 0 )
-					];
+					);
 				}
-				return [];
+				return rows;
 			}
 			case 0x268:
 				return (v[1] ?? 0) !== 0 ? [ `${text( "UIIT_STT_MONSTER" )} ${text( "PARAM_MAX" )} ${v[1]}` ] : [];
