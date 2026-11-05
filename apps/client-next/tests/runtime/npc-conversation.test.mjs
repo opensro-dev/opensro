@@ -18,7 +18,7 @@ async function load( file ) {
 	return import( sourceFileUrl( "src/engine/" + file ).href );
 }
 const { createNpcConversation } = await load( "runtime/simulation/worker/session/world/gameplay/npc/npc.ts" );
-const { decodeNpcDialogue } = await load( "foundation/gameplay/npc-dialogue.ts" );
+const { decodeNpcDialogue, decodeEventExchangeResult } = await load( "foundation/gameplay/npc-dialogue.ts" );
 const { serverNotification } = await load( "foundation/gameplay/system-notices.ts" );
 const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 function packet( kind, prompt, options = [] ) {
@@ -330,4 +330,43 @@ test("So-ok helmet and gift clicks at 0, 1, 59 and 60 boxes show the price or th
 		assertAnswer( row.helmet, row.helmetBanner );
 		assertAnswer( row.gift, row.giftBanner );
 	}
+});
+
+test("event exchange send, answer greetings and silent bytes (75D030 / 7026B0)", () => {
+	const sent = [];
+	const owner = createNpcConversation( frame => sent.push( frame ) );
+	owner.select( 7 );
+	owner.exchange( 0 );
+	assert.deepEqual( sent, [ { opcode: 0x747c, payload: new Uint8Array( 0 ) } ] );
+	assert.equal( owner.state().phase, "waiting" );
+	// Result 1: the compensation greeting, back on the menu page.
+	assert.equal( owner.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) } ), true );
+	assert.equal( owner.eventGreeting(), "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	assert.equal( owner.state().phase, "menu" );
+	// A new conversation drops the greeting.
+	owner.select( 9 );
+	assert.equal( owner.eventGreeting(), null );
+	// Result 2's sub-bytes: 3 the socks error, 4 the inventory error;
+	// every other byte is silent and leaves the wait standing.
+	const answer = ( payload, want ) => {
+		const fresh = createNpcConversation( () => {} );
+		fresh.select( 7 );
+		fresh.exchange( 0 );
+		assert.equal( fresh.receive( { opcode: 0xb47c, payload } ), true );
+		assert.equal( fresh.eventGreeting(), want );
+		assert.equal( fresh.state().phase, want ? "menu" : "waiting" );
+	};
+	answer( Uint8Array.of( 2, 3 ), "UIIT_MSG_XMAS_EVENT_ERROR_SOCKS" );
+	answer( Uint8Array.of( 2, 4 ), "UIIT_MSG_XMAS_EVENT_ERROR_INVENTORY" );
+	answer( Uint8Array.of( 2, 9 ), null );
+	answer( Uint8Array.of( 7 ), null );
+	// A firing answer with no conversation open is consumed and inert.
+	const closed = createNpcConversation( () => {} );
+	assert.equal( closed.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) } ), true );
+	assert.equal( closed.eventGreeting(), null );
+	// The decoder: truncated bodies throw, unknown bytes return null.
+	assert.equal( decodeEventExchangeResult( Uint8Array.of( 1 ) ), "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	assert.equal( decodeEventExchangeResult( Uint8Array.of( 0 ) ), null );
+	assert.throws( () => decodeEventExchangeResult( new Uint8Array( 0 ) ), /Truncated/ );
+	assert.throws( () => decodeEventExchangeResult( Uint8Array.of( 2 ) ), /Truncated/ );
 });
