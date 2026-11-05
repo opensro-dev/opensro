@@ -15,6 +15,7 @@ package store
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +133,78 @@ func TestWALCheckpointerWaitsOutAReader(t *testing.T) {
 	}
 	if streak := s.LockTiming().CheckpointBusyStreak; streak != 0 {
 		t.Fatalf("busy streak %d after the WAL drained, want 0", streak)
+	}
+}
+
+/*
+================
+TestWALCheckpointerResetsAWalPastTheCeiling
+
+The 2026-11-05 shape: a read snapshot pins the WAL while commits
+append past its mark, so the file keeps its high-water size after
+the reader lets go even though every checkpoint completes. While the
+reader holds, no cycle resets anything; the first drained cycle past
+the ceiling takes the file back.
+================
+*/
+func TestWALCheckpointerResetsAWalPastTheCeiling(t *testing.T) {
+	s := openTest(t, t.TempDir(), newTestClock())
+	if s.checkpoints == nil {
+		t.Fatal("Open started no checkpointer")
+	}
+	// A small ceiling keeps the test's WAL small; production stands
+	// at walCeilingBytes.
+	const ceiling = 256 << 10
+	s.checkpoints.ceiling.Store(ceiling)
+
+	if starved := s.checkpoints.cycle(); starved {
+		t.Fatal("the cycle ended starved on an empty store")
+	}
+	if resets := s.LockTiming().CheckpointResets; resets != 0 {
+		t.Fatalf("resets %d under the ceiling, want 0", resets)
+	}
+
+	pin, err := connectDB(s.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pin.Close() })
+	tx, err := pin.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRow("SELECT count(*) FROM characters").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	// One character per account: the account cap is four, and bulk
+	// here is the point - every commit appends past the read mark.
+	for i := 0; walFileBytes(s.dbPath) <= ceiling && i < 1000; i++ {
+		c := &enterworld.Character{Name: fmt.Sprintf("hero%04d", i)}
+		if err := s.CreateCharacter(testDivision, fmt.Sprintf("acct%04d", i), c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := walFileBytes(s.dbPath); got <= ceiling {
+		t.Fatalf("WAL at %d bytes behind the pin, want past the %d-byte ceiling", got, ceiling)
+	}
+	if starved := s.checkpoints.cycle(); !starved {
+		t.Fatal("the cycle drained the WAL past a reader holding it")
+	}
+	if resets := s.LockTiming().CheckpointResets; resets != 0 {
+		t.Fatalf("resets %d behind a reader, want 0: no lane may force the file", resets)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if starved := s.checkpoints.cycle(); starved {
+		t.Fatal("the cycle stayed starved after the reader let go")
+	}
+	if resets := s.LockTiming().CheckpointResets; resets < 1 {
+		t.Fatalf("resets %d past the ceiling with no reader, want at least 1", resets)
+	}
+	if got := walFileBytes(s.dbPath); got > ceiling {
+		t.Fatalf("WAL at %d bytes after the reset, want at most the %d-byte ceiling", got, ceiling)
 	}
 }
 
