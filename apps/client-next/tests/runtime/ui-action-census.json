@@ -15657,6 +15657,7 @@
 				"ext-vertical",
 				"fortress-map-close",
 				"fortress-map-construct",
+				"fortress-map-pan",
 				"fortress-map-repair",
 				"fortress-map-upgrade",
 				"hotbar-next",
@@ -15702,13 +15703,13 @@
 				"window-drag:Fortress map"
 			],
 			"focus": null,
-			"hash": "8d3dd7d027c5b4d7",
+			"hash": "3bf3c6856583f477",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -15723,7 +15724,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -15743,7 +15744,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0f5e93c9fff11441",
+					"hash": "8cdb3027a32c72ae",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:1",
@@ -15773,7 +15774,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "8259606ad50dfb7b",
+					"hash": "3248eb8e8c67bfea",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:1",
@@ -15803,7 +15804,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "ebbd89c6cb8f8f80",
+					"hash": "4a0a0f5bb73df044",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:1",
@@ -15827,7 +15828,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "7d8dd024400652e9",
+					"hash": "035b365a0ba8a13b",
 					"panel": "Fortress map",
 					"removed": [
 						"chat-line:0",
@@ -15857,7 +15858,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -15865,7 +15866,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "7d9439f94c68b386",
+					"hash": "a584e03e209e32ff",
 					"panel": "Fortress map",
 					"removed": [
 						"chat-line:0",
@@ -15880,7 +15881,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "7d9439f94c68b386",
+					"hash": "a584e03e209e32ff",
 					"panel": "Fortress map",
 					"removed": [
 						"chat-line:0",
@@ -15895,7 +15896,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "7d9439f94c68b386",
+					"hash": "a584e03e209e32ff",
 					"panel": "Fortress map",
 					"removed": [
 						"chat-line:0",
@@ -15910,7 +15911,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "7d9439f94c68b386",
+					"hash": "a584e03e209e32ff",
 					"panel": "Fortress map",
 					"removed": [
 						"chat-line:0",
@@ -15934,7 +15935,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -15944,7 +15945,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "3b089ae749606a6d",
+					"hash": "d8c3a9514f76de72",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:41",
@@ -15971,7 +15972,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "f9abee8b707bd306",
+					"hash": "eaf5bb6ce401bd63",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -15985,12 +15986,14 @@
 					"removed": [
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"window-drag:Fortress map"
 					]
 				},
 				"fortress-map-construct": null,
+				"fortress-map-pan": null,
 				"fortress-map-repair": null,
 				"fortress-map-upgrade": null,
 				"hotbar-next": {
@@ -16008,7 +16011,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0f5e93c9fff11441",
+					"hash": "8cdb3027a32c72ae",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:1",
@@ -16038,7 +16041,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "ebbd89c6cb8f8f80",
+					"hash": "4a0a0f5bb73df044",
 					"panel": "Fortress map",
 					"removed": [
 						"hotbar:1",
@@ -16095,6 +16098,7 @@
 					"removed": [
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"window-drag:Fortress map"
@@ -16169,6 +16173,7 @@
 						"ext-vertical",
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"hotbar-next",
@@ -16218,7 +16223,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "09645ed0a196896b",
+					"hash": "1054d111dbab0e9a",
 					"panel": "Fortress map",
 					"removed": [
 						"mall-notice-close",
@@ -16294,6 +16299,7 @@
 						"ext-vertical",
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"hotbar-next",
@@ -16352,7 +16358,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -16371,7 +16377,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -16387,7 +16393,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "8d3dd7d027c5b4d7",
+					"hash": "3bf3c6856583f477",
 					"panel": "Fortress map",
 					"removed": []
 				},
@@ -16415,6 +16421,7 @@
 					"removed": [
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"window-drag:Fortress map"
@@ -16435,6 +16442,7 @@
 					"removed": [
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"window-drag:Fortress map"
@@ -16457,6 +16465,7 @@
 					"removed": [
 						"fortress-map-close",
 						"fortress-map-construct",
+						"fortress-map-pan",
 						"fortress-map-repair",
 						"fortress-map-upgrade",
 						"window-drag:Fortress map"
@@ -16466,7 +16475,7 @@
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 70
+				"noop": 71
 			}
 		},
 		"Fortress production": {
