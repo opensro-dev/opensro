@@ -13,7 +13,30 @@ or (at your option) any later version: [LICENSE](LICENSE)
 (`AGPL-3.0-or-later`). You may use, study, modify and share it, including in
 forks. Anyone who distributes a modified version, or lets players use one over
 a network (for example by hosting a server), must make the complete
-corresponding source available under the same license.
+corresponding source available under the same license, and keep the
+attribution described under "Additional terms" below.
+
+## Additional terms: attribution (AGPL section 7(b))
+
+The OpenSRO contributors add the following term to the material they add
+to this work, as section 7(b) of the license allows ("requiring
+preservation of specified reasonable legal notices or author
+attributions"):
+
+1. **Keep the in-game credit.** Any version of the work, modified or not,
+   that players use keeps the "Powered by OpenSRO" attribution on its
+   loading and title screens, visible and readable, linking to
+   <https://github.com/opensro-dev/opensro>. A modified version may add its
+   own name beside it, for example "MyServer, powered by OpenSRO".
+2. **Keep this file.** Copies and modified versions keep this NOTICE.md,
+   with this section, and the copyright notices in the source.
+3. **Say you changed it.** A modified version states that it is modified
+   and where its complete corresponding source is (section 5(a) and
+   section 13 of the license already ask for both).
+
+These terms add no restriction beyond section 7(b): you may still use,
+change, host and share the work under the license. In plain words: open
+your source, and credit the project you built on.
 
 ## Origin
 
