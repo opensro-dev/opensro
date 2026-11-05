@@ -484,6 +484,12 @@ test("party fullness follows the native cap for the share option (818820)", () =
 	assert.equal( partyIsFull( 8, 1 ), true );
 	assert.equal( partyIsFull( 7, 1 ), false );
 	assert.equal( partyIsFull( 4, 1 ), false );
+	// The query compares the whole option word: any other word is
+	// never full, at either count.
+	for ( const word of [ 4, 5 ] ) {
+		assert.equal( partyIsFull( 4, word ), false );
+		assert.equal( partyIsFull( 8, word ), false );
+	}
 });
 
 test("auto chain reports progress or failure only while its session lives", () => {

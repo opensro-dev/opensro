@@ -381,15 +381,16 @@ export function partyMatchAckNotice( opcode: number, detail: number | undefined 
 partyIsFull
 
 CCharacterDependentData_IsPartyFull (818820), the fact the 6356A0
-register guard's last arm and the 634DC9 latch watcher both read:
-the option word [data+0x20] selects the cap - full is a roster of
-exactly 4 without EXP share, exactly 8 with it. The port compares
-with >= because the server caps the roster at the same bound, so
-the two readings agree everywhere the roster can sit.
+register guard's last arm and the 634DC9 latch watcher both read.
+The query compares the whole option word [data+0x20], not a bit:
+word 0 fills at 4 members, word 1 (EXP share) at 8, and any other
+word (4 and 5 carry the join-anyone bit) is never full. The port
+compares with >= because the server caps the roster at the same
+bound, so the two readings agree everywhere the roster can sit.
 ================
 */
 export function partyIsFull( members: number, options: number ): boolean {
-	return members >= ((options & 1) ? 8 : 4);
+	return options === 0 && members >= 4 || options === 1 && members >= 8;
 }
 
 /*
