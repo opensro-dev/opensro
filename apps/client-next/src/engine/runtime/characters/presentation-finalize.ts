@@ -455,18 +455,18 @@ export function publishCharacters(
 		// 6BBEA0 clones the player's composite, glow attachments
 		// included). Its emitters ride the portrait lane, not the world
 		// pass's owner: step() retires every row its own call does not
-		// present, so one owner sees one lane's call per frame.
+		// present, so one owner sees one lane's call per frame. A closed
+		// mannequin (glow() null) still steps the lane with no holders,
+		// so its rows retire that frame instead of idling until reset.
 		const glow = mallPreview.glow();
-		if ( glow ) {
-			portraits.push(
-				...portraitEmission.step(
-					[ glow ],
-					seconds,
-					resources.ready,
-					CHARACTER_ACTORS - next.size - portraits.length
-				)
-			);
-		}
+		portraits.push(
+			...portraitEmission.step(
+				glow ? [ glow ] : [],
+				seconds,
+				resources.ready,
+				CHARACTER_ACTORS - next.size - portraits.length
+			)
+		);
 	}
 	for ( const member of gameplay ? partyMembers( gameplay ) : [] ) {
 		const resource = catalog.get( member.model );
