@@ -75,6 +75,30 @@ function tickPacket( flags = 0, ticks = [ 25, 300 ] ) {
 	return Uint8Array.from( packet );
 }
 
+/*
+================
+tickVictim
+
+The share's victim as the combat owner's entity lookup reports it:
+a full EntityState (the readEntity contract), the warrior of gid 2.
+================
+*/
+function tickVictim( gid ) {
+	return gid === 2 ?
+		{
+			gid: 2,
+			refObjId: 1907,
+			kind: "player",
+			name: "",
+			regionId: 257,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0
+		} :
+		undefined;
+}
+
 test("deferred ticks decode to display-only damage without HP or a cast", () => {
 	assert.deepEqual( damageTicks( tickPacket() ), { target: 2, fatal: false, ticks: [ 25, 300 ] } );
 	// The 0x80 death byte reports the killing blow; the death itself is
@@ -85,7 +109,7 @@ test("deferred ticks decode to display-only damage without HP or a cast", () => 
 		assert.throws( () => damageTicks( tickPacket().slice( 0, length ) ) );
 	}
 	const events = [];
-	const combat = createCombat( gid => gid === 2 ? { gid: 2 } : undefined, event => events.push( event ) );
+	const combat = createCombat( tickVictim, event => events.push( event ) );
 	combat.seed( 2, { hp: 100 } );
 	assert.equal( combat.receive( 0xb3c6, tickPacket(), 2000 ), true );
 	// HP and death stay with the vitals owner; the tick only feeds the
@@ -99,7 +123,7 @@ test("deferred ticks decode to display-only damage without HP or a cast", () => 
 	);
 	// A fatal tick still only labels here: the death arrives on the life
 	// frames in the same broadcast, so this lane debits no HP for it.
-	const fatalCombat = createCombat( gid => gid === 2 ? { gid: 2 } : undefined, () => {} );
+	const fatalCombat = createCombat( tickVictim, () => {} );
 	fatalCombat.seed( 2, { hp: 100 } );
 	assert.equal( fatalCombat.receive( 0xb3c6, tickPacket( 0x80, [ 25 ] ), 3000 ), true );
 	assert.equal( fatalCombat.state().vitals.find( row => row.gid === 2 )?.hp, 100 );
