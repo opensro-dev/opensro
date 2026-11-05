@@ -381,6 +381,59 @@ func TestNetMintFlagRaisesOnASpike(t *testing.T) {
 	if flag := flags[0].(map[string]any); flag["rule"] != "net_mint_p95" || flag["value"] != "5000" || flag["at"] != float64(dayStart+8*86400) {
 		t.Fatalf("flag %v", flag)
 	}
+	if flag := flags[0].(map[string]any); flag["basis"] != flagBasisDailyTotal {
+		t.Fatalf("flag basis %v, want %q with no online-hour data", flag["basis"], flagBasisDailyTotal)
+	}
+}
+
+/*
+================
+TestNetMintFlagPerOnlineHourThroughHandler
+
+#2643 end to end: kill_stats hours recorded beside a growing ledger.
+The spike day mints 500x the quiet days but its online hours grew by
+the same factor, so per online hour nothing spiked and no flag fires;
+the same ledger with the spike day's hours left at the quiet days'
+level flags once, on the per-hour reading.
+================
+*/
+func TestNetMintFlagPerOnlineHourThroughHandler(t *testing.T) {
+	var ledger []ledgerFixture
+	for day := int64(0); day < 8; day++ {
+		ledger = append(ledger, ledgerFixture{gold: 10, reason: "monster_gold", atS: dayStart + day*86400 + 60})
+	}
+	ledger = append(ledger, ledgerFixture{gold: 5000, reason: "monster_gold", atS: dayStart + 8*86400 + 60})
+	now := time.Unix(dayStart+9*86400, 0)
+
+	seed := func(t *testing.T, spikeHours int64) http.Handler {
+		t.Helper()
+		service, handler := newTestService(t, writeSnapshotSource(t, ledger, nil, nil), now)
+		if err := service.Snapshot(); err != nil {
+			t.Fatal(err)
+		}
+		var rows []KillStatRow
+		for day := int64(0); day < 8; day++ {
+			rows = append(rows, KillStatRow{DayS: dayStart + day*86400, Band: 0, OnlineMs: 3600000, Characters: 5})
+		}
+		rows = append(rows, KillStatRow{DayS: dayStart + 8*86400, Band: 0, OnlineMs: spikeHours * 3600000, Characters: 5})
+		if err := service.RecordKillStats(rows); err != nil {
+			t.Fatal(err)
+		}
+		return handler
+	}
+	path := fmt.Sprintf("/economy/v1/flags?from=%d&to=%d", dayStart+7*86400, dayStart+9*86400-1)
+
+	if _, body := get(t, seed(t, 500), path, true); len(body["flags"].([]any)) != 0 {
+		t.Fatalf("growth-matched hours still flagged: %v", body)
+	}
+	_, body := get(t, seed(t, 1), path, true)
+	flags := body["flags"].([]any)
+	if len(flags) != 1 {
+		t.Fatalf("flags %v, want exactly one", body)
+	}
+	if flag := flags[0].(map[string]any); flag["basis"] != flagBasisPerOnlineHour || flag["value"] != "5000" {
+		t.Fatalf("flag %v, want basis %q value 5000", flag, flagBasisPerOnlineHour)
+	}
 }
 
 /*
