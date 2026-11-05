@@ -972,13 +972,15 @@ func TestHalloweenHelmetSealBothSettings(t *testing.T) {
 ================
 TestHalloweenHelmetSealDoorRefusals
 
-A sealed event helmet is refused at every transfer door with the
-door's own failure code on the wire, and moves through each door
-untouched while the seal is off (each half proves the other).
+A sealed event helmet is refused at every exit that hands it to
+another player with the door's own failure code on the wire, and
+moves through each door untouched while the seal is off (each half
+proves the other).
 
-The sale's sealed answer is the code an unsellable row earns from
-the merchant, the ground drop's is the indisposable refusal, and
-the companion transfer's is the never-enter refusal; the exchange,
+The merchant is the one exit the seal leaves open: the sale
+destroys the helmet, and the sale test proves no buyback row pays
+for one. The ground drop's is the indisposable refusal, and the
+companion transfer's is the never-enter refusal; the exchange,
 the stall, and the warehouse are pinned at their helper layer in
 TestHalloweenHelmetSealBothSettings and in the warehouse's own wire
 tests (its refusal is announced by the same guard it already uses
@@ -1012,16 +1014,24 @@ func TestHalloweenHelmetSealDoorRefusals(t *testing.T) {
 
 		before := c.Snapshot()
 		r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, NpcGID: 17, SourceSlot: 20, Quantity: 1})
-		if len(r.Frames) != 1 || !bytes.Equal(r.Frames[0].Payload, []byte{2, wire.ErrCodeCannotDealAtShop}) ||
-			!reflect.DeepEqual(before.MissionInventory, c.MissionInventory) || goldOf(c) != goldOf(before) {
-			t.Fatalf("sealed sale: %+v", r)
+		// The seal leaves the merchant open: the sale destroys the
+		// helmet (the bag row is gone next snapshot) and pays no
+		// buyback row, so no player can repurchase it.
+		if len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 ||
+			bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 0 || goldOf(c) != goldOf(before)+100 ||
+			len(c.Buyback) != 0 {
+			t.Fatalf("sealed sale: %+v gold %d buyback %v", r, goldOf(c), c.Buyback)
 		}
-
+		c.MissionInventory = []enterworld.InventoryRow{{
+			Slot: 20, RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD",
+			TypeFlags: wire.PackTypeFlags(3, 1, 13, 0), StackCount: 1,
+		}}
 		rt.HalloweenHelmetSeal = progression.HalloweenHelmetSeal{}
 		r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, NpcGID: 17, SourceSlot: 20, Quantity: 1})
 		if len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 ||
-			bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 0 || goldOf(c) != goldOf(before)+100 {
-			t.Fatalf("unsealed sale: %+v gold %d", r, goldOf(c))
+			bagCount(c, "ITEM_ETC_E071030_M_EGHEAD") != 0 || goldOf(c) != goldOf(before)+200 ||
+			len(c.Buyback) != 0 {
+			t.Fatalf("unsealed sale: %+v gold %d buyback %v", r, goldOf(c), c.Buyback)
 		}
 	})
 
