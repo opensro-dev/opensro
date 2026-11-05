@@ -298,10 +298,10 @@ const (
 	ErrCodeCannotBeDropped uint8 = 0x38
 	// ErrCodeCannotDealAtShop is UIIT_MSG_STRGERR_CANNOT_DEAL_AT_SHOP
 	// (01:3B, "Cannot trade the selected item at the current shop"):
-	// the refusal the v1.150 merchant raises locally when a row's
-	// canSell byte is clear and the player tries to sell it, so the
-	// sale never reaches the server natively. A server-side refusal
-	// of the same sale answers with the same byte.
+	// the notice the client has for a sale its shop refuses. Whether
+	// the v1.150 client also refuses such a sale locally (canSell byte
+	// clear) is untraced; the byte is the safe answer either way, and
+	// a server-side refusal of the sale uses it.
 	ErrCodeCannotDealAtShop uint8 = 0x3B
 	// ErrCodeLockedByOther is UIIT_MSG_STRGERR_LOCKED_BY_OTHER_ONE
 	// (01:12, banner + guide type 5): the drop is inside its ownership

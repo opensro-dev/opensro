@@ -303,8 +303,8 @@ func HalloweenPrizeByCodename(codename string) (HalloweenPrize, bool) {
 // window, the player stall, storage, the pet bag and the ground drop stay
 // closed. The exit to an NPC merchant stays open: the sale destroys the
 // helmet, and the item classes a helmet row carries keep it off the
-// buyback bench, so it can never reach another player. Sealed at every
-// door its own switch, separate from the event's, because it stays on
+// buyback bench, so it can never reach another player. Its own switch,
+// separate from the event's, seals it at every door, because it stays on
 // after the event ends: the rows are natively tradeable (CanTrade 1),
 // and a helmet the event paid was never meant to reach a market. Off is
 // the native row behaviour.

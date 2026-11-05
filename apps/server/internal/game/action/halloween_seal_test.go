@@ -137,6 +137,31 @@ func TestHalloweenHelmetSealDoorRefusals(t *testing.T) {
 		}
 	})
 
+	t.Run("shop sale of an unsellable row", func(t *testing.T) {
+		c := newCharacter()
+		// The HP potion's fixture reference carries no canSell byte,
+		// so the merchant refuses the sale before any seal logic.
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: 21, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 1,
+		})
+		items := halloweenTestItems()
+		rt, _ := newTestRuntime(c, items)
+		spawn := simulation.SeedWorldState(c).Spawn
+		rt.NpcSpawn.Enabled = true
+		rt.NpcRoster = []simulation.NpcDef{{ObjectID: 17, RefObjID: 100, TalkFlags: simulation.NpcTalkFlagShop, AuthoredSpawn: true, Spawn: spawn, NpcTalkStoreGroups: []simulation.NpcTalkStoreGroup{{StoreGroupID: 100, Tabs: []simulation.NpcTalkStoreTab{{TabID: 1}}}}}}
+		rt.Selected.Set(testDivision, c.Name, 17)
+		rt.Selected.OpenFunction(testDivision, c.Name, 17)
+		rt.Commerce = &commerce.Catalog{Tabs: map[int32][]commerce.Offer{1: {{Slot: 2, Ref: items["ITEM_ETC_HP_POTION_01"], Price: 60, Stack: 50}}}}
+
+		before := c.Snapshot()
+		r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, NpcGID: 17, SourceSlot: 21, Quantity: 1})
+		if len(r.Frames) != 1 || !bytes.Equal(r.Frames[0].Payload, []byte{2, wire.ErrCodeCannotDealAtShop}) ||
+			!reflect.DeepEqual(before.MissionInventory, c.MissionInventory) {
+			t.Fatalf("unsellable sale: %+v", r)
+		}
+	})
+
 	t.Run("ground drop", func(t *testing.T) {
 		c := newCharacter()
 		rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
