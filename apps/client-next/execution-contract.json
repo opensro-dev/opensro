@@ -3269,6 +3269,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "mallPreview.glow",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent mall preview owner supplies the committed mannequin's glow holder at the same publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.ready",
 			"function": "publishCharacters",
 			"kind": "callback",
