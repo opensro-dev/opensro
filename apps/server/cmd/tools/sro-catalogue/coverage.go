@@ -28,7 +28,7 @@ var catalogueReaders = map[string]string{
 	"SRO_CAP110_QINSHI":                      "shardPopulation reads it (monster.QinshiEnabled) to append the tomb's upper floors",
 	"SRO_CAP110_TEMPLE":                      "shardPopulation reads it (monster.TempleEnabled) to append the temple population",
 	"SRO_QINSHI_TOMB":                        "shardPopulation reads it (monster.QinShiTombFromEnv) to append the shipped tomb population",
-	"SRO_PHARAOH_TOMB_GEAR_RATE":             "AppendPharaohTomb reads it (monster.PharaohGearRateFromEnv); BuildMonsters models it in the tomb monsters' passes and unique equipment counts",
+	"SRO_PHARAOH_TOMB_GEAR_RATE":             "AppendPharaohTomb reads it (monster.PharaohGearRateFromEnv); BuildMonsters models it in the tomb variants' gearRate field and the uniques' prepass equipment counts",
 	"SRO_HALLOWEEN_EVENT":                    "BuildEvents reads it (progression.HalloweenEventFromEnv), and run withholds the event's box row while it is off",
 	"SRO_HALLOWEEN_EVENT_WINDOW":             "BuildEvents reads the window with the event (progression.HalloweenEventFromEnv): events.json's start and end",
 	"SRO_TRADE_TIERS":                        "shardItems and shardShops read it (action.TradeTiersFromEnv), and run applies the route profit while it runs",

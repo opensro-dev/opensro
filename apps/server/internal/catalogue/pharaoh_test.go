@@ -18,11 +18,13 @@ import (
 TestPharaohGearRateScalesTheTombDrops
 
 SRO_PHARAOH_TOMB_GEAR_RATE (port-only) rides the monster reference the
-tomb population stamped: a tomb elite (grade 6) or unique (grade 8)
-publishes its ordinary passes times the rate, and a tomb unique's
-prepass equipment counts times the rate - the two multiplications the
-server applies (action.pharaohGearRate, prepareUniqueDrops). Every
-other grade, and the native rate 1, publish the native numbers.
+tomb population stamped. The server spends the rate on equipment alone
+(monsterloot.go's equipment gate, prepareUniqueDrops' count), so a tomb
+elite (grade 6) or unique (grade 8) publishes its ordinary passes at the
+native count with the rate on its own field, and a tomb unique's prepass
+equipment counts times the rate. Gold heaps (one per native pass) and
+consumable families read the native passes and never see the rate.
+Every other grade, and the native rate 1, publish the native numbers.
 ================
 */
 func TestPharaohGearRateScalesTheTombDrops(t *testing.T) {
@@ -30,20 +32,29 @@ func TestPharaohGearRateScalesTheTombDrops(t *testing.T) {
 		return monster.MonsterRef{Codename: "MOB_TOMB_TEST", Level: 100, MonsterType: grade,
 			PharaohGearRate: rate}
 	}
-	passes := func(grade uint8, rate uint8) int {
+	variant := func(grade uint8, rate uint8) MonsterVariant {
 		variants := monsterVariants(ref(grade, rate), false)
 		if len(variants) != 1 {
 			t.Fatalf("grade %d: %d variants, want 1", grade, len(variants))
 		}
-		return variants[0].Passes
+		return variants[0]
 	}
 	for _, grade := range []uint8{6, 8} {
-		if got, want := passes(grade, 3), 3*passes(grade, 1); got != want {
-			t.Errorf("grade %d passes at rate 3 = %d, want %d (the native %d times the rate)", grade, got, want, passes(grade, 1))
+		geared, native := variant(grade, 5), variant(grade, 1)
+		if geared.Passes != native.Passes {
+			t.Errorf("grade %d passes at rate 5 = %d, want the native %d (the rate is equipment-only; gold heaps and consumables read these passes)",
+				grade, geared.Passes, native.Passes)
+		}
+		if geared.GearRate != 5 {
+			t.Errorf("grade %d gearRate at rate 5 = %d, want 5 published on its own field", grade, geared.GearRate)
+		}
+		if native.GearRate != 0 {
+			t.Errorf("grade %d gearRate at rate 1 = %d, want the field absent at the native rate", grade, native.GearRate)
 		}
 	}
-	if got, want := passes(3, 3), passes(3, 1); got != want {
-		t.Errorf("grade 3 passes at rate 3 = %d, want the native %d (the rate takes grades 6 and 8 only)", got, want)
+	if got := variant(3, 5); got.GearRate != 0 || got.Passes != variant(3, 1).Passes {
+		t.Errorf("grade 3 at rate 5 = passes %d gearRate %d, want the native passes and no gear rate (the rate takes grades 6 and 8 only)",
+			got.Passes, got.GearRate)
 	}
 
 	native := uniqueBonus(ref(8, 1))

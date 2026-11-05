@@ -70,6 +70,11 @@ type MonsterVariant struct {
 	Capacity int `json:"capacity"`
 	Passes   int `json:"passes"`
 	Attempts int `json:"attempts"`
+	// GearRate is the Pharaoh Tomb equipment multiplier (port-only)
+	// the server applies to this variant's equipment rolls alone
+	// (action.PharaohGearRate); gold heaps and consumable draws stay
+	// at Passes. Absent at the native rate 1.
+	GearRate int `json:"gearRate,omitempty"`
 	// GoldMin and GoldMax bound one gold heap; a kill makes one per pass.
 	GoldMin uint64 `json:"goldMin"`
 	GoldMax uint64 `json:"goldMax"`
@@ -322,17 +327,18 @@ func monsterVariants(ref monster.MonsterRef, promotes bool) []MonsterVariant {
 	out := make([]MonsterVariant, 0, len(grades))
 	for _, grade := range grades {
 		capacity, passes, attempts := loot.MonsterDropBudget(grade, ref.Codename)
-		// Port-only, not native: a Pharaoh Tomb elite (grade 6) or unique
-		// (grade 8) rolls its equipment this many times as often
-		// (monster.EnvPharaohGearRate, action.pharaohGearRate), and the
-		// kill's ordinary passes carry that rate; the tomb stamped it on
-		// the reference when the population loaded.
-		if rate := int(ref.PharaohGearRate); rate > 1 && (grade&0x0f == 6 || grade&0x0f == 8) {
-			passes *= rate
-		}
 		goldMin, goldMax, _ := action.MonsterGoldHeapRange(ref.Level, grade)
-		out = append(out, MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
-			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax})
+		variant := MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
+			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax}
+		// Port-only, not native: the Pharaoh Tomb gear rate the tomb
+		// stamped on the reference (monster.EnvPharaohGearRate) rides on
+		// its own field. The runtime (monsterloot.go) spends it on the
+		// equipment family alone: gold heaps stay at the native passes
+		// and consumables at theirs, so the passes above stay native.
+		if gearRate := action.PharaohGearRate(grade, int(ref.PharaohGearRate)); gearRate > 1 {
+			variant.GearRate = gearRate
+		}
+		out = append(out, variant)
 	}
 	return out
 }
@@ -378,12 +384,10 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}
 	// Port-only, not native: the same tomb gear rate multiplies the
 	// prepass equipment count of a tomb unique. The prepass admission
-	// (action.RollsUniqueDrops, grades 3 and 8) is the wider gate above;
-	// of those two grades only the tomb uniques (grade 8, the rate
-	// monster.AppendPharaohTomb stamps) take the rate here, so this
-	// grade-8 check restates the admission's tomb half and must change
-	// with it.
-	if rate := int(ref.PharaohGearRate); rate > 1 && ref.MonsterType&0x0f == 8 {
+	// above (action.RollsUniqueDrops, grades 3 and 8) is wider than the
+	// gear rate's own gate (action.PharaohGearRate, grades 6 and 8), so
+	// of the prepass grades only the grade-8 tomb uniques take it.
+	if rate := action.PharaohGearRate(ref.MonsterType, int(ref.PharaohGearRate)); rate > 1 {
 		bonus.EquipmentMin *= rate
 		bonus.EquipmentMax *= rate
 	}

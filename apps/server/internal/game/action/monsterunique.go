@@ -210,13 +210,26 @@ and a tomb member of any other grade, keeps the native rule (1).
 ================
 */
 func (rt *Runtime) pharaohGearRate(mob monster.Instance) int {
-	rate := int(mob.Ref.PharaohGearRate)
-	if rate <= 1 {
+	return PharaohGearRate(mob.Rarity(), int(mob.Ref.PharaohGearRate))
+}
+
+/*
+================
+PharaohGearRate
+
+The pharaohGearRate rule without the runtime: the stamped rate counts
+only for grades 6 and 8, and only above the native 1. The catalogue
+publishes this verdict per spawn variant, so the published gear rate
+and the rolled one cannot drift apart.
+================
+*/
+func PharaohGearRate(rarity uint8, stamped int) int {
+	if stamped <= 1 {
 		return 1
 	}
-	switch mob.Rarity() {
+	switch rarity {
 	case 6, 8:
-		return rate
+		return stamped
 	}
 	return 1
 }
