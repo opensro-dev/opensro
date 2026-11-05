@@ -379,7 +379,7 @@ function staticFixture( stage ) {
 	);
 	const entities = [
 		{ gid: 1, refObjId: 1, kind: "player", name: "caster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
-		{ gid: 2, refObjId: 1, kind: "monster", name: "victim", regionId: 258, x: 100, y: 0, z: 0, heading: 0 }
+		{ gid: 2, refObjId: 1, kind: "monster", name: "victim", regionId: 258, x: 100, y: 0, z: 0, heading: 16384 }
 	];
 	const cast = { token: 1, caster: 1, target: 2, skill: 9490 }, castRows = [];
 	const gameplay = { casts: castRows, localGid: 9, pose: null, vitals: [], inventory: [] };
@@ -423,12 +423,16 @@ test("a cast stage with an authored count of zero creates nothing and stays sile
 	assert.equal( f.effects.unsupported().length, 0 );
 });
 
-test("a return stage anchored on the source plays at the caster", () => {
-	// SKILL_EU_WIZARD_FIREA_TRAP_A's S_RETURN stage, as decoded. Native
-	// runs AT_SOURCE through the visual block (8DDEF9); with MOV_NONE
-	// there is no flight, and the stage ends in the caster-socket
-	// transform (8DE210). The static cast set left AT_SOURCE out, so
-	// the stage was refused (#2471).
+test("a return stage anchored on the source plays at the cast target", () => {
+	// SKILL_EU_WIZARD_FIREA_TRAP_A's S_RETURN stage, as decoded. Cast
+	// action 5 (AT_SOURCE) runs 8DE824, not the AT_ONE_FOLLOW/AT_LOOP
+	// block: it initializes each effect on the cast's target-side
+	// entity - that entity's +0x7C position, +0x88 yaw and +0x54
+	// socket binding. With MOV_NONE there is no flight, so the static
+	// lands on the target (victim at heading word 16384, about a
+	// quarter turn, so its yaw reads pi), never on the caster. The
+	// static cast set left AT_SOURCE out, so the stage was refused,
+	// then briefly anchored on the caster (#2471).
 	const f = staticFixture( {
 		resource: "skill/europe/wizard_fire_trap_hit.efp",
 		phase: "S_RETURN",
@@ -457,8 +461,9 @@ test("a return stage anchored on the source plays at the caster", () => {
 	assert.equal( f.effects.error(), null );
 	assert.equal( warnings.length, 0 );
 	assert.equal( actors.length, 1 );
-	assert.equal( actors[0].pose.regionId, 257 );
-	assert.equal( actors[0].pose.x, 0 );
+	assert.equal( actors[0].pose.regionId, 258 );
+	assert.equal( actors[0].pose.x, 100 );
+	assert.ok( Math.abs( actors[0].pose.yaw - Math.PI ) < 1e-3 );
 	assert.equal( f.sounds.length, 1 );
 });
 
@@ -521,11 +526,15 @@ function attachedFixture( stage ) {
 	return { effects, sounds, step };
 }
 
-test("an attached AT_STOP stage plays its sound and creates no visual, silently", () => {
-	// ITEM_ETC_FIREWORK_BOOMB_G's ACT_S stage, as decoded. 8DCA40
-	// dispatches on (action - 1), so AT_STOP (0) reaches only the sound
-	// tail (8DCE2B) on the attached route and creates no visual; the
-	// record's own route is the external item lane (#2471).
+test("an attached AT_STOP stage builds its static visual on the holder, silently", () => {
+	// ITEM_ETC_FIREWORK_BOOMB_G's ACT_S stage, as decoded. The attached
+	// action switch (table 8DCF1C) routes AT_STOP into the same visual
+	// build as the other attached statics (8DCC64): the visual rides
+	// the holder through the stage's +0x54 binding (the targetOffset
+	// below, not the +0x3C offset), and the sound tail (8DCE2B) runs
+	// after creation. No shipped record reaches this route - named
+	// records never enter attachedVisuals - so the shape is pinned
+	// from the binary, not from data (#2471).
 	const f = attachedFixture( {
 		resource: "system/item_firework_bomb_g.efp",
 		phase: "ACT_S",
@@ -535,7 +544,7 @@ test("an attached AT_STOP stage plays its sound and creates no visual, silently"
 		move: "MOV_NONE",
 		bone: null,
 		offset: [ 0, 0, 0 ],
-		targetOffset: [ 0, 0, 0 ],
+		targetOffset: [ 4, 5, 6 ],
 		count: 1,
 		scripts: [],
 		sound: "firework/firework_shot_01.wav",
@@ -544,14 +553,17 @@ test("an attached AT_STOP stage plays its sound and creates no visual, silently"
 	} );
 	const warnings = [], original = console.warn;
 	console.warn = ( ...args ) => warnings.push( args.join( " " ) );
+	let actors = [];
 	try {
-		assert.deepEqual( f.step( 0.2 ), [] );
+		actors = f.step( 0.2 );
 	} finally {
 		console.warn = original;
 	}
 	assert.equal( f.effects.error(), null );
 	assert.equal( warnings.length, 0 );
 	assert.equal( f.effects.unsupported().length, 0 );
+	assert.equal( actors.length, 1 );
+	assert.deepEqual( defined( actors[0].attachment, "attached visual" ).offset, [ 4, 5, 6 ] );
 	assert.equal( f.sounds.length, 1 );
 	assert.equal( f.sounds[0].path, "firework/firework_shot_01.wav" );
 });

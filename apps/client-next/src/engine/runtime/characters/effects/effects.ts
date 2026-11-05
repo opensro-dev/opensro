@@ -917,16 +917,20 @@ export function createCharacterEffects(
 					expires: now + .25
 				} );
 			}
-			// 8DCA40 dispatches on (action - 1), so AT_STOP (0) reaches only
-			// the sound tail (8DCE2B): it creates no visual on this route (#2471).
-			if ( stage.action === "AT_STOP" ) continue;
 			if ( !stage.resource ) continue;
 			const model = modelFor( stage.resource );
 			if ( !model ) {
 				refuse( stage.resource );
 				continue;
 			}
-			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
+			// The action switch (table 8DCF1C) routes AT_STOP into the same
+			// visual build as the other attached statics (8DCC64), through
+			// the +0x54 binding like AT_TARGET; the sound above is the
+			// 8DCE2B tail that runs after creation.
+			const binding = stageBinding(
+					stage,
+					stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" || stage.action === "AT_STOP"
+				),
 				offset = binding.offset;
 			// 8DCA40 consumes the authored count (+0x9) as the creation-loop
 			// bound (8DCDBB): the Qin-Shi tomb trap buffs author 0, which
@@ -1601,11 +1605,14 @@ export function createCharacterEffects(
 								script.kind === "camera" && !script.arrival &&
 								byGid.get( cast.caster )?.kind !== "player"
 							) cameraEvents.push( { ...script, atMs: Math.trunc( now * 1000 ) } );
-							// 8DDEF9 runs AT_SOURCE through the same visual block as
-							// AT_ONE_FOLLOW/AT_LOOP; with MOV_NONE there is no flight
-							// and the stage ends in the caster-socket transform
-							// (8DE210), so it is a static effect on the caster.
+							// Cast action 5 (AT_SOURCE) runs 8DE824, not the
+							// AT_ONE_FOLLOW/AT_LOOP block: it initializes each
+							// effect on the cast's target-side entity - that
+							// entity's +0x7C position, +0x88 yaw and +0x54 socket
+							// binding. With MOV_NONE there is no flight, so the
+							// static lands on the target like an AT_TARGET static.
 							const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
+							const sourceStatic = stage.action === "AT_SOURCE" && stage.move === "MOV_NONE";
 							// 8DE7A4 gives AT_TARGET_F's EFP to the target's decoration
 							// owner. It ignores mover fields and survives caster cleanup.
 							const targetFollow = stage.action === "AT_TARGET_F";
@@ -1619,7 +1626,7 @@ export function createCharacterEffects(
 							// effect on the target, as MOV_NONE is.
 							const flying = distributed || radial || returning ||
 								!targetFollow && targetLocal && (stage.movement?.startSpeed ?? 0) !== 0;
-							const staticTarget = targetLocal && !targetFollow && !flying;
+							const staticTarget = (targetLocal || sourceStatic) && !targetFollow && !flying;
 							const resultStage = impactIndex( cast.skill, trigger.phase, trigger.event );
 							const resultTargets = cast.results?.filter( row =>
 								resultStage < 0 || castResultAt( row.impacts, resultStage )
@@ -1636,7 +1643,7 @@ export function createCharacterEffects(
 							for ( const dispatch of targets ) {
 								const targetGid = dispatch.target;
 								const entity = byGid.get(
-									returning || targetLocal ?
+									returning || sourceStatic || targetLocal ?
 										targetGid :
 										flying || !stage.damageEvent ?
 										cast.caster :
@@ -1823,12 +1830,14 @@ export function createCharacterEffects(
 										// 8DE67A..8DE69E: the static effect sits on the target's
 										// binding but takes the caster's m_fYaw (+0x88). The caster
 										// always exists natively; a port without its row keeps the
-										// target's heading.
+										// target's heading. An AT_SOURCE static differs: 8DE824
+										// initializes on the target-side entity itself, so the
+										// heading is that entity's own +0x88 (pose.angle).
 										const anchor = stageAnchor(
 											entity,
 											stageBinding( stage, true ),
 											trigger,
-											nativeHeadingYaw( casterAngle ?? pose.angle )
+											nativeHeadingYaw( sourceStatic ? pose.angle : casterAngle ?? pose.angle )
 										);
 										if ( !anchor ) {
 											refuse( `anchor-height:${entity.refObjId}` );
@@ -2141,7 +2150,7 @@ export function createCharacterEffects(
 												stageAttachment( holder, stageBinding( stage, true ), stage.resource ) :
 												(stage.bone ||
 														[ "AT_ONE_FOLLOW", "AT_LOOP" ].includes( stage.action )) &&
-													!supportedFlight && !targetLocal ?
+													!supportedFlight && !targetLocal && !sourceStatic ?
 												{
 													...stageAttachment(
 														holder,
