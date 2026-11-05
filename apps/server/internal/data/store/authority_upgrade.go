@@ -61,6 +61,7 @@ const preRenameVersion = 32
 const preHalloweenVersion = 33
 const preMostWantedExpiryVersion = 34
 const preHalloweenAccountVersion = 35
+const preOnlineRecordVersion = 36
 const preNameReservationLayoutVersion = 10
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
@@ -227,6 +228,14 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		// Schema 35 ran at layout 11 and counted Halloween boxes per
 		// character; the account plane starts absent and is seeded from
 		// those counts at first load (#2547). Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preOnlineRecordVersion:
+		// Schema 36 ran at layout 11 and has no time-online record; its
+		// characters read unchanged and start counting at their next
+		// login (#2675). Records read unchanged.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

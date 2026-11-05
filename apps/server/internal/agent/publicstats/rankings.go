@@ -4,10 +4,11 @@
 rankings.go - GET /public/v1/rankings: every visible player, ranked
 
 The /players page lists the whole shard, not a top board: by level, by
-unique kills or by gear, optionally one race, fifty a page. Each ordering
-is built once per shared snapshot (the roster and the kill list) for each
-(by, race) and every page slices it, so a crawl of every page costs one
-sort. Hidden characters are left out entirely, as on the leaderboard.
+unique kills, by gear or by time online, optionally one race, fifty a
+page. Each ordering is built once per shared snapshot (the roster and
+the kill list) for each (by, race) and every page slices it, so a crawl
+of every page costs one sort. Hidden characters are left out entirely,
+as on the leaderboard.
 
 Port-only, not native: the original has no public read API.
 
@@ -39,6 +40,7 @@ const (
 	rankByLevel   = "level"
 	rankByUniques = "uniques"
 	rankByGear    = "gear"
+	rankByOnline  = "online"
 )
 
 /*
@@ -76,8 +78,8 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 	if by == "" {
 		by = rankByLevel
 	}
-	if by != rankByLevel && by != rankByUniques && by != rankByGear {
-		return nil, fmt.Errorf("%w: by must be level, uniques or gear", errBadRequest)
+	if by != rankByLevel && by != rankByUniques && by != rankByGear && by != rankByOnline {
+		return nil, fmt.Errorf("%w: by must be level, uniques, gear or online", errBadRequest)
 	}
 	race := query.Get("race")
 	if race != "" && race != "chinese" && race != "european" {
@@ -143,6 +145,10 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		row := RankingRow{Name: c.Name, Race: race, Gender: gender, Level: level(c), UniqueKills: killsBy[c.ID],
 			ExpPercent: s.expPercent(c), Gear: s.gearScore(c)}
+		if c.Online != nil {
+			row.OnlineSeconds = c.Online.TotalSeconds
+			row.OnlineWeekSeconds = c.Online.WeekSeconds()
+		}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job
 		}
@@ -198,6 +204,13 @@ func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 		}
 		if a.Level != b.Level {
 			return a.Level > b.Level
+		}
+	case rankByOnline:
+		if a.OnlineSeconds != b.OnlineSeconds {
+			return a.OnlineSeconds > b.OnlineSeconds
+		}
+		if a.OnlineWeekSeconds != b.OnlineWeekSeconds {
+			return a.OnlineWeekSeconds > b.OnlineWeekSeconds
 		}
 	default:
 		if a.Level != b.Level {
