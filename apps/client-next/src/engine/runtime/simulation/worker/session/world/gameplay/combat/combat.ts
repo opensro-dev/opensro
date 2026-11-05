@@ -479,7 +479,10 @@ export function createCombat(
 				// then the dead state), and this receive pass commits the
 				// whole batch before the next presented frame, so the
 				// death and the stop land at the same presented instant
-				// without this lane writing life state.
+				// without this lane writing life state: the LIFE dead
+				// state stops the motion in the entities owner
+				// (motion.stopForDeath), pinned by "a fatal deferred tick
+				// labels the mover" (tests/runtime/world.test.mjs).
 				const ticks = damageTicks( p );
 				if ( ticks ) {
 					if ( readEntity( ticks.target ) ) {
