@@ -572,9 +572,17 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.mu.Unlock()
 
 	go s.readLoop(conn, gen, ctx)
-	log.WithFields(log.Fields{
+	fields := log.Fields{
 		"session": s.ID, "kind": conn.Kind(), "remote": conn.RemoteAddr(), "resumed": resumed,
-	}).Info("transport: session attached")
+	}
+	// The admitted account names the player on the server half of the
+	// incident join (#2558): admission is recorded before attach
+	// (hub.go), and a session attached without one (in-process use)
+	// has no account to name.
+	if account := s.account.Load(); account != nil {
+		fields["account"] = *account
+	}
+	log.WithFields(fields).Info("transport: session attached")
 	return nil
 }
 

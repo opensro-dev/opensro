@@ -77,6 +77,9 @@ var unlistedSettings = map[string]string{
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	// Cosmetic item rows the variant build imports; the GameWorld reads no
+	// such switch, the items simply exist in the built data.
+	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",

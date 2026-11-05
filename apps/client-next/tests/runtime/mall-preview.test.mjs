@@ -391,6 +391,27 @@ test("the portrait glow lane and the world lane keep separate emitter clocks in 
 	assert.equal( mannequinNext.time, 1 );
 });
 
+test("closing the preview retires the portrait lane's rows at once", () => {
+	const f = glowFixture();
+	f.owner.request( [] );
+	f.owner.step( f.frame, f.resources, f.renderer );
+	const holder = defined( f.owner.glow(), "the committed mannequin offers its glow holder" );
+	assert.equal( f.emission.step( [ holder ], 10, () => true, 8 ).length, 1 );
+	// Close the preview: glow() offers nothing, and publishCharacters steps
+	// the lane with an empty holder list, so its emitter rows retire that
+	// frame instead of idling until the next reset.
+	f.owner.request( null );
+	assert.deepEqual( f.owner.step( f.frame, f.resources, f.renderer ), [] );
+	const closed = f.owner.glow();
+	assert.equal( closed, null );
+	assert.deepEqual( f.emission.step( closed ? [ closed ] : [], 11, () => true, 8 ), [] );
+	// The row is gone, not just unpresented: presenting the holder again
+	// starts a fresh emitter at time zero.
+	const reopened = f.emission.step( [ holder ], 12, () => true, 8 );
+	assert.equal( reopened.length, 1 );
+	assert.equal( defined( reopened[0] ).time, 0 );
+});
+
 test("body replacement clears incompatible local try-on before the next UI publication", () => {
 	const f = fixture();
 	f.owner.request( [ 2, 3 ] );

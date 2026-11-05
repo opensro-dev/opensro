@@ -33,6 +33,7 @@ const SOURCE_GATE_NAMES = new Set( [
 	"typecheck",
 	"typecheck:gallery",
 	"verify:layout",
+	"verify:dependencies",
 	"verify:ui-census"
 ] );
 
@@ -59,6 +60,8 @@ const GATES = [
 	] ],
 	[ "verify:execution", [ "tools/generate-execution-map.mjs" ] ],
 	[ "verify:ownership", [ "tools/verify-ownership.mjs" ] ],
+	[ "verify:dependencies", [ "tools/verify-dependencies.mjs" ] ],
+	[ "verify:allocations", [ "--expose-gc", "tools/perf/bench/ui-allocation-gauge.mjs" ] ],
 	[ "verify:ui-census", [ "tools/ui-census.mjs" ] ],
 	[ "verify:capabilities", [ "tools/verify-capabilities.mjs" ] ],
 	[ "verify:layout", [ "tools/verify-layout.mjs" ] ],
