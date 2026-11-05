@@ -130,7 +130,12 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		buckets, reasons := foldFlows(win, rollupGroups(entries, win))
 		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
 	case "flags":
-		flags := netMintFlags(entries, win, win.division)
+		// The flag's lookback starts netMintWindow days before the
+		// window (#2643); online hours come from the history's
+		// kill_stats, and any read failure degrades the flags to the
+		// raw-total reading instead of failing the route.
+		onlineMs, _ := s.onlineMsByDay(win.from-netMintWindow*bucketSeconds["1d"], win.to)
+		flags := netMintFlags(entries, onlineMs, win, win.division)
 		if flags == nil {
 			flags = []Flag{}
 		}
