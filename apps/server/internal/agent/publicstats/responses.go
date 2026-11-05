@@ -337,17 +337,22 @@ type Gear struct {
 // player reached its level, recorded only at the milestone levels (20, 30
 // ... 90) and only since tracking began; otherwise null.
 type RankingRow struct {
-	Rank        int     `json:"rank"`
-	Name        string  `json:"name"`
-	Race        string  `json:"race"`
-	Gender      string  `json:"gender"`
-	Level       int64   `json:"level"`
-	ExpPercent  float64 `json:"expPercent"`
-	ReachedAt   *string `json:"reachedAt"`
-	Guild       string  `json:"guild,omitempty"`
-	Job         string  `json:"job,omitempty"`
-	UniqueKills int     `json:"uniqueKills"`
-	Gear        Gear    `json:"gear"`
+	Rank       int     `json:"rank"`
+	Name       string  `json:"name"`
+	Race       string  `json:"race"`
+	Gender     string  `json:"gender"`
+	Level      int64   `json:"level"`
+	ExpPercent float64 `json:"expPercent"`
+	ReachedAt  *string `json:"reachedAt"`
+	Guild      string  `json:"guild,omitempty"`
+	Job        string  `json:"job,omitempty"`
+	// PKKills is the PK board's value: the native PK state's total
+	// murder count (PKRecord.TotalCount), not the penalty level the
+	// count feeds (#2675). Zero - and absent - for a character who
+	// has never murdered.
+	PKKills     int  `json:"pkKills,omitempty"`
+	UniqueKills int  `json:"uniqueKills"`
+	Gear        Gear `json:"gear"`
 }
 
 // RankingsResponse is GET /public/v1/rankings: one page of 50.
