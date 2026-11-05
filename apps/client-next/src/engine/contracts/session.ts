@@ -76,6 +76,11 @@ export type SessionCommand =
 		// How long the page was hidden during the entry a report names
 		// (entry-visibility.ts), for the world_entry_rejected incident.
 		readonly tabHiddenMs?: number;
+		// A thrown error's stack, when the reporter caught one (#2559):
+		// the message is capped far below a useful stack, so the stack
+		// rides its own field (ClientIncident.stack) and is bounded by
+		// the session when it files.
+		readonly stack?: string;
 	}
 	| LoginCommand
 	| {

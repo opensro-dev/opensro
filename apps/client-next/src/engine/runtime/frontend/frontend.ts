@@ -81,6 +81,24 @@ export function createFrontend(
 		},
 		/*
 		================
+		failure
+
+		The stage failure as facts for the incident report (#2559): the
+		text the flow failed with, and the caught error's stack when the
+		stage threw one.
+		================
+		*/
+		failure() {
+			const error = stage.error();
+			if ( !error ) return null;
+			const cause = stage.cause();
+			return {
+				message: error,
+				stack: cause instanceof Error && cause.stack ? cause.stack.slice( 0, 8192 ) : undefined
+			};
+		},
+		/*
+		================
 		create
 		================
 		*/

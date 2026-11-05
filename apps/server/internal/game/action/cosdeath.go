@@ -9,7 +9,11 @@ way a monster's drops do. Publishing a drop normally resets its ground
 owner to the winner, but trade goods are exempt from that reset - and
 every transport row is a trade good - so cargo stays unowned whoever
 killed the transport. The fatal dealer is still recorded on the
-settlement, for the scatter's log line only.
+settlement, for the scatter's log line only. The one exception is the
+credit itself: a fatal dealer on an opposing free-battle team earns no
+credit, and the cargo stays with the record (dropTransportCargo).
+A periodic (damage-over-time) kill credits its source the same way a
+strike does, so the gate reads the burn dealer's relation too.
 The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
 keep theirs on the summoner item for revival (cosabnormal.go). A
@@ -77,9 +81,26 @@ dropTransportCargo
 Natively the cargo scatters around the dead transport, owned by no
 one: the winner reset that publishing applies to drops never reaches
 a trade good (see the file banner).
+
+One kill earns no credit at all, cargo included: when the fatal
+dealer's side stands in the kill relation's team case against the
+owner - both in a free-battle group, the groups opposing each other
+or either the everyone-opposes group - the native credit is skipped
+and the goods go with the vehicle's record, the way the kill's own
+booking already answers (pkrelation.go's team kill). A monster
+dealer, a suited job opponent and a team-mate's kill all run the
+credit, so their transports drop.
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
+	_, ownerCape := rt.playerRelationEquipment(o.c)
+	if o.winnerCape != 0 && ownerCape != 0 &&
+		(o.winnerCape != ownerCape || o.winnerCape == freeBattleAllOpponents) {
+		log.WithFields(log.Fields{
+			"cause": "death", "owner": o.c.Name, "winner": o.winnerName,
+		}).Info("trade: transport cargo kept with the record (fatal dealer on an opposing free-battle team)")
+		return
+	}
 	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now, "death", o.winnerName)...)
 }
 
