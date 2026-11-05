@@ -168,6 +168,17 @@ func (rt *Runtime) HandleItemUse(
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
 
+	// The native use door refuses while the character interacts with a
+	// stall, as its keeper or as a visitor, before the item is read
+	// (ErrCodeCantUseItemWhileInteract). An open exchange is a
+	// different interaction state and keeps its uses.
+	if rt.Stalls.Keeping(divisionID, character.Name) {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+	if _, visiting := rt.Stalls.Visiting(divisionID, character.Name); visiting {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+
 	result := itemUseFailure(wire.ErrCodeInvalidRequest)
 	// A use that revives the player publishes after its commit (revivalFrames
 	// rebinds the resident region, which reads the committed character).

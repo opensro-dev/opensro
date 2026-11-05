@@ -258,6 +258,7 @@ nativeParamBlock
 		0x024,
 		0x028,
 		0x02c,
+		0x030,
 		0x034,
 		0x038,
 		0x03c,
@@ -327,6 +328,7 @@ nativeParamBlock
 		0x1d0,
 		0x1d8,
 		0x1dc,
+		0x1e0,
 		0x1e4,
 		0x1e8,
 		0x1ec,
@@ -545,8 +547,16 @@ projectedNativeRowsForBlock
 				return [ `${text( "UIIT_STT_DAMAGE" )} ${text( "UIIT_STT_EU_ABSOLUTE" )} ${v[0] ?? 0}` ];
 			case 0x010:
 				return [ `${text( "PARAM_KO" )} ${v[1] ?? 0}%(lv ${v[0] ?? 0})` ];
-			case 0x014:
-				return (v[0] ?? 100) !== 100 ? [ `${text( "PARAM_DA" )} ${(v[0] ?? 100) - 100}% ${increase}` ] : [];
+			case 0x014: {
+				if ( (v[0] ?? 100) === 100 ) return [];
+				let line = `${text( "PARAM_DA" )} ${(v[0] ?? 100) - 100}% ${increase}`;
+				// CSkillParameters_AppendLocalizedTooltip @0x7f9ffe..0x7fa034: a reqc
+				// block (+0x170) with a nonzero first value glues its note onto this
+				// row with no separator; it is unreachable when the row never prints.
+				const nst = nativeParamBlock( row, 0x170 );
+				if ( nst && (nst.values[0] ?? 0) !== 0 ) line += text( "PARAM_SKILL_ABILITY_NST" );
+				return [ line ];
+			}
 			case 0x018: {
 				const rows: string[] = [];
 				if ( (v[0] ?? 0) > 0 ) rows.push( amount( "PARAM_CRITICAL", v[0]! ) );
@@ -803,6 +813,20 @@ projectedNativeRowsForBlock
 				return (v[0] ?? 0) !== 0 ?
 					[ `${text( "PARAM_MP" )} ${v[0]}% ${text( "UIIT_STT_DAMAGE" )} ${text( "PARAM_ABSORB" )}` ] :
 					[];
+			// CSkillParameters_AppendLocalizedTooltip @0x7faa83..0x7fab03: hwir prints
+			// the berserk-gauge chance at values[0].
+			case 0x1e0:
+				return (v[0] ?? 0) > 0 ?
+					[ `${text( "UIIT_CTL_TC_ACQUISITION_WHAN" )} ${v[0]}% ${increase}` ] :
+					[];
+			// CSkillParameters_AppendLocalizedTooltip @0x7ff48f..0x7ff546: saps prints
+			// a resonance line per flag bit (4 physical, 8 magical) at values[1].
+			case 0x030: {
+				const rows: string[] = [];
+				if ( (v[0] ?? 0) & 4 ) rows.push( `${text( "PARAM_PSKILL_SYMPATHY" )} ${v[1] ?? 0}%` );
+				if ( (v[0] ?? 0) & 8 ) rows.push( `${text( "PARAM_MSKILL_SYMPATHY" )} ${v[1] ?? 0}%` );
+				return rows;
+			}
 			case 0x13c:
 				return [
 					`${text( "PARAM_HP" )} ${text( "UIIT_STT_EU_END_BUFF" )} ${text( "PARAM_TO_DECREASE_RATIO" )}`
@@ -899,10 +923,33 @@ projectedNativeRowsForBlock
 				if ( (v[1] ?? 0) > 0 ) rows.push( `${text( "PARAM_AGGRO" )} ${v[1]}% ${decrease}` );
 				return rows;
 			}
-			case 0x1a0:
-				return damagePairRows( v, "PARAM_ABSORB", true );
-			case 0x070:
-				return [ text( "UIIT_TOOLTIP_CURSING_STONE_01" ) ];
+			// CSkillParameters_AppendLocalizedTooltip @0x7ffe70..0x7fff2d: dmgt prints
+			// one absorb-rate line per nonzero value. The native tests are unsigned
+			// (jbe at 0x7ffe86, 0x7ffedb): any nonzero value prints.
+			case 0x1a0: {
+				const rows: string[] = [];
+				if ( (v[0] ?? 0) !== 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[0]}%` );
+				if ( (v[1] ?? 0) !== 0 ) rows.push( `${text( "UIIT_STT_EU_ABSORB_RATIO" )} ${v[1]}%` );
+				return rows;
+			}
+			// CSkillParameters_AppendLocalizedTooltip @0x803b5e..0x803c1d: stns prints
+			// _01 (the damage starts values[0]/1000 seconds after petrification) when a
+			// start delay is set, and then, independently, _02 every values[2]/1000
+			// seconds for values[1]%: the _01 path falls through (0x803bb5 -> 0x803bba)
+			// into the _02 test, so both print when all three values are set. The
+			// tests are unsigned (jbe): any nonzero value counts.
+			case 0x070: {
+				const rows: string[] = [];
+				if ( (v[0] ?? 0) !== 0 ) {
+					rows.push( format( text( "UIIT_TOOLTIP_CURSING_STONE_01" ), Math.floor( (v[0] ?? 0) / 1000 ) ) );
+				}
+				if ( (v[2] ?? 0) !== 0 && (v[1] ?? 0) !== 0 ) {
+					rows.push(
+						format( text( "UIIT_TOOLTIP_CURSING_STONE_02" ), Math.floor( (v[2] ?? 0) / 1000 ), v[1] ?? 0 )
+					);
+				}
+				return rows;
+			}
 			case 0x268:
 				return (v[1] ?? 0) !== 0 ? [ `${text( "UIIT_STT_MONSTER" )} ${text( "PARAM_MAX" )} ${v[1]}` ] : [];
 			case 0x26c:
@@ -975,6 +1022,7 @@ CSkillData_BuildProjectedDirectParamRows
 			0x1a4,
 			0x04c,
 			0x024,
+			0x1e0,
 			0x050,
 			0x058,
 			0x05c,
@@ -1027,6 +1075,7 @@ CSkillData_BuildProjectedDirectParamRows
 			0x244,
 			0x278,
 			0x27c,
+			0x030,
 			0x280,
 			0x284,
 			0x288,

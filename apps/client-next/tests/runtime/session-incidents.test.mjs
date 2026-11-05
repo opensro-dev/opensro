@@ -189,6 +189,38 @@ test("asset failures file once per episode, beside the once-per-code client repo
 	assert.equal( reports.filter( r => r.body.code === "title_fault" ).length, 1 );
 });
 
+test("a client report's stack rides the incident, bounded", async t => {
+	/** @type {{ url: string; body: any; headers: Record<string, string>; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { url, body, headers: options.headers } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	// A thrown error's stack cannot ride the 500-char message (#2559):
+	// it files on the incident's own field, cut at the house bound.
+	session.command( {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "runtime_exception",
+		message: "Characters: InternalError: too much recursion",
+		stack: "x".repeat( 9000 )
+	} );
+	session.step();
+	await settle();
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].body.code, "runtime_exception" );
+	assert.equal( reports[0].body.stack.length, 8192 );
+});
+
 test("world incidents carry the admitted region and a 401 transport-token refusal stops reconnect retries", async t => {
 	/** @type {any} */
 	let socket;

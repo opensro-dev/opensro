@@ -527,6 +527,11 @@ type Runtime struct {
 	// KillStatsFlush receives the drained rollup (the economy history
 	// in the cmd wiring); nil keeps the rows in memory.
 	KillStatsFlush func(rows []KillStatRow) error
+	// OnlineSessions reads the session views of the characters entered
+	// in the world at the accrual instant (killstats.go, #2479): online
+	// time counts them, never the division roster of everyone who
+	// exists. Installed by the cmd wiring; nil accrues nobody.
+	OnlineSessions func() []simulation.SessionView
 	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown

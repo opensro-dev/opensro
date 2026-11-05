@@ -86,7 +86,7 @@ The fields this phase borrows from the shared presentation output owner.
 */
 type DockPreviewOutput = Pick<
 	PresentationOutput,
-	"previewReady" | "dockReady" | "displayed" | "failure" | "cameraTarget"
+	"previewReady" | "dockReady" | "displayed" | "failure" | "failureCause" | "cameraTarget"
 >;
 
 /*
@@ -268,6 +268,7 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 						else if ( particles.length ) glowHolders.push( { actor: actors.at( -1 )!, particles } );
 					} catch ( error ) {
 						output.failure = String( error );
+						output.failureCause = error;
 					}
 				}
 				for ( const id of previewWear.keys() ) {

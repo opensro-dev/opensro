@@ -382,6 +382,44 @@ func foldFlows(w window, groups []group) (buckets []int64, reasons map[string][]
 	return buckets, reasons
 }
 
+// tradeReasonNames are the reasons a caravan trade sale writes: the
+// seller's credit, the party shares paid beside it and a thief's den
+// sale (domain/economy.go economyMemberReasons). No other ledger
+// reason is a caravan sale.
+var tradeReasonNames = []string{"trade_sale_credit", "trade_party_share", "thief_den_sale"}
+
+/*
+================
+foldTrade
+
+foldFlows of the trade reasons alone, for /economy/v1/trade: caravan
+trade sales by bucket (and division, through the window). Every trade
+reason is present in every answer, "0" where it moved nothing, so the
+console's Trade tab reads an empty window as zeros, not as missing
+rows; a window with no sale at all is the honest answer, since the
+reasons above are the only ones a trade sale can write.
+================
+*/
+func foldTrade(w window, groups []group) (buckets []int64, reasons map[string][]string) {
+	trade := make([]group, 0, len(groups))
+	for _, g := range groups {
+		if slices.Contains(tradeReasonNames, g.reason) {
+			trade = append(trade, g)
+		}
+	}
+	buckets, reasons = foldFlows(w, trade)
+	for _, name := range tradeReasonNames {
+		if reasons[name] == nil {
+			zeroes := make([]string, len(buckets))
+			for i := range zeroes {
+				zeroes[i] = "0"
+			}
+			reasons[name] = zeroes
+		}
+	}
+	return buckets, reasons
+}
+
 /*
 ================
 Flag
