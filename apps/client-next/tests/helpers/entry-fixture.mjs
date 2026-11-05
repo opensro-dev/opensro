@@ -22,6 +22,10 @@ The fixture: frontend, the stepped clock, the session it is driven
 with, and the roster/dock/phase helpers the entry tests drive it by.
 ================
 */
+/**
+ * @param {boolean} [failing] answer every asset request with an error
+ * @param {import("../../src/engine/contracts/session").SessionCommand[]} [sent] collects the frontend's commands
+ */
 export function entryFixture( failing = false, sent = undefined ) {
 	let serial = 0, sceneId = "";
 	const jobs = new Map();
@@ -37,7 +41,10 @@ export function entryFixture( failing = false, sent = undefined ) {
 		cameraControllerTargetTimeSeconds: 0,
 		regionBundlePublicPath: "/assets/fixture-world.json"
 	};
-	const assets = {
+	// Only the four methods the entry flow calls; the stage reads kind,
+	// error, buffer and world off a result and nothing else, so the
+	// fake's results carry just those (compare navigation-view.test.mjs).
+	const assets = /** @type {import("../../src/engine/contracts/assets").AssetOwner} */ (/** @type {unknown} */ ({
 		available: () => 8,
 		request: ( url, size, kind ) => {
 			const id = ++serial;
@@ -57,8 +64,10 @@ export function entryFixture( failing = false, sent = undefined ) {
 			return result;
 		},
 		cancel: id => jobs.delete( id )
-	};
-	const renderer = {
+	}));
+	// Only the members the entry flow calls; the rest of Renderer is
+	// the live page's surface and stays unmodelled here.
+	const renderer = /** @type {import("../../src/engine/contracts/runtime").Renderer} */ (/** @type {unknown} */ ({
 		cancelWorldUpdate() {},
 		settleWorld: () => false,
 		setWorld() {},
@@ -70,17 +79,19 @@ export function entryFixture( failing = false, sent = undefined ) {
 		worldStats: () => ({ sceneId, pendingGroups: 0, pendingTextures: 0 }),
 		setWorldCamera() {},
 		characterStats: () => ({ actors: 1 })
-	};
+	}));
 	const frontend = createFrontend(
 		assets,
 		renderer,
 		"http://fixture.invalid",
 		sent ? command => sent.push( command ) : undefined
 	);
+	/** @type {import("../../src/engine/contracts/session").SessionState} */
+	const signedOut = { phase: "signed-out", revision: 1, characters: [] };
 	const fixture = {
 		frontend,
 		now: 0,
-		session: { phase: "signed-out", revision: 1, characters: [] },
+		session: signedOut,
 		step: () => frontend.step( fixture.session, fixture.now += 100 ),
 		/*
 		================
@@ -98,9 +109,34 @@ export function entryFixture( failing = false, sent = undefined ) {
 			fixture.session = {
 				phase: "character-select",
 				revision: 2,
-				characters: [ { id: 1, name: "fixture", deletePending: false, visualLoadout: { heightScale: 1 } } ]
+				characters: [ {
+					id: 1,
+					name: "fixture",
+					level: 1,
+					raceIndex: 0,
+					gender: 0,
+					figureIndex: 0,
+					heightIndex: 0,
+					volumeIndex: 0,
+					weaponIndex: 0,
+					protectorIndex: 0,
+					armorSelected: true,
+					weaponSelected: true,
+					deletePending: false,
+					maxHp: 100,
+					maxMp: 100,
+					visualLoadout: {
+						modelCodename: "CHAR_TEST",
+						items: [],
+						avatars: [],
+						animationSetName: "test",
+						heightScale: 1,
+						volumeScale: 1
+					}
+				} ]
 			};
 		},
+		/** @param {import("../../src/engine/contracts/session").SessionState["phase"]} phase */
 		bind( phase ) {
 			fixture.session = { ...fixture.session, phase, revision: fixture.session.revision + 1 };
 			return fixture.step();
