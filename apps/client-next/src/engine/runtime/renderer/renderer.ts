@@ -683,8 +683,9 @@ export function createRenderer(
 				}
 				probe?.renderMark( "renderer-setup" );
 				if ( deferredAnswer ) {
-					// Before begin() resets the queue: complete() still sees
-					// the issuing frame's plan, so its answers land whole.
+					// The issuing round's plan stayed frozen while the
+					// answer was in flight, so it lands whole however many
+					// frames the readback took (#2573).
 					readbackWait += deferredAnswer.waitedMs;
 					characters.completeDeferred( deferredAnswer.results );
 					deferredAnswer = null;

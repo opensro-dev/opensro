@@ -84,14 +84,22 @@ export function createDeferredParticles() {
 			}
 			if ( keep.size > CHARACTER_ACTORS ) throw Error( "Deferred particle capacity exceeded" );
 			for ( const gid of rows.keys() ) if ( !keep.has( gid ) ) rows.delete( gid );
-			queued = [];
-			eligible = [];
-			due = false;
+			// While a query round is in flight its plan stays frozen:
+			// the answer validates against the round that issued it,
+			// however many frames the readback takes to land (#2573).
+			if ( !awaiting ) {
+				queued = [];
+				eligible = [];
+				due = false;
+			}
 		},
 		plan( ids: readonly number[], enabled: ReadonlySet<number> ) {
 			if (
 				ids.length > CHARACTER_ACTORS || new Set( ids ).size !== ids.length || ids.some( id => !rows.has( id ) )
 			) throw Error( "Invalid deferred particle queue" );
+			// One round at a time: while its answer is in flight the
+			// frozen plan stands and the cadence clock waits with it.
+			if ( awaiting ) return false;
 			queued = ids;
 			eligible = ids.filter( id => enabled.has( id ) );
 			if ( !ids.length ) return false;
@@ -115,8 +123,11 @@ export function createDeferredParticles() {
 			const enabled = new Set( eligible ),
 				visibility = new Map( eligible.map( ( id, i ) => [ id, results?.[i] ] ) );
 			for ( const id of queued ) {
-				const row = rows.get( id )!,
-					allowed = enabled.has( id ),
+				const row = rows.get( id );
+				// A row deleted while its round was in flight (the actor
+				// left mid-wait) has nothing to advance.
+				if ( !row ) continue;
+				const allowed = enabled.has( id ),
 					visible = allowed ? (due ? visibility.get( id )! : row.visible) : false;
 				if ( !advanceDeferredAlpha( row, visible, frame, delta ) ) {
 					row.draw = false;

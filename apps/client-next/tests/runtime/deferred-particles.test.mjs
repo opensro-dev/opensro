@@ -74,6 +74,55 @@ test("a visibility answer landing after its frame applies whole before the next 
 	owner.reset();
 	assert.equal( owner.sample( 1 ), undefined );
 });
+test("a visibility answer landing frames later still applies to its issuing round (#2573)", () => {
+	const owner = createDeferredParticles();
+	const at = time => ({ ...actor, time });
+	owner.begin( 0, [ at( 0 ) ] );
+	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	owner.complete( undefined );
+	owner.begin( .6, [ at( .6 ) ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	owner.complete( undefined );
+	// Two intervening frames run begin+plan while the answer is in
+	// flight - the second even plans a different eligible set: neither
+	// may re-plan over the issuing round, and holding the previous
+	// visibility stays a hold, not an error.
+	for ( const [time, enabled] of [ [ .7, new Set( [ 1 ] ) ], [ .8, new Set() ] ] ) {
+		owner.begin( time, [ at( time ) ] );
+		assert.equal( owner.plan( [ 1 ], enabled ), false );
+		owner.complete( undefined );
+		assert.equal( owner.sample( 1 ).visible, false );
+	}
+	// The late answer applies to the round that issued it, whole.
+	owner.complete( [ true ] );
+	assert.equal( owner.sample( 1 ).visible, true );
+	// The next frame plans again, on the visibility the answer left.
+	owner.begin( .9, [ at( .9 ) ] );
+	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	owner.complete( undefined );
+	assert.equal( owner.sample( 1 ).visible, true );
+	owner.reset();
+});
+test("an answer outlives its round's cast: departed rows are skipped, the rest apply (#2573)", () => {
+	const owner = createDeferredParticles();
+	const one = { ...actor, time: 0 }, two = { ...actor, gid: 2, time: 0 };
+	owner.begin( 0, [ one, two ] );
+	owner.plan( [ 1, 2 ], new Set( [ 1, 2 ] ) );
+	owner.complete( undefined );
+	owner.begin( .6, [ one, two ] );
+	assert.equal( owner.plan( [ 1, 2 ], new Set( [ 1, 2 ] ) ), true );
+	owner.complete( undefined );
+	// Actor 2 leaves while the answer is in flight.
+	owner.begin( .7, [ { ...one, time: .7 } ] );
+	assert.equal( owner.sample( 2 ), undefined );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.complete( undefined );
+	// The answer still names both issued rows; the departed one is
+	// skipped, the survivor applies.
+	owner.complete( [ true, false ] );
+	assert.equal( owner.sample( 1 ).visible, true );
+	owner.reset();
+});
 test("missing visible frames reset fading, retired IDs and model replacements cannot inherit query results", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ] );
