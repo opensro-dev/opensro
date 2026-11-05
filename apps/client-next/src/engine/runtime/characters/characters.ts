@@ -190,9 +190,9 @@ export function createCharacterPresentation(
 	const animationEmission = createAnimationEmission( allocateActor );
 	const auxiliary = createAuxiliaryPresentation( allocateActor );
 	const modelEmission = createModelEmission( allocateActor );
-	// The portrait publication (Item Mall mannequin, party portraits) steps in
-	// the same frame as the world pass, so its emitters get their own lane:
-	// one emission owner sees one lane's step per frame.
+	// The Item Mall mannequin's glow steps in the same frame as the world
+	// pass, so its emitters get their own lane: one emission owner sees
+	// one lane's step per frame. Party portraits publish no glow.
 	const portraitEmission = createModelEmission( allocateActor );
 	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );

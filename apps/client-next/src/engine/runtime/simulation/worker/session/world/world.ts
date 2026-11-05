@@ -178,6 +178,9 @@ onNetworkFailure
 			stack: reason?.stack,
 			category: reason?.category,
 			session: diagnosticSession || undefined,
+			// The session the failure happened on, so this report joins
+			// the transport's own session lines (#2558).
+			transportSession: network.transportSessionId(),
 			code: reason?.code ?? (frame ? "packet_application_failed" : "connection_closed"),
 			kind: reason?.code === "unsupported_feature" ?
 				"unsupported" :
@@ -247,6 +250,7 @@ onNetworkFailure
 		stage: string;
 		bytesReceived: number;
 		framesReceived: number;
+		closeReason?: string;
 		// The typed refusal the mint answered with ("MAINTENANCE"),
 		// when the failure was an answered refusal at all (#2557).
 		refusal?: string;
@@ -913,6 +917,9 @@ step
 					stage: phase,
 					bytesReceived: network.receivedBytes() - attemptBytesBase,
 					framesReceived: network.received() - attemptFramesBase,
+					// Why the transport ended (server_bye_N when the
+					// server's BYE named it), when the failure named one.
+					...(failureCode ? { closeReason: failureCode } : {}),
 					...(failureRefusal ? { refusal: failureRefusal } : {})
 				};
 				failureRefusal = undefined;
@@ -984,6 +991,7 @@ status
 				revision,
 				error: lastError,
 				entryFailure: lastFailureEvidence,
+				transportSessionId: network.transportSessionId(),
 				disconnectMessage,
 				incidentID,
 				character,
