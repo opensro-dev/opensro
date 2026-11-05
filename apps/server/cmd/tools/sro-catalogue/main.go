@@ -343,13 +343,12 @@ func run(out, release, textdata string) error {
 	// other item keeps its own chance (action/sunevent.go).
 	sun := progression.SunEventOnlyFromEnv()
 	// SRO_HALLOWEEN_EVENT (port-only, not native): the timed event's
-	// window, box drop and exchange are published while it runs (#2540).
-	halloweenActive := progression.HalloweenEventFromEnv().ActiveAt(time.Now().UTC())
+	// window, box drop and exchange ride the catalogue (#2540). The box
+	// keeps its drop-list place in every export, before the window too:
+	// readers show it only inside the window events.json publishes, so
+	// one export stays correct for the event's whole life.
 	dropItemID := func(codename string) uint32 {
 		if ref, ok := itemSource.ItemRefByCodename(codename); ok && action.SunExcludes(sun, ref) {
-			return 0
-		}
-		if codename == progression.HalloweenBoxCodename && !halloweenActive {
 			return 0
 		}
 		return itemID(codename)
@@ -443,7 +442,7 @@ func run(out, release, textdata string) error {
 		"levels.json":     catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery, levelCap),
 		"trade.json":      catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(), Quotes: tradeQuotes},
 		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
-		"events.json":     catalogue.BuildEvents(header, itemID, time.Now().UTC()),
+		"events.json":     catalogue.BuildEvents(header, itemID),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
 	}
