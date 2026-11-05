@@ -63,9 +63,9 @@ func TestDropTablesPublishUniqueRules(t *testing.T) {
 		t.Fatalf("beta off: unique %+v, want gapExempt and popTicket", built.Unique)
 	}
 	t.Setenv(progression.EnvBetaGrowth, "on")
-	if unique == nil || !unique.GapExempt || !unique.PopTicket || unique.PopTicketItem != 4055 ||
-		unique.MaxLevelLoot || unique.SealDrops {
-		t.Fatalf("defaults: unique %+v, want gapExempt and popTicket(4055) only", unique)
+	if rebuilt := build().Unique; rebuilt == nil || !rebuilt.GapExempt || !rebuilt.PopTicket ||
+		rebuilt.PopTicketItem != 4055 || rebuilt.MaxLevelLoot || rebuilt.SealDrops {
+		t.Fatalf("defaults: unique %+v, want gapExempt and popTicket(4055) only", rebuilt)
 	}
 
 	// Every Catalogue: true unique rule appears under both settings.
