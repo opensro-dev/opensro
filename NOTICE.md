@@ -25,7 +25,7 @@ attributions"):
 
 1. **Keep the in-game credit.** Any version of the work, modified or not,
    that players use keeps the "Powered by OpenSRO" attribution on its
-   loading and title screens, visible and readable, linking to
+   loading screen, visible and readable, linking to
    <https://github.com/opensro-dev/opensro>. A modified version may add its
    own name beside it, for example "MyServer, powered by OpenSRO".
 2. **Keep this file.** Copies and modified versions keep this NOTICE.md,
