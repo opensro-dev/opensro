@@ -133,6 +133,9 @@ export function startRuntime(
 		// last asset_offline was filed: one incident per burst.
 		const fetchFailures: { at: number; source: string; }[] = [];
 		let offlineReportedAt = -Infinity;
+		// One asset_offline per outage window; the window's other fetch
+		// failures are the same outage, never asset failures (#2559).
+		const OFFLINE_REPORT_GAP_MS = 5000;
 		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
 			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
@@ -310,11 +313,16 @@ export function startRuntime(
 				while ( fetchFailures.length && now - fetchFailures[0]!.at > 1000 ) fetchFailures.shift();
 				const burst = fetchFailures.length >= 3 &&
 					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
-				if (
-					(globalThis.navigator?.onLine === false || burst) && now - offlineReportedAt >= 5000
-				) {
-					offlineReportedAt = now;
-					sessionCommand( { kind: "client-report", incidentKind: "asset", code: "asset_offline", message } );
+				if ( globalThis.navigator?.onLine === false || burst ) {
+					if ( now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS ) {
+						offlineReportedAt = now;
+						sessionCommand( {
+							kind: "client-report",
+							incidentKind: "asset",
+							code: "asset_offline",
+							message
+						} );
+					}
 					return;
 				}
 			} else if ( facts?.stack ) {

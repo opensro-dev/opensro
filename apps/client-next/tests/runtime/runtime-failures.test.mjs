@@ -896,11 +896,13 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 			"asset_failed",
 			"asset_offline"
 		] );
-		// Inside the burst guard the next fetch failure is a plain
-		// asset failure again: one asset_offline per burst.
+		// The outage's later fetch failures are the same outage: they
+		// file nothing more, never an asset_failed, and the outage
+		// stays one asset_offline.
+		const tailStart = assetReports().length;
 		characterError = "TypeError: Failed to fetch (burst tail)";
 		await frame();
-		assert.equal( assetReports().at( -1 ).code, "asset_failed" );
+		assert.deepEqual( assetReports().slice( tailStart ), [] );
 		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
 		// The asset worker's death still stops the session: fatal
 		// (#2559). It dies mid-frame here: healthy at the frame's
