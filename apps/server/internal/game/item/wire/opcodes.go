@@ -211,6 +211,13 @@ const (
 	// 1889/185B/185C. v1.150 category 1 retains these low-byte meanings;
 	// its reply uses u8.
 	ErrCodeItemUseDead uint8 = 0x89
+	// ErrCodeCantUseItemWhileInteract is
+	// UIIT_MSG_STRGERR_CANT_USEITEM_WHILE_INTERACT (01:35): the native
+	// use door answers it, before the item is read, while the character
+	// interacts with a stall - as its keeper or as a visitor. An open
+	// exchange is a different interaction state and may still use
+	// items, so this is not the exchange door's refusal.
+	ErrCodeCantUseItemWhileInteract uint8 = 0x35
 	// ErrCodeCosTarget is the low byte of the server COS-expendable
 	// producer's 0x1871. The v1.150 0xB5BD body carries one notice byte
 	// (the client's CPSMission_OnItemUseResponse0xB5BD).
