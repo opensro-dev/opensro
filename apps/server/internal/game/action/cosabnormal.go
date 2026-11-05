@@ -139,7 +139,12 @@ type cosAbnormalOwner struct {
 	// winnerName is the player whose hit killed the pet ("" for a monster
 	// or companion killer), stamped by applyCOSHitInDoor so the death
 	// settlement can name the dealer on its cargo log line (cosdeath.go).
-	winnerName                         string
+	winnerName string
+	// winnerCape is the fatal dealer's free-battle group (0 for a
+	// monster dealer): the kill credit's relation gate on a transport's
+	// cargo reads it at settlement (cosdeath.go). A companion dealer
+	// answers with its owner's group.
+	winnerCape                         uint8
 	ref                                *enterworld.CharacterRef
 	hpChanged, mpChanged, speedChanged bool
 	private                            []wire.Frame
