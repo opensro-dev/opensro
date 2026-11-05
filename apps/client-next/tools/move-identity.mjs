@@ -14,6 +14,13 @@ normalisation is the tool that checks it - normaliseRemoved and
 normaliseAdded are the two directions of the same rewrite, and proveMove
 compares only their output.
 
+The proof rests on one convention it cannot check: inside a compared
+slice the identifier `state` names only the shared window record.
+Window modules receive that record as `state` and never bind a local
+of the same name; normaliseAdded collapses `state.x` on that
+assumption, so a slice that shadowed `state` could hide a changed
+read behind an identical stream. Movers keep the convention.
+
 What the proof does not cover is reported as residue: the tokens left
 over on each side after the longest common prefix and suffix are
 trimmed. Review reads the residue (imports, the dispatch wiring, any
@@ -240,8 +247,9 @@ function boundNamesIn( tokens, kinds ) {
 normaliseRemoved
 
 The ui.ts side of the rewrite: a bare census field `x` becomes the one
-token `state.x`. A field read through a member (`holder.x`) is not the
-closure field and is left alone, as is a field in property-name
+token `state.x`. A field read through a member (`holder.x`, and
+`holder?.x` - the optional chain is member position exactly like the
+dot) is not the closure field and is left alone, as is a field in property-name
 position (`{ x: 1 }` keeps its name; the value position is the read).
 A census name the block itself binds (a parameter, a let/const/var, a
 destructuring target) shadows the closure field: that spelling is the
@@ -257,7 +265,7 @@ export function normaliseRemoved( text, fields ) {
 	for ( let i = 0; i < tokens.length; i++ ) {
 		const previous = tokens[i - 1], next = tokens[i + 1];
 		if (
-			isIdentifierToken( kinds, i ) && wanted.has( tokens[i] ) && previous !== "." &&
+			isIdentifierToken( kinds, i ) && wanted.has( tokens[i] ) && previous !== "." && previous !== "?." &&
 			!(next === ":" && (previous === "{" || previous === ","))
 		) {
 			out.push( STATE_RECORD + "." + tokens[i] );

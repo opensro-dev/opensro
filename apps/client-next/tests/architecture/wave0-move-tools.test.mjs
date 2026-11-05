@@ -89,6 +89,16 @@ test("a member read and a property name are not closure fields", () => {
 	assert.deepEqual( normaliseRemoved( text, [ "stallGrid" ] ), normaliseRemoved( text, [] ) );
 });
 
+test("an optional-chain member read is not a closure field", () => {
+	// holder?.stallGrid reads another object's field through an
+	// optional chain: ?. is member position exactly like ., so the
+	// rewrite must leave the spelling alone and a verbatim move
+	// containing it must still prove identical.
+	const text = "return holder?.stallGrid;";
+	assert.deepEqual( normaliseRemoved( text, [ "stallGrid" ] ), normaliseRemoved( text, [] ) );
+	assert.equal( proveMove( text, text, [ "stallGrid" ] ).identical, true );
+});
+
 test("a census file the tool cannot read is an error, not silence", () => {
 	const dir = fs.mkdtempSync( path.join( os.tmpdir(), "sro-census-" ) );
 	try {
