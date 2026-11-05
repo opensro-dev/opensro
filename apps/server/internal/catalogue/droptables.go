@@ -25,6 +25,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 )
@@ -104,6 +105,37 @@ type BetaRates struct {
 	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
 	// while it runs, Rare's named tables carry the widened Sun class.
 	SunDropRate int `json:"sunDropRate,omitempty" doc:"Port-only beta balance: the degree-9 Seal of Sun class of the rare table is 30 times this rate as wide on levels 76-90, so each Sun item's chance is that multiple of its native one; every other class is unchanged. Rare's named tables already carry the widened chances."`
+	// Unique carries the unique-reward rules (UniqueRulesFromEnv) the
+	// GameWorld applies on top of these tables; absent, every rule is
+	// off (native) and a unique's rows above read exactly as published.
+	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only: the unique-reward rules (gapExempt, popTicket, maxLevelLoot, sealDrops) this server applies to unique kills on top of these tables, so a unique's guaranteed rows read as guaranteed instead of at their capped chances. Absent: every rule is off and the native rows apply."`
+}
+
+/*
+================
+UniqueRules
+
+The unique-reward rules (progression.UniqueRules) a kill applies after
+admission and the drop cap. They ride inside the beta object because
+they are this server's rule set beside the native tables, and they are
+read from the same UniqueRulesFromEnv the GameWorld wires, so the
+export cannot drift from the planner.
+================
+*/
+type UniqueRules struct {
+	// GapExempt: a unique's drops bypass the killer's level-gap
+	// admission, so they drop for a killer of any level.
+	GapExempt bool `json:"gapExempt,omitempty" doc:"Port-only: a unique's drops ignore the level gap between killer and monster, so they still drop for a high-level killer; every other chance runs as published."`
+	// PopTicket: every unique kill leaves exactly one Magic Pop ticket,
+	// appended after the drop cap, so it is guaranteed.
+	PopTicket     bool   `json:"popTicket,omitempty" doc:"Port-only: every unique kill leaves exactly one Magic Pop ticket (popTicketItem), appended after the drop cap, so the ticket is guaranteed and its capped chance in the monster's own rows does not apply."`
+	PopTicketItem uint32 `json:"popTicketItem,omitempty" doc:"Item id of the Magic Pop ticket popTicket guarantees; set only while popTicket is on."`
+	// MaxLevelLoot: a top-band unique rolls its equipment at the
+	// shard's highest installed level instead of its own.
+	MaxLevelLoot bool `json:"maxLevelLoot,omitempty" doc:"Port-only: a unique in the top loot band (its level within ten of the highest installed level) rolls its equipment tables at that level instead of its own, so its drops come from the higher level's tables."`
+	// SealDrops: every unique kill leaves one Seal of Star of the
+	// highest degree its drop level offers, plus a Moon one in ten.
+	SealDrops bool `json:"sealDrops,omitempty" doc:"Port-only: every unique kill leaves one Seal of Star of the highest degree its drop level offers and one Seal of Moon on one kill in ten, appended after admission and the drop cap, so neither can take them. There is no guaranteed Sun."`
 }
 
 /*
@@ -194,6 +226,17 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		// refuses it before building, so an error here is never published.
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
 			file.Beta.Mix = mix
+		}
+		// The unique rules ride from the same read the GameWorld wires
+		// (UniqueRulesFromEnv), so the export cannot drift; all four off
+		// is native and publishes no object.
+		if unique := progression.UniqueRulesFromEnv(); unique != (progression.UniqueRules{}) {
+			published := &UniqueRules{GapExempt: unique.GapExempt, PopTicket: unique.PopTicket,
+				MaxLevelLoot: unique.MaxLevelLoot, SealDrops: unique.SealDrops}
+			if unique.PopTicket {
+				published.PopTicketItem = itemID(gacha.CardCodename)
+			}
+			file.Beta.Unique = published
 		}
 	}
 	return file
