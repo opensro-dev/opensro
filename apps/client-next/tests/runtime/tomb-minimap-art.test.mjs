@@ -53,7 +53,10 @@ An asset owner answering each catalogue at once, recording what was asked.
 A missing path answers as an error, as a build without later tiles does.
 ================
 */
-/** @param {Record<string, object>} files */
+/**
+ * @param {Record<string, object>} files
+ * @returns {any}
+ */
 function assetsServing( files ) {
 	/** @type {string[]} */
 	const requested = [];
