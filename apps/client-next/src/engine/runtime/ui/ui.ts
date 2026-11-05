@@ -3963,14 +3963,16 @@ export function createUi(
 			return;
 		}
 		if (
-			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
-			id.startsWith( "npc-choice:" )
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-event-exchange" || id === "npc-close" ||
+			id === "npc-talkend" || id.startsWith( "npc-choice:" )
 		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
 					id === "npc-withdraw" ?
 					{ kind: "npc-withdraw" } :
+					id === "npc-event-exchange" ?
+					{ kind: "npc-event-exchange" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -16560,7 +16562,10 @@ export function createUi(
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const capabilities = game.targetCapabilities ?? 0;
+					// 75D030 clears the talk capabilities on a firing
+					// exchange answer: while its greeting stands, the
+					// menu reads as if the capability word were zero.
+					const capabilities = game.npcEventGreeting ? 0 : (game.targetCapabilities ?? 0);
 					// 5D7870's outcome page replaces the menu of the NPC that told it.
 					const outcomePage = game.npcConversation.phase === "menu" &&
 							jobHud.outcome() === game.npcConversation.gid,
@@ -16597,7 +16602,13 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: gachaHud.noVoucherFor() === game.npcConversation.gid ?
+						prompt: game.npcEventGreeting ?
+							copy( game.npcEventGreeting ) :
+							// 5D9409: capability 0x40000 replaces the
+							// greeting with the event's own line.
+							(capabilities & 0x40000) ?
+							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
+							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
 							outcomePage ?
 							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
@@ -16656,6 +16667,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canEventExchange: !!(capabilities & 0x40000),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [

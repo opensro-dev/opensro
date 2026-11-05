@@ -361,13 +361,19 @@ player models, an item reference and the NPCs a ground click must clear.
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
-	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly item: (
+		refObjId: number
+	) => { readonly typeFlags: number; readonly name: string; readonly codename: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
 	readonly npcs: () => readonly EntityState[];
 }
+
+// The Christmas exchange's item (702728): row 0x15's send scans the
+// bag for this codename and stays silent without it.
+const EVENT_EXCHANGE_SOCKS = "ITEM_ETC_E041225_RED_SOCKS";
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
@@ -2422,6 +2428,23 @@ state here before a command can claim a native wire conversation.
 					console.warn( `[SRO npc] ${command.kind} refused before sending: ${String( error )}` );
 					throw error;
 				}
+				return null;
+			}
+
+			if ( command.kind === "npc-event-exchange" ) {
+				const target = targeting.state(), conversation = npcConversation.state();
+				// Row 0x15's click: 7026B0 scans the bag for the red
+				// socks (702728) and sends only when a pair is held;
+				// without one the click is silent, so every failed
+				// precondition here just does nothing.
+				if (
+					!localGid || target.targetPending || conversation.phase === "closed" ||
+					conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 0x40000) ||
+					!inventory.state().inventory.some(
+						item => worldReferences.item( item.refObjId )?.codename === EVENT_EXCHANGE_SOCKS
+					)
+				) return null;
+				npcConversation.exchange( now );
 				return null;
 			}
 
@@ -5716,7 +5739,8 @@ The published plane when something changed since the last take, else null.
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
-				restorationRevision: npcConversation.restorationRevision()
+				restorationRevision: npcConversation.restorationRevision(),
+				npcEventGreeting: npcConversation.eventGreeting()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
 			const cos = activeCos ?

@@ -697,12 +697,15 @@ export function createEntities(
 		================
 		itemReference
 
-		An item reference's flags and display name, as ground drops resolve them.
+		An item reference's flags, display name and codename, as ground
+		drops resolve them; the exchange row's bag scan reads the codename.
 		================
 		*/
-		itemReference( refObjId: number ): { typeFlags: number; name: string; } | undefined {
+		itemReference( refObjId: number ): { typeFlags: number; name: string; codename: string; } | undefined {
 			const typeFlags = itemRefs.get( refObjId );
-			return typeFlags === undefined ? undefined : { typeFlags, name: itemNames.get( refObjId ) ?? "" };
+			return typeFlags === undefined ?
+				undefined :
+				{ typeFlags, name: itemNames.get( refObjId ) ?? "", codename: itemCodenames.get( refObjId ) ?? "" };
 		},
 		// Spawn initialization uses nearest terrain/object height (85FF38 ->
 		// 86D5C0 -> 403D20); late navigation admission repeats that lookup
