@@ -897,7 +897,9 @@ export function createCharacterEffects(
 			}
 			if (
 				stage.move !== "MOV_NONE" || script.kind === "unsupported" ||
-				![ "AT_LOOP", "AT_ONE_FOLLOW", "AT_SOURCE", "AT_TARGET", "AT_TARGET_F" ].includes( stage.action )
+				![ "AT_LOOP", "AT_ONE_FOLLOW", "AT_SOURCE", "AT_TARGET", "AT_TARGET_F", "AT_STOP" ].includes(
+					stage.action
+				)
 			) {
 				refuse(
 					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: ${stage.action}/${stage.move}/${
@@ -915,6 +917,9 @@ export function createCharacterEffects(
 					expires: now + .25
 				} );
 			}
+			// 8DCA40 dispatches on (action - 1), so AT_STOP (0) reaches only
+			// the sound tail (8DCE2B): it creates no visual on this route (#2471).
+			if ( stage.action === "AT_STOP" ) continue;
 			if ( !stage.resource ) continue;
 			const model = modelFor( stage.resource );
 			if ( !model ) {
@@ -923,10 +928,12 @@ export function createCharacterEffects(
 			}
 			const binding = stageBinding( stage, stage.action === "AT_TARGET" || stage.action === "AT_TARGET_F" ),
 				offset = binding.offset;
-			// A shipped stage can carry a batch count the port cannot
-			// instance (the Qin-Shi tomb trap buffs author 0). Skip and
-			// log it; one stage never ends the session (#2440).
-			if ( !Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ) {
+			// 8DCA40 consumes the authored count (+0x9) as the creation-loop
+			// bound (8DCDBB): the Qin-Shi tomb trap buffs author 0, which
+			// runs the loop below zero times and is refused nowhere. A count
+			// the byte cannot hold is logged; one stage never ends the
+			// session (#2440).
+			if ( !Number.isInteger( stage.count ) || stage.count < 0 || stage.count > 128 ) {
 				refuse(
 					`attached:${effect.skill}/${stage.phase}/${stage.startEvent}: invalid count ${stage.count} (${stage.resource})`
 				);
@@ -1594,6 +1601,10 @@ export function createCharacterEffects(
 								script.kind === "camera" && !script.arrival &&
 								byGid.get( cast.caster )?.kind !== "player"
 							) cameraEvents.push( { ...script, atMs: Math.trunc( now * 1000 ) } );
+							// 8DDEF9 runs AT_SOURCE through the same visual block as
+							// AT_ONE_FOLLOW/AT_LOOP; with MOV_NONE there is no flight
+							// and the stage ends in the caster-socket transform
+							// (8DE210), so it is a static effect on the caster.
 							const returning = stage.action === "AT_SOURCE" && stage.move !== "MOV_NONE";
 							// 8DE7A4 gives AT_TARGET_F's EFP to the target's decoration
 							// owner. It ignores mover fields and survives caster cleanup.
@@ -1653,6 +1664,12 @@ export function createCharacterEffects(
 									} );
 								}
 								if ( !stage.resource ) {
+									continue;
+								}
+								// 8DE398 consumes the authored count (+0x9) as the
+								// creation-loop bound: zero iterations create
+								// nothing, and the value is refused nowhere (#2471).
+								if ( stage.count === 0 ) {
 									continue;
 								}
 								const caster = byGid.get( cast.caster );
@@ -1735,12 +1752,15 @@ export function createCharacterEffects(
 											"AT_LOOP",
 											"AT_STOP",
 											"AT_TARGET",
-											"AT_TARGET_F"
+											"AT_TARGET_F",
+											"AT_SOURCE"
 										].includes(
 											stage.action
 										) || !targetFollow && !staticTarget && stage.move !== "MOV_NONE" ||
 											(stage.bone &&
-												![ "AT_ONE_FOLLOW", "AT_LOOP", "AT_STOP" ].includes( stage.action ) &&
+												![ "AT_ONE_FOLLOW", "AT_LOOP", "AT_STOP", "AT_SOURCE" ].includes(
+													stage.action
+												) &&
 												!targetLocal))) ||
 									script.kind === "unsupported" ||
 									(!Number.isInteger( stage.count ) || stage.count < 1 || stage.count > 128 ||
