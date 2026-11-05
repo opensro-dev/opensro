@@ -83,6 +83,38 @@ func TestBetaGrowthHoldsEveryLevelToTheLevelOnePace(t *testing.T) {
 
 /*
 ================
+TestPaidRewardsPriceAQuestAtItsOwnLevel
+
+The website's quest pages read PaidRewards from the catalogue export
+(issue #2539): the same scale a grant passes through, evaluated at the
+quest's own level. A fixed band pays its multiple, a level no band
+covers keeps the native EXP while skill EXP still takes the flat rate,
+the all-pace default pays the level's pace, and the beta off pays the
+native reward.
+================
+*/
+func TestPaidRewardsPriceAQuestAtItsOwnLevel(t *testing.T) {
+	beta := GrowthRates{Enabled: true, SkillExpRate: 100, Bands: mustBands(t, "60-69:1639")}
+	if exp, sp := beta.PaidRewards(growthLevels{}, 65, 2_400, 1_000); exp != 2_400*1639 || sp != 1_000*1639*100 {
+		t.Fatalf("fixed band paid %d/%d, want %d/%d", exp, sp, 2_400*1639, 1_000*1639*100)
+	}
+	if exp, sp := beta.PaidRewards(growthLevels{}, 50, 2_400, 1_000); exp != 2_400 || sp != 100_000 {
+		t.Fatalf("uncovered level paid %d/%d, want the native EXP and the flat-rate SP", exp, sp)
+	}
+	pace := GrowthRates{Enabled: true, SkillExpRate: 100}
+	if exp, sp := pace.PaidRewards(growthLevels{}, 50, 1_000, 7); exp != 80_000 || sp != 7*80*100 {
+		t.Fatalf("pace paid %d/%d, want the level-50 pace of 80", exp, sp)
+	}
+	if exp, sp := (GrowthRates{}).PaidRewards(growthLevels{}, 65, 2_400, 1_000); exp != 2_400 || sp != 1_000 {
+		t.Fatalf("beta off paid %d/%d, want the native reward", exp, sp)
+	}
+	if exp, sp := beta.PaidRewards(growthLevels{}, 65, 0, 0); exp != 0 || sp != 0 {
+		t.Fatalf("empty reward paid %d/%d", exp, sp)
+	}
+}
+
+/*
+================
 TestBetaGrowthSwitchReadsTheEnvironment
 ================
 */

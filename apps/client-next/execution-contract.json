@@ -564,6 +564,19 @@
 		},
 		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/bundle-encoder.ts",
+			"functions": [
+				"setPipeline",
+				"setBindGroup",
+				"setVertexBuffer",
+				"setIndexBuffer",
+				"draw",
+				"drawIndexed",
+				"finish"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/bloom.ts",
 			"functions": [
 				"encode"
@@ -4200,14 +4213,15 @@
 		{
 			"file": "src/engine/runtime/renderer/device/particle-query.ts",
 			"function": "query",
-			"sourceSha256": "1a237d2b2c1c941499abc1a86aac280515b797a1237d57b90a9fca736ca984eb",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
+			"sourceSha256": "5f5a585a19404f5e40d03e73b53ffff290eec615db97f9a1b5291e214309a45d",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping and ends the wait quietly - one all-invisible answer - so the retained frame completes instead of wedging on the cancelled readback (#2560).",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [
 				"tests/browser/particle-query.test.mjs",
 				"tests/browser/deferred-particles.test.mjs",
-				"tests/runtime/deferred-particles.test.mjs"
+				"tests/runtime/deferred-particles.test.mjs",
+				"tests/runtime/particle-query-dispose.test.mjs"
 			]
 		}
 	]

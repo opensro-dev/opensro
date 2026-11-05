@@ -3,12 +3,14 @@
 
 events.go - C5 events.json: the timed events the shard runs
 
-An event is shown only while the shard runs it: the entry carries the
-switch's state and the configured window, so a page names the event's
-terms before, during and after it runs, and nothing when it is off or has
-no usable window. The rows come from the same progression readers the
-GameWorld runs (halloween.go), so the page cannot promise a rate the
-server does not pay.
+An event is published while the shard runs it: the entry carries the
+configured window and the event's terms, and no state of the export
+instant, so one export stays correct before, during and after the
+window — a page decides for itself whether the event is running at
+the moment it renders. Nothing is published while the event is off or
+has no usable window. The rows come from the same progression readers
+the GameWorld runs (halloween.go), so the page cannot promise a rate
+the server does not pay.
 
 ===========================================================================
 */
@@ -79,8 +81,6 @@ type EventRow struct {
 	// EndsAt is the window's end (UTC, RFC3339); the event does not run
 	// at or after here.
 	EndsAt string `json:"endsAt"`
-	// Active says whether the export ran inside the window.
-	Active bool `json:"active"`
 	// Drops are the event's per-kill drops.
 	Drops []EventDrop `json:"drops,omitempty"`
 	// Gifts are the exchange's rolled rows.
@@ -105,12 +105,13 @@ BuildEvents
 
 Every timed event the shard runs, in id order. An event switched off, or
 on without a usable window, contributes no row: nothing is shown for an
-event that cannot run.
+event that cannot run. The export instant is not an input: a reader
+compares the published window with its own clock.
 ================
 */
-func BuildEvents(header Header, itemID func(string) uint32, now time.Time) EventsFile {
+func BuildEvents(header Header, itemID func(string) uint32) EventsFile {
 	file := EventsFile{Header: header, Events: []EventRow{}}
-	if event := halloweenEventRow(itemID, now); event != nil {
+	if event := halloweenEventRow(itemID); event != nil {
 		file.Events = append(file.Events, *event)
 	}
 	return file
@@ -127,7 +128,7 @@ flat-price tier (the helmets, then the Elixir recipes) at a box price
 each.
 ================
 */
-func halloweenEventRow(itemID func(string) uint32, now time.Time) *EventRow {
+func halloweenEventRow(itemID func(string) uint32) *EventRow {
 	event := progression.HalloweenEventFromEnv()
 	if !event.Enabled() || !event.WindowValid() {
 		return nil
@@ -137,8 +138,7 @@ func halloweenEventRow(itemID func(string) uint32, now time.Time) *EventRow {
 		return nil
 	}
 	row := EventRow{ID: "halloween", Name: "Halloween Day",
-		StartsAt: startsAt.Format(time.RFC3339), EndsAt: endsAt.Format(time.RFC3339),
-		Active: event.ActiveAt(now)}
+		StartsAt: startsAt.Format(time.RFC3339), EndsAt: endsAt.Format(time.RFC3339)}
 	if boxID := itemID(progression.HalloweenBoxCodename); boxID != 0 {
 		row.Drops = []EventDrop{{ItemID: boxID, Codename: progression.HalloweenBoxCodename,
 			ChancePercent: progression.HalloweenBoxDropChancePercent,
