@@ -285,6 +285,13 @@ func entryBodyShape(c *Character) *uint8 {
 // surface lifts; a legit ground-stander is untouched.
 const spawnUndergroundToleranceUnits = 2.0
 
+// spawnGroundDeckReachUnits is how far above the terrain a lifted spawn
+// still finds an object floor laid on the ground (a town plaza, a paved
+// yard). The lift asks the nearest-Y surface arbitration from this
+// height over the terrain, so a deck within twice the reach above the
+// terrain wins and a bridge or roof higher up never does.
+const spawnGroundDeckReachUnits = 2.0
+
 // LiftSpawnAboveTerrain raises an enter-world spawn onto the terrain surface
 // when the persisted height sits below it. Heights are client-pick authored
 // and never recomputed server-side, so a record saved before goal-frame
@@ -294,6 +301,16 @@ const spawnUndergroundToleranceUnits = 2.0
 // Only lifts when no nearer object surface explains the saved stand. A deck
 // can lie below the heightmap. Never lowers; cave spawns stand on their
 // dungeon surface instead (simulation.PlaneFeatures.SpawnTerrainLift).
+//
+// A lifted spawn stands on the ground floor at its x/z: an object floor
+// laid just over the terrain (Hotan's plaza deck sits 0.66 above the
+// heightmap) wins over the bare terrain beneath it. The GM map warp sends
+// an unknown height far below every terrain (map-teleport.ts), and the
+// terrain-only lift stood it under the plaza: the client's 403D20
+// arbitration then kept the terrain, nearer to the spawn height, and the
+// walk followed the heightmap down under the deck. INFERENCE (neither
+// binary shows a map-click warp): the stand a ground walker would reach
+// is the floor nearest a step above the terrain.
 // Returns whether the spawn was lifted.
 func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint16, x, z float64) (float64, bool), surfaceAt func(regionID uint16, x, authoredY, z float64) (float64, bool)) bool {
 	if entry == nil || heightAt == nil {
@@ -321,6 +338,12 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 		}
 	}
 	profile.Y = terrainY
+	if surfaceAt != nil {
+		if surfaceY, covered := surfaceAt(regionID, profile.X, terrainY+spawnGroundDeckReachUnits, profile.Z); covered &&
+			surfaceY > terrainY {
+			profile.Y = surfaceY
+		}
+	}
 	return true
 }
 

@@ -110,8 +110,15 @@ func TestSpawnLiftArbitratesAgainstAuthoredHeight(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			entry := LocalPlayerEntry{StartProfile: StartProfile{RegionID: 257, X: 25, Y: 10, Z: 50}}
 			surface := func(region uint16, x, y, z float64) (float64, bool) {
-				if region != 257 || x != 25 || y != 10 || z != 50 {
+				if region != 257 || x != 25 || z != 50 {
 					t.Fatal("arbitration lost authored pose")
+				}
+				// The lift's ground-floor probe: no deck within reach here.
+				if y == 15+spawnGroundDeckReachUnits {
+					return 15, true
+				}
+				if y != 10 {
+					t.Fatalf("arbitration asked at y=%v", y)
 				}
 				return tc.surface, tc.covered
 			}

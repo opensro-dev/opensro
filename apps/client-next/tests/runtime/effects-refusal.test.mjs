@@ -11,7 +11,8 @@ caster's bone. The socket query answers only for presented actors, so a
 caster whose model is still loading has no landing bone yet. The launch
 bone already held the cast callback; the landing bone refused the stage
 into the fatal unsupported set. These tests pin the symmetric hold, and
-the refusal contract: skipped and logged, never an error.
+the refusal contract: skipped and logged, never an error. A spin range
+wider than int32 plays with the native rotation instead (issue 2576).
 
 ===========================================================================
 */
@@ -231,6 +232,91 @@ test("an attached stage with an unusable batch count is skipped and logged, neve
 	assert.equal( rendered.effects.error(), null );
 	assert.equal( actors.length, 1 );
 	assert.ok( actors[0].model.includes( "buff_critical_up" ) );
+});
+
+function spinFixture() {
+	let id = 0;
+	const jobs = new Map(), sounds = [];
+	const encode = value => new TextEncoder().encode( JSON.stringify( value ) );
+	// A MOV_UPR stage whose authored spin endpoints are full int32 fields
+	// spanning more than a signed 32-bit range, as the worker decodes it.
+	const stage = {
+		resource: "skill/spin.efp",
+		phase: "SHOT",
+		damageEvent: false,
+		startEvent: 1,
+		action: "AT_SOURCE",
+		move: "MOV_UPR",
+		bone: null,
+		offset: [ 0, 0, 0 ],
+		targetOffset: [ 0, 0, 0 ],
+		count: 1,
+		scripts: [],
+		sound: null,
+		soundEnd: null,
+		movement: { delayMs: 0, startSpeed: 100, endSpeed: 100 },
+		parameters: [ 0, -2000000000, 2000000000 ]
+	};
+	const effects = createCharacterEffects(
+		{
+			available: () => 4,
+			progress: () => null,
+			health: () => ({ phase: "running" }),
+			textureFeatures() {},
+			install() {},
+			dispose() {},
+			request( url, limit, decode ) {
+				jobs.set(
+					++id,
+					decode === "effects" ?
+						{ kind: "effects", catalog: { "9490": { clips: [ "spin" ], stages: [ stage ] } } } :
+						{ kind: "bytes", buffer: encode( { format: "sro-skill-stage-models", models: {} } ).buffer }
+				);
+				return id;
+			},
+			take( jobId ) {
+				const r = jobs.get( jobId );
+				jobs.delete( jobId );
+				return r;
+			},
+			cancel( jobId ) {
+				jobs.delete( jobId );
+			}
+		},
+		"http://localhost",
+		event => sounds.push( event ),
+		createPresentationRandom( 1 )
+	);
+	const entities = [
+		{ gid: 1, refObjId: 1, kind: "player", name: "caster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 },
+		{ gid: 2, refObjId: 1, kind: "monster", name: "victim", regionId: 258, x: 100, y: 0, z: 0, heading: 0 }
+	];
+	const socket = gid => {
+		const entity = defined( entities.find( row => row.gid === gid ), "socket entity" );
+		return { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, yaw: radians( 0 ) };
+	};
+	const cast = { token: 1, caster: 1, target: 2, skill: 9490 }, castRows = [];
+	const gameplay = { casts: castRows, localGid: 9, pose: null, vitals: [], inventory: [] };
+	const step = ( time, triggers = [] ) =>
+		effects.step( entities, gameplay, time, () => true, () => 0.1, triggers, socket );
+	step( 0 );
+	step( 0.01 );
+	step( 0.02 );
+	castRows.push( cast );
+	return { effects, step, trigger: { cast, phase: "SHOT", event: 1, at: 1 } };
+}
+
+test("a spin range wider than int32 plays with the native rotation, never an error", () => {
+	// Issue 2576: the native range helper wraps the span to int32, reads
+	// it non-positive and returns the lower endpoint without a draw. The
+	// port threw out of the spawn and ended the session at world entry.
+	const f = spinFixture();
+	const launched = f.step( 1, [ f.trigger ] );
+	assert.equal( f.effects.error(), null );
+	assert.equal( launched.length, 1 );
+	assert.equal( launched[0].pose.regionId, 258 );
+	f.step( 12 );
+	assert.equal( f.effects.error(), null );
 });
 
 test("a mover whose cast ends while a bone is cold is skipped and logged, never an error", () => {
