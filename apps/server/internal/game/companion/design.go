@@ -56,28 +56,14 @@ PetDef
 ================
 */
 type PetDef struct {
-	HealthByLevel       []PetHealth `json:"healthByLevel"`
-	Name                string      `json:"name"`
-	Role                string      `json:"role"`
-	CodenamePrefix      string      `json:"codenamePrefix"`
-	HPPercent           float64     `json:"hpPercent"`
-	PhysicalPercent     float64     `json:"physicalPercent"`
-	MagicalPercent      float64     `json:"magicalPercent"`
-	DefensePercent      float64     `json:"defensePercent"`
-	MagicDefensePercent float64     `json:"magicDefensePercent"`
-	MagicPrimary        bool        `json:"magicPrimary"`
-}
-
-/*
-================
-PetHealth
-
-An authored survival benchmark; intermediate levels interpolate.
-================
-*/
-type PetHealth struct {
-	Level uint8  `json:"level"`
-	HP    uint32 `json:"hp"`
+	Name                string  `json:"name"`
+	Role                string  `json:"role"`
+	CodenamePrefix      string  `json:"codenamePrefix"`
+	PhysicalPercent     float64 `json:"physicalPercent"`
+	MagicalPercent      float64 `json:"magicalPercent"`
+	DefensePercent      float64 `json:"defensePercent"`
+	MagicDefensePercent float64 `json:"magicDefensePercent"`
+	MagicPrimary        bool    `json:"magicPrimary"`
 }
 
 /*

@@ -25,7 +25,7 @@ The shipped roster under this test's environment.
 */
 func janganRoster(t *testing.T) map[string]NpcDef {
 	t.Helper()
-	roster := LoadNpcWorldRoster(clientdata.RetailTextdataDir(t))
+	roster := sharedNpcWorldRoster(clientdata.RetailTextdataDir(t))
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}

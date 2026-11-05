@@ -667,12 +667,13 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 		hit: 30,
 		skills: []
 	};
-	// Third-party targeted bear without local PetTraining: Bear hpPercent = 220 -> 2200 base, Tier 3 (3%/stack) * 10 = +30% -> 2860.
+	// Third-party targeted bear without local PetTraining: the native row
+	// (1000) is the base now, Tier 3 (3%/stack) * 10 = +30% -> 1300.
 	const thirdParty = petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 );
-	assert.equal( thirdParty?.maxHp, 2860 );
+	assert.equal( thirdParty?.maxHp, 1300 );
 	assert.equal( petReference( baseRef, undefined, { stacks: 10, tier: 3, untilMs: 5000 }, 5000 )?.maxHp, 1000 );
 
-	// Owned bear with Unbroken Spirit III (value = 4%/stack) and unbuffed training.stats.maxHp = 2200: 10 stacks -> 3080.
+	// Owned bear with Unbroken Spirit III (value = 4%/stack) and unbuffed training.stats.maxHp = 1000: 10 stacks -> 1400.
 	const training = {
 		gid: 77,
 		points: 0,
@@ -697,7 +698,7 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 		receivedAtMs: 0,
 		counters: { attacks: 0, bearHits: 0, ownerHits: 0, resolve: 10 },
 		stats: {
-			maxHp: 2200,
+			maxHp: 1000,
 			magicPercent: 80,
 			magicDefensePercent: 110,
 			magicPrimary: false,
@@ -705,14 +706,17 @@ test("petReference scales maxHp from active Resolve stacks and reverts on expiry
 			cooldownPercent: 0
 		}
 	};
-	assert.equal( petReference( baseRef, training, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
-	// When 0x3FB1 already carries the Resolve-buffed maxHp (3080), do not double-scale, and revert to 2200 after expiry.
-	const preScaled = { ...training, stats: { ...training.stats, maxHp: 3080 } };
-	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 3080 );
-	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 2200 );
-	const balanced = { ...training, stats: { ...training.stats, maxHp: 15400 } };
-	assert.equal( petReference( baseRef, balanced, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 15400 );
-	assert.equal( petReference( baseRef, balanced, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 11000 );
+	assert.equal( petReference( baseRef, training, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 1400 );
+	// When 0x3FB1 already carries the Resolve-buffed maxHp (1400), do not double-scale, and revert to 1000 after expiry.
+	const preScaled = { ...training, stats: { ...training.stats, maxHp: 1400 } };
+	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 1000 )?.maxHp, 1400 );
+	assert.equal( petReference( baseRef, preScaled, { stacks: 10, tier: 3, untilMs: 5000 }, 6000 )?.maxHp, 1000 );
+	// The level-90 native row (39,434, the #2567 penguin) is the base at any
+	// level argument: no species percent and no level curve bend it.
+	const native90 = { ...baseRef, maxHp: 39434 };
+	const at90 = { ...training, stats: { ...training.stats, maxHp: 39434 } };
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 1000, 90 )?.maxHp, 55207 );
+	assert.equal( petReference( native90, at90, { stacks: 10, tier: 3, untilMs: 5000 }, 6000, 90 )?.maxHp, 39434 );
 });
 
 /*

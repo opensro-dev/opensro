@@ -402,7 +402,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
 		if ops.pooledLeg() && len(batch.actors) > 1 {
 			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
-			view.release()
+			ops.Monsters.releaseLegSnapshot(view)
 			continue
 		}
 		for index, ref := range batch.actors {
@@ -444,7 +444,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
-		view.release()
+		ops.Monsters.releaseLegSnapshot(view)
 	}
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped

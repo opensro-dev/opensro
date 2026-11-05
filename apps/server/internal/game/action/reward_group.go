@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"reflect"
 	"sort"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -477,6 +478,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		// Port-only, not native (#2547): a Gourd pays one box to every
+		// character who damaged it, each under their own account's cap;
+		// the boxes join the plan here, after admission and the drop
+		// cap, so neither can take them.
+		planned = append(planned, rt.halloweenGourdBoxes(a.character, impact.Instance, planned, impact.Contributions, roster.actors,
+			simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Angle: pose.Heading}, time.UnixMilli(now).UTC())...)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
@@ -487,12 +494,29 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// hunted, so it never counts either, however it died.
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
+			// The Sun counting hook (sundrops.go) counts the same
+			// committed loot the same way, Sun tier only and with the
+			// item named, for the #2538 measurement cycle.
+			rt.countSunDrops(a.character, drops, now)
 		}
 		// The Halloween daily cap (halloween.go) counts the same
 		// committed loot the same way: every minted box, GM-spawned
-		// kills excluded, lands on the winner before the next kill.
+		// kills excluded, lands on its owner's account before the
+		// next kill. An owner whose mint reached the cap is told so
+		// once, with the reset time (#2547).
 		if !impact.Instance.GMSpawned {
-			rt.countHalloweenBoxes(a.character, drops, now)
+			owners := make(map[uint32]*enterworld.Character, len(roster.actors))
+			for gid, member := range roster.actors {
+				owners[gid] = member.character
+			}
+			for _, reached := range rt.countHalloweenBoxes(owners, drops, now) {
+				frame := halloweenBoxCapFrame()
+				if reached == actor {
+					out.actorFrames = append(out.actorFrames, frame)
+				} else {
+					out.others = append(out.others, RecipientFrames{reached.ID, []wire.Frame{frame}})
+				}
+			}
 		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)

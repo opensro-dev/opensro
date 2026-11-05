@@ -41,7 +41,9 @@ type hawkLane struct {
 HawkDamage
 
 The u16 sum the server sends: physical plus magical, never zero. rank is the
-hawk row's mastery rank (zero without MAAT, as the summ rows are).
+mastery rank of the caster's main-weapon default attack row, resolved by
+the caller (action/hawkMasteryRank) - the summon row itself never carries
+the MAAT parameter the rank read gates on.
 A lane whose base word is zero returns zero without rolling (both
 formulas test it first).
 ================

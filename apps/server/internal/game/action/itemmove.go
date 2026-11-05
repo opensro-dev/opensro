@@ -336,6 +336,7 @@ func (rt *Runtime) applyGroundDrop(
 		// Port-only, not native (halloween.go): a sealed event helmet
 		// never leaves for the ground.
 		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
+			result = failureResult(wire.ErrCodeCannotBeDropped)
 			return false
 		}
 

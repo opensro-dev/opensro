@@ -694,6 +694,21 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 					unresolvedNotice: undefined,
 					notice: { key: "UIIT_MSG_MRELEASEERR_NOTVOTETIME", value: 0, nativeType: 0 }
 				};
+			} else if ( op === 0xb140 && code === 0x45 ) {
+				// 760A55: no compensation is owing; the refusal raises the
+				// EVENTGUIDE dialog, as the (16, 0x43) suggestions box does.
+				// Every other carrier dispatches the byte and stays silent.
+				next = {
+					...next,
+					error: null,
+					unresolvedNotice: undefined,
+					notice: {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_GUILDWAR_NOTCOMPENSATION" ] }
+					}
+				};
 			} else {
 				// 75CC50 reads the ballot's and the candidate request's refusals
 				// in category 0x15.

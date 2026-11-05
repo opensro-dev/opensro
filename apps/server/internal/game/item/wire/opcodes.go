@@ -211,6 +211,13 @@ const (
 	// 1889/185B/185C. v1.150 category 1 retains these low-byte meanings;
 	// its reply uses u8.
 	ErrCodeItemUseDead uint8 = 0x89
+	// ErrCodeCantUseItemWhileInteract is
+	// UIIT_MSG_STRGERR_CANT_USEITEM_WHILE_INTERACT (01:35): the native
+	// use door answers it, before the item is read, while the character
+	// interacts with a stall - as its keeper or as a visitor. An open
+	// exchange is a different interaction state and may still use
+	// items, so this is not the exchange door's refusal.
+	ErrCodeCantUseItemWhileInteract uint8 = 0x35
 	// ErrCodeCosTarget is the low byte of the server COS-expendable
 	// producer's 0x1871. The v1.150 0xB5BD body carries one notice byte
 	// (the client's CPSMission_OnItemUseResponse0xB5BD).
@@ -292,6 +299,17 @@ const (
 	// drop is a different native byte (ErrCodeLockedByOther); the two were
 	// once conflated here, which cost the specific message.
 	ErrCodeCannotBePicked uint8 = 0x39
+	// ErrCodeCannotBeDropped is UIIT_MSG_STRGERR_CANNOT_BE_DROPPED
+	// (01:38, "The selected item is indisposable"): the ground-drop
+	// refusal for an item that may never leave for the ground.
+	ErrCodeCannotBeDropped uint8 = 0x38
+	// ErrCodeCannotDealAtShop is UIIT_MSG_STRGERR_CANNOT_DEAL_AT_SHOP
+	// (01:3B, "Cannot trade the selected item at the current shop"):
+	// the notice the client has for a sale its shop refuses. Whether
+	// the v1.150 client also refuses such a sale locally (canSell byte
+	// clear) is untraced; the byte is the safe answer either way, and
+	// a server-side refusal of the sale uses it.
+	ErrCodeCannotDealAtShop uint8 = 0x3B
 	// ErrCodeLockedByOther is UIIT_MSG_STRGERR_LOCKED_BY_OTHER_ONE
 	// (01:12, banner + guide type 5): the drop is inside its ownership
 	// window and this character is neither its owner nor entitled by the

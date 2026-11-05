@@ -118,30 +118,6 @@ func (rt *Runtime) lockDivision(divisionID string) func() {
 
 /*
 ================
-tryLockDivision
-
-lockDivision with a deadline: poll the lane until it frees or the
-deadline passes, and report whether the lane was taken. A caller
-that cannot wait (a tick step) leaves its work due for the next
-tick instead of parking behind a long lane holder and charging
-the wait to its hook (#2143, the tickGateBound rule one lock down).
-================
-*/
-func (rt *Runtime) tryLockDivision(divisionID string, deadline time.Time) (func(), bool) {
-	rt.maintenance.RLock()
-	lane := rt.operations.lane(divisionID, &rt.maintenance)
-	for !lane.TryLock() {
-		if time.Now().After(deadline) {
-			rt.maintenance.RUnlock()
-			return nil, false
-		}
-		time.Sleep(tickGatePollInterval)
-	}
-	return lane.release, true
-}
-
-/*
-================
 LockPublication
 
 Request adapters, entry bootstraps and delayed pickups retain this outer

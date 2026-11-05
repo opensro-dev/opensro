@@ -72,8 +72,6 @@ export interface ExperimentalOptions {
 	// (equipmentGlowCatalog, equipmentEnchantSparks). On by default (owner
 	// 2026-10-17, 2026-10-24); an explicit false restores the native v1.150 look.
 	readonly enchantSparks: boolean;
-	// Port-only wolf skill tree controls; requires the server's matching opt-in.
-	readonly attackPetTraining: boolean;
 	// Port-only, not native: the Actions window gains Auto Select (action 1005,
 	// select-nearest.ts). Native holds the code but no row or key reaches it.
 	readonly autoSelect: boolean;
@@ -441,7 +439,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
-		attackPetTraining: enabled( "attackPetTraining" ),
 		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),

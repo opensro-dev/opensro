@@ -629,12 +629,24 @@ func (rt *Runtime) planMonsterKillLoot(
 	capacity *= rate
 	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
 	uniqueRound := len(prepared)
+	unique := RollsUniqueDrops(monster.Rarity())
 	for round := 0; round < familyRate("assigned") && len(prepared) < capacity; round++ {
 		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
-			chosen.FromUnique = RollsUniqueDrops(monster.Rarity())
+			chosen.FromUnique = unique
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
 				prepared = append(prepared, item)
 			}
+		}
+		// Port-only, not native (decision record on #2538): a unique's
+		// first assigned round is the native round - the monster's own
+		// rows at their native chances (traced native) - so the beta
+		// drop cap keeps it outside, like the prepass above, and brakes
+		// only what the beta rate added: the extra rounds here and the
+		// scaled passes below. Without this the cap cut a unique's own
+		// 100% rows in most kills (census:
+		// unique_drop_cap_census_test.go).
+		if round == 0 && unique {
+			uniqueRound = len(prepared)
 		}
 	}
 	items := rt.deps.ItemReferences()
@@ -760,7 +772,7 @@ capKillDrops
 
 Port-only, not native: bounds the ordinary items one kill leaves to dropCap
 once the beta rate has grown its capacity. The first uniqueRound items (a
-unique's own prepass, one native round) and every gold heap are kept; of
+unique's own prepass and its first, native, assigned round) and every gold heap are kept; of
 the rest a uniform random subset of dropCap survives, in planned order, so
 no item family is favoured by the planner's fill order. A partial
 Fisher-Yates draws each index by rejection sampling on the 15-bit roll, so

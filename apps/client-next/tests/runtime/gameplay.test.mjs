@@ -697,6 +697,47 @@ test("a timed-out inventory recovers on the resumed transport's EnterWorld boots
 	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
 	assert.equal( inv.state().inventoryPending, false );
 });
+test("an in-flight move crosses the reconnect resync exactly once, applied or not (#2148)", () => {
+	// The link goes quiet with a move unanswered. On reconnect the bag
+	// is rebuilt from what the server holds: if the server applied the
+	// move before the silence it shows exactly once; if it never saw
+	// the request the item is simply still in its slot. The transaction
+	// is neither lost nor doubled either way.
+	const before = {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	};
+	for ( const applied of [ true, false ] ) {
+		const inv = createInventory( () => {} );
+		inv.bootstrap( before );
+		inv.move( 13, 14, 10, 100 );
+		assert.throws( () => inv.step( 10101 ), /timed out \(0xB06D move 0\); held=0; reconnect/ );
+		// The answer lost in the silence still arrives on the resumed
+		// transport, ahead of EnterWorld: set aside, never applied.
+		assert.equal( inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) ), false );
+		// Resync from what the server actually holds.
+		inv.bootstrap(
+			applied ?
+				{
+					refItemSnapshot: before.refItemSnapshot,
+					equipItems: [ { refObjId: 1, slot: 14, body: item( 1, 10 ) } ]
+				} :
+				before
+		);
+		const rows = inv.state().inventory;
+		assert.equal( rows.reduce( ( total, row ) => total + row.quantity, 0 ), 10 );
+		assert.equal( rows.find( row => row.slot === 13 )?.quantity, applied ? undefined : 10 );
+		assert.equal( rows.find( row => row.slot === 14 )?.quantity, applied ? 10 : undefined );
+		assert.equal( inv.state().inventoryPending, false );
+		// The bag answers new requests again, and nothing replays the
+		// old one on top of the resynced state.
+		inv.move( applied ? 14 : 13, 15, 10, 20000 );
+		assert.equal( inv.state().inventoryPending, true );
+		inv.receive( 0xb06d, Uint8Array.of( 1, 0, applied ? 14 : 13, 15, 10, 0, 0 ) );
+		assert.equal( inv.state().inventoryPending, false );
+		assert.equal( inv.state().inventory.find( row => row.slot === 15 )?.quantity, 10 );
+	}
+});
 
 /*
 ================

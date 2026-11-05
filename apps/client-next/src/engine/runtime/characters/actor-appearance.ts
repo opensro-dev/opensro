@@ -358,6 +358,7 @@ export function createActorAppearance( owner: ActorOwner ) {
 				}
 			} catch ( error ) {
 				output.failure = String( error );
+				output.failureCause = error;
 				model = fallback();
 			}
 			return {

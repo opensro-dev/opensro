@@ -143,10 +143,12 @@ func (rt *Runtime) planInventoryItemsGrant(
 					// B-11: log the bag state behind a full-bag grant
 					// refusal so a repeat separates "genuinely full"
 					// from a client that lost earlier grant answers.
+					// Info, not a warning (#2441): the player's own
+					// full bag is a normal outcome, not a fault.
 					log.WithField("character", c.Name).
 						WithField("occupied", inv.Len()).
 						WithField("capacity", inventory.BagEnd(c)).
-						Warn("quest inventory: grant refused, bag full")
+						Info("quest inventory: grant refused, bag full")
 				}
 				return nil, nil, fmt.Errorf("quest reward inventory: %w", fault)
 			}

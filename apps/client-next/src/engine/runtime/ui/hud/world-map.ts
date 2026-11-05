@@ -19,6 +19,7 @@ import type { MapLabel, MapIcon, WorldMapLayout } from "@/engine/foundation/ui/w
 import type { minimapNpcPositions } from "@/engine/foundation/ui/minimap-catalog";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
+import { featuresAt } from "@/engine/foundation/world/plane";
 import { panelCloseId } from "@/engine/foundation/ui/panels";
 import { minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
 import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/minimap-markers";
@@ -184,6 +185,10 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	const huntingGuide = createHuntingGuideHud( options.assets, options.base );
 	let mapSmall = false, mapFollow = true, mapPage = 0, mapX = 100, mapY = 100;
 	let mapPan: [number, number] = [ 0, 0 ], mapCenter: Pose | null = null;
+	// The last pose the world map could place. 5758D0 finds no page for a
+	// dungeon point and 57FE60 then keeps the loaded page and its scroll,
+	// so while the player is off the map this pose holds the view.
+	let mapPose: Pose | null = null;
 	let guideAvailable = false;
 	// The expanded world map's layout (port-only, Experimental), as the last
 	// presented frame read it; undefined is the native layout.
@@ -219,6 +224,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			mapSmall = false;
 			mapPan = [ 0, 0 ];
 			mapCenter = null;
+			mapPose = null;
 		},
 		/*
 		================
@@ -320,7 +326,10 @@ export function createWorldMapHud( options: MapHudOptions ) {
 		step( next: UiView, panel: string ) {
 			const source = next.session?.phase === "world" ? next.session.huntingGuide : undefined;
 			guideAvailable = source !== undefined;
-			const page = mapFollow && next.gameplay?.pose ? worldMapPageAt( next.gameplay.pose, mapLayout ) : mapPage;
+			const stepPose = next.gameplay?.pose;
+			const page = mapFollow && stepPose && featuresAt( stepPose.regionId ).worldMap ?
+				worldMapPageAt( stepPose, mapLayout ) :
+				mapPage;
 			return huntingGuide.step(
 				source,
 				panel === "Map" && page === 0 && experimental.state().saved.monsterGuide
@@ -365,10 +374,15 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			mapLayout = expandedMap ? hudData?.mapLayout : undefined;
 			const mapIcons = expandedMap ? hudData?.expandedMapIcons : hudData?.mapIcons;
 			const mapLabels = expandedMap ? hudData?.expandedMapLabels : hudData?.mapLabels;
+			// 5758D0 finds no page for a dungeon point and 57FE60 then keeps the
+			// loaded page and its scroll: only a pose on the map may derive a
+			// page or hold the view, so an off-map pose leaves both untouched.
+			const poseOnMap = pose && featuresAt( pose.regionId ).worldMap ? pose : null;
+			if ( poseOnMap ) mapPose = poseOnMap;
 			if (
-				(mapFollow && pose) || (mapPage !== 0 && !worldMapPages( mapLayout ).some( p => p.id === mapPage ))
+				(mapFollow && poseOnMap) || (mapPage !== 0 && !worldMapPages( mapLayout ).some( p => p.id === mapPage ))
 			) {
-				mapPage = pose ? worldMapPageAt( pose, mapLayout ) : 0;
+				mapPage = poseOnMap ? worldMapPageAt( poseOnMap, mapLayout ) : 0;
 				mapPan = [ 0, 0 ];
 				mapCenter = null;
 			}
@@ -469,7 +483,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? pose,
+					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
 					mapLayout
 				);
 			}
@@ -479,7 +493,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? pose,
+					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
 					mapLabels,
 					mapIcons,
 					mapMarkers,
@@ -498,7 +512,14 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 			// its own font extent, subtracting the integer half-width from the anchor.
 			const mapGuide = mapOpen && mapGuideEnabled && pose ?
-				huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose, hover, mapLayout ) :
+				huntingGuide.present(
+					mapPage,
+					mapClip,
+					mapPan,
+					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					hover,
+					mapLayout
+				) :
 				null;
 			const fontPath = text.path();
 			if ( !mapOpen && fontPath ) paths.push( fontPath );
@@ -507,7 +528,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					page: mapPage,
 					clip: mapClip,
 					pan: mapPan,
-					center: mapCenter ?? pose,
+					center: mapCenter ?? (poseOnMap ?? mapPose ?? pose),
 					points: roster,
 					layout: mapLayout
 				} ) :
@@ -609,7 +630,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						page: mapPage,
 						clip,
 						pan: mapPan,
-						center: mapCenter ?? pose,
+						center: mapCenter ?? (poseOnMap ?? mapPose ?? pose),
 						points: game?.reverseMapPoints ?? [],
 						layout: mapLayout
 					} )
@@ -639,7 +660,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? pose,
+					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
 					mapIcons ?? [],
 					paths,
 					mapLayout
@@ -653,8 +674,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 				// map-pan mid-drag, which cancelled the drag. Chrome stays gated.
 				const admission = beginWindow();
 				const mw = mapWidth, mh = mapHeight, mx = mapLeft, my = mapTop;
-				if ( mapFollow && pose ) {
-					mapPage = worldMapPageAt( pose, mapLayout );
+				if ( mapFollow && poseOnMap ) {
+					mapPage = worldMapPageAt( poseOnMap, mapLayout );
 					mapPan = [ 0, 0 ];
 					mapCenter = null;
 				}

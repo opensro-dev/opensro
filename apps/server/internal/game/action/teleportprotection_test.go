@@ -97,6 +97,7 @@ func TestTeleportProtectionStartsAtGameReady(t *testing.T) {
 				// A load longer than the grace must not spend it.
 				clock.Advance(20 * time.Second)
 				rt.TickHook()(clock.NowMs())
+				rt.processReturnArrivals()
 				self, peers = 0, 0
 				gameReady(rt, c)
 				if rejected {

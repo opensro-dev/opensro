@@ -36,11 +36,15 @@ test("a pending target select is the oldest outstanding request until it is answ
 	game.bootstrap( { simulationProtocolVersion: 1 } );
 	game.seed( local );
 	assert.equal( game.outstandingSince(), undefined );
+	assert.equal( game.outstandingLane(), undefined );
 	game.command( { kind: "select", gid: monster.gid }, 100, /** @type {any} */ (monster), local );
 	// The select left at 100 and waits for its grant.
 	assert.equal( game.outstandingSince(), 100 );
+	// The stall incident names the lane this request belongs to (#2148).
+	assert.equal( game.outstandingLane(), "targeting" );
 	// Its timeout clears the selection locally (a select has no lost-answer
 	// throw), after which nothing is outstanding.
 	game.step( 100 + 10_001, local );
 	assert.equal( game.outstandingSince(), undefined );
+	assert.equal( game.outstandingLane(), undefined );
 });

@@ -3,8 +3,9 @@
 
 pet-training.ts - how the pet window presents the attack-pet tree and gear
 
-Port-only, not native (the server's SRO_ATTACK_PET_EXPANSION and the
-Experimental window's attack-pet training row). The server decides every
+Port-only, not native: the server's SRO_ATTACK_PET_EXPANSION owns admission.
+The client requests state on summon and shows training only after 0x3FB1.
+The server decides every
 rule and sends each skill's level, requirement and effect values (0x3FB1);
 names, effect text, ranks, icons and affix text come from the design
 workbook's export (pet-design-data.ts). Pure.
@@ -24,6 +25,9 @@ import type { CosReference, cosAbilities } from "./cos-command";
 petReference
 
 Port-only stats use the server's catalog and worn/passive modifiers.
+Maximum HP is the pet's native character row (reference.maxHp): the
+server design no longer scales pet HP by species or level, so the only
+adjustments left are the worn gear percent and Resolve.
 ================
 */
 export function petReference(
@@ -45,24 +49,18 @@ export function petReference(
 			s => s.family === "Unbroken Spirit" && s.option === resolve.tier
 		);
 		const perStack = tierBook?.value ?? 0;
-		const bearPct = PET_DESIGN.pets.find( p => p.name === "Bear" )?.hpPercent ?? 100;
-		const baseMaxHp = profileHealth( "Bear", level, reference.maxHp * bearPct / 100 );
 		return perStack > 0 ?
-			{ ...reference, maxHp: Math.trunc( baseMaxHp * (1 + activeResolve * perStack / 100) ) } :
+			{ ...reference, maxHp: Math.trunc( reference.maxHp * (1 + activeResolve * perStack / 100) ) } :
 			reference;
 	}
 	const spirit = training.skills.find(
 		s => s.slotted && s.level > 0 && petSkillDesign( s.id )?.family === "Unbroken Spirit"
 	);
-	const species = petPetName( training );
-	const speciesPct = PET_DESIGN.pets.find( p => p.name === species )?.hpPercent ?? 100;
 	const gearHP = training.gear.reduce( ( sum, item ) => {
 		const gear = petGear( item?.refObjId );
 		return sum + (gear && (!level || gear.degree.minPetLevel <= level) ? gear.item.baseStats.maxHPPercent : 0);
 	}, 0 );
-	const unbuffedMaxHp = Math.trunc(
-		profileHealth( species, level, reference.maxHp * speciesPct / 100 ) * (1 + Math.min( 2250, gearHP ) / 100)
-	);
+	const unbuffedMaxHp = Math.trunc( reference.maxHp * (1 + Math.min( 2250, gearHP ) / 100) );
 	let maxHp = training.stats.maxHp;
 	if ( spirit && activeResolve > 0 && (maxHp === unbuffedMaxHp || maxHp === reference.maxHp) ) {
 		maxHp = Math.trunc( maxHp * (1 + activeResolve * spirit.value / 100) );
@@ -81,27 +79,6 @@ export function petReference(
 		hit: reference.hit + (training.stats.gearStats?.[4] ?? 0),
 		parry: reference.parry + (training.stats.gearStats?.[5] ?? 0)
 	};
-}
-
-/*
-================
-profileHealth
-
-The server's authored curve; keep native references unchanged when no level is known.
-================
-*/
-function profileHealth( species: string, level: number, fallback: number ): number {
-	const curve = PET_DESIGN.pets.find( p => p.name === species )?.healthByLevel;
-	if ( !level || !curve?.length ) return Math.trunc( fallback );
-	let previous: { readonly level: number; readonly hp: number; } = curve[0]!;
-	for ( const point of curve.slice( 1 ) ) {
-		if ( level <= point.level ) {
-			return previous.hp +
-				Math.trunc( (point.hp - previous.hp) * (level - previous.level) / (point.level - previous.level) );
-		}
-		previous = point;
-	}
-	return previous.hp;
 }
 
 /*
@@ -188,17 +165,6 @@ export function petRows( state: PetTraining ): { design: PetSkillDesign; skill: 
 	}
 	for ( const row of rows ) row.sort( ( a, b ) => a.design.option - b.design.option );
 	return rows;
-}
-
-/*
-================
-petPetName
-
-The pet kind of a state ("Wolf", ...), from its first skill.
-================
-*/
-export function petPetName( state: PetTraining ): string {
-	return petSkillDesign( state.skills[0]?.id ?? 0 )?.pet ?? "";
 }
 
 /*

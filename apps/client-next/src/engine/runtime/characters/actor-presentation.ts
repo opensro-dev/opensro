@@ -83,6 +83,7 @@ export function createActorPresentation( owner: ActorOwner ) {
 					actorMotion.present( entity, appearance, frame, pass );
 				} catch ( error ) {
 					output.failure = String( error );
+					output.failureCause = error;
 				}
 			}
 			return { animationHolders, particleHolders };

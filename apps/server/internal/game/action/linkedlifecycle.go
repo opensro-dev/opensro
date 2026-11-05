@@ -37,6 +37,12 @@ advanceLinkedEffectInDivision
 func (rt *Runtime) advanceLinkedEffectInDivision(link statuseffect.Link, nowMs int64) {
 	unlock := rt.lockDivision(link.DivisionID)
 	defer unlock()
+	if !rt.effects.SourceHalfPresent(link) {
+		// The source half left with its caster. There is no live pair
+		// to tether: the recipient half runs its own timer, as native
+		// buff entries belong to the recipient's own list.
+		return
+	}
 	source := rt.findCharacter(link.DivisionID, link.SourceName)
 	target := rt.findCharacter(link.DivisionID, link.TargetName)
 	valid := rt.linkedEndpointLive(link.DivisionID, source, link.SourceGID) &&

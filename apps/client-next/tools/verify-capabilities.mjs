@@ -74,6 +74,8 @@ const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 // Port-only: the 3D viewer's still readback (docs/guides/VIEWER.md).
 const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
+// The device's bundle-encoder wrapper: finishes the raw encoder it wraps (#2560).
+const bundleEncoder = runtime + "renderer/device/bundle-encoder.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 // Slabs of geometry's small buffers (uniforms, instances, vertex and index ranges).
@@ -402,6 +404,9 @@ for (
 ) rules[name].push( particleQuery );
 for ( const name of [ "createBuffer", "createCommandEncoder", "submit", "finish", "mapAsync", "getMappedRange" ] ) {
 	rules[name].push( portraitReadback );
+}
+for ( const name of [ "finish" ] ) {
+	rules[name].push( bundleEncoder );
 }
 /*
 ================

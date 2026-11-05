@@ -7,7 +7,6 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { petGear } = await import( "../../src/engine/foundation/ui/pet-gear.ts" );
 const { itemTooltip } = await import( "../../src/engine/foundation/ui/item-tooltip.ts" );
 const { itemSlotOverlays } = await import( "../../src/engine/foundation/ui/item-slot-effects.ts" );
@@ -84,7 +83,6 @@ test("equipped sealed pet gear draws the same animated rare shine as inventory",
 		}
 	} );
 	f.ui.step( f.state, 0 );
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { attackPetTraining: true } ) } );
 	f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
 	f.ui.step( f.state, 0 );
 	f.ui.event( { kind: "activate", id: "cos-tab:1" } );

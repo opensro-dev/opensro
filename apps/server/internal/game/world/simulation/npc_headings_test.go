@@ -83,7 +83,7 @@ func TestPublishedNPCHeadingCoverage(t *testing.T) {
 	tier.Long(t, "every published NPC placement has a heading")
 	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := sharedNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Fatal("published NPC roster missing")
 	}

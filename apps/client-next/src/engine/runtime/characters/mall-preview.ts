@@ -22,6 +22,7 @@ import {
 	type DressCatalog,
 	type WornItem
 } from "@/engine/foundation/animation/equipment-appearance";
+import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { radians } from "@/engine/foundation/math/angles";
 
 // Above both the unsigned wire GID range and the party portrait range.
@@ -72,7 +73,11 @@ export function createMallPreview() {
 	let body = "";
 	let state: MallPreviewState = { wearable: [] };
 	let planned: { signature: string; assembly: AppearanceAssembly; model: string; paths: string[]; } | null = null;
-	let committed: { actors: CharacterActor[]; paths: string[]; } | null = null;
+	let committed: {
+		actors: CharacterActor[];
+		paths: string[];
+		particles: readonly ModelParticle[];
+	} | null = null;
 
 	/*
 	================
@@ -217,10 +222,31 @@ export function createMallPreview() {
 					pickable: false,
 					attachment: { gid: MALL_PREVIEW_GID, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 				}) );
-				committed = { actors: [ actor, ...children ], paths: planned.paths };
+				committed = {
+					actors: [ actor, ...children ],
+					paths: planned.paths,
+					particles: planned.assembly.particles
+				};
 				if ( state.gid === undefined ) state = { ...state, gid: MALL_PREVIEW_GID };
 			}
 			return committed?.actors ?? [];
+		},
+		/*
+		================
+		glow
+
+		The committed mannequin's emission holder for the portrait pass:
+		its body actor and the committed outfit assembly's particles (the
+		rare items' glows the assembler resolved). The particles are the
+		assembly's own array, so an unchanged outfit keeps its emitter
+		identities across frames (the #2416 rule); a new commit swaps
+		them with the outfit, and no commit yet offers nothing.
+		================
+		*/
+		glow(): { actor: CharacterActor; particles: readonly ModelParticle[]; } | null {
+			return committed ?
+				{ actor: committed.actors[0]!, particles: committed.particles } :
+				null;
 		},
 		/*
 		================

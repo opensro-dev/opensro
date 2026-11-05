@@ -107,6 +107,17 @@ func (e HalloweenEvent) WindowValid() bool { return !e.startsAt.IsZero() && e.en
 
 /*
 ================
+HalloweenEvent.Window
+
+The configured window, and whether it is usable.
+================
+*/
+func (e HalloweenEvent) Window() (startsAt, endsAt time.Time, valid bool) {
+	return e.startsAt, e.endsAt, e.WindowValid()
+}
+
+/*
+================
 HalloweenEvent.ActiveAt
 
 The event runs from the window's start up to (not including) its end.
@@ -287,11 +298,16 @@ func HalloweenPrizeByCodename(codename string) (HalloweenPrize, bool) {
 	return HalloweenPrize{}, false
 }
 
-// EnvHalloweenHelmetSeal seals the eight event helmets at every transfer
-// door (port-only, not native). Its own switch, separate from the event's,
-// because it stays on after the event ends: the rows are natively
-// tradeable (CanTrade 1), and a helmet the event paid was never meant to
-// reach a market. Off is the native row behaviour.
+// EnvHalloweenHelmetSeal seals the eight event helmets at the exits that
+// hand a helmet to another player (port-only, not native): the exchange
+// window, the player stall, storage, the pet bag and the ground drop stay
+// closed. The exit to an NPC merchant stays open: the sale destroys the
+// helmet, and the item classes a helmet row carries keep it off the
+// buyback bench, so it can never reach another player. Its own switch,
+// separate from the event's, seals it at every door, because it stays on
+// after the event ends: the rows are natively tradeable (CanTrade 1),
+// and a helmet the event paid was never meant to reach a market. Off is
+// the native row behaviour.
 const EnvHalloweenHelmetSeal = "SRO_HALLOWEEN_HELMET_SEAL"
 
 /*

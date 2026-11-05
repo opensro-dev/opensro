@@ -87,4 +87,4 @@ New here? Start with **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**: setup, the 
 - 🚢 [RELEASE.md](docs/operations/RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](.github/SECURITY.md): how to report a vulnerability
 - 💬 [SUPPORT.md](.github/SUPPORT.md): getting help
-- ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
+- ⚖️ [AGPL-3.0-or-later](LICENSE) with one section 7(b) attribution term (keep the "Powered by OpenSRO" credit); the term, origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)

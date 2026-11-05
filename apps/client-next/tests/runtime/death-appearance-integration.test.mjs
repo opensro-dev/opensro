@@ -181,6 +181,7 @@ test("actor-motion drops outgoing live-body locomotion and active installations 
 		output: {
 			displayed,
 			failure: null,
+			failureCause: null,
 			cameraTarget: null,
 			cameraFade: null,
 			previewReady: false,

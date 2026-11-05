@@ -1585,6 +1585,29 @@ selected entities, cooldowns or world-entry state.
 		cosResult = undefined;
 		cosError = null;
 	}
+	/*
+================
+oldestOutstanding
+
+The oldest request still waiting for its answer, and the lane it
+belongs to. Every lane whose lost answer resumes the session (world.ts
+lostAnswer): moves, the inventory transaction (mall purchases
+included, inventory busy()), and a pending target select or release
+(#1472).
+================
+	*/
+	function oldestOutstanding(): { at: number; lane: string; } | undefined {
+		const lanes: [number | undefined, string][] = [
+			[ movement.oldestPendingSentAt(), "movement" ],
+			[ inventorySince, "inventory" ],
+			[ targeting.waitingSince(), "targeting" ]
+		];
+		let oldest: { at: number; lane: string; } | undefined;
+		for ( const [at, lane] of lanes ) {
+			if ( at !== undefined && (!oldest || at < oldest.at) ) oldest = { at, lane };
+		}
+		return oldest;
+	}
 	const api = {
 		/*
 ================
@@ -5330,13 +5353,19 @@ session reads it to tell a stalled connection from a lost answer.
 		*/
 		noteInput: movement.noteInput,
 		outstandingSince(): number | undefined {
-			// Every lane whose lost answer resumes the session (world.ts
-			// lostAnswer): moves, the inventory transaction (mall purchases
-			// included, inventory busy()), and a pending target select or
-			// release (#1472).
-			const since = [ movement.oldestPendingSentAt(), inventorySince, targeting.waitingSince() ]
-				.filter( ( at ): at is number => at !== undefined );
-			return since.length ? Math.min( ...since ) : undefined;
+			return oldestOutstanding()?.at;
+		},
+		/*
+================
+outstandingLane
+
+Which lane the oldest outstanding request belongs to, or undefined.
+The stall incident names it: one lane stuck while the world streams
+is not a silent link (#2148).
+================
+		*/
+		outstandingLane(): string | undefined {
+			return oldestOutstanding()?.lane;
 		},
 		/*
 ================

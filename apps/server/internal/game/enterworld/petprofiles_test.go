@@ -8,9 +8,12 @@ petprofiles_test.go - explicit expansion catalog profiles preserve native off
 package enterworld
 
 import (
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/game/companion"
+	"opensro.online/server/internal/testsupport/clientdata"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
 /*
@@ -28,8 +31,8 @@ func TestPetProfilesOnlyChangeAttackPetsAfterExplicitApplication(t *testing.T) {
 		t.Fatal("native catalog changed before opt-in")
 	}
 	items.ApplyAttackPetProfiles()
-	if bear.MaxHP != 390 || bear.Parameters.MaxHP != 390 || bear.Parameters.PhysicalDefense != 100 || bear.Parameters.MagicalDefense != 100 || items.summonableCharacters[0].MaxHP != 390 || horse.MaxHP != 1000 {
-		t.Fatal("profile did not consistently update attack-pet references only")
+	if bear.MaxHP != 1000 || bear.Parameters.PhysicalDefense != 100 || bear.Parameters.MagicalDefense != 100 || items.summonableCharacters[0].MaxHP != 1000 || horse.MaxHP != 1000 {
+		t.Fatal("profile touched native MaxHP or defenses outside the design's own percent")
 	}
 }
 
@@ -57,7 +60,42 @@ func TestPetExpansionGateKeepsNativeHealthOff(t *testing.T) {
 	}
 	t.Setenv(companion.EnvAttackPetExpansion, "on")
 	items, bear := catalog()
-	if !items.ApplyAttackPetExpansion() || bear.MaxHP != 390 {
-		t.Fatalf("explicit opt-in left MaxHP %d, want 390", bear.MaxHP)
+	if !items.ApplyAttackPetExpansion() || bear.MaxHP != 1000 {
+		t.Fatalf("explicit opt-in left MaxHP %d, want the native 1000", bear.MaxHP)
+	}
+}
+
+/*
+================
+TestShippedAttackPetHealthStaysNativeAtBenchmarkLevels
+
+Issue #2567: native attack-pet HP is the per-level characterdata row
+(the level chain's MaxHP column), 360 at level 1, 10,260 at 50 and
+39,434 at 90 for every attack-pet species. The expansion's design curve
+once replaced it (a level-90 penguin showed 4,800); with or without
+the expansion applied, the shipped rows must keep the native values.
+================
+*/
+func TestShippedAttackPetHealthStaysNativeAtBenchmarkLevels(t *testing.T) {
+	clientdata.RequireGameData(t)
+	items := NewTextdataItems(gamedatatest.TextdataDir(t))
+	items.once.Do(items.load)
+	want := map[uint8]uint32{1: 360, 50: 10260, 90: 39434}
+	// One loader, two passes: the shipped rows are native first, and
+	// applying the expansion's profiles must leave them that way.
+	for pass := 0; pass < 2; pass++ {
+		for _, species := range []string{"COS_P_BEAR", "COS_P_WOLF", "COS_P_PENGUIN", "COS_P_RAVEN"} {
+			for level, hp := range want {
+				codename := fmt.Sprintf("%s_%03d", species, level)
+				ref := items.charactersByCodename[codename]
+				if ref == nil {
+					t.Fatalf("pass %d: %s missing from shipped characterdata", pass, codename)
+				}
+				if ref.Level != level || ref.MaxHP != hp {
+					t.Fatalf("pass %d: %s is level %d with MaxHP %d, want level %d with the native %d", pass, codename, ref.Level, ref.MaxHP, level, hp)
+				}
+			}
+		}
+		items.ApplyAttackPetProfiles()
 	}
 }

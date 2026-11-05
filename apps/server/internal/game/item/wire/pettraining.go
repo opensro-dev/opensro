@@ -8,6 +8,9 @@ row cooldowns and worn gear in the pet window. 0x3FB1 is a port-only
 opcode: no v1.150 client or v1.188 server uses it, and only this port's
 browser client consumes it. The server sends it on the owner's request and
 after every training or gear change; every rule is decided by the server.
+A state request while SRO_ATTACK_PET_EXPANSION is off is silent: no 0x3FB1
+frame and no trainer receipt. The client keeps native controls until a
+matching pet state arrives; it probes on summon regardless of local preferences.
 
 Body, little-endian:
 

@@ -166,6 +166,7 @@ exactly once (#2337), so a code dedupe would eat a later episode whole.
 			code: command.code,
 			kind: command.incidentKind,
 			message: command.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			...(command.stack ? { stack: command.stack.slice( 0, 8192 ) } : {}),
 			phase: state.phase,
 			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {})
 		} );

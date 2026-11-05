@@ -215,6 +215,63 @@ func TestKillStatsConcurrentFlushesWriteEachDeltaOnce(t *testing.T) {
 	}
 }
 
+// killStatRosterDeps is the roster half of Dependencies for the
+// accrual test: every other door stays the embedded nil interface,
+// which the accrual path never calls.
+type killStatRosterDeps struct {
+	Dependencies
+	roster []*enterworld.Character
+}
+
+/*
+================
+killStatRosterDeps.CharactersForDivision
+================
+*/
+func (d killStatRosterDeps) CharactersForDivision(string) []*enterworld.Character {
+	return d.roster
+}
+
+/*
+================
+TestKillStatsAccrualCountsOnlyEnteredCharacters
+
+#2479: the division roster holds everyone who exists (it loads at
+boot and shrinks only on character deletion), so online time taken
+from it made every character "play" about 23 hours a day. Only the
+character with a session view accrues; the roster-mate without one
+gains no online time and never becomes a distinct character of its
+band.
+================
+*/
+func TestKillStatsAccrualCountsOnlyEnteredCharacters(t *testing.T) {
+	rt := &Runtime{KillStats: true}
+	rt.Now = func() time.Time { return time.UnixMilli(killStatNow) }
+	var flushed []KillStatRow
+	rt.KillStatsFlush = func(rows []KillStatRow) error {
+		flushed = append(flushed, rows...)
+		return nil
+	}
+	entered := killStatCharacter(7, 85)
+	absent := killStatCharacter(9, 5)
+	rt.deps = killStatRosterDeps{roster: []*enterworld.Character{entered, absent}}
+	rt.OnlineSessions = func() []simulation.SessionView {
+		return []simulation.SessionView{{SessionID: "s1", DivisionID: "test", CharacterID: 7}}
+	}
+	rt.advanceKillStats(killStatNow)
+	rt.advanceKillStats(killStatNow + killStatAccrueEveryMs)
+	if err := rt.FlushKillStats(); err != nil {
+		t.Fatal(err)
+	}
+	if len(flushed) != 1 {
+		t.Fatalf("flushed %+v, want only the entered character's band row", flushed)
+	}
+	row := flushed[0]
+	if row.Band != 8 || row.OnlineMs != killStatAccrueEveryMs || row.Characters != 1 {
+		t.Fatalf("row = %+v, want band 81-90 with one entered character and one accrued minute", row)
+	}
+}
+
 /*
 ================
 TestKillStatsCadenceFlushWhileOneFliesWaitsItsTurn

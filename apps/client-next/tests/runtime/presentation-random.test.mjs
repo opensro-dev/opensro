@@ -64,6 +64,42 @@ test("replay construction is immutable and reading the field cannot reseed later
 	);
 	for ( const invalid of [ -1, 2 ** 32, NaN, 1.5 ] ) assert.throws( () => createPresentationRandom( invalid ) );
 });
+test("a span wider than int32 wraps like the native helper, returning lower and no draw", () => {
+	// 878a10 forms upper - lower in a wrapping 32-bit register and returns
+	// lower, without a draw, when that span reads non-positive. Authored
+	// spin endpoints are full int32 fields, so a pair can span more than
+	// int32 (issue 2576): the port threw "Invalid CRT random range" and
+	// ended the session at world entry instead.
+	const wide = crtRandomRange( 1, -2000000000, 2000000000 );
+	assert.equal( wide.value, -2000000000 );
+	assert.equal( wide.state, 1 );
+	const full = crtRandomRange( 0xffffffff, -0x80000000, 0x7fffffff );
+	assert.equal( full.value, -0x80000000 );
+	assert.equal( full.state, 0xffffffff );
+	const edge = crtRandomRange( 7, -1, 0x7fffffff );
+	assert.equal( edge.value, -1 );
+	assert.equal( edge.state, 7 );
+	// The wrapped call leaves the shared stream exactly where it was.
+	const a = createPresentationRandom( 9 ), first = a.range( 0, 32768 );
+	const b = createPresentationRandom( 9 );
+	b.range( -2000000000, 2000000000 );
+	assert.equal( b.range( 0, 32768 ), first );
+});
+
+test("inputs no native caller can produce still throw", () => {
+	for (
+		const [state, lower, upper] of [
+			[ 1, 0.5, 2 ],
+			[ 1, 0, NaN ],
+			[ 1, -(2 ** 31) - 1, 0 ],
+			[ 1, 0, 2 ** 31 ],
+			[ -1, 0, 2 ],
+			[ 2 ** 32, 0, 2 ],
+			[ NaN, 0, 2 ]
+		]
+	) assert.throws( () => crtRandomRange( state, lower, upper ), /Invalid CRT random range/ );
+});
+
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 test("all 3000 startup stars and final RNG state match the original suspended-process capture", async () => {

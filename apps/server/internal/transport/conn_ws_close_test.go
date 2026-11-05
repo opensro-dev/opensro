@@ -122,6 +122,41 @@ func TestWSCloseDoesNotWaitBehindParkedWrite(t *testing.T) {
 
 /*
 ================
+TestWSCloseOfAnIdleConnDoesNotWaitOnThePeer
+
+#2142: with no write in flight, Close used to write the courtesy close
+frame itself. The peer here never reads, so that write parked until its
+2 s deadline while the caller (a game goroutine holding a division lane)
+waited. Close must return at once, and the socket must still close once
+the frame's deadline passes.
+================
+*/
+func TestWSCloseOfAnIdleConnDoesNotWaitOnThePeer(t *testing.T) {
+	conn, _ := pipeWSConn(t)
+
+	start := time.Now()
+	if err := conn.Close("test close"); err != nil {
+		t.Fatalf("Close errored: %v", err)
+	}
+	if took := time.Since(start); took > 200*time.Millisecond {
+		t.Fatalf("Close took %v: it waited on a peer that never reads", took)
+	}
+	// The close-frame goroutine releases the write lock once its deadline
+	// passes and the socket is closed.
+	wait.Eventually(t, wsCloseFrameDeadline+3*time.Second, "the close frame goroutine to finish", func() bool {
+		if conn.writeMu.TryLock() {
+			conn.writeMu.Unlock()
+			return true
+		}
+		return false
+	})
+	if err := conn.WriteFrame(Frame{Opcode: OpPing, Payload: []byte{1}}); err == nil {
+		t.Fatal("write after Close succeeded")
+	}
+}
+
+/*
+================
 TestWSWriteAfterCloseRefuses
 ================
 */

@@ -270,10 +270,12 @@ func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result Op
 				// B-11: a full-bag refusal is honest only with the bag
 				// state in the log; a repeat then separates "genuinely
 				// full" from a client that lost earlier grant answers.
+				// Info, not a warning (#2441): the player's own full
+				// bag is a normal outcome, not a server fault.
 				log.WithField("character", character.Name).
 					WithField("occupied", inv.Len()).
 					WithField("capacity", inv.BagEnd()).
-					Warn("pickup: ground item refused, bag full")
+					Info("pickup: ground item refused, bag full")
 			}
 			result = pickupRefusal(fault.Code)
 			return false

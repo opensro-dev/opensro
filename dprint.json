@@ -50,7 +50,9 @@
 		"apps/client-next/src/engine/foundation/gameplay/native-notice-data.ts",
 		"apps/client-next/src/engine/foundation/gameplay/windows1252.ts",
 		"apps/client-next/src/engine/foundation/ui/pet-design-data.ts",
-		"apps/server/internal/game/companion/petdesign.json"
+		"apps/server/internal/game/companion/petdesign.json",
+		"apps/client-next/tests/runtime/ui-census.json",
+		"apps/client-next/tests/runtime/ui-action-census.json"
 	],
 	"plugins": [
 		"./node_modules/@dprint/typescript/plugin.wasm"

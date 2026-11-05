@@ -481,6 +481,11 @@ func (r *Registry) Snapshot(divisionID, characterName string) []Effect {
 /*
 ================
 Forget
+
+Session close: the owner's rows go with it. A linked half its owner
+leaves behind is detached, not retired (detachLinkHalfLocked): the
+other character's half keeps its own timer, as the native logout
+cleanup cancels only the departing character's own buff list.
 ================
 */
 func (r *Registry) Forget(divisionID, characterName string) {
@@ -491,7 +496,7 @@ func (r *Registry) Forget(divisionID, characterName string) {
 	key := ownerKey(divisionID, characterName)
 	for _, e := range r.byOwner[key] {
 		if e.LinkToken != 0 {
-			r.retireLinkHalfLocked(e)
+			r.detachLinkHalfLocked(e)
 		}
 	}
 	delete(r.byOwner, key)

@@ -25,6 +25,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 )
@@ -108,6 +109,26 @@ type BetaRates struct {
 
 /*
 ================
+UniqueRules
+
+The port-only rules a unique kill runs after admission and the drop cap
+(progression.UniqueRulesFromEnv, the same source the GameWorld wires),
+so the export cannot drift from the server (#2537). The object stands on
+its own, outside the beta rates: the GameWorld runs the rules whether or
+not beta growth runs. A rule that is off stays absent; without the
+object the native rules apply.
+================
+*/
+type UniqueRules struct {
+	GapExempt     bool   `json:"gapExempt,omitempty" doc:"Port-only: a unique's drops ignore the killer's level gap (SRO_UNIQUE_GAP_EXEMPT); without it the native gap admission decides."`
+	PopTicket     bool   `json:"popTicket,omitempty" doc:"Port-only: every unique kill adds exactly one Magic Pop card after admission and the per-kill drop cap, so neither can take it (SRO_UNIQUE_POP_TICKET); the card is guaranteed, not a chance."`
+	PopTicketItem uint32 `json:"popTicketItem,omitempty" doc:"The item id of the guaranteed Magic Pop card (popTicketItem); present only while popTicket runs."`
+	MaxLevelLoot  bool   `json:"maxLevelLoot,omitempty" doc:"Port-only: a top-band unique's equipment tables roll at the shard's highest installed level instead of the unique's own (SRO_UNIQUE_MAX_LEVEL_LOOT)."`
+	SealDrops     bool   `json:"sealDrops,omitempty" doc:"Port-only: every unique kill guarantees one Seal of Star plus a one-in-ten Seal of Moon draw (SRO_UNIQUE_SEAL_DROPS)."`
+}
+
+/*
+================
 DropTablesFile
 ================
 */
@@ -128,6 +149,14 @@ type DropTablesFile struct {
 	// SunEventOnly says degree-9 Seal of Sun gear neither drops nor is sold
 	// (progression.SunEventOnly); its chances are already left out.
 	SunEventOnly bool `json:"sunEventOnly,omitempty" doc:"Port-only: degree-9 Seal of Sun gear (rarity 2, ItemClass 27) neither drops nor is sold; it comes only as an event reward. Its chances are left out of these tables, and a Sun pick drops nothing, so every other chance is unchanged."`
+	// PetGear is the attack-pet gear derived drop (petgear.go), present
+	// only while the expansion runs at a positive factor.
+	PetGear *PetGearRule `json:"petGear,omitempty"`
+	// Unique carries the unique rules, present only while at least one
+	// of them runs. It sits outside the beta object on purpose: the
+	// GameWorld wires the rules whether or not beta growth runs, so a
+	// beta-off shard running them must still publish them (#2537).
+	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only: the rules a unique kill runs after admission and the per-kill drop cap (gapExempt, popTicket, maxLevelLoot, sealDrops). Absent when every rule is off, which is the native game; a rule that is off stays absent inside the object too."`
 }
 
 /*
@@ -195,6 +224,18 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
 			file.Beta.Mix = mix
 		}
+	}
+	// The unique rules are not a beta rule: the GameWorld wires them
+	// (UniqueRulesFromEnv) whether or not beta growth runs, so they are
+	// published here, outside the beta gate, while any of them runs.
+	if rules := progression.UniqueRulesFromEnv(); rules.GapExempt || rules.PopTicket ||
+		rules.MaxLevelLoot || rules.SealDrops {
+		unique := &UniqueRules{GapExempt: rules.GapExempt, PopTicket: rules.PopTicket,
+			MaxLevelLoot: rules.MaxLevelLoot, SealDrops: rules.SealDrops}
+		if rules.PopTicket {
+			unique.PopTicketItem = itemID(gacha.CardCodename)
+		}
+		file.Unique = unique
 	}
 	return file
 }

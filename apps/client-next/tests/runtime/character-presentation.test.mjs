@@ -906,6 +906,140 @@ test("stall state selects motion 80, keeps full height and retires its independe
 	}
 });
 
+test("a rewound frame clock republishes the previous instant on every published clock", () => {
+	// #2561: the host frame clock steps back when animation-frame and
+	// maintenance frames interleave. The presenter owns the contract:
+	// a rewound frame presents the latest reading it has ever seen, so
+	// no published clip or effect clock runs backwards or negative.
+	const role = "native:default:80", bsr = "res/item/china/item/cj_store.bsr";
+	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
+		.itemsByRefObjId;
+	const wingId = Number(
+		Object.keys( roster.dress.avatarAuxiliary ).find( id => roster.dress.equipment[id].bodies.CH_M )
+	);
+	assert.ok( wingId > 0, "the roster carries a CH_M auxiliary avatar" );
+	const stage = {
+		phase: "ACT_S",
+		startEvent: 0,
+		move: "MOV_NONE",
+		scripts: [],
+		action: "AT_ONE_FOLLOW",
+		resource: "system/cos_p_gold_pig_etc.efp",
+		count: 1,
+		offset: [ 0, 0, 0 ],
+		life: 60
+	};
+	const f = fixture(
+		{ "-2147483642": { stages: [ stage ] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{
+			appearance: {
+				extraClips: [ role ],
+				items,
+				roster: {
+					models: [
+						{
+							refObjId: 1,
+							codename: "NPC_1",
+							glb: "/assets/1.glb",
+							clips: [ "stand", role ],
+							animationStates: { [role]: { stateId: 80, durationMs: 1000, loop: true } }
+						},
+						{
+							refObjId: 2,
+							codename: "CHAR_CH_MAN_TEST",
+							glb: "/assets/2.glb",
+							clips: [ "stand", "walk", "run" ]
+						}
+					],
+					dress: roster.dress
+				}
+			},
+			rows: [ { codename: "NPC_1", soundProfileName: "NPC_1", heightFactor: 2 } ]
+		},
+		{
+			cameraPitch: 0,
+			extraClips: [ role ],
+			boothModels: { [bsr]: { glb: "/assets/npc/booth.glb", clips: [ "stand" ] } }
+		}
+	);
+	const gameplay = { localGid: 1, inventory: [], vitals: [], casts: [], skills: [], moving: false };
+	const entities = [
+		entity( 1, { kind: "local-player", countryByte9c: 0, appearanceState: [ 1, 0, 0, 0, 0, 0, 4 ] } ),
+		entity( 2, { kind: "player", equipment: [], avatars: [ { refObjId: wingId } ] } )
+	];
+	const clocks = () =>
+		new Map(
+			f.actors.filter( a => typeof a.time === "number" ).map( a => [
+				a.gid,
+				{ time: a.time, layers: (a.layers ?? []).map( layer => layer.time ) }
+			] )
+		);
+	const markers = () => ({
+		pig: f.actors.find( a => a.model.includes( "cos_p_gold_pig_etc" ) ),
+		booth: f.actors.find( a => a.model.startsWith( "booth:" ) ),
+		wing: f.actors.find( a => a.attachment && a.model.includes( "/avatar_aux_" ) )
+	});
+	try {
+		let now = 0;
+		const stepTo = target => {
+			while ( now < target ) {
+				now = Math.min( target, now + .05 );
+				f.step( entities, now, gameplay );
+				assert.equal( f.presentation.error(), null );
+			}
+		};
+		stepTo( 1 );
+		f.presentation.receiveFeedback( [ { kind: "level-up", gid: 1 } ], entities );
+		for ( let i = 0; i < 200 && !(markers().pig && markers().booth && markers().wing); i++ ) {
+			stepTo( now + .05 );
+		}
+		const found = markers();
+		assert.ok( found.pig && found.booth && found.wing, "pig, booth and wing all publish before the rewind" );
+		stepTo( 10 );
+		const ahead = clocks();
+		assert.ok( ahead.get( found.pig.gid ).time > 0, "the pig clock is running" );
+		assert.ok( ahead.get( found.booth.gid ).time > 0, "the booth clock is running" );
+		assert.ok( ahead.get( found.wing.gid ).time > 0, "the wing clock is running" );
+		for ( const rewound of [ 9.5, 9.75 ] ) {
+			f.step( entities, rewound, gameplay );
+			assert.equal( f.presentation.error(), null );
+			const held = clocks();
+			assert.deepEqual( [ ...held.keys() ].sort(), [ ...ahead.keys() ].sort(), "the same actors publish" );
+			for ( const [gid, clock] of held ) {
+				assert.ok( clock.time >= 0, `actor ${gid} never publishes a negative clock` );
+				assert.equal( clock.time, ahead.get( gid ).time, `actor ${gid} republishes the previous instant` );
+				assert.deepEqual(
+					clock.layers,
+					ahead.get( gid ).layers,
+					`actor ${gid} layers republish the previous instant`
+				);
+			}
+		}
+		stepTo( 10.5 );
+		const advanced = clocks();
+		for ( const marker of [ found.pig, found.booth, found.wing ] ) {
+			const delta = advanced.get( marker.gid ).time - ahead.get( marker.gid ).time;
+			assert.ok( Math.abs( delta - .5 ) < 1e-9, `marker ${marker.gid} advances with the caught-up clock` );
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a released buff never leaves an empty pose after a stall or equipment change", () => {
 	const f = fixture(
 		{ 7: { clips: [ "walk", "run" ], phaseClips: [ [], [ "walk" ], [ "run" ] ], stages: [] } },

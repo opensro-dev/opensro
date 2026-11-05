@@ -48,8 +48,10 @@ Player victims take this full capture: capturePlayerAbnormalSources
 classifies the killer copy before the write, and the fatal transition
 settles from it inside the write, so the copy cannot be taken lazily at
 the death - the write door is already held there and a read would
-reenter it. Owners that never read a killer (a COS owner's callbacks, the
-monster context) capture through captureAbnormalSourcesLife instead.
+reenter it. The COS tick takes it too, for the same reason (its fatal
+periodic hit stamps the dealer). Owners that never read a killer (the
+monster context, the COS hit lanes that stamp from the hit itself)
+capture through captureAbnormalSourcesLife instead.
 ================
 */
 func (rt *Runtime) captureAbnormalSources(division string, block *abnormal.Block, records []abnormal.Record) map[uint32]abnormalSourceState {
@@ -145,13 +147,13 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 captureAbnormalSourceLife
 
 The life facts of captureAbnormalSource without the killer copy, for the
-owners that never read one. A COS owner's callbacks weigh existence,
+owners that never read one. A COS hit lane's callbacks weigh existence,
 source death and whether the source is a monster (the shield test); the
 monster owner's context weighs existence and death alone. The killer
-snapshot - and with it the COS source's striker level - is consumed only
-on the player lane, where captureAbnormalSources keeps it eager for the
-reason its banner gives. The monster arm needs no change: it never
-copied. Like the full capture, never call from a write.
+snapshot - and with it the COS source's striker level - is consumed on
+the player lane and the COS tick, where captureAbnormalSources keeps it
+eager for the reason its banner gives. The monster arm needs no change:
+it never copied. Like the full capture, never call from a write.
 ================
 */
 func (rt *Runtime) captureAbnormalSourceLife(division string, gid uint32) abnormalSourceState {

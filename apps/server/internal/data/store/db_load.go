@@ -105,6 +105,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	if err != nil {
 		return nil, err
 	}
+	halloweenBoxesPresent := false
+	out.meta.HalloweenBoxes, halloweenBoxesPresent, err = loadHalloweenBoxes(db)
+	if err != nil {
+		return nil, err
+	}
 	if currentLayout >= 11 {
 		out.nameReservations, err = loadNameReservations(db)
 		if err != nil {
@@ -137,6 +142,13 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	// An authority that predates the account count has no halloweenBoxes
+	// row: seed the plane from the legacy per-character counts the
+	// characters just loaded with (#2547). Once any commit writes the
+	// row, this derivation never runs again.
+	if !halloweenBoxesPresent {
+		out.meta.HalloweenBoxes = seedHalloweenBoxes(out.characters)
 	}
 
 	delRows, err := db.Query("SELECT division, record FROM deleted_characters ORDER BY division, seq")

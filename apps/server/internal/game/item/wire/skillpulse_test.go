@@ -30,6 +30,22 @@ func TestSkillPulseNativeLayout(t *testing.T) {
 
 /*
 ================
+TestSkillDamageTickNativeLayout
+
+Mode, source, the death byte, target, count, then three bytes per tick;
+a tick is capped at the three bytes the client reads.
+================
+*/
+func TestSkillDamageTickNativeLayout(t *testing.T) {
+	frame := SkillDamageTickFrame(9001, true, 2, []uint32{25, 0x1000000})
+	want := []byte{1, 0x29, 0x23, 0, 0, 0x80, 2, 0, 0, 0, 2, 25, 0, 0, 0xff, 0xff, 0xff}
+	if frame.Opcode != OpSkillPulse || !bytes.Equal(frame.Payload, want) {
+		t.Fatalf("tick %04x %x; want %x", frame.Opcode, frame.Payload, want)
+	}
+}
+
+/*
+================
 TestSkillTrapResultsNativeLayout
 ================
 */

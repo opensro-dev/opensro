@@ -284,6 +284,58 @@ func TestFlowsAlignEveryBucket(t *testing.T) {
 
 /*
 ================
+TestTradeAnswersCaravanSalesByBucket
+
+/economy/v1/trade is the flows shape folded from the trade reasons
+alone (#2642): the seller's credit, the party shares and the thief's
+den sale, every one present in every answer ("0" where it moved
+nothing), and no other reason beside them. Before the first snapshot
+it answers no_snapshot like the other rollup routes.
+================
+*/
+func TestTradeAnswersCaravanSalesByBucket(t *testing.T) {
+	source := writeSnapshotSource(t, []ledgerFixture{
+		{gold: 500, reason: "trade_sale_credit", atS: dayStart + 10},
+		{gold: 50, reason: "trade_party_share", atS: dayStart + 20},
+		{gold: 70, reason: "thief_den_sale", atS: dayStart + 3600 + 30},
+		{gold: 999, reason: "npc_sale", atS: dayStart + 40},
+	}, nil, nil)
+	service, handler := newTestService(t, source, time.Unix(dayStart+3*3600, 0))
+	target := fmt.Sprintf("/economy/v1/trade?bucket=1h&from=%d&to=%d", dayStart, dayStart+2*3600)
+	if status, body := get(t, handler, target, true); status != http.StatusServiceUnavailable || errorCode(body) != "no_snapshot" {
+		t.Fatalf("trade before a snapshot %d %v", status, body)
+	}
+	if err := service.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	status, body := get(t, handler, target, true)
+	buckets, _ := body["t"].([]any)
+	reasons, _ := body["reasons"].(map[string]any)
+	if status != http.StatusOK || len(buckets) != 3 {
+		t.Fatalf("trade %d %v", status, body)
+	}
+	if got := fmt.Sprint(reasons["trade_sale_credit"]); got != "[500 0 0]" {
+		t.Fatalf("trade_sale_credit %s", got)
+	}
+	if got := fmt.Sprint(reasons["trade_party_share"]); got != "[50 0 0]" {
+		t.Fatalf("trade_party_share %s", got)
+	}
+	if got := fmt.Sprint(reasons["thief_den_sale"]); got != "[0 70 0]" {
+		t.Fatalf("thief_den_sale %s", got)
+	}
+	if _, leaked := reasons["npc_sale"]; leaked {
+		t.Fatalf("trade answers a non-trade reason: %v", reasons)
+	}
+	// Another division has no caravan sales: every trade reason reads 0.
+	status, body = get(t, handler, fmt.Sprintf("/economy/v1/trade?division=d2&bucket=1h&from=%d&to=%d", dayStart, dayStart+2*3600), true)
+	reasons, _ = body["reasons"].(map[string]any)
+	if status != http.StatusOK || fmt.Sprint(reasons["trade_sale_credit"]) != "[0 0 0]" {
+		t.Fatalf("division trade %d %v", status, body)
+	}
+}
+
+/*
+================
 TestDistributionCountsGoldGearAndActivity
 
 Characters' gold and the warehouse's, the 14-day active accounts, plus
@@ -380,6 +432,59 @@ func TestNetMintFlagRaisesOnASpike(t *testing.T) {
 	}
 	if flag := flags[0].(map[string]any); flag["rule"] != "net_mint_p95" || flag["value"] != "5000" || flag["at"] != float64(dayStart+8*86400) {
 		t.Fatalf("flag %v", flag)
+	}
+	if flag := flags[0].(map[string]any); flag["basis"] != flagBasisDailyTotal {
+		t.Fatalf("flag basis %v, want %q with no online-hour data", flag["basis"], flagBasisDailyTotal)
+	}
+}
+
+/*
+================
+TestNetMintFlagPerOnlineHourThroughHandler
+
+#2643 end to end: kill_stats hours recorded beside a growing ledger.
+The spike day mints 500x the quiet days but its online hours grew by
+the same factor, so per online hour nothing spiked and no flag fires;
+the same ledger with the spike day's hours left at the quiet days'
+level flags once, on the per-hour reading.
+================
+*/
+func TestNetMintFlagPerOnlineHourThroughHandler(t *testing.T) {
+	var ledger []ledgerFixture
+	for day := int64(0); day < 8; day++ {
+		ledger = append(ledger, ledgerFixture{gold: 10, reason: "monster_gold", atS: dayStart + day*86400 + 60})
+	}
+	ledger = append(ledger, ledgerFixture{gold: 5000, reason: "monster_gold", atS: dayStart + 8*86400 + 60})
+	now := time.Unix(dayStart+9*86400, 0)
+
+	seed := func(t *testing.T, spikeHours int64) http.Handler {
+		t.Helper()
+		service, handler := newTestService(t, writeSnapshotSource(t, ledger, nil, nil), now)
+		if err := service.Snapshot(); err != nil {
+			t.Fatal(err)
+		}
+		var rows []KillStatRow
+		for day := int64(0); day < 8; day++ {
+			rows = append(rows, KillStatRow{DayS: dayStart + day*86400, Band: 0, OnlineMs: 3600000, Characters: 5})
+		}
+		rows = append(rows, KillStatRow{DayS: dayStart + 8*86400, Band: 0, OnlineMs: spikeHours * 3600000, Characters: 5})
+		if err := service.RecordKillStats(rows); err != nil {
+			t.Fatal(err)
+		}
+		return handler
+	}
+	path := fmt.Sprintf("/economy/v1/flags?from=%d&to=%d", dayStart+7*86400, dayStart+9*86400-1)
+
+	if _, body := get(t, seed(t, 500), path, true); len(body["flags"].([]any)) != 0 {
+		t.Fatalf("growth-matched hours still flagged: %v", body)
+	}
+	_, body := get(t, seed(t, 1), path, true)
+	flags := body["flags"].([]any)
+	if len(flags) != 1 {
+		t.Fatalf("flags %v, want exactly one", body)
+	}
+	if flag := flags[0].(map[string]any); flag["basis"] != flagBasisPerOnlineHour || flag["value"] != "5000" {
+		t.Fatalf("flag %v, want basis %q value 5000", flag, flagBasisPerOnlineHour)
 	}
 }
 

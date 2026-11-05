@@ -1,0 +1,5 @@
+# halloween-box-account-fields record fields owned by store schema 36 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 37, its upgrade
+# step and halloween-box-account-fields-fields-v37.txt.
+count
+day

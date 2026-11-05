@@ -171,7 +171,7 @@ func RefillStarterPotions(character *Character, refills []StarterRefill) int {
 		if !raised {
 			slot, ok := firstFreeBagSlot(character)
 			if !ok {
-				log.Warnf("bootstrap: %s has no free bag slot for starter refill %s", character.Name, item.Codename)
+				log.Infof("bootstrap: %s has no free bag slot for starter refill %s", character.Name, item.Codename)
 				continue
 			}
 			rows = append(rows, InventoryRow{

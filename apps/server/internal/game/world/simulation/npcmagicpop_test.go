@@ -78,7 +78,7 @@ npcpos identities below it are untouched.
 func TestShippedWorldHasMagicPopMachines(t *testing.T) {
 	tier.Long(t, "the shipped world roster carries its magic-pop machines")
 	clientdata.RequireGameData(t)
-	roster := LoadNpcWorldRoster(gamedatatest.TextdataDir(t))
+	roster := sharedNpcWorldRoster(gamedatatest.TextdataDir(t))
 	regions, operators := map[uint16]bool{}, map[uint16]bool{}
 	for _, npc := range roster {
 		if npc.Codename == magicPopOperatorCodename {

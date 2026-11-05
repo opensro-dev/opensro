@@ -257,3 +257,20 @@ func (g GrowthRates) scale(levels enterworld.LevelDataSource, level, expDelta, s
 	}
 	return expDelta, skillExpDelta
 }
+
+/*
+================
+PaidRewards
+
+What the beta growth pays for a native EXP / skill-EXP reward at this
+level: the same scale applyExperience grants with, priced by the
+catalogue export so the website shows the paid amounts beside the
+native ones (issue #2539). The export passes the quest's own level; a
+grant passes the player's. Beta off, the native rewards come back
+unchanged. The site never recomputes this: it renders what the export
+says, so the page cannot drift from the grant.
+================
+*/
+func (g GrowthRates) PaidRewards(levels enterworld.LevelDataSource, level, expReward, skillExpReward int64) (int64, int64) {
+	return g.scale(levels, level, expReward, skillExpReward)
+}

@@ -131,6 +131,8 @@ export type UiHelpSource = {
 	readonly token: number;
 	readonly skill: number;
 	readonly viewer?: boolean;
+	// Local board slot state, captured with the displayed icon at its refresh.
+	readonly suppressed?: boolean;
 } | {
 	readonly kind: "abnormal";
 	readonly gid: number;

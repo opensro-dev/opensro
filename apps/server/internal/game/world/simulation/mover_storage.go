@@ -585,19 +585,50 @@ func (s *moverStorage) scheduleSlot(gid uint32) (moverSchedule, uint32, bool) {
 	if !ok {
 		return moverSchedule{}, 0, false
 	}
+	return s.scheduleRow(slot), slot, true
+}
+
+/*
+================
+scheduleRow
+
+The schedule facts of the row in slot: a live row's mode, cadence,
+arrival and region, a pending row's stored mode, pose cadence and
+region with no segment, a neither row's zero schedule.
+================
+*/
+func (s *moverStorage) scheduleRow(slot uint32) moverSchedule {
 	r := s.slots[slot].rec
 	if r.live != nil {
 		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
-			regionID: r.live.Pose.RegionID}, slot, true
+			regionID: r.live.Pose.RegionID}
 	}
 	if r.pending != nil {
 		mode := monster.MoverPending
 		if r.pending.shared.Value().row.Spawning {
 			mode = monster.MoverSpawning
 		}
-		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}, slot, true
+		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}
 	}
-	return moverSchedule{}, slot, true
+	return moverSchedule{}
+}
+
+/*
+================
+scheduleSlotAt
+
+scheduleSlot through a slot carried from the last batch build,
+verified against the gid before use (#2133): a slot that no longer
+names gid (remove swapped another row into it, or the hint is the
+no-slot sentinel) delegates to scheduleSlot, so the answer is the
+row's either way.
+================
+*/
+func (s *moverStorage) scheduleSlotAt(slot uint32, gid uint32) (moverSchedule, uint32, bool) {
+	if s == nil || int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		return s.scheduleSlot(gid)
+	}
+	return s.scheduleRow(slot), slot, true
 }
 
 /*

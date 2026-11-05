@@ -301,6 +301,43 @@ func TestGroundDropBucketsFollowRegistryWrites(t *testing.T) {
 
 /*
 ================
+TestGroundCacheIgnoresOtherDivisionsWrites
+
+The stamp is the division's own counter: one division's drops churn
+every tick of a live shard, and under the one global counter every
+other division's cached copy rebuilt with it (#2030). A busy
+division's write must leave a quiet division's entry in place -
+the same entry, not a rebuilt twin - while the quiet division's own
+write still replaces it.
+================
+*/
+func TestGroundCacheIgnoresOtherDivisionsWrites(t *testing.T) {
+	rt := &Runtime{Ground: grounditem.NewRegistry()}
+	rt.Ground.Add("quiet", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 10, Z: 10}})
+	before := rt.groundDivisionSnapshot("quiet")
+
+	rt.Ground.Add("busy", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 20, Z: 20}})
+	rt.Ground.Add("busy", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 30, Z: 30}})
+	if after := rt.groundDivisionSnapshot("quiet"); after != before {
+		t.Fatal("another division's writes rebuilt the quiet division's cached drops")
+	}
+
+	rt.Ground.Add("quiet", grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02",
+		Position: grounditem.Point{RegionID: 0x6a9a, X: 40, Z: 40}})
+	after := rt.groundDivisionSnapshot("quiet")
+	if after == before {
+		t.Fatal("the quiet division's own write did not rebuild its cached drops")
+	}
+	if len(after.items) != 2 {
+		t.Fatalf("rebuilt cache holds %d drops, want 2", len(after.items))
+	}
+}
+
+/*
+================
 TestGroundCacheDropsTheEmptyDivision
 
 A division whose last drop leaves keeps no cache entry, so a closed

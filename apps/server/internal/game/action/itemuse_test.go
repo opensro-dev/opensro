@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"reflect"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
@@ -576,5 +577,79 @@ func TestQuestToolSpendsItsOwnRowAfterAGrant(t *testing.T) {
 	}
 	if used != 1 || granted != 1 {
 		t.Fatalf("tool stack %d and grant %d, want 1 and 1: %+v", used, granted, character.MissionInventory)
+	}
+}
+
+/*
+================
+TestHandleItemUseRefusedWhileInteractingWithAStall
+
+The native use door answers 01:35 while the character interacts with
+a stall, as its keeper or as a visitor, before the item is read; the
+refused use consumes nothing. Once the stall interaction ends the
+same use goes through. (An open exchange is a different interaction
+state and keeps its uses; that door is pinned by the exchange seats.)
+================
+*/
+func TestHandleItemUseRefusedWhileInteractingWithAStall(t *testing.T) {
+	potions := func(c *enterworld.Character) {
+		hp := int64(40)
+		c.CurrentHP = &hp
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
+			Slot: 21, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), VarianceBits: "0", StackCount: 2,
+		})
+	}
+	refused := func(rt *Runtime, c *enterworld.Character) {
+		t.Helper()
+		before := c.Snapshot()
+		result := rt.HandleItemUse(testDivision, c, []byte{21, 0xEC, 0x08})
+		if len(result.Frames) != 1 || !reflect.DeepEqual(
+			result.Frames[0].Payload,
+			wire.EncodeItemUseError(wire.ErrCodeCantUseItemWhileInteract),
+		) {
+			t.Fatalf("use while interacting = %+v", result.Frames)
+		}
+		if !reflect.DeepEqual(before.MissionInventory, c.MissionInventory) {
+			t.Fatal("refused use changed the bag")
+		}
+	}
+
+	keeper := testCharacter()
+	potions(keeper)
+	rt, _ := newTestRuntime(keeper, testItems())
+	if err := rt.Stalls.Open(testDivision, keeper.Name, "stall", 0); err != nil {
+		t.Fatal(err)
+	}
+	refused(rt, keeper)
+	rt.Stalls.Close(testDivision, keeper.Name)
+	if result := rt.HandleItemUse(testDivision, keeper, []byte{21, 0xEC, 0x08}); len(result.Frames) == 0 ||
+		result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("use after the stall closed = %+v", result.Frames)
+	}
+
+	host := testCharacter()
+	visitor := testCharacter()
+	visitor.ID, visitor.Name = 4, "peer"
+	potions(visitor)
+	rt2 := NewRuntime(&enterworld.Deps{
+		Characters: enterworld.StaticCharacterSource{testDivision: {host, visitor}},
+		Items:      testItems(),
+		NpcSpawns:  enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
+	}, nil)
+	rt2.Now = (&fakeClock{now: time.UnixMilli(1_000_000)}).Now
+	if err := rt2.Stalls.Open(testDivision, host.Name, "stall", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt2.Stalls.Enter(testDivision, visitor.Name, host.Name); err != nil {
+		t.Fatal(err)
+	}
+	refused(rt2, visitor)
+	if _, err := rt2.Stalls.Leave(testDivision, visitor.Name); err != nil {
+		t.Fatal(err)
+	}
+	if result := rt2.HandleItemUse(testDivision, visitor, []byte{21, 0xEC, 0x08}); len(result.Frames) == 0 ||
+		result.Frames[0].Payload[0] != 1 {
+		t.Fatalf("use after leaving the stall = %+v", result.Frames)
 	}
 }

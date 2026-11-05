@@ -1,0 +1,4 @@
+{
+	"decision": "opensro-dev/opensro#2534 decision record: no runtime library and no new dev-time library for the ui.ts split. Adding a name here is the deliberate, reviewed reversal of that decision.",
+	"packages": ["@vitejs/plugin-basic-ssl", "typescript"]
+}

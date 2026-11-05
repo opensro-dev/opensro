@@ -252,7 +252,11 @@ func TestCaveRouteFollowsTheCorridor(t *testing.T) {
 	}
 	// The port's portal route, which a dungeon without a valid native
 	// route table keeps (#1732): Donwhang's table is set aside here.
+	// The surfaces are shared across the package's tests (#2562), so
+	// the table goes back before this test ends.
+	table := surface.routeTable
 	surface.routeTable = nil
+	t.Cleanup(func() { surface.routeTable = table })
 	fromBlock, toBlock, hops := caveFarthestPair(t, surface)
 	from := caveStandpoint(surface, planeCaveRegion, fromBlock)
 	goal := caveStandpoint(surface, planeCaveRegion, toBlock)

@@ -50,7 +50,12 @@ import (
 const (
 	// stallVisitReach is the native length <= 100.
 	stallVisitReach = 100
-	// stallErrNotHost is 0x3C2A: the target keeps no stall.
+	// stallErrNotHost is 0x3C2A: the target keeps no stall. The word
+	// is the native no-stall answer on the close, visit and edit
+	// lanes (proven in the native stall handlers); no row of the
+	// client's stall notice category names 0x2A, so the refusal is
+	// silent as natively (#2357). Pinned by
+	// TestStallNoStallRefusalKeepsTheNativeByte.
 	stallErrNotHost uint8 = 0x2A
 )
 

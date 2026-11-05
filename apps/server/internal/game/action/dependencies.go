@@ -72,6 +72,10 @@ type Dependencies interface {
 	UpdateDeferred(character *domain.Character, label string, update func() bool) bool
 	UpdateManyDeferred(characters []*domain.Character, label string, update func() bool) bool
 	SettleTrade(characters []*domain.Character, label string, update func(*domain.TradeRewardPool) bool) bool
+	// HalloweenAccount is the account's daily Halloween box count
+	// (port-only, #2547): the live record, read or mutated only inside
+	// a kill settlement's door.
+	HalloweenAccount(accountID string) *domain.HalloweenBoxAccount
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())

@@ -337,9 +337,10 @@ func (s *MonsterState) InstallTombChainDef(def TombChainDef) error {
 MonsterState.tombChainSpawnerNest
 
 The nest row a spawner spawns from. A point spawner (nonzero Region)
-synthesizes its row at the native stage point - the instance still
-carries a nest, just one no lifecycle owns - and needs only its ref.
-A nest spawner needs the codename's authored tomb nest.
+places its row at the native stage point - the instance still
+carries a nest, just one no lifecycle owns - and takes its AI
+fields from the codename's authored nest in the region when it
+carries one. A nest spawner needs the codename's authored tomb nest.
 ================
 */
 func (s *MonsterState) tombChainSpawnerNest(spawner TombSpawnerDef) (monster.NestRow, error) {
@@ -348,15 +349,51 @@ func (s *MonsterState) tombChainSpawnerNest(spawner TombSpawnerDef) (monster.Nes
 		if !ok {
 			return monster.NestRow{}, fmt.Errorf("tomb chain spawner %s: no ref for %s", spawner.Name, spawner.Codename)
 		}
-		return monster.NestRow{SpawnPoint: monster.SpawnPoint{
+		point := monster.SpawnPoint{
 			RefObjID: ref.RefObjID, RegionID: spawner.Region, X: spawner.X, Y: spawner.Y, Z: spawner.Z,
-		}}, nil
+		}
+		// An anchor whose codename carries an authored nest in this
+		// region (Floor 6's snakes) spawns with that nest's AI fields
+		// at the stage point: the bare point row resolves to no
+		// tactics contract at all, so the unique stood inert under
+		// any amount of damage (#2600).
+		if authored, ok := s.tombChainRegionNest(spawner.Codename, spawner.Region); ok {
+			authored.SpawnPoint = point
+			return authored, nil
+		}
+		// The wave codenames carry refs only. A pinned point nest -
+		// the quest spawn shape - resolves their tactics to the
+		// retail wander contract instead of nothing, so a damaged
+		// wave mob retaliates like any other spawn.
+		return monster.NestRow{SpawnPoint: point, PolicyPinned: true}, nil
 	}
 	nest, ok := s.tombChainNest(spawner.Codename)
 	if !ok {
 		return monster.NestRow{}, fmt.Errorf("tomb chain spawner %s: no tomb nest for %s", spawner.Name, spawner.Codename)
 	}
 	return nest, nil
+}
+
+/*
+================
+MonsterState.tombChainRegionNest
+
+The codename's authored tomb nest in one region, when it carries
+one. The same codename can nest on other floors (the Snake General
+on Floor 3); only the spawner's own region row describes this
+stage.
+================
+*/
+func (s *MonsterState) tombChainRegionNest(codename string, region uint16) (monster.NestRow, bool) {
+	for _, nest := range s.template.Nests {
+		if nest.RegionID != region {
+			continue
+		}
+		if ref, ok := s.template.Refs[nest.RefObjID]; ok && ref.Codename == codename {
+			return nest, true
+		}
+	}
+	return monster.NestRow{}, false
 }
 
 /*

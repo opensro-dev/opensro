@@ -108,6 +108,7 @@ func TestReverseMapOnTravelsToAPublishedPoint(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("missing native reentry: %+v", sent)
 	}
@@ -225,6 +226,7 @@ func TestReverseMapImportedTableIsPublishedDense(t *testing.T) {
 	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.X != 100 || got.Z != 200 {
 		t.Fatalf("arrived at %+v, not the imported point", got)
 	}

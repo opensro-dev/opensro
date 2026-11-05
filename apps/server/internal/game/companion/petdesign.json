@@ -34,165 +34,41 @@
 			"name": "Bear",
 			"role": "Defense",
 			"codenamePrefix": "COS_P_BEAR",
-			"hpPercent": 220,
 			"physicalPercent": 65,
 			"magicalPercent": 20,
 			"defensePercent": 100,
 			"magicDefensePercent": 100,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 20
-				},
-				{
-					"level": 10,
-					"hp": 185
-				},
-				{
-					"level": 20,
-					"hp": 245
-				},
-				{
-					"level": 40,
-					"hp": 390
-				},
-				{
-					"level": 60,
-					"hp": 1025
-				},
-				{
-					"level": 80,
-					"hp": 5000
-				},
-				{
-					"level": 90,
-					"hp": 11000
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Wolf",
 			"role": "Attack",
 			"codenamePrefix": "COS_P_WOLF",
-			"hpPercent": 100,
 			"physicalPercent": 130,
 			"magicalPercent": 25,
 			"defensePercent": 70,
 			"magicDefensePercent": 70,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 16
-				},
-				{
-					"level": 10,
-					"hp": 165
-				},
-				{
-					"level": 20,
-					"hp": 235
-				},
-				{
-					"level": 40,
-					"hp": 350
-				},
-				{
-					"level": 60,
-					"hp": 900
-				},
-				{
-					"level": 80,
-					"hp": 4500
-				},
-				{
-					"level": 90,
-					"hp": 8100
-				}
-			]
+			"magicPrimary": false
 		},
 		{
 			"name": "Penguin",
 			"role": "Magic",
 			"codenamePrefix": "COS_P_PENGUIN",
-			"hpPercent": 70,
 			"physicalPercent": 35,
 			"magicalPercent": 160,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": true,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": true
 		},
 		{
 			"name": "Crow",
 			"role": "Support",
 			"codenamePrefix": "COS_P_RAVEN",
-			"hpPercent": 90,
 			"physicalPercent": 55,
 			"magicalPercent": 95,
 			"defensePercent": 40,
 			"magicDefensePercent": 40,
-			"magicPrimary": false,
-			"healthByLevel": [
-				{
-					"level": 1,
-					"hp": 10
-				},
-				{
-					"level": 10,
-					"hp": 100
-				},
-				{
-					"level": 20,
-					"hp": 160
-				},
-				{
-					"level": 40,
-					"hp": 230
-				},
-				{
-					"level": 60,
-					"hp": 590
-				},
-				{
-					"level": 80,
-					"hp": 3000
-				},
-				{
-					"level": 90,
-					"hp": 4800
-				}
-			]
+			"magicPrimary": false
 		}
 	],
 	"skills": [

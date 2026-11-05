@@ -348,3 +348,30 @@ test("a Seal of Star drop notice keeps its chat line but never takes the top-cen
 	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, starText );
 	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, starText );
 });
+
+test("a shard event notice (Halloween wave) prints in the bottom-right message log as well as the banner", async () => {
+	const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
+	// A drop/plus frame with an empty link section: no player, no item.
+	const frame = ( text, link ) =>
+		Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ), link ] );
+	const waveText = "Halloween: Gourds land near Jangan in 10 minutes",
+		dropText = "Looter has dropped Heaven's Cloud Spear (Seal Of Moon) from Tiger Girl";
+	const wave = defined( serverNotification( 0x3667, frame( waveText, Buffer.from( [ 0, 0, 0, 0 ] ) ) ) );
+	assert.equal( wave.notificationBanner, true );
+	assert.equal( wave.bannerOnly, undefined );
+	assert.equal( wave.shardEvent, true );
+	// A seal drop names its dropper, so it stays banner and chat only.
+	const name = Buffer.from( "Looter", "ascii" ),
+		dropLink = Buffer.concat( [ Buffer.from( [ name.length, 0 ] ), name, Buffer.from( [ 0, 0 ] ) ] );
+	const drop = defined( serverNotification( 0x3667, frame( dropText, dropLink ) ) );
+	assert.equal( drop.bannerOnly, true );
+	assert.equal( drop.shardEvent, undefined );
+	// Through the gameplay owner and the HUD log: the wave lands under the
+	// game tab, the drop does not appear.
+	const game = createGameplay( () => {} );
+	game.receive( { opcode: 0x3667, payload: frame( waveText, Buffer.from( [ 0, 0, 0, 0 ] ) ) }, 100 );
+	game.receive( { opcode: 0x3667, payload: frame( dropText, dropLink ) }, 110 );
+	const notices = defined( defined( game.take() ).notices );
+	const rows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, notices, key => key, false );
+	assert.deepEqual( rows.map( r => [ r.value, r.category ] ), [ [ waveText, "game" ] ] );
+});

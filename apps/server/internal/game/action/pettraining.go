@@ -104,6 +104,10 @@ func (rt *Runtime) handlePetTraining(division string, c *enterworld.Character, p
 		return OpResult{}
 	}
 	if !rt.AttackPetExpansion {
+		// Clients probe on summon; off is silent and publishes no expansion state.
+		if payload[5] == petTrainingState {
+			return OpResult{}
+		}
 		return petTrainingReceipt("Attack-pet training is disabled on this server.")
 	}
 	r := wire.NewReader(payload)

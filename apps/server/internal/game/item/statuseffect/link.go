@@ -68,6 +68,21 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 		return 0x3011
 	}
 	e.CharacterName, e.OwnerGID, e.InstanceToken, e.Phase = link.SourceName, link.SourceGID, link.SourceToken, 1
+	// A fresh cast on the recipient replaces the half an earlier
+	// departure orphaned there, whoever cast it: the entry belongs to
+	// the recipient, so the recipient holds one entry for the buff,
+	// never a stacked copy beside the orphan. A live pair is refused
+	// above and never reaches here, and a live caster's halves are not
+	// replaced - only a source-retired link leaves an orphan behind.
+	for i, old := range r.byOwner[target] {
+		if old.Phase != 2 || old.LinkToken == 0 || old.StopRequested ||
+			(old.SkillID != link.SkillID && (link.SkillGroup == 0 || old.SkillGroup != link.SkillGroup)) {
+			continue
+		}
+		if orphan, ok := r.links[linkKey(link.DivisionID, old.LinkToken)]; ok && orphan.sourceRetired {
+			r.requestReplacementStopLocked(target, i)
+		}
+	}
 	r.byOwner[source] = append(r.byOwner[source], e)
 	r.byOwner[target] = append(r.byOwner[target], recipient)
 	r.touchLocked(source)
@@ -183,11 +198,43 @@ func (r *Registry) retireLinkHalfLocked(e Effect) {
 	if !ok {
 		return
 	}
+	if e.Phase != 1 {
+		r.detachLinkHalfLocked(e)
+		return
+	}
+	l.sourceRetired = true
+	if !l.targetRetired {
+		r.stopLinkHalfLocked(l, false)
+	}
+	if l.sourceRetired && l.targetRetired {
+		delete(r.links, key)
+	} else {
+		r.links[key] = l
+	}
+}
+
+/*
+================
+detachLinkHalfLocked
+
+Forget's half of a pair: the owner is leaving, so its half is marked
+retired without asking the other half to stop. The native logout cleanup
+cancels only the departing character's own buff list; nothing walks
+another character's entries, whose buffs serialize out of each owner's
+own manager and run their own timers. The retired mark still ends the
+pair's live exchanges at once: the threat, fence, quota, mana and hunt
+readers all refuse a link with a retired half. The surviving half
+retires by its own expiry through the ordinary teardown.
+================
+*/
+func (r *Registry) detachLinkHalfLocked(e Effect) {
+	key := linkKey(e.DivisionID, e.LinkToken)
+	l, ok := r.links[key]
+	if !ok {
+		return
+	}
 	if e.Phase == 1 {
 		l.sourceRetired = true
-		if !l.targetRetired {
-			r.stopLinkHalfLocked(l, false)
-		}
 	} else {
 		l.targetRetired = true
 		// The retirement path clears link+10; the source observes the
@@ -209,6 +256,30 @@ func (r *Registry) retireLinkHalfLocked(e Effect) {
 	} else {
 		r.links[key] = l
 	}
+}
+
+/*
+================
+SourceHalfPresent
+
+Whether the link's source owner still holds the phase-1 half, installed
+and not on its way out. Once it has left with its caster the pair is
+detached (detachLinkHalfLocked): there is no live pair to police, and
+the recipient half is owned by its own timer alone.
+================
+*/
+func (r *Registry) SourceHalfPresent(link Link) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.byOwner[ownerKey(link.DivisionID, link.SourceName)] {
+		if e.Phase == 1 && e.LinkToken == link.SourceToken && !e.StopRequested {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Registry) Links() []Link {

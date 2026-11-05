@@ -12,6 +12,7 @@ import {
 	reportedGpuFeatures
 } from "@/engine/foundation/rendering/gpu-facts";
 import { createBloom } from "./bloom";
+import { createSingleUseBundleEncoder } from "./bundle-encoder";
 import { createFinish } from "./finish";
 import { createHdr } from "./hdr";
 import { createParticleQuery } from "./particle-query";
@@ -249,13 +250,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true,
 				================
 				*/
 				createBundleEncoder: ( depth = true, scene = false ) =>
-					current().createRenderBundleEncoder( {
-						label: "retained-scene",
-						// Scene bundles execute into the frame's scene target: the
-						// canvas format, or the HDR stage's float intermediate.
-						colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
-						...(depth ? { depthStencilFormat: "depth24plus" as const } : {})
-					} ),
+					// Single use by construction (bundle-encoder.ts): a recorder
+					// that kept a finished encoder fails here, in the frame's
+					// own terms, not as a backend validation error (#2560).
+					createSingleUseBundleEncoder(
+						current().createRenderBundleEncoder( {
+							label: "retained-scene",
+							// Scene bundles execute into the frame's scene target: the
+							// canvas format, or the HDR stage's float intermediate.
+							colorFormats: [ scene && hdrOn ? "rgba16float" : navigator.gpu.getPreferredCanvasFormat() ],
+							...(depth ? { depthStencilFormat: "depth24plus" as const } : {})
+						} )
+					),
 				/*
 				================
 				createEncoder

@@ -35,12 +35,20 @@ resolution and projectile flight. Its gameplay mutation is release-owned too.
 ==================
 */
 type pendingProjectileCast struct {
-	executionCost             skillCharge // immutable prepared snapshot; never recomputed at release
-	supportCast               bool        // shares prepare/cancel ownership; has no monster target or flight
-	selfEffect                bool        // category-three recipient installation at release
-	trap                      bool        // untargeted; the release plants a combat trap (skillcombattrap.go)
-	statusArea                bool        // untargeted; the release rolls a caster-centred status area
-	threatDecrease            bool        // untargeted; the release lowers hostility around the caster (mirage.go)
+	executionCost skillCharge // immutable prepared snapshot; never recomputed at release
+	// verdictCost and verdictGroup snapshot the cast skill's admission
+	// price shape at prepare time, beside executionCost: the waiting
+	// verdict prices resources against them instead of resolving the
+	// skill row again every tick (#2139). An unpriced cast (Pinned
+	// false) was prepared without the snapshot and resolves its row
+	// in the verdict, exactly as every cast did before.
+	verdictCost               enterworld.SkillConsumption
+	verdictGroup              uint32
+	supportCast               bool // shares prepare/cancel ownership; has no monster target or flight
+	selfEffect                bool // category-three recipient installation at release
+	trap                      bool // untargeted; the release plants a combat trap (skillcombattrap.go)
+	statusArea                bool // untargeted; the release rolls a caster-centred status area
+	threatDecrease            bool // untargeted; the release lowers hostility around the caster (mirage.go)
 	divisionID, characterName string
 	// ownerKey is simulation.WorldKey(divisionID, characterName), computed
 	// once at prepare time; see pendingSkillFinalize.ownerKey (#1820 D).
@@ -105,6 +113,7 @@ func (rt *Runtime) prepareSelfCast(division string, c *enterworld.Character, cas
 	charge := skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(division, c, skill)}
 	p := newPendingProjectileCast(division, c.Name)
 	p.executionCost = charge
+	p.verdictCost, p.verdictGroup = skill.Consumption, skill.Group
 	p.supportCast = !effect
 	p.selfEffect = effect
 	p.characterID = c.ID
@@ -132,6 +141,7 @@ func (rt *Runtime) prepareProjectileCast(division string, c *enterworld.Characte
 	charge := skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(division, c, skill)}
 	pending := newPendingProjectileCast(division, c.Name)
 	pending.executionCost = charge
+	pending.verdictCost, pending.verdictGroup = skill.Consumption, skill.Group
 	pending.characterID = c.ID
 	pending.cast = cast
 	pending.rootID = rootID
@@ -394,6 +404,17 @@ func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld
 	source := rt.deps.SkillData()
 	if source == nil {
 		return false, true
+	}
+	// A priced cast judges against its prepared snapshot; resolving
+	// the skill row again every waiting tick bought nothing, as the
+	// row is static data the preparation already read (#2139). An
+	// unpriced cast resolves its row exactly as before.
+	if p.verdictCost.Pinned {
+		if !statsHit {
+			return false, false
+		}
+		_, refusal := resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, p.verdictCost, p.verdictGroup)
+		return refusal == 0, true
 	}
 	skill, exists := source.SkillByID(p.cast.ActionId)
 	if !exists {

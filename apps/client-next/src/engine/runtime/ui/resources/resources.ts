@@ -303,6 +303,27 @@ export function createUiAssets(
 		},
 		/*
 		================
+		failure
+
+		The first standing failure as facts for the incident report
+		(#2559): the path that failed, how many attempts it has used
+		and that the retry clock is still running - error() keeps the
+		one-line text for the HUD and the loading screen.
+		================
+		*/
+		failure: () => {
+			const failure = failures.entries().next().value;
+			return failure ?
+				{
+					path: failure[0],
+					attempts: failure[1].attempts,
+					transient: true,
+					message: `UI image unavailable; retrying: ${failure[0]}: ${failure[1].message}`
+				} :
+				null;
+		},
+		/*
+		================
 		dispose
 		================
 		*/

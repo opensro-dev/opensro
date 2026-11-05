@@ -551,7 +551,46 @@ func TestConcurrentColdRegionLoadsDoNotSerialize(t *testing.T) {
 func realAuthorityValidator(t testing.TB) *WaterValidator {
 	t.Helper()
 	paths := gamedatatest.Paths(t)
-	return NewAuthorityValidator(paths.WorldAuthorityDir)
+	v := NewAuthorityValidator(paths.WorldAuthorityDir)
+	seedSharedDungeonSurfaces(v)
+	return v
+}
+
+// sharedDungeonSurfaces holds the one parse of the shipped dungeon
+// resident surfaces for the whole test process. loadDungeonSpawnSurfaces
+// re-reads the manifest, decodes every DOF resource and nav mesh and
+// attaches the AI-nav route tables, and every validator a test built
+// paid that again until the package blew its test budget (#2562). The
+// surfaces are read-only after load - the cave tests that set a route
+// table aside restore it before returning - so every authority
+// validator shares the parse. Each validator keeps its own outdoor
+// caches: the readFile probes and the scanEveryPlacement reference
+// depend on cold per-instance loads, and they build NewWaterValidator
+// directly, never this helper.
+var (
+	sharedDungeonSurfacesOnce sync.Once
+	sharedDungeonSurfaces     map[uint16]*dungeonSpawnSurface
+)
+
+/*
+================
+seedSharedDungeonSurfaces
+
+Hand v the process-shared dungeon surfaces, parsing them on first use.
+================
+*/
+func seedSharedDungeonSurfaces(v *WaterValidator) {
+	sharedDungeonSurfacesOnce.Do(func() {
+		sharedDungeonSurfaces = v.loadDungeonSpawnSurfaces()
+	})
+	if len(sharedDungeonSurfaces) == 0 {
+		return
+	}
+	v.dungeonSpawnSurfaces = sharedDungeonSurfaces
+	// Consume this validator's once so a later explicit load (the
+	// dungeonValidators helper) keeps the shared map instead of
+	// parsing a second, private copy.
+	v.dungeonSpawnOnce.Do(func() {})
 }
 
 // TestWaterValidatorRealHarborAndGorge drives the validator over the REAL

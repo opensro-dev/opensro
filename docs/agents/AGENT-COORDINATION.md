@@ -79,6 +79,32 @@ links. In addition:
   `node_modules/.bin` launcher can point at a removed version. Delete the stale
   launcher and run an offline install; do not copy binaries around.
 
+## Branches
+
+A branch lives exactly as long as the work on it. Short-lived branches on
+one trunk: every branch ends merged, as an open PR, or archived with a
+reason, and none is left behind when its work ends.
+
+- **One branch per piece of work.** A fix to an open PR goes onto that PR's
+  own branch, one fixer at a time. Never cut a copy of someone else's
+  branch to fix it in parallel.
+- **Pushed at birth.** A branch with a commit is pushed and has a PR, a
+  draft while the work is unfinished. Local-only branches with commits are
+  invisible to every review and cleanup and are not allowed.
+- **Ends with its task.** When the task closes and the branch has no open
+  PR, its worktree is removed and the branch ends: work already on `main`
+  is deleted, anything else is first archived on `origin` under
+  `refs/archive/<branch>` with the reason recorded. Restore one with
+  `git fetch origin refs/archive/<branch>` and
+  `git worktree add -b <branch> <path> FETCH_HEAD`.
+- **Reviews create no branches.** A review reads the head through
+  `git fetch origin pull/<n>/head` and `FETCH_HEAD`.
+- **Two days, then seven.** A branch on no PR for two days is listed for its
+  owner to push as a draft PR or drop. Past seven days the coordinator
+  salvages it as a draft PR or archives it.
+
+Merged PR branches on `origin` are deleted by GitHub on merge.
+
 ## Reviews and merges
 
 - **Three approvals on the exact head:** two from Cursor agents and one from
@@ -86,7 +112,16 @@ links. In addition:
   wrote the PR; the two Cursor approvals never come from the author. An
   approval covers one commit. A push, rebase or amend needs a fresh look:
   `git range-diff` showing `=` (or only context changes) carries an approval
-  forward; anything else is re-reviewed.
+  forward; any changed commit, a reviewer's fix included, is re-reviewed in
+  full by all three seats.
+- **A reviewer fixes what it finds.** A blocker or major the reviewer can
+  fix and prove within the review (a wrong branch, a missed case, a wrong
+  constant, a missing test) is fixed by the reviewer, not sent back: the
+  reviewer records CHANGES with the finding, pushes a fast-forward commit
+  with a test that fails without it to the PR's own branch, and tells the
+  author to pull. One fixer at a time: when the author is already fixing,
+  the reviewer reports instead. A finding goes back to the author only when
+  it is a design choice, needs the author's state, or is larger than the PR.
 - **The PR body carries its evidence.** The template's Evidence checklist is
   ticked for what was done, or marked `n/a - <reason>`:
   - the rg blast radius;
@@ -145,8 +180,9 @@ links. In addition:
      new tests catch, and the full gate when a contract changes. Unsure
      findings are listed as questions, not dropped.
 
-  A real gap in any section means CHANGES. A non-blocking finding is filed
-  as an issue, not left in a comment.
+  A real gap in any section means CHANGES, fixed by the reviewer where it
+  can be (above). A non-blocking finding goes on the area's Backlog issue as
+  a checklist line, not left in a comment.
 - **A merged PR is re-reviewed at the merge commit.** The verdict line is
   `Review by <session>: POST-MERGE at <merge sha8>`, the sha of the merge
   commit, not the PR head, with the same five sections.

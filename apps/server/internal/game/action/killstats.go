@@ -162,7 +162,10 @@ accrue
 
 elapsedMs of online time for every entered character, in its current
 band; each is also seen today. Deleted-pending characters are leaving
-and do not accrue.
+and do not accrue. The caller passes only characters entered at the
+accrual instant: the division roster outlives every session (it loads
+at boot and shrinks only on character deletion), so accruing from it
+charged existence, not online time (#2479).
 ================
 */
 func (t *killStatTracker) accrue(dayS int64, online []*enterworld.Character, elapsedMs int64) {
@@ -243,10 +246,34 @@ func (rt *Runtime) advanceKillStats(nowMs int64) {
 	}
 	if elapsed := nowMs - rt.killStats.lastAccrualMs; elapsed >= killStatAccrueEveryMs {
 		rt.killStats.lastAccrualMs = nowMs
-		if rt.Ground != nil && rt.deps != nil {
+		if rt.deps != nil {
+			// Online is entered, not existing (#2479): the session
+			// views name who is in the world at this instant, by
+			// division; the roster only says who exists. No session
+			// source wired (fixtures), nobody accrues.
+			entered := map[string]map[int64]struct{}{}
+			if rt.OnlineSessions != nil {
+				for _, view := range rt.OnlineSessions() {
+					if view.CharacterID == 0 {
+						continue
+					}
+					ids := entered[view.DivisionID]
+					if ids == nil {
+						ids = map[int64]struct{}{}
+						entered[view.DivisionID] = ids
+					}
+					ids[view.CharacterID] = struct{}{}
+				}
+			}
 			var online []*enterworld.Character
-			for _, division := range rt.Ground.DivisionIDs() {
-				online = append(online, rt.deps.CharactersForDivision(division)...)
+			for division, ids := range entered {
+				for _, c := range rt.deps.CharactersForDivision(division) {
+					if c != nil {
+						if _, ok := ids[c.ID]; ok {
+							online = append(online, c)
+						}
+					}
+				}
 			}
 			rt.killStats.accrue(killStatDayOf(nowMs), online, elapsed)
 		}

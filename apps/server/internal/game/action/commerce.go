@@ -458,17 +458,20 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || !isCOS && q.SourceSlot < inventory.EquipmentSlotEnd {
 				return false
 			}
-			// Port-only, not native (halloween.go): a sealed event
-			// helmet is never sold, however sellable its row is.
-			if rt.HalloweenHelmetSeal.Sealed(item.Codename) {
-				return false
-			}
+			// Port-only, not native (halloween.go): the seal leaves the
+			// merchant open. A sealed event helmet may be sold; the sale
+			// destroys it (the bag row drops) and the item classes a
+			// helmet row carries keep it out of the buyback bench
+			// (commerceNoBuyback), so it never reaches another player.
 			ref, found := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 			if !found || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
 				return false
 			}
-			admitted := commerceSaleAdmitted(ref)
-			if !admitted || !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
+			if !commerceSaleAdmitted(ref) {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
+			if !inventory.IsEtcStackableTypeFlags(item.TypeFlags) && q.Quantity != 1 {
 				return false
 			}
 			if code := rt.tradeAdmission(division, c, npc, item); code != 0 {

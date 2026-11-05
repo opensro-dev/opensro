@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -58,6 +59,9 @@ type Item struct {
 	Tooltip  []TooltipRow `json:"tooltip"`
 	Sell     int64        `json:"sellPrice"`
 	MaxStack int64        `json:"maxStack"`
+	// PetGear names the derived drop of an attack-pet gear piece
+	// (petgear.go); nil for every other item.
+	PetGear *PetGearDrop `json:"petGear,omitempty"`
 	Standing
 }
 
@@ -110,6 +114,9 @@ item-use registry.
 type ItemSource struct {
 	Refs   []*enterworld.ItemRef
 	Usable func(*enterworld.ItemRef) bool
+	// PetGearFactor is the petGearDropFactor the shard runs by default;
+	// zero publishes no pet gear sources (petgear.go).
+	PetGearFactor float64
 }
 
 /*
@@ -121,6 +128,12 @@ name or no id are left out.
 ================
 */
 func BuildItems(source ItemSource) []Item {
+	// Pet gear sources name the live rule only while the expansion runs
+	// (petgear.go); off, the factor passes through as zero.
+	petGearFactor := 0.0
+	if companion.AttackPetExpansionEnabled() {
+		petGearFactor = source.PetGearFactor
+	}
 	items := make([]Item, 0, len(source.Refs))
 	for _, ref := range source.Refs {
 		if ref == nil || ref.RefObjID == 0 || strings.TrimSpace(ref.Name) == "" {
@@ -132,6 +145,7 @@ func BuildItems(source ItemSource) []Item {
 		item := Item{ID: ref.RefObjID, Codename: ref.Codename, Name: ref.Name, Type: itemTypePath(ref.TypeIDs),
 			Degree: itemDegree(ref), Rarity: itemRarity(ref), Level: itemLevel(ref), Race: itemRace(ref.Country), Gender: itemGender(ref.RequiredSex),
 			Icon: webIcon(ref.Icon), Tooltip: []TooltipRow{}, Sell: nativeInt(ref, "sellPrice"), MaxStack: nativeInt(ref, "maxStack")}
+		item.PetGear = petGearDropFor(ref, petGearFactor)
 		item.Standing = applyGaps("item", ref.RefObjID, itemStanding(ref, source.Usable))
 		items = append(items, item)
 	}

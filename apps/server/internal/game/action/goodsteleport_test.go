@@ -106,7 +106,7 @@ func TestReturnScrollWithATransportOnlyWithTheRule(t *testing.T) {
 			t.Fatalf("rule: the return did not start: %+v", out.Frames)
 		}
 		clock.Advance(5 * time.Second)
-		rt.advanceReturnScrolls(clock.NowMs())
+		advanceAndDrainReturns(rt, clock.NowMs())
 		if c.NativeTeleportMode != 0 || c.ActiveCOS == nil || !c.ActiveCOS.Summoned {
 			t.Fatalf("rule: return did not complete with the transport out (mode %d, cos %+v)", c.NativeTeleportMode, c.ActiveCOS)
 		}

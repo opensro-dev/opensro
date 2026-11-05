@@ -249,6 +249,7 @@ func TestReturnScrollCompletionAppliesTownHead(t *testing.T) {
 	useReturn(rt, c)
 	clock.Advance(6 * time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if c.NativeTeleportMode != 0 {
 		t.Fatal("return scroll did not complete")
 	}

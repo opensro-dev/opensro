@@ -14,6 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/gorilla/websocket"
+	"github.com/quic-go/webtransport-go"
 )
 
 /*
@@ -110,6 +113,27 @@ func classifyClose(cause error) (string, string) {
 		default:
 			return "unknown", "explicit_close"
 		}
+	}
+	// A remote WebTransport session or stream error is the peer's close
+	// capsule arriving: the client deliberately ended the session or its
+	// control stream (reload, navigation, tab close). A dead path cannot
+	// produce it - silence surfaces as the idle timeout instead - so it
+	// is a goodbye, not a loss (#2148). Its message is empty for a plain
+	// close, which is why these used to land in connection_closed with
+	// no text at all. The WebSocket clean-close codes (1000, 1001) are
+	// the same goodbye on the fallback lane; abnormal codes stay losses.
+	var sessionErr *webtransport.SessionError
+	if errors.As(cause, &sessionErr) && sessionErr.Remote {
+		return "expected", "client_closed"
+	}
+	var streamErr *webtransport.StreamError
+	if errors.As(cause, &streamErr) && streamErr.Remote {
+		return "expected", "client_closed"
+	}
+	var closeErr *websocket.CloseError
+	if errors.As(cause, &closeErr) &&
+		(closeErr.Code == websocket.CloseNormalClosure || closeErr.Code == websocket.CloseGoingAway) {
+		return "expected", "client_closed"
 	}
 	switch {
 	case errors.Is(cause, errHandlerPanic):

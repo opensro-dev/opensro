@@ -207,9 +207,12 @@ func TestActivityGateResolvesSettledBlockOnce(t *testing.T) {
 	settled := calls
 	for k := int64(1); k <= 5; k++ {
 		current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
-		frames, _, handled := ops.runActivityGate(monsterTestDivision, actor, current, now+k*1000)
+		frames, _, handled, generationAdvanced := ops.runActivityGate(monsterTestDivision, actor, current, now+k*1000)
 		if handled || len(frames) != 0 {
 			t.Fatalf("gate %d: active settled actor was suspended or moved", k)
+		}
+		if generationAdvanced {
+			t.Fatalf("gate %d: a settled re-check rewrote the row instead of stamping its cadence", k)
 		}
 	}
 	if calls != settled+1 {
@@ -218,7 +221,7 @@ func TestActivityGateResolvesSettledBlockOnce(t *testing.T) {
 	moved, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
 	moved.Pose.X += 50
 	ops.Monsters.CommitMover(monsterTestDivision, actor.Gid, moved)
-	if _, _, handled := ops.runActivityGate(monsterTestDivision, actor, moved, now+6000); handled {
+	if _, _, handled, _ := ops.runActivityGate(monsterTestDivision, actor, moved, now+6000); handled {
 		t.Fatal("moved actor was suspended beside its viewer")
 	}
 	if calls != settled+2 {

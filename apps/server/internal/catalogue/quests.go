@@ -18,6 +18,8 @@ package catalogue
 import (
 	"sort"
 
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 )
 
@@ -50,11 +52,19 @@ QuestRewards
 ================
 */
 type QuestRewards struct {
-	Exp      int64         `json:"exp"`
-	SkillExp int64         `json:"skillExp"`
-	Gold     int64         `json:"gold"`
-	Items    []QuestItem   `json:"items"`
-	Choices  [][]QuestItem `json:"choices,omitempty"`
+	Exp      int64 `json:"exp"`
+	SkillExp int64 `json:"skillExp"`
+	// PaidExp is the EXP the beta growth actually pays for this quest at
+	// its own level (progression.GrowthRates.PaidRewards); exp keeps the
+	// native amount beside it. Absent when the beta is off or pays the
+	// native amount, when exp alone is the truth.
+	PaidExp int64 `json:"paidExp,omitempty" doc:"Port-only beta balance: the EXP actually paid for this quest at its own level after the beta growth band; exp keeps the native amount. Absent when the beta growth is off or pays the native amount."`
+	// PaidSkillExp is PaidExp for skill EXP: the quest level's band, then
+	// the flat skill EXP rate on top.
+	PaidSkillExp int64         `json:"paidSkillExp,omitempty" doc:"Port-only beta balance: the skill EXP actually paid for this quest at its own level after the beta growth band and the flat skill EXP rate; skillExp keeps the native amount. Absent when the beta growth is off or pays the native amount."`
+	Gold         int64         `json:"gold"`
+	Items        []QuestItem   `json:"items"`
+	Choices      [][]QuestItem `json:"choices,omitempty"`
 	// BagSlots is the inventory slots the reward adds.
 	BagSlots int `json:"bagSlots,omitempty"`
 }
@@ -94,7 +104,8 @@ type QuestsFile struct {
 QuestSource
 
 The display catalogue, the executable definitions, the English text by
-symbol, and item ids by codename.
+symbol, item ids by codename, and the level table the beta growth
+prices a quest's paid rewards with.
 ================
 */
 type QuestSource struct {
@@ -102,6 +113,9 @@ type QuestSource struct {
 	Definitions *quest.Definitions
 	Text        func(symbol string) string
 	ItemID      func(codename string) uint32
+	// Levels prices the paid rewards (PaidRewards); nil prices every
+	// pace band at the native pace, as a level without table rows does.
+	Levels enterworld.LevelDataSource
 	// Listed are the codenames questdata lists, in file order.
 	Listed []string
 }
@@ -112,6 +126,9 @@ BuildQuests
 ================
 */
 func BuildQuests(source QuestSource) []Quest {
+	// The export describes the shard it is built for, so it reads the
+	// same port-only beta growth the GameWorld grants with.
+	beta := progression.BetaGrowthFromEnv()
 	ids := map[string]uint32{}
 	for _, codename := range source.Listed {
 		if row, ok := source.Catalog.QuestByCodename(codename); ok {
@@ -143,6 +160,20 @@ func BuildQuests(source QuestSource) []Quest {
 				}
 			}
 			q.Rewards = questRewards(def, source.ItemID)
+			// The website shows what the shard pays, not the native
+			// reward (issue #2539): the beta growth priced at the
+			// quest's own level by the same GrowthRates the grant
+			// scales with. A band that pays the native amount leaves
+			// the paid fields absent, so the page falls back to exp.
+			if beta.Enabled {
+				paidExp, paidSkillExp := beta.PaidRewards(source.Levels, int64(q.Level), q.Rewards.Exp, q.Rewards.SkillExp)
+				if paidExp != q.Rewards.Exp {
+					q.Rewards.PaidExp = paidExp
+				}
+				if paidSkillExp != q.Rewards.SkillExp {
+					q.Rewards.PaidSkillExp = paidSkillExp
+				}
+			}
 		}
 		q.Standing = applyGaps("quest", q.ID, q.Standing)
 		byID[q.ID] = len(quests)

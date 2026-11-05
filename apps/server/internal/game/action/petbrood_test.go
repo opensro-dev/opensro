@@ -111,6 +111,50 @@ func TestCrowWithoutBroodStillRecharges(t *testing.T) {
 
 /*
 ================
+TestCrowRechargeIdleTickTakesNoUpdateDoor
+
+#2139: the recharge row is judged under the read door; the deferred
+update door opens only on the tick whose row actually moves.
+================
+*/
+func TestCrowRechargeIdleTickTakesNoUpdateDoor(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	learnPetBook(t, c, 51)
+	now := clock.NowMs()
+	doors := 0
+	rt.deps.(*enterworld.Deps).UpdateCharacterDeferred = func(_ *enterworld.Character, label string, update func() bool) bool {
+		if label == "crow-brood-recharge" {
+			doors++
+		}
+		return update()
+	}
+	c.ActiveCOS.Training.Rows[1] = domain.PetRowCooldown{Kind: companion.ChargeKind, Capacity: 3, Charges: 0, RechargeMs: 300000, ReadyAtMs: now + 3600000}
+	// The first tick settles the hand-written row (BroodRow rewrites
+	// the recharge period from the book); only then is a tick idle.
+	rt.advanceCrowBrood(key, now)
+	doors = 0
+	c.ActiveCOS.Training.Rows[1].ReadyAtMs = now + 3600000
+	if frames := rt.advanceCrowBrood(key, now); len(frames) != 0 {
+		t.Fatalf("idle recharge published %d frames", len(frames))
+	}
+	if doors != 0 {
+		t.Fatalf("idle recharge tick opened %d update doors", doors)
+	}
+	c.ActiveCOS.Training.Rows[1].ReadyAtMs = now + 1000
+	frames := rt.advanceCrowBrood(key, now+1000)
+	if c.ActiveCOS.Training.Rows[1].Charges == 0 {
+		t.Fatalf("no charge came back: %+v", c.ActiveCOS.Training.Rows[1])
+	}
+	if len(frames) == 0 {
+		t.Fatal("the recharge published nothing")
+	}
+	if doors != 1 {
+		t.Fatalf("maturing recharge opened %d update doors, want 1", doors)
+	}
+}
+
+/*
+================
 TestCrowBroodDestroyedEggAndCaps
 ================
 */

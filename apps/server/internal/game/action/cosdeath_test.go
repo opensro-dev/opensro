@@ -192,6 +192,166 @@ func TestTransportDeathDropsCargoAndDeletesRecord(t *testing.T) {
 
 /*
 ================
+dressTestCape
+
+Register a free-battle cape of one group and wear it in slot eight,
+the group playerRelationEquipment resolves.
+================
+*/
+func dressTestCape(t *testing.T, rt *Runtime, c *enterworld.Character, index int, group int64) {
+	t.Helper()
+	cape := &enterworld.ItemRef{
+		RefObjID: uint32(63200 + index), Codename: "TEST_CARGO_CAPE_" + string(rune('A'+index)),
+		TypeIDs:      [4]int64{3, 1, 7, 5},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{freeBattleGroupField: float64(group)}),
+		Combat:       &enterworld.ItemCombatRef{},
+	}
+	switch items := rt.deps.ItemReferences().(type) {
+	case staticItemSource:
+		items[cape.Codename] = cape
+	case cosTestItemSource:
+		items.staticItemSource[cape.Codename] = cape
+	default:
+		t.Fatalf("unknown item source %T", items)
+	}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(enterworld.JobSuitSlot),
+		RefObjID: cape.RefObjID, Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1})
+}
+
+/*
+================
+killLoadedTransport
+
+The TestPlayerKillOfATransportScattersItsCargo strike: a loaded
+transport at one HP, killed by the attacker's basic attack; the kill
+must land and retire the record.
+================
+*/
+func killLoadedTransport(t *testing.T, rt *Runtime, attacker, owner *enterworld.Character) {
+	t.Helper()
+	equipStrikeTestCOS(t, rt, owner)
+	transport := owner.ActiveCOS
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	transport.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	transport.CurrentHP = 1
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: transport.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if owner.ActiveCOS != nil {
+		t.Fatal("the killed transport kept its record")
+	}
+}
+
+/*
+================
+TestTransportKillCreditFollowsTheFreeBattleRelation
+
+The kill credit's relation gate on the cargo: a fatal dealer whose
+free-battle group opposes the transport owner's (or is the
+everyone-opposes group) earns no credit at all, so the goods go with
+the record; a team-mate's kill runs the credit and drops them. The
+record dies either way.
+================
+*/
+func TestTransportKillCreditFollowsTheFreeBattleRelation(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		killerCape int64
+		ownerCape  int64
+		drops      bool
+	}{
+		{"opposing groups keep the cargo", 2, 1, false},
+		{"the everyone-opposes group keeps the cargo", 5, 3, false},
+		{"team mates drop the cargo", 1, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, _, attacker, owner := newPvpPair(t)
+			dressTestCape(t, rt, attacker, 0, tc.killerCape)
+			dressTestCape(t, rt, owner, 1, tc.ownerCape)
+			killLoadedTransport(t, rt, attacker, owner)
+			ground := rt.Ground.All(testDivision)
+			if dropped := len(ground) == 1; dropped != tc.drops {
+				t.Fatalf("killer cape %d, owner cape %d: cargo dropped %v (ground %+v), want drops %v",
+					tc.killerCape, tc.ownerCape, dropped, ground, tc.drops)
+			}
+		})
+	}
+}
+
+/*
+================
+TestJobOpponentKillOfATransportDropsItsCargo
+
+A suited job opponent is not the relation gate: a thief striking a
+trader's transport dead runs the full credit (his kill books as a job
+kill), so the goods drop unowned like any credited kill's.
+================
+*/
+func TestJobOpponentKillOfATransportDropsItsCargo(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	dressJobSuit(t, rt, attacker, domain.JobThief)
+	dressJobSuit(t, rt, owner, domain.JobTrader)
+	killLoadedTransport(t, rt, attacker, owner)
+	ground := rt.Ground.All(testDivision)
+	if len(ground) != 1 || ground[0].StackCount != 7 || ground[0].DroppedBy != "" {
+		t.Fatalf("a thief's kill of a trader's transport left %+v, want the 7 potions unowned", ground)
+	}
+}
+
+/*
+================
+TestAttackPetKillOfATransportKeepsCargoOnOpposingCapes
+
+A companion dealer answers with its owner's relation: an attack pet
+whose owner wears an opposing free-battle cape kills the transport,
+and the skipped credit keeps the cargo with the record exactly as a
+direct player strike on that relation does.
+================
+*/
+func TestAttackPetKillOfATransportKeepsCargoOnOpposingCapes(t *testing.T) {
+	rt, _, c, _ := newPetCombatRuntime(t, 100, attackPetBand)
+	petGID := c.ActiveCOS.GID
+	victim := *c
+	victim.ID, victim.Name, victim.ActiveCOS = c.ID+1, "victim", nil
+	ref := equipCombatTestPet(t, rt, &victim, cosBandTransport)
+	transport := victim.ActiveCOS
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	transport.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	transport.CurrentHP = 1
+	dressTestCape(t, rt, c, 0, 2)
+	dressTestCape(t, rt, &victim, 1, 1)
+	attackerRef, ok := rt.cosReference(c.ActiveCOS)
+	if !ok {
+		t.Fatal("the attack pet has no reference")
+	}
+	state := rt.petSessionFor(testDivision, c.Name, petGID)
+	if state == nil || state.character != c {
+		t.Fatal("the pet session does not hold its owner")
+	}
+	step := petCombatStep{key: petOwnerKey{division: testDivision, name: c.Name, gid: petGID},
+		state: state, snapshot: c, pet: c.ActiveCOS, ref: attackerRef, percent: fullAreaPercent}
+	target := petCombatTarget{
+		combatTarget: combatTarget{gid: transport.GID, player: &victim, snapshot: &victim},
+		cos:          transport, cosRef: ref,
+	}
+	skill := rt.deps.SkillData().(staticSkillSource)[2]
+	result, committed := rt.petStrikeCOS(step, target, skill)
+	if !committed || !result.fatal {
+		t.Fatalf("the pet's hit on the transport did not commit fatally: %+v", result)
+	}
+	if victim.ActiveCOS != nil {
+		t.Fatal("the killed transport kept its record")
+	}
+	if ground := rt.Ground.All(testDivision); len(ground) != 0 {
+		t.Fatalf("an opposing-cape pet kill dropped %+v, want the cargo kept with the record", ground)
+	}
+}
+
+/*
+================
 TestMonsterKillOfATransportDropsItsCargo
 
 A thief or any monster striking a loaded transport dead: its goods drop
@@ -224,5 +384,58 @@ func TestMonsterKillOfATransportDropsItsCargo(t *testing.T) {
 	}
 	if c.ActiveCOS != nil {
 		t.Fatal("the dead transport kept its record")
+	}
+}
+
+/*
+================
+TestBurnKillOfATransportFollowsTheFreeBattleRelation
+
+A burn death settles through the abnormal path (cosabnormal.go
+commit), which never saw a direct hit: the fatal periodic hit still
+credits its source, so the cargo gate reads the burn dealer's cape
+exactly as it reads a strike's. An opposing-cape burn keeps the
+cargo with the record; a team-mate's burn drops it.
+================
+*/
+func TestBurnKillOfATransportFollowsTheFreeBattleRelation(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		killerCape int64
+		drops      bool
+	}{
+		{"an opposing-cape burn keeps the cargo", 2, false},
+		{"a team-mate burn drops the cargo", 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, clock, burner, owner := newPvpPair(t)
+			// Equip first: it replaces the item source, and the cape
+			// registration (dressTestCape) writes into that source.
+			equipCombatTestPet(t, rt, owner, cosBandTransport)
+			dressTestCape(t, rt, burner, 0, tc.killerCape)
+			dressTestCape(t, rt, owner, 1, 1)
+			transport := owner.ActiveCOS
+			potion := testItems()["ITEM_ETC_HP_POTION_01"]
+			transport.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+				Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+			transport.CurrentHP = 5
+			record := abnormal.Record{Status: abnormal.Burn, Level: 1, Grade: 1, DurationMs: 10000,
+				PeriodMs: 2000, SourceGID: enterworld.ObjectIDForCharacter(burner), Rate24: 10, Scale20: 1, Param38: 10}
+			abnormalOwner := rt.newCosAbnormalOwner(testDivision, owner, clock.NowMs())
+			abnormalOwner.sources = rt.captureAbnormalSources(testDivision, abnormalOwner.block, []abnormal.Record{record})
+			if !abnormalOwner.block.Apply(abnormalOwner, record, clock.NowMs()) {
+				t.Fatal("status refused")
+			}
+			abnormalOwner.block.Update(abnormalOwner, clock.NowMs())
+			abnormalOwner.commit()
+			if owner.ActiveCOS != nil {
+				t.Fatal("the burned transport kept its record")
+			}
+			ground := rt.Ground.All(testDivision)
+			if dropped := len(ground) == 1; dropped != tc.drops {
+				t.Fatalf("burner cape %d, owner cape 1: cargo dropped %v (ground %+v), want drops %v",
+					tc.killerCape, dropped, ground, tc.drops)
+			}
+		})
 	}
 }
