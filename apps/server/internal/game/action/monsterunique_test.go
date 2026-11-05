@@ -342,3 +342,25 @@ func TestPharaohGearRateAppliesOnlyToTombElitesAndUniques(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestPharaohGearRateReadsTheRarityNibble
+
+The catalogue hands PharaohGearRate the raw grade byte, party flag
+(0x10) included, while the runtime hands it Instance.Rarity, which drops
+the flag. Both must reach the same verdict, or the site publishes a gear
+rate the server does not roll (or the reverse).
+================
+*/
+func TestPharaohGearRateReadsTheRarityNibble(t *testing.T) {
+	rt := &Runtime{}
+	for _, grade := range []uint8{0, 1, 3, 6, 8} {
+		for _, flagged := range []uint8{grade, grade | 0x10} {
+			mob := monster.Instance{Ref: monster.MonsterRef{PharaohGearRate: 5, MonsterType: flagged}}
+			if got, want := PharaohGearRate(flagged, 5), rt.pharaohGearRate(mob); got != want {
+				t.Fatalf("grade %#x: catalogue verdict %d, runtime verdict %d", flagged, got, want)
+			}
+		}
+	}
+}

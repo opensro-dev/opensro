@@ -221,13 +221,17 @@ The pharaohGearRate rule without the runtime: the stamped rate counts
 only for grades 6 and 8, and only above the native 1. The catalogue
 publishes this verdict per spawn variant, so the published gear rate
 and the rolled one cannot drift apart.
+
+The catalogue passes the raw grade byte, whose high nibble is the party
+flag (0x10); Instance.Rarity drops it, so the rule reads the low nibble
+for both callers.
 ================
 */
-func PharaohGearRate(rarity uint8, stamped int) int {
+func PharaohGearRate(grade uint8, stamped int) int {
 	if stamped <= 1 {
 		return 1
 	}
-	switch rarity {
+	switch grade & 0x0f {
 	case 6, 8:
 		return stamped
 	}
