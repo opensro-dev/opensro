@@ -176,6 +176,10 @@ export function createCharacterPresentation(
 	const animationEmission = createAnimationEmission( allocateActor );
 	const auxiliary = createAuxiliaryPresentation( allocateActor );
 	const modelEmission = createModelEmission( allocateActor );
+	// The portrait publication (Item Mall mannequin, party portraits) steps in
+	// the same frame as the world pass, so its emitters get their own lane:
+	// one emission owner sees one lane's step per frame.
+	const portraitEmission = createModelEmission( allocateActor );
 	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
@@ -280,6 +284,7 @@ export function createCharacterPresentation(
 		scenery.reset();
 		entityLod.reset();
 		modelEmission.reset();
+		portraitEmission.reset();
 		structureVisuals.reset();
 		animationEmission.reset();
 		auxiliary.resetStages();
@@ -882,7 +887,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld },
 			output,
 			published,
-			{ renderer, resources, mallPreview, modelEmission }
+			{ renderer, resources, mallPreview, portraitEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
@@ -947,6 +952,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					presentationState.clearStances();
 					modelEmission.reset();
+					portraitEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
 					auxiliary.resetStages();
@@ -984,6 +990,7 @@ export function createCharacterPresentation(
 			return weather.eventRain( published, () => {
 				presentationState.clearStances();
 				modelEmission.reset();
+				portraitEmission.reset();
 				structureVisuals.reset();
 				animationEmission.reset();
 				auxiliary.resetStages();

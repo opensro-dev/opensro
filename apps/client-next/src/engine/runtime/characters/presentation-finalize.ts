@@ -392,7 +392,7 @@ interface PortraitBindings {
 		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions"
 	>;
 	readonly resources: PortraitResources;
-	readonly modelEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
+	readonly portraitEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
 	readonly mallPreview: {
 		skin(): { model: number; shape: number; } | null;
 		glow(): { actor: CharacterActor; particles: readonly ModelParticle[]; } | null;
@@ -427,7 +427,7 @@ export function publishCharacters(
 ) {
 	const { local, gameplay, next, seconds, blindHeld } = frame;
 	const { catalog, dress, manifest } = published;
-	const { renderer, resources, mallPreview, modelEmission } = bindings;
+	const { renderer, resources, mallPreview, portraitEmission } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 	// It remains admitted even when no world entity exists for that member.
 	const portraits: CharacterActor[] = [];
@@ -453,12 +453,13 @@ export function publishCharacters(
 		) );
 		// The mannequin's rare items glow as the player's do (native
 		// 6BBEA0 clones the player's composite, glow attachments
-		// included): its emitters ride the same emission owner as the
-		// world and dock actors, keyed to the mannequin body.
+		// included). Its emitters ride the portrait lane, not the world
+		// pass's owner: step() retires every row its own call does not
+		// present, so one owner sees one lane's call per frame.
 		const glow = mallPreview.glow();
 		if ( glow ) {
 			portraits.push(
-				...modelEmission.step(
+				...portraitEmission.step(
 					[ glow ],
 					seconds,
 					resources.ready,

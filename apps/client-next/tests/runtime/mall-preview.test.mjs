@@ -342,6 +342,55 @@ test("mannequin keeps its rare weapon's glow on the portrait pass with the outfi
 	assert.deepEqual( f.emission.step( [ defined( f.owner.glow() ) ], 13, () => true, 8 ), [] );
 });
 
+test("the portrait glow lane and the world lane keep separate emitter clocks in one frame", () => {
+	const f = glowFixture();
+	f.owner.request( [] );
+	f.owner.step( f.frame, f.resources, f.renderer );
+	const mannequin = defined( f.owner.glow(), "the committed mannequin offers its glow holder" );
+	const worldHolder = {
+		actor: {
+			gid: 77,
+			model: "world",
+			pose: mannequin.actor.pose,
+			clip: "stand",
+			time: 0,
+			loop: true,
+			scale: 1
+		},
+		particles: [ {
+			effectPath: "system/system_raretype_a_step1.efp",
+			bone: "ai_end",
+			scale: 1,
+			offset: /** @type {[ number, number, number ]} */ ([ 0, 0, 0 ]),
+			root: false
+		} ]
+	};
+	// One owner stepped twice in a frame with different holder sets retires
+	// the other call's emitters on every call (step's keep-set sweep), so
+	// both clocks sit at zero forever. That is the shape the #2637 review
+	// rejected; pinned so the one-owner-one-lane contract stays explicit.
+	let sharedId = -1;
+	const shared = createModelEmission( () => sharedId-- );
+	shared.step( [ worldHolder ], 10, () => true, 8 );
+	shared.step( [ mannequin ], 10, () => true, 8 );
+	assert.equal( defined( shared.step( [ worldHolder ], 11, () => true, 8 )[0] ).time, 0 );
+	assert.equal( defined( shared.step( [ mannequin ], 11, () => true, 8 )[0] ).time, 0 );
+	// The production wiring gives each lane its own owner over the shared
+	// allocator: stepped in frame order (world pass, then portrait pass),
+	// both emitters keep their ids and their clocks advance.
+	let laneId = -1;
+	const allocate = () => laneId--;
+	const worldLane = createModelEmission( allocate ), portraitLane = createModelEmission( allocate );
+	const worldFirst = defined( worldLane.step( [ worldHolder ], 10, () => true, 8 )[0] );
+	const mannequinFirst = defined( portraitLane.step( [ mannequin ], 10, () => true, 8 )[0] );
+	const worldNext = defined( worldLane.step( [ worldHolder ], 11, () => true, 8 )[0] );
+	const mannequinNext = defined( portraitLane.step( [ mannequin ], 11, () => true, 8 )[0] );
+	assert.equal( worldNext.gid, worldFirst.gid );
+	assert.equal( worldNext.time, 1 );
+	assert.equal( mannequinNext.gid, mannequinFirst.gid );
+	assert.equal( mannequinNext.time, 1 );
+});
+
 test("body replacement clears incompatible local try-on before the next UI publication", () => {
 	const f = fixture();
 	f.owner.request( [ 2, 3 ] );
