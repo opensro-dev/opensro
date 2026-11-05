@@ -66,15 +66,17 @@ const (
 ================
 Setting
 
-One shard setting. Catalogue marks the settings sro-catalogue reads (what
-the site publishes depends on them); the rest are server only.
+One shard setting. Which settings sro-catalogue models - and the reason
+for each one it does not - lives with the catalogue tool
+(cmd/tools/sro-catalogue/settings.go), whose coverage test holds every
+row of this table to one list or the other (#2542); this table stays the
+one owner of the variables and their deployment defaults.
 ================
 */
 type Setting struct {
 	Env        string
 	NomadVar   string
 	Default    string
-	Catalogue  bool
 	Source     Source
 	Validation ValueValidation
 }
@@ -84,21 +86,21 @@ var Settings = []Setting{
 	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off"},
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
-	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
+	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Source: Built,
 		Validation: ValueSwitch},
 	// Port-only, not native: the 110 cap. Owner, 2026-10-27: the default is
 	// the native 90 (the non-native rule: the off value is native); the
 	// cap-110 expansion names 110 when it ships (#1751).
-	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90", Catalogue: true},
+	{Env: "SRO_LEVEL_CAP", NomadVar: "level_cap", Default: "90"},
 	// Port-only, not native: database-authored Alexandria field population.
-	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_MONSTERS", NomadVar: "cap110_monsters", Default: "off"},
 	// Port-only, not native: the level-100 slice of that population,
 	// admitted for hunting separately (#1741); switches on with the
 	// cap-110 catalogue (#1607).
-	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off"},
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
-	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off"},
 	// Port-only, not native: the degree-11 equipment and skill tiers
 	// (#1745). Consumed at build time, not at runtime: the variant build's
 	// import tools (cap110_item_import.py, cap110_skill_import.py) read
@@ -108,16 +110,16 @@ var Settings = []Setting{
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
-	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
+	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off"},
 	// Port-only, not native: the Qin-Shi tomb upper-floor population
 	// (#1800). Needs SRO_CAP110_MONSTERS (its drops ride the shared
 	// cap-110 loot catalogue).
-	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_QINSHI", NomadVar: "cap110_qinshi", Default: "off"},
 	// Port-only, not native: the temple band population and its 22
 	// instanced worlds (#1800 step 3). Needs SRO_CAP110_MONSTERS (the
 	// importer writes cap110-temple.txt only on that pairing, and the
 	// consumer refuses the same pairing at load). "off" is native.
-	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
+	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off"},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
 	// many times as often (1 is native; 2 to 20). Server only: the site's drop
 	// lists describe the native rule.
@@ -126,8 +128,8 @@ var Settings = []Setting{
 	// The catalogue publishes its window, box drop and exchange while it
 	// runs (#2540), so the event and window rows are catalogue settings;
 	// the helmet seal outlives the event and stays server-only.
-	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
-	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off"},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: ""},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -171,10 +173,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-28: a companion's job kill counts for its owner.
 	{Env: "SRO_MOST_WANTED_COS_KILLS", NomadVar: "most_wanted_cos_kills", Default: "off"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
-	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
+	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on"},
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
 	// (port-only, not native; off is native, #1518).
-	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off"},
 	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
 	// the running lower one; the replaced ticket's remaining time moves
 	// the new ticket's end later (#1624, port-only, not native; "off"
@@ -189,11 +191,10 @@ var Settings = []Setting{
 	{Env: "SRO_KILL_STATS", NomadVar: "kill_stats", Default: "off"},
 	// F10 trade group (game/tunables): the Jangan route profit percents. The
 	// site's trade quotes read them, so the catalogue does too.
-	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50", Catalogue: true},
-	{Env: "SRO_TRADE_ROUTE_HOTAN_PERCENT", NomadVar: "trade_route_hotan_percent", Default: "100", Catalogue: true},
-	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200", Catalogue: true},
-	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300",
-		Catalogue: true},
+	{Env: "SRO_TRADE_ROUTE_DONWHANG_PERCENT", NomadVar: "trade_route_donwhang_percent", Default: "50"},
+	{Env: "SRO_TRADE_ROUTE_HOTAN_PERCENT", NomadVar: "trade_route_hotan_percent", Default: "100"},
+	{Env: "SRO_TRADE_ROUTE_SAMARKAND_PERCENT", NomadVar: "trade_route_samarkand_percent", Default: "200"},
+	{Env: "SRO_TRADE_ROUTE_CONSTANTINOPLE_PERCENT", NomadVar: "trade_route_constantinople_percent", Default: "300"},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour. Owner,
 	// 2026-10-24: off (native) again; the rule stays available.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "off"},
@@ -206,7 +207,7 @@ var Settings = []Setting{
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
 	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only); the site
 	// publishes the pool's odds, so the catalogue reads the setting too.
-	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on", Catalogue: true},
+	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.
@@ -268,31 +269,31 @@ var Settings = []Setting{
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
-	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
+	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on"},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
-	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off", Catalogue: true},
+	{Env: "SRO_ALCHEMY_MAX_PLUS", NomadVar: "alchemy_max_plus", Default: "off"},
 	{Env: "SRO_TEAM_DEATH_REVIVE", NomadVar: "team_death_revive", Default: "on"},
 	// Owner, 2026-10-24: the daily Capture the Flag match (#887) - its UTC
 	// start (HH:MM) and the house minimum; the GameWorld refuses bad values.
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
-	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Validation: ValueSwitch},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json.
 	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
-		Catalogue: true, Validation: ValueBetaGrowthBands},
-	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,
+		Validation: ValueBetaGrowthBands},
+	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1",
 		Validation: ValueBetaGrowth},
-	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "off", Catalogue: true, Validation: ValueBetaDropMix},
-	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
+	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_DROP_MIX", NomadVar: "beta_drop_mix", Default: "off", Validation: ValueBetaDropMix},
+	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on"},
 	// Owner, 2026-10-28 (#1850): Jangan's grocer as "OpenSRO Alchemy -
 	// Jangan", the default list's alchemy goods on three tabs and the
 	// elixirs off the smith. On by default (it extends the extra goods);
 	// off restores the native name and tabs.
-	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
+	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on"},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
@@ -326,42 +327,42 @@ var Settings = []Setting{
 	// walls that stand in battlefield regions; "off" is the native region
 	// rule alone.
 	{Env: "SRO_THIEF_CART_TOWN_AREAS", NomadVar: "thief_cart_town_areas", Default: "on"},
-	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
+	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on"},
 	// Community vote, 2026-10-24: the monster parts drop again, so the
 	// deployment default is native ("off"); "on" restores the 2026-10-14
 	// beta removal.
-	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off", Catalogue: true},
-	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Catalogue: true, Validation: ValueBetaGrowth},
+	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "off"},
+	{Env: "SRO_BETA_DROP_CAP", NomadVar: "beta_drop_cap", Default: "0", Validation: ValueBetaGrowth},
 	// Owner, 2026-10-19: gold falls at 100 times retail (was 250).
-	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},
-	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off", Catalogue: true,
+	{Env: "SRO_BETA_GOLD_RATE", NomadVar: "beta_gold_rate", Default: "1", Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "1", Validation: ValueBetaGrowth},
+	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "off",
 		Validation: ValueSwitch},
-	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "off", Validation: ValueSwitch},
 	// Owner, 2026-10-14 (narrowed 2026-10-18): degree-9 Sun gear only from
 	// unique monsters; superseded 2026-10-20 for drops (Sun drops at the
 	// rate below; this gate now defaults off and only an operator's explicit
 	// "on" still excludes). The shop half never returned: NPC Sun withholding
 	// is permanent and does not read this setting (action/commerce.go).
-	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "off", Catalogue: true},
+	{Env: "SRO_SUN_EVENT_ONLY", NomadVar: "sun_event_only", Default: "off"},
 	// Owner, 2026-10-20: the degree-9 Sun drop rate (class mass 30 x rate
 	// on levels 76-90). Owner, 2026-10-25 (#1605 P1): the widened class
 	// is capped at the Moon class's width, so a Sun expects about twice
 	// a Moon's kills; the cap supersedes the eleven-a-week calibration.
-	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2", Catalogue: true},
+	{Env: "SRO_SUN_DROP_RATE", NomadVar: "sun_drop_rate", Default: "2"},
 	// Owner, 2026-10-20: uniques ignore the level-gap drop admission and
 	// always leave exactly one Magic Pop ticket; "off" is native.
-	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on", Catalogue: true},
-	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on", Catalogue: true},
+	{Env: "SRO_UNIQUE_GAP_EXEMPT", NomadVar: "unique_gap_exempt", Default: "on"},
+	{Env: "SRO_UNIQUE_POP_TICKET", NomadVar: "unique_pop_ticket", Default: "on"},
 	// Owner, 2026-10-25 (narrowed 2026-10-26): a unique in the top loot
 	// band (own level within ten of the highest installed level: degree 9
 	// at cap 90, degree 11 at cap 110) rolls its equipment at that level;
 	// every other unique keeps its own level. Opt-in: "off" is native.
-	{Env: "SRO_UNIQUE_MAX_LEVEL_LOOT", NomadVar: "unique_max_level_loot", Default: "off", Catalogue: true},
+	{Env: "SRO_UNIQUE_MAX_LEVEL_LOOT", NomadVar: "unique_max_level_loot", Default: "off"},
 	// Owner, 2026-10-25 (narrowed 2026-10-26): every unique kill leaves one
 	// Seal of Star of the top degree and a Moon one in ten; no guaranteed
 	// Sun. Opt-in: "off" is native.
-	{Env: "SRO_UNIQUE_SEAL_DROPS", NomadVar: "unique_seal_drops", Default: "off", Catalogue: true},
+	{Env: "SRO_UNIQUE_SEAL_DROPS", NomadVar: "unique_seal_drops", Default: "off"},
 	// Owner, 2026-10-18: respawning unique nests draw over 45-90 minutes
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
@@ -369,17 +370,17 @@ var Settings = []Setting{
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native. The catalogue
 	// publishes the caps the shard runs, so it reads the setting too.
-	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Catalogue: true, Source: Built},
+	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Source: Built},
 	// Owner, 2026-10-17: Qin-Shi Emperor Tomb monsters, skills and walk-in
 	// portals (port-only, not native: v1.150 shipped Tomb visual assets
 	// before the Legend IV server tables); opened in the shard defaults
 	// 2026-10-21 (GH #1013). "off" is native.
-	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on", Catalogue: true},
+	{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "on"},
 	// The Alexandria city of a build_alexandria_variant.py game root: its
 	// regions, gates and NPCs (port-only, not native; internal/game/world/
 	// alexandria). "off" is native and hides them from a variant's data;
 	// the catalogue's NPC list follows it.
-	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off", Catalogue: true},
+	{Env: "SRO_ALEXANDRIA", NomadVar: "alexandria", Default: "off"},
 	// Port-only, not native: WebTransport as a public endpoint (epic
 	// #1451). "off" keeps the loopback/development transport; "on" lets
 	// the GameWorld serve WT publicly under its explicit TLS pair and
@@ -460,16 +461,18 @@ func JobVariables(getenv func(string) string, variables map[string]any) map[stri
 ================
 ApplyCatalogueDefaults
 
-For each setting the catalogue reads that the operator left unset, sets
-its deployment default through setenv, so the catalogue's readers (the
-same parsers the GameWorld uses) see what a default deploy runs. Returns
-the names it filled.
+For each modelled setting the operator left unset, sets its deployment
+default through setenv, so the catalogue's readers (the same parsers the
+GameWorld uses) see what a default deploy runs. modelled is the
+catalogue's own coverage table; a setting it does not model is never
+filled, so the catalogue's output cannot depend on a setting its table
+does not name. Returns the names it filled.
 ================
 */
-func ApplyCatalogueDefaults(getenv func(string) string, setenv func(string, string) error) ([]string, error) {
+func ApplyCatalogueDefaults(getenv func(string) string, setenv func(string, string) error, modelled func(Setting) bool) ([]string, error) {
 	var filled []string
 	for _, s := range Settings {
-		if !s.Catalogue || strings.TrimSpace(getenv(s.Env)) != "" || s.Default == "" {
+		if !modelled(s) || strings.TrimSpace(getenv(s.Env)) != "" || s.Default == "" {
 			continue
 		}
 		if err := setenv(s.Env, s.Default); err != nil {

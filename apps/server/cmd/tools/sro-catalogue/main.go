@@ -242,7 +242,7 @@ looks. An explicit value, "off" included, still wins.
 ================
 */
 func resolveShardSettings() error {
-	filled, err := shardsettings.ApplyCatalogueDefaults(os.Getenv, os.Setenv)
+	filled, err := shardsettings.ApplyCatalogueDefaults(os.Getenv, os.Setenv, ModelledSetting)
 	if err != nil {
 		return fmt.Errorf("shard settings: %w", err)
 	}

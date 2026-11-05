@@ -47,7 +47,7 @@ func TestCataloguePopulationCarriesTheShippedTomb(t *testing.T) {
 		// setting it may fill is scoped to the test first; otherwise the
 		// deployment defaults leak into the package's later tests.
 		for _, s := range shardsettings.Settings {
-			if s.Catalogue {
+			if ModelledSetting(s) {
 				t.Setenv(s.Env, "")
 			}
 		}

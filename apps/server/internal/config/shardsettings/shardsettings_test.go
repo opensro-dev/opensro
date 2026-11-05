@@ -123,11 +123,17 @@ TestCatalogueDefaultsFillOnlyUnsetCatalogueSettings
 ================
 */
 func TestCatalogueDefaultsFillOnlyUnsetCatalogueSettings(t *testing.T) {
+	// The mechanism with a stand-in modelled set: which settings the
+	// catalogue itself models is the catalogue tool's table, held by
+	// its coverage test (#2542).
+	modelled := func(s Setting) bool {
+		return s.Env == "SRO_LEVEL_CAP" || s.Env == "SRO_ALCHEMY_RATES"
+	}
 	env := map[string]string{"SRO_ALCHEMY_RATES": "off"}
 	filled, err := ApplyCatalogueDefaults(func(k string) string { return env[k] }, func(k, v string) error {
 		env[k] = v
 		return nil
-	})
+	}, modelled)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,9 +142,9 @@ func TestCatalogueDefaultsFillOnlyUnsetCatalogueSettings(t *testing.T) {
 	}
 	for _, s := range Settings {
 		_, set := env[s.Env]
-		wantSet := s.Catalogue && s.Default != "" || s.Env == "SRO_ALCHEMY_RATES"
+		wantSet := modelled(s) && s.Default != "" || s.Env == "SRO_ALCHEMY_RATES"
 		if set != wantSet {
-			t.Fatalf("%s set=%v, catalogue=%v", s.Env, set, s.Catalogue)
+			t.Fatalf("%s set=%v, modelled=%v", s.Env, set, modelled(s))
 		}
 	}
 	if strings.Contains(strings.Join(filled, ","), "SRO_ALCHEMY_RATES") {

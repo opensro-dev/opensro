@@ -35,7 +35,7 @@ func TestCatalogueResolvesOptionalPopulationSetting(t *testing.T) {
 	for _, value := range []string{"", "off", "on"} {
 		t.Run(value, func(t *testing.T) {
 			for _, s := range shardsettings.Settings {
-				if s.Catalogue {
+				if ModelledSetting(s) {
 					t.Setenv(s.Env, "")
 				}
 			}
@@ -64,7 +64,7 @@ still overrides the deployment default.
 */
 func TestUnsetSettingsTakeTheDeploymentDefaults(t *testing.T) {
 	for _, s := range shardsettings.Settings {
-		if s.Catalogue {
+		if ModelledSetting(s) {
 			t.Setenv(s.Env, "")
 		}
 	}
@@ -123,7 +123,7 @@ func TestStackSizesPublishTheShardsCaps(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			for _, s := range shardsettings.Settings {
-				if s.Catalogue {
+				if ModelledSetting(s) {
 					t.Setenv(s.Env, "")
 				}
 			}
@@ -167,7 +167,7 @@ func TestUnsetShopSettingPublishesTheShardsGoods(t *testing.T) {
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	for _, s := range shardsettings.Settings {
-		if s.Catalogue {
+		if ModelledSetting(s) {
 			t.Setenv(s.Env, "")
 		}
 	}
