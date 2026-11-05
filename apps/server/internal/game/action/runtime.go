@@ -125,8 +125,11 @@ type Runtime struct {
 	returnGeneration atomic.Uint64
 	// surpriseFatalCount counts strikes that killed under a plan that
 	// could not kill: the roster gate's invariant made audible (#2030).
-	surpriseFatalCount  atomic.Uint64
-	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	surpriseFatalCount atomic.Uint64
+	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// arrivalLane holds the due return arrivals the tick handed off
+	// for the return lane to complete (returnscroll.go).
+	arrivalLane         returnArrivalLane
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
