@@ -16,7 +16,8 @@ func testSkillCastFacingPoint(t *testing.T) SkillCastFacingPoint {
 }
 
 // The finalize token must echo the authoritative result frame. A token miss
-// is a silent sub_8e2bc0 consume that never closes the client bracket.
+// is consumed silently by the client's SkillInstanceRegistry_Find lookup
+// and never closes the client bracket.
 func TestSkillCastFinalizeGolden(t *testing.T) {
 	finalize := SkillCastFinalize{InstanceToken: 0x00C0FFEE}
 	gotFinalize := finalize.Encode()

@@ -132,7 +132,7 @@ func (s *Store) commitMallPurchaseLocked(division string, character *domain.Char
 	if s.commitFail != nil {
 		return s.commitFail
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk, gift_silk = excluded
 	if err != nil {
 		return err
 	}
-	if err := upsertCharacterTx(tx, division, character); err != nil {
+	if err := tx.upsertCharacter(division, character); err != nil {
 		return err
 	}
 	return tx.Commit()

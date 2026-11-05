@@ -42,7 +42,7 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 // and 6), not experimental stages.
 //
 // Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
-// native client authored (sub_4dc920 start/end): the same start/end
+// native client authored (EnvironmentVectorTrack_SampleAtTime start/end): the same start/end
 // uniforms drive an exp2 falloff with a height term and a horizon tint,
 // which keeps the mid-range clear, softens the horizon and lets peaks
 // rise out of the haze. Off, the retail linear ramp and colours stand.
@@ -533,7 +533,15 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let fogApplies=(env.settings.y>0.5||material.policy.y>0.5)&&material.policy.x<0.5;
  var fog=select(0.0,clamp((input.viewZ-fogSource.w)/max(0.001,fogEnd-fogSource.w),0,1),fogApplies);
  var fogColor=fogSource.rgb;var terrainFogColor=env.terrainFog.rgb;
- if(env.stages.x>0.5){
+ // A dungeon block's fog is the retail vertex shader's, not the ramp above:
+ // the smaller of an exp2 distance term and a height term (dungeon-fog.ts).
+ let shaderFog=material.policy.y>1.5;
+ if(shaderFog){
+  let depth=input.viewZ*material.localFogSettings.y;
+  let height=1.0-(abs(input.worldY-material.localFogSettings.z)-material.localFogSettings.w)*material.stagePolicy.w;
+  fog=select(0.0,1.0-clamp(min(exp2(-depth*depth),height),0,1),fogApplies);
+ }
+ if(env.stages.x>0.5&&!shaderFog){
   // Height fog (experimental): exp2 with no fog before the authored start,
   // 1-1/255 at the end, the density e-folding above the eye so peaks clear
   // the haze. The global fog takes the horizon tint; local fog volumes keep

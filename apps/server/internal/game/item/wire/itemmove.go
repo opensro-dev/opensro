@@ -328,7 +328,8 @@ func readSubMove(r *Reader) (SubMove, error) {
 	return out, nil
 }
 
-// ItemMoveRequest is a 0x706D client item operation (serializer sub_697e80).
+// ItemMoveRequest is a 0x706D client item operation (serializer
+// ItemMoveRequest_Serialize, client 697E80).
 //
 // Which fields carry meaning depends on MovementType:
 //

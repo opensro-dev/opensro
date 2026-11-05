@@ -113,7 +113,7 @@ const (
 	// WhisperBlockResultListFull: "Cannot register any more users to
 	// block list."
 	WhisperBlockResultListFull uint8 = 3
-	// WhisperBlockResultNoEffect: the client's no-op arm - sub_771550
+	// WhisperBlockResultNoEffect: the client's no-op arm - CPSMission_OnAliasActionResponse0xB66F
 	// reads the byte and does nothing (no msgbox, no panel change). The
 	// v1.188 GameServer sends it for the quote-scan hit and
 	// for job-enqueue failures (its ADD caller maps every internal
@@ -310,10 +310,28 @@ func DecodeLetterIndexRequest(payload []byte) (uint8, error) {
 // EncodeLetterSendAckB261 renders the 0xB261 result-1 body: the single
 // byte [0x01] - client CPSMission_OnLetterSendResponse0xB261 reads no
 // further and raises the
-// UIIT_MSG_LETTER_SENDOK banner. (Result 2's error codes are unpinned;
-// refusals stay silent instead.)
+// UIIT_MSG_LETTER_SENDOK banner.
 func EncodeLetterSendAckB261() []byte {
 	return []byte{0x01}
+}
+
+// The 0xB261 result-2 refusal codes. On result 2 the client's letter-send
+// answer handler reads one more byte and hands it verbatim to the
+// category-0x14 notice table, whose letter rows are exactly these
+// three; every other code falls to the table's silent default arm.
+const (
+	// LetterSendRefusalUnknownUser raises UIIT_MSG_LETTERERR_UNKNOWNUSER.
+	LetterSendRefusalUnknownUser uint8 = 0x0d
+	// LetterSendRefusalSendError raises UIIT_MSG_LETTERERR_SENDERR.
+	LetterSendRefusalSendError uint8 = 0x10
+	// LetterSendRefusalMailboxFull raises UIIT_MSG_LETTERERR_FULLLETTERBOX.
+	LetterSendRefusalMailboxFull uint8 = 0x14
+)
+
+// EncodeLetterSendRefusalB261 renders the 0xB261 result-2 body
+// [0x02, code] answering a sender-facing refusal.
+func EncodeLetterSendRefusalB261(code uint8) []byte {
+	return []byte{0x02, code}
 }
 
 // EncodeLetterReadBodyB3F2 renders the 0xB3F2 result-1 body: u8 result =

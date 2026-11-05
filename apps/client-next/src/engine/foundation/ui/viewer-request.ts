@@ -3,7 +3,7 @@
 
 viewer-request.ts - what the embeddable 3D viewer is asked to draw
 
-Port-only, not native (docs/VIEWER.md). Parses viewer.html's query into one
+Port-only, not native (docs/guides/VIEWER.md). Parses viewer.html's query into one
 request, a monster by reference id or a character by the public API's look
 object, and owns the fixed failure reasons the website and the catalogue
 record. Pure: no browser, no assets.

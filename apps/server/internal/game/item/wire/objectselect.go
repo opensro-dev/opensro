@@ -83,9 +83,10 @@ func EncodeObjectSelectRefusal(code uint8) []byte {
 EncodeNpcObjectSelectResult
 
 EncodeNpcObjectSelectResult composes the S->C 0xB45A grant body for a
-live roster NPC, in the folded sub_764c60 field order. A live CICNPC
-dynamic-casts to CICharactor (CICNPC -> CICNonuser -> CICharactor), so
-the read takes the CHARACTER arm and the vitals-mask byte IS present:
+live roster NPC, in the field order of the client's folded
+CPSMission_OnNpcSelectResponse0xB45A. A live CICNPC dynamic-casts to
+CICharactor (CICNPC -> CICNonuser -> CICharactor), so the read takes the
+CHARACTER arm and the vitals-mask byte IS present:
 
 	{u8 result=1}{u32le gid}{u8 vitalsMask=0}{u32le capabilityFlags}{u8 npcExtra}
 

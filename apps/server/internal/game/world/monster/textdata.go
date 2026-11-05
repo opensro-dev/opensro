@@ -46,11 +46,11 @@ type MonsterRef struct {
 	RefObjID uint32
 	// TrainingDummy is a port-only GM target, never a native monster or reward source.
 	TrainingDummy bool
-	// TidWord is the packed RefObj TypeID word the client's sub_851420
+	// TidWord is the packed RefObj TypeID word the client's GIDObject_SelectRuntimeClassAndSpawn
 	// cascade classifies on. ARBITER-CLOSED (RZ seq42 gate + seq234
 	// column ruling): the binary selects CLASS_CICMONSTER iff
 	// (W & 0x7FE) == 0x0C6, W = word[RefObj+0] via
-	// CGlobalDataManager::GetTIDFromObjectID (client sub_7efef0). Every row this
+	// CGlobalDataManager::GetTIDFromObjectID (client GlobalDataManager_GetTIDFromObjectID). Every row this
 	// loader classifies as a monster packs to exactly 0x00C6 (bit0 and
 	// bits11-15 are never set by the packer), the canonical value for
 	// create-row/refObjSnapshot emission.
@@ -155,7 +155,7 @@ type MonsterRef struct {
 	// v1.188 server data.
 	WalkSpeed float64
 	RunSpeed  float64
-	// ScaleDenom is the third scalar consumed by client sub_85fb20 (column 48).
+	// ScaleDenom is the third scalar consumed by client CICharactor_DeserializeSpawnData (column 48).
 	// It varies across the shipped roster and must remain per monster.
 	ScaleDenom float64
 	// BodyRadius is RefObjChar BCRadius (column 50, record+0xEE). The retail
@@ -602,7 +602,7 @@ loadMonsterRideMetadata
 
 loadMonsterRideMetadata projects the complete native ride contract from
 skilleffect.txt. The enum values are executable-authored (the static table
-consumed by client sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
+consumed by client stdext_hash_map_wstring_uint32_find_value at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
 Unknown tokens are rejected rather than silently inventing a transform.
 Records with no ride are kept: they end the client 9171B0 lookup.
 ==================

@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 )
 
 // globalChatRestricted is the native result 2 for a restricted player; the
@@ -101,7 +102,26 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)}, line}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
 	division, name := use.division, c.Name
+	// Port-only, not native: the staff moderation log (chatlog) keeps
+	// the line, muted ones included and marked. It is a publication like
+	// the shard push and the website line below, so it waits for the
+	// post-commit step: a door that rolls the use back must not keep a
+	// line that was never said, for an item that was never spent.
+	muted := rt.ChatShadowMuted != nil && rt.ChatShadowMuted(c.AccountID)
+	record := func() {
+		if rt.ModerationLog != nil {
+			rt.ModerationLog.Record(chatlog.Entry{
+				AccountID: c.AccountID, Character: c.Name, Channel: "global", Muted: muted, Text: message,
+			})
+		}
+	}
+	if muted {
+		// The item is spent and the author sees the line; nobody else does.
+		*after = record
+		return true
+	}
 	*after = func() {
+		record()
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
 		}

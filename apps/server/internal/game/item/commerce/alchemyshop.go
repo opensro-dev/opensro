@@ -59,12 +59,10 @@ type janganGood struct {
 }
 
 // The elixir recipes, owner 2026-10-11 at 1,000,000 on the smith's third
-// tab; on the grocer they open the elixirs tab.
+// tab; on the grocer they open the elixirs tab. Only the B grade is sold: the
+// A grade's itemdata names archemy_reinforce_recipe_a.ddj, which the v1.150
+// client does not ship, so its rows had no image.
 var janganElixirGoods = []janganGood{
-	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 1000000},
-	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_A", 1000000},
-	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_A", 1000000},
-	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ACCESSARY_A", 1000000},
 	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B", 1000000},
 	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_SHIELD_B", 1000000},
 	{"ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_ARMOR_B", 1000000},

@@ -18,7 +18,7 @@ func motionTestRuntime(character *enterworld.Character, nowMs *int64) *Runtime {
 	return rt
 }
 
-// want3122 is the exact 0x3122 body the client fold sub_777b60 reads:
+// want3122 is the exact 0x3122 body the client fold CPSMission_OnEntityStateUpdate0x3122 reads:
 // [u32 gid][u8 stateType=1][u8 value]. gid for test character ID 7 is
 // 100007 = 0x000186A7 little-endian.
 func want3122(value uint8) []byte {
@@ -57,7 +57,7 @@ func TestHandleMotionStateWalkRunSetsModeAndAnswers(t *testing.T) {
 	key := simulation.WorldKey("0", character.Name)
 
 	// Request walk (code 2 - see the label-swap FINDING: 2=walk/3=run in
-	// BOTH directions, the client sub_858450 mode table).
+	// BOTH directions, the client CICharactor_ApplyMovementMode mode table).
 	assertMotionSuccess(t, rt.HandleMotionState("0", character, []byte{simulation.WalkMode}), wire.MoveStateWalk)
 	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	if world.MovementMode != simulation.WalkMode {
@@ -330,7 +330,7 @@ func TestHandleMotionStateRejectsMalformedSilently(t *testing.T) {
 		{},                         // empty
 		{simulation.RunMode, 0x00}, // over-long
 		{0x00},                     // stand is S->C only, never a request
-		{0x01},                     // client sub_858450 no-op band
+		{0x01},                     // client CICharactor_ApplyMovementMode no-op band
 		{0x05},                     // no-op band
 		{0x0C},                     // motion state 0xe channel, not a request
 		{0xFF},                     // out of table
@@ -360,7 +360,7 @@ func TestHandleMotionStateRejectsMalformedSilently(t *testing.T) {
 }
 
 // TestHandleMotionStateRetimesInFlightSegment pins the server mirror of
-// client sub_858450 restarting an active path-follow on the new speed channel: a
+// client CICharactor_ApplyMovementMode restarting an active path-follow on the new speed channel: a
 // mid-move gait change re-times the segment from the LIVE interpolated
 // point (bug-D plane), not the goal.
 func TestHandleMotionStateRetimesInFlightSegment(t *testing.T) {

@@ -77,6 +77,40 @@ type GroundSnapshot struct {
 	Divisions  map[string][]GroundItemRecord `json:"divisions"`
 }
 
+/*
+================
+GroundChange
+
+One persisted row the registry changed since the store last
+acknowledged it: Record is the row as it stands now, or nil when the
+gid is gone (a pickup, an expiry, a closed division).
+================
+*/
+type GroundChange struct {
+	Division string
+	Gid      uint32
+	Record   *GroundItemRecord
+}
+
+/*
+================
+GroundChanges
+
+What the store must persist to make the disk equal the registry at
+Revision. Full means the change set is unknown (a Restore, or a
+registry the store has never acknowledged): Snapshot then carries the
+whole plane and Rows is empty. Otherwise Rows holds exactly the
+changed gids, sorted by division then gid.
+================
+*/
+type GroundChanges struct {
+	Revision   uint64
+	GidCounter uint32
+	Full       bool
+	Snapshot   GroundSnapshot
+	Rows       []GroundChange
+}
+
 // ItemCount returns the number of records across all divisions.
 /*
 ================

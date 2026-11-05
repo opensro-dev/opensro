@@ -5,7 +5,7 @@ progression.ts - the local player's level, experience, gold and points
 
 The worker's progression plane: the char-data bootstrap seeds it, then the
 stat acks (0xB27A/0xB552), the points channel (0x30B3 types 1-3: gold,
-skill points, stat points; sub_779C70) and the mastery ack (0xB165) move
+skill points, stat points; CPSMission_OnPointUpdate30B3) and the mastery ack (0xB165) move
 it. Experience deltas (0x30D2) belong to the level owner, not here.
 
 ===========================================================================

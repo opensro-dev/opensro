@@ -4,7 +4,7 @@ import { SCRIPT_OBJ_ANIMATION_NAME_ID_ROWS } from "./scriptObjAnimationRegistry.
 
 /**
  * Native v1.150 data_ccd620: the 121 {wstring pointer, int32 id} rows loaded
- * into GlobalEffectManager's animation-name map at 0xf090c8 by sub_bbe650.
+ * into GlobalEffectManager's animation-name map at 0xf090c8 by StaticInit_RegisterEffectAnimationNames.
  *
  * Rizin/PE census (2026-08-05): rows run from 0x00ccd620 through
  * 0x00ccd9e0, followed by the {nullptr,-1} sentinel at 0x00ccd9e8. The

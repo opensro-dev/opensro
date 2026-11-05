@@ -24,6 +24,7 @@ import (
 
 	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -253,6 +254,44 @@ func resolveShardSettings() error {
 
 /*
 ================
+shardPopulation
+
+The monster template the shard spawns from, for the catalogue: the
+retail population plus every switch-gated family the server's bootstrap
+appends (enterworld/devdeps.go), with the switches resolved to their
+deployment defaults (resolveShardSettings). The shipped Qin-Shi tomb
+(SRO_QINSHI_TOMB, default on) was missing here, so its 79 species and
+their uniques had no catalogue page (#2025).
+================
+*/
+func shardPopulation(dir string, cap110 bool) (monster.Template, error) {
+	template, err := monster.AppendCap110(monster.LoadTemplate(dir), dir, cap110)
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue population: %w", err)
+	}
+	template, err = monster.AppendPharaohTomb(template, dir, monster.PharaohTombEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue tomb population: %w", err)
+	}
+	template, err = monster.AppendTemple(template, dir, monster.TempleEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue temple population: %w", err)
+	}
+	template, err = monster.AppendQinshi(template, dir, monster.QinshiEnabled())
+	if err != nil {
+		return monster.Template{}, fmt.Errorf("catalogue qinshi population: %w", err)
+	}
+	if monster.QinShiTombFromEnv() {
+		template, err = template.WithQinShiTomb(dir)
+		if err != nil {
+			return monster.Template{}, fmt.Errorf("catalogue qinshi tomb population: %w", err)
+		}
+	}
+	return template, nil
+}
+
+/*
+================
 run
 ================
 */
@@ -278,7 +317,12 @@ func run(out, release, textdata string) error {
 	if len(refs) == 0 {
 		return fmt.Errorf("no item references loaded from %s", dir)
 	}
-	items := catalogue.BuildItems(catalogue.ItemSource{Refs: refs, Usable: action.ItemUseSupported})
+	// The pet gear export (catalogue petgear.go) publishes at the
+	// petGearDropFactor the shard runs by default: store.DefaultPetGearDropFactor.
+	// An operator can retune the setting while the shard is stopped; the
+	// live rule follows the database, the export the shipped default.
+	items := catalogue.BuildItems(catalogue.ItemSource{Refs: refs, Usable: action.ItemUseSupported,
+		PetGearFactor: store.DefaultPetGearDropFactor})
 	itemSource, err := shardItems(dir)
 	if err != nil {
 		return err
@@ -304,6 +348,11 @@ func run(out, release, textdata string) error {
 	// on the shard, so its chances leave the published drop lists; every
 	// other item keeps its own chance (action/sunevent.go).
 	sun := progression.SunEventOnlyFromEnv()
+	// SRO_HALLOWEEN_EVENT (port-only, not native): the timed event's
+	// window, box drop and exchange ride the catalogue (#2540). The box
+	// keeps its drop-list place in every export, before the window too:
+	// readers show it only inside the window events.json publishes, so
+	// one export stays correct for the event's whole life.
 	dropItemID := func(codename string) uint32 {
 		if ref, ok := itemSource.ItemRefByCodename(codename); ok && action.SunExcludes(sun, ref) {
 			return 0
@@ -311,19 +360,11 @@ func run(out, release, textdata string) error {
 		return itemID(codename)
 	}
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
-		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
+		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID, Levels: enterworld.NewTextdataLevels(dir)})
 	skillData := enterworld.NewTextdataSkills(dir)
-	template, err := monster.AppendCap110(monster.LoadTemplate(dir), dir, cap110)
+	template, err := shardPopulation(dir, cap110)
 	if err != nil {
-		return fmt.Errorf("catalogue population: %w", err)
-	}
-	template, err = monster.AppendPharaohTomb(template, dir, monster.PharaohTombEnabled())
-	if err != nil {
-		return fmt.Errorf("catalogue tomb population: %w", err)
-	}
-	template, err = monster.AppendQinshi(template, dir, monster.QinshiEnabled())
-	if err != nil {
-		return fmt.Errorf("catalogue qinshi population: %w", err)
+		return err
 	}
 	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: template, ItemID: dropItemID,
 		Skills: skillData})
@@ -387,6 +428,8 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return err
 	}
+	dropTables := catalogue.BuildDropTables(monsters, dropItemID, header)
+	dropTables.PetGear = catalogue.BuildPetGearRule(store.DefaultPetGearDropFactor, itemID)
 	files := map[string]any{
 		"items.json":    catalogue.ItemsFile{Header: header, Items: items},
 		"quests.json":   catalogue.QuestsFile{Header: header, Quests: quests},
@@ -406,7 +449,8 @@ func run(out, release, textdata string) error {
 		"notes.json":      catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
 		"levels.json":     catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery, levelCap),
 		"trade.json":      catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(), Quotes: tradeQuotes},
-		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
+		"droptables.json": dropTables,
+		"events.json":     catalogue.BuildEvents(header, itemID),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
 	}
@@ -416,6 +460,7 @@ func run(out, release, textdata string) error {
 		"quests.schema.json":     catalogue.Schema("quests.json", catalogue.QuestsFile{}),
 		"monsters.schema.json":   catalogue.Schema("monsters.json", catalogue.MonstersFile{}),
 		"droptables.schema.json": catalogue.Schema("droptables.json", catalogue.DropTablesFile{}),
+		"events.schema.json":     catalogue.Schema("events.json", catalogue.EventsFile{}),
 		"skills.schema.json":     catalogue.Schema("skills.json", catalogue.SkillsFile{}),
 		"regions.schema.json":    catalogue.Schema("regions.json", catalogue.RegionsFile{}),
 		"npcs.schema.json":       catalogue.Schema("npcs.json", catalogue.NpcsFile{}),

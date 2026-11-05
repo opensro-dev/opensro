@@ -39,7 +39,7 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 		return Stats{}, err
 	}
 	if instance.Abnormal == nil {
-		return s, nil
+		return scaleJobMonsterDamage(s, instance), nil
 	}
 	for _, entry := range []struct {
 		id    uint16
@@ -62,7 +62,40 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 		}
 		*entry.value = value
 	}
-	return s, nil
+	return scaleJobMonsterDamage(s, instance), nil
+}
+
+/*
+================
+scaleJobMonsterDamage
+
+Port-only, not native (#2474): under SRO_JOB_MONSTER_AGGRESSION a job
+monster's outgoing factors carry the doubled damage, over whatever the
+abnormal block wrote (a curse's 0.65 becomes 1.3). A zero factor is the
+formula's "no factor", so it becomes the factor itself. Incoming
+factors - the monster as defender - never scale.
+================
+*/
+func scaleJobMonsterDamage(s Stats, instance monster.Instance) Stats {
+	factor := instance.JobMonsterDamageFactor()
+	if factor == 1 {
+		return s
+	}
+	s.PhysicalOutgoing = jobMonsterOutgoing(s.PhysicalOutgoing, factor)
+	s.MagicalOutgoing = jobMonsterOutgoing(s.MagicalOutgoing, factor)
+	return s
+}
+
+/*
+================
+jobMonsterOutgoing
+================
+*/
+func jobMonsterOutgoing(value, factor float32) float32 {
+	if value == 0 {
+		return factor
+	}
+	return value * factor
 }
 
 // The terd and thrd program tags a target effect carries.

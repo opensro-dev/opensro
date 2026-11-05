@@ -81,11 +81,202 @@ func TestActivityRetaliationInvalidatesSuspensionAndWakesScheduledActor(t *testi
 	found := false
 	for _, b := range batches {
 		for _, a := range b.actors {
-			found = found || a == actor.Gid
+			found = found || a.gid == actor.Gid
 		}
 	}
 	if !found {
 		t.Fatal("retaliation did not wake queue entry")
+	}
+}
+
+/*
+================
+TestCommitActivityCadenceOnlyStampsCadence
+
+An idle re-check commit that moves only the activity clock stores
+exactly the committed value (stamped in place, not rebuilt: the
+interest bounds and the pending row's shared handle never carried
+the cadence), and a commit that moves anything else still lands in
+full (#2136). Read back through Mover, the read the gate trusts.
+================
+*/
+func TestCommitActivityCadenceOnlyStampsCadence(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	before, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	after := before
+	if !after.Activity.Due(uint32(now + 1001)) {
+		t.Fatal("fixture cadence did not fire")
+	}
+	if !ops.Monsters.commitActivity(monsterTestDivision, actor.Gid, before, after, now+1001) {
+		t.Fatal("cadence-only commit rejected")
+	}
+	got, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if got != after {
+		t.Fatalf("stored mover differs from cadence-only commit:\n got %+v\nwant %+v", got, after)
+	}
+	moved := after
+	moved.Pose.X += 25
+	if !ops.Monsters.commitActivity(monsterTestDivision, actor.Gid, after, moved, now+1001) {
+		t.Fatal("pose-carrying commit rejected")
+	}
+	got, _ = ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	if got != moved {
+		t.Fatal("pose change did not land in full")
+	}
+}
+
+/*
+================
+TestActivityGateReportsGenerationAdvance
+
+The step chains its generation-guarded commits off the gate's
+last answer (#2136): a due re-check that suspends rewrites the
+row - the stored generation moves and the answer must say so,
+or the step would chain off the generation it read at dispatch.
+The settled re-check beside a viewer is pinned cadence-only by
+the golden leg test; this pins the rewriting half.
+================
+*/
+func TestActivityGateReportsGenerationAdvance(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	_, genBefore, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid)
+	ops.activity = ops.captureActivity(nil, now+1001)
+	current, _ := ops.Monsters.Mover(monsterTestDivision, actor.Gid)
+	_, gated, handled, generationAdvanced := ops.runActivityGate(monsterTestDivision, actor, current, now+1001)
+	if !handled || gated.Mode() != monster.MoverPending {
+		t.Fatalf("unobserved actor was not suspended: %v", gated.Mode())
+	}
+	if !generationAdvanced {
+		t.Fatal("suspension rewrote the row but the gate denied advancing the generation")
+	}
+	if _, genAfter, _ := ops.Monsters.MoverGeneration(monsterTestDivision, actor.Gid); genAfter == genBefore {
+		t.Fatal("suspension did not advance the stored generation")
+	}
+}
+
+/*
+================
+TestCommitActivityCadenceOnlySkipsValidate
+
+A cadence-only commit moves nothing Validate guards: the stored
+row passed validation when its own commit wrote it, and the pair
+differs only in the cadence stamp. Re-validating the whole state
+on every due re-check is the deferred remainder of the gate's
+write set (#2029), so the cadence arm must not run it. The proof
+installs a row no full commit would accept (a wandering mover
+retaining an attack-plan field): the cadence commit still lands
+and stamps, while a pose-carrying commit of the same row keeps
+panicking - the full path's validation is untouched.
+================
+*/
+func TestCommitActivityCadenceOnlySkipsValidate(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	s := ops.Monsters
+	corrupt, _ := s.Mover(monsterTestDivision, actor.Gid)
+	corrupt.AttackCooldownMs = 5
+	s.mu.Lock()
+	s.populationForObject(monsterTestDivision, actor.Gid).movers.set(actor.Gid, corrupt)
+	s.mu.Unlock()
+
+	after := corrupt
+	if !after.Activity.Due(uint32(now + 1001)) {
+		t.Fatal("fixture cadence did not fire")
+	}
+	if !s.commitActivity(monsterTestDivision, actor.Gid, corrupt, after, now+1001) {
+		t.Fatal("cadence-only commit rejected")
+	}
+	// Read the raw row, not Mover: the gate's read validates, and
+	// this row is installed precisely because it cannot pass.
+	s.mu.Lock()
+	got, ok := s.populationForObject(monsterTestDivision, actor.Gid).movers.lookup(actor.Gid)
+	s.mu.Unlock()
+	if !ok {
+		t.Fatal("cadence-only commit lost the row")
+	}
+	if got.Activity != after.Activity || got.AttackCooldownMs != corrupt.AttackCooldownMs {
+		t.Fatalf("cadence-only commit rebuilt the row: %+v", got)
+	}
+
+	moved := after
+	moved.Pose.X += 25
+	panicked := false
+	func() {
+		defer func() { panicked = recover() != nil }()
+		s.commitActivity(monsterTestDivision, actor.Gid, after, moved, now+1001)
+	}()
+	if !panicked {
+		t.Fatal("pose-carrying commit of an invalid row did not panic")
+	}
+}
+
+/*
+================
+TestCommitActivityCadenceOnlySkipsApproachSync
+
+Approach membership derives from the mover's mode and target and
+the instance's squad eligibility (monsterapproach.go). A
+cadence-only commit moves none of them - the activity gate, its
+only production source, never holds a chasing or attacking row
+(MaySuspendWander admits wandering, the other gate arm is pending) -
+so it must not re-derive membership: an eligibility flip waits for
+the next full commit, which still syncs (#2136).
+================
+*/
+func TestCommitActivityCadenceOnlySkipsApproachSync(t *testing.T) {
+	ops, actor, now := activityFixture(t)
+	s := ops.Monsters
+	approachTarget := func() (uint32, bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		target, ok := s.populationForObject(monsterTestDivision, actor.Gid).approachActors[actor.Gid]
+		return target, ok
+	}
+	setSummoner := func(gid uint32) {
+		s.mu.Lock()
+		state := s.populationForObject(monsterTestDivision, actor.Gid)
+		member := state.instances.get(actor.Gid)
+		member.SummonerGID = gid
+		state.instances.set(actor.Gid, member)
+		s.mu.Unlock()
+	}
+
+	// A squad-eligible chaser, engaged by a full commit, is a member.
+	setSummoner(999)
+	mover, _ := s.Mover(monsterTestDivision, actor.Gid)
+	if mover.Mode() == monster.MoverSpawning {
+		mustMoverTransition(&mover, monster.MoverEventSpawnHoldElapsed, 0)
+	}
+	mustMoverTransition(&mover, monster.MoverEventAggroAcquired, squadTestTarget)
+	if !s.CommitMover(monsterTestDivision, actor.Gid, mover) {
+		t.Fatal("engage commit refused")
+	}
+	if target, ok := approachTarget(); !ok || target != squadTestTarget {
+		t.Fatalf("full commit did not record approach membership: %v %v", target, ok)
+	}
+
+	// Eligibility flips off; the cadence-only commit must not notice.
+	setSummoner(0)
+	before, _ := s.Mover(monsterTestDivision, actor.Gid)
+	after := before
+	after.Activity.LastCheck++
+	if !cadenceOnlyWrite(before, after) {
+		t.Fatal("fixture commit is not cadence-only")
+	}
+	if !s.commitActivity(monsterTestDivision, actor.Gid, before, after, now+1001) {
+		t.Fatal("cadence-only commit rejected")
+	}
+	if target, ok := approachTarget(); !ok || target != squadTestTarget {
+		t.Fatalf("cadence-only commit re-derived approach membership: %v %v", target, ok)
+	}
+
+	// The next full commit syncs again and the membership goes.
+	moved := after
+	moved.Pose.X += 25
+	if !s.commitActivity(monsterTestDivision, actor.Gid, after, moved, now+1001) {
+		t.Fatal("full commit rejected")
+	}
+	if _, ok := approachTarget(); ok {
+		t.Fatal("full commit did not re-derive approach membership")
 	}
 }
 
@@ -129,7 +320,7 @@ func TestSummonFactoryBindsControllerAndExemptsActivity(t *testing.T) {
 	m.BehaviorDeadlineMs = now + 10000
 	ops.Monsters.CommitMover("summon", child.Gid, m)
 	ops.activity = ops.captureActivity(nil, now+1001)
-	frames, handled := ops.runActivityGate("summon", child, m, now+1001)
+	frames, _, handled, _ := ops.runActivityGate("summon", child, m, now+1001)
 	after, _ := ops.Monsters.Mover("summon", child.Gid)
 	if handled || len(frames) != 0 || after != m {
 		t.Fatal("controlled actor ran unobserved suspension/cadence")

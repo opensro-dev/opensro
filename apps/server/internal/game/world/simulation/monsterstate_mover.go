@@ -17,12 +17,35 @@ Mover
 ================
 */
 func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState, bool) {
+	return s.MoverAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot)
+}
+
+/*
+================
+MoverAt
+
+Mover through the slots the behaviour batch carried for the actor
+(#2133): the existence probe and the row read go through the
+verified hints and fall back to the gid resolve whenever a hint no
+longer names the gid, so the value is Mover's either way. The
+synthesized spawn mover of an actor with no row yet reads its
+instance by gid, as Mover does: that is the spawn window, not the
+step's steady state.
+================
+*/
+func (s *MonsterState) MoverAt(divisionID string, gid uint32, slot, monsterSlot uint32) (monster.MoverState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	state := s.populationForObject(divisionID, gid)
-	if !state.instances.contains(gid) {
+	if !state.instances.containsAt(monsterSlot, gid) {
 		return monster.MoverState{}, false
+	}
+	if mover, ok := state.movers.lookupAt(slot, gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, true
 	}
 	if mover, ok := state.movers.lookup(gid); ok {
 		if err := mover.Validate(); err != nil {
@@ -35,6 +58,31 @@ func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState,
 		panic(err)
 	}
 	return mover, true
+}
+
+/*
+================
+livePose
+
+livePose reads one actor's live pose without expanding or validating a
+whole mover value - the read vanishInSafeZone weighs once per advanced
+actor. A gid the mover storage cannot place reads through the same
+synthesized spawn mover Mover would build, so the pose is Mover's.
+================
+*/
+func (s *MonsterState) livePose(divisionID string, gid uint32, nowMs int64) (monster.Pose, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if pose, ok := state.movers.livePoseAt(gid, nowMs, nil); ok {
+		return pose, true
+	}
+	instance, ok := state.instances.lookup(gid)
+	if !ok {
+		return monster.Pose{}, false
+	}
+	return monster.NewSpawnMover(instance, s.nowMillis()).LivePoseAt(nowMs, nil), true
 }
 
 // CommitMover replaces an instance's mover value. Whole-value commits keep
@@ -65,6 +113,23 @@ commitMoverLocked
 ================
 */
 func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32, mover monster.MoverState) bool {
+	return s.commitMoverChecked(state, gid, mover, 0, false)
+}
+
+/*
+================
+commitMoverChecked
+
+commitMoverLocked with the leg's generation guard (#2137 slice 1):
+when guarded, the commit lands only while the stored row still sits
+at baseGen - the generation the planner's snapshot read. A slower
+lane's set advances the row, the stale commit drops, and the actor
+replans at its next due; nothing of the newer value is overwritten.
+Returns the row's generation after the attempt (the new generation
+on acceptance, the current one on a generation drop).
+================
+*/
+func (s *MonsterState) commitMoverChecked(state *divisionMonsterState, gid uint32, mover monster.MoverState, baseGen uint64, guarded bool) bool {
 	if err := mover.Validate(); err != nil {
 		panic(err)
 	}
@@ -74,6 +139,9 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 	}
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)
+	}
+	if guarded && state.movers.generation(gid) != baseGen {
+		return false
 	}
 	// Packet-side damage can arm retaliation between a tick's snapshot read
 	// and commit. Reject only a plan from an older retaliation revision.
@@ -114,6 +182,101 @@ func (s *MonsterState) CommitMoverFrames(divisionID string, gid uint32, mover mo
 		return nil
 	}
 	return frames
+}
+
+/*
+================
+CommitMoverGen
+
+CommitMover guarded by the mover row's commit generation: the
+commit lands only while the row still sits at baseGen, the
+generation the caller's snapshot read (#2137 slice 1). Returns the
+row's generation after the attempt alongside acceptance, so a
+step committing several times in a row re-bases on its own accepted
+commits while an intervening slower-lane set drops the next one.
+================
+*/
+func (s *MonsterState) CommitMoverGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64) (uint64, bool) {
+	if err := mover.Validate(); err != nil {
+		panic(err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if !s.commitMoverChecked(state, gid, mover, baseGen, true) {
+		return state.movers.generation(gid), false
+	}
+	return state.movers.generation(gid), true
+}
+
+/*
+================
+CommitMoverFramesGen
+
+CommitMoverFrames with CommitMoverGen's generation guard: frames
+are released only for a commit that landed on its base generation.
+================
+*/
+func (s *MonsterState) CommitMoverFramesGen(divisionID string, gid uint32, mover monster.MoverState, baseGen uint64, frames []Frame) []Frame {
+	if _, ok := s.CommitMoverGen(divisionID, gid, mover, baseGen); !ok {
+		return nil
+	}
+	return frames
+}
+
+/*
+================
+MoverGeneration
+
+One actor's mover value with the commit generation it was read at:
+the re-read a step makes after a transaction of its own (an idle
+entry, the activity gate) has already advanced the row.
+================
+*/
+func (s *MonsterState) MoverGeneration(divisionID string, gid uint32) (monster.MoverState, uint64, bool) {
+	return s.MoverGenerationAt(divisionID, gid, behaviorNoMoverSlot, behaviorNoMonsterSlot)
+}
+
+/*
+================
+MoverGenerationAt
+
+MoverGeneration through the slots the behaviour batch carried for
+the actor (#2133): the existence probe, the row read and the
+generation read go through the verified hints and fall back to the
+gid resolve whenever a hint no longer names the gid, so the value
+and the generation are MoverGeneration's either way.
+generationAt answers for whichever row the read found: the hinted
+slot's row when the hint held, the gid's row when it did not.
+================
+*/
+func (s *MonsterState) MoverGenerationAt(divisionID string, gid uint32, slot, monsterSlot uint32) (monster.MoverState, uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state := s.populationForObject(divisionID, gid)
+	if !state.instances.containsAt(monsterSlot, gid) {
+		return monster.MoverState{}, 0, false
+	}
+	if mover, ok := state.movers.lookupAt(slot, gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, state.movers.generationAt(slot, gid), true
+	}
+	if mover, ok := state.movers.lookup(gid); ok {
+		if err := mover.Validate(); err != nil {
+			panic(err)
+		}
+		return mover, state.movers.generationAt(slot, gid), true
+	}
+	mover := monster.NewSpawnMover(state.instances.get(gid), s.nowMillis())
+	if err := mover.Validate(); err != nil {
+		panic(err)
+	}
+	return mover, state.movers.generationAt(slot, gid), true
 }
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.

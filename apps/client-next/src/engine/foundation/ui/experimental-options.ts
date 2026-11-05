@@ -40,6 +40,12 @@ export interface ExperimentalOptions {
 	// size; a missing or invalid stored value restores it.
 	readonly uiScale: number;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native (#1976): a fifth chat tab, Event, holding the
+	// shard's channel-7 event notices (seal drops, plus results, item
+	// breaks, job kills) that otherwise land in All. On unless turned off
+	// (the owner's choice, 2026-10-28); off is the native four tabs with
+	// notices in All.
+	readonly eventChatTab: boolean;
 	// Port-only, not native: use only the male warrior loading artwork.
 	// Off by default so both original loading backgrounds remain available.
 	readonly safeLoadingScreen: boolean;
@@ -66,8 +72,9 @@ export interface ExperimentalOptions {
 	// (equipmentGlowCatalog, equipmentEnchantSparks). On by default (owner
 	// 2026-10-17, 2026-10-24); an explicit false restores the native v1.150 look.
 	readonly enchantSparks: boolean;
-	// Port-only wolf skill tree controls; requires the server's matching opt-in.
-	readonly attackPetTraining: boolean;
+	// Port-only, not native: the Actions window gains Auto Select (action 1005,
+	// select-nearest.ts). Native holds the code but no row or key reaches it.
+	readonly autoSelect: boolean;
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
@@ -118,6 +125,11 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
+	// Port-only, not native (#1849): the buff board shows the Most Wanted
+	// row (the shard's 0x3FBA state, server SRO_MOST_WANTED) while the
+	// player's job suit is worn. Off unless turned on, so each player
+	// opts in; off is the native board.
+	readonly mostWantedBuff: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -229,6 +241,16 @@ export interface ExperimentalOptions {
 	// the top seal reads differently the moment it lands. Other players'
 	// drops are never marked. Off unless turned on.
 	readonly sunDropMarker: boolean;
+	// Port-only, not native: the portal-out cue (SND_WARP, gatein.wav) when
+	// the world arrives. The native row has no traced caller - the gate at
+	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
+	// native arrival is silent. Off unless turned on.
+	readonly warpArrivalSound: boolean;
+	// Port-only, not native (#2496): a rare item's seal line sits under the
+	// item name. 558FF0 appends it after the requirement rows (the 56B099
+	// call in FormatWeapon, after 568500). Off unless turned on; off is the
+	// native place.
+	readonly sealUnderHeading: boolean;
 }
 
 /*
@@ -365,7 +387,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -385,6 +407,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		phoneRenderCap: record.phoneRenderCap !== false,
 		uiScale: uiScaleStop( record.uiScale ) ?? UI_SCALE_DEFAULT,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		eventChatTab: record.eventChatTab !== false,
 		safeLoadingScreen: enabled( "safeLoadingScreen" ),
 		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
@@ -408,6 +431,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		plusSevenNotices: record.plusSevenNotices !== false,
 		breakNotices: record.breakNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
+		mostWantedBuff: enabled( "mostWantedBuff" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
@@ -415,7 +439,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
-		attackPetTraining: enabled( "attackPetTraining" ),
+		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
 		transportAutoPotion: enabled( "transportAutoPotion" ),
@@ -431,7 +455,9 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		touchInspect: record.touchInspect !== false,
 		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
-		sunDropMarker: enabled( "sunDropMarker" )
+		sunDropMarker: enabled( "sunDropMarker" ),
+		warpArrivalSound: enabled( "warpArrivalSound" ),
+		sealUnderHeading: enabled( "sealUnderHeading" )
 	};
 }
 
@@ -548,6 +574,7 @@ export interface ExperimentalGameplay {
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
 	readonly sunDropMarker?: boolean;
+	readonly warpArrivalSound?: boolean;
 	// The pickup pet filter's kind mask (ground-item's PICKUP_KIND bits);
 	// undefined while the filter row is off, which is the native loop.
 	readonly petPickupKinds?: number;
@@ -569,6 +596,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
+		warpArrivalSound: options.warpArrivalSound,
 		petPickupKinds: options.petPickupFilter ?
 			(options.petFilterGold ? PICKUP_KIND_GOLD : 0) |
 			(options.petFilterEquipment ? PICKUP_KIND_EQUIPMENT : 0) |

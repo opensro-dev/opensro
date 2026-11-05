@@ -204,6 +204,20 @@ export function isPetSkillItem( flags: number ): boolean {
 
 /*
 ================
+isRideStateRefusedItem
+
+5608B0: an EtcGroup6 item (550200: the consumable bits at group 6) of
+subtype 2, activated while the local player rides (+0x434 == 1), is
+refused with UIIT_MSG_SKILL_USE_FAIL_CANT_USEITEM_IN_RIDESTATE and
+nothing is sent.
+================
+*/
+export function isRideStateRefusedItem( flags: number ): boolean {
+	return (flags & 0x7e) === 0x6c && (flags >>> 7 & 15) === 6 && (flags >>> 11 & 31) === 2;
+}
+
+/*
+================
 isRevivalGrass
 
 Grass of Life: ETC group 1, subtype 6 (550340 tests the group; 696490 case 6).

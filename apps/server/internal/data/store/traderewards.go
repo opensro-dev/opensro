@@ -98,16 +98,32 @@ func loadTradeRewards(db *sql.DB) (map[string]domain.TradeRewardPool, error) {
 
 /*
 ================
+tradeRewardsRecord
+
+The meta row's bytes for the pool plane; empty when no pool exists, in
+which case no writer puts a row down.
+================
+*/
+func tradeRewardsRecord(pools map[string]domain.TradeRewardPool) (string, error) {
+	if len(pools) == 0 {
+		return "", nil
+	}
+	raw, err := json.Marshal(pools)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+/*
+================
 writeTradeRewards
 ================
 */
 func writeTradeRewards(tx *sql.Tx, pools map[string]domain.TradeRewardPool) error {
-	if len(pools) == 0 {
-		return nil
-	}
-	raw, err := json.Marshal(pools)
-	if err != nil {
+	record, err := tradeRewardsRecord(pools)
+	if err != nil || record == "" {
 		return err
 	}
-	return upsertMetaTx(tx, metaKeyTradeRewards, string(raw))
+	return upsertMetaTx(tx, metaKeyTradeRewards, record)
 }

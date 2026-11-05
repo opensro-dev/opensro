@@ -169,7 +169,7 @@ func HandleWhisperBlock(deps Dependencies, divisionID string, character *enterwo
 				// binary emits opcode 0xb30d, not our 0xb66f, so the
 				// evidence is version-skewed - but its ADD-side remap
 				// (its add remap) reproduces exactly the result semantics
-				// the v1.150 client's sub_771550 decodes (1 duplicate /
+				// the v1.150 client's CPSMission_OnAliasActionResponse0xB66F decodes (1 duplicate /
 				// 2 no-such-user / 3 list-full), so the result-code
 				// contract survived the renumbering. The v1.150 client
 				// shows "User does not exist." for {x,2} - odd for an

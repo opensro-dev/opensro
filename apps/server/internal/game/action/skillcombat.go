@@ -15,6 +15,7 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -103,6 +104,7 @@ func (rt *Runtime) acceptSkillCast(
 		snapshot,
 		cast,
 		rt.Now().UnixMilli(),
+		rt.handlerDoors(),
 	)
 	return result
 }
@@ -124,8 +126,9 @@ func (rt *Runtime) acceptSkillCastAt(
 	snapshot *enterworld.Character,
 	cast wire.SkillAction,
 	nowMs int64,
+	doors characterDoors,
 ) (OpResult, skillCastDecision) {
-	return rt.acceptSkillStageAt(divisionID, character, snapshot, cast, nowMs, 0)
+	return rt.acceptSkillStageAt(divisionID, character, snapshot, cast, nowMs, 0, doors)
 }
 
 /*
@@ -152,8 +155,8 @@ acceptSkillStageAt
 Enter a fresh stage without a prepared execution-cost snapshot.
 ================
 */
-func (rt *Runtime) acceptSkillStageAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32) (OpResult, skillCastDecision) {
-	return rt.acceptSkillStagePhaseAt(divisionID, character, snapshot, cast, nowMs, rootID, nil)
+func (rt *Runtime) acceptSkillStageAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, doors characterDoors) (OpResult, skillCastDecision) {
+	return rt.acceptSkillStagePhaseAt(divisionID, character, snapshot, cast, nowMs, rootID, nil, doors)
 }
 
 /*
@@ -164,7 +167,7 @@ Share admission, range and preparation before choosing the release producer.
 Persistent attacks install linked pairs; immediate attacks commit their hits.
 ================
 */
-func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, nowMs int64, rootID uint32, release *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if character == nil || snapshot == nil || rt.Monsters == nil || !cast.HasTarget ||
 		cast.HasGroundTarget || cast.TargetGid == 0 {
 		return OpResult{}, skillCastRefused
@@ -235,12 +238,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return rt.acceptPlayerTargetStage(offensiveStage{division: divisionID, character: character, snapshot: snapshot,
 			cast: cast, skill: skill, basic: basic, advanced: advanced, rootID: rootID, release: release,
 			attacker: attacker, loadout: loadout, consumeAmmo: consumeAmmo, actionReach: actionReach,
-			lifecycleMs: actionLifecycleMs, now: nowMs})
+			lifecycleMs: actionLifecycleMs, now: nowMs, doors: doors})
 	}
 	if target.CurrentHP == 0 {
 		return OpResult{}, skillCastRefused
 	}
 	if code := temptationTargetRefusal(skill, target); code != 0 {
+		return offensiveRefusal(code), skillCastRefused
+	}
+	if code := rt.jobMonsterTargetRefusal(snapshot, target); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
 	if d := skill.TimedEffect.Periodic; d.Pinned {
@@ -311,7 +317,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		rt.noteHawkOwnerAttack(divisionID, snapshot, target.Gid, nowMs)
 	}
 	if skill.ActionCastingTimeMs != 0 && release == nil {
-		return rt.prepareOffensiveCast(divisionID, character, snapshot, cast, skill, advanced, rootID, nowMs)
+		return rt.prepareOffensiveCast(divisionID, character, snapshot, cast, skill, advanced, rootID, nowMs, doors)
 	}
 
 	primary := combatTarget{gid: target.Gid, monster: &target, at: targetAt}
@@ -331,14 +337,14 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			skill: skill, target: target.Gid, now: nowMs})
 	}
 	if skill.OffensiveArea.Radius != 0 {
-		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)
+		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release, doors)
 	}
 	// With no area of its own, an imbue-eligible attack
 	// (att value 5) that passes the execution selector selects its victims with the active
 	// imbue's efr (the Lightning Force); the chain's victims are flagged.
 	if skill.Attack.Value5 != 0 && skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector {
 		if imbue, _ := rt.activeWeaponImbue(divisionID, snapshot.Name, nowMs); imbue.Pinned && imbue.Area.Radius != 0 {
-			return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, imbue.Area, true, advanced, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)
+			return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, imbue.Area, true, advanced, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release, doors)
 		}
 	}
 	stealBase, stealOK := int64(0), true
@@ -383,7 +389,22 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	var killDrops []grounditem.Item
-	roster := rt.monsterRewardRoster(divisionID, character, nowMs)
+	// The reward roster serves the settlement alone, and a strike
+	// whose planned damage cannot kill reaches none (#2030): door the
+	// caster alone and build no roster. A plan that can kill keeps
+	// the roster-wide door exactly as before. The sequence refuses
+	// outright when the target's HP moved off the planned value and
+	// applied damage never exceeds planned damage, so a fatal impact
+	// implies a lethal plan; settleStrikeFatal guards the rest.
+	var plannedDamage uint64
+	for _, plan := range damagePlans {
+		plannedDamage += uint64(plan.Damage)
+	}
+	canKill := plannedDamage >= uint64(target.CurrentHP)
+	roster := rewardRoster{division: divisionID, characters: []*enterworld.Character{character}}
+	if canKill {
+		roster = rt.monsterRewardRoster(divisionID, character, nowMs)
+	}
 	var settlement monsterSettlement
 	committed := make([]simulation.MonsterDamageResult, 0, len(formulas))
 	var ammo ammunitionResult
@@ -395,7 +416,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		// Character ammo and monster HP move under the same per-division lock
 		// and the same character authority closure. Validation is read-only;
 		// debit is the non-refusing tail after the HP authority accepts damage.
-		if !rt.deps.UpdateMany(roster.characters, "player-basic-attack", func() bool {
+		if !doors.updateMany(roster.characters, "player-basic-attack", func() bool {
 			var cost skillCharge
 			if advanced {
 				cost, refusal = rt.stagePhaseCost(divisionID, character, skill, nowMs, release, rootID)
@@ -440,7 +461,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 				rt.commitSkillTravel(simulation.WorldKey(divisionID, character.Name), character, travel)
 			}
 			if committed[len(committed)-1].Fatal {
-				settlement = rt.settleMonsterInsideDoor(divisionID, character, roster, committed[len(committed)-1], monsterPose, nowMs)
+				settlement = rt.settleStrikeFatal(divisionID, character, roster, canKill, committed[len(committed)-1], monsterPose, nowMs)
 				killProgressionFrames, killDrops = settlement.actorFrames, settlement.drops
 			}
 			return true
@@ -548,7 +569,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	for _, formula := range formulas {
 		tally.note(formula.Blocked, true)
 	}
-	wear := rt.applyEquipmentWear(divisionID, character, tally)
+	wear := rt.applyEquipmentWear(divisionID, character, tally, doors)
 	actorFrames = append(actorFrames, wear.actor...)
 	broadcastFrames = append(broadcastFrames, wear.public...)
 	// The actor sees the same fatal B245/drop prefix first, then the complete
@@ -605,15 +626,49 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 
 /*
 ================
+settleStrikeFatal
+
+The fatal impact of a strike, settled inside the strike door: a
+player's skill strike, or a companion's struck for its owner.
+canKill says the plan was lethal and the roster is the full reward
+roster; without it the settlement runs on the caster's narrow roster
+and the kill was impossible by the planned-damage invariant, which
+noteSurpriseFatal makes audible instead of silent (#2030).
+================
+*/
+func (rt *Runtime) settleStrikeFatal(division string, character *enterworld.Character, roster rewardRoster, canKill bool, impact simulation.MonsterDamageResult, pose monster.Pose, now int64) monsterSettlement {
+	if !canKill {
+		rt.noteSurpriseFatal(division, impact.Instance.Gid)
+	}
+	return rt.settleMonsterInsideDoor(division, character, roster, impact, pose, now)
+}
+
+/*
+================
+noteSurpriseFatal
+
+A strike killed under a plan that could not kill: the invariant the
+roster gate rests on broke. Count it and log it at Error with the
+division and the monster, because the settlement just ran with the
+narrow roster and underpaid - this is the sign that is not silence.
+================
+*/
+func (rt *Runtime) noteSurpriseFatal(division string, gid uint32) {
+	rt.surpriseFatalCount.Add(1)
+	log.WithFields(log.Fields{"division": division, "gid": gid}).Error("strike killed under a non-lethal plan; reward settled with the narrow roster")
+}
+
+/*
+================
 prepareOffensiveCast
 
 A cast with a preparation time charges and cools at the press, then waits
 for its release (advanceProjectileCasts), whatever its target's kind.
 ================
 */
-func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, advanced bool, rootID uint32, nowMs int64) (OpResult, skillCastDecision) {
+func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, advanced bool, rootID uint32, nowMs int64, doors characterDoors) (OpResult, skillCastDecision) {
 	var refusal uint16
-	if !rt.deps.Update(character, "prepare-offensive-cooldown", func() bool {
+	if !doors.update(character, "prepare-offensive-cooldown", func() bool {
 		if !enterworld.CharacterAlive(character) {
 			return false
 		}

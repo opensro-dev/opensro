@@ -3,7 +3,7 @@
 
 scenery-particles.ts - project BSR ModDataParticle records into SceneryEmitters
 
-Converts a world object's ambient ModDataParticle (sub_acd4d0) entries into
+Converts a world object's ambient ModDataParticle (CModDataParticle_Load_ACD4D0) entries into
 world-space SceneryEmitter records using the native row-vector Euler
 orientation (AD05F0).
 

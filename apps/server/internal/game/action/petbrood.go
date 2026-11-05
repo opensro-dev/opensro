@@ -131,6 +131,65 @@ func (rt *Runtime) broodSpawnFrame(division string, state *petSession, pet *doma
 
 /*
 ================
+crowBroodSource
+
+The companion the brood lifecycle answers for: the summoned record
+under this gid, else a brood-stage crow still waiting in the roster.
+Admission and the advance itself resolve through here so the two can
+never disagree about which pet a gid names.
+================
+*/
+func crowBroodSource(c *enterworld.Character, gid uint32) *domain.CharacterCOS {
+	if source := c.CompanionByGID(gid); source != nil {
+		return source
+	}
+	var found *domain.CharacterCOS
+	c.VisitCompanions(func(candidate *domain.CharacterCOS) bool {
+		if candidate.GID == gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
+			found = candidate
+		}
+		return found == nil
+	})
+	return found
+}
+
+/*
+================
+hasBroodFrom
+
+Whether any brood pet of c was laid by the crow gid.
+================
+*/
+func hasBroodFrom(c *enterworld.Character, gid uint32) bool {
+	for _, pet := range c.Brood {
+		if pet.BroodSource == gid {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+crowRechargeRow
+
+The crow's recharge row at now, and whether it moves the stored row.
+Pure on the live pet, so a tick judges it under the read door and
+only a moving row opens the update door (#2139).
+================
+*/
+func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
+	row := companion.AdvanceCharges(live.Training.Rows[1], now)
+	for _, def := range companion.SkillsForPet(live) {
+		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
+			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
+		}
+	}
+	return row, row != live.Training.Rows[1]
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -142,40 +201,60 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	if state == nil {
 		return nil
 	}
-	snapshot := rt.characterSnapshot(key.division, state.character)
-	source := snapshot.CompanionByGID(key.gid)
-	if source == nil {
-		for _, candidate := range snapshot.Companions() {
-			if candidate.GID == key.gid && candidate.BroodStage == 0 && companion.PetKind(candidate.Codename) == "Crow" {
-				source = candidate
-				break
-			}
-		}
-	}
-	if source != nil && companion.PetKind(source.Codename) != "Crow" || key.gid >= broodGIDBase {
+	// Runs for every pet per tick: copy the owner only when the check
+	// below would let this gid through - every other pet (and every
+	// brood-space gid) is refused before any state moves (#1943). A crow
+	// with no brood out needs no copy at all: only the recharge below
+	// runs for it, and that reads the live record inside its own door.
+	// The copy is the companion copy (#2030): every reader below - the
+	// source and its brood, life, town, and the death storm's pet-combat
+	// step - reads companions, equipment and world facts, never a plain
+	// bag row or the avatar inventory.
+	crow := false
+	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		source := crowBroodSource(c, key.gid)
+		crow = key.gid < broodGIDBase && (source == nil || companion.PetKind(source.Codename) == "Crow")
+		return crow && hasBroodFrom(c, key.gid)
+	})
+	if !crow {
 		return nil
 	}
-	valid := source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
+	valid := false
+	if snapshot != nil {
+		source := crowBroodSource(snapshot, key.gid)
+		valid = source != nil && rt.AttackPetExpansion && source.Summoned && source.CurrentHP > 0 && enterworld.CharacterAlive(snapshot) && !rt.inTown(key.division, snapshot)
+	}
 	var output []wire.Frame
 	var reuse []wire.Frame
-	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
+	// The recharge row is pure on the live pet: judge it under the
+	// read door and open the update door only on a tick whose row
+	// actually moves (#2139); the door re-derives the same row.
+	recharges := false
+	rt.deps.Read(key.division, func() {
 		live := state.character.CompanionByGID(key.gid)
 		if live == nil {
-			return false
+			return
 		}
-		row := companion.AdvanceCharges(live.Training.Rows[1], now)
-		for _, def := range companion.SkillsForPet(live) {
-			if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-				row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
-			}
-		}
-		if row == live.Training.Rows[1] {
-			return false
-		}
-		live.Training.Rows[1] = row
-		reuse = rt.petTrainingStateFrames(live, now)
-		return true
+		_, recharges = crowRechargeRow(live, now)
 	})
+	if recharges {
+		rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
+			live := state.character.CompanionByGID(key.gid)
+			if live == nil {
+				return false
+			}
+			row, changed := crowRechargeRow(live, now)
+			if !changed {
+				return false
+			}
+			live.Training.Rows[1] = row
+			reuse = rt.petTrainingStateFrames(live, now)
+			return true
+		})
+	}
+	if snapshot == nil {
+		return simFrames(reuse)
+	}
 	for _, pet := range snapshot.Brood {
 		if pet.BroodSource != key.gid {
 			continue
@@ -190,7 +269,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 			if valid && child != nil && pet.BroodStage == 2 && pet.BroodBook == 3 {
 				rt.broodDeathStorm(key, child, snapshot, pet, now)
 			}
-			rt.deps.Update(state.character, "crow-brood-remove", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-remove", func() bool {
 				kept := state.character.Brood[:0]
 				for _, live := range state.character.Brood {
 					if live.GID != pet.GID {
@@ -209,7 +288,7 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 		}
 		if hatch {
 			var clone *domain.CharacterCOS
-			rt.deps.Update(state.character, "crow-brood-hatch", func() bool {
+			rt.deps.UpdateDeferred(state.character, "crow-brood-hatch", func() bool {
 				live := state.character.CompanionByGID(pet.GID)
 				if live == nil || live.CurrentHP == 0 || live.BroodStage != 1 {
 					return false

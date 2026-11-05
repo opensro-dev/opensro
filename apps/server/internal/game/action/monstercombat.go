@@ -227,7 +227,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
 			// Natively a COS answers the job test with its owner's state.
-			if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(rt.characterSnapshot(divisionID, owner))) {
+			if release == nil && instance.JobTargetRefused(rt.characterPartyJobClass(divisionID, owner)) {
 				return result
 			}
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
@@ -239,16 +239,21 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		}
 		return result
 	}
-	snapshot := rt.characterSnapshot(divisionID, character)
-	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+	// Admission copies the victim only when it may be struck: presence,
+	// life and - for an unowned command - the job refusal are field
+	// facts weighed on the live record in the copy's own door pass
+	// (#1943). The admitted copy still feeds spacing, stats and the
+	// strike, exactly as the detached record did.
+	snapshot := rt.characterSnapshotAdmitted(divisionID, character, func(live *enterworld.Character) bool {
+		return !live.DeletePending && enterworld.CharacterAlive(live) &&
+			(release != nil || !instance.JobTargetRefused(enterworld.PartyJobClass(live)))
+	})
+	if snapshot == nil {
 		return result
 	}
 	// Natively a job monster refuses its own side at admission, before the
 	// ride swap (a ride answers with its rider's job). The zero result sends
 	// the monster home rather than retrying a strike it may never make.
-	if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(snapshot)) {
-		return result
-	}
 	// Only hostile-target skills swap (natively the target flag is tested); summons
 	// and self effects keep their own branches below.
 	if ride := ridingCOS(snapshot); release == nil && ride != 0 && ok && skill.TargetRequired &&
@@ -315,6 +320,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		result.Refusal = simulation.MonsterAttackApproachRequired
 		return result
 	}
+	if release == nil && rt.monsterLineBlocked(mover, playerPose, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
+		return result
+	}
 	attacker, err := combat.MonsterInstanceStats(instance)
 	if err != nil {
 		return result
@@ -357,4 +366,28 @@ func (rt *Runtime) findCharacterByGid(divisionID string, gid uint32) *enterworld
 		}
 	}
 	return nil
+}
+
+/*
+================
+monsterLineBlocked
+
+The line-of-sight check of a monster's skill command. The original server
+validates every skill command, a monster's included, with the same checks
+as a player's cast; one of them asks the region manager's line-of-sight
+query and refuses 0x3010 when the line is blocked. A monster on another
+cave floor or behind a wall therefore never strikes through it: the
+command is refused, and the AI keeps its target and retries on its next
+tick, as for any refused command. Only the command is judged; an owned
+cast's release is not, since the original's later cast checks leave line
+of sight out. Notes: ../research/investigations/world/monster-line-of-sight-20261029.md.
+================
+*/
+func (rt *Runtime) monsterLineBlocked(mover monster.MoverState, to simulation.Spawn, nowMs int64) bool {
+	if rt.LineOfSight == nil {
+		return false
+	}
+	pose := mover.LivePoseAt(nowMs, nil)
+	from := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
+	return !rt.LineOfSight(from, mover.LiveNavOwner(nowMs), to)
 }

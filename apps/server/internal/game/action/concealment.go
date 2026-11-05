@@ -128,13 +128,42 @@ func (rt *Runtime) concealmentRecipients(division string, caster *enterworld.Cha
 ==================
 installRecipientEffects
 
+The cast release's recipient installs, through the immediate door: a
+handler's answer follows the commit. See installRecipientEffectsThrough.
+==================
+*/
+func (rt *Runtime) installRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) []*enterworld.Character {
+	return rt.installRecipientEffectsThrough(rt.deps.Update, division, recipients, skill, rider, now)
+}
+
+/*
+==================
+installTickRecipientEffects
+
+The skill-object tick's recipient installs, through the deferred door.
+The rule (#2294): no immediate commit while the tick holds the
+publication gates - each one would pay its own store transaction
+inside the pass, beside the retirements' deferred door. The tick's
+batch commits every recipient in its one transaction instead.
+==================
+*/
+func (rt *Runtime) installTickRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) []*enterworld.Character {
+	return rt.installRecipientEffectsThrough(rt.deps.UpdateDeferred, division, recipients, skill, rider, now)
+}
+
+/*
+==================
+installRecipientEffectsThrough
+
 The recipient loop of the reference server's persistent cast: every recipient gets its
 own instance, in execution context mode 2, if buff replacement admits it.
 Runs after the caster's own door; each recipient is published to itself
 and its observers. Returns the recipients that received an instance.
+The door is the caller's lane: immediate from a handler, deferred from
+the tick.
 ==================
 */
-func (rt *Runtime) installRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) []*enterworld.Character {
+func (rt *Runtime) installRecipientEffectsThrough(door func(*enterworld.Character, string, func() bool) bool, division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) []*enterworld.Character {
 	var installed []*enterworld.Character
 	for _, c := range recipients {
 		if !rt.auraReplacementAllowed(division, c, skill, false) {
@@ -142,7 +171,7 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 		}
 		token := atomic.AddUint32(&rt.castTokenCounter, 1)
 		var frames []wire.Frame
-		if !rt.deps.Update(c, "concealment-recipient", func() bool {
+		if !door(c, "concealment-recipient", func() bool {
 			if c.DeletePending || !enterworld.CharacterAlive(c) {
 				return false
 			}

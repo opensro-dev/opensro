@@ -21,7 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -356,7 +356,7 @@ TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media
 ================
 */
 func TestMonsterDropBootstrapCatalogResolvesAgainstShippedV1150Media(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "itemdata_5000.txt")); err != nil {
 		t.Skip("shipped v1.150 itemdata not present")
 	}

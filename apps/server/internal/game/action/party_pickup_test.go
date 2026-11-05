@@ -26,6 +26,39 @@ import (
 
 /*
 ================
+TestPartyShareRosterResolvesOnlyTheParty
+
+#2030: a share lookup asks presence only for the party it can pay.
+With three bystanders standing in the same division, the gold share
+still splits between picker and peer - and never asks about anyone
+else. The full reward roster asked about every character present.
+================
+*/
+func TestPartyShareRosterResolvesOnlyTheParty(t *testing.T) {
+	rt, _, picker, peer, _ := sharedPickupFixture(t)
+	source := fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)
+	for i := range 3 {
+		by := picker.Snapshot()
+		by.ID = int64(40 + i)
+		by.Name = "Bystander" + string(rune('0'+i))
+		source[testDivision] = append(source[testDivision], by)
+	}
+	asked := 0
+	rt.RewardActorPresent = func(division, name string) bool {
+		asked++
+		return true
+	}
+	shares := rt.partyGoldShares(testDivision, picker, 101, rt.Now().UnixMilli())
+	if len(shares) != 2 || shares[0].character != picker || shares[1].character != peer {
+		t.Fatalf("shares = %+v, want the picker and the peer", shares)
+	}
+	if asked > 2 {
+		t.Fatalf("the share lookup asked presence for %d characters, want at most the 2 party members", asked)
+	}
+}
+
+/*
+================
 sharedPickupFixture
 ================
 */
@@ -569,7 +602,8 @@ TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull
 
 The native COS pickup recipient choice and COS ground pickup:
  1. When the rotated party member's player bag is full and they have no pickup
-    pet, the picker's owner receives 0xB69E [2, 8, 0x9C, pickerPet, item].
+    pet, the selection returns 0x1807 and the picker's owner receives
+    0xB69E [2, 8, 0xB4, pickerPet, item] (the bag-full class).
  2. When the rotated party member has a summoned pickup pet with free space,
     the grant spills into that member's pickup pet (0xB06D type 0x11 to the
     member, 0xB69E [1, 8, pickerPet, item] to the picker's owner, and 0x317D
@@ -603,12 +637,13 @@ func TestPetPickupSharedPeerFullPlayerBagSpillsToPeerPetAndNotifiesBothWhenFull(
 	cmd1 := wire.NewWriter(9).U32(pickerPetGID).U8(wire.CosCommandPickupTag).U32(drop1.Gid).Payload()
 
 	// 1. Peer has no free bag slot (even with a below-cap potion stack at slot 13) and no pickup pet:
-	// Natively the first-empty-slot probe from 0x0D returns 0xFF and refuses with 0x9C without merging.
+	// Natively the first-empty-slot probe from 0x0D returns 0xFF without merging, the pickup-pet
+	// lookup finds none, and the selection's 0x1807 is answered as the bag-full class 0xB4.
 	rt.NextPartyLootMember(testDivision, picker.Name)
 	noPetRes := rt.HandleCosCommand(testDivision, picker, cmd1)
 	assertCosPickupAck(t, noPetRes.Frames, pickerPetGID, drop1.Gid, false)
-	if noPetRes.Frames[0].Payload[2] != cosPickupRetryBackoff || len(noPetRes.Recipients) != 0 || len(rt.Ground.All(testDivision)) != 1 {
-		t.Fatalf("peer without pet full-bag result = %+v, want 0x9C to picker and no peer frame", noPetRes)
+	if noPetRes.Frames[0].Payload[2] != cosPickupBagFull || len(noPetRes.Recipients) != 0 || len(rt.Ground.All(testDivision)) != 1 {
+		t.Fatalf("peer without pet full-bag result = %+v, want 0xB4 to picker and no peer frame", noPetRes)
 	}
 	if peer.MissionInventory[0].StackCount != 3 {
 		t.Fatalf("peer slot 13 stack = %d, want 3 (no merge when no empty slot exists, as natively)", peer.MissionInventory[0].StackCount)
@@ -750,7 +785,7 @@ func TestGrantPeerCosPickupRechecksReservationUnderRecipientUpdate(t *testing.T)
 		OwnerJID: 0x7777777, DroppedAt: rt.Now(),
 	})
 	res := rt.grantPeerCosPickup(testDivision, picker, peer, drop, wire.PickupAnim{Gid: peerPetGID}, petPickupAt{
-		now: rt.Now(), command: true,
+		now: rt.Now(), command: true, doors: rt.handlerDoors(),
 	})
 	if len(res.Broadcast) != 0 || len(peer.ActiveCOS.Container.Rows) != 0 || len(rt.Ground.All(testDivision)) != 1 {
 		t.Fatalf("grantPeerCosPickup bypassed OwnerJID recheck: res=%+v rows=%+v", res, peer.ActiveCOS.Container.Rows)

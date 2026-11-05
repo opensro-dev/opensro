@@ -19,6 +19,7 @@ package action
 
 import (
 	"sort"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -35,13 +36,27 @@ import (
 ================
 placedDrop
 
-A drop with its message block, computed once per pass and shared by every
-viewer of its population.
+A drop with its message block, computed once per registry revision and
+shared by every viewer of its population. item points into the slice
+the drop was placed from (the division's cached copy), so a bucket row
+is a pointer and a block, not a copy of the item (#2031). Readers never
+mutate either.
 ================
 */
 type placedDrop struct {
-	item  grounditem.Item
+	item  *grounditem.Item
 	block worldgeom.InterestBlock
+}
+
+/*
+================
+dropBlock
+================
+*/
+func dropBlock(item *grounditem.Item) worldgeom.InterestBlock {
+	return worldgeom.InterestBlockAt(worldgeom.RegionXZ{
+		RegionID: item.Position.RegionID, X: float64(item.Position.X), Z: float64(item.Position.Z),
+	})
 }
 
 /*
@@ -51,12 +66,144 @@ placeDrops
 */
 func placeDrops(items []grounditem.Item) []placedDrop {
 	out := make([]placedDrop, len(items))
-	for i, item := range items {
-		out[i] = placedDrop{item: item, block: worldgeom.InterestBlockAt(worldgeom.RegionXZ{
-			RegionID: item.Position.RegionID, X: float64(item.Position.X), Z: float64(item.Position.Z),
-		})}
+	for i := range items {
+		out[i] = placedDrop{item: &items[i], block: dropBlock(&items[i])}
 	}
 	return out
+}
+
+/*
+================
+groundDivisionDrops, groundDropCache
+
+One division's drops as of one registry revision: the deep copy and, per
+population, its placement. The registry deep-copies on every read, so the
+per-tick pass paid that copy per population per tick (#1943); the cache
+pays it once per revision. The stamp is the division's own counter
+(Registry.DivisionRevision), so an entry is rebuilt only when its own
+division's drops moved - under the one global counter, a changed tick
+anywhere rebuilt every division's copy (#2030).
+
+The stamp is read BEFORE the copy: a mutation racing the copy raises the
+revision past the stamp, so the next pass rebuilds. The stamp is never
+newer than the content, so stale content is never served as current.
+================
+*/
+type groundDivisionDrops struct {
+	revision uint64
+	items    []grounditem.Item
+	buckets  map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop
+}
+
+type groundDropCache struct {
+	mu        sync.Mutex
+	divisions map[string]*groundDivisionDrops
+}
+
+/*
+================
+groundDivisionLocked
+
+The division's cached drops, rebuilt under the cache lock when the
+registry revision moved. The caller holds groundDrops.mu.
+================
+*/
+func (rt *Runtime) groundDivisionLocked(division string, revision uint64) *groundDivisionDrops {
+	entry := rt.groundDrops.divisions[division]
+	if entry == nil || entry.revision != revision {
+		entry = &groundDivisionDrops{revision: revision, items: rt.Ground.All(division)}
+		if len(entry.items) == 0 {
+			// A division with no drops retains no entry, so a closed
+			// instance division leaves the cache with its last drop.
+			// The empty copy is cheap to rebuild on demand.
+			delete(rt.groundDrops.divisions, division)
+			return entry
+		}
+		if rt.groundDrops.divisions == nil {
+			rt.groundDrops.divisions = make(map[string]*groundDivisionDrops)
+		}
+		rt.groundDrops.divisions[division] = entry
+	}
+	return entry
+}
+
+/*
+================
+groundDivisionSnapshot
+
+The division's cached drops. The returned entry is shared; callers read
+it and never mutate it.
+================
+*/
+func (rt *Runtime) groundDivisionSnapshot(division string) *groundDivisionDrops {
+	revision := rt.Ground.DivisionRevision(division)
+	rt.groundDrops.mu.Lock()
+	defer rt.groundDrops.mu.Unlock()
+	return rt.groundDivisionLocked(division, revision)
+}
+
+/*
+================
+bucketDrops
+
+The kept drops grouped by message block, so a viewer scans only its
+own block, its eight neighbours and its region's block-less drops
+instead of the whole population. keep nil keeps every drop.
+
+Counted first, then laid into one backing array: each bucket is a
+window of it, so the rows cost one allocation, not an append growth
+per bucket, and keep filters in place of a filtered copy (#2031).
+Within a bucket the rows keep items' order.
+================
+*/
+func bucketDrops(items []grounditem.Item, keep func(*grounditem.Item) bool) map[worldgeom.InterestBlock][]placedDrop {
+	counts := make(map[worldgeom.InterestBlock]int)
+	total := 0
+	for i := range items {
+		if keep == nil || keep(&items[i]) {
+			counts[dropBlock(&items[i])]++
+			total++
+		}
+	}
+	rows := make([]placedDrop, total)
+	buckets := make(map[worldgeom.InterestBlock][]placedDrop, len(counts))
+	next := 0
+	for block, n := range counts {
+		buckets[block] = rows[next : next : next+n]
+		next += n
+	}
+	for i := range items {
+		if keep == nil || keep(&items[i]) {
+			block := dropBlock(&items[i])
+			buckets[block] = append(buckets[block], placedDrop{item: &items[i], block: block})
+		}
+	}
+	return buckets
+}
+
+/*
+================
+groundDropBuckets
+
+The population's drops by message block, from the division's cached
+copy: bucketed once per revision and shared by every viewer of the
+population.
+================
+*/
+func (rt *Runtime) groundDropBuckets(division string, population grounditem.Population) map[worldgeom.InterestBlock][]placedDrop {
+	revision := rt.Ground.DivisionRevision(division)
+	rt.groundDrops.mu.Lock()
+	defer rt.groundDrops.mu.Unlock()
+	entry := rt.groundDivisionLocked(division, revision)
+	if buckets, ok := entry.buckets[population]; ok {
+		return buckets
+	}
+	buckets := bucketDrops(entry.items, func(item *grounditem.Item) bool { return item.Population == population })
+	if entry.buckets == nil {
+		entry.buckets = make(map[grounditem.Population]map[worldgeom.InterestBlock][]placedDrop)
+	}
+	entry.buckets[population] = buckets
+	return buckets
 }
 
 /*
@@ -66,26 +213,49 @@ groundScope
 The drops a viewer in block viewer should be shown but is not, and the
 published drops it should no longer be shown: out of range, or gone from
 the population.
+
+buckets are the population's shared cache rows, read-only here. shown
+is the caller's scratch set, cleared on entry, so one map serves every
+viewer of a pass. Spawn keeps the old flat walk's order - gid ascending,
+as the registry reads - so the bucket visit order never reaches the
+wire.
 ================
 */
-func groundScope(drops []placedDrop, viewer worldgeom.InterestBlock, published []uint32) ([]grounditem.Item, []uint32) {
-	shown := make(map[uint32]struct{})
+func groundScope(buckets map[worldgeom.InterestBlock][]placedDrop, viewer worldgeom.InterestBlock, published []uint32,
+	shown map[uint32]struct{},
+) ([]grounditem.Item, []uint32) {
+	clear(shown)
 	for _, gid := range published {
 		if gid > domain.GroundItemGIDBase && gid <= domain.GroundItemGIDLimit {
 			shown[gid] = struct{}{}
 		}
 	}
 	var spawn []grounditem.Item
-	for _, drop := range drops {
-		if !viewer.Adjacent(drop.block) {
-			continue
+	scan := func(drops []placedDrop) {
+		for _, drop := range drops {
+			if _, exists := shown[drop.item.Gid]; exists {
+				delete(shown, drop.item.Gid)
+				continue
+			}
+			spawn = append(spawn, *drop.item)
 		}
-		if _, exists := shown[drop.item.Gid]; exists {
-			delete(shown, drop.item.Gid)
-			continue
-		}
-		spawn = append(spawn, drop.item)
 	}
+	if viewer.Whole {
+		// A block-less dungeon viewer neighbours every block of its region.
+		for block, drops := range buckets {
+			if block.Dungeon == viewer.Dungeon {
+				scan(drops)
+			}
+		}
+	} else {
+		for dx := -1; dx <= 1; dx++ {
+			for dz := -1; dz <= 1; dz++ {
+				scan(buckets[worldgeom.InterestBlock{Dungeon: viewer.Dungeon, X: viewer.X + dx, Z: viewer.Z + dz}])
+			}
+		}
+		scan(buckets[worldgeom.InterestBlock{Dungeon: viewer.Dungeon, Whole: true}])
+	}
+	sort.Slice(spawn, func(i, j int) bool { return spawn[i].Gid < spawn[j].Gid })
 	despawn := make([]uint32, 0, len(shown))
 	for gid := range shown {
 		despawn = append(despawn, gid)
@@ -175,7 +345,7 @@ func (rt *Runtime) GroundObjectRows(division string, c *enterworld.Character, en
 	var items []grounditem.Item
 	for _, drop := range placeDrops(rt.CharacterGroundItems(division, c)) {
 		if viewer.Adjacent(drop.block) {
-			items = append(items, drop.item)
+			items = append(items, *drop.item)
 		}
 	}
 	return enterworld.GroundObjectListRows(items)
@@ -238,18 +408,14 @@ func (rt *Runtime) advanceDivisionGroundScope(division string, sessions []simula
 ) {
 	unlock := rt.LockPublication(division, "groundScope")
 	defer unlock()
-	placed := make(map[grounditem.Population][]placedDrop)
+	shown := make(map[uint32]struct{})
 	for _, session := range sessions {
 		population, ok := sessionGroundPopulation(session)
 		if !ok {
 			continue
 		}
-		drops, cached := placed[population]
-		if !cached {
-			drops = placeDrops(rt.Ground.AllInPopulation(division, population))
-			placed[population] = drops
-		}
-		spawn, despawn := groundScope(drops, viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects)
+		spawn, despawn := groundScope(rt.groundDropBuckets(division, population),
+			viewerBlock(session.World.LiveSpawnAt(nowMs)), session.PublishedObjects, shown)
 		if len(spawn) == 0 && len(despawn) == 0 {
 			continue
 		}

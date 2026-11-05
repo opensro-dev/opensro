@@ -236,6 +236,27 @@ export function mallPageLayout( rect: readonly [number, number, number, number],
 
 /*
 ================
+mallPageNumberPresentation
+
+How one page number of the manager draws. The page manager is born with
+three colours (its constructor defaults): white for a plain page, and
+0xFFFF9951 for both the styled face and the current page. Drawing a page
+(CIFPageManager_SetCurrentPage) gives the current page the third colour
+and the styled font face, and every other page the white and the plain
+face; the mall never recolours them.
+================
+*/
+export function mallPageNumberPresentation( page: number, current: number ): {
+	color: AuthoredControl["color"] | undefined;
+	fontStyle: number;
+} {
+	return page === current ?
+		{ color: [ 1, 0x99 / 255, 0x51 / 255, 1 ], fontStyle: 2 } :
+		{ color: undefined, fontStyle: 0 };
+}
+
+/*
+================
 mallCurrencyRows
 
 6BF320 starts y at 80, advances 22 before each mall row and grows the
@@ -279,7 +300,9 @@ mallQuestionLayout
 
 528920 configures reservation and bulk confirmations. 52859D creates worn
 name/cost pairs at y=100 with a 16-pixel pitch; the sentinel row anchors the
-native total, points, buttons and final height.
+native total, points, buttons and final height. On the two boxes that draw
+a total row (worn 529846, basket 529BE7) the total control (+0x89C) is
+captioned UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL.
 ================
 */
 export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "basket", count: number ) {
@@ -311,6 +334,9 @@ export function mallQuestionLayout( kind: "reserve" | "remove" | "worn" | "baske
 		rowStart: ROW_START,
 		rowPitch: ROW_PITCH,
 		totalY: kind === "basket" ? 74 : totalY + 4,
-		pointY: kind === "basket" ? 92 : totalY + 22
+		pointY: kind === "basket" ? 92 : totalY + 22,
+		totalCaption: kind === "worn" || kind === "basket" ?
+			"UIIT_MSG_QUESTION_SILKMALL_ZZIM_LUMP_BUY_TOTAL" :
+			undefined
 	};
 }

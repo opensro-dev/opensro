@@ -10,7 +10,7 @@ terrain-associations.ts - native terrain texture coverage and sampling rules
 passes
 ================
 */
-// Native association ordering/claim/fringe algorithm (sub_8b3aa0). Unlike a
+// Native association ordering/claim/fringe algorithm (SWorldCell_BuildTerrainMeshLOD). Unlike a
 // dominant-texture shortcut, every surviving association has a corner mask.
 export function passes( words: readonly number[], step: number ) {
 	const n = 16 / step, axis = n + 1, pad = n + 2, keys = new Set<number>();

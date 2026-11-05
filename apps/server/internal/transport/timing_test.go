@@ -31,10 +31,10 @@ func TestTimingHistogramsBucketHandlersPhasesAndSlowHooks(t *testing.T) {
 	})
 	m := hub.Metrics()
 	move := m.HandlerMs["0x7738"]
-	if !equalCounts(move.Buckets, []uint64{0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1}) || move.MaxMs != 2000 {
+	if !equalCounts(move.Buckets, []uint64{0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}) || move.MaxMs != 2000 {
 		t.Fatalf("handler histogram = %+v", move)
 	}
-	if m.TickPhaseMs["divisions"].Buckets[6] != 1 || m.TickPhaseMs["hooks"].Buckets[9] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
+	if m.TickPhaseMs["divisions"].Buckets[6] != 1 || m.TickPhaseMs["hooks"].Buckets[12] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
 		t.Fatalf("tick phases = %+v", m.TickPhaseMs)
 	}
 	if slow := m.SlowHooks["action.(*Runtime).TickHook.func1"]; slow.Count != 1 || slow.MaxMs != 300 {
@@ -90,7 +90,7 @@ func TestTickCommitsAreCounted(t *testing.T) {
 	if m.TickCommit != want {
 		t.Fatalf("tick commit = %+v, want %+v", m.TickCommit, want)
 	}
-	if !equalCounts(m.TickPhaseMs["commit"].Buckets, []uint64{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0}) {
+	if !equalCounts(m.TickPhaseMs["commit"].Buckets, []uint64{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}) {
 		t.Fatalf("commit histogram = %+v", m.TickPhaseMs["commit"])
 	}
 }
@@ -185,5 +185,35 @@ func TestPublicationHoldsRecordMaxByLabel(t *testing.T) {
 	}
 	if got := holds["requestOp"]; got.Count != 1 || got.MaxMs != 200 {
 		t.Fatalf("requestOp holds = %+v, want count 1, max 200 ms", got)
+	}
+}
+
+/*
+================
+TestUnhandledOpcodesAreNamedAndBounded
+
+A frame no handler takes is counted under its opcode, and a sender walking
+the opcode space cannot grow the map past its bound (#2147).
+================
+*/
+func TestUnhandledOpcodesAreNamedAndBounded(t *testing.T) {
+	hub := newHub(testCfg())
+	hub.metrics.timing.recordUnhandled(0x7001)
+	hub.metrics.timing.recordUnhandled(0x7001)
+	hub.metrics.timing.recordUnhandled(0x7002)
+	m := hub.Metrics()
+	if m.UnhandledOpcodes["0x7001"] != 2 || m.UnhandledOpcodes["0x7002"] != 1 {
+		t.Fatalf("unhandled opcodes = %v, want 0x7001:2 0x7002:1", m.UnhandledOpcodes)
+	}
+
+	for opcode := 0; opcode <= 0xFFFF; opcode++ {
+		hub.metrics.timing.recordUnhandled(uint16(opcode))
+	}
+	m = hub.Metrics()
+	if len(m.UnhandledOpcodes) != maxUnhandledOpcodes {
+		t.Fatalf("distinct opcodes = %d, want the bound %d", len(m.UnhandledOpcodes), maxUnhandledOpcodes)
+	}
+	if m.UnhandledOpcodes["0x7001"] != 3 {
+		t.Fatalf("0x7001 after the walk = %d, want 3: a known opcode keeps counting", m.UnhandledOpcodes["0x7001"])
 	}
 }

@@ -15,7 +15,6 @@ package grounditem
 // the domain-owned persistence values.
 
 import (
-	"sort"
 	"strconv"
 	"time"
 
@@ -127,10 +126,9 @@ func (r *Registry) snapshotLocked() domain.GroundSnapshot {
 			continue
 		}
 		rows := make([]domain.GroundItemRecord, 0, len(items))
-		for _, item := range items {
-			rows = append(rows, persistedFromItem(item))
+		for _, gid := range sortedGids(items) {
+			rows = append(rows, persistedFromItem(items[gid]))
 		}
-		sort.Slice(rows, func(a, b int) bool { return rows[a].Gid < rows[b].Gid })
 		divisions[divisionID] = rows
 	}
 	return domain.GroundSnapshot{Version: domain.GroundSnapshotVersion, GidCounter: r.counter, Divisions: divisions}
@@ -157,6 +155,11 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		r.counter = domain.MaxGroundItemGIDCounter
 	}
 	r.revision++
+	// Rows the snapshot holds but the registry drops (retired
+	// populations, unkeyable gids) are known to no stamp, so the next
+	// commit diffs the whole plane.
+	r.changes = changeJournal{}
+	r.resyncLocked()
 	for divisionID, rows := range s.Divisions {
 		items := make(map[uint32]Item, len(rows))
 		for _, row := range rows {
@@ -178,5 +181,18 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		if len(items) > 0 {
 			r.byDivision[divisionID] = items
 		}
+	}
+	// The plane was replaced wholesale: every division a per-division
+	// cache could hold - the ones the registry held and the ones the
+	// snapshot brought alike - takes the new global value as its
+	// stamp, so no division keeps serving its pre-restore copy.
+	if r.divRevisions == nil {
+		r.divRevisions = make(map[string]uint64)
+	}
+	for divisionID := range r.divRevisions {
+		r.divRevisions[divisionID] = r.revision
+	}
+	for divisionID := range r.byDivision {
+		r.divRevisions[divisionID] = r.revision
 	}
 }

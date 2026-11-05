@@ -145,7 +145,7 @@ func (rt *Runtime) OpenResuscitation(c *enterworld.Character, npc string) (OpRes
 		} else if npc == "NPC_EU_POTION" || npc == "NPC_CA_POTION" {
 			symbol = "SN_TALK_QSP_ALL_POTION_1_22"
 		}
-		result.Frames = []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}
+		result.Frames = []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogAnswer(symbol)}}
 		return false
 	})
 	if len(result.Frames) == 0 {

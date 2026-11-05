@@ -79,6 +79,10 @@ type monsterStrikeInput struct {
 	from     monster.Pose
 	percent  uint64
 	now      int64
+	// dealerCape is the free-battle group of the player a companion
+	// dealer answers for (0 for a population monster): the victim's
+	// death settlement gates a transport's cargo drop on it.
+	dealerCape uint8
 }
 
 /*
@@ -170,7 +174,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
 	// The shares fence and Pain Quota links took off the hits land on their
 	// takers as this monster's hits (linkeddamage.go).
-	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs))
+	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs, rt.tickDoors()))
 	// A Scream Mask on the victim rolls its statuses on this monster (screammask.go).
 	returned = mergeOpResults(returned, rt.screamMaskMonster(divisionID, character, instance, in.from, nowMs))
 	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)
@@ -252,9 +256,9 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		records = append(records, rolled...)
 	}
 	hit := cosHit{monsterSource: populationMonster, resolveHits: populationMonster, owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
-		displacement: displacement, displaceAt: displaceAt,
+		displacement: displacement, displaceAt: displaceAt, winnerCape: in.dealerCape,
 		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
-	hit.block.sources = rt.captureAbnormalSources(divisionID, hit.block.block, records)
+	hit.block.sources = rt.captureAbnormalSourcesLife(divisionID, hit.block.block, records)
 	if !rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
 		if !rt.applyCOSHitInDoor(divisionID, &hit, nowMs) {
 			return false
@@ -311,6 +315,17 @@ type cosHit struct {
 	displacement  *playerDisplacement
 	displaceAt    int
 	context       abnormal.HitContext
+	// winnerName names the player who dealt this hit ("" when the dealer
+	// is a monster or a companion): a fatal hit's dealer is named on the
+	// death settlement for the cargo scatter's log line only - trade
+	// goods are never reserved to it (cosdeath.go).
+	winnerName string
+	// winnerCape is the fatal dealer's free-battle group (0 when the
+	// dealer is a monster, judged at plan time outside the doors): the
+	// death settlement reads it for the kill credit's relation gate on
+	// a transport's cargo (cosdeath.go). A companion dealer answers
+	// with its owner's group, as the native relation does.
+	winnerCape uint8
 	// Filled by applyCOSHitInDoor.
 	strike    monsterStrike
 	remaining uint32
@@ -386,6 +401,8 @@ func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64
 	if strike.fatal {
 		block.changed = block.block.ClearAll(block)
 		block.fatal = true
+		block.winnerName = hit.winnerName
+		block.winnerCape = hit.winnerCape
 	} else {
 		if block.block.Mask != 0 {
 			block.changed = block.block.BreakOnHit(block, hit.context) || block.changed

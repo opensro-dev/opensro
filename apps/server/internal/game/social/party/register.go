@@ -511,7 +511,7 @@ handleJoinInvite
 
 handleJoinInvite applies one 0x751A in-party proposal: the actor must
 be partied and privileged (leader, or the party's join-anyone option
-- the same gate the client dispatch sub_5b78e0 takes), the target
+- the same gate the client dispatch CIFParty_OnFormPartyClicked takes), the target
 resolvable, online and partyless, the roster under its experience-mode
 capacity. The target gets a 0x3393 type-3 prompt (formation uses type 2);
 the join commits only on their accept consent.

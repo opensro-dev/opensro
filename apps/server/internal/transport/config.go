@@ -70,8 +70,25 @@ type Config struct {
 	GracePeriod time.Duration
 	// KeepaliveInterval is how often a quiet attached client is pinged.
 	KeepaliveInterval time.Duration
+	// WireProofInterval is how long a live session may stay silent
+	// outbound before the keepalive proves the wire with a PING (#2148).
+	// It must stay inside the client's stall window (7 s + 1 s confirm).
+	WireProofInterval time.Duration
 	// IdleTimeout detaches a client that answered nothing at all.
 	IdleTimeout time.Duration
+	// EntryBootstrapBound caps how long a scene admission may sit with
+	// its bootstrap (or refusal) still unenqueued before the session is
+	// closed with a logged cause. A completed entry enqueues in well
+	// under a second; this bound only fires when the entry lane is
+	// wedged, so a slow real entry can never hit it.
+	EntryBootstrapBound time.Duration
+	// RingParkBound caps how long the session writer may stay parked on
+	// a full resume ring (stream_ring.go) with no stream-ack progress
+	// before the session detaches into its resume grace window. A
+	// client that is applying frames acks within a frame or two, so
+	// the bound only fires when the applier is wedged; an unbounded
+	// park would hold the burst, and the session, forever (#2146).
+	RingParkBound time.Duration
 	// OutboundQueue and OutboundQueueBytes bound pending reliable and
 	// coalesced frames per session. Keeping both limits prevents tiny-frame
 	// floods and a few catalogue-sized frames from consuming unbounded memory.
@@ -151,7 +168,10 @@ func DefaultConfig() Config {
 		HelloTimeout:          10 * time.Second,
 		GracePeriod:           30 * time.Second,
 		KeepaliveInterval:     20 * time.Second,
+		WireProofInterval:     4 * time.Second,
 		IdleTimeout:           60 * time.Second,
+		EntryBootstrapBound:   30 * time.Second,
+		RingParkBound:         30 * time.Second,
 		OutboundQueue:         8192,
 		OutboundQueueBytes:    32 << 20,
 		RateLimitPerSec:       25,
@@ -182,8 +202,17 @@ func (c *Config) applyDefaults() {
 	if c.KeepaliveInterval == 0 {
 		c.KeepaliveInterval = d.KeepaliveInterval
 	}
+	if c.WireProofInterval == 0 {
+		c.WireProofInterval = d.WireProofInterval
+	}
 	if c.IdleTimeout == 0 {
 		c.IdleTimeout = d.IdleTimeout
+	}
+	if c.EntryBootstrapBound == 0 {
+		c.EntryBootstrapBound = d.EntryBootstrapBound
+	}
+	if c.RingParkBound == 0 {
+		c.RingParkBound = d.RingParkBound
 	}
 	if c.OutboundQueue == 0 {
 		c.OutboundQueue = d.OutboundQueue

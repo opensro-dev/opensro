@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"reflect"
 	"sort"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -50,7 +51,6 @@ rewardActor
 type rewardActor struct {
 	world     uint32
 	character *enterworld.Character
-	pose      simulation.Spawn
 	party     *RewardParty
 }
 
@@ -77,7 +77,16 @@ authoritative character pointers, then enter a single UpdateMany transaction.
 ================
 */
 func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Character, now int64) rewardRoster {
-	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor)}
+	// The division list is taken before the read door: CharactersForDivision
+	// takes the store's read lock itself, and a second read lock inside the
+	// door waits behind any queued writer while the door holds that writer
+	// off. The slice is a fresh copy of the live pointers, so
+	// the field reads below stay inside the door.
+	characters := rt.deps.CharactersForDivision(division)
+	// Sized for the whole division: the roster runs per credited hit, and
+	// growing the map and slice from empty was most of its cost (#2031).
+	r := rewardRoster{division: division, actors: make(map[uint32]rewardActor, len(characters)),
+		characters: make([]*enterworld.Character, 0, len(characters))}
 	parties := []RewardParty(nil)
 	if rt.RewardParties != nil {
 		parties = rt.RewardParties(division)
@@ -88,12 +97,6 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 			memberParty[gid] = &parties[i]
 		}
 	}
-	// The division list is taken before the read door: CharactersForDivision
-	// takes the store's read lock itself, and a second read lock inside the
-	// door waits behind any queued writer while the door holds that writer
-	// off. The slice is a fresh copy of the live pointers, so
-	// the field reads below stay inside the door.
-	characters := rt.deps.CharactersForDivision(division)
 	rt.deps.Read(division, func() {
 		for _, c := range characters {
 			if c == nil || c.DeletePending {
@@ -103,11 +106,26 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 				continue
 			}
 			gid := enterworld.ObjectIDForCharacter(c)
-			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, pose: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), party: memberParty[gid]}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: memberParty[gid]}
 			r.characters = append(r.characters, c)
 		}
 	})
 	return r
+}
+
+/*
+================
+rewardActorPose
+
+The actor's live position at the moment a settlement or share decision
+reads it. The roster build used to resolve every division member's spawn
+(a world-key build and a mover lookup each) although only the winner and
+its party are ever range-checked (#2030); resolving at the read keeps the
+value at kill-decision time, which is what the range rules judge.
+================
+*/
+func (rt *Runtime) rewardActorPose(division string, a rewardActor, now int64) simulation.Spawn {
+	return rt.liveSpawn(simulation.WorldKey(division, a.character.Name), a.character, now)
 }
 
 /*
@@ -397,7 +415,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	origin := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	originWorld := uint32(impact.Population.ID)
 	if a, ok := roster.actors[winner]; ok {
-		origin = a.pose
+		origin = rt.rewardActorPose(division, a, now)
 		originWorld = a.world
 	}
 	var count uint16
@@ -417,7 +435,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = []float32{factor}
 		} else {
 			for _, gid := range g.party.Members {
-				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, a.pose) {
+				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, rt.rewardActorPose(division, a, now)) {
 					members = append(members, a)
 				}
 			}
@@ -460,6 +478,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		// Port-only, not native (#2547): a Gourd pays one box to every
+		// character who damaged it, each under their own account's cap;
+		// the boxes join the plan here, after admission and the drop
+		// cap, so neither can take them.
+		planned = append(planned, rt.halloweenGourdBoxes(a.character, impact.Instance, planned, impact.Contributions, roster.actors,
+			simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Angle: pose.Heading}, time.UnixMilli(now).UTC())...)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
@@ -470,6 +494,29 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// hunted, so it never counts either, however it died.
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
+			// The Sun counting hook (sundrops.go) counts the same
+			// committed loot the same way, Sun tier only and with the
+			// item named, for the #2538 measurement cycle.
+			rt.countSunDrops(a.character, drops, now)
+		}
+		// The Halloween daily cap (halloween.go) counts the same
+		// committed loot the same way: every minted box, GM-spawned
+		// kills excluded, lands on its owner's account before the
+		// next kill. An owner whose mint reached the cap is told so
+		// once, with the reset time (#2547).
+		if !impact.Instance.GMSpawned {
+			owners := make(map[uint32]*enterworld.Character, len(roster.actors))
+			for gid, member := range roster.actors {
+				owners[gid] = member.character
+			}
+			for _, reached := range rt.countHalloweenBoxes(owners, drops, now) {
+				frame := halloweenBoxCapFrame()
+				if reached == actor {
+					out.actorFrames = append(out.actorFrames, frame)
+				} else {
+					out.others = append(out.others, RecipientFrames{reached.ID, []wire.Frame{frame}})
+				}
+			}
 		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)

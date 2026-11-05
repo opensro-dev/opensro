@@ -516,6 +516,56 @@ func (s *MonsterState) takeAIEvents(division string, gid uint32) []monsterAIEven
 	return events
 }
 
+/*
+================
+peekAIEvents
+
+The queued tactics events without consuming them: a planning
+step (#2205) reads them now and consumes them at commit.
+================
+*/
+func (s *MonsterState) peekAIEvents(division string, gid uint32) []monsterAIEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	return append([]monsterAIEvent(nil), state.aiEvents[gid]...)
+}
+
+/*
+================
+consumeAIEvents
+
+Drop exactly the events a planning step read (peekAIEvents), once
+its plan commits. Events queued behind them since survive - the
+queue only grows by append between the read and the commit. A
+queue that no longer starts with the read set is left untouched:
+the events then process at the actor's next due, which risks a
+second processing but never the loss the stale-plan rule forbids.
+================
+*/
+func (s *MonsterState) consumeAIEvents(division string, gid uint32, events []monsterAIEvent) {
+	if len(events) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	queued := state.aiEvents[gid]
+	if len(queued) < len(events) {
+		return
+	}
+	for i, event := range events {
+		if queued[i] != event {
+			return
+		}
+	}
+	if queued = queued[len(events):]; len(queued) == 0 {
+		delete(state.aiEvents, gid)
+		return
+	}
+	state.aiEvents[gid] = queued
+}
+
 // MonsterAbnormalCandidate is one monster with an active block.
 /*
 ================

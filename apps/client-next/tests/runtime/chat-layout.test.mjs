@@ -121,6 +121,80 @@ test("compact landscape limits row groups by height without changing the request
 	assert.deepEqual( chatLayout( { ...state, height: 667 } ).scrolling.bounds, [ 0, 129, 399, 378 ] );
 });
 
+const EVENT_LINES = [
+	{ channel: 1, name: "Peer", text: "hello all", outgoing: false },
+	{ channel: 4, name: "Peer", text: "hello party", outgoing: false },
+	{
+		channel: 7,
+		name: "",
+		text: "Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl",
+		outgoing: false
+	}
+];
+
+/*
+================
+visibleLabels
+================
+*/
+/** @param {ReturnType<typeof chatLayout>} result */
+function visibleLabels( result ) {
+	return result.controls.filter( c => c.id.startsWith( "chat-line:" ) ).map( c => c.label );
+}
+
+test("without the Event tab the four native tabs keep notices in All", () => {
+	const result = chatLayout( input( { lines: EVENT_LINES, welcome: "" } ) );
+	assert.deepEqual(
+		result.controls.filter( c => c.id.startsWith( "chat-tab:" ) ).map( c => c.id ),
+		[ "chat-tab:0", "chat-tab:1", "chat-tab:2", "chat-tab:3" ]
+	);
+	assert.ok( visibleLabels( result ).some( label => label.includes( "Seal Of Star" ) ) );
+});
+
+test("the Event tab holds channel-7 notices and All skips them", () => {
+	const tabs = chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true } ) );
+	assert.deepEqual(
+		tabs.controls.filter( c => c.id.startsWith( "chat-tab:" ) ).map( c => [ c.id, c.label ] ),
+		[
+			[ "chat-tab:0", "UIIT_CTL_CHAT_ALL" ],
+			[ "chat-tab:1", "UIIT_CTL_PARTY" ],
+			[ "chat-tab:2", "UIIT_CTL_GUILD" ],
+			[ "chat-tab:3", "UIIT_STT_GUILD_RESPECT_ALLY" ],
+			[ "chat-tab:4", "Event" ]
+		]
+	);
+	const all = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 0 } ) ) );
+	assert.ok( all.some( label => label.includes( "hello all" ) ) );
+	assert.ok( !all.some( label => label.includes( "Seal Of Star" ) ) );
+	const party = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 1 } ) ) );
+	assert.deepEqual( party.filter( label => label.includes( "hello" ) ).length, 1 );
+	assert.ok( !party.some( label => label.includes( "Seal Of Star" ) ) );
+	const event = visibleLabels( chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 4 } ) ) );
+	assert.ok( event.length >= 1 );
+	assert.ok( event.some( label => label.includes( "Seal Of Star" ) ) );
+	assert.ok( !event.some( label => label.includes( "hello" ) ) );
+});
+
+test("a saved Event selection clamps when the row is off, and five tabs fit narrow chat", () => {
+	const clamped = chatLayout( input( { lines: EVENT_LINES, welcome: "", tab: 4 } ) );
+	assert.equal( clamped.controls.find( c => c.id === "chat-tab:3" )?.selected, true );
+	const narrow = chatLayout( input( {
+		width: 375,
+		height: 667,
+		lines: EVENT_LINES,
+		welcome: "",
+		eventTab: true,
+		tab: 4,
+		compact: { bottom: 100, maxRows: 1 }
+	} ) );
+	const tabRects = narrow.controls.filter( c => c.id.startsWith( "chat-tab:" ) ).map( c => c.rect );
+	assert.equal( tabRects.length, 5 );
+	for ( const r of tabRects ) assert.ok( r[0] >= 0 && r[0] + r[2] <= 375, JSON.stringify( r ) );
+	const desktop = chatLayout( input( { lines: EVENT_LINES, welcome: "", eventTab: true, tab: 4 } ) );
+	const last = desktop.controls.find( c => c.id === "chat-tab:4" )?.rect;
+	assert.ok( last && last[0] + last[2] <= 399, JSON.stringify( last ) );
+});
+
 test("zero displayed rows keeps only the input strip and preserves requested history size", () => {
 	for ( const maxRows of [ 0, -1 ] ) {
 		const state = input( { width: 375, height: 667, rows: 6, compact: { bottom: 140, maxRows } } );

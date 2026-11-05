@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+lifecycle_test.go - the control listener's start, policy and shutdown
+
+The address policy is tested without binding: a test that bound a
+non-loopback interface would make Windows Firewall prompt for every
+fresh test binary. Real starts bind loopback.
+
+===========================================================================
+*/
 package agentapi
 
 import (
@@ -54,7 +65,7 @@ func TestStartRefusesPublicPlaintextListener(t *testing.T) {
 func TestStartAllowsExplicitPrivateNetworkListener(t *testing.T) {
 	api, _ := newTestAPI(t)
 	api.privateNetwork = true
-	serveError, err := api.Start("0.0.0.0:0")
+	serveError, err := api.Start("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("private network Start: %v", err)
 	}
@@ -65,6 +76,29 @@ func TestStartAllowsExplicitPrivateNetworkListener(t *testing.T) {
 	}
 	if err := <-serveError; !errors.Is(err, http.ErrServerClosed) {
 		t.Fatalf("serve error = %v", err)
+	}
+}
+
+/*
+================
+TestControlListenAddressPolicy
+
+The pre-bind policy itself: a wildcard address needs the explicit
+private-network deployment; loopback never does. Testing the function
+keeps the wildcard cases off the network entirely.
+================
+*/
+func TestControlListenAddressPolicy(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:0", "[::]:0"} {
+		if err := checkControlListenAddress(addr, true); err != nil {
+			t.Fatalf("%s with a private-network deployment: %v", addr, err)
+		}
+		if err := checkControlListenAddress(addr, false); err == nil {
+			t.Fatalf("%s accepted without a private-network deployment", addr)
+		}
+	}
+	if err := checkControlListenAddress("127.0.0.1:0", false); err != nil {
+		t.Fatalf("loopback without a private-network deployment: %v", err)
 	}
 }
 

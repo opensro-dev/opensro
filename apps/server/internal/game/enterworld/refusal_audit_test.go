@@ -42,3 +42,34 @@ func TestRefusedDoorThatChangedItsCharacterPanics(t *testing.T) {
 	})
 	t.Fatal("unreachable: the audit did not panic")
 }
+
+/*
+================
+TestSuspendRefusalAuditOnlyWhileSuspended
+
+The tick guard suspends the audit for its measured window: while
+suspended, a door that changes a character and then refuses passes
+unchecked; after restore the same door fails the audit again.
+================
+*/
+func TestSuspendRefusalAuditOnlyWhileSuspended(t *testing.T) {
+	gold := int64(10)
+	c := &Character{Name: "audited", Gold: &gold}
+	dirtyRefusal := func() bool { *c.Gold++; return false }
+	restore := SuspendRefusalAudit(t)
+	func() {
+		defer func() {
+			if recover() != nil {
+				t.Error("a suspended audit still checked the door")
+			}
+		}()
+		refusalAudited("suspended", []*Character{c}, dirtyRefusal)()
+	}()
+	restore()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("the audit stayed off after restore")
+		}
+	}()
+	refusalAudited("restored", []*Character{c}, dirtyRefusal)()
+}

@@ -64,7 +64,13 @@ const NAVIGATION_REJECT = WALK_NAVIGATION_REJECT;
 // A skill run-up's server goal lies within this heading of the predicted
 // one, seen from the predicted start (sameApproachWalk).
 const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
+// Cast displacement kind 2: B245 result bit 2, a teleport that lands at once
+// (combat.ts routes it; cast-displacement.ts gives it no duration).
+const CAST_TELEPORT = 2;
 const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
+// The hard backstop: even with the stream still flowing, a receipt this
+// late is lost - answers are ordered, so it can only be missing (#1978).
+const MOVEMENT_RECEIPT_MAX_WAIT_MS = 90000;
 // What reconcile does when the walk to a server position is blocked
 // (86D9D0's fourth argument): keep the nav cell, find it at the point, or
 // walk from the predicted pose when reachable and otherwise resolve at the
@@ -262,6 +268,10 @@ export function createMovement(
 		sent: number;
 		direction?: number;
 	}>();
+	// Simulation time of the last inbound frame of any kind
+	// (noteInboundProgress): receipts travel in stream order, so while
+	// frames keep arriving a missing receipt is behind them, not lost.
+	let lastInboundAt = 0;
 	// The goal of the last walk requested, the latest measured round trip,
 	// and a walk correctsWalkStart kept while its receipt is outstanding.
 	let lastGoal: Pose | undefined, roundTripMs = DEFAULT_ROUND_TRIP_MS;
@@ -635,6 +645,30 @@ is endPrediction); the next server walk reconciles from here.
 	}
 	/*
 ================
+predictedApproachSegment
+
+The one build of a predicted approach leg (an attack chase, a skill
+run-up), shared by retargetPrediction's re-aim and correct()'s re-aim
+from a corrected pose. Null off navigation coverage, as predictApproach
+refuses there; the goal is taken as admitted (the callers admit it), so
+no clip is re-run. owners is never set: the prediction's spans were
+never bound (bindOwners binds them when the server's walk adopts).
+================
+	*/
+	function predictedApproachSegment( current: Pose, to: Pose, now: number ): NonNullable<typeof segment> | null {
+		if ( !navigation.available( current ) ) return null;
+		return {
+			from: current,
+			to: { ...to, angle: movementHeading( current, to ) },
+			start: now,
+			timing: "speed",
+			lead: "client",
+			duration: movementDuration( poseDistance( current, to ), speed ),
+			admitted: true
+		};
+	}
+	/*
+================
 bindOwners
 ================
 	*/
@@ -937,7 +971,16 @@ displace
 			// one after the displacement, and its receipt owns the outcome.
 			surfaceCursor = {};
 			walk = null;
-			pose = authoritative = navigation.surface( next.from, from, owner );
+			if ( command.kind !== CAST_TELEPORT ) pose = authoritative = navigation.surface( next.from, from, owner );
+			else {
+				// A teleport (kind 2) does not walk: the server seats the point by
+				// FindNavCell at the point itself (nearest |deltaY|, terrain wins
+				// ties; 0x98B1D0 -> 0x99FD90), as a correction's RESOLVE_CELL
+				// does. Resolving it against the old height and owner put a
+				// Wizard who teleported from the ground onto stairs under them.
+				owner = undefined;
+				pose = authoritative = navigation.surface( next.from );
+			}
 			poseAtMs = now;
 			segment = next.duration ?
 				bindOwners( {
@@ -1337,6 +1380,13 @@ correct
 				} );
 				retainCorrectionHistory( previousHistory, before, pose );
 			}
+			// A predicted approach (an attack chase, a skill run-up) survives
+			// the correction and re-aims from the corrected pose below: the
+			// native B2F5 handler (775B50) only reseeds the walker
+			// (86C9C0, 86D9D0) and writes no target or action state, so the
+			// pending cast's approach is still owed. Dropping it here left
+			// the player standing with the target held (#2368).
+			const keptApproach = predicted?.approach ? predicted : null;
 			predicted = null;
 			surfaceCursor = {};
 			segment = null;
@@ -1367,6 +1417,19 @@ correct
 						admitted: true,
 						history: transition.walkingPath
 					};
+				}
+			}
+			// No pending request resumed the walk: re-aim the kept approach
+			// from the corrected pose (predictedApproachSegment). Off
+			// navigation coverage the approach is dropped, as a refused
+			// re-aim drops nothing else. The rebuilt leg carries the
+			// correction's walking history, as the pending resume above
+			// does, so the display keeps the proven return edges.
+			if ( keptApproach && !segment && now !== undefined ) {
+				const rebuilt = predictedApproachSegment( pose, keptApproach.to, now );
+				if ( rebuilt ) {
+					predicted = keptApproach;
+					segment = { ...rebuilt, history: transition.walkingPath };
 				}
 			}
 		},
@@ -1514,25 +1577,12 @@ coverage, like predictApproach; the caller then keeps the old leg.
 			advanceTo( now );
 			const current = pose,
 				to = admitPose( value ),
-				query: { slide: boolean; sourceOwner?: NavOwner; owners?: readonly NavOwnerSpan[]; } = {
-					slide: false,
-					sourceOwner: owner
-				};
-			const clipped = navigation.available( current ) ? to : null;
-			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
+				rebuilt = predictedApproachSegment( current, to, now );
+			if ( !rebuilt ) return false;
 			beginTransition( "input" );
 			predicted = { ...predicted, to };
 			pose = current;
-			segment = {
-				from: current,
-				to: { ...clipped, angle: movementHeading( current, clipped ) },
-				start: now,
-				timing: "speed",
-				lead: "client",
-				duration: movementDuration( poseDistance( current, clipped ), speed ),
-				owners: query.owners,
-				admitted: true
-			};
+			segment = rebuilt;
 			return true;
 		},
 		/*
@@ -1825,6 +1875,20 @@ receive
 		},
 		/*
 ================
+noteInboundProgress
+
+Records that an inbound frame of any kind arrived at now (gameplay's
+receive path). Receipts travel in stream order, so while frames keep
+arriving a missing receipt is behind them, not lost: step's watchdog
+calls a receipt lost only after a full timeout with no inbound
+progress at all, with the backstop as the outer bound (#1978).
+================
+		*/
+		noteInboundProgress( now: number ) {
+			if ( now > lastInboundAt ) lastInboundAt = now;
+		},
+		/*
+================
 oldestPendingSentAt
 
 When the oldest unanswered movement command left, or undefined.
@@ -1841,12 +1905,24 @@ step
 		step( now: number ) {
 			const oldest = pending.entries().next().value;
 			if ( oldest && now - oldest[1].sent > MOVEMENT_RECEIPT_TIMEOUT_MS ) {
-				throw new Error(
-					`Movement receipt timed out: command ${oldest[0]}, age ${
-						now - oldest[1].sent
-					} ms, pending ${pending.size}`,
-					{ cause: MOVEMENT_RECEIPT_TIMEOUT }
-				);
+				// Receipts are ordered behind the inbound stream: while
+				// frames still arrive this one is in transit behind what
+				// has not been consumed yet, not lost. Only a full
+				// timeout of silence - or the hard backstop - calls it
+				// lost (#1978).
+				const silent = now - lastInboundAt > MOVEMENT_RECEIPT_TIMEOUT_MS;
+				const overdue = now - oldest[1].sent > MOVEMENT_RECEIPT_MAX_WAIT_MS;
+				if ( silent || overdue ) {
+					// The incident's socket suffix is fed by keepalive pings,
+					// so this lane's own silence rides here beside it: the
+					// two clocks must not be conflated (#2148).
+					throw new Error(
+						`Movement receipt timed out: command ${oldest[0]}, age ${
+							now - oldest[1].sent
+						} ms, pending ${pending.size}, gameplay silence ${Math.round( now - lastInboundAt )} ms`,
+						{ cause: MOVEMENT_RECEIPT_TIMEOUT }
+					);
+				}
 			}
 			// A kept walk's receipt is overdue: the server never walked it.
 			// Walk back to the stop it sent instead of staying ahead of it.
@@ -1968,6 +2044,7 @@ clear
 			predicted = null;
 			castHold = null;
 			pending.clear();
+			lastInboundAt = 0;
 			keptWalk = null;
 			lastGoal = undefined;
 			error = null;

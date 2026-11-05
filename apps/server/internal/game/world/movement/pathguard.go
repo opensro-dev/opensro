@@ -8,7 +8,7 @@ package movement
 // spawn rescue. A modified client can therefore move through walls, up
 // cliffs, and into geometry - the stock client refuses blocked-tile clicks
 // locally (cellForLocal gate) and clips its own advance to nav edges
-// (client sub_428930 NavMesh_AdvanceWithinMesh -> sub_43b980 NavEdge_ClipSegment),
+// (client CRTNavMeshObj_WalkOwnedCells NavMesh_AdvanceWithinMesh -> Seg2D_Intersect NavEdge_ClipSegment),
 // so retail players can never compose such a move.
 //
 // WHY AN ENDPOINT CHECK IS NOT A FIX: ApplyMove interpolates a STRAIGHT
@@ -69,7 +69,7 @@ package movement
 // anywhere on the chord - endpoint, departure, or interior - is
 // OVERRIDDEN when the chord point there stands on an object-nav deck
 // (worldPointOnObjectDeck, objectnav.go: the native nearest-Y owner
-// arbitration of client sub_403d20 over the shipped BMS object-nav payloads).
+// arbitration of client CRTNavMeshTerrain_ResolvePosition over the shipped BMS object-nav payloads).
 // This kills the known category-A FALSE POSITIVE that blocked the enforce
 // posture: a legal click onto a bridge deck whose underlying seabed tile
 // is blocked (the Constantinople harbor bridge, region 0x6850) used to

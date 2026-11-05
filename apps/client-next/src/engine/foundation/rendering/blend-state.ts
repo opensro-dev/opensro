@@ -12,7 +12,7 @@ a pair into the WebGPU blend the fixed-function pipeline would apply
   - without D3DRS_SEPARATEALPHABLENDENABLE the alpha channel blends with
     the same factors;
   - the back buffer is X8R8G8B8 (the windowed device takes the desktop
-    format, sub_a1e190, at the 32-bit mode sub_a1b8f0 forces), so it has no
+    format, CD3DApplication_FindBestWindowedMode, at the 32-bit mode CD3DApplication_Create forces), so it has no
     alpha: DESTALPHA reads 1 and INVDESTALPHA 0;
   - BOTHSRCALPHA and BOTHINVSRCALPHA, as the source factor, set both;
   - BLENDFACTOR reads D3DRS_BLENDFACTOR, the pass's blend constant.

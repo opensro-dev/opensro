@@ -37,9 +37,10 @@ import {
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
 import { createRecording } from "./recording";
-import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget } from "./archive";
+import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget, diagnosticValue } from "./archive";
 import { fitTrack } from "./transcode";
 import { createJournal, JOURNAL_WINDOW_MS, refusalReason } from "./journal";
+import { createAssetHistory } from "./asset-history";
 
 const ROUTE = "/title/bug-report";
 const MAX_ERRORS = 50;
@@ -106,6 +107,8 @@ export interface BugReportOptions {
 	readonly state: () => DiagnosticState;
 	/** The transport's frame journal (SimulationHost.netJournal), for network.json. */
 	readonly network?: () => Float64Array;
+	/** The asset owner's copied request state (AssetOwner.snapshot), for assets.json. */
+	readonly assets?: () => import("@/engine/contracts/assets").AssetJobSnapshot | undefined;
 }
 
 /*
@@ -135,6 +138,10 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	const recorder = createReplayRecorder( options.canvas, options.sound );
 	const archive = createReportArchive();
 	const journal = createJournal( options.canvas );
+	const assetHistory = createAssetHistory( {
+		read: () => options.assets?.(),
+		phase: () => options.state().session?.phase ?? null
+	} );
 	let movementOriginMs: number | undefined;
 	/*
 	================
@@ -590,7 +597,8 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			"network.json": json( networkJournal( zeroMs, fromMs ) ),
 			"movement.json": json( dumpMovement() ),
 			"state.json": json( state ),
-			"environment.json": json( environment() )
+			"environment.json": json( environment() ),
+			"assets.json": json( assetHistory.document( zeroMs, performance.now() ) )
 		};
 	}
 
@@ -758,7 +766,18 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		},
 		dumpMovement,
 		reportsEnabled: () => availability === "on",
-		recordingFrame: () => recording.frame(),
+		/*
+		================
+		recordingFrame
+
+		Every UI frame, the loading screen's included: the recording's timer
+		and the asset queue's history (asset-history.ts).
+		================
+		*/
+		recordingFrame() {
+			recording.frame();
+			assetHistory.sample( performance.now() );
+		},
 		chat,
 		open,
 		note,
@@ -858,15 +877,9 @@ function reportId() {
 ================
 json
 
-JSON for the .zip: Maps and Sets as plain data, binary as its size.
+JSON for the .zip, through archive's shared replacer (diagnosticValue).
 ================
 */
 function json( value: unknown ): string {
-	return JSON.stringify( value, ( _key, item: unknown ) => {
-		if ( item instanceof Map ) return Object.fromEntries( item );
-		if ( item instanceof Set ) return [ ...item ];
-		if ( ArrayBuffer.isView( item ) ) return `[${item.constructor.name}: ${item.byteLength} bytes]`;
-		if ( typeof item === "bigint" ) return item.toString();
-		return item;
-	}, "\t" ) ?? "null";
+	return JSON.stringify( value, diagnosticValue, "\t" ) ?? "null";
 }

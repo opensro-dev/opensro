@@ -1,0 +1,21 @@
+{
+ "width": 1600,
+ "height": 900,
+ "semantics": {
+  "loading": false,
+  "loadingProgress": 0,
+  "loadingStatus": "Loading world assets",
+  "loadingVisible": true,
+  "message": "Health unknown; mana unknown; target none. 1 nearby entities.",
+  "title": "Silkroad game interface",
+  "titleCredit": false
+ },
+ "controls": [],
+ "quads": [
+  "{\"clip\":[0,0,1600,900],\"color\":[0,0,0,1],\"rect\":[0,0,1600,900],\"texture\":\"\",\"uv\":[0,0,1,1]}",
+  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[200,0,1200,900],\"texture\":\"/assets/images/Media_extracted/interface/loading/loading_europe_1.png\",\"uv\":[0,0,1,1]}",
+  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[381,730,840.75,48],\"texture\":\"/assets/images/Media_extracted/interface/loading/loading_form.png\",\"uv\":[0,0,1,1]}",
+  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[401,739,0,15],\"texture\":\"/assets/images/Media_extracted/interface/loading/gauge_loading.png\",\"uv\":[0,0,0,1]}",
+  "{\"clip\":[0,0,1600,900],\"color\":[1,1,1,1],\"rect\":[401,769,189,26.25],\"texture\":\"/assets/images/Media_extracted/interface/loading/nowloading.png\",\"uv\":[0,0,1,1]}"
+ ]
+}

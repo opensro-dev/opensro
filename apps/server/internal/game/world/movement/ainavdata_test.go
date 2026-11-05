@@ -16,6 +16,8 @@ package movement
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -82,6 +84,37 @@ func TestAINavDataLoadsDonwhangAndRefuses8009(t *testing.T) {
 	_, err := decodeAINavFile(aiNavRefusedRegion, length, raw, refused)
 	if err == nil || !strings.Contains(err.Error(), "route cells") {
 		t.Fatalf("0x8009 refused for %v, want a cell-count mismatch", err)
+	}
+	// #1979: this refusal is the recorded decision, logged at info level.
+	if _, known := aiNavKnownRefusal(aiNavRefusedRegion, err); !known {
+		t.Fatalf("0x8009's cell-count refusal is not the recorded mismatch: %v", err)
+	}
+}
+
+/*
+================
+TestAINavKnownRefusalOnlyCoversTheRecordedMismatch
+
+#1979: only 0x8009's cell-count refusal is the recorded decision. The
+same region failing another way, or another region failing on cell
+counts, still warns.
+================
+*/
+func TestAINavKnownRefusalOnlyCoversTheRecordedMismatch(t *testing.T) {
+	cells := fmt.Errorf("block 0: 57 route cells, the mesh has 187: %w", errAINavCellMismatch)
+	for _, c := range []struct {
+		name   string
+		region uint16
+		err    error
+		known  bool
+	}{
+		{"the arena's cell counts", aiNavRefusedRegion, cells, true},
+		{"the arena failing to parse", aiNavRefusedRegion, errors.New("route trailer 7, want 0"), false},
+		{"another dungeon's cell counts", aiNavDonwhangRegion, cells, false},
+	} {
+		if _, known := aiNavKnownRefusal(c.region, c.err); known != c.known {
+			t.Errorf("%s: known = %v, want %v", c.name, known, c.known)
+		}
 	}
 }
 

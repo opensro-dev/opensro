@@ -22,10 +22,11 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -133,6 +134,30 @@ func TestAnnouncementsAreCappedAndClamped(t *testing.T) {
 
 /*
 ================
+TestAnnouncementsFeedTheEventsNotTheChat
+
+The website's chat once filled with drop and enhancement notices until no
+person's line was left (2026-10-28): a drained notice goes to the events
+stream and leaves the transcript alone.
+================
+*/
+func TestAnnouncementsFeedTheEventsNotTheChat(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.PublicChat = chatfeed.New()
+	rt.PublicChat.Record(testDivision, chatfeed.KindChat, "Kekw", "Kekw", "hi")
+	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", wire.NoticeLink{}, 0, 1000)
+	rt.drainAnnouncements(0)
+	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Text != "hi" {
+		t.Fatalf("chat %+v", lines)
+	}
+	if events := rt.PublicChat.Events(testDivision); len(events) != 1 || events[0].Kind != chatfeed.KindEvent ||
+		events[0].Text != "Looter advanced Blade to +8" {
+		t.Fatalf("events %+v", events)
+	}
+}
+
+/*
+================
 TestSealDropNoticeFollowsTheFlag
 ================
 */
@@ -227,7 +252,7 @@ capitals and drops the parenthesis.
 ================
 */
 func TestSealDropNoticeNamesTheSeal(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	for codename, seal := range map[string]string{
 		"ITEM_CH_BLADE_08_A_RARE": "Seal Of Star",
@@ -317,7 +342,7 @@ line too long for the notice keeps its plus and gives up the seal.
 ================
 */
 func TestPlusNoticeNamesTheSeal(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	plus := func(codename string) alchemy.Outcome {
 		return alchemy.Outcome{Success: true, Target: 13,
@@ -743,15 +768,15 @@ func TestMostWantedNoticesFollowTheFlag(t *testing.T) {
 	}
 	for _, on := range []bool{false, true} {
 		for _, tc := range []kill{
-			{true, 9, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2", "[leChiffre] is MOST WANTED LV 1"}},
-			{true, 10, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2"}},
+			{true, 4, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2", "[leChiffre] is MOST WANTED LV 1"}},
+			{true, 5, []string{"[leChiffre] claimed bounty of [ES_Tip] MOST WANTED LV 2"}},
 			{false, 0, []string{"Bounty of [ES_Tip] MOST WANTED LV 2 was claimed"}},
 		} {
 			rt, _, killer, victim := newPvpPair(t)
 			rt.MostWanted, rt.Announce.MostWanted = true, on
 			dressForJob(rt, victim, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
 			victim.Job.Alias = "ES_Tip"
-			victim.MostWanted = &domain.MostWanted{Streak: 25}
+			victim.MostWanted = &domain.MostWanted{Streak: 10}
 			kind := pk.DeathPlayer
 			if tc.dressed {
 				dressForJob(rt, killer, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)

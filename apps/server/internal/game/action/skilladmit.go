@@ -9,7 +9,6 @@ here, each native call site with its own phase mask.
 Named in the binary but not ported yet:
 
 	command +0xC == 0x20  indirect skill; skips the caster gates
-	manager +0x214        set by stns (+0x448); no shipped row  0x3009
 	ao / pw               motions 0x12, 8 (players never), 0xF  0x3009
 	char +0xC0C           the active pw shield instance       0x3009
 	                      (set by the skill engage): tele, tel2, tel3 refused;
@@ -373,11 +372,14 @@ CASTER STATE
 casterDisabled
 
 The native check tests freeze, sleep and stun before ordinary skill admission.
+The stone curse refuses with the same 0x3009 through the manager's
+standing stone record; the port carries the curse as abnormal slot 12,
+so petrify tests here beside the mask bits.
 ================
 */
 func (rt *Runtime) casterDisabled(division string, c *enterworld.Character) bool {
 	block := rt.playerAbnormal(division, c.Name)
-	disabling := abnormal.Freeze.Bit() | abnormal.Sleep.Bit() | abnormal.Stun.Bit()
+	disabling := abnormal.Freeze.Bit() | abnormal.Sleep.Bit() | abnormal.Stun.Bit() | abnormal.Petrify.Bit()
 	return block != nil && block.Mask&disabling != 0
 }
 

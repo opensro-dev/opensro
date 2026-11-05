@@ -99,8 +99,8 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	rt.retireReturnForReentry(division, c)
 	corpses, _ := rt.retireCompanionCorpses(division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
-	if snapshot := rt.characterSnapshot(division, c); snapshot != nil && snapshot.NativeBodyStatus != 0 {
-		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), snapshot.NativeBodyStatus))
+	if _, _, bodyStatus := rt.characterLifeState(division, c); bodyStatus != 0 {
+		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}
 	rt.PushCharacterFrames(division, name, frames)
 	rt.Pending.Clear(grounditem.PendingKey(division, name))

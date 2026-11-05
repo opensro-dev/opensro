@@ -492,7 +492,8 @@ func flagWarCancelFrames(registrants []FlagWarRegistrant) []simulation.DivisionF
 flagWarStartDivision
 
 One division's match start: house rules, the instance open, the
-transfers, the monsters, the live match state.
+native entry admission (flagWarCanEnter) on each registrant, the
+transfers of the admitted, the monsters, the live match state.
 ================
 */
 func (rt *Runtime) flagWarStartDivision(division string, registrants []FlagWarRegistrant, nowMs int64) []simulation.DivisionFrames {
@@ -551,12 +552,19 @@ func (rt *Runtime) flagWarStartDivision(division string, registrants []FlagWarRe
 		}
 		unlock := rt.lockDivision(division)
 		character := rt.findCharacter(division, registrant.Name)
+		admitted := false
 		if character != nil {
-			participant.level = flagWarLevelOf(character.Level)
+			rt.deps.Read(division, func() {
+				participant.level = flagWarLevelOf(character.Level)
+				admitted = rt.flagWarCanEnter(character)
+			})
 		}
 		unlock()
 		if character == nil {
 			continue // signed up, then left: no transfer, no seat
+		}
+		if !admitted {
+			continue // the native entry admission refuses: no transfer, no seat
 		}
 		rt.flagWarPush(division, registrant.Name, simulation.Frame{
 			Opcode:  wire.OpFlagWarEvent,
@@ -743,7 +751,7 @@ func (rt *Runtime) flagWarReconcile(match *flagWarMatch, nowMs int64) []simulati
 		unlock()
 		if s.character != nil && s.gone {
 			character := s.character
-			rt.deps.Update(character, "flagwar-anchor-clear", func() bool {
+			rt.deps.UpdateDeferred(character, "flagwar-anchor-clear", func() bool {
 				if character.World != nil {
 					character.World.InstanceReturn = nil
 				}

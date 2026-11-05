@@ -79,8 +79,13 @@ type Runtime struct {
 	// for transports). It gets one region change, and movement asks it for
 	// every change a walk makes (thiefCargoCrossingBlocked): a refused
 	// destination move carries the native 0x3058 notice, a direction walk
-	// stops at the border. Nil allows every entry.
+	// stops at the border and shows the same notice. Nil allows every entry.
 	TownEntryBlocked func(character *enterworld.Character, fromRegion, toRegion uint16) bool
+	// TownAreaEntryBlocked is the port-only twin of TownEntryBlocked for
+	// the town parts that lie in battlefield regions (#1985,
+	// SRO_THIEF_CART_TOWN_AREAS): it gets the whole chord, since those
+	// parts end inside a region. Nil is native.
+	TownAreaEntryBlocked func(character *enterworld.Character, from, to worldgeom.RegionXZ) bool
 	// ClearPendingPickup, when set, clears the character's pickup-approach
 	// latch before a ground move applies (the reference clears
 	// missionPendingPickups on every accepted move; the tracker itself
@@ -209,7 +214,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 		}
 		s.OnSceneReady(rearm)
 	})
-	hub.OnSessionClose(func(s *transport.Session, _ error) { rt.forgetLoadingQueue(s.ID) })
+	hub.OnSessionClose(func(s *transport.Session, _ error) { rt.answerHeldOnClose(s, s.Send) })
 	hub.Handle(simulation.OpClientMovementRequest, func(s *transport.Session, _ uint16, payload []byte) {
 		if _, live := s.SceneRevision(); !live {
 			// Scene still loading: hold the command for scene-ready so
@@ -311,15 +316,28 @@ notice. The move itself stays silent on the wire, as every refusal.
 func thiefCargoTownRefusal() MoveOutcome {
 	return MoveOutcome{
 		Refusal: &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "thiefCargoInTown"},
-		Frames:  []wire.Frame{{Opcode: opEventNotice, Payload: []byte{eventNoticeThiefCargoTown}}},
+		Frames:  []wire.Frame{thiefCargoTownNotice()},
 	}
+}
+
+/*
+==================
+thiefCargoTownNotice
+
+The 0x3058 kind 1 notice: a thief may not bring its transport into a town.
+==================
+*/
+func thiefCargoTownNotice() wire.Frame {
+	return wire.Frame{Opcode: opEventNotice, Payload: []byte{eventNoticeThiefCargoTown}}
 }
 
 /*
 ==================
 thiefCargoCrossingBlocked
 
-Whether the walk from->to makes a region change TownEntryBlocked refuses.
+Whether the walk from->to makes a region change TownEntryBlocked refuses,
+or, with the port-only town areas on, enters a town part
+TownAreaEntryBlocked refuses.
 The reference server tests the transport's region on every movement step
 (its per-step movement asks the transport's job-region check), so a walk
 from a battlefield through a protected sector and back out is refused at
@@ -327,13 +345,15 @@ its first protected entry, not only judged by its two ends (#721).
 ==================
 */
 func (rt *Runtime) thiefCargoCrossingBlocked(character *enterworld.Character, from, to simulation.Spawn) bool {
+	fromXZ := worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z}
+	toXZ := worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z}
+	if rt.TownAreaEntryBlocked != nil && rt.TownAreaEntryBlocked(character, fromXZ, toXZ) {
+		return true
+	}
 	if rt.TownEntryBlocked == nil {
 		return false
 	}
-	regions := worldgeom.RegionsAlong(
-		worldgeom.RegionXZ{RegionID: from.RegionID, X: from.X, Z: from.Z},
-		worldgeom.RegionXZ{RegionID: to.RegionID, X: to.X, Z: to.Z},
-	)
+	regions := worldgeom.RegionsAlong(fromXZ, toXZ)
 	for i := 1; i < len(regions); i++ {
 		if rt.TownEntryBlocked(character, regions[i-1], regions[i]) {
 			return true
@@ -354,7 +374,7 @@ Transport-free so tests drive it without a Hub; Register is the only
 glue.
 
 RUN/WALK - CLOSED ANSWER: the world's current mode times the travel.
-The native 0x7738 has no mode field (client sub_877cc0 serializes only
+The native 0x7738 has no mode field (client CNavigationDeadreckon_WriteMovementPayloadToStream serializes only
 region+xyz after the hasDestination byte). The browser DID send
 characterMovementMode on the JSON path, but its value is a closed loop
 with the server: seeded from the bootstrap spawn block, sent back
@@ -365,7 +385,7 @@ the request field always equals the server's stored mode and world-mode
 timing is behaviorally identical for every producible flow. When a real
 toggle lands, the native wire is a C->S toggle exchange answered by an
 0x3122 move-channel push for the local gid (S->C half RE-pinned:
-client sub_777b60 -> sub_573b70 HUD icon refresh; the C->S opcode is not yet
+client CPSMission_OnEntityStateUpdate0x3122 -> CIFUnderBar_SetMotionStateIcons HUD icon refresh; the C->S opcode is not yet
 pinned in the reconstruct evidence) - NOT a new field on 0x7738.
 ==================
 */
@@ -458,7 +478,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 	worldKey := admission.worldKey
 
 	// A new ground move supersedes any pickup approach in flight (native:
-	// the target-move latch clears on the next click command, client sub_67b0e0).
+	// the target-move latch clears on the next click command, client CGInterface_SetTargetMoveActive).
 	// Reference order preserved: the latch clears BEFORE the movement body
 	// is even coerced, so a malformed or refused move still released it.
 	if rt.ClearPendingPickup != nil {

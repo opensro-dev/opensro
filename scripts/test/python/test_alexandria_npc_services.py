@@ -25,6 +25,22 @@ def raw(rows):
 # ================
 class ServicesTests(unittest.TestCase):
 	# ================
+	# test_a_shared_goods_slot_moves_the_later_package
+	#
+	# Two packages in one tab slot: the first keeps it, the second takes
+	# the tab's lowest free slot; in a full tab the second is dropped.
+	# ================
+	def test_a_shared_goods_slot_moves_the_later_package(self):
+		goods = [["1", "15", "TAB", "A", "1"], ["1", "15", "TAB", "B", "1"], ["1", "15", "TAB", "C", "0"]]
+		kept, report = services.unique_slots(goods)
+		self.assertEqual([(r[3], r[4]) for r in kept], [("A", "1"), ("B", "2"), ("C", "0")])
+		self.assertEqual(report, {"moved": ["TAB:1->2:B"], "dropped": []})
+		full = [["1", "15", "FULL", f"P{s}", str(s)] for s in range(services.MAX_TAB_SLOTS)]
+		kept, report = services.unique_slots(full + [["1", "15", "FULL", "LATE", "3"]])
+		self.assertEqual(len(kept), services.MAX_TAB_SLOTS)
+		self.assertEqual(report["dropped"], ["FULL:3:LATE"])
+
+	# ================
 	# test_shop_closure_keeps_native_prices_and_defers_missing_packages
 	# ================
 	def test_shop_closure_keeps_native_prices_and_defers_missing_packages(self):

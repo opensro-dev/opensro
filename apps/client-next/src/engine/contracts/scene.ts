@@ -31,7 +31,7 @@ export interface WorldMaterial {
 	/** D3DRS_TEXTUREFACTOR rgba in [0, 1] for a stage's TFACTOR argument; default white. */
 	readonly textureFactor?: readonly [number, number, number, number];
 	/**
-	 * A BSR material modifier's TEXTUREFACTOR pulse (sub_aecab0): an alpha
+	 * A BSR material modifier's TEXTUREFACTOR pulse (CRTModMtrl_AdvancePulseChannel): an alpha
 	 * byte oscillating between low and high at rate * delta ms * 0.01.
 	 */
 	readonly textureFactorPulse?: { readonly low: number; readonly high: number; readonly rate: number; };
@@ -46,6 +46,15 @@ export interface WorldMaterial {
 		readonly nearPlane: number;
 		readonly farPlane: number;
 		readonly intensity: number;
+		/** The .dof height term; dungeon-fog.ts names its fields. */
+		readonly heightFog?: {
+			readonly unk3: number;
+			readonly unk4: number;
+			readonly unk5: number;
+			readonly unk6: number;
+		} | null;
+		/** Table fog over near..far (dungeon water, 8AEEAC), not the block's shader fog. */
+		readonly linear?: boolean;
 	};
 	readonly fogDisabled?: boolean;
 	readonly instanceFade?: boolean;
@@ -82,7 +91,7 @@ export interface WorldMaterial {
 	 * fixed-function vertex diffuse (effects).
 	 */
 	readonly shaderDiffuse?: boolean;
-	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers sub_aed240). */
+	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers CRTModMtrl_BeginStates). */
 	readonly textureStage?: import("@/engine/foundation/rendering/texture-stage").TextureStage;
 }
 /*

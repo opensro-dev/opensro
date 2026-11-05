@@ -11,6 +11,7 @@ requirements. Chain children contribute effects, never training ranks.
 */
 import type { SkillTooltipRowView, TooltipSkillCatalog } from "./skill-tooltip-data";
 import { skillParameterFormatters } from "./skill-tooltip-params";
+import { tooltipDescription } from "./tooltip-description";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 import type { Progression } from "../gameplay/progression";
 const WHITE = 0xffffffff, GOLD = 0xffefdaa4, RED = 0xffff4a4a;
@@ -159,7 +160,8 @@ export function skillTooltip(
 		weapons[kind - FIRST_WEAPON_KIND] ? [ text( weapons[kind - FIRST_WEAPON_KIND]! ) ] : []
 	);
 	if ( names.length ) add( `${text( "PARAM_REQ_WEAPON_TYPE" )}: ${names.join( ", " )}` );
-	add( text( row.tooltipDescriptionSymbol ), white );
+	// Skill text is PML like item text: markup never reaches the tooltip.
+	rows.push( ...tooltipDescription( text( row.tooltipDescriptionSymbol ) ) );
 	const format = skillParameterFormatters( text );
 	if ( !row.chainNextSkillId ) { for ( const value of format.direct( row ) ) add( value ); }
 	else {

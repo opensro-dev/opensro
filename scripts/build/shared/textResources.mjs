@@ -17,19 +17,19 @@ export async function buildTextResources() {
 	const zoneNameCatalog = await buildTextCatalog( path.join( textDataDir, "textzonename.txt" ) );
 	// SN_* symbol -> text catalog (textdataname.txt): the world-map overlay
 	// labels resolve their SN_ZONE_* keys through the localized-text manager
-	// twin (sub_796330), seeded from this catalog.
+	// twin (CTextStringManager_GetTextByWString), seeded from this catalog.
 	const dataNameCatalog = await buildTextCatalog( path.join( textDataDir, "textdataname.txt" ) );
 	completeItemText( dataNameCatalog.entries );
 	assertItemNameCoverage( textDataDir, dataNameCatalog.entries );
 	// worldmap_localinfo.txt rows (native CGlobalDataManager_ParseScriptRecord
 	// case 4): shipped as raw tab-token rows; the browser plane runs the REAL
-	// sub_807cc0 parse fold per row into the 0xcec870 +0x1d8 record map twin.
+	// CWorldMap_LocalInfo_ParseRecordBody parse fold per row into the 0xcec870 +0x1d8 record map twin.
 	const worldMapLocalInfo = await buildWorldMapLocalInfoRows(
 		path.join( textDataDir, "worldmap_localinfo.txt" )
 	);
-	// npcpos.txt rows (native media load @0x00723b34, parser sub_7f22d0 case
+	// npcpos.txt rows (native media load @0x00723b34, parser CGlobalDataManager_LoadTextDataFile case
 	// 0x1d -> the 0xcec870+0x414 CNPCPosData map): shipped as raw tab-token
-	// rows; the quest plane runs the REAL sub_80d9d0 parse fold per row.
+	// rows; the quest plane runs the REAL CNpcPositionData_ParseTextRow parse fold per row.
 	const npcPosRows = await buildNpcPosRows( path.join( textDataDir, "npcpos.txt" ) );
 	const regionCodeCatalog = await buildRegionCodeCatalog( path.join( textDataDir, "regioncode.txt" ) );
 	const helpTextPath = path.join( textDataDir, "texthelp.txt" );
@@ -213,7 +213,7 @@ export function completeUiText( entries ) {
  * columns mirror the native record-body token stream exactly:
  * id, kind, name x4, eight dwords (mode, pageId, regionX, regionY, posX,
  * posY, sizeW, sizeH/styleIndex), r, g, b, three state bytes - the browser
- * plane feeds them through the REAL sub_807cc0 parse fold.
+ * plane feeds them through the REAL CWorldMap_LocalInfo_ParseRecordBody parse fold.
  */
 async function buildWorldMapLocalInfoRows( sourcePath ) {
 	const raw = await readText( sourcePath );
@@ -270,13 +270,13 @@ async function buildWorldMapInfoRows( sourcePath ) {
 /*
  * npcpos.txt -> raw tab-token rows (comments dropped). The columns mirror
  * the native CNPCPosData record-body token stream exactly: id, regionId,
- * x, y, z (parser sub_80d9d0 @0x0080d9d0 - id/region via sub_9fbec0
- * ParseInt, x/y/z via sub_9fc210 ParseFloat). Native loads the file at
+ * x, y, z (parser CNpcPositionData_ParseTextRow @0x0080d9d0 - id/region via CTextParser_ReadInt
+ * ParseInt, x/y/z via CTextParser_ReadFloat ParseFloat). Native loads the file at
  * media boot ("%stextdata\\npcpos.txt" @0x00723b34, fmt data_c05184) and
- * the sub_7f22d0 case-0x1d walk (@0x007f481f) inserts each record into the
+ * the CGlobalDataManager_LoadTextDataFile case-0x1d walk (@0x007f481f) inserts each record into the
  * data_cec870+0x414 map - the browser quest plane (questPlane.ts) feeds
  * the SAME raw rows through the REAL parse folds into the map twin the
- * minimap quest pass resolves (REAL sub_7e1240).
+ * minimap quest pass resolves (REAL CGlobalDataManager_GetNpcPositionData).
  *
  * (Plain block comment, not JSDoc: the checkJs parser reads the @0x...
  * native offsets above as malformed JSDoc tags - TS1003.)

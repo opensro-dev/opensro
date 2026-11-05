@@ -212,12 +212,21 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 	unlock := rt.lockDivision(effect.Division)
 	defer unlock()
 	c := rt.findCharacter(effect.Division, effect.SourceName)
-	var snapshot *enterworld.Character
-	if c != nil {
-		snapshot = rt.characterSnapshot(effect.Division, c)
-	}
-	live := snapshot != nil && enterworld.CharacterAlive(snapshot) && !snapshot.DeletePending &&
-		rt.periodicEffects.Active(effect.Division, effect.SourceToken)
+	// Copy the source only when it can still act: a dead or
+	// deletion-pending caster's record was detached on every pulse of
+	// every persistent effect only to be refused here (#1943). A refused
+	// source resolves no target below - its life verdict already retires
+	// the effect, exactly as the copy's did. The copy is the combat
+	// copy: every reader below weighs combat inputs only - the stat
+	// projection reads equipment rows and the avatar inventory, target
+	// resolution weighs the attacker's name, ID and world instance, and
+	// the hit commits read the name and pose. No reader resolves the
+	// caster's companions or bag rows; the one companion resolution
+	// (resolveCOSTarget) walks the target owner's own full copy.
+	snapshot := rt.characterSnapshotCombatAdmitted(effect.Division, c, func(live *enterworld.Character) bool {
+		return enterworld.CharacterAlive(live) && !live.DeletePending
+	})
+	live := snapshot != nil && rt.periodicEffects.Active(effect.Division, effect.SourceToken)
 	if effect.StructureRepair {
 		live = live && rt.structureRepairSourceActive(effect)
 	}
@@ -236,7 +245,7 @@ func (rt *Runtime) advancePeriodicEffectInDivision(step linkedpulse.Step, now in
 		} else {
 			result = rt.applyPeriodicPlayerPulse(effect, c, snapshot, target, now)
 		}
-		if _, ok := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now); !ok {
+		if !rt.combatTargetExists(effect.Division, snapshot, effect.TargetGID) {
 			live = false
 		}
 	}
@@ -339,7 +348,7 @@ func (rt *Runtime) applyPeriodicPlayerPulse(effect linkedpulse.Effect, c, snapsh
 		return OpResult{}
 	}
 	hit, result, landed := rt.creditPlayerHit(playerHitInput{division: effect.Division, caster: c, snapshot: snapshot,
-		attacker: attacker, skill: skill, target: target, impacts: 1, now: now})
+		attacker: attacker, skill: skill, target: target, impacts: 1, now: now}, rt.tickDoors())
 	if !landed {
 		return OpResult{}
 	}
@@ -373,7 +382,7 @@ func (rt *Runtime) applyPeriodicCOSPulse(effect linkedpulse.Effect, c, snapshot 
 		return OpResult{}
 	}
 	owner := target.player
-	st := offensiveStage{division: effect.Division, character: c, snapshot: snapshot, skill: skill, attacker: attacker, now: now}
+	st := offensiveStage{division: effect.Division, character: c, snapshot: snapshot, skill: skill, attacker: attacker, now: now, doors: rt.tickDoors()}
 	casterAt := rt.liveSpawn(simulation.WorldKey(effect.Division, snapshot.Name), snapshot, now)
 	hit, planned := rt.planPlayerCOSHitAt(st, target, casterAt, 0, 0)
 	if !planned {
@@ -384,7 +393,7 @@ func (rt *Runtime) applyPeriodicCOSPulse(effect linkedpulse.Effect, c, snapshot 
 	var after jobKillPayout
 	var war domain.GuildWarCombat
 	landed := false
-	rt.deps.UpdateMany([]*enterworld.Character{c, owner}, "periodic-cos-pulse", func() bool {
+	rt.deps.UpdateManyDeferred([]*enterworld.Character{c, owner}, "periodic-cos-pulse", func() bool {
 		if !rt.applyCOSHitInDoor(effect.Division, &hit, now) {
 			return false
 		}

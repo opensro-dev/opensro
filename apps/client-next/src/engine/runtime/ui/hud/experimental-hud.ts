@@ -44,7 +44,8 @@ frame-wide stages and scene resolution, World the
 atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
 filter's kinds (#841); it is appended last so the existing tabs keep the
-indices a reopening window relies on.
+indices a reopening window relies on. Jobs (#1849) is appended after it for
+the same reason.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -117,12 +118,6 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Distance haze that thins with height."
 			},
 			{
-				key: "dynamicSun",
-				id: "experimental-dynamic-sun",
-				label: "Moving sunlight",
-				description: "Lighting follows the time of day."
-			},
-			{
 				key: "compressedTextures",
 				id: "experimental-compressed-textures",
 				label: "Compressed textures",
@@ -145,6 +140,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-sun-drop-marker",
 				label: "Seal of Sun drop marker",
 				description: "Mark your own degree-9+ Sun drops on the ground."
+			},
+			{
+				key: "warpArrivalSound",
+				id: "experimental-warp-arrival-sound",
+				label: "Portal arrival sound",
+				description: "Play the portal-out cue when you arrive."
 			}
 		]
 	},
@@ -159,6 +160,15 @@ export const EXPERIMENTAL_TABS: readonly {
 				description: "Scene shadows cast by the sunlight."
 			},
 			{
+				// Moved from World (#2105): the window fits seven rows a tab
+				// and the portal arrival sound joins World and map; the
+				// option, its key and its default are unchanged.
+				key: "dynamicSun",
+				id: "experimental-dynamic-sun",
+				label: "Moving sunlight",
+				description: "Lighting follows the time of day."
+			},
+			{
 				key: "perPixelLighting",
 				id: "experimental-per-pixel-lighting",
 				label: "Per-pixel character light",
@@ -169,6 +179,14 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-enchant-sparks",
 				label: "Enhanced item glow",
 				description: "Richer glow and sparks on reinforced gear."
+			},
+			{
+				// #2496: this tab holds the other item-look row and has
+				// room; the window fits seven rows a tab.
+				key: "sealUnderHeading",
+				id: "experimental-seal-under-heading",
+				label: "Seal line under item name",
+				description: "Show a rare item's seal right under its name."
 			},
 			{
 				key: "dungeonCharacterPvs",
@@ -186,6 +204,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-chat-timestamps",
 			label: "Chat timestamps",
 			description: "Show message time on hover."
+		}, {
+			key: "eventChatTab",
+			id: "experimental-event-chat-tab",
+			label: "Event chat tab",
+			description: "Event notices get their own chat tab."
 		}, {
 			key: "predictedRunUp",
 			id: "experimental-predicted-run-up",
@@ -211,14 +234,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-web-transport",
 			label: "WebTransport connection",
 			description: "Connect over QUIC/UDP; falls back to WebSocket."
-		}, {
-			// Moved from Notices (#1738): the window fits seven rows a tab
-			// and the break-notice row joins the shard notices; the option,
-			// its key and its default are unchanged.
-			key: "questTrackerMarkers",
-			id: "experimental-quest-tracker-markers",
-			label: "Quest target markers",
-			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
@@ -305,11 +320,6 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pets",
 		section: "Attack pets",
 		rows: [ {
-			key: "attackPetTraining",
-			id: "experimental-attack-pet-training",
-			label: "Attack-pet training",
-			description: "Pet skills and gear; requires server opt-in."
-		}, {
 			key: "transportAutoPotion",
 			id: "experimental-transport-auto-potion",
 			label: "Transport auto-potion",
@@ -334,12 +344,25 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-v-hides-companions",
 			label: "V hides pets and transports",
 			description: "Holding V also hides other players' pets and transports."
+		}, {
+			// Moved from Game (#1976): the window fits seven rows a tab
+			// and the Event chat tab row joins Chat and movement; the
+			// option, its key and its default are unchanged.
+			key: "questTrackerMarkers",
+			id: "experimental-quest-tracker-markers",
+			label: "Quest target markers",
+			description: "Show every active quest's target on M and the minimap."
 		} ]
 	},
 	{
 		title: "Pickup",
 		section: "Pickup pet filter",
 		rows: [ {
+			key: "autoSelect",
+			id: "experimental-auto-select",
+			label: "Auto Select",
+			description: "Actions window: select the nearest monster."
+		}, {
 			key: "smartPetPickup",
 			id: "experimental-smart-pet-pickup",
 			label: "Keep pet gold pickup when full",
@@ -369,6 +392,16 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
+		} ]
+	},
+	{
+		title: "Jobs",
+		section: "Job buffs",
+		rows: [ {
+			key: "mostWantedBuff",
+			id: "experimental-most-wanted-buff",
+			label: "Most Wanted buff",
+			description: "Show your wanted level on the buff board."
 		} ]
 	}
 ];

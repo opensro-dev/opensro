@@ -20,7 +20,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -29,7 +29,7 @@ TestShippedMangnyangAttackPlanIsRunnable
 ================
 */
 func TestShippedMangnyangAttackPlanIsRunnable(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	ref, ok := monster.LoadMonsterRefs(dir)[1933]
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")
@@ -48,7 +48,7 @@ TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases
 ================
 */
 func TestShippedMoviaAttackPlanIncludesCastingAndRecoveryPhases(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
+	dir := clientdata.RetailTextdataDir(t)
 	ref, ok := monster.LoadMonsterRefs(dir)[5850]
 	if !ok {
 		t.Skip("shipped characterdata is unavailable")

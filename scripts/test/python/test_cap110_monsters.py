@@ -559,6 +559,30 @@ class Cap110MonstersTest(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			loot.compile_field_equipment(base, [item], [assignment], classes[:-1], classes)
 
+	# ================
+	# test_export_without_assignments_stages_the_native_catalog
+	#
+	# #1745 D3: the pinned export has no drop assignments; the staged
+	# catalog is then the native compilation, classes and items unchanged.
+	# ================
+	def test_export_without_assignments_stages_the_native_catalog(self):
+		from unittest import mock
+		base = {"equipment.json": {"version": 2, "widths": {"normal": 2, "rare": 2},
+			"normal": [[0.0, 0.5]] * 180, "rare": [[0.25, 0.0]] * 180,
+			"items": [{"codename": "ITEM_NATIVE", "group": 1}]},
+			"properties.json": {"items": {"ITEM_NATIVE": {"codename": "ITEM_NATIVE", "type": [3, 1, 6, 2],
+				"country": 0, "rarity": 0, "class": 2, "maxMagic": 4, "extra": 1}}, "magic": [], "assignments": []}}
+		with tempfile.TemporaryDirectory() as temporary:
+			text_root, source = Path(temporary) / "text", Path(temporary) / "source"
+			text_root.mkdir()
+			source.mkdir()
+			self.assertFalse(loot.has_assignments(source))
+			with mock.patch.object(loot, "compile_catalogs", return_value=copy.deepcopy(base)):
+				self.assertEqual(loot.stage_field_equipment(text_root, source), 1)
+			staged = json.loads((text_root / loot.EQUIPMENT_FILE).read_text(encoding="utf-8"))
+		self.assertEqual(staged["Equipment"], base["equipment.json"])
+		self.assertNotIn("extra", staged["Properties"]["items"]["ITEM_NATIVE"])
+
 
 if __name__ == "__main__":
 	unittest.main()

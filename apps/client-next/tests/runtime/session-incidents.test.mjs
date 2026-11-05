@@ -133,6 +133,94 @@ test("a failure before login is reported to the listing Agent without a bearer",
 	assert.equal( report.body.kind, "runtime" );
 });
 
+test("asset failures file once per episode, beside the once-per-code client reports", async t => {
+	/** @type {{ url: string; body: any; headers: Record<string, string>; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { url, body, headers: options.headers } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	// The stream owner hands each terminal episode out once; the
+	// session files what it is given, so the same failure arriving
+	// again is a second episode, not a duplicate (#2337).
+	const asset = {
+		kind: "client-report",
+		incidentKind: "asset",
+		code: "world_asset_failed",
+		message: "asset=/assets/a.json transient=true attempts=8 error=Error: /assets/a.json: Load failed"
+	};
+	session.command( asset );
+	session.step();
+	await settle();
+	session.command( asset );
+	session.step();
+	await settle();
+	const filed = reports.filter( r => r.body.code === "world_asset_failed" );
+	assert.equal( filed.length, 2, "one incident per episode: asset reports skip the code dedupe" );
+	for ( const report of filed ) {
+		assert.equal( report.body.kind, "asset" );
+		assert.equal( report.body.category, "software" );
+		assert.equal( report.body.message, asset.message );
+		assert.equal( typeof report.body.phase, "string", "the incident carries the session phase" );
+		assert.ok( report.body.phase.length > 0 );
+	}
+	// A runtime fault still reports once per code beside them.
+	const fault = {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "title_fault",
+		message: "Runtime failed"
+	};
+	session.command( fault );
+	session.step();
+	await settle();
+	session.command( fault );
+	session.step();
+	await settle();
+	assert.equal( reports.filter( r => r.body.code === "title_fault" ).length, 1 );
+});
+
+test("a client report's stack rides the incident, bounded", async t => {
+	/** @type {{ url: string; body: any; headers: Record<string, string>; }[]} */
+	const reports = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { url, body, headers: options.headers } );
+			return Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( [] );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step();
+	await settle();
+	// A thrown error's stack cannot ride the 500-char message (#2559):
+	// it files on the incident's own field, cut at the house bound.
+	session.command( {
+		kind: "client-report",
+		incidentKind: "runtime",
+		code: "runtime_exception",
+		message: "Characters: InternalError: too much recursion",
+		stack: "x".repeat( 9000 )
+	} );
+	session.step();
+	await settle();
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].body.code, "runtime_exception" );
+	assert.equal( reports[0].body.stack.length, 8192 );
+});
+
 test("world incidents carry the admitted region and a 401 transport-token refusal stops reconnect retries", async t => {
 	/** @type {any} */
 	let socket;
@@ -277,6 +365,8 @@ test("a refused entry files its incident with the entering character", async t =
 	welcome[0] = 2;
 	welcome[10] = 16;
 	welcome.fill( 7, 11 );
+	// The WELCOME's session id is the join key to the transport's logs (#2558).
+	new DataView( welcome.buffer ).setBigUint64( 2, 123456789n, true );
 	defined( socket ).receive( 2, welcome );
 	session.step( 3 );
 	await settle();
@@ -293,7 +383,8 @@ test("a refused entry files its incident with the entering character", async t =
 		kind: "client-report",
 		incidentKind: "runtime",
 		code: "world_entry_rejected",
-		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0"
+		message: "Entry rejected (S2) at dock/entering: EnterWorld rejected: 0",
+		tabHiddenMs: 42000
 	} );
 	session.step( 5 );
 	await settle();
@@ -301,4 +392,91 @@ test("a refused entry files its incident with the entering character", async t =
 	// rejection report is the one triage matches by character (#1855).
 	const rejection = reports.find( report => report.code === "world_entry_rejected" );
 	assert.equal( rejection?.character, "fixture" );
+	// The rejection joins to its transport session by id, names why the
+	// transport ended and how long the tab was hidden (#2558).
+	assert.equal( rejection?.transportSession, "123456789" );
+	assert.equal( rejection?.closeReason, "packet_application_failed" );
+	assert.equal( rejection?.tabHiddenMs, 42000 );
+	const failure = reports.find( report => report.code === "packet_application_failed" );
+	assert.equal( failure?.transportSession, "123456789" );
+});
+
+/*
+================
+mintRefusalPublishesTypedRefusal
+
+The EnterWorld mint's structured refusal reaches the published state
+as the typed refusal on the entry failure, so the frontend can file a
+maintenance refusal apart from a real rejection without matching the
+error text (#2557). The world files no incident of its own for an
+answered mint refusal.
+================
+*/
+test("a mint refusal publishes its typed refusal on the entry failure", async t => {
+	for (
+		const [code, errorPattern] of /** @type {[string, RegExp][]} */ ([
+			[ "MAINTENANCE", /under maintenance/ ],
+			[ "UNKNOWN_CHARACTER", /^Admission request failed$/ ]
+		])
+	) {
+		/** @type {{ onopen: () => void; receive: ( op: number, payload: Uint8Array ) => void; } | undefined} */
+		let socket;
+		const reports = [];
+		class Socket {
+			static OPEN = 1;
+			readyState = 1;
+			bufferedAmount = 0;
+			/** @type {(( event: { data: ArrayBuffer; } ) => void) | undefined} */
+			onmessage;
+			constructor() {
+				socket = /** @type {any} */ (this);
+			}
+			send() {}
+			close() {}
+			/** @param {number} op @param {Uint8Array} payload */
+			receive( op, payload ) {
+				const bytes = new Uint8Array( payload.length + 2 );
+				new DataView( bytes.buffer ).setUint16( 0, op, true );
+				bytes.set( payload, 2 );
+				this.onmessage?.( { data: bytes.buffer } );
+			}
+		}
+		const descriptor = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
+		Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true } );
+		t.after( () => {
+			if ( descriptor ) Object.defineProperty( globalThis, "WebSocket", descriptor );
+			else Reflect.deleteProperty( globalThis, "WebSocket" );
+		} );
+		t.mock.method( globalThis, "fetch", async url => {
+			if ( url.endsWith( "/client/incident" ) ) {
+				reports.push( url );
+				return Response.json( { ok: true, id: "fixture" } );
+			}
+			if ( url.endsWith( "/auth/enterworld-token" ) ) return Response.json( { ok: false, code } );
+			return Response.json( url.endsWith( "/title/login" ) ? response : { ok: true, token: "fixture-ticket" } );
+		} );
+		const session = createSession();
+		session.command( command );
+		session.step( 0 );
+		await settle();
+		session.step( 1 );
+		session.command( { kind: "enter-world", character: "fixture" } );
+		await settle();
+		session.step( 2 );
+		defined( socket ).onopen();
+		const welcome = new Uint8Array( 27 );
+		welcome[0] = 2;
+		welcome[10] = 16;
+		welcome.fill( 7, 11 );
+		defined( socket ).receive( 2, welcome );
+		session.step( 3 );
+		await settle();
+		const bounced = session.step( 4 );
+		await settle();
+		assert.equal( bounced?.phase, "character-select", code );
+		assert.equal( bounced?.entryFailure?.refusal, code, code );
+		assert.match( String( bounced?.error ), errorPattern, code );
+		assert.equal( reports.length, 0, code );
+		session.dispose();
+	}
 });

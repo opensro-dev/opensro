@@ -4,7 +4,7 @@
 frontend-camera.ts - frontend camera tracks: key sampling and view cameras
 
 Samples the authored title/dock/creation camera tracks (native camera
-evidence: sub_4bf3c0, sub_4bcb00, sub_4dc920, sub_a1bb00) and turns a key
+evidence: CameraTrack_CatmullRomPoint, CameraTrack_UnwrapAngles, EnvironmentVectorTrack_SampleAtTime, CCamera_ComposeEyeFromOrbit) and turns a key
 into the WorldCamera the renderer consumes. Owns no state.
 
 ===========================================================================

@@ -11,7 +11,7 @@ the native structure grant (capabilities without the CICNPC mask). Guard
 and AT structures still require their own authored spawn authorities.
 
 Wire contract: internal/game/item/wire/objectselect.go (dual-use send sites and
-the 0xB45A twin's encoder). The browser client folded sub_764c60's
+the 0xB45A twin's encoder). The browser client folded CPSMission_OnNpcSelectResponse0xB45A's
 live-CICNPC arm REAL (npcTalkPlane.ts consumes it), retiring the old
 "0xB45A is unconsumable" ruling from server-wave seq 51: the GRANT for
 a live roster NPC now answers a real 0xB45A - result 1, the gid, the

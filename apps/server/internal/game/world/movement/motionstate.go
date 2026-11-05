@@ -10,14 +10,14 @@ motionstate.go - movement command admission and state transitions
 //
 // WIRE CONTRACT (the client folds are the surviving contract):
 //
-//   - C->S 0x7017 (client sub_6ff740 NetSend_MotionState7017): exactly ONE code
-//     byte. 2 = request walk / 3 = request run (client sub_862850 sends the
-//     opposite of the +0x255 mode byte, which client sub_858450 writes as
-//     0=walk/1=run) and 4 = sit/stand toggle (client sub_862870 always sends 4;
+//   - C->S 0x7017 (client NetClient_SendPlayerState7017 NetSend_MotionState7017): exactly ONE code
+//     byte. 2 = request walk / 3 = request run (client CICPlayer_ToggleWalkRun sends the
+//     opposite of the +0x255 mode byte, which client CICharactor_ApplyMovementMode writes as
+//     0=walk/1=run) and 4 = sit/stand toggle (client CICPlayer_ToggleSitStand always sends 4;
 //     sit-vs-stand is server-authoritative).
-//   - S->C 0xB017 (client sub_775db0): [u8 result], result 1 = silent success.
-//   - S->C 0x3122 stateType 1 (client sub_777b60 -> sub_858450 SetRunWalkMode +
-//     client sub_58bbc0 SetupActionButton + sub_573b70 HUD icons):
+//   - S->C 0xB017 (client CPSMission_OnMovementAckResponse0xB017): [u8 result], result 1 = silent success.
+//   - S->C 0x3122 stateType 1 (client CPSMission_OnEntityStateUpdate0x3122 -> CICharactor_ApplyMovementMode SetRunWalkMode +
+//     client CIFActionTabPanel_SetMotionStateIcon SetupActionButton + CIFUnderBar_SetMotionStateIcons HUD icons):
 //     [u32 gid][u8 1][u8 value] with value 0 stand / 2 walk / 3 run /
 //     4 sit - one shared motion enum in both directions.
 //
@@ -76,7 +76,7 @@ authoritative world plane and answers with the client-contract frames.
 Codes 2/3 set WorldState.MovementMode (persisted through the same
 write-back the move lane owns) and, when a move is in flight and the
 gait actually changed, re-time the live segment from the interpolated
-point at the new wire speed - the server mirror of client sub_858450 restarting
+point at the new wire speed - the server mirror of client CICharactor_ApplyMovementMode restarting
 an active path-follow state on the new speed channel. Code 4 toggles the
 runtime-only sitting posture; the answered 0x3122 value is 4 (sit) or
 0 (stand), the two SetRunWalkMode motion-state arms.
@@ -204,7 +204,7 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	// (Ruling 44 must-haves B / B') the truncation correction rides the
 	// MOVEMENT channel (0xB2F5 OpObjectSourceCorrection), NOT the sit ack
 	// (0xB017): the v1.150 client's sit-ack handler never touches the mover
-	// (client sub_775db0, binary-certified), so a stop sent there is silently
+	// (client CPSMission_OnMovementAckResponse0xB017, binary-certified), so a stop sent there is silently
 	// swallowed. And the tick's own 0xB2F5 settle EXCLUDES the acting session
 	// (tick.go), so the correction must go to SELF as well as peers or the
 	// sitting player keeps sliding on its own uncleared move goal (a

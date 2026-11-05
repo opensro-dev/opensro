@@ -127,6 +127,8 @@ type Registry struct {
 	mu      sync.Mutex
 	nextGID uint32
 	objects map[uint32]Object
+	// generation counts registry writes (see Generation).
+	generation uint64
 }
 
 /*
@@ -163,7 +165,26 @@ func (r *Registry) Create(object Object) (Object, error) {
 		r.objects = make(map[uint32]Object)
 	}
 	r.objects[object.Spawn.GID] = object
+	r.generation++
 	return object, nil
+}
+
+/*
+================
+Generation
+
+Generation counts the registry's writes. A snapshot taken just after a
+Generation read still names the registry exactly while a later read
+returns the same value, so a caller holding such a snapshot can skip
+copying the registry again until a write lands. Every mutator below
+(Create, Remove, Scan, Advance, Track, Pulsed) advances it on each
+write, including scan restamps.
+================
+*/
+func (r *Registry) Generation() uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.generation
 }
 
 /*
@@ -199,6 +220,9 @@ func (r *Registry) Remove(gid uint32) bool {
 	defer r.mu.Unlock()
 	_, present := r.objects[gid]
 	delete(r.objects, gid)
+	if present {
+		r.generation++
+	}
 	return present
 }
 
@@ -221,6 +245,7 @@ func (r *Registry) Scan(gid uint32, nowMs int64, ownerPresent bool, targets []Ta
 	}
 	if !ownerPresent || nowMs-object.CreatedMs > int64(object.Program.DurationMs) {
 		delete(r.objects, gid)
+		r.generation++
 		return object, 0, true
 	}
 	if nowMs < object.NextScanMs {
@@ -228,11 +253,13 @@ func (r *Registry) Scan(gid uint32, nowMs int64, ownerPresent bool, targets []Ta
 	}
 	object.NextScanMs = nowMs + int64(object.Program.ScanMs)
 	r.objects[gid] = object
+	r.generation++
 	for _, target := range targets {
 		if !Matches(object, target) {
 			continue
 		}
 		delete(r.objects, gid)
+		r.generation++
 		return object, target.GID, true
 	}
 	return object, 0, false
@@ -295,6 +322,7 @@ func (r *Registry) Advance(gid uint32, nowMs int64, ownerPresent bool) (object O
 	object.Tracked = append([]FieldRecipient(nil), object.Tracked...)
 	if !ownerPresent || nowMs-object.CreatedMs > int64(object.Program.DurationMs) {
 		delete(r.objects, gid)
+		r.generation++
 		return object, false, true
 	}
 	if nowMs < object.NextScanMs {
@@ -303,6 +331,7 @@ func (r *Registry) Advance(gid uint32, nowMs int64, ownerPresent bool) (object O
 	stored := r.objects[gid]
 	stored.NextScanMs = nowMs + int64(object.Program.ScanMs)
 	r.objects[gid] = stored
+	r.generation++
 	return object, true, false
 }
 
@@ -323,6 +352,7 @@ func (r *Registry) Track(gid uint32, tracked []FieldRecipient) bool {
 	}
 	object.Tracked = append([]FieldRecipient(nil), tracked...)
 	r.objects[gid] = object
+	r.generation++
 	return true
 }
 
@@ -343,6 +373,7 @@ func (r *Registry) Pulsed(gid uint32, nowMs int64) bool {
 	}
 	object.LastPulseMs = nowMs
 	r.objects[gid] = object
+	r.generation++
 	return true
 }
 

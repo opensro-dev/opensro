@@ -13,7 +13,6 @@ package simulation
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -33,7 +32,7 @@ func (c *fakeTickClock) advance(elapsed time.Duration) { c.now = c.now.Add(elaps
 timedTicker
 ================
 */
-func timedTicker(clock *fakeTickClock, hooks ...TickHook) (*Ticker, *[]TickTiming) {
+func timedTicker(clock *fakeTickClock, hooks ...NamedTickHook) (*Ticker, *[]TickTiming) {
 	got := &[]TickTiming{}
 	ticker := &Ticker{
 		Source: emptySessionSource{}, Push: discardPusher{}, Now: clock.Now, Hooks: hooks,
@@ -51,7 +50,12 @@ func TestTickReportsPhasesAndNamesSlowHooks(t *testing.T) {
 	clock := &fakeTickClock{now: time.UnixMilli(1000)}
 	fast := func(int64) []DivisionFrames { clock.advance(time.Millisecond); return nil }
 	slow := func(int64) []DivisionFrames { clock.advance(150 * time.Millisecond); return nil }
-	ticker, got := timedTicker(clock, fast, slow)
+	// The slow hook is an anonymous closure on purpose: its registered
+	// name, not its runtime name (<constructor>.funcN), is reported
+	// (#2294).
+	ticker, got := timedTicker(clock,
+		NamedTickHook{Hook: fast},
+		NamedTickHook{Name: "skill-objects", Hook: slow})
 	ticker.RunTick(0)
 	if len(*got) != 1 {
 		t.Fatalf("observer saw %d ticks, want 1", len(*got))
@@ -61,7 +65,7 @@ func TestTickReportsPhasesAndNamesSlowHooks(t *testing.T) {
 		timing.BeforeHooks != 0 || timing.Divisions != 0 {
 		t.Fatalf("phases = %+v", timing)
 	}
-	if len(timing.SlowHooks) != 1 || !strings.Contains(timing.SlowHooks[0].Name, "TestTickReportsPhasesAndNamesSlowHooks") ||
+	if len(timing.SlowHooks) != 1 || timing.SlowHooks[0].Name != "skill-objects" ||
 		timing.SlowHooks[0].Elapsed != 150*time.Millisecond {
 		t.Fatalf("slow hooks = %+v", timing.SlowHooks)
 	}
@@ -79,7 +83,7 @@ func TestCancelledScheduledTickHasNoNegativePhase(t *testing.T) {
 	clock := &fakeTickClock{now: time.UnixMilli(1000)}
 	before := func(int64) []DivisionFrames { clock.advance(20 * time.Millisecond); return nil }
 	ticker, got := timedTicker(clock)
-	ticker.BeforeHooks = []TickHook{before}
+	ticker.BeforeHooks = []NamedTickHook{{Hook: before}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	ticker.runScheduledTick(ctx, 0, nil)
@@ -104,7 +108,7 @@ func TestPanickingSlowHookIsStillCounted(t *testing.T) {
 		clock.advance(200 * time.Millisecond)
 		panic("hook failure")
 	}
-	ticker, got := timedTicker(clock, panics)
+	ticker, got := timedTicker(clock, NamedTickHook{Hook: panics})
 	ticker.RunTick(0)
 	if len(*got) != 1 || len((*got)[0].SlowHooks) != 1 || (*got)[0].SlowHooks[0].Elapsed != 200*time.Millisecond {
 		t.Fatalf("panicking slow hook lost: %+v", *got)

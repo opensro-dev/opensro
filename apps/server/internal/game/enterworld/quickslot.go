@@ -27,7 +27,8 @@ const quickSlotSaveMode uint8 = 1
 // The native check uses the current bag capacity, not a fixed 45-slot inventory.
 const quickSlotBagPayloadLimit = (1 << 8) - 13
 
-// Native CGInterface_OnMissionLoadingRevealed (client sub_683b40) can emit
+// Native CGInterface_InitializeWorldEntryUi (client, called from
+// CPSMission_UpdateLoadingTransition) can emit
 // the exact two-byte body {0,7} when its world-entry quickslot block was not
 // mode 7. It is a reveal/request marker, not a slot mutation. Our normal
 // enter-world writer always supplies mode 7, but accepting this sister frame

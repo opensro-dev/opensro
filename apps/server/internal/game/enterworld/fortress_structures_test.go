@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -20,7 +20,7 @@ and the unplaced defensive sites hold nothing.
 ================
 */
 func TestJanganFortressStartsWithItsStructures(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	textdata := gamedatatest.TextdataDir(t)
 	template, err := appendFortressStructures(monster.LoadTemplate(textdata), textdata,
 		filepath.Join(gamedatatest.WorldAuthorityDir(t), "structure-zones.json"))
@@ -65,7 +65,7 @@ including the column 10 tax target mask the tax management window ticks.
 ================
 */
 func TestDefaultSiegeFortressRowsMatchShippedTextdata(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rows := ReadTextdataFile(filepath.Join(gamedatatest.TextdataDir(t), "siegefortress.txt"))
 	defaults := DefaultSiegeFortressDataRows()
 	enabled := 0

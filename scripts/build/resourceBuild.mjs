@@ -468,7 +468,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// record getter). Same placement rules as the effect records above.
 	const levelData = await steps.buildLevelDataAsset();
 	// WIP action-record data plane (actionwnddata.txt raw rows ->
-	// actionwnddata.json, seeded through the REAL sub_80cb00 parse fold into the
+	// actionwnddata.json, seeded through the REAL CActionWndData_ParseTextRow parse fold into the
 	// data_cec870 +0x258 map the CIFAction_OnCreate populate iterates). Same
 	// placement rules as the level data above.
 	const actionWndData = steps.buildActionWndDataAsset();
@@ -482,18 +482,18 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const skillMasteryData = steps.buildSkillMasteryDataAsset();
 	// WIP skill-pane skilldata plane (skilldata_*.txt projected columns ->
 	// skillData.json, decoded by bridge/ui/panes/skillPanePlane.ts for the CIFSkill
-	// pane's per-row skill slots - the sub_586b40/sub_589050 fill legs). Same
+	// pane's per-row skill slots - the CIFSkillMasteryRow_CreateSkillCells/CIFSkillSlot_BindSkill fill legs). Same
 	// placement rules.
 	const skillData = await steps.buildSkillDataAsset();
 	// WIP quest-pane questdata plane (questdata.txt projected columns + the
 	// referenced textquest.txt title entries -> questData.json, decoded by
 	// bridge/ui/panes/questPlane.ts for the CIFQuestSlotMain live-row title
-	// "%s (%d/%d)" and the sub_5c3840 content-button level art). Same
+	// "%s (%d/%d)" and the CIFQuest_UpdateContentViewButton content-button level art). Same
 	// placement rules.
 	const questData = steps.buildQuestDataAsset();
 	// WIP party-pane chardata country plane (characterdata_*.txt id -> country
 	// byte -> characterDataCountry.json, decoded by bridge/ui/panes/partyPanePlane.ts
-	// for the sub_81d5b0 kindred race-mark resolve over sub_7efeb0's
+	// for the CharKindredIcon_GetPath kindred race-mark resolve over GlobalDataManager_GetCharCosDataById's
 	// recordMap1f0 lookup). Same placement rules.
 	const characterDataCountry = steps.buildCharacterDataCountryAsset();
 	// COS HUD reference fields (icon, max HP, rideable) for the status icon,
@@ -504,11 +504,11 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const fortressMap = await steps.buildFortressMapAsset();
 	// WIP Toggle*Window plane (ginterface.txt raw section lines ->
 	// ginterface-sections.json, decoded once in sectionWindowPlane.ts and driven
-	// through the REAL sub_783f80 CreateControlsFromSection deserializer).
+	// through the REAL CIFWnd_CreateChildrenFromLayout CreateControlsFromSection deserializer).
 	const ginterfaceSections = await steps.buildGInterfaceSectionsAsset();
 	// WIP fortress-emblem data plane (siegefortress.txt decoded rows ->
 	// siegeFortressData.json: fortress id -> code name + resolved public emblem
-	// image, the sub_914ae0 CrestPath128 sprite map twin). Same placement rules.
+	// image, the CSkillEffectManager_InitializeDamageGlyphsAndEffects CrestPath128 sprite map twin). Same placement rules.
 	const siegeFortressData = steps.buildSiegeFortressDataAsset();
 	// Native character-name filter (textdata/abusefilter.txt, copied byte for
 	// byte). The game-data pack group claims it, so it must exist before packing.

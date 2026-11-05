@@ -36,7 +36,7 @@ func (rt *Runtime) crowManaSpring(step petCombatStep, damage uint64) {
 		var frames []wire.Frame
 		var petFrames []wire.Frame
 		recovered := false
-		if !rt.deps.Update(member, "crow-mana-spring", func() bool {
+		if !rt.deps.UpdateDeferred(member, "crow-mana-spring", func() bool {
 			if !enterworld.CharacterAlive(member) {
 				return false
 			}

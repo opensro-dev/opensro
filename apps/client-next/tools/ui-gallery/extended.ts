@@ -17,6 +17,7 @@ import { reachabilityRecipes } from "./recipes-reachability";
 import { surfaceRecipes } from "./recipes-surfaces";
 import { completionRecipes } from "./recipes-completion";
 import { fixtureGuild, guildMember } from "./recipe-input";
+import { experimentalOptions } from "../../src/engine/foundation/ui/experimental-options";
 import { npcGid } from "../../src/engine/foundation/gameplay/npc-dialogue";
 import type { FixtureState } from "./fixture-state";
 
@@ -385,8 +386,74 @@ export const extendedRecipes: readonly ExtendedRecipe[] = [
 				banner: true
 			} ];
 		}
+	},
+	{
+		id: "transient:seal-star",
+		title: "Seal of Star drop: Event tab and notice",
+		family: "Transients",
+		source: "#1976 / runtime/ui/hud/unique-banner.ts + foundation/ui/chat-layout.ts",
+		open( context ) {
+			sealDropFixture( context, "Looter has dropped D6 Star Blade (Seal Of Star) from Tiger Girl", false );
+		}
+	},
+	{
+		id: "transient:seal-moon",
+		title: "Seal of Moon drop: Event tab and notice",
+		family: "Transients",
+		source: "#1976 / runtime/ui/hud/unique-banner.ts + foundation/ui/chat-layout.ts",
+		open( context ) {
+			sealDropFixture( context, "Looter has dropped D6 Moon Blade (Seal Of Moon) from Tiger Girl", false );
+		}
+	},
+	{
+		id: "transient:seal-sun",
+		title: "Seal of Sun drop: Event tab and notice",
+		family: "Transients",
+		source: "#1976 / runtime/ui/hud/unique-banner.ts + foundation/ui/chat-layout.ts",
+		open( context ) {
+			sealDropFixture( context, "SEAL OF SUN: Looter has dropped D6 Sun Blade from Tiger Girl", true );
+		}
 	}
 ];
+
+/*
+================
+sealDropFixture
+
+One seal drop on both of its surfaces (#1976): the tier-coloured
+top-centre notice, and its channel-7 chat line beside an ordinary All
+line and a Party line, so the Event tab (Experimental row on) and the
+All tab can be compared. The wording is the server's own
+(action/announce.go).
+================
+*/
+function sealDropFixture( context: RecipeContext, text: string, sunDrop: boolean ) {
+	// The fixture document retires saved preferences, so the Event tab's
+	// Experimental row is restored through the production event instead.
+	context.ui.event( {
+		kind: "experimental-preferences",
+		value: experimentalOptions( { eventChatTab: true } )
+	} );
+	context.state.gameplay.notices = [ {
+		sequence: 1,
+		key: "",
+		text,
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true,
+		dropPlus: true,
+		...(sunDrop ? { sunDrop: true as const } : {})
+	} ];
+	context.state.gameplay.chat = {
+		pending: false,
+		error: null,
+		lines: [
+			{ channel: 1, name: "Reviewer", text: "An ordinary line in All.", outgoing: false, sequence: 1 },
+			{ channel: 7, name: "", text, outgoing: false, sequence: 2 },
+			{ channel: 4, name: "Reviewer", text: "A party line.", outgoing: false, sequence: 3 }
+		]
+	};
+}
 
 export const extendedJourneys: readonly Journey[] = extendedRecipes.map( recipe => ({
 	id: recipe.id,

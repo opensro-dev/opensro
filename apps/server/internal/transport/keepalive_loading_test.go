@@ -97,3 +97,30 @@ func TestKeepaliveReturnsToIdleCadenceAfterLoading(t *testing.T) {
 		return countPings(fc) <= before+1
 	})
 }
+
+/*
+================
+TestKeepalivePingDueToleratesALateTick
+
+The ticker's ticks land on its schedule, not a fixed gap after the last
+one: a tick 300 ms late is followed by one only 1.7 s later. That tick
+still owes the loading ping; the cadence must not double to 4 s. A tick
+well short of the cadence still waits.
+================
+*/
+func TestKeepalivePingDueToleratesALateTick(t *testing.T) {
+	tick := sceneLoadingPingInterval
+	if !keepalivePingDue(1700*time.Millisecond, sceneLoadingPingInterval, tick) {
+		t.Fatal("a tick 1.7 s after a late ping skipped the 2 s loading cadence")
+	}
+	if !keepalivePingDue(sceneLoadingPingInterval, sceneLoadingPingInterval, tick) {
+		t.Fatal("an on-time tick skipped the loading cadence")
+	}
+	if keepalivePingDue(500*time.Millisecond, sceneLoadingPingInterval, tick) {
+		t.Fatal("a tick half a second after the last ping pinged again")
+	}
+	idle := 20 * time.Second
+	if keepalivePingDue(10*time.Second, idle, tick) || !keepalivePingDue(19500*time.Millisecond, idle, tick) {
+		t.Fatal("the idle cadence lost its bound")
+	}
+}

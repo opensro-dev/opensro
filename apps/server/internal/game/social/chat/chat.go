@@ -227,6 +227,16 @@ func handleAllChat(request Request, sender *enterworld.Character, global bool) O
 // deviation from native's case-sensitive CompareStringA the register
 // path already made; a sensitive compare here would let the identical
 // character through on a casing technicality.
+//
+// Port-only, not native (SRO_WHISPER_JOB_ALIAS, default on - owner,
+// 2026-10-28; "off" restores the native name-only behaviour; see
+// whisperalias.go): with the switch on, a typed target that matches no
+// character name also tries the dressed-alias resolution, the self arm
+// covers the sender's own dressed alias, and the block match accepts
+// the sender's dressed alias beside the character name. Nothing the
+// sender receives ever names the resolved character: the ack bodies
+// carry no name (the client renders the typed string) and the refusal
+// log below prints only what the sender typed.
 /*
 ================
 handleWhisper
@@ -239,13 +249,20 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 			Ack:     EncodeChatAckError(ChatErrCantFindTarget, request.ChatType, request.Second),
 		}
 	}
-	if strings.EqualFold(request.TargetName, sender.Name) {
+	if strings.EqualFold(request.TargetName, sender.Name) || selfByDressedAlias(sender, request.TargetName) {
 		// Self-whisper: success with NO delivery (the dump's self arm).
 		// The ack presents the "To [name]" line locally; a delivered
 		// copy would be dropped by the client's own-name compare anyway.
 		return Outcome{Ack: EncodeChatAckSuccess(request.ChatType, request.Second)}
 	}
 	target := findCharacterByName(deps, divisionID, request.TargetName)
+	if target == nil && WhisperJobAliasEnabled() {
+		// Port-only: the typed string is nobody's name; it may still be
+		// the job alias of a player wearing the suit right now. A typed
+		// string that IS a character name never reaches this arm, so a
+		// name can never be shadowed by an alias.
+		target = findCharacterByDressedAlias(deps, divisionID, request.TargetName)
+	}
 	target = characterSnapshot(deps, divisionID, target)
 	if target == nil || target.DeletePending ||
 		presence == nil || !presence.OnlineByName(divisionID, target.Name) {
@@ -258,8 +275,10 @@ func handleWhisper(deps Dependencies, presence PresenceView, divisionID string, 
 			Ack:     EncodeChatAckError(ChatErrCantFindTarget, request.ChatType, request.Second),
 		}
 	}
+	dressedAlias := senderDressedAlias(sender)
 	for _, blockedName := range target.BlockedWhisperers {
-		if strings.EqualFold(blockedName, sender.Name) {
+		if strings.EqualFold(blockedName, sender.Name) ||
+			(dressedAlias != "" && strings.EqualFold(blockedName, dressedAlias)) {
 			return Outcome{
 				Refusal: fmt.Sprintf("whisper from %s to %s suppressed by the target's block list", sender.Name, target.Name),
 				Ack:     EncodeChatAckSuccess(request.ChatType, request.Second),
@@ -429,6 +448,66 @@ findCharacterByName
 func findCharacterByName(deps Dependencies, divisionID, name string) *enterworld.Character {
 	for _, candidate := range deps.CharactersForDivision(divisionID) {
 		if candidate != nil && strings.EqualFold(candidate.Name, name) {
+			return candidate
+		}
+	}
+	return nil
+}
+
+/*
+================
+senderDressedAlias
+
+The alias the sender currently speaks under: their job alias while the
+suit is on, "" otherwise - and always "" while the port-only alias rules
+are off, so every caller stays native by construction.
+================
+*/
+func senderDressedAlias(sender *enterworld.Character) string {
+	if !WhisperJobAliasEnabled() || sender == nil || sender.Job.Alias == "" {
+		return ""
+	}
+	if enterworld.DressedJob(sender) == 0 {
+		return ""
+	}
+	return sender.Job.Alias
+}
+
+/*
+================
+selfByDressedAlias
+
+Port-only (SRO_WHISPER_JOB_ALIAS): the typed target is the sender's own
+dressed alias - the self-whisper arm, answered with the success ack and
+no delivery exactly as if the sender had typed their character name.
+With the switch off this is never true (senderDressedAlias is "").
+================
+*/
+func selfByDressedAlias(sender *enterworld.Character, typed string) bool {
+	alias := senderDressedAlias(sender)
+	return alias != "" && strings.EqualFold(typed, alias)
+}
+
+/*
+================
+findCharacterByDressedAlias
+
+Port-only (SRO_WHISPER_JOB_ALIAS): resolve a typed whisper target that
+matched no character name to the division character whose job alias it
+is AND who is wearing the suit right now. The dress verdict reads a
+snapshot, never the live record. An alias whose owner is undressed (or
+has none) resolves to nobody: the sender cannot tell "suit off" from
+"logged off" from "never existed", and all three answer
+ChatErrCantFindTarget.
+================
+*/
+func findCharacterByDressedAlias(deps Dependencies, divisionID, name string) *enterworld.Character {
+	for _, candidate := range deps.CharactersForDivision(divisionID) {
+		if candidate == nil || candidate.Job.Alias == "" || !strings.EqualFold(candidate.Job.Alias, name) {
+			continue
+		}
+		if snapshot := characterSnapshot(deps, divisionID, candidate); snapshot != nil &&
+			enterworld.DressedJob(snapshot) != 0 {
 			return candidate
 		}
 	}

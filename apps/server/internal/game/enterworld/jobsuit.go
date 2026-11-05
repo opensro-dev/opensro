@@ -15,7 +15,7 @@ package enterworld
 import "opensro.online/server/internal/domain"
 
 // JobSuitSlot is the job suit's equipment socket.
-const JobSuitSlot = 8
+const JobSuitSlot = domain.JobSuitSlot
 
 /*
 ================

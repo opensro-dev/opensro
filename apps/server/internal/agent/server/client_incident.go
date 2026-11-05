@@ -57,6 +57,10 @@ const (
 	// multi-megabyte OpEnterWorldResult (0x0007) bootstrap frames do not
 	// invalidate the journal; a gap row's size is the dropped frame count.
 	maxIncidentJournalBytes = transport.MaxFrameBytes
+	// The tab-hidden span an entry rejection may report (#2558): an
+	// entry attempt is bounded by the scene-loading patience, so a day
+	// is a generous ceiling no honest report reaches.
+	maxIncidentTabHiddenMs = 24 * 60 * 60 * 1000
 )
 
 // incidentJournalDirections are the journal's row kinds, in the client's
@@ -98,6 +102,14 @@ type clientIncident struct {
 	Character   string `json:"character,omitempty"`
 	Region      int    `json:"region,omitempty"`
 	Build       string `json:"build,omitempty"`
+	// The entry failure's transport join fields (#2558): the session
+	// the failure happened on, why the transport ended and how long
+	// the page was hidden during the entry. All optional; absent on
+	// reports that are not an entry failure. sanitizeJoinFields drops
+	// a value the log line cannot carry, never the report.
+	TransportSession string `json:"transportSession,omitempty"`
+	CloseReason      string `json:"closeReason,omitempty"`
+	TabHiddenMs      *int64 `json:"tabHiddenMs,omitempty"`
 	// Journal is the last frames before the failure, flattened rows of
 	// incidentJournalFields numbers.
 	Journal []float64 `json:"journal,omitempty"`
@@ -157,6 +169,29 @@ func (incident clientIncident) problem() string {
 		return "phase too long"
 	}
 	return ""
+}
+
+/*
+================
+sanitizeJoinFields
+
+Drops a transport join field the log line cannot carry faithfully:
+the session id is the server's decimal u64, the close reason a short
+failure code, the hidden span non-negative and under a day. The
+fields are evidence seasoning, never the report itself, so a bad one
+costs the field, not the incident (the journal rule, #788).
+================
+*/
+func (incident *clientIncident) sanitizeJoinFields() {
+	if !incidentTransportSession.MatchString(incident.TransportSession) {
+		incident.TransportSession = ""
+	}
+	if len(incident.CloseReason) > 64 || !incidentNamePattern.MatchString(incident.CloseReason) {
+		incident.CloseReason = ""
+	}
+	if incident.TabHiddenMs != nil && (*incident.TabHiddenMs < 0 || *incident.TabHiddenMs > maxIncidentTabHiddenMs) {
+		incident.TabHiddenMs = nil
+	}
 }
 
 /*
@@ -246,6 +281,7 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	if err := decodeJSON(r, &incident); err != nil {
 		reason = "malformed body: " + err.Error()
 	} else {
+		incident.sanitizeJoinFields()
 		reason = incident.problem()
 	}
 	pace, paceKey := server.incidentReports, "account/"+claims.AccountID
@@ -310,6 +346,22 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		fields["journal"] = journal
 		eventFields["journal"] = journal
 	}
+	// The entry failure's join keys ride the line and the history
+	// event (#2558): the session id is searched against the
+	// transport's lines, the close reason says whether the server
+	// closed for idle, the hidden span settles tab versus device.
+	if incident.TransportSession != "" {
+		fields["transportSession"] = incident.TransportSession
+		eventFields["transportSession"] = incident.TransportSession
+	}
+	if incident.CloseReason != "" {
+		fields["closeReason"] = incident.CloseReason
+		eventFields["closeReason"] = incident.CloseReason
+	}
+	if incident.TabHiddenMs != nil {
+		fields["tabHiddenMs"] = *incident.TabHiddenMs
+		eventFields["tabHiddenMs"] = fmt.Sprint(*incident.TabHiddenMs)
+	}
 	id := incident.ID
 	if id == "" {
 		var err error
@@ -368,3 +420,4 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 
 var incidentIdentifier = regexp.MustCompile(`^[a-f0-9]{32}$`)
 var incidentSessionIdentifier = regexp.MustCompile(`^[a-f0-9]{32}:[0-9]{1,20}$`)
+var incidentTransportSession = regexp.MustCompile(`^[0-9]{1,20}$`)

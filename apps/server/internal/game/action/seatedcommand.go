@@ -4,7 +4,7 @@
 seatedcommand.go - an attack or skill pressed while seated
 
 The v1.150 client stands a seated player instead of attacking
-(sub_692CB0 -> CICPlayer_ToggleSitStand) but composes a skill press
+(CGInterface_InteractCharacterTarget -> CICPlayer_ToggleSitStand) but composes a skill press
 without looking at the posture (CGInterface_ExecuteSelectedActionAtTarget
 client 6FCD50). The v1.188 server then casts from the seat: no command-path gate
 reads motion 4 outside msch mode 1 and ao/pw, and a

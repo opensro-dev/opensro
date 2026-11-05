@@ -675,3 +675,281 @@ dispose
 		runtime.dispose();
 	}
 });
+
+test("terminal asset failures reach the session as asset incidents, once per episode", async t => {
+	const keys = [
+		"__runtimeOwners",
+		"requestAnimationFrame",
+		"cancelAnimationFrame",
+		"location",
+		"document",
+		"performance"
+	];
+	const previous = new Map( keys.map( key => [ key, Object.getOwnPropertyDescriptor( globalThis, key ) ] ) );
+	t.after( () => {
+		for ( const [key, value] of previous ) {
+			if ( value ) Object.defineProperty( globalThis, key, value );
+			else delete globalThis[key];
+		}
+	} );
+	const closed = [], reports = [], sounds = [], commands = [];
+	const owners = frameOwners( "characters", closed, reports, sounds );
+	// The frame clock and the deliveries are the test's own (the hidden-tab
+	// test's pattern): holding `now` holds every pace decision the runtime
+	// makes, and a frame runs when a delivery settles past the starve line.
+	// The loop reaches each delivery wait on a microtask chain, so frame()
+	// lets it run until a wait is pending before releasing it.
+	let now = 1000;
+	const deliveries = [];
+	globalThis.performance = { now: () => now };
+	globalThis.document = { visibilityState: "visible" };
+	globalThis.location = { search: "", origin: "http://localhost" };
+	owners.simulation.delivery = () => new Promise( resolve => deliveries.push( resolve ) );
+	globalThis.__runtimeOwners = owners;
+	globalThis.requestAnimationFrame = () => 1;
+	globalThis.cancelAnimationFrame = () => {};
+	// The owner surface the frame reads on its way to the report block,
+	// plus the failure handouts this test steers. The handout queues are
+	// the owners' take-once contract: an empty queue hands out nothing.
+	const worldHandouts = [], navigationHandouts = [];
+	let characterError = null, rendererError = null;
+	owners.simulation.session = command => {
+		commands.push( command );
+	};
+	Object.assign( owners.world, {
+		error: () => null,
+		reconnecting: () => false,
+		ready: () => false,
+		progress: () => 0,
+		loadingRegion: () => undefined,
+		terminalFailure: () => worldHandouts.shift()
+	} );
+	Object.assign( owners.navigation, {
+		error: () => null,
+		reconnecting: () => false,
+		phase: () => "idle",
+		terminalFailure: () => navigationHandouts.shift()
+	} );
+	owners.characters.step = () => {};
+	owners.characters.cameraTarget = () => null;
+	owners.characters.drawnPose = () => null;
+	owners.characters.ownMover = () => {};
+	owners.characters.ready = () => false;
+	owners.characters.damageText = () => [];
+	owners.characters.takeCameraScripts = () => [];
+	owners.characters.error = () => characterError;
+	owners.ui.event = () => {};
+	owners.ui.cursor = () => null;
+	owners.renderer.experimentalVideo = () => {};
+	owners.renderer.setDamageText = () => {};
+	owners.renderer.setTeleportGates = () => {};
+	owners.renderer.pickEntity = () => null;
+	owners.renderer.audioListener = () => null;
+	owners.world.retryTransient = () => {};
+	owners.navigation.retryTransient = () => {};
+	owners.platform.readViewport = () => ({ width: 800, height: 600 });
+	owners.platform.presentWorldCursor = () => {};
+	owners.platform.presentTelemetry = () => {};
+	owners.platform.setKeepAwake = () => {};
+	owners.presentation.travel = () => null;
+	owners.presentation.read = () => undefined;
+	owners.input.altHeld = () => false;
+	Object.assign( owners.renderer, {
+		worldStats: () => ({ visibleGroups: 0, pendingGroups: 0, pendingTextures: 0, residentGroups: 0 }),
+		phase: () => rendererError ? "failed" : "ready",
+		error: () => rendererError,
+		adapterFacts: () => ({
+			vendor: "nvidia",
+			architecture: "ampere",
+			features: [ "texture-compression-bc" ],
+			limits: { maxBufferSize: 0, maxStorageBufferBindingSize: 0, maxTextureDimension2D: 0 }
+		}),
+		characterStats: () => ({ actors: 0, draws: 0 }),
+		gpuTiming: () => undefined
+	} );
+	Object.assign( owners.platform, {
+		presentUi() {},
+		presentLoading() {},
+		readUiViewport: () => ({ width: 800, height: 600 }),
+		diagnosticsActive: () => false
+	} );
+	owners.assets.progress = () => null;
+	Object.assign( owners.audio, {
+		enqueue() {},
+		ready: () => true,
+		error: () => null,
+		music() {},
+		musicStatus: () => "stopped",
+		prepareUi() {},
+		prepareCombat() {}
+	} );
+	Object.assign( owners.ui, {
+		resourceError: () => null,
+		stats: () => ({ pending: 0, failed: [], error: undefined }),
+		runtimeError() {}
+	} );
+	owners["bug-report"].note = () => {};
+	owners["build-info"].readout = () => "";
+	owners.input.dropNamesHeld = () => false;
+	owners.input.blindHeld = () => false;
+	owners.presentation.count = () => 0;
+	const runtime = startRuntime( {}, {} );
+	// A failed assertion must not leak a running runtime: it keeps node alive.
+	try {
+		const frame = async () => {
+			now += 1000;
+			for ( let i = 0; i < 64 && deliveries.length === 0; i++ ) await Promise.resolve();
+			defined( deliveries.shift() )();
+			for ( let i = 0; i < 32; i++ ) await Promise.resolve();
+		};
+		const assetReports = () => commands.filter( c => c.kind === "client-report" );
+		await frame();
+		assert.deepEqual( assetReports(), [], "no failure, no incident" );
+		worldHandouts.push( {
+			error: "Error: /assets/a.json: Load failed",
+			path: "/assets/a.json",
+			transient: true,
+			attempts: 8
+		} );
+		await frame();
+		assert.deepEqual( assetReports(), [ {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "world_asset_failed",
+			message: "asset=/assets/a.json transient=true attempts=8 error=Error: /assets/a.json: Load failed"
+		} ] );
+		await frame();
+		assert.equal( assetReports().length, 1, "the same episode is not filed twice" );
+		characterError = "Missing height";
+		await frame();
+		assert.equal( assetReports().length, 2, "a resource failure files beside the stream lanes" );
+		assert.deepEqual( assetReports()[1], {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "asset_failed",
+			message: "asset=- error=Characters: Missing height"
+		} );
+		// A thrown error files as runtime_exception with its stack (#2559).
+		owners.characters.failure = () => ({
+			path: null,
+			message: "InternalError: too much recursion",
+			stack: "recursion stack"
+		});
+		characterError = "InternalError: too much recursion";
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "runtime",
+			code: "runtime_exception",
+			message: "Characters: InternalError: too much recursion",
+			stack: "recursion stack"
+		} );
+		// An audio decode failure names its file (#2559).
+		owners.audio.error = () => "EncodingError: Unable to decode audio data";
+		owners.audio.failure = () => ({
+			path: "/assets/audio/ui_click.ogg",
+			message: "EncodingError: Unable to decode audio data"
+		});
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "asset_failed",
+			message: "asset=/assets/audio/ui_click.ogg error=Audio: EncodingError: Unable to decode audio data"
+		} );
+		// A UI image failure carries the retry owner's facts (#2559).
+		owners.ui.resourceError = () => "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode";
+		owners.ui.resourceFailure = () => ({
+			path: "/assets/ui/panel.ddj",
+			attempts: 3,
+			transient: true,
+			message: "UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
+		});
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "asset_failed",
+			message: "asset=/assets/ui/panel.ddj transient=true attempts=3 " +
+				"error=Interface: UI image unavailable; retrying: /assets/ui/panel.ddj: Failed to decode"
+		} );
+		// A fetch burst across sources in one poll is a dropped
+		// connection, not three broken assets (#2559): the first two
+		// file as asset failures, the third completes the burst and
+		// files the one asset_offline.
+		owners.characters.failure = () => null;
+		characterError = "TypeError: Failed to fetch";
+		owners.audio.error = () => "TypeError: Failed to fetch";
+		owners.audio.failure = () => ({ path: "/assets/audio/burst.ogg", message: "TypeError: Failed to fetch" });
+		owners.ui.resourceError = () =>
+			"UI image unavailable; retrying: /assets/ui/burst.ddj: TypeError: Failed to fetch";
+		owners.ui.resourceFailure = () => ({
+			path: "/assets/ui/burst.ddj",
+			attempts: 1,
+			transient: true,
+			message: "UI image unavailable; retrying: /assets/ui/burst.ddj: TypeError: Failed to fetch"
+		});
+		const burstStart = assetReports().length;
+		await frame();
+		assert.deepEqual( assetReports().slice( burstStart ).map( report => report.code ), [
+			"asset_failed",
+			"asset_failed",
+			"asset_offline"
+		] );
+		// The outage's later fetch failures are the same outage: they
+		// file nothing more, never an asset_failed, and the outage
+		// stays one asset_offline.
+		const tailStart = assetReports().length;
+		characterError = "TypeError: Failed to fetch (burst tail)";
+		await frame();
+		assert.deepEqual( assetReports().slice( tailStart ), [] );
+		assert.equal( assetReports().filter( report => report.code === "asset_offline" ).length, 1 );
+		// The asset worker's death still stops the session: fatal
+		// (#2559). It dies mid-frame here: healthy at the frame's
+		// opening check, failed by the report poll in the same frame -
+		// a worker already dead at the opening check throws instead.
+		let healthReads = 0;
+		owners.assets.health = () =>
+			++healthReads === 1 ?
+				{ phase: "running" } :
+				{ phase: "failed", error: "Asset worker failed" };
+		await frame();
+		assert.deepEqual( assetReports().at( -1 ), {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "fatal_asset_failed",
+			message: "error=Assets: Asset worker failed"
+		} );
+		owners.assets.health = () => ({ phase: "running" });
+		const episodeStart = assetReports().length;
+		navigationHandouts.push( {
+			error: "Error: Asset HTTP 404",
+			path: "/assets/world/world-region-catalog.json",
+			transient: false,
+			attempts: 0
+		} );
+		worldHandouts.push( {
+			error: "Error: /assets/b.json: Load failed",
+			path: "/assets/b.json",
+			transient: true,
+			attempts: 8
+		} );
+		await frame();
+		assert.equal( assetReports().length, episodeStart + 2, "a later episode files again under its own facts" );
+		assert.equal( assetReports()[episodeStart].code, "world_asset_failed" );
+		assert.equal( assetReports()[episodeStart + 1].code, "navigation_asset_failed" );
+		rendererError = "D3D12 device removed (DXGI_ERROR_DEVICE_HUNG): the GPU device instance has been suspended";
+		await frame();
+		assert.equal( assetReports().length, episodeStart + 3, "the renderer failure files before dispose" );
+		assert.deepEqual( assetReports()[episodeStart + 2], {
+			kind: "client-report",
+			incidentKind: "asset",
+			code: "renderer_failed",
+			message: "asset=- transient=false attempts=0 error=D3D12 device removed (DXGI_ERROR_DEVICE_HUNG): " +
+				"the GPU device instance has been suspended | adapter: nvidia/ampere features=texture-compression-bc"
+		} );
+		assert.ok( closed.length > 0, "the runtime disposed after filing" );
+	} finally {
+		runtime.dispose();
+	}
+});

@@ -141,7 +141,11 @@ advanceHawk
 
 One record's turn: a lost instance drops it, a dead or missing target
 clears its aim, and a strike needs a full interval since the last one and
-a caster attack within the last interval.
+a caster attack within the last interval. The wait verdict reads values
+only; the resolution and the aim clear it feeds wait for a strike tick,
+so a target that dies mid-interval is cleared at the strike tick instead
+of the tick it died. No strike outcome moves - the strike re-resolves
+first - and the record's target has no reader outside this lane.
 ================
 */
 func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionFrames {
@@ -154,8 +158,21 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 		rt.dropHawk(key, h.token)
 		return nil
 	}
-	snapshot := rt.characterSnapshot(h.division, c)
-	if snapshot == nil || !enterworld.CharacterAlive(snapshot) || h.target == 0 {
+	// The wait verdict reads values only: life from the read door (the
+	// copy's normalizations feed no vitals fact) and the interval from
+	// the hawk record and its skill row. The caster record is detached
+	// only on a strike tick, below - the resolution and the strike both
+	// still run there, in the original order, before anything commits.
+	alive, _, _ := rt.characterLifeState(h.division, c)
+	if !alive || h.target == 0 {
+		return nil
+	}
+	interval := int64(row.TimedEffect.Hawk.IntervalMs)
+	if now-h.strikeAt < interval || now-h.ownerAttackAt > interval {
+		return nil
+	}
+	snapshot := rt.characterSnapshotCombat(h.division, c)
+	if snapshot == nil {
 		return nil
 	}
 	target, exists := rt.resolveCombatTarget(h.division, snapshot, h.target, now)
@@ -163,10 +180,6 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 	// player's own single-target hit on a COS).
 	if !exists || target.cos != nil {
 		rt.updateHawk(key, h.token, func(live *summonedHawk) { live.target = 0 })
-		return nil
-	}
-	interval := int64(row.TimedEffect.Hawk.IntervalMs)
-	if now-h.strikeAt < interval || now-h.ownerAttackAt > interval {
 		return nil
 	}
 	rt.updateHawk(key, h.token, func(live *summonedHawk) { live.strikeAt = now })
@@ -218,7 +231,7 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 	if err != nil {
 		return OpResult{}
 	}
-	rank := combat.SkillMasteryRank(snapshot.Masteries, row.Attack)
+	rank := rt.hawkMasteryRank(snapshot)
 	damage, err := combat.HawkDamage(defender, row.TimedEffect.Hawk.Physical, row.TimedEffect.Hawk.Magical, rank, rt.CombatRoll)
 	if err != nil {
 		return OpResult{}
@@ -230,7 +243,7 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 			return OpResult{}
 		}
 		hit, result, landed := rt.creditPlayerHit(playerHitInput{division: h.division, caster: c, snapshot: snapshot,
-			attacker: attacker, skill: row, target: victim, impacts: 1, fixed: &formula, now: now})
+			attacker: attacker, skill: row, target: victim, impacts: 1, fixed: &formula, now: now}, rt.tickDoors())
 		if !landed {
 			return OpResult{}
 		}
@@ -251,6 +264,27 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 		word |= wire.HawkFatalBit
 	}
 	return rt.creditedHitResult(h.division, target, hit, []wire.Frame{wire.HawkStrikeFrame(h.token, target.Gid, word)}, now)
+}
+
+/*
+================
+hawkMasteryRank
+
+Natively, before each of its lanes the periodic damage asks the caster
+for its main weapon's default attack skill, looks that skill up in the
+caster's skill manager, and reads the mastery rank on THAT row. It never
+reads the summon row: no hawk row carries MAAT, so reading the rank
+there always answered zero and every hawk struck at rank 0 (#2500).
+The row read is the one a basic attack resolves; a caster with no
+resolvable default attack row reads rank 0.
+================
+*/
+func (rt *Runtime) hawkMasteryRank(caster *enterworld.Character) uint8 {
+	base, _, refusal := rt.resolveBasicAttack(caster)
+	if refusal != "" {
+		return 0
+	}
+	return combat.SkillMasteryRank(caster.Masteries, base.Attack)
 }
 
 /*

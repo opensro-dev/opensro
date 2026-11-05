@@ -12,10 +12,13 @@ import (
 
 // The letter (memo) lane: 0x7261 send, 0x73F2 read-fetch, 0x70CC delete
 // over the authority store's memos table (enterworld.LetterStore). All
-// wire layouts are pinned from the client folds cited in wire.go; every
-// refusal is SILENT (the war-horn/COS convention) because the only error
-// channels the client parses - 0xB261/0xB3F2 result 2 - carry error
-// CODES whose values are unpinned vs retail.
+// wire layouts are pinned from the client folds cited in wire.go. A send
+// refusal the sender's client cannot gate itself (unknown or
+// delete-pending receiver, full mailbox, generic delivery failure) is
+// answered with the 0xB261 result-2 code the client's category-0x14
+// notice table prints; refusals the client's own composer already
+// reports before the wire (empty fields, edit caps, the job-alias lead)
+// stay silent.
 //
 // Index contract: the u8 wire index is the mailbox slice position. The
 // seed (0xB3CD), the live push (0x3F9A case 8, a tail append on both
@@ -24,7 +27,7 @@ import (
 // never needs a stable id column.
 
 // PackLetterReceiveTime composes the packed receive-time dword the
-// client's sub_60c9b0 decode reads (record +0x3c): bits 0..5 the
+// client's CIFLetterSlot_SetRecord decode reads (record +0x3c): bits 0..5 the
 // two-digit year, 6..9 the month, 10..14 the day, 15..19 the hour,
 // 20..25 the minute. The year field is 6 bits, so years past 2063 alias
 // - exactly what the native field does; the client renders it %0.2d.
@@ -44,10 +47,12 @@ func PackLetterReceiveTime(t time.Time) uint32 {
 const letterJobAliasLead = "*"
 
 // LetterSendOutcome is one handled 0x7261 request. AckPayload is the
-// 0xB261 result-1 body for the SENDER; RecipientPushPayload is the
-// 0x3F9A case-8 body for the RECIPIENT's live session when one exists
-// (the hub adapter resolves it - never inside the store door). A refusal
-// leaves both nil and the wire silent.
+// 0xB261 body for the SENDER - the result-1 ack on delivery, or the
+// result-2 refusal body when the refusal is the sender's to see;
+// RecipientPushPayload is the 0x3F9A case-8 body for the RECIPIENT's
+// live session when one exists (the hub adapter resolves it - never
+// inside the store door). A refusal the client's own composer already
+// reports leaves AckPayload nil and the wire silent.
 type LetterSendOutcome struct {
 	AckPayload           []byte
 	RecipientName        string
@@ -59,13 +64,23 @@ func refusedLetterSend(reason string) LetterSendOutcome {
 	return LetterSendOutcome{Refusal: reason}
 }
 
+// refusedLetterSendAnswered is a refusal the sender's client cannot
+// gate itself: the reason stays in Refusal for the log, and AckPayload
+// carries the 0xB261 result-2 body naming the client's notice row.
+func refusedLetterSendAnswered(reason string, code uint8) LetterSendOutcome {
+	outcome := refusedLetterSend(reason)
+	outcome.AckPayload = EncodeLetterSendRefusalB261(code)
+	return outcome
+}
+
 // HandleLetterSend applies one decoded 0x7261 request: resolve the
 // receiver character through the store (never a session), append the
 // letter to THEIR mailbox through the letter door, and ack the sender
 // with the pinned 0xB261 success byte. Refusals mirror the client's own
-// gates (empty fields, the 0xc/0x100 edit caps, the job-alias lead) plus
-// the server-side truths the client cannot know (unknown receiver,
-// delete-pending receiver, the 0x14 mailbox cap) - all silent.
+// gates (empty fields, the 0xc/0x100 edit caps, the job-alias lead) and
+// stay silent; the server-side truths the client cannot know (unknown
+// receiver, delete-pending receiver, the mailbox cap, a failed
+// delivery) are answered with their 0xB261 result-2 codes instead.
 func HandleLetterSend(deps Dependencies, divisionID string, sender *enterworld.Character, payload []byte, now time.Time) LetterSendOutcome {
 	if sender == nil {
 		return refusedLetterSend("characterNotFound")
@@ -104,7 +119,7 @@ func HandleLetterSend(deps Dependencies, divisionID string, sender *enterworld.C
 		}
 	}
 	if receiver == nil {
-		return refusedLetterSend(fmt.Sprintf("receiver %q not found in division %s", request.Receiver, divisionID))
+		return refusedLetterSendAnswered(fmt.Sprintf("receiver %q not found in division %s", request.Receiver, divisionID), LetterSendRefusalUnknownUser)
 	}
 	var senderSnapshot, receiverSnapshot *enterworld.Character
 	deps.Read(divisionID, func() {
@@ -112,10 +127,16 @@ func HandleLetterSend(deps Dependencies, divisionID string, sender *enterworld.C
 		receiverSnapshot = receiver.Snapshot()
 	})
 	if senderSnapshot == nil || senderSnapshot.DeletePending {
-		return refusedLetterSend("deletePending")
+		// Inference: the client's letter rows give a delete-pending
+		// SENDER no code of its own (the composer is his own client);
+		// the generic send-error row carries the refusal.
+		return refusedLetterSendAnswered("deletePending", LetterSendRefusalSendError)
 	}
 	if receiverSnapshot == nil || receiverSnapshot.DeletePending {
-		return refusedLetterSend(fmt.Sprintf("receiver %q is delete-pending", receiver.Name))
+		// A delete-pending receiver is indistinguishable from an
+		// unknown one on the sender's side of the wire: the
+		// unknown-user row answers both.
+		return refusedLetterSendAnswered(fmt.Sprintf("receiver %q is delete-pending", receiver.Name), LetterSendRefusalUnknownUser)
 	}
 
 	letter := enterworld.LetterRecord{
@@ -125,17 +146,23 @@ func HandleLetterSend(deps Dependencies, divisionID string, sender *enterworld.C
 		ReadFlag:          0,
 		Body:              request.Body,
 	}
-	if !letters.DeliverLetter(
+	switch letters.DeliverLetter(
 		divisionID,
 		sender.ID,
 		receiver.ID,
 		LetterMailboxMaxCount,
 		letter,
 	) {
-		return refusedLetterSend(fmt.Sprintf(
-			"delivery to %q refused inside the authority door (character unavailable or mailbox full)",
+	case enterworld.LetterDeliveryDone:
+	case enterworld.LetterDeliveryMailboxFull:
+		return refusedLetterSendAnswered(fmt.Sprintf(
+			"delivery to %q refused: mailbox full", receiver.Name,
+		), LetterSendRefusalMailboxFull)
+	default:
+		return refusedLetterSendAnswered(fmt.Sprintf(
+			"delivery to %q refused inside the authority door (character unavailable)",
 			receiver.Name,
-		))
+		), LetterSendRefusalSendError)
 	}
 	outcome := LetterSendOutcome{}
 	outcome.AckPayload = EncodeLetterSendAckB261()
@@ -243,9 +270,10 @@ func MailboxListEntries(mailbox []enterworld.LetterRecord) []LetterListEntry {
 // RegisterLetter wires the letter lane onto the hub: 0x7261 send, 0x73F2
 // read-fetch, 0x70CC delete (replacing their silent-refuse stubs). Wired
 // from wiring.go with the SAME deps pointer every other lane retains.
-// A refusal stays SILENT (the only pinned error
-// arms carry unpinned error-code values) and logs its reason; success
-// answers with the pinned 0xB261/0xB3F2/0xB0CC result-1 bodies. The
+// A refusal logs its reason; a send refusal the sender's client cannot
+// gate itself also answers its pinned 0xB261 result-2 body, the rest
+// stay silent. Success answers with the pinned 0xB261/0xB3F2/0xB0CC
+// result-1 bodies. The
 // send handler additionally pushes the pinned 0x3F9A case-8 event to the
 // RECIPIENT's live session when presence resolves one - AFTER the mailbox
 // door returned (never inside the store lock); an offline recipient is
@@ -259,6 +287,9 @@ func RegisterLetter(hub *transport.Hub, deps Dependencies, presence Presence) {
 		}
 		outcome := HandleLetterSend(deps, divisionID, sender, payload, time.Now())
 		if outcome.Refusal != "" {
+			if outcome.AckPayload != nil {
+				_ = s.Send(OpLetterSendAckAnswer, outcome.AckPayload)
+			}
 			log.Debugf("community: 0x7261 (letter-send) refused for %s: %s", sender.Name, outcome.Refusal)
 			return
 		}

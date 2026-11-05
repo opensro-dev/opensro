@@ -144,19 +144,19 @@ func (rt *Runtime) playerAbnormalCandidates() []playerAbnormalEntry {
 PlayerMovementBlocked
 
 The reference server's move command drops ground commands while frozen, asleep, rooted or stunned.
+Petrified joins them: the stone curse holds its victim in place while
+its pulses land. The native curse gates the cast side at the manager's
+standing stone record (0x3009); the move side is the port's inference
+from the same hold, carried here as abnormal slot 12.
 ================
 */
 func (rt *Runtime) PlayerMovementBlocked(division, name string) bool {
 	block := rt.playerAbnormal(division, name)
-	if block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0 {
+	if block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()|abnormal.Petrify.Bit()) != 0 {
 		return true
 	}
-	character := rt.findCharacter(division, name)
-	if character == nil {
-		return false
-	}
-	snapshot := rt.characterSnapshot(division, character)
-	return snapshot != nil && snapshot.ActiveCOS != nil && snapshot.ActiveCOS.Mounted && rt.cosMovementBlocked(division, snapshot)
+	petGID, mounted := rt.mountedCosGID(division, name)
+	return mounted && rt.cosMovementBlockedFor(division, name, petGID)
 }
 
 /*
@@ -189,13 +189,15 @@ func (rt *Runtime) PlayerAttackLocked(division, name string) bool {
 playerCastBlocked
 
 playerCastBlocked is the native pre-engage abnormal gate (0x3009): freeze,
-sleep and stun (mask 4041) forbid every command. The 'nmf' waiver and the
-MOB_RM_SEALSTONE exemption name no v1.150 player skill.
+sleep and stun (mask 4041) forbid every command. The stone curse refuses
+with the same 0x3009 through the manager's standing stone record; the
+port carries the curse as slot 12, so petrify tests here beside the mask
+bits. The 'nmf' waiver and the MOB_RM_SEALSTONE exemption name no v1.150 player skill.
 ==================
 */
 func (rt *Runtime) playerCastBlocked(division, name string) bool {
 	block := rt.playerAbnormal(division, name)
-	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Stun.Bit()) != 0
+	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Stun.Bit()|abnormal.Petrify.Bit()) != 0
 }
 
 /*

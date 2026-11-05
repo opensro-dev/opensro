@@ -14,6 +14,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/platform/namekey"
 )
 
 /*
@@ -53,11 +54,13 @@ func NewWorldStore() *WorldStore {
 ================
 WorldKey
 
-WorldKey is the store key for one character.
+WorldKey is the store key for one character; the key's shape is defined
+once in platform/namekey so this store and the hub's session bindings
+can never drift apart.
 ================
 */
 func WorldKey(divisionID, characterName string) string {
-	return divisionID + ":" + strings.ToLower(characterName)
+	return namekey.Key(divisionID, characterName)
 }
 
 /*
@@ -100,6 +103,29 @@ func (st *WorldStore) Snapshot(key string, seed func() WorldState) WorldState {
 	state := st.state(key, seed)
 	st.advanceGroundWalk(key, state)
 	return CloneWorldState(*state)
+}
+
+/*
+================
+SnapshotExisting
+
+SnapshotExisting is Snapshot without the seed: it answers only for an
+actor the store already holds. A caller that must not read a character
+record outside the character door (the judged pet tick, #2139) takes
+the owner world here and falls back when it is missing, instead of
+seeding from the live record the way Snapshot's seed would.
+================
+*/
+func (st *WorldStore) SnapshotExisting(key string) (WorldState, bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	state, ok := st.states[key]
+	if !ok {
+		return WorldState{}, false
+	}
+	st.advanceGroundWalk(key, state)
+	return CloneWorldState(*state), true
 }
 
 /*

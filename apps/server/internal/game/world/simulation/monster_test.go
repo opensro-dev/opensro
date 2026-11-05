@@ -12,7 +12,7 @@ import (
 // The monster create row is the shared bionic spawn tail (byte-identical
 // in SHAPE to the NPC row: pos block, standing movement block, speeds,
 // per-monster f32 scale denom, mastery 0, name mask 1 + name) plus exactly one
-// trailing rarity byte (client sub_861b00 @0x861b74) - and NOTHING else: no HP,
+// trailing rarity byte (client CICMonster_DeserializeSpawnPacket @0x861b74) - and NOTHING else: no HP,
 // no level (those are post-spawn 0x33A6). Field offsets follow the
 // prior-board SCOUT-M2 byte map; the layout re-pin is tracked on the
 // monster-live board.

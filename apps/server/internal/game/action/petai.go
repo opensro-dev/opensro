@@ -182,6 +182,14 @@ func (rt *Runtime) forgetPetSession(division, name string) {
 		}
 	}
 	rt.petMu.Unlock()
+	// The owner's pets leave the world with the owner: the gid index
+	// forgets them here (cosownerindex.go).
+	for _, state := range retired {
+		if state != nil && state.character != nil {
+			rt.cosOwners.forgetOwner(division, state.character)
+			break
+		}
+	}
 	for key, state := range retired {
 		if key.gid == 0 {
 			rt.deps.Update(state.character, "crow-brood-logout", func() bool {
@@ -386,22 +394,48 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		}
 	}()
 	// The session binds the canonical character pointer. Avoid searching the
-	// division's entire saved-character population on every pet tick.
-	var snapshot *enterworld.Character
-	rt.deps.Read(key.division, func() {
-		if state.character.CompanionByGID(key.gid) != nil {
-			snapshot = state.character.Snapshot()
-		}
-	})
-	if snapshot == nil {
+	// division's entire saved-character population on every pet tick. The
+	// tick first judges on door-read facts (readPetTickFacts): a missing
+	// companion ends the session's motion, and an admitted tick that can
+	// finish on values - the bound follower's follow, the early stops -
+	// pays no owner copy at all (#2139). A tick that must commit through
+	// the record abstains to the copy, which judges exactly as before:
+	// an unsummoned, dead, mounted or deletion-pending companion (or a
+	// fallen owner) takes the cheaper stop path, never the whole record
+	// (#1943). companionSeen separates the two refusals; ownerDead
+	// carries the copy's life fact the guardian test below weighs, read
+	// in the same door pass that judged admission.
+	facts := rt.readPetTickFacts(key.division, state.character, key.gid)
+	if !facts.companionSeen {
 		state.roar = nil
 		rt.cancelPetCombat(key, state, nowMs)
 		state.follower = nil
 		return nil
 	}
-	cos := snapshot.CompanionByGID(key.gid)
+	if facts.admitted {
+		if out, handled := rt.advancePetJudged(key, state, facts, nowMs, &following, &answerStuck); handled {
+			return out
+		}
+	}
+	companionSeen := false
+	ownerDead := false
+	snapshot := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(live *enterworld.Character) bool {
+		pet := live.CompanionByGID(key.gid)
+		if pet == nil {
+			return false
+		}
+		companionSeen = true
+		ownerDead = enterworld.CurrentHP(live) == 0
+		return !live.DeletePending && !ownerDead && pet.Summoned && !pet.Mounted && pet.CurrentHP != 0
+	})
+	if snapshot == nil && !companionSeen {
+		state.roar = nil
+		rt.cancelPetCombat(key, state, nowMs)
+		state.follower = nil
+		return nil
+	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-	if !ok || snapshot.DeletePending || enterworld.CurrentHP(snapshot) == 0 || cos == nil || !cos.Summoned || cos.Mounted || cos.CurrentHP == 0 {
+	if snapshot == nil || !ok {
 		state.roar = nil
 		// An unsummoned, dead or mounted pet leaves BATTLE; a later summon
 		// must not resume an old fight.
@@ -412,11 +446,12 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		frames := state.follower.Stop(nowMs)
 		// Port-only: a living guardian must keep its real anchor while awaiting its owner's revival timer.
 		_, _, _, _, guardian := rt.bondSource(key, state)
-		if !guardian || enterworld.CurrentHP(snapshot) != 0 {
+		if !guardian || !ownerDead {
 			state.follower = nil
 		}
 		return frames
 	}
+	cos := snapshot.CompanionByGID(key.gid)
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
 	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
 		state.roar = nil
@@ -491,7 +526,11 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	if state.pickup != nil {
 		q := *state.pickup
 		item, found := rt.characterGround(key.division, snapshot, q.GroundGID)
-		if !found || nowMs >= state.pickupDeadline {
+		pose := state.follower.Position(nowMs)
+		// A target that vanished, timed out, or can never be granted
+		// at arrival (cosPickupTargetRetired) retires the same way:
+		// the refusal answer, no walk, no warning.
+		if !found || nowMs >= state.pickupDeadline || rt.cosPickupTargetRetired(key.division, snapshot, pose, item) {
 			result := finishPendingCosPickup(state, failureResult(wire.ErrCodeInvalidRequest))
 			frames := state.follower.Stop(nowMs)
 			for _, f := range result.Frames {
@@ -499,7 +538,6 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			}
 			return frames
 		}
-		pose := state.follower.Position(nowMs)
 		target := simulation.Spawn{RegionID: item.Position.RegionID, X: float64(item.Position.X), Y: float64(item.Y), Z: float64(item.Position.Z)}
 		from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
@@ -507,7 +545,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			return state.follower.Approach(target, float64(rt.cosPacedRun(ref, run)), nowMs, grounditem.ExecuteRange, constraint)
 		}
 		frames := state.follower.Stop(nowMs)
-		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs), command: state.pickupCommand})
+		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs), command: state.pickupCommand, doors: rt.tickDoors()})
 		result = finishPendingCosPickup(state, result)
 		state.public = append(state.public, result.Broadcast...)
 		// A shared pickup's receipt and the party loot notices belong to other
@@ -682,7 +720,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
-			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: c.Name, OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
 	if state.relocatedAtMs != 0 && now-state.relocatedAtMs <= petAppearWindowMs {
 		result.Row.State = 7
 	}
@@ -730,6 +768,10 @@ own state without touching the owner's independent attack and pickup pets.
 */
 func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet *enterworld.CharacterCOS) *petSession {
 	key := petOwnerKey{division: division, name: strings.ToLower(owner.character.Name), gid: pet.GID}
+	// Every summoned pet's runtime life starts at this door (world
+	// entry, summon, mercenary call): the gid index notes its owner
+	// here and nowhere else (cosownerindex.go).
+	rt.cosOwners.note(division, pet.GID, owner.character)
 	rt.petMu.Lock()
 	old := rt.petSessions[key]
 	if old != nil && old.character == owner.character && old.transportCOS == pet {
@@ -751,6 +793,29 @@ func (rt *Runtime) bindCompanionSession(division string, owner *petSession, pet 
 	state.transportWorld = simulation.WorldState{Spawn: pose}
 	state.follower = simulation.NewPetFollower(pet.GID, pose)
 	return state
+}
+
+/*
+================
+refreshCompanionOwnerLabels
+
+A suited owner's companions carry the job alias, not the real name (#1983;
+the native spawn writers read the owner name through the same job rule as
+the player spawn). The peer COS lane only re-sends a pet when its session
+generation moves, so a completed dress or undress bumps every summoned
+companion session of this owner: the lane despawns and respawns each pet
+with the new label.
+================
+*/
+func (rt *Runtime) refreshCompanionOwnerLabels(division string, c *enterworld.Character) {
+	rt.petMu.Lock()
+	for key, state := range rt.petSessions {
+		if key.division != division || key.gid == 0 || state == nil || state.character != c {
+			continue
+		}
+		state.generation++
+	}
+	rt.petMu.Unlock()
 }
 
 // Successful owner re-entry retires motion/pickup from the departed world.

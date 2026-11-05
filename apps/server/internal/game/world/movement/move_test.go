@@ -480,7 +480,7 @@ func TestMoveThenTickBroadcastsLivePosition(t *testing.T) {
 TestHandleMoveDungeonRegionSameNineByteForm
 
 TestHandleMoveDungeonRegionSameNineByteForm pins the dungeon behavior end
-to end: v1.150's client serializer (sub_877cc0) has NO s32 dungeon arm -
+to end: v1.150's client serializer (CNavigationDeadreckon_WriteMovementPayloadToStream) has NO s32 dungeon arm -
 dungeon clicks ride the SAME 9-byte i16 form - so the handler must accept
 a dungeon-region body, ack it byte-identically, and interpolate the live
 plane with the dungeon bit intact, including across a sector crossing.
@@ -582,7 +582,7 @@ func TestHandleMoveCannotForgeOutdoorDungeonTransition(t *testing.T) {
 encodeTurnBody
 
 encodeTurnBody builds the native 4-byte angular 0x7738 body
-(client sub_877cc0's mode-0 arm: [u8 0][u8 angularMode][u16 headingWord LE]).
+(client CNavigationDeadreckon_WriteMovementPayloadToStream's mode-0 arm: [u8 0][u8 angularMode][u16 headingWord LE]).
 ================
 */
 func encodeTurnBody(angularMode uint8, headingWord uint16) []byte {
@@ -600,7 +600,7 @@ TestHandleMoveAngularTurnInPlace
 TestHandleMoveAngularTurnInPlace drives the stationary angular arm end to
 end: a 4-byte angular body WITHOUT AngularFlagGo (the SetCommand arm that
 latches the angle but not the moving flag) is accepted, acked on 0xB738
-with the angular arm client sub_776170 parses, and the heading lands on the
+with the angular arm client MovementPayload_ReadFromStream parses, and the heading lands on the
 settled plane without starting any travel. The GO form walks instead
 (direction_test.go).
 ================
@@ -631,7 +631,7 @@ func TestHandleMoveAngularTurnInPlace(t *testing.T) {
 	}
 	// Raw wire-shape pin, independent of the builder: [u32 gid][u8 0]
 	// [u8 angularMode][u16 headingWord][u8 srcFlag=1]... - exactly what
-	// client sub_776170's mode-0 read consumes.
+	// client MovementPayload_ReadFromStream's mode-0 read consumes.
 	head := []byte{byte(gid), byte(gid >> 8), byte(gid >> 16), byte(gid >> 24), 0x00, 0x00, 0x00, 0x40, 0x01}
 	if !bytes.HasPrefix(outcome.Frames[0].Payload, head) {
 		t.Errorf("ack head\n got % X\nwant prefix % X", outcome.Frames[0].Payload, head)
@@ -741,7 +741,7 @@ TestHandleMoveAngularMalformedAndUnknownModesStayDistinct
 TestHandleMoveAngularMalformedAndUnknownModesStayDistinct preserves the
 deliberate refusal split now that the turn lane is real: a WRONG-LENGTH
 angular body is a malformed frame, a mode byte the client serializer
-cannot emit (client sub_877cc0 produces only 0/1) is the loud unsupported-mode
+cannot emit (client CNavigationDeadreckon_WriteMovementPayloadToStream produces only 0/1) is the loud unsupported-mode
 refusal, and both stay wire-silent without touching the world plane.
 ================
 */

@@ -161,6 +161,12 @@ const (
 // guild onto a guildless character.
 const OpGuildInfo uint16 = 0x32C4
 
+// OpCrestUpdate is the S->C 0x34F3 crest update frame: a type-1 row
+// restates one guild's crest, a type-2 row one union's crest for each
+// named member guild (crestupdate.go). Emitted from real store state
+// on a committed crest change.
+const OpCrestUpdate uint16 = 0x34F3
+
 // S->C opcodes the mutator handlers emit - always from REAL store state,
 // never empty or synthetic, and always presence-targeted (never division
 // broadcast).
@@ -592,7 +598,7 @@ func EncodeMemberKick3B29(jid uint32) []byte {
 }
 
 // EncodeLeaveAckB56E composes the 0xB56E success body: the result byte
-// 1 and nothing else. The client's sub_75c8c0 handler runs only a light
+// 1 and nothing else. The client's CPSMission_OnGuildLeaveResponse0xB56E handler runs only a light
 // UI refresh on result 1 - the guild-state wipe rides the subOp-3
 // kind-1 push, so the ack alone would leave the leaver's client stale.
 // Result=2 bodies are deliberately never composed (wire.go constant

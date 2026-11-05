@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -43,7 +43,7 @@ The saved record says 9 while 11 teeth are held: entry shows 10 of 10.
 ================
 */
 func TestEntryRederivesALaggingCollectCount(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, "QNO_CH_SPECIAL_1")
 	level, gold := int64(30), int64(0)
@@ -75,7 +75,7 @@ the four kills the record alone knows.
 ================
 */
 func TestEntryKeepsKillsWhileRederivingItems(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt := expansionRuntime(t)
 	def := mustQuest(t, rt, stableQuest)
 	level, gold := int64(10), int64(0)

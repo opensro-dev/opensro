@@ -86,7 +86,7 @@ func (c *Character) Companions() []*CharacterCOS {
 		return nil
 	}
 	var pets []*CharacterCOS
-	c.visitCompanions(func(pet *CharacterCOS) bool {
+	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		pets = append(pets, pet)
 		return true
 	})
@@ -95,16 +95,17 @@ func (c *Character) Companions() []*CharacterCOS {
 
 /*
 ================
-visitCompanions
+VisitCompanions
 
 Visits the records Companions returns, in the same order, without building
 the slice; visit returns false to stop. Lookups by GID run on every pet,
 combat and abnormal tick for every character a division walk touches, and
 the slice cost an allocation per call plus a walk of the whole bag (#1820).
+Read-door admission checks use it for the same reason (#2032).
 The order is the one canonical order: Companions is built from it.
 ================
 */
-func (c *Character) visitCompanions(visit func(*CharacterCOS) bool) {
+func (c *Character) VisitCompanions(visit func(*CharacterCOS) bool) {
 	if c == nil {
 		return
 	}
@@ -145,7 +146,7 @@ func (c *Character) CompanionByGID(gid uint32) *CharacterCOS {
 	}
 	var found *CharacterCOS
 	duplicate := false
-	c.visitCompanions(func(pet *CharacterCOS) bool {
+	c.VisitCompanions(func(pet *CharacterCOS) bool {
 		if pet.Summoned && pet.GID == gid {
 			if found != nil {
 				duplicate = true

@@ -45,7 +45,7 @@ type MovementRequest struct {
 	Y        float64
 	Z        float64
 	// AngularMode is the angular-form flag byte (record +0x0E in
-	// client sub_877cc0). The only native producer on 0x7738,
+	// client CNavigationDeadreckon_WriteMovementPayloadToStream). The only native producer on 0x7738,
 	// CNavigationDeadreckon_SendAngleMoveCommand (client 0x877F30), sends
 	// AngularFlagGo; the ack parser MovementPayload_ReadFromStream
 	// (client 0x776170) reads the echoed byte back.
@@ -121,8 +121,8 @@ func MovementSourceFromSpawn(spawn Spawn) MovementSource {
 BuildMovementAckPayload
 
 Encodes the 0xB738 payload. The mode arms are the v1.150 parser's
-shape, exactly as the native client consumes them (client sub_776200 ->
-client sub_776170):
+shape, exactly as the native client consumes them (client CPSMission_OnSkillNavResponse0xB738 ->
+client MovementPayload_ReadFromStream):
 
 	[u32 objectId][u8 mode]
 	then mode!=0: [u16 region][i16 x][i16 y][i16 z]
@@ -135,7 +135,7 @@ Protocol 11 (#1744, releaseprotocol.MovementContract) carries it as
 	then [u8 1][u16 srcRegion][f32 srcX][f32 srcY][f32 srcZ]
 	or   [u8 0]
 
-The angular arm mirrors client sub_776170's mode-0 read ([u8 angularFlag]
+The angular arm mirrors client MovementPayload_ReadFromStream's mode-0 read ([u8 angularFlag]
 [u16 headingWord] client @0x77619b..0x7761b1) and carries the request's own bytes
 back - the same verbatim-echo contract as the destination arm.
 

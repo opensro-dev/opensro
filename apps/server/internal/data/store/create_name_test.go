@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -68,6 +69,29 @@ func TestCreateCharacterReturnsTypedNameErrors(t *testing.T) {
 	}
 	if err := s.CreateCharacter(testDivision, "test-account", &enterworld.Character{Name: "tester-123"}); !errors.Is(err, ErrCharacterNameInvalid) {
 		t.Fatalf("invalid-shape error = %v, want ErrCharacterNameInvalid", err)
+	}
+}
+
+// A new character name may not equal an existing character's job
+// alias: the alias is what its owner speaks and appears under while
+// suited, so a registered twin would impersonate them (and make typed
+// whisper targets ambiguous). The reference server never refuses the
+// clash - a native bug we do not copy (owner, 2026-10-28) - so the
+// refusal is unconditional and reuses the duplicate-name error class.
+func TestCreateCharacterRefusesExistingJobAlias(t *testing.T) {
+	dir := t.TempDir()
+	clock := newTestClock()
+	s := openTest(t, dir, clock)
+
+	holder := &enterworld.Character{Name: "Holder", Job: domain.CharacterJob{Type: domain.JobThief, Alias: "Shadow"}}
+	if err := s.CreateCharacter(testDivision, "test-account", holder); err != nil {
+		t.Fatalf("holder create: %v", err)
+	}
+	if err := s.CreateCharacter(testDivision, "other-account", &enterworld.Character{Name: "shadow"}); !errors.Is(err, ErrCharacterNameConflict) {
+		t.Fatalf("name equal to an alias error = %v, want ErrCharacterNameConflict", err)
+	}
+	if err := s.CreateCharacter(testDivision, "other-account", &enterworld.Character{Name: "Shadowfax"}); err != nil {
+		t.Fatalf("an unrelated name must still create: %v", err)
 	}
 }
 

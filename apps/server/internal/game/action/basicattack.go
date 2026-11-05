@@ -15,6 +15,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
@@ -161,6 +162,13 @@ type basicAttackIntent struct {
 // chainLatencyBudgetMs is the per-command allowance native chain steps take
 // out of their waits so client latency does not stretch the authored combo.
 const chainLatencyBudgetMs = 500
+
+// basicAttackSpreadBudget is the per-tick ceiling on advancing attack
+// intents: a burst of due intents drains over later ticks instead of
+// inside one (#2143). At least one intent always advances, so a single
+// expensive intent cannot stall the step either. A var so tests can
+// shrink it to zero and watch the spread happen.
+var basicAttackSpreadBudget = 4 * time.Millisecond
 
 /*
 ==================
@@ -365,7 +373,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if character == nil || rt.Monsters == nil || engage.TargetGid == 0 {
 		return OpResult{DiagnosticRefusal: "attack-context-unavailable"}
 	}
-	snapshot := rt.characterSnapshot(divisionID, character)
+	snapshot := rt.characterSnapshotCombat(divisionID, character)
 	if snapshot == nil || snapshot.DeletePending {
 		return OpResult{DiagnosticRefusal: "character-unavailable"}
 	}
@@ -388,6 +396,10 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		if code := rt.playerAttackTargetRefusal(divisionID, snapshot, target.snapshot, nowMs); code != 0 {
 			return offensiveRefusal(code)
 		}
+	} else if target.monster != nil {
+		if code := rt.jobMonsterTargetRefusal(snapshot, *target.monster); code != 0 {
+			return offensiveRefusal(code)
+		}
 	}
 	// Command acceptance runs phase 0x37 with the ammo bit 0x20
 	// (the reference server's cost check): an empty bow is refused at the double-click, before the
@@ -407,7 +419,7 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 		NextActionMs: skillCooldownDeadline(snapshot, skill),
 	}
 	rt.setCombatIntent(intent)
-	return rt.advanceBasicAttackIntent(character, intent, nowMs)
+	return rt.advanceBasicAttackIntent(character, intent, nowMs, rt.handlerDoors())
 }
 
 /*
@@ -417,21 +429,21 @@ advanceBasicAttackIntent
 Dispatch the command owner before resolving any combat skill or cost.
 ================
 */
-func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64) OpResult {
+func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	if intent.Deferred != nil {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return rt.handleTargetInteractLocked(intent.DivisionID, character, intent.Deferred.payload)
 	}
 	if intent.FollowTarget {
-		return rt.advanceFollowIntent(character, intent, nowMs)
+		return rt.advanceFollowIntent(character, intent, nowMs, doors)
 	}
 	if intent.SupportCast {
-		return rt.advanceSupportCastIntent(character, intent, nowMs)
+		return rt.advanceSupportCastIntent(character, intent, nowMs, doors)
 	}
 	if intent.CaptureCast {
-		return rt.advanceCaptureIntent(character, intent, nowMs)
+		return rt.advanceCaptureIntent(character, intent, nowMs, doors)
 	}
-	snapshot := rt.characterSnapshot(intent.DivisionID, character)
+	snapshot := rt.characterSnapshotCombat(intent.DivisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{}
@@ -523,7 +535,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		if !reachChanged && !rt.pursuitSteerDue(intent, worldKey, snapshot, targetSpawn, nowMs) {
 			return OpResult{}
 		}
-		return rt.approachIntentTarget(character, snapshot, intent, spacing, live, targetSpawn, nowMs)
+		return rt.approachIntentTarget(character, snapshot, intent, spacing, live, targetSpawn, nowMs, doors)
 	}
 	// Entering action range (or, for a combo stage, its turn, in reach or
 	// not) transfers ownership from movement to combat.
@@ -536,6 +548,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		worldKey,
 		targetSpawn,
 		nowMs,
+		doors,
 	)
 	if !transitioned {
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -553,7 +566,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	result, decision := rt.acceptSkillStageAt(intent.DivisionID, character, snapshot, wire.SkillAction{
 		ActionId: skill.ID, HasTarget: true, TargetGid: intent.TargetGid,
-	}, nowMs, intent.ComboRootID)
+	}, nowMs, intent.ComboRootID, doors)
 	switch decision {
 	case skillCastDeferred:
 		// Range and the previous action bracket are transient states. Preserve
@@ -565,7 +578,7 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 	}
 	intent.ActionReach = actionReach
 	if intent.SingleCast {
-		_, alive := rt.resolveCombatTarget(intent.DivisionID, snapshot, intent.TargetGid, nowMs)
+		alive := rt.combatTargetExists(intent.DivisionID, snapshot, intent.TargetGid)
 		if skill.ChainNext != 0 && alive {
 			if intent.ComboRootID == 0 {
 				intent.ComboRootID = skill.ID
@@ -624,7 +637,7 @@ Publishes one approach leg toward the intent's target, a monster or a
 player, and records the sample it was authored from.
 ==================
 */
-func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Character, intent basicAttackIntent, spacing simulation.CombatSpacing, from, target simulation.Spawn, nowMs int64) OpResult {
+func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Character, intent basicAttackIntent, spacing simulation.CombatSpacing, from, target simulation.Spawn, nowMs int64, doors characterDoors) OpResult {
 	goal, disposition := spacing.ApproachGoal(from, target)
 	if disposition == simulation.CombatApproachInvalid {
 		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -638,7 +651,7 @@ func (rt *Runtime) approachIntentTarget(character, snapshot *enterworld.Characte
 	}
 	return rt.commitIntentMovement(character, snapshot, intentMovement{
 		intent: intent, from: from, target: target, goal: goal, nowMs: nowMs,
-	})
+	}, doors)
 }
 
 /*
@@ -660,7 +673,7 @@ type intentMovement struct {
 commitIntentMovement
 ================
 */
-func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement, doors characterDoors) OpResult {
 	// The reference server's pursuit tick dispatches
 	// its pursuit walk through the character's move command handler, which
 	// drops the move when vt+0x5A0 (the motion-change lock, which asks
@@ -686,7 +699,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	var movementRevision uint64
 	var movementState simulation.WorldState
 	rt.bindResidentRegion(worldKey, nowMs)
-	if !rt.deps.Update(character, "basic-attack-approach", func() bool {
+	if !doors.update(character, "basic-attack-approach", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -750,6 +763,7 @@ func (rt *Runtime) enterBasicAttackRange(
 	worldKey string,
 	target simulation.Spawn,
 	nowMs int64,
+	doors characterDoors,
 ) (OpResult, bool) {
 	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
 	live := world.LiveSpawnAt(nowMs)
@@ -759,7 +773,7 @@ func (rt *Runtime) enterBasicAttackRange(
 		return OpResult{}, true
 	}
 	var committed simulation.Spawn
-	accepted := rt.deps.Update(character, "basic-attack-enter-range", func() bool {
+	accepted := doors.update(character, "basic-attack-enter-range", func() bool {
 		if character.DeletePending {
 			return false
 		}
@@ -813,14 +827,40 @@ then routes their results after releasing authority locks.
 */
 func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[string]bool) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
-	for _, intent := range rt.combatIntentSnapshot() {
+	intents := rt.combatIntentSnapshot()
+	if len(intents) == 0 {
+		return nil
+	}
+	// The scan resumes past the intent the last call served last, so a
+	// burst draining over several ticks under the spread budget cannot
+	// starve the tail of the sorted snapshot (#2143). A cursor whose
+	// intent retired finds no match and the scan starts at the head.
+	start := 0
+	for i, intent := range intents {
+		if simulation.WorldKey(intent.DivisionID, intent.CharacterName) == rt.basicAttackCursor {
+			start = i + 1
+			break
+		}
+	}
+	if start == len(intents) {
+		start = 0
+	}
+	started := time.Now()
+	served := 0
+	for n := 0; n < len(intents); n++ {
+		intent := intents[(start+n)%len(intents)]
 		// A chain stage waits only on the casting instance; its root bracket
 		// is deliberately still open (see chainStageBlocked).
 		casting, ownsOpenAction := openActionOwners[simulation.WorldKey(intent.DivisionID, intent.CharacterName)]
 		if ownsOpenAction && (casting || intent.ComboRootID == 0 || intent.ResumeBasic) {
 			continue
 		}
+		if served > 0 && time.Since(started) >= basicAttackSpreadBudget {
+			return out
+		}
 		character, result, ok := rt.advanceBasicAttackIntentInDivision(intent, nowMs)
+		served++
+		rt.basicAttackCursor = simulation.WorldKey(intent.DivisionID, intent.CharacterName)
 		if !ok {
 			continue
 		}
@@ -868,6 +908,9 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 			out = append(out, private)
 		}
 	}
+	// The whole snapshot was served: no burst is draining, so the next
+	// tick starts at the head and keeps the sorted order.
+	rt.basicAttackCursor = ""
 	return out
 }
 
@@ -877,7 +920,14 @@ advanceBasicAttackIntentInDivision
 ================
 */
 func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, nowMs int64) (*enterworld.Character, OpResult, bool) {
-	unlock := rt.lockDivision(intent.DivisionID)
+	// The wait for the division lane is named as its own slow step
+	// (basicAttackDivisionWait): a slow advanceBasicAttackIntents reading
+	// beside it is the lane holder's cost, not the intent's work (#2143).
+	// The wait still sits inside the enclosing step's time.
+	var unlock func()
+	rt.Steps.Time("basicAttackDivisionWait", func() {
+		unlock = rt.lockDivision(intent.DivisionID)
+	})
 	defer unlock()
 	// A request can cancel/replace an intent after the tick snapshots it but
 	// before this division lock is acquired. Never resurrect that stale cast.
@@ -885,5 +935,5 @@ func (rt *Runtime) advanceBasicAttackIntentInDivision(intent basicAttackIntent, 
 		return nil, OpResult{}, false
 	}
 	character := rt.findCharacter(intent.DivisionID, intent.CharacterName)
-	return character, rt.advanceBasicAttackIntent(character, intent, nowMs), true
+	return character, rt.advanceBasicAttackIntent(character, intent, nowMs, rt.tickDoors()), true
 }

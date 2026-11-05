@@ -214,7 +214,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle},
 		// The same projected speeds the entry bootstrap publishes for this pet
 		// (EntryCompanionMovementSpeeds), so a fresh summon and a relogin agree.
-		Walk: walk, Run: run, Scale: ref.Scale, Name: pet.Name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c),
+		Walk: walk, Run: run, Scale: ref.Scale, Name: pet.Name, OwnerName: enterworld.PartyMemberName(c), OwnerGid: enterworld.ObjectIDForCharacter(c),
 		// CICCos_DeserializeSpawnSubState (854CD0): 1 is a fresh summon.
 		State: cosSpawnFresh,
 	})}

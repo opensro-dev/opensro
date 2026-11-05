@@ -7,8 +7,10 @@ The transport's handler and tick-phase histograms and the authority
 store's lock timing share this one recording form. Buckets are fixed and
 recording is atomic adds plus a CAS on the maximum, so a hot path (every
 inbound frame, every store read) can record without allocating or
-locking. The bounds are fine below 16 ms (a frame at 60 Hz) and coarse up
-to a second; one more bucket holds the rest.
+locking. The bounds are fine below 16 ms (a frame at 60 Hz), fine again
+through the 100 to 250 ms band (a tick or commit past the 100 ms budget
+must not read as 250 flat), and coarse up to a second; one more bucket
+holds the rest.
 
 ===========================================================================
 */
@@ -23,7 +25,7 @@ import (
 
 // BoundsMs are the inclusive upper bounds of the buckets; one more bucket
 // holds the rest.
-var BoundsMs = [...]float64{1, 2, 5, 10, 16, 25, 50, 100, 250, 1000}
+var BoundsMs = [...]float64{1, 2, 5, 10, 16, 25, 50, 100, 125, 150, 200, 250, 1000}
 
 // Buckets is the bucket count, the open last one included.
 const Buckets = len(BoundsMs) + 1

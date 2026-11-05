@@ -356,24 +356,31 @@ class ImportTests(unittest.TestCase):
 			for name, raw in files.items():
 				self.assertEqual((root / "out" / name).read_bytes(), raw)
 	# ================
-	# test_set_armour_comma_models_verify_and_copy_both_variants
+	# test_set_armour_comma_models_keep_the_plain_path
 	#
-	# Degree-11 set armour authors MODEL as a comma pair (normal and
-	# full-set variant). The closure resolves each variant on its own;
-	# the joined cell is never looked up as one path.
+	# Degree-11 set armour authors MODEL as a comma pair (plain and
+	# full-set variant). The import keeps the plain path in the cell and
+	# copies only its closure; the full-set variant is never requested.
 	# ================
-	def test_set_armour_comma_models_verify_and_copy_both_variants(self):
+	def test_set_armour_comma_models_keep_the_plain_path(self):
 		row = weapon("ITEM_CH_M_CLOTHES_11_HA_SET_A", item_class=31)
 		row[11], row[62] = "1", "15"
 		row[52] = "item/set_a.bsr,item/set_a_fullset.bsr"
+		self.assertEqual(items.plain_worn_models([row]), 1)
+		self.assertEqual(row[52], "item/set_a.bsr")
+		self.assertEqual(items.plain_worn_models([row]), 0)
 		with tempfile.TemporaryDirectory() as folder:
 			root = Path(folder)
+			native_only = {"Data_extracted/res/item/set_a_fullset.bsr": b"fullset"}
 			files = {
 				"Data_extracted/res/item/set_a.bsr": b"normal",
-				"Data_extracted/res/item/set_a_fullset.bsr": b"fullset",
 				"Data_extracted/res/item/drop.bsr": b"drop",
 				"Media_extracted/icon/item/weapon.ddj": b"icon",
 			}
+			for name, raw in native_only.items():
+				path = root / "native" / name
+				path.parent.mkdir(parents=True, exist_ok=True)
+				path.write_bytes(raw)
 			for name, raw in files.items():
 				path = root / "native" / name
 				path.parent.mkdir(parents=True, exist_ok=True)
@@ -389,11 +396,12 @@ class ImportTests(unittest.TestCase):
 				assets = importer.copy_asset_closure([row], root / "native", root / "out", archives)
 			self.assertEqual(
 				{request["weapon"]["resolvedModel"] for request in seen if "weapon" in request},
-				{"res/item/set_a.bsr", "res/item/set_a_fullset.bsr"},
+				{"res/item/set_a.bsr"},
 			)
 			self.assertEqual(len(assets), len(files))
 			for name, raw in files.items():
 				self.assertEqual((root / "out" / name).read_bytes(), raw)
+			self.assertFalse((root / "out" / "Data_extracted/res/item/set_a_fullset.bsr").exists())
 
 	# ================
 	# test_accessories_have_drop_and_icon_assets_without_a_worn_model

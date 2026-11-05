@@ -106,18 +106,18 @@ func (s *Store) commitStorageLocked(division string, live, character *domain.Cha
 	if s.commitFail != nil {
 		return nil, s.commitFail
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := writeAccountStorageTx(tx, character.AccountID, storage); err != nil {
+	if err := writeAccountStorageTx(tx.Tx, character.AccountID, storage); err != nil {
 		return nil, err
 	}
-	if err := upsertCharacterTx(tx, division, character); err != nil {
+	if err := tx.upsertCharacter(division, character); err != nil {
 		return nil, err
 	}
-	settle, err := s.ledgerOwnTxLocked(tx, "storage-transfer", division, live, ledgerGold(character))
+	settle, err := s.ledgerOwnTxLocked(tx.Tx, "storage-transfer", division, live, ledgerGold(character))
 	if err != nil {
 		return nil, err
 	}

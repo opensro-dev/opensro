@@ -8,7 +8,9 @@ values, keeper writes (reat, br, hpi/mpi/er/hr, passive defense, passive
 cr) and status
 resistance buckets. A program declaring reqi is gated by the server's reqi
 equipment walk; passive cr follows the equipped weapon kind instead.
-Nothing here is cached: Character.Snapshot is the only input.
+The projections stay pure functions of the snapshot; the stats path
+memoizes their combined result per skill/equipment content
+(projectioncache.go).
 
 ===========================================================================
 */

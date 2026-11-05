@@ -28,7 +28,8 @@ job leave and job alias handlers:
 INFERENCE: v1.188 tests the join and alias-change fees but the deduction
 happens inside its database jobs; the port charges each with its commit. The alias follows the
 character name shape (the shared name filter) and is unique
-among the division's aliases.
+among the division's aliases, and - a native bug we do not copy
+(owner, 2026-10-28) - never equal to a character name either.
 
 ===========================================================================
 */
@@ -224,6 +225,19 @@ jobAliasTaken
 func (rt *Runtime) jobAliasTaken(division string, c *enterworld.Character, alias string) bool {
 	for _, other := range rt.deps.CharactersForDivision(division) {
 		if other != nil && other != c && strings.EqualFold(other.Job.Alias, alias) {
+			return true
+		}
+	}
+	// An alias may not equal a character name either. The reference
+	// server never refuses this (its alias validity is the name filter
+	// alone), which lets a suited player speak under another player's
+	// real name; that impersonation is a native bug we do not copy
+	// (owner, 2026-10-28), so the refusal is unconditional - and it
+	// keeps the alias and name namespaces disjoint for typed-target
+	// routing. Deleted-pending names count: the name is still spoken
+	// for until the deletion matures.
+	for _, other := range rt.deps.CharactersForDivision(division) {
+		if other != nil && other != c && strings.EqualFold(other.Name, alias) {
 			return true
 		}
 	}

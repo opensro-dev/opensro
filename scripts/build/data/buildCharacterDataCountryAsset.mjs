@@ -1,19 +1,19 @@
 // Publish the chardata COUNTRY catalog: model ref id -> the RefObjChar
 // country byte, nothing more. The native CGlobalDataManager boot loader
-// (sub_723058) formats "%stextdata\characterdata.txt" and hands the manifest
+// (Client_LoadGameDataTables at 0x723058) formats "%stextdata\characterdata.txt" and hands the manifest
 // to the table dispatcher; each shard line is parsed by CCharacterData's
-// sub_808670 -> sub_808ad0 (the table loader consumes column 0 "Service"
+// CCharacterData_ParseTextRow -> CRefObjCommon_ParseTextRow (the table loader consumes column 0 "Service"
 // before the parse runs, so parse token N is file column N+1):
 //
-//   col  1 -> payload+0x04 model ref id (the recordMap1f0 key sub_7efd60
-//             lower-bounds; sub_808250 GetPayloadBody = record+4)
+//   col  1 -> payload+0x04 model ref id (the recordMap1f0 key CGlobalDataManager_GetCharacterDataById
+//             lower-bounds; std_tree_node_to_value_808250 GetPayloadBody = record+4)
 //   col 14 -> payload+0x9c country byte (parsed @0x00808c84, duplicated at
 //             +0x9d; CCharacterData::Parse tests it against 3 @0x00808a30)
 //
-// The byte is the sub_81d5b0 kindred-art selector (0 -> com_kindred_china*,
+// The byte is the CharKindredIcon_GetPath kindred-art selector (0 -> com_kindred_china*,
 // 1 -> com_kindred_europe*; ANY other value builds NO path - the fold's
 // @0x0081d614/@0x0081d619 two-arm dispatch). The party pane's race-mark
-// chain reads it through sub_7efeb0 (@0x005b8533); the party-match race
+// chain reads it through GlobalDataManager_GetCharCosDataById (@0x005b8533); the party-match race
 // text (@0x0053054a) reads the same byte. Only country 0/1 rows ship -
 // the 10k+ country-3 rows (mobs/NPCs) are outside the kindred fold's art
 // domain, and a catalog miss decodes to the same "no art" result.
@@ -42,7 +42,7 @@ const manifestPath = path.join(textdataRoot, "characterdata.txt");
 // File column indices (see the contract above).
 const COLUMN_ID = 1;
 const COLUMN_COUNTRY = 14;
-// The native sub_808ad0/sub_808670 parse consumes 100+ tokens; short rows
+// The native CRefObjCommon_ParseTextRow/CCharacterData_ParseTextRow parse consumes 100+ tokens; short rows
 // would underrun it. The country column is all this asset needs intact.
 const MIN_COLUMN_COUNT = 15;
 
@@ -66,7 +66,7 @@ export function buildCharacterDataCountryAsset() {
         continue;
       }
       const country = cols[COLUMN_COUNTRY].trim();
-      // Only the sub_81d5b0 art domain ships (0 = china, 1 = europe); the
+      // Only the CharKindredIcon_GetPath art domain ships (0 = china, 1 = europe); the
       // country-3 rows decode to the same "no kindred art" a miss does.
       if (country !== "0" && country !== "1") {
         continue;

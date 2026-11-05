@@ -3,7 +3,7 @@
 
 moverequest.go - the 0x7738 decoder and the heading-word codec
 
-The client serializer (sub_877cc0) is the only producer of 0x7738, so the
+The client serializer (CNavigationDeadreckon_WriteMovementPayloadToStream) is the only producer of 0x7738, so the
 decoder accepts exactly its two forms. The heading-word codec is shared by
 every opcode that carries a native 1/65535-circle heading.
 
@@ -22,7 +22,7 @@ const ClientMovementRequestSize = 9
 
 // ClientAngularMovementRequestSize is the encoded size of the native 0x7738
 // angular body: [u8 0][u8 angularMode][u16 headingWord]. The serializer's
-// angular arm (client sub_877cc0 @0x877ceb) appends exactly 1+2 bytes after the
+// angular arm (client CNavigationDeadreckon_WriteMovementPayloadToStream @0x877ceb) appends exactly 1+2 bytes after the
 // mode byte - the xyz words never ride this form (client 0x877F30 zeroes them in
 // the record and the serializer skips them).
 const ClientAngularMovementRequestSize = 4
@@ -38,11 +38,11 @@ const MaxWadeDepth = 12.0
 // binary (units, range and wrapping are native, not guessed):
 //
 //   - UNIT: 1 word unit = 1/65535 of a full 360-degree circle. The client
-//     SERIALIZER (client sub_877cc0 @0x877ceb; SendSteeringUpdate 0x877540 shares
+//     SERIALIZER (client CNavigationDeadreckon_WriteMovementPayloadToStream @0x877ceb; SendSteeringUpdate 0x877540 shares
 //     the client idiom @0x877621..0x87764d) computes
 //     word = trunc(rad * 57.295780181884766 / 360.0 * 65535.0) with the x87
 //     rounding control forced to truncate-toward-zero (fnstcw / or 0xc00 /
-//     fldcw / fistp). The ACK PARSER (client sub_776170 @0x7761c0..0x7761d6: fild /
+//     fldcw / fistp). The ACK PARSER (client MovementPayload_ReadFromStream @0x7761c0..0x7761d6: fild /
 //     fdiv / fmul / fmul / fstp dword) inverts it as
 //     radians = float32(word / 65535.0 * 360.0 * 0.01745329238474369).
 //   - CONSTANTS (rizin px against SRO_Client.exe): qword @0xc13df8 =
@@ -51,15 +51,15 @@ const MaxWadeDepth = 12.0
 //     65535.0, client qword @0xbc8568 = 0.01745329238474369 (float32(pi/180)
 //     promoted to double).
 //   - RANGE: producers wrap the yaw into [0, 2*pi) BEFORE converting
-//     (client sub_853550 Math_YawToHeadingAngle rebases by -pi/2 and wraps), so a
+//     (client Navigation_NormalizeAngle2Pi Math_YawToHeadingAngle rebases by -pi/2 and wraps), so a
 //     live client emits words in [0, 65535]; 2*pi itself lands on 65535
 //     because the rad->deg constant's float32 excess pushes 360.0000042
 //     degrees / 360 * 65535 = 65535.00077 before the truncation.
 //   - WRAPPING: the serializer itself does NOT range-check - the truncated
 //     integer stores through a 2-byte append, so an out-of-range yaw wraps
 //     through the low 16 bits (two's complement for negatives). The ack
-//     consumer re-normalizes with client sub_8535a0 Math_NormalizeRadians before
-//     applying the yaw (client sub_776200 @0x77627d).
+//     consumer re-normalizes with client Heading_AddQuarterTurnAndWrap Math_NormalizeRadians before
+//     applying the yaw (client CPSMission_OnSkillNavResponse0xB738 @0x77627d).
 const (
 	// RadToDegF32 is the client qword @0xc13df8.
 	RadToDegF32 = 57.295780181884766
@@ -77,7 +77,7 @@ const (
 ================
 HeadingWordFromRadians
 
-Mirrors the client serializer's rad -> wire-word conversion (sub_877cc0
+Mirrors the client serializer's rad -> wire-word conversion (CNavigationDeadreckon_WriteMovementPayloadToStream
 client @0x877ceb): truncate toward zero (fistp with RC=0b11), then keep the low 16
 bits (the 2-byte append).
 ================
@@ -91,7 +91,7 @@ func HeadingWordFromRadians(rad float64) uint16 {
 ================
 RadiansFromHeadingWord
 
-Mirrors the client ack parser's word -> radians conversion (sub_776170
+Mirrors the client ack parser's word -> radians conversion (MovementPayload_ReadFromStream
 client @0x7761c0: fild / fdiv 65535.0 / fmul 360.0 / fmul float32(pi/180) / fstp
 dword - the result narrows to float32 on the store, preserved here).
 ================
@@ -108,7 +108,7 @@ Parses the native 0x7738 body.
 
 Layout, pinned to the CLIENT SERIALIZER (the only producer): the single
 move-request sender CNavigationDeadreckon_SendTargetMovePacket (client 0x877D80)
-feeds every 0x7738 through client sub_877cc0 / MoveRequest_SerializePayload, which
+feeds every 0x7738 through client CNavigationDeadreckon_WriteMovementPayloadToStream / MoveRequest_SerializePayload, which
 emits exactly two forms after the mode byte:
 
 	positional (mode=1): [u8 1][u16 region][i16 x][i16 y][i16 z]  = 9 bytes
@@ -120,7 +120,7 @@ region-conditional branch anywhere in the serializer. The s32
 dungeon-coordinate form other SRO builds carry DOES NOT EXIST in v1.150's
 client; dungeon-region clicks (regionId & 0x8000) ride this same 9-byte
 form, and the sector-grid helpers keep the dungeon bit intact through
-interpolation. client sub_878080 builds the record with FloatToInt32-packed int16
+interpolation. client CNavigationDeadreckon_SendDestinationMoveCommand builds the record with FloatToInt32-packed int16
 xyz regardless of region.
 
 The MIDDLE i16 is the HEIGHT (world y), the same slot order the 0xB738 ack
@@ -188,7 +188,7 @@ EncodeClientMovementRequest
 
 The 0x7738 ground-click body DecodeClientMovementRequest reads: mode 1,
 the region and the int16 region-local position the client serializes
-(sub_877cc0). Server-issued steps that must take the client's own movement
+(CNavigationDeadreckon_WriteMovementPayloadToStream). Server-issued steps that must take the client's own movement
 path, such as a rider's pursuit through the vehicle owner, are built here.
 ================
 */

@@ -175,7 +175,7 @@ advancePetSkillWindows
 
 advancePetSkillWindows retires each spent row with the native zero pair,
 which client 775F20 turns into 6E6150's remove selector. An exhausted
-window is not self-retiring on the client: sub_6E6AA0 holds the row at zero
+window is not self-retiring on the client: CIFMagicStateBoard_OnUpdate holds the row at zero
 because only server teardown may remove it.
 ================
 */

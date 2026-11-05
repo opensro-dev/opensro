@@ -87,6 +87,62 @@ test("a pet's ground pickup prints the bag's item line, and its gold prints none
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 3 );
 	assert.equal( owner.take()?.notices?.at( -1 )?.sequence ?? merged?.sequence, merged?.sequence );
 });
+test("a server grant into the pet bag prints a new row and keeps a merge silent (#2258)", () => {
+	// 756CF0's print case is shared by ground (0) and quest (3) sources
+	// (756EEC): a grant (0x15) names a new row, a merge stays silent, and
+	// the gold-shaped row has no line. It settles no client request.
+	const { owner, initial } = fixture();
+	assert.deepEqual( initial.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 30 ], [ 1, 40 ] ] );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 3, ...u32( 8 ), 5, 0 ] ) }, 1 );
+	let s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 30 ], [ 1, 40 ], [
+		3,
+		5
+	] ] );
+	const grantedNotice = s.notices?.at( -1 );
+	assert.deepEqual( [ grantedNotice?.key, grantedNotice?.value ], [ "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE", 5 ] );
+	assert.notEqual( grantedNotice?.sequence, initial.notices?.at( -1 )?.sequence );
+	// A merge into an open stack prints nothing for a grant.
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 0, ...u32( 8 ), 45, 0 ] ) }, 2 );
+	s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => [ x.slot, x.quantity ] ), [ [ 0, 45 ], [ 1, 40 ], [
+		3,
+		5
+	] ] );
+	assert.equal( s.notices?.at( -1 )?.sequence, grantedNotice?.sequence );
+	// The gold-shaped grant (slot 254) carries an amount, never a row.
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x15, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 3 );
+	s = owner.take();
+	assert.equal( s.cosRecords[0].inventory.length, 3 );
+	assert.equal( s.notices?.at( -1 )?.sequence, grantedNotice?.sequence );
+	// A result for a pet with no record.
+	assert.throws(
+		() =>
+			owner.receive( {
+				opcode: 0xb06d,
+				payload: Uint8Array.from( [ 1, 0x15, ...u32( 9 ), 3, ...u32( 8 ), 5, 0 ] )
+			}, 5 ),
+		/Absent COS grant owner/
+	);
+});
+test("a quest removal takes the item out of the pet bag silently (#2258)", () => {
+	// 0x16 resolves the COS bag to the quest (74EF50); the quest sink
+	// (758C13) prints nothing.
+	const { owner, initial } = fixture();
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 7 ), 0 ] ) }, 1 );
+	const s = owner.take();
+	assert.deepEqual( s.cosRecords[0].inventory.map( x => x.slot ), [ 1 ] );
+	assert.equal( s.notices?.at( -1 )?.sequence, initial.notices?.at( -1 )?.sequence );
+	// A slot the pet no longer holds, and a pet with no record, both refuse.
+	assert.throws(
+		() => owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 7 ), 0 ] ) }, 2 ),
+		/Invalid COS removal source/
+	);
+	assert.throws(
+		() => owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x16, ...u32( 9 ), 0 ] ) }, 3 ),
+		/Absent COS removal owner/
+	);
+});
 function fixture() {
 	const sent = [], owner = createGameplay( f => sent.push( f ) );
 	owner.bootstrap( {
@@ -211,7 +267,39 @@ test("player/COS whole transfers await matching authority and preserve both cont
 	state = owner.take();
 	assert.deepEqual( state.inventory, [] );
 	assert.deepEqual( state.cosRecords[0].inventory, before );
-	assert.throws( () => owner.receive( reply, 4 ) );
+	// A replayed copy of the applied result is set aside, not fatal (#1977).
+	assert.doesNotThrow( () => owner.receive( reply, 4 ) );
+	state = owner.take();
+	assert.deepEqual( state.inventory, [] );
+	assert.deepEqual( state.cosRecords[0].inventory, before );
+	assert.equal( state.inventoryPending, false );
+});
+
+test("a replayed COS transfer result after re-entry does not end the session", () => {
+	const { owner } = fixture();
+	// The production frame (#1977): success, 0x1A, COS gid 0x02400143,
+	// source slot 0, destination slot 24. No record for that COS exists
+	// yet on re-entry: native drops it behind the FindCharData guard.
+	const production = {
+		opcode: 0xb06d,
+		payload: Uint8Array.of( 0x01, 0x1a, 0x43, 0x01, 0x40, 0x02, 0x00, 0x18 )
+	};
+	assert.doesNotThrow( () => owner.receive( production, 1 ) );
+	// The same shape against the live COS: applied once with its request,
+	// then replayed with no pending left. State must not move twice.
+	const f = owner.command( { kind: "cos-transfer", gid: 7, toCos: false, source: 0, destination: 24 }, 2, entity );
+	const reply = { opcode: 0xb06d, payload: Uint8Array.from( [ 1, ...f.payload ] ) };
+	owner.receive( reply, 3 );
+	let state = owner.take();
+	assert.equal( state.inventory.find( row => row.slot === 24 )?.quantity, 30 );
+	assert.equal( state.cosRecords[0].inventory.length, 1 );
+	assert.doesNotThrow( () => owner.receive( reply, 4 ) );
+	assert.doesNotThrow( () => owner.receive( production, 5 ) );
+	state = owner.take();
+	assert.equal( state.inventory.find( row => row.slot === 24 )?.quantity, 30 );
+	assert.equal( state.inventory.length, 1 );
+	assert.equal( state.cosRecords[0].inventory.length, 1 );
+	assert.equal( state.inventoryPending, false );
 });
 
 test("failed or timed out transfers cannot consume items or cross the inventory barrier", () => {

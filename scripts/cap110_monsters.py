@@ -49,8 +49,8 @@ MAX_LEVEL = 110
 APIS_CODENAME = "MOB_SD_APIS"
 APIS_SOURCE_GRADE = 8
 # The VSRO test-shard backup every imported nest, tactic, monster skill and
-# drop row comes from, as the author pinned it (docs/CAP110_PROGRESS.md,
-# "Database export pin"). The export records this hash in summary.json.
+# drop row comes from, as the author pinned it (docs/features/CAP110.md,
+# Building). The export records this hash in summary.json.
 SOURCE_BACKUP_NAME = "SRO_VT_SHARD.bak"
 SOURCE_BACKUP_SHA256 = "b4d85a043ebce36c8704768dce0dfa63ff9418c8489241d8441b7902e28fa37a"
 TOMB_FLAG = "SRO_PHARAOH_TOMB"
@@ -602,10 +602,15 @@ def add_monsters(vsro_root, native, output, source_root=None):
 			"regions": sorted({r["RegionID"] for r in populations[family["Name"]]["Rows"]})}
 			for family in enabled}
 		summary["sourceBackupSha256"] = read_json(source_root / "summary.json")["backup_sha256"]
-		summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in (
-			"all-spawns.json", "Tab_RefNest.json", "Tab_RefTactics.json", "Tab_RefHive.json",
-			"vsro-outdoor-monster-skills.json", "vsro-outdoor-drop-assignments.json",
-			"vsro-outdoor-drop-classes.json", "vsro-outdoor-rare-classes.json")}
+		# The drop assignments are optional (#1745 D3): an export without
+		# them builds the native loot posture, and the marker says which.
+		from cap110_monster_loot import ASSIGNMENTS_NAME, has_assignments
+		summary["equipmentLoot"] = "vsro" if has_assignments(source_root) else "native"
+		snapshot = ["all-spawns.json", "Tab_RefNest.json", "Tab_RefTactics.json", "Tab_RefHive.json",
+			"vsro-outdoor-monster-skills.json", "vsro-outdoor-drop-classes.json", "vsro-outdoor-rare-classes.json"]
+		if has_assignments(source_root):
+			snapshot.append(ASSIGNMENTS_NAME + ".json")
+		summary["snapshotHashes"] = {name: sro_pk2.digest((source_root / name).read_bytes()) for name in snapshot}
 		write_atomically(marker, (json.dumps(summary, indent=2) + "\n").encode())
 		return summary
 

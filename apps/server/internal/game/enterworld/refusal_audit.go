@@ -12,6 +12,11 @@ door is audited: the persisted form of each character is captured before
 the callback and compared after a refusal, and a difference fails at the
 door that made it. Production runs the callback untouched.
 
+An allocation measurement (the synthetic-shard tick guard, #1943) may
+suspend the audit for its measured window only: the audit encodes each
+character twice per door, which would otherwise dominate what the
+measurement counts. The audit still runs around that window.
+
 ===========================================================================
 */
 package enterworld
@@ -20,10 +25,29 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	// testing.Testing() alone gates the audit: production binaries report
 	// false and run every callback untouched.
 	"testing"
 )
+
+// refusalAuditSuspended is set only by SuspendRefusalAudit, from a test.
+var refusalAuditSuspended atomic.Bool
+
+/*
+================
+SuspendRefusalAudit
+
+Turns the audit off until the returned restore runs. For allocation
+measurements only: a test that suspends it must restore it before any
+other check runs, and must not run in parallel with other tests.
+================
+*/
+func SuspendRefusalAudit(tb testing.TB) (restore func()) {
+	tb.Helper()
+	refusalAuditSuspended.Store(true)
+	return func() { refusalAuditSuspended.Store(false) }
+}
 
 /*
 ================
@@ -34,7 +58,7 @@ form changed panics with the door's label.
 ================
 */
 func refusalAudited(label string, characters []*Character, update func() bool) func() bool {
-	if update == nil || !testing.Testing() {
+	if update == nil || !testing.Testing() || refusalAuditSuspended.Load() {
 		return update
 	}
 	return func() bool {

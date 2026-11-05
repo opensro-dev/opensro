@@ -130,13 +130,13 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 }
 
 // loadNpcStoreGroupIndex projects the exact native lookup chain used by
-// client sub_7d3b70 -> sub_5d5be0:
+// client CGlobalDataManager_FindShopGroupByNpcRefId -> CIFNPCTalk_AppendStoreTabRows:
 //
 //	NPC codename -> refshopgroup group -> store -> tab group -> tab rows.
 //
 // The menu row's storeGroupId0c is characterRefId24 (the NPC RefObjID), not
 // refshopgroup column 2. The retail server reads the same field as
-// [record+0x24], and client sub_7d3b70 proves that field is the lookup's character
+// [record+0x24], and client CGlobalDataManager_FindShopGroupByNpcRefId proves that field is the lookup's character
 // RefObjID. The largest authored tab and tab-group ids come back with the
 // index: the Jangan alchemy shop (npcjanganshop.go) numbers its
 // synthesized tabs and group above them.
@@ -278,7 +278,7 @@ func loadNpcWorldRefs(textdataDir string) map[uint32]npcWorldRef {
 			if charBit != 0 {
 				word |= 2
 			}
-			// Exact CICNPC branch of sub_851420: TID1=1,TID2=2,TID3=2.
+			// Exact CICNPC branch of GIDObject_SelectRuntimeClassAndSpawn: TID1=1,TID2=2,TID3=2.
 			if word&0x7fe != 0x0146 {
 				continue
 			}

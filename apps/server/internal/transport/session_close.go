@@ -8,6 +8,7 @@ package transport
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -62,6 +63,9 @@ func (h *Hub) retireSession(s *Session, cause error) (bool, error) {
 	h.mu.Lock()
 	delete(h.sessions, s.ID)
 	delete(h.byToken, s.resumeToken)
+	if s.evicted.Load() {
+		h.rememberEndedLocked(s, time.Now())
+	}
 	if key, ok := h.bindingKeys[s.ID]; ok {
 		delete(h.bindingKeys, s.ID)
 		if h.bindings[key] == s {

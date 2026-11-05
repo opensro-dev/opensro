@@ -151,6 +151,8 @@ PlayerStatsWithModifiers applies installation-time effect writes through the
 same dependency graph as equipment and passives. The effect owner supplies
 an immutable snapshot with independent source identities; this function does
 not infer lifetimes, rebuild caps from current stats, or allocate identities.
+While every input stands still the answer is shared from the content-keyed
+memo (statscache.go) instead of rebuilt.
 
 block carries the abnormal-state writes (source 5, or 0 for frostbite's 8C
 base replacement), applied after every other owner as the callbacks write
@@ -158,6 +160,29 @@ into the live keeper.
 ==================
 */
 func PlayerStatsWithModifiers(
+	character *domain.Character,
+	catalogs Catalogs,
+	modifiers []paramkeeper.Write,
+	block *abnormal.Block,
+) (Stats, Loadout, error) {
+	if stats, loadout, err, ok := playerStatsMemo.lookup(character, catalogs, modifiers, block); ok {
+		return stats, loadout, err
+	}
+	stats, loadout, err := playerStatsWithModifiers(character, catalogs, modifiers, block)
+	playerStatsMemo.insert(character, catalogs, modifiers, block, stats, loadout, err)
+	return stats, loadout, err
+}
+
+/*
+================
+playerStatsWithModifiers
+
+The rebuild itself: every equipment, passive and magic-option write
+through one fresh keeper graph. PlayerStatsWithModifiers memoises it
+(statscache.go) while every input stands still.
+================
+*/
+func playerStatsWithModifiers(
 	character *domain.Character,
 	catalogs Catalogs,
 	modifiers []paramkeeper.Write,
@@ -325,29 +350,20 @@ func PlayerStatsWithModifiers(
 	for _, effect := range setEffects {
 		writes = append(writes, setResistWrites(effect)...)
 	}
-	// One rank selection feeds all three passive projections (learnedRankRows).
-	// Without learned skills or skill references the wrappers answer their
-	// empty or error results exactly as before.
+	// The three learned projections are one pure function of the skill
+	// list and the equipment (projectioncache.go): computed once per
+	// content, shared by every stats call in between. Without learned
+	// skills the answer is empty; without skill references it refuses,
+	// exactly as the wrappers answered before.
 	var passives []paramkeeper.Write
 	var power enterworld.SkillParameterValues
-	if len(character.Skills) == 0 || skills == nil {
-		passives, power, err = learnedPassives(character, skills, catalogs.Items, passiveWeaponKind)
-		if err != nil {
-			return Stats{}, Loadout{}, err
-		}
-		out.StatusResistance = learnedStatusResistance(character, skills, catalogs.Items)
-		out.DamageReturn, out.DamageReturnSkill = learnedDamageReturn(character, skills, catalogs.Items)
-	} else {
-		rows := learnedRankRowsCached(character, skills)
-		passives, power, err = learnedPassivesFrom(character, rows, catalogs.Items, passiveWeaponKind)
-		if err == nil {
-			out.StatusResistance = learnedStatusResistanceFrom(character, rows, catalogs.Items)
-			out.DamageReturn, out.DamageReturnSkill = learnedDamageReturnFrom(character, rows, catalogs.Items)
-		}
-		if err != nil {
-			return Stats{}, Loadout{}, err
-		}
+	projection := learnedProjections(character, skills, catalogs.Items, passiveWeaponKind)
+	passives, power, err = projection.writes, projection.power, projection.err
+	if err != nil {
+		return Stats{}, Loadout{}, err
 	}
+	out.StatusResistance = projection.resistance
+	out.DamageReturn, out.DamageReturnSkill = projection.damageReturn, projection.damageReturnSkill
 	// Option 390's percent half lands in the same buckets the learned
 	// real projection filed, after both rank branches converge.
 	applySetStatusResistance(&out.StatusResistance, setEffects)

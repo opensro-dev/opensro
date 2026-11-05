@@ -42,7 +42,7 @@ func TestLinkedAdmissionIsAtomicAndBounded(t *testing.T) {
 }
 
 func TestLinkedRetirementPropagatesExactlyOnce(t *testing.T) {
-	for _, cause := range []string{"source-cancel", "target-cancel", "expiry", "source-disconnect", "target-death"} {
+	for _, cause := range []string{"source-cancel", "target-cancel", "expiry", "target-death"} {
 		t.Run(cause, func(t *testing.T) {
 			r := NewRegistry()
 			l := testLink()
@@ -63,8 +63,6 @@ func TestLinkedRetirementPropagatesExactlyOnce(t *testing.T) {
 					t.Fatal("link consumer disagrees with retirement boundary")
 				}
 				r.Expire(10001)
-			case "source-disconnect":
-				r.Forget("g", "warrior")
 			case "target-death":
 				if len(r.RetireBodyStatusesOnDeath("g", "friend")) != 1 {
 					t.Fatal("death")
@@ -89,7 +87,7 @@ func TestLinkedRetirementPropagatesExactlyOnce(t *testing.T) {
 				b = append(b, r.DrainStopRequested()...)
 			}
 			want := 2
-			if cause == "source-disconnect" || cause == "target-death" {
+			if cause == "target-death" {
 				want = 1
 			}
 			if len(b) != want {
@@ -99,6 +97,120 @@ func TestLinkedRetirementPropagatesExactlyOnce(t *testing.T) {
 				t.Fatal("residual pair")
 			}
 		})
+	}
+}
+
+// A disconnect is not a retirement: the departing owner's rows go, the
+// recipient half runs its own timer, and only the pair's live exchanges
+// (the threat share here) end with the source.
+func TestForgetDetachesRecipientHalfToItsOwnTimer(t *testing.T) {
+	r := NewRegistry()
+	l := testLink()
+	if r.ApplyLink(l) != 0 {
+		t.Fatal("apply")
+	}
+	r.Forget("g", "warrior")
+	if rows := r.Snapshot("g", "warrior"); len(rows) != 0 {
+		t.Fatalf("departed owner kept rows: %+v", rows)
+	}
+	friend := r.Snapshot("g", "friend")
+	if len(friend) != 1 || friend[0].Phase != 2 || friend[0].StopRequested {
+		t.Fatalf("recipient half after disconnect: %+v", friend)
+	}
+	if _, ok := r.ThreatLink("g", "friend", 9999); ok {
+		t.Fatal("a departed source still shares threat")
+	}
+	if got := r.Links(); len(got) != 1 {
+		t.Fatalf("link records %v, want the detached pair", got)
+	}
+	if b := r.DrainStopRequested(); len(b) != 0 {
+		t.Fatalf("disconnect drained stop batches: %+v", b)
+	}
+	r.Expire(10000)
+	if len(r.Snapshot("g", "friend")) != 1 {
+		t.Fatal("recipient half retired at its timer equality")
+	}
+	r.Expire(10001)
+	b := r.DrainStopRequested()
+	if len(b) != 1 || b[0].CharacterName != "friend" || len(b[0].Effects) != 1 {
+		t.Fatalf("expiry batches: %+v", b)
+	}
+	if len(r.Links()) != 0 || len(r.Snapshot("g", "friend")) != 0 {
+		t.Fatal("residual pair after the recipient's timer")
+	}
+}
+
+// A caster back from a disconnect re-installs its own blessing on the
+// same recipient: the orphaned half is replaced, never stacked beside.
+func TestApplyLinkReplacesOwnOrphanedRecipientHalf(t *testing.T) {
+	r := NewRegistry()
+	l := testLink()
+	if r.ApplyLink(l) != 0 {
+		t.Fatal("apply")
+	}
+	r.Forget("g", "warrior")
+	back := l
+	back.SourceToken, back.TargetToken = 12, 13
+	if code := r.ApplyLink(back); code != 0 {
+		t.Fatalf("reinstall refused: %x", code)
+	}
+	live := 0
+	for _, e := range r.Snapshot("g", "friend") {
+		if e.StopRequested {
+			continue
+		}
+		live++
+		if e.InstanceToken != 13 {
+			t.Fatalf("live half token %d, want the replacement", e.InstanceToken)
+		}
+	}
+	if live != 1 {
+		t.Fatalf("recipient rows after reinstall: %+v", r.Snapshot("g", "friend"))
+	}
+	b := r.DrainStopRequested()
+	if len(b) != 1 || len(b[0].Effects) != 1 || b[0].Effects[0].InstanceToken != 11 {
+		t.Fatalf("orphan retirement: %+v", b)
+	}
+	if len(r.Links()) != 1 {
+		t.Fatalf("links after reinstall: %+v", r.Links())
+	}
+}
+
+// Another cleric casting the same blessing on the same recipient while
+// the first caster's orphan still runs its timer replaces the orphan
+// too: the recipient never holds two live halves of one buff, whoever
+// cast the replacement.
+func TestApplyLinkFromAnotherCasterReplacesTheOrphan(t *testing.T) {
+	r := NewRegistry()
+	l := testLink()
+	if r.ApplyLink(l) != 0 {
+		t.Fatal("apply")
+	}
+	r.Forget("g", "warrior")
+	other := l
+	other.SourceName, other.SourceGID, other.SourceToken, other.TargetToken = "cleric", 7, 22, 23
+	if code := r.ApplyLink(other); code != 0 {
+		t.Fatalf("second cast refused: %x", code)
+	}
+	live := 0
+	for _, e := range r.Snapshot("g", "friend") {
+		if e.StopRequested {
+			continue
+		}
+		live++
+		if e.InstanceToken != 23 {
+			t.Fatalf("live half token %d, want the new cast's", e.InstanceToken)
+		}
+	}
+	if live != 1 {
+		t.Fatalf("recipient rows after the second cast: %+v", r.Snapshot("g", "friend"))
+	}
+	b := r.DrainStopRequested()
+	if len(b) != 1 || len(b[0].Effects) != 1 || b[0].Effects[0].InstanceToken != 11 {
+		t.Fatalf("orphan retirement: %+v", b)
+	}
+	if len(r.Links()) != 1 {
+		t.Fatalf("links after the second cast: %+v", r.Links())
 	}
 }
 

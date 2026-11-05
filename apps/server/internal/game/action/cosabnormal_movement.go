@@ -88,6 +88,20 @@ func (rt *Runtime) cosMovementBlocked(division string, character *enterworld.Cha
 
 /*
 ================
+cosMovementBlockedFor
+
+The blocked-mask question by owner name and COS GID. The lookup only
+ever weighed those two values, so callers that already hold them as
+facts answer without a record copy (#1943).
+================
+*/
+func (rt *Runtime) cosMovementBlockedFor(division, name string, petGID uint32) bool {
+	block := rt.cosAbnormal(division, name, petGID)
+	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0
+}
+
+/*
+================
 companionMovementBlocked
 ================
 */
@@ -95,8 +109,7 @@ func (rt *Runtime) companionMovementBlocked(division string, character *enterwor
 	if character == nil || pet == nil {
 		return false
 	}
-	block := rt.cosAbnormal(division, character.Name, pet.GID)
-	return block != nil && block.Mask&(abnormal.Freeze.Bit()|abnormal.Sleep.Bit()|abnormal.Root.Bit()|abnormal.Stun.Bit()) != 0
+	return rt.cosMovementBlockedFor(division, character.Name, pet.GID)
 }
 
 /*

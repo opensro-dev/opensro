@@ -103,7 +103,19 @@ func isVersionMismatch(err error) bool {
 // pendingRenameQueuedMs, lastRenameMs; port-only, #1689,
 // SRO_NAME_CHANGE_SCROLL) and layout 11's name_reservations table. The
 // offline upgrade adds the empty table and rewrites no record.
-const CurrentVersion = 33
+// Version 34 adds the optional Halloween daily box count (halloweenBoxDay,
+// halloweenBoxCount; port-only, SRO_HALLOWEEN_EVENT). The offline upgrade
+// rewrites no record.
+// Version 35 adds the optional wanted-level lapse (mostWanted.expiresAtMs,
+// port-only, #1849): the time a suited player's wanted level lapses.
+// Streaks saved earlier carry none and lapse at their next level. The
+// offline upgrade rewrites no record.
+// Version 36 moves the Halloween daily box count to the account (the
+// halloweenBoxes metadata plane, port-only, #2547): the cap counts per
+// account, not per character. The character halloweenBoxDay/Count fields
+// stay as the seed the account record is derived from at first load; the
+// offline upgrade rewrites no record.
+const CurrentVersion = 36
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -127,6 +139,11 @@ type Meta struct {
 	NextGuildID  map[string]int64                  `json:"nextGuildId,omitempty"`
 	TradeRewards map[string]domain.TradeRewardPool `json:"tradeRewards,omitempty"`
 	JobRankings  map[string]domain.JobRankings     `json:"jobRankings,omitempty"`
+	// HalloweenBoxes is the per-account daily box count (#2547), keyed
+	// by account id. Records are pointers: a settlement mutates the one
+	// record inside its door and the commit stages it, exactly like a
+	// character record.
+	HalloweenBoxes map[string]*domain.HalloweenBoxAccount `json:"halloweenBoxes,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

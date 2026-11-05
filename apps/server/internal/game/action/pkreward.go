@@ -67,10 +67,12 @@ type playerKill struct {
 	victimLevel int64
 	// Port-only, not native (mostwanted.go): whether killer and victim are
 	// strangers (no shared account, party, guild or union), which both the
-	// streak count and the bounty require, and the victim's wanted level
-	// before its death cleared it.
+	// streak count and the bounty require, and the victim's wanted level and
+	// lapse before its death cleared them (the kill door judges the lapse
+	// from this snapshot; the record itself is already gone by then).
 	mostWantedStrangers bool
 	victimWanted        int64
+	victimWantedLapse   int64
 }
 
 /*
@@ -112,6 +114,9 @@ func (kill playerKill) withVictim(killer, victim *enterworld.Character) playerKi
 	kill.legalEnemy = kill.enemyRules.enemy(killer, victim)
 	kill.victimLevel = rewardLevel(victim)
 	kill.victimWanted = mostWantedLevel(victim)
+	if victim != nil && victim.MostWanted != nil {
+		kill.victimWantedLapse = victim.MostWanted.ExpiresAtMs
+	}
 	return kill
 }
 
@@ -125,6 +130,7 @@ to every observer; shares are the job EXP its party members still earn.
 ================
 */
 func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, after jobKillPayout) {
+	after.division = division
 	if killer == nil || victim == nil {
 		return nil, nil, after
 	}
@@ -175,7 +181,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			after.notices = append(after.notices, notice)
 		}
 		if party == nil {
-			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
+			if frames, ok := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
 				actor = append(actor, frames...)
 			}
 		} else {
@@ -186,7 +192,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 					after.shares = append(after.shares, share)
 					continue
 				}
-				if frames, ok := rt.addJobExperience(killer, share.exp); ok {
+				if frames, ok := rt.addJobExperience(division, killer, share.exp); ok {
 					actor = append(actor, frames...)
 				}
 			}
@@ -217,8 +223,9 @@ withVictim inside the door), while the actual victim is the COS. An
 ordinary kill books the murder against the owner (RecordMurder on the
 owner's level); a job kill pays job EXP on the owner's level, shared by
 the killer's party, but not the +0x1c * 3 basis EXP, which the reference server gates
-on the actual victim being a player, and not the port-only job-kill or
-Most Wanted notices; a guild-war kill scores from the COS's own level
+on the actual victim being a player, and not the port-only job-kill
+notice; the port-only Most Wanted counts a job kill here only with
+SRO_MOST_WANTED_COS_KILLS on, below. A guild-war kill scores from the COS's own level
 . The death penalty never runs on a COS death, so no PvP EXP is paid. The
 killer's penalty relief for the COS itself stays with
 creditPlayerCOSKill, after this. war is published by the caller after
@@ -226,6 +233,7 @@ its door, as a player kill's is.
 ================
 */
 func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.Character, kill playerKill, cosLevel uint8, now int64) (actor, public []wire.Frame, after jobKillPayout, war domain.GuildWarCombat) {
+	after.division = division
 	if killer == nil || owner == nil {
 		return nil, nil, after, war
 	}
@@ -242,9 +250,18 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
+		// Port-only, not native (SRO_MOST_WANTED_COS_KILLS): the same
+		// classification line a player kill writes (payPlayerKillInDoor),
+		// so a companion-delivered job kill leaves the same trace.
+		if rt.MostWantedCOSKills {
+			log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": owner.Name,
+				"killerJob": enterworld.DressedJob(killer), "victimJob": enterworld.DressedJob(owner),
+				"strangers": kill.mostWantedStrangers, "mostWanted": rt.MostWanted,
+				"killerAlive": enterworld.CharacterAlive(killer)}).Info("job kill classified")
+		}
 		party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 		if party == nil {
-			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
+			if frames, ok := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(owner))); ok {
 				actor = append(actor, frames...)
 			}
 			break
@@ -256,12 +273,23 @@ func (rt *Runtime) payCOSKillInDoor(division string, killer, owner *enterworld.C
 				after.shares = append(after.shares, share)
 				continue
 			}
-			if frames, ok := rt.addJobExperience(killer, share.exp); ok {
+			if frames, ok := rt.addJobExperience(division, killer, share.exp); ok {
 				actor = append(actor, frames...)
 			}
 		}
 	case pk.DeathGuildWar:
 		war = rt.prepareCOSGuildWarCombat(division, killer, owner, cosLevel)
+	}
+	// Port-only, not native: with SRO_MOST_WANTED_COS_KILLS on, a job kill
+	// delivered on a companion runs the same Most Wanted count as a player
+	// kill (mostWantedKillInDoor): the same stranger test, killer-alive
+	// gate and pair limit, credited to the killer this door books - the
+	// companion's owner when a companion dealt the blow.
+	if rt.MostWantedCOSKills && kill.kind == pk.DeathJob {
+		wantedActor, wantedPublic, owed, wanted := rt.mostWantedKillInDoor(division, killer, owner, kill, now)
+		actor, public = append(actor, wantedActor...), append(public, wantedPublic...)
+		after.bounties = append(after.bounties, owed...)
+		after.wanted = append(after.wanted, wanted...)
 	}
 	return actor, public, after, war
 }
@@ -277,6 +305,7 @@ Nothing here runs when the kill's commit rolls back.
 ================
 */
 type jobKillPayout struct {
+	division string
 	shares   []jobKillShare
 	notices  []jobKillNotice
 	wanted   []mostWantedNotice
@@ -318,7 +347,7 @@ func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
 		var frames []wire.Frame
 		rt.deps.Update(share.member, "job-kill-share", func() bool {
 			var ok bool
-			frames, ok = rt.addJobExperience(share.member, share.exp)
+			frames, ok = rt.addJobExperience(after.division, share.member, share.exp)
 			return ok
 		})
 		if len(frames) > 0 {
@@ -519,14 +548,23 @@ func (rt *Runtime) grantKillExperience(c *enterworld.Character, exp int64, sourc
 ================
 addJobExperience
 
-The reference server's job EXP grant, through the progression owner.
+The reference server's job EXP grant, through the progression owner. A
+grant that crosses a worn suit's tier boundary also re-sends the stat
+block and the speeds (jobsuitbuff.go), so the new tier shows at once
+instead of at the next projection.
 ================
 */
-func (rt *Runtime) addJobExperience(c *enterworld.Character, exp int64) ([]wire.Frame, bool) {
+func (rt *Runtime) addJobExperience(division string, c *enterworld.Character, exp int64) ([]wire.Frame, bool) {
 	if rt.UpdateJobExperience == nil || exp == 0 {
 		return nil, false
 	}
-	return rt.UpdateJobExperience(c, exp)
+	before := rt.jobSuitTier(c)
+	frames, ok := rt.UpdateJobExperience(c, exp)
+	if ok && rt.jobSuitTier(c) != before {
+		private, public := rt.jobSuitBuffRefresh(division, c, rt.Now().UnixMilli())
+		frames = append(append(frames, private...), public...)
+	}
+	return frames, ok
 }
 
 /*
@@ -558,13 +596,13 @@ func (rt *Runtime) payMonsterJobKillInDoor(division string, killer *enterworld.C
 	level := int64(victim.Ref.Level)
 	party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
 	if party == nil {
-		frames, _ := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, level))
+		frames, _ := rt.addJobExperience(division, killer, jobKillExperience(rt.deps.LevelData(), killer, level))
 		return frames, nil
 	}
 	fallen := jobKillVictim{level: level, world: domain.CharacterWorldInstance(killer),
 		at: simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}}
 	for _, share := range rt.jobKillShares(division, killer, fallen, party, now) {
-		frames, ok := rt.addJobExperience(share.member, share.exp)
+		frames, ok := rt.addJobExperience(division, share.member, share.exp)
 		if !ok {
 			continue
 		}

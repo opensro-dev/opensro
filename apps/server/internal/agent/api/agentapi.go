@@ -11,7 +11,7 @@ agentapi.go - private character selection and control HTTP surface
 // opens a login path or chooses a shard.
 //
 // Response shapes are 1:1 with the client's recovered native folds
-// (sub_72c0e0_CPSCharacterCreate_OnClickOk / sub_735c00 / authClient
+// (sub_72c0e0_CPSCharacterCreate_OnClickOk / CPSCharacterSelect_OnStartClicked / authClient
 // types) - the client is the surviving contract, and its error codes map
 // through the native agent-error table (data_cc9e5c).
 package agentapi
@@ -39,7 +39,7 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
-// Env configuration (documented in ops/docs/DEPLOYMENT.md).
+// Env configuration (documented in the operator's deployment guide).
 const (
 	// EnvAddr overrides the listen address. The default is the retired
 	// Node launcher's address, so the client needs no configuration
@@ -71,7 +71,35 @@ const (
 	// deliberately off unless the deployment explicitly enables it; the
 	// Nomad development job does so only on its loopback network.
 	EnvBenchmarkFixtureControl = "SRO_BENCHMARK_FIXTURE_CONTROL"
+
+	// EnvMaintenanceMessage names the maintenance refusals (the gate's
+	// world-entry refusal here, the Agent's not-operating refusals in
+	// internal/agent/server). Port-only, not native (the original has no
+	// self-explaining maintenance refusal): off answers SHARD_OFFLINE, a
+	// code no client maps, so players keep the player-visible behaviour
+	// shipped today even though the wire code differs from the
+	// MAINTENANCE the gate answered before this switch existed; on
+	// answers MAINTENANCE so the client can explain the refusal.
+	EnvMaintenanceMessage = "SRO_MAINTENANCE_MESSAGE"
 )
+
+/*
+================
+MaintenanceMessageFromEnv
+
+The switch as both the Agent and the GameWorld read it. The job passes the
+shard setting's own "on"/"off"; "1" and "true" stay on as well, because a
+job file from before this reader rendered "1", and a jobs-only revert
+must keep meaning what it meant.
+================
+*/
+func MaintenanceMessageFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMaintenanceMessage))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
 
 // Native agent error codes (the client's data_cc9e5c table; see
 // client 72C0E0's recovered mapping). Only the codes this surface emits.
@@ -187,6 +215,10 @@ type Config struct {
 	// MaintenanceGatePath is the maintenance release gate (EnvMaintenanceGate,
 	// maintenance_gate.go); empty means no gate.
 	MaintenanceGatePath string
+	// MaintenanceMessage names the gate's world-entry refusal MAINTENANCE
+	// instead of SHARD_OFFLINE (EnvMaintenanceMessage). Port-only, not
+	// native: see the EnvMaintenanceMessage comment.
+	MaintenanceMessage bool
 }
 
 // API serves the agent HTTP surface.
@@ -201,6 +233,8 @@ type API struct {
 	economyPath             string
 	settings                http.Handler
 	settingsPath            string
+	chatLog                 http.Handler
+	chatLogPath             string
 	operator                http.Handler
 	notices                 *noticePublisher
 	observatory             *observatoryReader
@@ -225,6 +259,7 @@ type API struct {
 	privateNetwork          bool
 	now                     func() time.Time
 	maintenanceGatePath     string
+	maintenanceMessage      bool
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
@@ -295,6 +330,7 @@ func New(config Config) (*API, error) {
 		privateNetwork:          config.PrivateNetwork,
 		now:                     now,
 		maintenanceGatePath:     config.MaintenanceGatePath,
+		maintenanceMessage:      config.MaintenanceMessage,
 		allowedOrigins:          allowedOrigins,
 		revocations:             newAccountRevoker(),
 	}
@@ -315,6 +351,9 @@ func New(config Config) (*API, error) {
 	log.Infof("agentapi: transport admission mint enabled (POST /auth/transport-token, ttl %s)", transportAdmissionTokenTTL)
 	if api.benchmarkFixtureControl {
 		log.Infof("agentapi: deterministic benchmark fixture control enabled at %s", BenchmarkFixtureResetPath)
+	}
+	if api.maintenanceMessage {
+		log.Infof("agentapi: maintenance gate refusal code is MAINTENANCE (%s on); off answers SHARD_OFFLINE", EnvMaintenanceMessage)
 	}
 	return api, nil
 }
@@ -374,6 +413,9 @@ func (api *API) Handler() http.Handler {
 	}
 	if api.economy != nil {
 		mux.Handle(api.economyPath, api.economy)
+	}
+	if api.chatLog != nil {
+		mux.Handle(api.chatLogPath, api.chatLog)
 	}
 	if api.settings != nil {
 		mux.Handle(api.settingsPath, api.settings)
@@ -499,7 +541,7 @@ const maxGuildMarkBytes int64 = 1 << 20
 
 // handleGuildMark serves one guild-crest .crb blob by its native filename
 // from the configured marks directory - a raw passthrough, no
-// transformation (the client's sub_4ba950 loader consumes the bytes and
+// transformation (the client's CGuildCrestManager_BuildCrestUrl loader consumes the bytes and
 // caches them locally as .rd under the client's 0xcbc340 cache root). The server
 // stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
 // lineage), never images, so art is host-supplied: no directory or no

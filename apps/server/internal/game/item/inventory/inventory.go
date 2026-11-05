@@ -510,12 +510,13 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// after their operator cap returns to one. This does not enable merging.
 	splittable := stackable || (bothInBag && retainedOversizedStack(inv.items[sourceIndex], stackCap))
 	if bothInBag && splittable && destIndex < 0 && quantity != sourceCount {
-		// Per-cause notice bytes (client sub_689420 copy): zero asks for a
-		// positive number (01:29), over-stack says fewer-than-remain
-		// (01:14). Retail UI clamps the divide input to [1, stack-1] before
-		// composing, so both are hostile/malformed-packet guards - the
-		// split keeps the semantically matching notice for each cause
-		// instead of collapsing both onto 0x14.
+		// Per-cause notice bytes (the client's
+		// CGInterface_ShowSystemNotification copy): zero asks for a positive
+		// number (01:29), over-stack says fewer-than-remain (01:14). Retail
+		// UI clamps the divide input to [1, stack-1] before composing, so
+		// both are hostile/malformed-packet guards - the split keeps the
+		// semantically matching notice for each cause instead of collapsing
+		// both onto 0x14.
 		if quantity < 1 {
 			return out, newFault(wire.ErrCodePositiveNumberOnly, "splitQuantityNotPositive")
 		}

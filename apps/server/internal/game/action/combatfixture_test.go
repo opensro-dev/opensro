@@ -107,6 +107,40 @@ newCombatTestRuntimeAtLevel
 ================
 */
 func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonster(t, monsterHP, level, 0)
+}
+
+/*
+================
+newCombatTestRuntimeBandit
+
+The combat fixture with a job bandit for its target: typeID4 2 is a
+thief bandit, 3 a hunter bandit (the jobmonster.go type words). The
+bandit stands where the ordinary fixture monster stands.
+================
+*/
+func newCombatTestRuntimeBandit(t *testing.T, monsterHP uint32, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonster(t, monsterHP, 1, typeID4)
+}
+
+/*
+================
+newCombatTestRuntimeMonster
+================
+*/
+func newCombatTestRuntimeMonster(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonsterTuned(t, monsterHP, level, typeID4, nil)
+}
+
+/*
+================
+newCombatTestRuntimeMonsterTuned
+
+The combat fixture with its target monster's reference tuned before the
+template is built (a real row's defenses, another codename).
+================
+*/
+func newCombatTestRuntimeMonsterTuned(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8, tune func(*monster.MonsterRef)) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
 	const region = uint16(0x62A8)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
@@ -114,6 +148,7 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 	ref := monster.MonsterRef{
 		RefObjID:   1933,
 		TidWord:    0x00c6, // Authored monster class; actor-class gates must run in fixtures too.
+		TypeID4:    typeID4,
 		Codename:   "MOB_CH_MANGNYANG",
 		Level:      level,
 		MaxHP:      monsterHP,
@@ -130,6 +165,9 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 		EvasionRate:     27,
 		HitRate:         27,
 		CriticalRate:    2,
+	}
+	if tune != nil {
+		tune(&ref)
 	}
 	monsters := simulation.NewMonsterState(monster.TemplateFromParts(
 		map[uint32]monster.MonsterRef{ref.RefObjID: ref},

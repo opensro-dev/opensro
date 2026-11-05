@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
@@ -34,12 +35,14 @@ import (
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/match"
 	"opensro.online/server/internal/game/social/mentor"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/social/shadowmute"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -59,13 +62,16 @@ ports. Runtimes retain only the capabilities declared by their packages.
 ================
 */
 type gameplayPlane struct {
-	divisionID    string
-	hub           *transport.Hub
-	deps          *enterworld.Deps
-	items         *action.Runtime
-	movement      *movement.Runtime
-	water         *movement.WaterValidator
-	presence      *livepresence.Directory
+	divisionID string
+	hub        *transport.Hub
+	deps       *enterworld.Deps
+	items      *action.Runtime
+	movement   *movement.Runtime
+	water      *movement.WaterValidator
+	presence   *livepresence.Directory
+	// mutes is the chat mute book (moderation_wiring.go), set once the
+	// shard is known; the console's conduct actions reach it.
+	mutes         *moderation.Book
 	chat          *chat.Runtime
 	chatFeed      *chatfeed.Feed
 	parties       *party.Runtime
@@ -141,6 +147,7 @@ func newGameplayPlane(
 	// windows to the same sweep that retires them.
 	deps.Now = func() time.Time { return items.Now() }
 	deps.TrackTimedWindows = items.TrackTimedWindows
+	deps.TrackMostWanted = items.TrackMostWanted
 	deps.RestoreEntryEffects = items.RestoreTimedSkillJobs
 	deps.AdmitCharacterSession = items.AdmitCharacterSession
 	deps.RetireCharacterSession = items.ForgetCharacterSession
@@ -200,6 +207,12 @@ func newGameplayPlane(
 	if items.SunEventOnly.Enabled() {
 		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
 	}
+	// SRO_HALLOWEEN_EVENT (port-only, not native in this client build):
+	// the Halloween Day event's switch and UTC window (wiring_halloween.go).
+	items.Halloween = halloweenEventFromEnv()
+	// SRO_HALLOWEEN_HELMET_SEAL (port-only, not native): the event
+	// helmets stay sealed at the transfer doors after the event.
+	items.HalloweenHelmetSeal = halloweenHelmetSealFromEnv()
 	// SRO_UNIQUE_GAP_EXEMPT / SRO_UNIQUE_POP_TICKET / SRO_UNIQUE_MAX_LEVEL_LOOT
 	// / SRO_UNIQUE_SEAL_DROPS (port-only, not native): uniques ignore the
 	// level-gap admission, one Magic Pop ticket per kill, a top-band unique's
@@ -328,6 +341,9 @@ func newGameplayPlane(
 	}
 	// A thief in job mode may not bring its transport into a town (#721).
 	movementRuntime.TownEntryBlocked = items.ThiefCargoTownBlocked
+	if err := configureThiefCartTownAreas(items, movementRuntime, devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
 	movementRuntime.EnableGroundWalk()
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
@@ -506,70 +522,6 @@ func appendGroundObjectRows(deps *enterworld.Deps, items *action.Runtime) {
 
 /*
 ================
-connectInvitationLanes
-
-Shares the single outstanding-consent rule across party, guild, mentor,
-and resurrection invitations without moving their state ownership.
-================
-*/
-func connectInvitationLanes(
-	parties *party.Runtime,
-	guildInvites *guild.InviteRuntime,
-	unions *guild.UnionRuntime,
-	mentorInvites *mentor.InviteRuntime,
-	items *action.Runtime,
-) {
-	resurrections := items.ResurrectionConsent()
-	exchanges := items.ExchangeConsent()
-	instanceInvites := items.InstanceInviteConsent()
-	parties.AddConsentArm(exchanges)
-	parties.AddConsentArm(guildInvites)
-	parties.AddConsentArm(unions)
-	parties.AddConsentArm(mentorInvites)
-	parties.AddConsentArm(resurrections)
-	parties.AddConsentArm(instanceInvites)
-
-	// A player holds one unanswered proposal at a time, whatever its
-	// lane (the server's unique transaction insert): every lane refuses to
-	// propose while another's proposal waits.
-	partyPending := parties.Registry().HasPendingInviteFor
-	guildInvites.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	unions.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	mentorInvites.PeerPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			resurrections.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	items.ProposalPending = func(divisionID, name string) bool {
-		return partyPending(divisionID, name) ||
-			guildInvites.HasPendingInvite(divisionID, name) ||
-			unions.HasPendingInvite(divisionID, name) ||
-			mentorInvites.HasPendingInvite(divisionID, name) ||
-			exchanges.HasPendingInvite(divisionID, name) ||
-			instanceInvites.HasPendingInvite(divisionID, name)
-	}
-	parties.PartyChanged = items.NotePartyChanged
-}
-
-/*
-================
 register
 
 Installs validated cross-owner callbacks before registering transport
@@ -618,6 +570,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}
+	// Port-only, not native: a worn job suit's bonus tiered by job level.
+	game.items.JobSuitTiers = action.JobSuitTiersFromEnv()
+	if game.items.JobSuitTiers {
+		log.Infof("job: suit tiers by job level ON (%s)", action.EnvJobSuitTiers)
+	}
 	// Port-only, not native, temporary: Most Wanted's test pacing.
 	game.items.MostWantedTest = action.MostWantedTestFromEnv()
 	step, err := action.MostWantedTestStreakStepFromEnv()
@@ -639,11 +596,23 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWantedStreakNotice {
 		log.Infof("job: most wanted progress notice per counted kill ON (%s)", action.EnvMostWantedStreakNotice)
 	}
+	// Port-only, not native: a companion's job kill counts for its owner.
+	game.items.MostWantedCOSKills = action.MostWantedCOSKillsFromEnv()
+	if game.items.MostWantedCOSKills {
+		log.Infof("job: most wanted counts companion-delivered job kills ON (%s)", action.EnvMostWantedCOSKills)
+	}
 	// Port-only, not native: a trader's goods stay in the world when the
 	// trader dies riding or disconnects in the field.
 	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()
 	if game.items.TraderCargoDrop {
 		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
+	}
+	// Port-only, not native: ten-billion stall prices and billion-gold warehouse deposits.
+	game.items.RaisedGoldCaps = action.RaisedGoldCapsFromEnv()
+	game.deps.RaisedGoldCaps = game.items.RaisedGoldCaps
+	if game.items.RaisedGoldCaps {
+		log.Infof("trade: stall prices to %d and warehouse deposits to %d ON (%s)",
+			action.RaisedStallPriceLimit, action.RaisedStorageGoldDepositLimit, action.EnvRaisedGoldCaps)
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
 	game.deps.TradeTiers = game.items.TradeTiers
@@ -829,10 +798,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			Accepted:   event.Accepted,
 		})
 	}
-	if quests.InstantInventoryExpansion = quest.InstantInventoryExpansionFromEnv(); quests.InstantInventoryExpansion {
-		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
-	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
+	game.deps.RemoveExpiredEventBoxes = game.items.RemoveExpiredHalloweenBoxes
+	game.deps.EntryEventFrames = game.items.HalloweenEntryFrames
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
 	}
@@ -940,6 +908,18 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.chatFeed = chatfeed.New()
 	game.chat.Feed = game.chatFeed
 	game.items.PublicChat = game.chatFeed
+	// Port-only, not native: the staff's chat shadow-mute list, kept beside
+	// the shard's other operator stores (shadowmute).
+	shadowMutes := shadowmute.Open(store.DirForShardFromEnv(game.divisionID))
+	game.chat.ShadowMuted = shadowMutes.Muted
+	game.items.ChatShadowMuted = shadowMutes.Muted
+	// Port-only, not native: the staff's moderation chat log (chatlog),
+	// daily files beside the mute list in the shard's authority
+	// directory - never the public site or API. Retention is
+	// SRO_CHAT_LOG_RETAIN_DAYS (default 30).
+	moderationLog := chatlog.Open(store.DirForShardFromEnv(game.divisionID), chatlog.RetainDaysFromEnv())
+	game.chat.ModerationLog = moderationLog
+	game.items.ModerationLog = moderationLog
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)

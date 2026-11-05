@@ -18,6 +18,7 @@ closing the window.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import type { SystemNotice } from "./system-notices";
 import type { ExchangeOffer, ExchangeState } from "@/engine/contracts/item-process";
 import { decodeInventoryItem } from "./inventory-item";
 
@@ -69,13 +70,15 @@ export function emptyExchange(): ExchangeState {
 ================
 ExchangeOutcome
 
-The next state, a category-1 notice code the frame raised, and the swap
-a 0x3272 asks the bag to apply.
+The next state, a category-1 notice code the frame raised, the swap
+a 0x3272 asks the bag to apply, and the banner a success raises
+(765260 shows it in the notice window as the window closes).
 ================
 */
 export interface ExchangeOutcome {
 	readonly state: ExchangeState;
 	readonly notice?: number;
+	readonly message?: SystemNotice;
 	readonly swap?: { readonly receive: readonly InventoryItem[]; readonly give: readonly number[]; };
 }
 
@@ -141,6 +144,12 @@ export function exchangeFrame(
 		case OP_EXCHANGE_SUCCEEDED:
 			return {
 				state: emptyExchange(),
+				message: {
+					key: "UIIT_MSG_STGRERR_ITEM_EXCHANGE_SUCCEED",
+					value: 0,
+					notificationBanner: true,
+					bannerOnly: true
+				},
 				swap: {
 					receive: [ ...state.theirs ].sort( ( a, b ) => a.slot - b.slot ).map( row => row.item ),
 					give: state.own.flatMap( row => row.bagSlot === undefined ? [] : [ row.bagSlot ] )

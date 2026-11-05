@@ -45,11 +45,14 @@ plane.
 ================
 */
 func (rt *Runtime) screamMaskSource(division string, member *enterworld.Character, to monster.Pose, now int64) (*enterworld.Character, enterworld.SkillRow, bool) {
-	snapshot := rt.characterSnapshot(division, member)
-	if snapshot == nil || rt.effects == nil || rt.deps.SkillData() == nil {
+	// Every refusal below weighs the member's name, its live link and
+	// its live pose - none of them the detached record - so the record
+	// is copied only once the source is admitted (#1943). The link and
+	// skill lookups stay outside the copy's door, as before.
+	if member == nil || rt.effects == nil || rt.deps.SkillData() == nil {
 		return nil, enterworld.SkillRow{}, false
 	}
-	link, ok := rt.effects.ScreamLink(division, snapshot.Name, now)
+	link, ok := rt.effects.ScreamLink(division, member.Name, now)
 	if !ok {
 		return nil, enterworld.SkillRow{}, false
 	}
@@ -57,12 +60,18 @@ func (rt *Runtime) screamMaskSource(division string, member *enterworld.Characte
 	if !known || !row.Abnormal.Present() {
 		return nil, enterworld.SkillRow{}, false
 	}
-	at := rt.liveSpawn(simulation.WorldKey(division, snapshot.Name), snapshot, now)
+	at := rt.liveSpawn(simulation.WorldKey(division, member.Name), member, now)
 	if !worldgeom.SamePlane(at.RegionID, to.RegionID) {
 		return nil, enterworld.SkillRow{}, false
 	}
 	from := monster.Pose{RegionID: at.RegionID, X: at.X, Y: at.Y, Z: at.Z}
 	if float64(monster.NativeActorDistance(from, to)) >= float64(link.ScreamRange) {
+		return nil, enterworld.SkillRow{}, false
+	}
+	// The roll reads the member's level, getv modifiers and identity
+	// off the copy - nothing from the bag (#2209).
+	snapshot := rt.characterSnapshotCombat(division, member)
+	if snapshot == nil {
 		return nil, enterworld.SkillRow{}, false
 	}
 	return snapshot, row, true
@@ -111,8 +120,16 @@ run on it.
 ================
 */
 func (rt *Runtime) screamMaskPlayer(division string, member, attacker *enterworld.Character, now int64) OpResult {
-	view := rt.characterSnapshot(division, attacker)
-	if view == nil || !enterworld.CharacterAlive(view) {
+	// The attacker's record feeds its defender stats and the status
+	// roll, but only while it lives: a dead attacker never pays for
+	// its detached copy (#1943).
+	// The admitted view feeds the attacker's spawn lookup, defender
+	// stats and the victim side of the status roll - the bag stays
+	// behind (#2209).
+	view := rt.characterSnapshotCombatAdmitted(division, attacker, func(live *enterworld.Character) bool {
+		return enterworld.CharacterAlive(live)
+	})
+	if view == nil {
 		return OpResult{}
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, view.Name), view, now)

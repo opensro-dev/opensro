@@ -135,12 +135,20 @@ seals their private tails to the recipients captured at commit time. The
 tick's own session list holds only world-ready sessions; without the seal
 a planter whose client is loading lost its 0x30D2 while the server kept
 the EXP, and the client's next level crossing failed its length check.
+The wait for that gate is the tick gate's bounded one (#2294): a pass
+cut by a held gate commits nothing and reruns whole on the next tick.
 ================
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
 	var out, results []simulation.DivisionFrames
-	before := rt.advanceSkillObjectCommits(nowMs, &out, &results)
-	after := rt.SkillObjects.Snapshot()
+	before, generation := rt.advanceSkillObjectCommits(nowMs, &out, &results)
+	// A commit pass that wrote nothing leaves the registry exactly as
+	// before names it, so the post-pass copy is paid only on a pass that
+	// created, retired or restamped an object.
+	after := before
+	if rt.SkillObjects.Generation() != generation {
+		after = rt.SkillObjects.Snapshot()
+	}
 	for _, session := range sessions {
 		if session.PublishedObjects == nil {
 			continue
@@ -181,14 +189,26 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 advanceSkillObjectCommits
 
 Runs every live object's pulse under the publication gate and returns the
-objects as they stood before it. A batch sourced by its own object is a
+objects as they stood before it, with the registry generation read just
+before that copy. A batch sourced by its own object is a
 viewer row (results); every other batch is the pulse's routed output, whose
 private tails are sealed before the gate is released.
 ================
 */
-func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) []skillobject.Object {
-	unlock := rt.lockTickPublication()
-	defer unlock()
+func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) ([]skillobject.Object, uint64) {
+	if !rt.acquireTickGate() {
+		// The gate is held (an entry bootstrap marshalling its snapshot,
+		// say): the pass waits only within the tick gate's bound (#2294).
+		// Nothing is lost - every due time below is absolute, so fields,
+		// trap pulses, scans and retirements read the same state on the
+		// next served pass; and committing nothing is exactly what the
+		// gate orders against the holder's snapshot. The registry's own
+		// lock makes the before copy safe without the gate.
+		generation := rt.SkillObjects.Generation()
+		return rt.SkillObjects.Snapshot(), generation
+	}
+	defer rt.releaseTickGate()
+	generation := rt.SkillObjects.Generation()
 	before := rt.SkillObjects.Snapshot()
 	var routed []simulation.DivisionFrames
 	for _, object := range before {
@@ -201,7 +221,7 @@ func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simula
 		}
 	}
 	*out = append(*out, rt.sealTickPrivate(routed)...)
-	return before
+	return before, generation
 }
 
 /*
@@ -216,12 +236,28 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	unlock := rt.lockDivision(object.Division)
 	defer unlock()
 	c := rt.findCharacter(object.Division, object.OwnerName)
-	snapshot := rt.characterSnapshot(object.Division, c)
 	lease, present := rt.EntryPopulationLease(object.Division, object.OwnerName)
-	ownerPresent := present && lease == object.Population && snapshot != nil && !snapshot.DeletePending &&
-		enterworld.CharacterAlive(snapshot) && snapshot.NativeTeleportMode == 0 &&
-		enterworld.ObjectIDForCharacter(snapshot) == object.OwnerGID &&
-		domain.CharacterWorldInstance(snapshot) == uint32(object.Population.ID)
+	// The presence verdict weighs only record facts the copy carries
+	// verbatim, so the copy is admitted on those facts: an absent
+	// owner retires its object in the registry before any reader
+	// touches the snapshot (#1943). The copy is the combat copy:
+	// every reader below weighs the owner's name, GID, pose, world
+	// instance, guild and combat stats - victim selection, the field
+	// and trap strikes and the trap explosion read nothing from the
+	// bag and resolve none of the owner's companions (the two
+	// downstream re-copies, screamMaskPlayer's attacker view and
+	// returnDamageToPlayer's attacker, read only stats, pose and
+	// GID of theirs).
+	var snapshot *enterworld.Character
+	if present && lease == object.Population {
+		snapshot = rt.characterSnapshotCombatAdmitted(object.Division, c, func(live *enterworld.Character) bool {
+			return !live.DeletePending && enterworld.CharacterAlive(live) &&
+				live.NativeTeleportMode == 0 &&
+				enterworld.ObjectIDForCharacter(live) == object.OwnerGID &&
+				domain.CharacterWorldInstance(live) == uint32(object.Population.ID)
+		})
+	}
+	ownerPresent := snapshot != nil
 	if object.Program.Field {
 		rt.advanceSkillField(object, snapshot, ownerPresent, nowMs)
 		return nil

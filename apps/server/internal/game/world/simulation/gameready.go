@@ -32,7 +32,7 @@ const (
 	VitalsSourceNaturalRecovery VitalsSourceFlags = 0x0010
 )
 
-// VitalsRefreshPayload encodes the 0x33A6 refresh (client sub_77a080):
+// VitalsRefreshPayload encodes the 0x33A6 refresh (client CPSMission_OnVitalsUpdate0x33A6):
 // [u32 objectId][u16 stateFlags=0][u8 updateMask=0x03][u32 hp][u32 mp],
 // matching the reference buildV150VitalsRefreshPayload.
 func VitalsRefreshPayload(objectID uint32, vitals Vitals) []byte {

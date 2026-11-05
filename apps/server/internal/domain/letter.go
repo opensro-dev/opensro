@@ -2,7 +2,7 @@ package domain
 
 // LetterRecord is one persisted letter (memo) row: the per-recipient
 // mailbox entry the community letter lane serves. The wire-facing fields
-// mirror the client's ced160+0x24c record (sub_822d10 insert: sender
+// mirror the client's ced160+0x24c record (CharacterDependentData_AppendLetter insert: sender
 // wstring +0x00, sender model ref +0x1c, packed receive time +0x3c, read
 // flag +0x40) plus the body the 0xB3F2 read-fetch fills lazily
 // (client 8277D0 stores it at +0x20). The retail shard shape is
@@ -21,6 +21,24 @@ type LetterRecord struct {
 	Body              string `json:"body"`
 }
 
+// LetterDelivery is DeliverLetter's verdict. The letter lane answers
+// the sender from it (a full mailbox names a different client line
+// than any other refusal), so the one distinction the wire needs is
+// made here, on the store owner's single locked read - never by a
+// second mailbox lookup outside the door.
+type LetterDelivery uint8
+
+const (
+	// LetterDeliveryRefused: no commit - a character is unavailable or
+	// delete-pending under the lock, or the record is outside the
+	// persisted bounds.
+	LetterDeliveryRefused LetterDelivery = iota
+	LetterDeliveryDone
+	// LetterDeliveryMailboxFull: no commit - the receiver's mailbox
+	// already holds the cap, counted on the delivery read itself.
+	LetterDeliveryMailboxFull
+)
+
 // LetterStore is the authority store's letter-mailbox door. A mailbox is the ordered letter list of
 // one character; the SLICE ORDER is the wire order - the 0xB3CD list, the
 // u8 index in 0x73F2/0x70CC and the client's ced160+0x24c list all agree
@@ -32,8 +50,8 @@ type LetterStore interface {
 	Mailbox(divisionID string, characterID int64) []LetterRecord
 	// DeliverLetter validates both live characters, the receiver's deletion
 	// state, and the mailbox cap under one lock before appending and
-	// committing. It returns false without a commit on any refusal.
-	DeliverLetter(divisionID string, senderID, receiverID int64, maxCount int, letter LetterRecord) bool
+	// committing. A refusal commits nothing.
+	DeliverLetter(divisionID string, senderID, receiverID int64, maxCount int, letter LetterRecord) LetterDelivery
 	// UpdateMailbox runs a conditional copy-then-swap update. The callback's
 	// bool reports whether state changed; false means no commit.
 	UpdateMailbox(divisionID string, characterID int64, label string, fn func(mailbox []LetterRecord) ([]LetterRecord, bool)) bool

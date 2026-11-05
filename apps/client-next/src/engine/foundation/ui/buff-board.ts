@@ -9,7 +9,7 @@ suppressed slots left out.
 
 ===========================================================================
 */
-import { countJobFraction } from "@/engine/foundation/gameplay/count-job";
+import { countJobFraction, countJobHelpText, countJobRemainingMs } from "@/engine/foundation/gameplay/count-job";
 import { buffDepartureFrame } from "@/engine/foundation/gameplay/buff-slots";
 import { abnormalBarFraction } from "@/engine/foundation/gameplay/abnormal-snapshot";
 import type { GameplayState, PetTraining } from "@/engine/contracts/gameplay";
@@ -21,6 +21,7 @@ import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
 import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
+import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
 export const buffTimerRoot = "/assets/images/Media_extracted/icon/stateodd/";
 
 /*
@@ -46,13 +47,16 @@ export function buffBoard(
 		| "petGuidance"
 		| "petGuidance"
 		| "petTraining"
+		| "mostWanted"
 		| "skillCatalog"
 		| "skillIndex"
 	>,
 	timeMs: number,
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
-	showPetTraining = true
+	showPetTraining = true,
+	copy: ( key: string ) => string = key => key,
+	showMostWanted = false
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -67,7 +71,9 @@ export function buffBoard(
 			}
 			continue;
 		}
-		const remaining = effectRemainingMs( effect, timeMs ), duration = effect.durationMs;
+		const remaining = effectRemainingMs( effect, timeMs ),
+			duration = effect.durationMs,
+			isSuppressed = suppressed.has( slot.serial );
 		// 6E5D40 stores slot kind 1 for every 0xB419 effect, so 6E51A0 always takes
 		// the single-bar branch of 6E7FA0. The alternate s_stateodd_time02_gauge slot
 		// belongs to kind 3, which only 6E6E00 (opcode 0x3691) creates. This phase
@@ -81,11 +87,17 @@ export function buffBoard(
 					instance: effect.token
 				} :
 				undefined,
-			helpSource: { kind: "effect" as const, gid: effect.gid, token: effect.token, skill: effect.skill },
+			helpSource: {
+				kind: "effect" as const,
+				gid: effect.gid,
+				token: effect.token,
+				skill: effect.skill,
+				...(isSuppressed ? { suppressed: true } : {})
+			},
 			id: "buff:" + effect.token + ":" + effect.skill,
 			path,
 			label: skill?.name ?? "",
-			suppressed: suppressed.has( slot.serial ),
+			suppressed: isSuppressed,
 			fraction: remaining !== null && duration !== undefined && duration > 0 ?
 				Math.min( 1, remaining / duration ) :
 				1
@@ -123,7 +135,9 @@ export function buffBoard(
 		}
 	}
 	// 6E6E00 kind 5: a premium package's limited uses, one slot per package
-	// with its icon and its period's bar; the help lists each item's uses.
+	// with its icon and its period's bar. The hover help (6E2C90) reads
+	// the package's name, the remained period and one line per limited
+	// row; countJobHelpText composes it from the client's text keys.
 	const packages = new Map<number, NonNullable<typeof game.countJobs>[number][]>();
 	for ( const row of game.countJobs ?? [] ) {
 		packages.set( row.packageRefObjId, [ ...(packages.get( row.packageRefObjId ) ?? []), row ] );
@@ -132,7 +146,7 @@ export function buffBoard(
 		const reference = rows[0]!.reference, path = iconPath( reference.icon );
 		if ( path ) {
 			primary.push( {
-				helpText: [ reference.name ?? "", ...rows.map( r => (r.itemName ?? "") + " x" + r.uses ) ].join( "\n" ),
+				helpText: countJobHelpText( reference.name ?? "", rows, countJobRemainingMs( rows[0]!, timeMs ), copy ),
 				id: "count-job:" + packageRefObjId,
 				path,
 				label: reference.name ?? "",
@@ -197,6 +211,19 @@ export function buffBoard(
 			} );
 		}
 	}
+	// Port-only (#1849): the streak holder's own wanted row, opted into
+	// in the Experimental window. It wears the dressed job's icon (the
+	// row waits while the suit is off, as its bonuses do).
+	const wantedRow = showMostWanted ? mostWantedRow( game.mostWanted, timeMs ) : null;
+	if ( wantedRow ) {
+		primary.push( {
+			id: "most-wanted",
+			path: wantedRow.path,
+			label: wantedRow.label,
+			helpText: wantedRow.helpText,
+			fraction: wantedRow.fraction
+		} );
+	}
 	for ( const row of abnormalBuffIcons( game.vitals?.find( v => v.gid === game.localGid )?.abnormal ?? 0 ) ) {
 		const record = game.abnormalRecords?.find( item => item.bit === Number( row.id.slice( 9 ) ) );
 		secondary.push( {
@@ -214,6 +241,11 @@ export function buffBoard(
 		}) )
 	];
 }
+/*
+================
+Entry
+================
+*/
 interface Entry {
 	suppressed?: boolean;
 	cancel?: { mode: "direct" | "confirm"; skillId: number; token: number; instance: number; };

@@ -282,7 +282,7 @@ func BuildVitalsRefreshPayload(c *Character) []byte {
 
 // BuildLocalPlayerEntryPayload ports buildV150LocalPlayerEntryPayload: the
 // 0x32B3 char-data chunk. Field order/widths are byte-identical to the WIP
-// sub_863880 CICPlayer_BindRecords reconstruction; see the Node builder for
+// CICPlayer_DeserializeBaseRecord CICPlayer_BindRecords reconstruction; see the Node builder for
 // the per-field provenance comments. Bytes must not drift - REV-1 diffs this
 // against the Node output.
 /*
@@ -386,7 +386,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// constraints); an avatar-less record emits the same [5][0] bytes as
 	// before. Every emitted refObjId rides the refItemSnapshot with its
 	// full record (buildRefItemSnapshot walks the avatar rows), because an
-	// unseeded ref DESYNCS the client stream (sub_78c830 L182-183).
+	// unseeded ref DESYNCS the client stream (CSOItem_Deserialize L182-183).
 	avatarCapacity, avatarRoster := AvatarWireItems(character)
 	// AvatarWireItems already caps its rows at 0xff; this clamp is the
 	// defensive count-site twin so the u8 count can never disagree with
@@ -458,7 +458,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 		writer.U32(questID)
 	}
 	// Section 2 - ACTIVE quests: u8 count + count x [u32 refId +
-	// SQuestInfo body] (client parse sub_788210; field emission is
+	// SQuestInfo body] (client parse SQuestInfo_Deserialize; field emission is
 	// FLAG-DRIVEN, see the ActiveQuestRecord doc - a flags/field mismatch
 	// desyncs the stream). An empty list emits the same single zero byte
 	// the composer hardcoded before this section was modeled.
@@ -523,8 +523,8 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	}
 	// Section 3 - TRACKED quest records: u8 count + count x [u32 refId,
 	// u8 flags, u8 valueA, u16 word, 6 tail bytes, u32 optional iff
-	// flags&0x02] (client sub_8673d0 @0x8674a0..0x867524; applied by
-	// sub_866c60 - the browser client's hosted apply drives the CIFQuest
+	// flags&0x02] (client CICPlayer_DeserializeQuestSections @0x8674a0..0x867524; applied by
+	// CPSMission_Calls_CPlayer_GetVisibilityMap - the browser client's hosted apply drives the CIFQuest
 	// +0x398 tracked id the minimap quest pass gates on). An empty list
 	// emits the same single zero byte as before.
 	trackedQuests := character.TrackedQuests
@@ -609,7 +609,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// Privilege byte -> CICPlayer+0x1890: the local full-character
 	// deserialize (client 8675F0) reads u32 +0x1894 (the JID dword above,
 	// client @0x867a80) then THIS u8 (@0x867a90) - the position is byte-critical.
-	// Bit 0 is the v1.150 GM privilege flag, tested by sub_862a70
+	// Bit 0 is the v1.150 GM privilege flag, tested by CICPlayer_IsTestGM
 	// ("movzx eax, byte [ecx+0x1890]; and eax, 1"); its consumers are
 	// client Client_IsDebugCommandAllowed @0x004fa670 (console/GM-command availability -
 	// bit 0 OR the retail session byte +0x12f), the GM default chat
@@ -650,7 +650,7 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	// "No fortress war" sentinel 0x10001 (a literal 0 reads as war id 0 and
 	// closes the world-map follow gate).
 	writer.U32(entryFortressWorld(entry))
-	// Event-group list (client fold sub_77b220 @0x0077b2f4..): u8 count +
+	// Event-group list (client fold CPSMission_OnMyCharacterEntered @0x0077b2f4..): u8 count +
 	// count x u32 groupId LE. Every id sets the client's event-start slot;
 	// id 1 additionally fires the render-option pair and the
 	// UIIT_MSG_EVENT_START guide message. Ids are POLICY content (declared

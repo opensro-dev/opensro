@@ -12,7 +12,7 @@ import {
 // Every track in the canonical table (environmentTracks.mjs) is parsed and carried, not just
 // the sky-relevant ones, so any consumer (sky, cloud, stars, fog, sun/moon) can be wired
 // without re-RE.
-//   loader sub_8a7870 @ 0x008a7870, samplers sub_4dc920 (vec3) / sub_4dcab0 (scalar).
+//   loader SEnvironment_ReadIfo @ 0x008a7870, samplers EnvironmentVectorTrack_SampleAtTime (vec3) / EnvironmentScalarTrack_SampleAtTime (scalar).
 
 const ENVIRONMENT_IFO_PATH = path.join(extractedRoot, "Map_extracted", "environment.ifo");
 

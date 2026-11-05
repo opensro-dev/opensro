@@ -34,7 +34,7 @@ const (
 	// PermMaskStorage is the warehouse bit the reference server asks of a non-master
 	// (a member permission check for 8).
 	PermMaskStorage uint32 = 0x8
-	// LeaderGrade is the member grade the client's sub_826610 fold
+	// LeaderGrade is the member grade the client's SGuildData_ReadGuildBlock_826610 fold
 	// publishes as the leader name (grade 0 = leader).
 	LeaderGrade uint8 = 0
 	// LeaderPermMask is the creating leader's initial permission mask.

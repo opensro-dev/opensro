@@ -151,6 +151,7 @@ function play( clicks, endMs = 5000 ) {
 			aim: p?.aim,
 			speedFactor: 1,
 			turnRate: 0,
+			relocation: 0,
 			walkPredictable: true,
 			walkHeld: false,
 			holding: false,

@@ -1,6 +1,24 @@
+/*
+===========================================================================
+
+population.go - ground entries by world lifetime
+
+A division's drops belong to a population: the persistent main world
+(the zero value) or one live instance world's packed id and
+generation. The reads and the retirement here never cross from one
+lifetime into another, so a recycled world id cannot see or remove
+its successor's drops.
+
+===========================================================================
+*/
 package grounditem
 
-import "sort"
+import (
+	"slices"
+	"sort"
+
+	"opensro.online/server/internal/domain"
+)
 
 // Population is a ground object's owning world lifetime. The zero value is
 // the persistent main-world population used by pre-instance ground records.
@@ -22,15 +40,40 @@ func (r *Registry) GetInPopulation(division string, population Population, gid u
 	return item, true
 }
 
+// AllInPopulation returns the population's entries in the division,
+// in All's entity-id order and detached the same way, but filtered
+// under the lock: only the matching entries pay the deep copy. The
+// old read copied every drop of the division and kept a fraction
+// (#2030) - one dungeon's bootstrap paid for the whole main world.
+/*
+================
+AllInPopulation
+================
+*/
 func (r *Registry) AllInPopulation(division string, population Population) []Item {
-	var out []Item
 	if !population.Valid() {
-		return out
+		return nil
 	}
-	for _, item := range r.All(division) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	items := r.byDivision[division]
+	var gids []uint32
+	for gid, item := range items {
 		if item.Population == population {
-			out = append(out, item)
+			gids = append(gids, gid)
 		}
+	}
+	if len(gids) == 0 {
+		return nil
+	}
+	slices.Sort(gids)
+	out := make([]Item, 0, len(gids))
+	for _, gid := range gids {
+		item := items[gid]
+		item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
+		item.Summon = domain.CloneCOS(item.Summon)
+		out = append(out, item)
 	}
 	return out
 }
@@ -51,7 +94,10 @@ func (r *Registry) RemovePopulation(division string, population Population) []It
 		}
 	}
 	if len(removed) != 0 {
-		r.revision++
+		r.bumpLocked(division)
+		for _, item := range removed {
+			r.stampLocked(division, item.Gid)
+		}
 	}
 	sort.Slice(removed, func(i, j int) bool { return removed[i].Gid < removed[j].Gid })
 	return removed

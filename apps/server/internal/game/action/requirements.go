@@ -8,7 +8,7 @@ import (
 
 // equipRequirements builds the per-operation character-vs-itemdata equip
 // gate (inventory.EquipRequirements): the server-authority mirror of the
-// native client's full-mask requirement bits (sub_789c60). Data sources:
+// native client's full-mask requirement bits (CSOItem_Query_789C60). Data sources:
 //
 //   - the character's level/gender/race off the bound enterworld.Character
 //     (the authority store rows);

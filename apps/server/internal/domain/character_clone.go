@@ -18,6 +18,154 @@ Every mutable child added to Character must acquire an independent copy here.
 ================
 */
 func cloneCharacter(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsAll)
+}
+
+/*
+================
+CloneCharacter
+
+cloneCharacter for callers outside the package (the store's committed
+copies, persistence.go): a detached, value-equal copy of the whole
+record. Every mutable child added to Character must acquire an
+independent copy in cloneCharacterFiltered, or this copy aliases it.
+================
+*/
+func CloneCharacter(source *Character) *Character {
+	return cloneCharacter(source)
+}
+
+/*
+================
+cloneCharacterEquipment
+
+cloneCharacter for readers that never leave the worn equipment: the
+mission inventory keeps only its equipment rows and the avatar
+inventory is not copied at all. Every other child detaches exactly as
+cloneCharacter detaches it. Dropping the bag rows also drops every
+companion stored in them: Companions reaches the row Summon records,
+so a reader of this copy must never resolve companions.
+================
+*/
+func cloneCharacterEquipment(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsEquipment)
+}
+
+/*
+================
+cloneCharacterCombat
+
+cloneCharacter for the combat stat readers (#1943): the mission
+inventory keeps only its equipment rows, and the avatar inventory is
+copied whole, since the stat projection reads its option rows. The same
+companion rule as cloneCharacterEquipment applies.
+================
+*/
+func cloneCharacterCombat(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsCombat)
+}
+
+/*
+================
+cloneCharacterCast
+
+cloneCharacter for the skill-press readers (#1943): the mission
+inventory keeps its equipment rows, the whole avatar inventory, and
+every bag row carrying a companion, each detached exactly as
+cloneInventoryRows detaches it. Companion resolution walks the
+bag-row Summon records, and the press flow resolves the caster's
+companions through its copy (the crow lane), so the kept bag rows
+keep that resolution identical to the full copy's; the plain bag
+rows it drops are read by no press reader.
+================
+*/
+func cloneCharacterCast(source *Character) *Character {
+	return cloneCharacterFiltered(source, rowsCast)
+}
+
+/*
+================
+cloneCharacterCompanion
+
+The pet-owner view (#2030): the per-tick pet and brood passes copy
+only what their readers read, detached exactly as cloneCharacter
+detaches it - identity, world and model, the companions (every record
+VisitCompanions walks, in its order), life, body and teleport state,
+the PvP and relation facts (PK, aggressions, guild, job, event
+membership, visibility, transform), and of the mission inventory only
+the companion rows and the relation slot (the job suit and cape row the
+relation rules read). Every other field is zero.
+
+The list is the pet chain's audited read set (#2030 comment
+6475323279): the whole action suite runs on this view, and the relation
+helpers (attack refusal, world enemy, guild war, caravan, free battle,
+team) were checked field by field. A new reader of any other field
+through this copy would silently see it zero: widen the list with it.
+================
+*/
+func cloneCharacterCompanion(source *Character) *Character {
+	if source == nil {
+		return nil
+	}
+	clone := &Character{
+		ID: source.ID, AccountID: source.AccountID, Name: source.Name, DeletePending: source.DeletePending,
+		ModelCodename: source.ModelCodename, BroodGeneration: source.BroodGeneration,
+		NativeTeleportMode: source.NativeTeleportMode, NativeBodyStatus: source.NativeBodyStatus,
+		BattleUntilMs: source.BattleUntilMs, Job: source.Job, GMPrivilege: source.GMPrivilege,
+		PublicHidden: source.PublicHidden, TransformRefObjID: source.TransformRefObjID,
+		TransformMode: source.TransformMode, TransformShape: source.TransformShape,
+		TransformEquipment: source.TransformEquipment,
+	}
+	clone.PK = clonePointer(source.PK)
+	clone.EventMembership = clonePointer(source.EventMembership)
+	if source.Aggressions != nil {
+		clone.Aggressions = make(map[uint32]uint32, len(source.Aggressions))
+		for gid, ticks := range source.Aggressions {
+			clone.Aggressions[gid] = ticks
+		}
+	}
+	clone.Level = clonePointer(source.Level)
+	clone.MaxLevel = clonePointer(source.MaxLevel)
+	clone.CurrentHP = clonePointer(source.CurrentHP)
+	clone.CurrentMP = clonePointer(source.CurrentMP)
+	clone.GuildID = clonePointer(source.GuildID)
+	clone.MissionInventory = cloneCompanionRows(source.MissionInventory)
+	clone.World = cloneCharacterWorld(source.World)
+	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
+	clone.Mercenaries = cloneSlice(source.Mercenaries)
+	for i, soldier := range clone.Mercenaries {
+		clone.Mercenaries[i] = CloneCOS(soldier)
+	}
+	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
+	clone.Brood = cloneSlice(source.Brood)
+	for i, pet := range source.Brood {
+		clone.Brood[i] = CloneCOS(pet)
+	}
+	return clone
+}
+
+// cloneRows names which inventory rows one clone walk detaches.
+type cloneRows int
+
+const (
+	// rowsAll detaches every mission and avatar row.
+	rowsAll cloneRows = iota
+	// rowsEquipment keeps the equipment rows and no avatar inventory.
+	rowsEquipment
+	// rowsCombat keeps the equipment rows and the whole avatar inventory.
+	rowsCombat
+	// rowsCast keeps the combat rows and every companion-carrying bag row.
+	rowsCast
+)
+
+/*
+================
+cloneCharacterFiltered
+
+The one clone walk; rows narrows the two inventory children.
+================
+*/
+func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 	if source == nil {
 		return nil
 	}
@@ -57,7 +205,14 @@ func cloneCharacter(source *Character) *Character {
 	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
 	clone.FigureIndex = clonePointer(source.FigureIndex)
 
-	clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+	switch rows {
+	case rowsAll:
+		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+	case rowsCast:
+		clone.MissionInventory = cloneCastRows(source.MissionInventory)
+	default:
+		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
+	}
 	clone.Buyback = cloneSlice(source.Buyback)
 	for i := range clone.Buyback {
 		clone.Buyback[i].Item.Summon = CloneCOS(source.Buyback[i].Item.Summon)
@@ -94,7 +249,11 @@ func cloneCharacter(source *Character) *Character {
 		}
 	}
 	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
-	clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
+	if rows == rowsEquipment {
+		clone.AvatarInventory = nil
+	} else {
+		clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
+	}
 	clone.Masteries = cloneSlice(source.Masteries)
 	clone.Skills = cloneSlice(source.Skills)
 	if source.OffensiveSkillCooldowns != nil {
@@ -109,6 +268,9 @@ func cloneCharacter(source *Character) *Character {
 			clone.SharedSkillCooldowns[group] = until
 		}
 	}
+	clone.MostWanted = clonePointer(source.MostWanted)
+	clone.VisualFlags = clonePointer(source.VisualFlags)
+	clone.Mission = cloneMissionRuntime(source.Mission)
 	clone.QuickSlots = cloneSlice(source.QuickSlots)
 	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
 	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
@@ -183,6 +345,98 @@ func cloneInventoryRows(source []InventoryRow) []InventoryRow {
 
 /*
 ================
+cloneEquipmentRows
+
+The worn half of cloneInventoryRows: rows in the equipment slots,
+deep-copied in order; bag rows are dropped, and a nil inventory stays
+nil so absence keeps its meaning.
+================
+*/
+func cloneEquipmentRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	clone := make([]InventoryRow, 0, EquipmentSlotEnd)
+	for _, row := range source {
+		if row.Slot < 0 || row.Slot >= EquipmentSlotEnd {
+			continue
+		}
+		row.Summon = CloneCOS(row.Summon)
+		row.MagicOptions = cloneSlice(row.MagicOptions)
+		clone = append(clone, row)
+	}
+	return clone
+}
+
+/*
+================
+cloneCastRows
+
+The press half of cloneInventoryRows: the equipment rows plus every
+bag row carrying a companion, deep-copied in source order exactly as
+cloneInventoryRows copies them; plain bag rows are dropped, and a nil
+inventory stays nil so absence keeps its meaning. Keeping the kept
+rows in source order keeps Companions over this copy visiting exactly
+the full copy's companions.
+================
+*/
+func cloneCastRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	kept := 0
+	for _, row := range source {
+		if row.Slot >= 0 && row.Slot < EquipmentSlotEnd || row.Summon != nil {
+			kept++
+		}
+	}
+	clone := make([]InventoryRow, 0, kept)
+	for _, row := range source {
+		if row.Slot >= 0 && row.Slot < EquipmentSlotEnd || row.Summon != nil {
+			row.Summon = CloneCOS(row.Summon)
+			row.MagicOptions = cloneSlice(row.MagicOptions)
+			clone = append(clone, row)
+		}
+	}
+	return clone
+}
+
+/*
+================
+cloneCompanionRows
+
+The pet-owner view's rows: the relation slot plus every row carrying
+a companion, each deep-copied in order exactly as cloneInventoryRows
+copies it; the remaining rows are dropped, and a nil inventory stays
+nil so absence keeps its meaning. VisitCompanions over the kept rows
+visits the same companions in the same order as over the full
+inventory, because the dropped rows carry no Summon.
+================
+*/
+func cloneCompanionRows(source []InventoryRow) []InventoryRow {
+	if source == nil {
+		return nil
+	}
+	kept := 0
+	for _, row := range source {
+		if row.Summon != nil || row.Slot == JobSuitSlot {
+			kept++
+		}
+	}
+	clone := make([]InventoryRow, 0, kept)
+	for _, row := range source {
+		if row.Summon == nil && row.Slot != JobSuitSlot {
+			continue
+		}
+		row.Summon = CloneCOS(row.Summon)
+		row.MagicOptions = cloneSlice(row.MagicOptions)
+		clone = append(clone, row)
+	}
+	return clone
+}
+
+/*
+================
 cloneCharacterWorld
 
 Detach saved positions and raw movement bytes from the authority snapshot.
@@ -216,6 +470,7 @@ func cloneCharacterWorld(source *CharacterWorld) *CharacterWorld {
 		value := *source.InstanceReturn
 		clone.InstanceReturn = &value
 	}
+	clone.MovementMode = clonePointer(source.MovementMode)
 	clone.MoveSegment = cloneSlice(source.MoveSegment)
 	return &clone
 }
@@ -304,5 +559,19 @@ func cloneWorldSpawn(source *WorldSpawn) *WorldSpawn {
 	clone.Y = clonePointer(source.Y)
 	clone.Z = clonePointer(source.Z)
 	clone.Angle = clonePointer(source.Angle)
+	return &clone
+}
+
+/*
+================
+cloneMissionRuntime
+================
+*/
+func cloneMissionRuntime(source *MissionRuntime) *MissionRuntime {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.EventGuideStateMask = clonePointer(source.EventGuideStateMask)
 	return &clone
 }

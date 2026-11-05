@@ -384,7 +384,7 @@ func TestImbueProjectileConsumesReleaseTimeEffect(t *testing.T) {
 			rt, c, target, arrow, now := arrowFixture(t)
 			fire := installFireImbue(t, rt, c)
 			rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: fire.ID}.Encode())
-			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: arrow.ID, HasTarget: true, TargetGid: target}, now)
+			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: arrow.ID, HasTarget: true, TargetGid: target}, now, rt.handlerDoors())
 			if decision != skillCastAccepted {
 				t.Fatal(start)
 			}

@@ -482,7 +482,7 @@ func (rt *Runtime) cancelObjectAction(division string, character, snapshot *ente
 		return OpResult{Frames: []wire.Frame{{Opcode: wire.OpActionState, Payload: wire.NoticeActionState(singleActionCount, committedActionNotice).Encode()}}}
 	}
 	from := rt.liveSpawn(key, snapshot, rt.Now().UnixMilli())
-	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, rt.Now().UnixMilli())
+	stopped, _ := rt.enterBasicAttackRange(character, snapshot, key, from, rt.Now().UnixMilli(), rt.handlerDoors())
 	rt.ClearCombatIntent(division, snapshot.Name)
 	closed := rt.cancelPreparingProjectile(division, snapshot.Name)
 	rt.actionSessions.Delete(key)

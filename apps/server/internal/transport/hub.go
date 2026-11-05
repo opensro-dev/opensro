@@ -40,6 +40,15 @@ type Hub struct {
 	History HistoryObserver
 	cfg     Config
 
+	// now and newTicker are the hub's one clock. Production reads the
+	// wall clock (newHub's defaults); a test installs a manual clock so
+	// the keepalive watchdogs prove their bounds as ordering, never as
+	// scheduler speed (#2445). Only the stamps the keepalive loop
+	// compares (lastRecv, lastSent, lastStreamAck, sceneLoadingSince)
+	// read this clock.
+	now       func() time.Time
+	newTicker func(time.Duration) ticker
+
 	// activity is the one subscriber told about every dispatched game frame
 	// (OnSessionActivity); an atomic pointer, so the hot path takes no lock.
 	activity atomic.Pointer[func(account string)]
@@ -50,7 +59,10 @@ type Hub struct {
 	mu       sync.RWMutex
 	sessions map[uint64]*Session
 	byToken  map[[ResumeTokenLen]byte]*Session
-	closed   bool
+	// ended remembers the tokens of evicted sessions after teardown, for
+	// endedTokenGraces grace periods (endedResume).
+	ended  map[[ResumeTokenLen]byte]endedToken
+	closed bool
 
 	// Single-session bind: one live session per bind key
 	// (division:character). bindingKeys is the reverse index for cleanup.
@@ -127,8 +139,11 @@ newHub
 func newHub(cfg Config) *Hub {
 	return &Hub{
 		cfg:             cfg,
+		now:             time.Now,
+		newTicker:       newRealTicker,
 		sessions:        make(map[uint64]*Session),
 		byToken:         make(map[[ResumeTokenLen]byte]*Session),
+		ended:           make(map[[ResumeTokenLen]byte]endedToken),
 		bindings:        make(map[string]*Session),
 		bindingKeys:     make(map[uint64]string),
 		controls:        make(map[string]uint64),
@@ -170,7 +185,7 @@ func (h *Hub) BindExclusive(key string, s *Session) (*Session, bool) {
 		return nil, false
 	}
 	if _, controlled := h.controls[key]; controlled {
-		s.markEvicted()
+		s.markEvicted(ByeReasonReplaced)
 		h.mu.Unlock()
 		log.WithFields(log.Fields{"key": key, "session": s.ID}).
 			Warn("transport: bind refused during character control transaction")
@@ -194,7 +209,7 @@ func (h *Hub) BindExclusive(key string, s *Session) (*Session, bool) {
 		// binding with a live victim or the new binding with a lame duck,
 		// never a bound-out victim that can still drive the character.
 		// Atomic store only — h.mu never nests session.mu here.
-		evict.markEvicted()
+		evict.markEvicted(ByeReasonReplaced)
 	}
 	h.mu.Unlock()
 
@@ -238,7 +253,7 @@ func (h *Hub) AcquireBindingControl(key string) (*BindingControlLease, bool) {
 		return nil, false
 	}
 	if bound := h.bindings[key]; bound != nil {
-		bound.markEvicted()
+		bound.markEvicted(ByeReasonReplaced)
 		h.mu.Unlock()
 		bound.CloseWhenDrained(ByeReasonReplaced)
 		return nil, false
@@ -545,6 +560,16 @@ func (h *Hub) AcceptConn(conn Conn) {
 			if errors.Is(attachErr, errResumeGap) {
 				if hello.HasPosition {
 					h.metrics.resumeGap.Add(1)
+					// The refusal line (#2146): what the client reported
+					// against the ring that refused it. Without it the
+					// resume_gap metric counts a cause nobody can name.
+					d := sess.ResumeRefusal(hello.LastApplied)
+					log.WithFields(log.Fields{
+						"session": sess.ID, "kind": conn.Kind(), "remote": conn.RemoteAddr(),
+						"reason": d.Reason, "reported": d.Reported, "floor": d.Floor,
+						"oldest": d.Oldest, "head": d.Head, "ringFrames": d.RingFrames,
+						"queuedFrames": d.QueuedFrames, "queuedBytes": d.QueuedBytes,
+					}).Info("transport: resume refused; reported position not covered")
 				} else {
 					h.metrics.resumeNoPosition.Add(1)
 				}
@@ -553,6 +578,16 @@ func (h *Hub) AcceptConn(conn Conn) {
 			// The session closed between lookup and attach, or its stream
 			// could not be resumed; fall through to a fresh session so the
 			// client still gets in.
+		} else if reason, ok := h.endedResume(token, time.Now()); ok {
+			// The session was evicted (see endedResume): tell the client
+			// why instead of handing it a fresh session that would evict
+			// the login that replaced it.
+			h.metrics.resumeEnded.Add(1)
+			log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "reason": reason}).
+				Info("transport: resume refused; the session was evicted")
+			_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{reason}})
+			_ = conn.Close("resume of an evicted session")
+			return
 		} else {
 			// Detection only: without this line a failed resume and a fresh
 			// token-less connect are indistinguishable in the log. The token
@@ -843,7 +878,7 @@ func (h *Hub) admitAccountSession(account string, s *Session) {
 		if oldest == nil {
 			break
 		}
-		oldest.markEvicted()
+		oldest.markEvicted(ByeReasonReplaced)
 		evict = append(evict, oldest)
 	}
 	h.mu.Unlock()
@@ -876,7 +911,7 @@ func (h *Hub) EvictAccount(account string) int {
 		if candidate.evicted.Load() {
 			continue
 		}
-		candidate.markEvicted()
+		candidate.markEvicted(ByeReasonUnauthorized)
 		evict = append(evict, candidate)
 	}
 	h.mu.Unlock()

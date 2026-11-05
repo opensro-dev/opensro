@@ -89,7 +89,7 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 //
 // NATIVE EVIDENCE for the walk semantics replicated here:
 //
-//   - client sub_428930 NavMesh_AdvanceWithinMesh: the per-cell edge walk clips
+//   - client CRTNavMeshObj_WalkOwnedCells NavMesh_AdvanceWithinMesh: the per-cell edge walk clips
 //     the move segment against each cell edge. On a crossing of an edge
 //     carrying bit 0x4, the side-block bits gate the stop: 0x2 clips when
 //     the walker leaves the edge's side-0 cell (srcCell), 0x1 when it
@@ -98,14 +98,14 @@ func (v *WaterValidator) worldPointOnObjectDeck(worldX, worldZ, y float64) bool 
 //     NAV_CLIPPED; the recursion ends, the endpoint is the contact) - it
 //     never continues across terrain past the contact. An un-clipped
 //     bit-0x4 crossing recurses into the adjacent cell.
-//   - client sub_428930's non-0x4 branch REFLECTS (NAV_REFLECTED, returns null
-//     cell): the walk also ends at the edge. client sub_403fb0
+//   - client CRTNavMeshObj_WalkOwnedCells's non-0x4 branch REFLECTS (NAV_REFLECTED, returns null
+//     cell): the walk also ends at the edge. client CRTNavMeshTerrain_StepPlacedObject
 //     ObjNavMesh_StepThroughObject's exit tail then decides open-vs-block:
 //     a null-cell end after an OPEN outline edge retags to terrain
 //     (exitObjectToTerrain) and the move continues; every failing leg
 //     returns 0x10000000 - the client's hard-stop signal.
-//   - client sub_428f40 CRTNavMeshObj_StepMove clamps an outside start into the
-//     cell then dispatches the walk; client sub_403fb0 owns the world<->object
+//   - client CRTNavMeshObj_Move CRTNavMeshObj_StepMove clamps an outside start into the
+//     cell then dispatches the walk; client CRTNavMeshTerrain_StepPlacedObject owns the world<->object
 //     matrix bridge (the placement yaw+translate this file inverts).
 //
 // SHIPPED-DATA GROUND TRUTH (all 1191 offset-7 payloads, decoded

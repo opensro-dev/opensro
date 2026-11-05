@@ -134,8 +134,16 @@ order first, each struck with the pdmg record at its share.
 ================
 */
 func (rt *Runtime) pulseArea(division string, c *enterworld.Character, row enterworld.SkillRow, now int64) []simulation.DivisionFrames {
-	snapshot := rt.characterSnapshot(division, c)
-	if snapshot == nil || !enterworld.CharacterAlive(snapshot) {
+	// The combat copy, admitted on exactly the life fact the full
+	// copy was checked against (#1943): victim selection weighs the
+	// caster's name, pose and relations, the stat projection reads
+	// equipment and the avatar inventory, and the hit commit reads
+	// the name and pose. No reader resolves the caster's companions
+	// or bag rows.
+	snapshot := rt.characterSnapshotCombatAdmitted(division, c, func(live *enterworld.Character) bool {
+		return enterworld.CharacterAlive(live)
+	})
+	if snapshot == nil {
 		return nil
 	}
 	pulse := row.TimedEffect.PulseArea
@@ -162,7 +170,7 @@ func (rt *Runtime) pulseArea(division string, c *enterworld.Character, row enter
 	for _, victim := range plan.victims {
 		var result OpResult
 		if victim.player >= 0 {
-			hit, credited, ok := rt.commitCreditedPlayerHit(division, c, plan.players[victim.player], now)
+			hit, credited, ok := rt.commitCreditedPlayerHit(division, c, plan.players[victim.player], now, rt.tickDoors())
 			if !ok {
 				continue
 			}

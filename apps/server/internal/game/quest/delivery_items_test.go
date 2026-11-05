@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"os"
 	"reflect"
 	"testing"
@@ -38,7 +38,7 @@ func sourceDeliverySpecs(t *testing.T) []QuestSpec {
 }
 
 func TestSourceDeliveryInventoryLifecycle(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, spec := range sourceDeliverySpecs(t) {
 		t.Run(spec.Codename, func(t *testing.T) {
 			rt := testRuntime(t)
@@ -185,7 +185,7 @@ func TestDeliveryLoaderRejectsMissingAndCrossObjectiveContracts(t *testing.T) {
 // This uses the actual SQLite authority and entry composer. Candidate admission
 // gates are explicitly removed only to qualify the shared inventory mechanism.
 func TestSourceDeliveryAuthorityRestart(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, spec := range sourceDeliverySpecs(t) {
 		t.Run(spec.Codename, func(t *testing.T) {
 			def := &Definition{QuestSpec: spec, RefID: 900, CountryByte: 3, ContentsSymbol: "DELIVERY"}

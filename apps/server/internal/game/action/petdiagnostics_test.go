@@ -113,6 +113,34 @@ func TestPetFightOnKilledTargetIsCountedNotLogged(t *testing.T) {
 
 /*
 ================
+TestPetTargetEndedReadsLifeWithoutACopy
+
+A player target's end is a life question, answered from the record's
+life facts under the read door instead of a detached copy (#1943):
+the same died verdict the copy gave, at a fraction of its cost.
+================
+*/
+func TestPetTargetEndedReadsLifeWithoutACopy(t *testing.T) {
+	rt, _, a, v := newPvpPair(t)
+	target := enterworld.ObjectIDForCharacter(v)
+	if got := rt.petTargetEnded(testDivision, a, target); got != "" {
+		t.Fatalf("a living player target ended: %q", got)
+	}
+	copyAllocs := testing.AllocsPerRun(20, func() { rt.characterSnapshot(testDivision, v) })
+	endedAllocs := testing.AllocsPerRun(20, func() { rt.petTargetEnded(testDivision, a, target) })
+	t.Logf("allocs: one character copy %.0f, target-end read %.0f", copyAllocs, endedAllocs)
+	if endedAllocs >= copyAllocs {
+		t.Fatalf("the target-end read still copies the target: %.0f allocs; one copy is %.0f",
+			endedAllocs, copyAllocs)
+	}
+	v.CurrentHP = testInt64(0)
+	if got := rt.petTargetEnded(testDivision, a, target); got != petTargetDied {
+		t.Fatalf("a dead player target ended as %q, want %q", got, petTargetDied)
+	}
+}
+
+/*
+================
 TestStalledPetApproachIsLogged
 
 A pet that pursues for petApproachStallMs without reaching strike range is

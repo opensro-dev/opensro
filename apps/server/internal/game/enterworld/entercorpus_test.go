@@ -153,7 +153,7 @@ func corpusTrackedQuestWithOptional() TrackedQuestRecord {
 //   - MATTR_INT degree 1  = param id  5, paramName "+"  (visible)
 //   - MATTR_DUR degree 2  = param id 81, paramName "+"  (visible)
 //   - MATTR_DEC_MAXDUR degree 1 = param id 1, paramName "-@" (the '-'
-//     name drives the client's visible-count decrement, sub_78b1b0
+//     name drives the client's visible-count decrement, CSOItem_DeserializeMagicOptions
 //     client @0x0078b306..)
 //   - MATTR_REINFORCE_ITEM degree 1 = param id 66 (name equality sets the
 //     client's +0x30 reinforce flag, @0x0078b2f7..)

@@ -18,8 +18,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 // questGateTestRecall is the recall point a gate sends the fixture to.
@@ -84,7 +84,7 @@ building (type word & 0x1e == 0x10) with positive bounds.
 ================
 */
 func TestQuestGateBuildingRow(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)

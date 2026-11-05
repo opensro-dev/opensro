@@ -73,7 +73,7 @@ const StatWordMax int64 = 0xffff
 // only STR 21 produces that, so the auto +1 is real). The level-up path
 // that was deliberately absent through the adopt wave now exists:
 // progression.Runtime.GrantExperience (internal/game/progression/levelup.go) walks the
-// leveldata exp curve (column 1, the same sub_7e0f20 row the client's
+// leveldata exp curve (column 1, the same CGlobalData_GetLevelDataPayload row the client's
 // own 0x30D2 walk reads) and, per level gained, performs exactly the
 // 3-step contract this comment used to hold open:
 //

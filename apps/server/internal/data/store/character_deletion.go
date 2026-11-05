@@ -95,6 +95,8 @@ func (s *Store) ReapMaturedDeletions() []string {
 		byDivision[victim.divisionID][victim.c] = true
 		s.deleted[victim.divisionID] = append(s.deleted[victim.divisionID], victim.raw)
 		delete(s.charDivision, victim.c)
+		// The victim's retained digest went with the archive
+		// transaction's Commit (characterRowTx::deleteCharacter).
 		s.forgetLedgerLocked(victim.c)
 		delete(s.changes.characters, victim.c)
 		// The archived record's mailbox dies with it (the archive keeps
@@ -198,7 +200,7 @@ func (s *Store) archiveTxLocked(victims []reapVictim, friendUpdates []reapFriend
 		}
 		s.db = db
 	}
-	tx, err := s.beginTxLocked()
+	tx, err := s.beginCharacterTxLocked()
 	if err != nil {
 		return err
 	}
@@ -211,10 +213,7 @@ func (s *Store) archiveTxLocked(victims []reapVictim, friendUpdates []reapFriend
 	// transaction can never collide.
 	nextSeq := map[string]int{}
 	for _, update := range friendUpdates {
-		if _, err := tx.Exec(
-			"INSERT INTO characters (division, id, name_lower, record) VALUES (?, ?, ?, ?) ON CONFLICT(division, id) DO UPDATE SET name_lower = excluded.name_lower, record = excluded.record",
-			update.divisionID, update.c.ID, strings.ToLower(update.c.Name), string(update.raw),
-		); err != nil {
+		if err := tx.writeCharacterRecord(update.divisionID, update.c, update.raw); err != nil {
 			return err
 		}
 	}
@@ -225,7 +224,7 @@ func (s *Store) archiveTxLocked(victims []reapVictim, friendUpdates []reapFriend
 				return err
 			}
 		}
-		if _, err := tx.Exec("DELETE FROM characters WHERE division = ? AND id = ?", victim.divisionID, victim.c.ID); err != nil {
+		if err := tx.deleteCharacter(victim.divisionID, victim.c.ID); err != nil {
 			return err
 		}
 		if _, err := tx.Exec("DELETE FROM memos WHERE division = ? AND char_id = ?", victim.divisionID, victim.c.ID); err != nil {
@@ -236,9 +235,11 @@ func (s *Store) archiveTxLocked(victims []reapVictim, friendUpdates []reapFriend
 			return err
 		}
 	}
-	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {
+	if err := upsertMetaTx(tx.Tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {
 		return err
 	}
+	// Commit retains the friend updates' digests and drops the
+	// victims' (characterRowTx): the reap below moves only memory.
 	return tx.Commit()
 }
 

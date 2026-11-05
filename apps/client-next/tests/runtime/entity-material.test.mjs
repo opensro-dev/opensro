@@ -15,9 +15,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readPublishedAssetJsonSync, readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
-import { loadDataAsset } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
 import { entityMaterialMetadata } from "../../../../scripts/build/char/entityMaterialMetadata.mjs";
+import { entitySource } from "../../../../scripts/build/char/publishEntityBsrModifiers.mjs";
 import { CROW_EGG_BSR } from "../../../../scripts/build/char/crowEgg.mjs";
 import { PORT_PET_DROP_MODEL } from "../../../../scripts/build/shared/portItemRows.mjs";
 import { npcManifestModels } from "../../../../scripts/build/shared/npcManifest.mjs";
@@ -43,8 +43,11 @@ test("every original entity material modifier binds through GLB publication and 
 			) continue; // Owned procedural asset has no native BSR.
 			if ( seen.has( row.glb ) ) continue;
 			seen.add( row.glb );
-			const source = row.bsr ?? "res/" + key,
-				bytes = await loadDataAsset( source ),
+			// A compound entity (.cpd) reads through its body branch, as the
+			// modifier refresh does (#2088).
+			const entity = await entitySource( row.bsr ?? "res/" + key ),
+				source = entity.path,
+				bytes = entity.buffer,
 				bsr = parseCharacterBsr( bytes, source );
 			if ( !bsr.materialModifiers.length && !bsr.textureModifiers.length ) continue;
 			for (
@@ -196,6 +199,35 @@ test("production modifier clocks consume capped native frame milliseconds withou
 	assert.ok( Math.abs( clock.color.rgb[1] - .45 ) < 1e-7 );
 	owner.reset();
 	assert.equal( owner.bytes(), 0 );
+});
+
+test("two animated-material models on one owner id step one row without throwing, and strict owners keep the assertion", async () => {
+	const { createModelMaterialClocks } = await load( "src/engine/foundation/animation/model-material-clock.ts" );
+	const material = {
+		color: [ 1, 1, 1, 1 ],
+		colorTimeline: {
+			duration: 10000,
+			mode: 2,
+			flags: 2,
+			colors: [ { time: 0, value: [ 1, 0, 0, 1 ] }, { time: 10000, value: [ 0, 1, 0, 1 ] } ]
+		},
+		uvVelocity: [ 0, 0, 0, 0, 1, 0 ]
+	};
+	const model = { primitives: [ { geometry: { material } } ] },
+		body = { gid: 41, modifierId: -7, model: "body" },
+		copy = { gid: -8, modifierId: -7, model: "body" };
+	// #2438: a fading despawn copy and the same gid's respawned body once
+	// shared one owner id and the throw ended the session. The renderer
+	// steps the owner's row once and carries on; both actors read it.
+	const owner = createModelMaterialClocks();
+	owner.step( [ body, copy ], 0, () => model );
+	owner.step( [ body, copy ], .5, () => model );
+	assert.ok( owner.get( body )?.[0] );
+	assert.equal( owner.get( body ), owner.get( copy ) );
+	// A duplicate owner stays a producer bug a test can pin: strict owners
+	// keep the assertion the renderer no longer throws.
+	const strict = createModelMaterialClocks( true );
+	assert.throws( () => strict.step( [ body, copy ], 0, () => model ), /Duplicate material instance owner/ );
 });
 
 test("production animation material queue retains clocks through blends, applies LOD, and restores the base pipeline", () => {

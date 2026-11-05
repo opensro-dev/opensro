@@ -1,7 +1,7 @@
 // Publish the siegefortress.txt table as DECODED emblem rows: the native
 // CGlobalDataManager parses this file into the CSiegeFortressData record map
 // (GlobalDataManager map488 off 0xcec870, stride 0xb8), and the fortress
-// emblem builder sub_914ae0 walks those records, DDJ_SpriteCreate's each
+// emblem builder CSkillEffectManager_InitializeDamageGlyphsAndEffects walks those records, DDJ_SpriteCreate's each
 // record's CrestPath128 (record+0x9c, rooted under the native icon\ base -
 // the DDJ ships at icon/etc/fort_jangan.ddj) and inserts the sprite into the
 // fortress-id -> emblem map at 0xf0935c keyed by record+0x00.
@@ -17,7 +17,7 @@
 // 5000000 etc\fort_jangan.ddj NPC_CH_FORTRESS_OFFICIAL"):
 //   0  Service        1 = live row (disabled rows are skipped, the
 //                     regioncode/messagetip builder convention)
-//   1  ID             fortress id - record+0x00, the sub_914ae0 map key
+//   1  ID             fortress id - record+0x00, the CSkillEffectManager_InitializeDamageGlyphsAndEffects map key
 //   2  CodeName128    "FORTRESS_JANGAN"
 //   3  ObjName128     Korean display name
 //   4  NameStrID128   "SN_FORTRESS_JANGAN" (resolves via textdataname.en.json)

@@ -225,6 +225,26 @@ test(
 					const b = await render( [ dotQuad( 5, 5, "linear", turn ) ], 1 );
 					if ( a.every( ( v, i ) => v === b[i] ) ) out.turn++;
 				}
+				// #1973: the tooltip bubble mirrors its right edge and three
+				// corners with a negative uv extent (uv 1,1,-1,-1). Stretched, or
+				// at a fractional size, those quads take the area path; mirrored,
+				// they must draw the same ink as their unmirrored twins.
+				// A solid 8 x 4 texture, the shape of com_tooltip_edge.
+				const SOLID_TEXTURE = "test:solid", solid = new OffscreenCanvas( 8, 4 );
+				const solidContext = solid.getContext( "2d" );
+				if ( !solidContext ) throw Error( "2D canvas unavailable" );
+				solidContext.fillStyle = "#fff";
+				solidContext.fillRect( 0, 0, 8, 4 );
+				ui.texture( SOLID_TEXTURE, solid.transferToImageBitmap() );
+				out.mirrored = {};
+				for ( const scale of [ 1, 1.5 ] ) {
+					for ( const [name, rect] of [ [ "edge", [ 4, 4, 8, 60 ] ], [ "corner", [ 4, 4, 8, 4 ] ] ] ) {
+						const quad = uv => ({ ...dotQuad( 0, 0, "nearest" ), texture: SOLID_TEXTURE, rect, uv });
+						const plain = sum( await render( [ quad( [ 0, 0, 1, 1 ] ) ], scale ) );
+						const mirrored = sum( await render( [ quad( [ 1, 1, -1, -1 ] ) ], scale ) );
+						out.mirrored[name + "@" + scale] = { plain, mirrored };
+					}
+				}
 				device.destroy();
 				return out;
 			} );
@@ -250,6 +270,13 @@ test(
 			}
 			assert.deepEqual( result.whole, { 1: true, 2: true, 3: true } );
 			assert.equal( result.turn, 3 );
+			for ( const [name, ink] of Object.entries( result.mirrored ) ) {
+				assert.ok( ink.plain > 0, `${name}: the unmirrored quad draws` );
+				assert.ok(
+					Math.abs( ink.mirrored - ink.plain ) <= ink.plain * 0.02,
+					`${name}: mirrored ink ${ink.mirrored.toFixed( 3 )}, unmirrored ${ink.plain.toFixed( 3 )}`
+				);
+			}
 		} finally {
 			await browser.close();
 		}

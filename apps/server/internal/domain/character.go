@@ -376,6 +376,16 @@ type Character struct {
 	// MostWanted is the character's job-kill streak (port-only, not native:
 	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
 	MostWanted *MostWanted `json:"mostWanted,omitempty"`
+	// HalloweenBoxDay is the 04:00-UTC day (progression.HalloweenDayKey)
+	// the character's daily jewelry-box count belongs to, and
+	// HalloweenBoxCount the boxes minted that day from every source
+	// (port-only, not native: SRO_HALLOWEEN_EVENT, action/halloween.go;
+	// schema 34). Zero day: nothing counted yet. Since schema 36 the
+	// account's HalloweenBoxAccount owns the count (#2547); these fields
+	// are the legacy per-character seed the account record is derived
+	// from at first load, kept so schema 34/35 records still load.
+	HalloweenBoxDay   int64 `json:"halloweenBoxDay,omitempty"`
+	HalloweenBoxCount int64 `json:"halloweenBoxCount,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).
@@ -598,6 +608,25 @@ type Character struct {
 	// Experience and leveldata; progression does not maintain this old cache.
 	ExperiencePercent *float64 `json:"experiencePercent,omitempty"`
 	FigureIndex       *int64   `json:"figureIndex,omitempty"`
+}
+
+/*
+==================
+HalloweenBoxAccount
+
+One account's daily Halloween jewelry-box count (port-only, not native:
+SRO_HALLOWEEN_EVENT, #2547; schema 36). The cap counts per account, so
+an alt adds no boxes: every character of the account mints against this
+one record, kept in the store's metadata plane and mutated only inside
+a settlement door, like a character record. Day is the 04:00-UTC day
+(progression.HalloweenDayKey) Count belongs to. An account with no
+record has minted nothing; at first load the record is seeded from the
+characters' legacy per-character counts (schema 34 fields above).
+==================
+*/
+type HalloweenBoxAccount struct {
+	Day   int64 `json:"day"`
+	Count int64 `json:"count"`
 }
 
 /*
@@ -884,9 +913,16 @@ type TimedSkillJob struct {
 MostWanted
 
 A suited player's streak of counted job kills (port-only, not native;
-action/mostwanted.go). Death or taking the suit off clears it.
+action/mostwanted.go). Death clears it; the wanted level also lapses
+when ExpiresAtMs passes. Taking the suit off keeps it: only the
+bonuses shelve while the suit is off.
 ================
 */
 type MostWanted struct {
 	Streak int64 `json:"streak"`
+	// ExpiresAtMs is when the wanted level lapses (Unix milliseconds),
+	// stamped when a counted kill raises the level. Streaks saved
+	// before the field existed carry zero: no lapse until their next
+	// level stamps one.
+	ExpiresAtMs int64 `json:"expiresAtMs,omitempty"`
 }

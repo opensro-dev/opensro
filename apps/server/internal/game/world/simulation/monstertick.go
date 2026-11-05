@@ -68,6 +68,40 @@ type MonsterMoverOps struct {
 	// shownMonsters; nil until the first wake on this ops clone (ticker
 	// clones are made before any leg runs, so each owns its map).
 	resumePending map[populationKey]map[uint32]struct{}
+	// activityBlocks memoizes the activity gate's per-actor block
+	// resolution (monsteractivity.go); shard-owned like resumePending.
+	activityBlocks map[uint32]activityBlockMemo
+	// legSessions groups the running leg's sessions by division, built
+	// at the top of RunMonsterLeg and cleared when it returns, so the
+	// per-actor publish path iterates one division's viewers instead of
+	// rescanning every session. Nil outside a leg.
+	legSessions map[string][]SessionSnapshot
+	// stepBaseGen is the commit generation the running step's actor
+	// was read at, armed by advanceAndPublish for the step's duration
+	// (#2137 slice 1): the generation-guarded commit helpers
+	// (monsterpublish.go) re-base it on each accepted commit, so a
+	// step's own commits chain while a slower lane's set in between
+	// drops the next one. Unarmed outside advanceAndPublish, where
+	// the helpers fall back to the plain commits of before.
+	stepBaseGen  uint64
+	stepGenArmed bool
+	// stepSlot and stepMonsterSlot are the running step actor's
+	// dense storage slots, armed and cleared with stepGenArmed
+	// (#2133): the step's door funnels (monsterpublish.go) read and
+	// commit through these gid-verified hints while armed.
+	stepSlot        uint32
+	stepMonsterSlot uint32
+	// LegWorkers is the monster leg's worker count (monsterlegpool.go,
+	// #2205): the zero value (everywhere but production wiring) runs
+	// the serial leg; >= 1 plans each batch on a pool - one worker
+	// included - and commits it in the serial order. Port-only
+	// concurrency, not native.
+	LegWorkers int
+	// plan is the running plan's sink while one batch actor is being
+	// planned on a pool worker (#2205): the commit funnels record
+	// into it instead of applying. Nil outside a pooled plan, where
+	// every funnel behaves exactly as before.
+	plan *legPlan
 	// Navigation counts route plans and path clips (navigation_metrics.go);
 	// nil counts nothing.
 	Navigation     *NavigationMetrics
@@ -138,6 +172,12 @@ type MonsterMoverOps struct {
 	// breachLogged keeps the A19-b budget-breach log to once per
 	// division (a per-tick log line would be its own flood).
 	breachLogged map[string]bool
+	// scopeMemo is each seeded viewer's last full scope pass: the
+	// block and interest stamp its shown set synced under. A later
+	// leg matching all of them faces the same in-scope set and
+	// skips the delta work (#2134). Only the owning division shard
+	// touches it, like shownMonsters.
+	scopeMemo map[string]scopeViewerMemo
 }
 
 /*
@@ -220,7 +260,7 @@ MonsterDespawnBracketFrames
 
 MonsterDespawnBracketFrames encodes a byListSub=2 object-list group:
 0x30CB {0x02, u16 count} begin, one 0x3417 chunk of 4-byte gids (the
-client sub_777310 despawn bodies the finalize loop consumes), empty 0x330A
+client CPSMission_OnEntityDespawn36AB despawn bodies the finalize loop consumes), empty 0x330A
 finalize. The native bulk-eviction shape (byListSub=2 pinned by
 RZ seq134/DUMP seq91; client-side handling sabotage-proven by WIP's
 ensureDespawn4cBinding chain, board seq359/373).
@@ -240,102 +280,6 @@ func MonsterDespawnBracketFrames(gids []uint32) []Frame {
 	}
 }
 
-/*
-==================
-playerMovementIntent
-
-playerMovementIntent is one immutable target-command snapshot. It is kept
-separate from playerPose.Pose because the command destination is an
-invalidation input, while the live pose owns combat and approach geometry.
-==================
-*/
-type playerMovementIntent struct {
-	destination Spawn
-	inFlight    bool
-	present     bool
-}
-
-/*
-================
-capturePlayerMovementIntent
-================
-*/
-func capturePlayerMovementIntent(world WorldState, nowMs int64) playerMovementIntent {
-	return playerMovementIntent{
-		destination: world.Spawn,
-		inFlight:    world.MovingAt(nowMs),
-		present:     true,
-	}
-}
-
-// playerPose is one live player position inside a division at tick time.
-/*
-================
-playerPose
-================
-*/
-type playerPose struct {
-	NativeBodyStatus uint8
-	Gid              uint32
-	Pose             Spawn
-	MovementIntent   playerMovementIntent
-	BodyRadius       BodyRadius
-	// Guard is the player's first-attack protection (the Bard's Noise),
-	// read from the action owner when the leg samples its players.
-	Guard monster.FirstAttackGuard
-	// OwnerGid names the player a companion entry belongs to; zero for a
-	// player. Companions are targets, never acquisition candidates.
-	OwnerGid uint32
-	// Band is a companion's COS band (TypeID 4).
-	Band uint8
-	// JobState is a player's job state: the dressed job, 4 outside
-	// job mode.
-	JobState uint8
-	// Mounted: whether the player is mounted on a COS when
-	// acquisition chooses a companion.
-	Mounted bool
-}
-
-/*
-================
-CompanionTarget
-
-One summoned, living companion a monster may strike: the action owner's
-projection of its world pose, body and status.
-================
-*/
-type CompanionTarget struct {
-	Gid              uint32
-	Pose             Spawn
-	BodyRadius       BodyRadius
-	NativeBodyStatus uint8
-	Band             uint8
-}
-
-/*
-==================
-chaseGuidance
-
-chaseGuidance returns the movement state the pursuit owner last observed.
-Direct test fixtures and stationary actors may omit MovementIntent; their
-live pose then acts as a settled command destination.
-==================
-*/
-func (player playerPose) chaseGuidance() monster.ChaseGuidance {
-	intent := player.MovementIntent
-	destination := player.Pose
-	if intent.present {
-		destination = intent.destination
-	}
-	return monster.NewChaseGuidance(monster.Pose{
-		RegionID: destination.RegionID,
-		X:        destination.X,
-		Y:        destination.Y,
-		Z:        destination.Z,
-		Heading:  destination.Angle,
-	}, intent.present && intent.inFlight)
-}
-
 // RunMonsterLeg advances actors independently of observer interest.
 /*
 ================
@@ -345,6 +289,18 @@ RunMonsterLeg
 func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapshot, push Pusher) {
 	if ops == nil || ops.Monsters == nil {
 		return
+	}
+
+	// The activity gate's memo lives on the ops, but the dispatch below
+	// binds each actor to a value copy (owned := *ops): a memo map first
+	// made inside the gate lands on that discarded copy, so on the
+	// production path the memo survives no actor at all - every due gate
+	// allocates a fresh map and re-walks the actor's surface. Make the
+	// map on the leg's own ops before dispatch; every copy then shares
+	// the one map header, as the memo's shard-owned design intends. The
+	// gate keeps its lazy make for direct callers outside a leg.
+	if ops.activityBlocks == nil {
+		ops.activityBlocks = make(map[uint32]activityBlockMemo)
 	}
 
 	// Slow-leg attribution (#1820 part C): one record per leg, filled
@@ -360,12 +316,15 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 
 	viewers := make(map[string]worldgeom.RegionXZ, len(sessions))
 	live := make(map[string]bool, len(sessions))
+	legSessions := make(map[string][]SessionSnapshot)
 	for _, session := range sessions {
 		live[session.SessionID] = true
 		pose := session.World.LiveSpawnAt(nowMs)
 		viewers[session.SessionID] = worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}
-
+		legSessions[session.DivisionID] = append(legSessions[session.DivisionID], session)
 	}
+	ops.legSessions = legSessions
+	defer func() { ops.legSessions = nil }()
 
 	// Scope visibility FIRST, mover frames SECOND: a viewer must have
 	// received a monster's spawn before any 0xB738/0xB2F5 for its gid
@@ -393,19 +352,38 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	// its closure before returning, so the slots are reused safely.
 	var dispatch struct {
 		division string
-		instance monster.Instance
+		key      populationKey
+		index    int
 		players  []playerPose
+		view     *legSnapshot
 	}
 	act := func(attack MonsterAttackOperation) {
 		// Bind the capability to a value copy, not the shard's dependency
 		// set. Mutable actor state remains in MonsterState.
 		owned := *ops
 		owned.BasicAttack = attack
-		owned.advanceAndPublish(dispatch.division, dispatch.instance, dispatch.players, nowMs, sessions, push)
+		// The step starts from the leg-start snapshot (monsterlegsnapshot.go),
+		// not a resolve inside this lock: a mover set by a slower lane
+		// (an abnormal retime, a GM or impact set) while the leg waited
+		// for the lock has advanced the row's commit generation, so the
+		// step's whole-value commits drop instead of overwriting it -
+		// the #2047 overwrite hazard is now carried by the generation
+		// guard rather than by resolve-inside-the-lock timing.
+		actor, ok := dispatch.view.actorAt(dispatch.index)
+		if !ok {
+			return
+		}
+		owned.advanceAndPublish(dispatch.division, actor, dispatch.players, nowMs, sessions, push)
 	}
 	stepped := 0
 	phaseStarted = time.Now()
-	for _, batch := range ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID) {
+	queueStarted := time.Now()
+	batches := ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID)
+	// The batches die with this leg: their refs backings return to
+	// the scratch pool once every batch below is dispatched (#2030).
+	defer ops.Monsters.releaseBehaviorBatches(batches)
+	stats.queue = time.Since(queueStarted)
+	for _, batch := range batches {
 		divisionID := batch.key.division
 		divisionSet[divisionID] = true
 		ops.activity.world = activityWorld{divisionID, uint32(batch.key.lease.ID), batch.key.lease.Generation}
@@ -421,27 +399,52 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			players = append(players, player)
 			players = appendCompanionTargets(players, ops.companionTargets(divisionID, player, nowMs))
 		}
-		for _, gid := range batch.actors {
+		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
+		if ops.pooledLeg() && len(batch.actors) > 1 {
+			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
+			ops.Monsters.releaseLegSnapshot(view)
+			continue
+		}
+		for index, ref := range batch.actors {
 			// The scheduler carries identities, not a second copy of the world.
-			// Read a value snapshot at dispatch so despawn/retaliation between
-			// scheduling and dispatch cannot revive an obsolete actor snapshot.
-			instance, exists := ops.Monsters.behaviorActor(batch.key, gid)
-			if !exists {
+			// All dispatch decides is that the actor is still there: a
+			// despawn between scheduling and dispatch drops it here. Its
+			// instance and mover come from the batch's leg-start
+			// snapshot; a slower lane's set since then has advanced the
+			// mover's commit generation, so the step's whole-value
+			// commits drop instead of overwriting the newer value
+			// (#2047 review, carried by the generation since #2137
+			// slice 1). The direct path below reads the same view at
+			// the same adjacency it always had.
+			if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
 				continue
 			}
-			if ops.noteResumed(batch.key, gid) {
+			if ops.noteResumed(batch.key, ref.gid) {
 				stats.resumed++
 			}
 			if stepped++; stepped%monsterLegStepActors == 0 {
 				ops.watch.step()
 			}
 			if ops.RunAction != nil {
-				dispatch.division, dispatch.instance, dispatch.players = divisionID, instance, players
+				dispatch.division, dispatch.key, dispatch.index, dispatch.players, dispatch.view = divisionID, batch.key, index, players, view
+				advanceBefore := stats.advance
+				laneStarted := time.Now()
 				ops.RunAction(divisionID, act)
+				// The lane wall outside the step: the per-actor
+				// division-lock entry plus the snapshot read act
+				// runs before advanceAndPublish.
+				if outside := time.Since(laneStarted) - (stats.advance - advanceBefore); outside > 0 {
+					stats.lane += outside
+				}
 				continue
 			}
-			ops.advanceAndPublish(divisionID, instance, players, nowMs, sessions, push)
+			actor, ok := view.actorAt(index)
+			if !ok {
+				continue
+			}
+			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
+		ops.Monsters.releaseLegSnapshot(view)
 	}
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped
@@ -460,29 +463,6 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	if stats.total >= SlowHookThreshold {
 		stats.logSlow(ops.divisionID)
 	}
-}
-
-/*
-================
-advanceAndPublish
-================
-*/
-func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, instance monster.Instance, players []playerPose, nowMs int64, sessions []SessionSnapshot, push Pusher) {
-	// Part C times the advance itself, so the direct dispatch below and
-	// the RunAction closure path accumulate into the same figure.
-	if ops.leg != nil {
-		started := time.Now()
-		defer func() { ops.leg.noteAdvance(time.Since(started)) }()
-	}
-	frames, targeted := ops.advanceInstance(divisionID, instance, players, nowMs)
-	for _, session := range sessions {
-		if len(frames) > 0 && session.DivisionID == divisionID && ops.shownMonsters[session.SessionID][instance.Gid] {
-			push.PushToSession(session.SessionID, frames)
-		}
-	}
-	// Private consequences follow the public result in the same operation.
-	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
-	ops.vanishInSafeZone(divisionID, instance.Gid, nowMs)
 }
 
 /*
@@ -556,7 +536,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 		mustMoverTransition(&mover, monster.MoverEventEntryRefused, 0)
 		mover.BehaviorDeadlineMs = nowMs + ops.idleDelayMs()
 		mover, frames := ops.planIdleEntry(instance, mover, nowMs)
-		return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+		return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 	}
 	// Nest containment, probe origin and movement goal are separate inputs.
 	live := mover.LivePoseAt(nowMs, ops.GroundHeight)
@@ -573,7 +553,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 			// Missing geometry cannot be interpreted as a successful probe.
 			mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 			mover, frames := ops.holdNavigation(instance.Gid, mover, live, nowMs)
-			return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+			return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 		}
 		motion = motion.AfterProbe(path.Result())
 	}
@@ -581,7 +561,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
 	mover.BehaviorDeadlineMs = nowMs + monster.NativeWanderDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
 	mover, frames := ops.planSegment(instance, mover, dest, instance.WalkSpeed(), wire.MoveStateWalk, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 }
 
 /*
@@ -591,7 +571,7 @@ commitSegment
 commitSegment is THE single emit seam: computes the timed segment from
 the live departure pose, commits the mover, and builds the frames -
 an optional 0x3122 MOVE channel push (only when the run/walk channel
-changes; client sub_777b60 case 1 -> SetRunWalkMode, the pinned wire that
+changes; client CPSMission_OnEntityStateUpdate0x3122 case 1 -> SetRunWalkMode, the pinned wire that
 keeps the client integrator at the server's segment speed - BUG-7
 speed-half fix) followed by the 0xB738 goal. The optional source follows
 the retail autonomous-entity turn gate, not the player ack's first-move
@@ -603,6 +583,40 @@ func (ops *MonsterMoverOps) commitSegment(divisionID string, instance monster.In
 	return ops.commitPreparedSegment(divisionID, before, instance, mover, dest, speed, channel, nowMs)
 }
 
+/*
+================
+commitSteppedNavigation
+
+The step's navigation-transaction commits (commitSegment,
+startReturnLeg, startWanderLeg, commitIdleEntry) funnel here: the
+transaction itself value-guards its commit exactly as before, and
+an accepted one re-bases the running step's commit generation on
+the row's new generation, so the step's later generation-guarded
+commits chain off it instead of dropping against their own leg
+(#2137 slice 1). The stored value equalling next is the acceptance
+witness - commitNavigation's frame return cannot tell a landed
+commit with no frames from a dropped one. Unarmed callers pay
+nothing.
+================
+*/
+func (ops *MonsterMoverOps) commitSteppedNavigation(divisionID string, before navigationAdmission, next monster.MoverState, frames []Frame) []Frame {
+	if ops.plan != nil {
+		// Planning (#2205): record the transaction's result; the
+		// commit re-prepares the admission against the row then, the
+		// moment the serial call reads it, so the plan-time admission
+		// is deliberately not carried over.
+		ops.plan.recordNavigation(next, frames)
+		return frames
+	}
+	committed := ops.Monsters.commitNavigation(divisionID, before, next, frames)
+	if ops.stepGenArmed {
+		if mover, gen, ok := ops.Monsters.MoverGenerationAt(divisionID, before.instance.Gid, ops.stepSlot, ops.stepMonsterSlot); ok && mover == next {
+			ops.stepBaseGen = gen
+		}
+	}
+	return committed
+}
+
 // Approach allocation and geometry must publish in the same navigation transaction.
 /*
 ================
@@ -611,7 +625,7 @@ commitPreparedSegment
 */
 func (ops *MonsterMoverOps) commitPreparedSegment(divisionID string, before navigationAdmission, instance monster.Instance, mover monster.MoverState, dest monster.Pose, speed float64, channel uint8, nowMs int64) []Frame {
 	mover, frames := ops.planSegment(instance, mover, dest, speed, channel, nowMs)
-	return ops.Monsters.commitNavigation(divisionID, before, mover, frames)
+	return ops.commitSteppedNavigation(divisionID, before, mover, frames)
 }
 
 // Plan only: terrain sampling may run concurrently with damage/lifecycle work.
@@ -656,7 +670,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	// discontinuity.
 	// Shallow chase re-aims therefore preserve the client's PATH source cursor;
 	// reversals and hard cuts re-anchor that logical cursor at this live pose.
-	// This says nothing about animation playback: v1.150 sub_776200 re-enters
+	// This says nothing about animation playback: v1.150 CPSMission_OnSkillNavResponse0xB738 re-enters
 	// state 9 for every B738 destination, and the cyclic mixer reset clears its
 	// authored cursor. The browser presentation adapter separately retains the
 	// visible walk/run phase while that locomotion lane remains continuously live.

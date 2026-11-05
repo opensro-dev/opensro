@@ -204,6 +204,18 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		if monster.TempleEnabled() {
+			// Port-only (#1800 step 3): the temple band worlds join the
+			// catalogue only while their switch is on, before any
+			// division opens.
+			if err := instance.RegisterPortOnly(instance.TempleDefinitions()); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
+		template, err = monster.AppendTemple(template, textdataDir, monster.TempleEnabled())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: %w", err)
+		}
 		template, err = monster.AppendQinshi(template, textdataDir, monster.QinshiEnabled())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
@@ -233,13 +245,20 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
 		if monster.JobMonsterSpeedFromEnv() {
-			// Port-only, not native: thief and hunter monsters move 20%
+			// Port-only, not native: thief and hunter monsters move 30%
 			// faster (monster/jobmonsterspeed.go).
 			var scaled int
 			template, scaled = template.WithJobMonsterSpeed()
-			log.Infof("bootstrap: %d job monster types move 20%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
+			log.Infof("bootstrap: %d job monster types move 30%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
 		}
 		monsters = simulation.NewMonsterState(template)
+		if monster.QinShiTombFromEnv() {
+			// Port-only, not native: the tomb trigger chain owns the
+			// Floor 5 unique spawns (simulation/tomb_chain.go, #2372).
+			if err := monsters.InstallTombChain(); err != nil {
+				return nil, fmt.Errorf("bootstrap: %w", err)
+			}
+		}
 		log.Infof("bootstrap: monster population ON (kill switch MISSION_SPAWN_MONSTERS=0): template %d nest rows / %d spawnable types; per-viewer native 320-unit block interest",
 			len(template.Nests), len(template.SpawnableRefs()))
 	} else {

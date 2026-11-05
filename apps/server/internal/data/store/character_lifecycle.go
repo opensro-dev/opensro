@@ -93,6 +93,17 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 		if strings.EqualFold(existing.Name, c.Name) {
 			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
 		}
+		if existing.Job.Alias != "" && strings.EqualFold(existing.Job.Alias, c.Name) {
+			// A new name may not take a job alias already spoken for:
+			// the alias would shadow (or be shadowed by) the new
+			// character in every typed-name path, and a suited player
+			// could be impersonated by registration. The reference
+			// server never refuses this clash; that is a native bug
+			// we do not copy (owner, 2026-10-28), so the refusal is
+			// unconditional. It reuses the duplicate-name error class
+			// (and therefore the client's name-taken reply).
+			return fmt.Errorf("%w: %q in division %s", ErrCharacterNameConflict, c.Name, divisionID)
+		}
 	}
 	// A name a rename gave up inside its 90-day hold (#1689) is not
 	// free for a new character: re-registering it at once is the

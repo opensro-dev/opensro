@@ -56,7 +56,7 @@ func (rt *Runtime) petGearProcs(division string, owner *enterworld.Character, gi
 		if kind == companion.ProcMend {
 			var heal wire.Frame
 			healed := false
-			if !rt.deps.Update(owner, "pet-gear-mend", func() bool {
+			if !rt.deps.UpdateDeferred(owner, "pet-gear-mend", func() bool {
 				heal, healed = rt.petOwnerHeal(division, owner, 5)
 				return healed
 			}) {

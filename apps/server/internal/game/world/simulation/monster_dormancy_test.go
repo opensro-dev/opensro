@@ -94,7 +94,7 @@ func TestDormancyPreservesPositionAndWakesBeforeVisibility(t *testing.T) {
 	if d.instances.get(actor.Gid) != actor || d.movers.get(actor.Gid) != woken {
 		t.Fatal("wake respawned, relocated or rephased actor")
 	}
-	if at := d.behavior.entries[0].at; at != 201074 {
+	if at := d.behavior.slots[d.behavior.byGID[actor.Gid]].at; at != 201074 {
 		t.Fatalf("woken actor due at %d, want 201074 (its cadence phase)", at)
 	}
 	if d.aiTimers[actor.Gid] == nil || *d.aiTimers[actor.Gid] != wantTimers || len(d.storedAITimers) != 0 {

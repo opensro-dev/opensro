@@ -15,6 +15,7 @@ walking inside it is never refused, summoning there is.
 package action
 
 import (
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -22,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/townarea"
 )
 
 /*
@@ -101,6 +103,52 @@ func TestThiefWithTransportCannotEnterATown(t *testing.T) {
 	trader.ActiveCOS = thief.ActiveCOS
 	if rt.ThiefCargoTownBlocked(trader, field, town) {
 		t.Fatal("a trader with a transport was refused a town")
+	}
+}
+
+/*
+================
+TestThiefWithTransportStopsAtTownWalls
+
+#1985, port-only (SRO_THIEF_CART_TOWN_AREAS): the town walls apply the
+same thief-and-transport test as the region rule. The list is one town
+whose core is the protected region (152,102) and whose outer part is
+x 0..600 of the battlefield region (154,102).
+================
+*/
+func TestThiefWithTransportStopsAtTownWalls(t *testing.T) {
+	areas, err := townarea.Parse(strings.NewReader("#TOWN\ttown\n152\t102\tALL\n154\t102\tRECT\t0\t0\t600\t1920\n"))
+	if err != nil || areas.Len() != 1 {
+		t.Fatalf("town list: %d parts, %v", areas.Len(), err)
+	}
+	outer := worldgeom.RegionIDForSectors(154, 102)
+	from := worldgeom.RegionXZ{RegionID: outer, X: 900, Z: 900}
+	to := worldgeom.RegionXZ{RegionID: outer, X: 300, Z: 900}
+
+	thief := testCharacter()
+	dressThief(thief)
+	rt, _ := newTestRuntime(thief, testCosSource(testItems()))
+	gid, _ := enterworld.CosObjectIDForCharacter(thief)
+	thief.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true}
+	if rt.ThiefCargoTownAreaEntered(thief, from, to) {
+		t.Fatal("the walls stopped a thief with the switch off")
+	}
+	rt.ThiefCartTownAreas = areas
+	if !rt.ThiefCargoTownAreaEntered(thief, from, to) {
+		t.Fatal("a thief with a transport walked through a town wall")
+	}
+	if rt.ThiefCargoTownAreaEntered(thief, to, from) {
+		t.Fatal("a thief with a transport was stopped leaving a town")
+	}
+	trader := testCharacter()
+	dressTrader(trader)
+	trader.ActiveCOS = thief.ActiveCOS
+	if rt.ThiefCargoTownAreaEntered(trader, from, to) {
+		t.Fatal("a trader with a transport was stopped at a town wall")
+	}
+	thief.ActiveCOS = nil
+	if rt.ThiefCargoTownAreaEntered(thief, from, to) {
+		t.Fatal("a thief without a transport was stopped at a town wall")
 	}
 }
 

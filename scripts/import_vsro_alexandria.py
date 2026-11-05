@@ -99,6 +99,8 @@ MAPM_VERTEX_TEXTURE_OFFSET = 4
 MAPM_TEXTURE_ID_MASK = 0x03FF
 
 MFO_PATH = "navmesh/mapinfo.mfo"
+# The native v1.150 copy of MFO_PATH, under an extracted root.
+NATIVE_MAPINFO = Path("Data_extracted") / "navmesh" / "mapinfo.mfo"
 PLACEHOLDER_TILE = re.compile(r"^x+\.ddj$", re.IGNORECASE)
 TILE_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"\s+"([^"]*)"')
 OBJECT_ROW = re.compile(r'^(\d+)\s+(0x[0-9a-fA-F]+|\d+)\s+"([^"]*)"')
@@ -375,9 +377,8 @@ def table_json(raw, keep, key_column):
 #============================================================================
 
 
-def vsro_only_regions(data, index, extracted):
-	"""The regions the VSRO client enables and the native v1.150 extraction does not."""
-	native_path = extracted / "Data_extracted" / "navmesh" / "mapinfo.mfo"
+def vsro_only_regions(data, index, native_path):
+	"""The regions the VSRO client enables and the native v1.150 mapinfo.mfo does not."""
 	if not native_path.is_file():
 		raise SystemExit(f"{native_path} is missing; run pnpm assets prepare for the v1.150 client first")
 	entry = index.get(MFO_PATH)
@@ -388,9 +389,15 @@ def vsro_only_regions(data, index, extracted):
 
 # ================
 # import_alexandria
+#
+# native_mapinfo is the v1.150 mapinfo.mfo; by default the one under
+# extracted. The variant build passes the native tree's file, because its
+# isolated stage 1 root holds no native extraction.
 # ================
-def import_alexandria(vsro_root, extracted):
+def import_alexandria(vsro_root, extracted, native_mapinfo=None):
 	"""Run the import; returns the manifest dict it also writes."""
+	if native_mapinfo is None:
+		native_mapinfo = extracted / NATIVE_MAPINFO
 	require_vsro_pin(vsro_root, STAGE1_ARCHIVES)
 	output = extracted / OUTPUT_FOLDER
 	map_path, map_handle, map_data = open_archive(vsro_root, "Map")
@@ -408,9 +415,12 @@ def import_alexandria(vsro_root, extracted):
 		fields = set()
 		if os.environ.get("SRO_CAP110_MONSTERS", "").lower() in FLAG_ON:
 			from cap110_monsters import outdoor_regions, SOURCE_ENV, tomb_enabled
+			source = os.environ.get(SOURCE_ENV, "")
+			if not source:
+				raise SystemExit(f"SRO_CAP110_MONSTERS is on but {SOURCE_ENV} names no monster database export")
 			# The Pharaoh Tomb regions seed their own components the same way.
-			fields = outdoor_regions(os.environ[SOURCE_ENV], tomb_enabled())
-		regions = connected_regions(city, vsro_only_regions(data_data, data_index, extracted), fields)
+			fields = outdoor_regions(source, tomb_enabled())
+		regions = connected_regions(city, vsro_only_regions(data_data, data_index, native_mapinfo), fields)
 		log(f"{len(city)} city regions, {len(regions)} regions with the fields around it")
 
 		tile_ids, copied, missing = set(), [], []
@@ -527,13 +537,16 @@ def write_tables(output, media, index, regions):
 def main():
 	parser = argparse.ArgumentParser(description="Import Alexandria's map from a VSRO client (port-only, not native).")
 	parser.add_argument("--vsro-root", default=os.environ.get(ROOT_ENV), help=f"VSRO client folder (else {ROOT_ENV})")
+	parser.add_argument("--native-mapinfo", type=Path,
+		help="the native v1.150 mapinfo.mfo (default: the one under this game root's extraction)")
 	args = parser.parse_args()
 	if not flag_enabled():
 		raise SystemExit(f"{FLAG_ENV} is not on. Alexandria is port-only, not native; set {FLAG_ENV}=1 to import it.")
 	if not args.vsro_root:
 		raise SystemExit(f"Pass --vsro-root or set {ROOT_ENV} to the VSRO client folder.")
-	EXTRACTED_ROOT.mkdir(exist_ok=True)
-	manifest = import_alexandria(Path(args.vsro_root), EXTRACTED_ROOT)
+	# parents: the variant build's isolated stage 1 game root starts empty.
+	EXTRACTED_ROOT.mkdir(parents=True, exist_ok=True)
+	manifest = import_alexandria(Path(args.vsro_root), EXTRACTED_ROOT, args.native_mapinfo)
 	log(f"{len(manifest['files'])} files copied, {len(manifest['missing'])} absent from the archives")
 	log(f"extracted/{OUTPUT_FOLDER}/{MANIFEST_NAME} written")
 

@@ -371,6 +371,16 @@ test("authored impact events produce damage text and sparse head reactions while
 	game.environmentalDamage = [ { sequence: 1, gid: 1, damage: 17, atMs: 10000 } ];
 	presenter.step( entities, game, 10, 10000 );
 	assert.equal( presenter.damageText().length, 1, "environmental wire feedback reaches the presenter" );
+	assert.deepEqual(
+		presenter.damageText()[0].color,
+		[ 1, 211 / 255, 58 / 255 ],
+		"a deferred tick on a player renders in the no-character-source tint"
+	);
+	assert.equal(
+		actors.find( a => a.gid === 1 ).layers?.some( l => l.clip === "hit1" || l.clip === "hit" ) ?? false,
+		false,
+		"a deferred tick plays no hit reaction"
+	);
 	presenter.step( entities, game, 10.01, 10010 );
 	assert.equal( presenter.damageText().length, 1, "snapshot replay cannot duplicate environmental feedback" );
 	game.environmentalDamage = [];
