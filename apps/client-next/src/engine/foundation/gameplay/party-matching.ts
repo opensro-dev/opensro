@@ -84,6 +84,15 @@ export type PartyMatchCommand =
 	| { readonly kind: "party-match-page"; readonly page: number; }
 	| { readonly kind: "party-match-join"; readonly id: number; }
 	| {
+		readonly kind: "party-match-search";
+		readonly filter: {
+			readonly name: string;
+			readonly purpose: number;
+			readonly min: number;
+			readonly max: number;
+		};
+	}
+	| {
 		readonly kind: "party-match-register" | "party-match-modify";
 		readonly registration: Omit<PartyRegistration, "id">;
 	}
@@ -160,6 +169,10 @@ export function partyMatchRequest(
 		u( state.own.id, 4 );
 		opcode = 0x7535;
 		pending = "delete";
+	} else if ( command.kind === "party-match-search" ) {
+		// A search commits in the worker (one answer over the rows);
+		// it composes no frame, so reaching the composer is a bug.
+		throw Error( "Party matching search sends no request" );
 	} else {
 		const r = command.registration, modify = command.kind === "party-match-modify";
 		if ( modify ? !state.own : !!state.own ) throw Error( "Party registration ownership mismatch" );
@@ -361,6 +374,131 @@ export function partyMatchAckNotice( opcode: number, detail: number | undefined 
 	if ( detail === 0 ) return { key: "UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED", value: 0, nativeType: 4 };
 	if ( detail === 2 ) return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0, nativeType: 4 };
 	return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 };
+}
+
+// Native parties cap at eight members: the 6356A0 register guard's
+// full query (818820) and the 634DC9 latch watcher read the same fact.
+// The port's social state publishes no capacity, so the constant is
+// the pin both producers share.
+export const PARTY_FULL_ROSTER = 8;
+
+/*
+================
+partyMatchRegisterNotice
+
+The party-match window's own register validator (6356A0): it prints a
+type-4 line and sends nothing, or falls through and composes the
+request. First match prints, in the native order - already listed,
+partyless below level 5, in a party but not its master, master of a
+full party. Two of its keys also exist as server bytes (0x1B, 0x08)
+for the races this pre-send check cannot see; the port keeps both
+lanes, never aligned, and JOIN_ERROR_PARTY has no server byte at all.
+================
+*/
+export function partyMatchRegisterNotice( facts: {
+	readonly listed: boolean;
+	readonly inParty: boolean;
+	readonly master: boolean;
+	readonly partyFull: boolean;
+	readonly level: number;
+} ): SystemNotice | null {
+	if ( facts.listed ) return { key: "UIIT_MSG_PARTYMATCH_RECORD_ERROR_AGAIN", value: 0, nativeType: 4 };
+	if ( !facts.inParty && facts.level < 5 ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_LEVEL", value: 0, nativeType: 4 };
+	}
+	if ( facts.inParty && !facts.master ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_PARTY", value: 0, nativeType: 4 };
+	}
+	if ( facts.inParty && facts.partyFull ) {
+		return { key: "UIIT_MSG_PARTYERR_ALREADY_FULL", value: 0, nativeType: 4 };
+	}
+	return null;
+}
+
+/*
+================
+partyMatchCompletionNotice
+
+The completion the register (75E3A0 @75E455) and modify (75E4D0
+@75E566) success bytes raise: a centre banner alone (67D030), no
+guide line. The delete answer's banner runs through
+partyMatchDeleteNotice - its wording depends on the party's past.
+================
+*/
+export function partyMatchCompletionNotice( opcode: number ): SystemNotice | null {
+	if ( opcode === 0xb6ff ) {
+		return {
+			key: "UIIT_MSG_PARTYMATCH_RECORD_COMPLETE",
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true
+		};
+	}
+	if ( opcode === 0xb3dc ) {
+		return {
+			key: "UIIT_MSG_PARTYMATCH_MODIFY_COMPLETE",
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true
+		};
+	}
+	return null;
+}
+
+/*
+================
+partyMatchDeleteNotice
+
+The delete success banner (75B220 @75B32B): a party that filled at
+any moment while the listing stood (flag data_cea6e0, set by the
+634DC9 watcher) names the complete2 wording; the print consumes it.
+================
+*/
+export function partyMatchDeleteNotice( partyWasFull: boolean ): SystemNotice {
+	return {
+		key: partyWasFull ? "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE2" : "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	};
+}
+
+/*
+================
+partyMatchAutoNotice
+
+While the auto-match session lives (75EBD0), every join answer that
+is not an acceptance reports the chain at type 4: candidates remain
+-> AUTO_PROGRESS; the chain spent -> AUTO_FAILURE, and the session
+closes. On a refused answer the mapped category-2 error prints
+first; this line follows it, never replaces it. An acceptance
+prints neither (the completion banner stands).
+================
+*/
+export function partyMatchAutoNotice( facts: {
+	readonly sessionOpen: boolean;
+	readonly accepted: boolean;
+	readonly candidatesRemain: boolean;
+} ): SystemNotice | null {
+	if ( !facts.sessionOpen || facts.accepted ) return null;
+	return {
+		key: facts.candidatesRemain ? "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS" : "UIIT_MSG_PARTYMATCH_AUTO_FAILURE",
+		value: 0,
+		nativeType: 4
+	};
+}
+
+/*
+================
+partyMatchNoResultNotice
+
+The empty-collection line (63B130 @63B327, 637CF0 @637FC3): an auto
+round with nobody to ask, and a committed search whose filtered
+list is empty, both print it once at type 4.
+================
+*/
+export function partyMatchNoResultNotice(): SystemNotice {
+	return { key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT", value: 0, nativeType: 4 };
 }
 // 637CF0 uses exact name equality and inclusive overlapping level intervals.
 /*
