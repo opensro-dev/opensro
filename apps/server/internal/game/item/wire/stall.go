@@ -123,7 +123,6 @@ const (
 	StallErrRideState    uint8 = 0x34
 	StallErrMurderer     uint8 = 0x39
 	StallErrJob          uint8 = 0x3B
-	StallErrNoCategory   uint8 = 0x42
 	StallErrNetworkTown  uint8 = 0x49
 	StallErrRegisterTown uint8 = 0x4A
 	StallErrNetworkStale uint8 = 0x4F
