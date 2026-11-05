@@ -44,7 +44,7 @@ func (rt *Runtime) petStrikeCOS(step petCombatStep, target petCombatTarget, skil
 		skill: skill, attacker: attacker, from: monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, percent: step.percent, now: step.nowMs}
 	// The pet's owner is the dealer for the death settlement's relation
 	// gate, as natively (a COS answers with its owner).
-	_, in.dealerCape = rt.playerRelationEquipment(step.state.character)
+	_, in.dealerCape = rt.playerRelationEquipment(step.snapshot)
 	outcome := rt.monsterStrikeCOS(in, target.player, live, target.cosRef, target.at)
 	if !outcome.committed {
 		return petStrikeResult{}, false
