@@ -128,6 +128,39 @@ func (s *Service) RecordKillStats(rows []KillStatRow) error {
 
 /*
 ================
+Service.onlineMsByDay
+
+The summed online milliseconds per UTC day over [fromS, toS] from
+kill_stats, keyed by day start (the day_s key). All bands are summed:
+the caller (netMintFlags, #2643) normalises a whole-shard mint total by
+whole-shard activity, and only the ratio leaves this process - no band
+figure does. Days with no rows are absent from the map, which the
+caller reads as "no online-hour data".
+================
+*/
+func (s *Service) onlineMsByDay(fromS, toS int64) (map[int64]int64, error) {
+	rows, err := s.history.Query(`SELECT day_s, SUM(online_ms) FROM kill_stats
+		WHERE day_s >= ? AND day_s <= ? GROUP BY day_s`, fromS, toS)
+	if err != nil {
+		return nil, fmt.Errorf("kill stats hours: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]int64{}
+	for rows.Next() {
+		var dayS, onlineMs int64
+		if err := rows.Scan(&dayS, &onlineMs); err != nil {
+			return nil, fmt.Errorf("kill stats hours: %w", err)
+		}
+		out[dayS] = onlineMs
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("kill stats hours: %w", err)
+	}
+	return out, nil
+}
+
+/*
+================
 killStatBandLabel
 
 Band 0 is levels 1-10, band 1 is 11-20, and so on.
