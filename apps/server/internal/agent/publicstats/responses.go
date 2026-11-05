@@ -346,6 +346,8 @@ type RankingRow struct {
 	ReachedAt   *string `json:"reachedAt"`
 	Guild       string  `json:"guild,omitempty"`
 	Job         string  `json:"job,omitempty"`
+	JobLevel    uint8   `json:"jobLevel,omitempty"`
+	JobExp      uint32  `json:"jobExp,omitempty"`
 	UniqueKills int     `json:"uniqueKills"`
 	Gear        Gear    `json:"gear"`
 }
