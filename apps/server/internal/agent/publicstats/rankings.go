@@ -35,11 +35,15 @@ import (
 // rankingPageSize is the rows of one page.
 const rankingPageSize = 50
 
-// The orderings a request may ask for.
+// The orderings a request may ask for. by=pk is the PK board (#2675):
+// the native PK state's total murder count, highest first; by=online is
+// the time-online board: credited time in the world, all-time first,
+// the rolling week breaking ties.
 const (
 	rankByLevel   = "level"
 	rankByUniques = "uniques"
 	rankByGear    = "gear"
+	rankByPK      = "pk"
 	rankByOnline  = "online"
 )
 
@@ -78,8 +82,8 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 	if by == "" {
 		by = rankByLevel
 	}
-	if by != rankByLevel && by != rankByUniques && by != rankByGear && by != rankByOnline {
-		return nil, fmt.Errorf("%w: by must be level, uniques, gear or online", errBadRequest)
+	if by != rankByLevel && by != rankByUniques && by != rankByGear && by != rankByPK && by != rankByOnline {
+		return nil, fmt.Errorf("%w: by must be level, uniques, gear, pk or online", errBadRequest)
 	}
 	race := query.Get("race")
 	if race != "" && race != "chinese" && race != "european" {
@@ -145,6 +149,9 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		row := RankingRow{Name: c.Name, Race: race, Gender: gender, Level: level(c), UniqueKills: killsBy[c.ID],
 			ExpPercent: s.expPercent(c), Gear: s.gearScore(c)}
+		if c.PK != nil {
+			row.PKKills = int(c.PK.TotalCount)
+		}
 		if c.Online != nil {
 			row.OnlineSeconds = c.Online.TotalSeconds
 			row.OnlineWeekSeconds = c.Online.WeekSeconds()
@@ -188,6 +195,13 @@ orders: it is not in the response.
 */
 func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 	switch by {
+	case rankByPK:
+		if a.PKKills != b.PKKills {
+			return a.PKKills > b.PKKills
+		}
+		if a.Level != b.Level {
+			return a.Level > b.Level
+		}
 	case rankByUniques:
 		if a.UniqueKills != b.UniqueKills {
 			return a.UniqueKills > b.UniqueKills
