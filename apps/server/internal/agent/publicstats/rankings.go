@@ -5,10 +5,13 @@ rankings.go - GET /public/v1/rankings: every visible player, ranked
 
 The /players page lists the whole shard, not a top board: by level, by
 unique kills, by gear or by time online, optionally one race, fifty a
-page. Each ordering is built once per shared snapshot (the roster and
-the kill list) for each (by, race) and every page slices it, so a crawl
-of every page costs one sort. Hidden characters are left out entirely,
-as on the leaderboard.
+page. The job boards (by=trader, hunter or thief, #2675) list one job
+each, ordered by job level then job experience - the same Grade and Exp
+the profile publishes as jobLevel and job experience, so the board and
+the profile never disagree. Each ordering is built once per shared
+snapshot (the roster and the kill list) for each (by, race) and every
+page slices it, so a crawl of every page costs one sort. Hidden
+characters are left out entirely, as on the leaderboard.
 
 Port-only, not native: the original has no public read API.
 
@@ -35,14 +38,18 @@ import (
 // rankingPageSize is the rows of one page.
 const rankingPageSize = 50
 
-// The orderings a request may ask for. by=pk is the PK board (#2675):
+// The orderings a request may ask for. The three job boards list one
+// job each, by job level then job experience; by=pk is the PK board:
 // the native PK state's total murder count, highest first; by=online is
 // the time-online board: credited time in the world, all-time first,
-// the rolling week breaking ties.
+// the rolling week breaking ties (#2675).
 const (
 	rankByLevel   = "level"
 	rankByUniques = "uniques"
 	rankByGear    = "gear"
+	rankByTrader  = "trader"
+	rankByHunter  = "hunter"
+	rankByThief   = "thief"
 	rankByPK      = "pk"
 	rankByOnline  = "online"
 )
@@ -82,8 +89,9 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 	if by == "" {
 		by = rankByLevel
 	}
-	if by != rankByLevel && by != rankByUniques && by != rankByGear && by != rankByPK && by != rankByOnline {
-		return nil, fmt.Errorf("%w: by must be level, uniques, gear, pk or online", errBadRequest)
+	if by != rankByLevel && by != rankByUniques && by != rankByGear &&
+		by != rankByTrader && by != rankByHunter && by != rankByThief && by != rankByPK && by != rankByOnline {
+		return nil, fmt.Errorf("%w: by must be level, uniques, gear, trader, hunter, thief, pk or online", errBadRequest)
 	}
 	race := query.Get("race")
 	if race != "" && race != "chinese" && race != "european" {
@@ -158,6 +166,8 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job
+			row.JobLevel = c.Job.Grade
+			row.JobExp = c.Job.Exp
 		}
 		if s.src.GuildOf != nil {
 			row.Guild, _ = s.src.GuildOf(c)
@@ -169,6 +179,17 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		lastLogin[c.Name] = c.LastLoginAtMs
 		rows = append(rows, row)
+	}
+	// A job board lists only its own job; every other ordering lists
+	// every visible player.
+	if isJobBoard(key.by) {
+		kept := make([]RankingRow, 0, len(rows))
+		for _, row := range rows {
+			if row.Job == key.by {
+				kept = append(kept, row)
+			}
+		}
+		rows = kept
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rankedBefore(key.by, rows[i], rows[j], lastLogin) })
 	for i := range rows {
@@ -193,8 +214,29 @@ that never logged in since tracking (0) ranks after. The login time only
 orders: it is not in the response.
 ================
 */
+/*
+================
+isJobBoard
+
+The three orderings that list one job each (#2675).
+================
+*/
+func isJobBoard(by string) bool {
+	return by == rankByTrader || by == rankByHunter || by == rankByThief
+}
+
 func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 	switch by {
+	case rankByTrader, rankByHunter, rankByThief:
+		if a.JobLevel != b.JobLevel {
+			return a.JobLevel > b.JobLevel
+		}
+		if a.JobExp != b.JobExp {
+			return a.JobExp > b.JobExp
+		}
+		if a.Level != b.Level {
+			return a.Level > b.Level
+		}
 	case rankByPK:
 		if a.PKKills != b.PKKills {
 			return a.PKKills > b.PKKills

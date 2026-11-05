@@ -346,6 +346,8 @@ type RankingRow struct {
 	ReachedAt  *string `json:"reachedAt"`
 	Guild      string  `json:"guild,omitempty"`
 	Job        string  `json:"job,omitempty"`
+	JobLevel   uint8   `json:"jobLevel,omitempty"`
+	JobExp     uint32  `json:"jobExp,omitempty"`
 	// PKKills is the PK board's value: the native PK state's total
 	// murder count (PKRecord.TotalCount), not the penalty level the
 	// count feeds (#2675). Zero - and absent - for a character who

@@ -126,6 +126,61 @@ func TestRankingsOnlineBoardOrdersByTotalThenWeek(t *testing.T) {
 
 /*
 ================
+TestRankingsJobBoardsListOneJobEach
+
+Each job board lists only its own job, ordered by job level, then job
+experience, then character level; the row carries the same job level
+and experience the profile publishes. Hidden and jobless characters
+never appear (#2675).
+================
+*/
+func TestRankingsJobBoardsListOneJobEach(t *testing.T) {
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	f.chars = append(f.chars,
+		&domain.Character{ID: 10, Name: "TraderTop", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(40),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 7, Exp: 0}},
+		&domain.Character{ID: 11, Name: "TraderRich", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 5, Exp: 250}},
+		&domain.Character{ID: 12, Name: "TraderPoor", ModelCodename: "CHAR_EU_WOMAN_WARRIOR", Level: lvl(50),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 5, Exp: 100}},
+		&domain.Character{ID: 13, Name: "HunterOne", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(20),
+			Job: domain.CharacterJob{Type: domain.JobHunter, Grade: 2, Exp: 999}},
+		&domain.Character{ID: 14, Name: "TraderGhost", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			PublicHidden: true, Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 9, Exp: 9999}},
+	)
+	s := f.service()
+
+	traders := rankingNames(t, s, "/public/v1/rankings?by=trader")
+	names := []string{}
+	for _, row := range traders.Rows {
+		names = append(names, row.Name)
+	}
+	if want := "TraderTop,TraderRich,TraderPoor"; join(names) != want {
+		t.Fatalf("by trader %s, want %s (hidden and other jobs left out)", join(names), want)
+	}
+	if traders.Total != 3 || traders.Rows[0].Rank != 1 ||
+		traders.Rows[0].JobLevel != 7 || traders.Rows[1].JobExp != 250 || traders.Rows[2].Job != "trader" {
+		t.Fatalf("trader rows %+v", traders.Rows)
+	}
+	hunters := rankingNames(t, s, "/public/v1/rankings?by=hunter")
+	if len(hunters.Rows) != 1 || hunters.Rows[0].Name != "HunterOne" || hunters.Rows[0].JobLevel != 2 {
+		t.Fatalf("by hunter %+v", hunters.Rows)
+	}
+	if thieves := rankingNames(t, s, "/public/v1/rankings?by=thief"); thieves.Total != 0 || len(thieves.Rows) != 0 {
+		t.Fatalf("by thief %+v, want an empty board", thieves)
+	}
+	european := rankingNames(t, s, "/public/v1/rankings?by=trader&race=european")
+	if len(european.Rows) != 1 || european.Rows[0].Name != "TraderPoor" || european.Rows[0].Rank != 1 {
+		t.Fatalf("european traders %+v", european.Rows)
+	}
+	if code := get(t, s, "/public/v1/rankings?by=guildmaster", nil); code != http.StatusBadRequest {
+		t.Errorf("by=guildmaster answered %d, want 400", code)
+	}
+}
+
+/*
+================
 TestRankingsPKBoardCountsMurdersNotPenalty
 
 The PK board's value is the PK state's total murder count, never the
