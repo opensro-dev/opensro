@@ -183,6 +183,9 @@ func waitingProjectileBenchRuntime(b *testing.B, count int) (*Runtime, int64) {
 		p.token = uint32(10_000 + i)
 		p.characterID = character.ID
 		p.cast = wire.SkillAction{ActionId: benchWaitingSkillID, HasTarget: true, TargetGid: instances[0].Gid}
+		// The production shape: prepare prices the cast (projectilecast.go).
+		p.verdictCost = enterworld.SkillConsumption{Pinned: true, MP: 21}
+		p.verdictGroup = 4242
 		p.releaseAtMs = now + 3_600_000
 		rt.pendingProjectileCasts = append(rt.pendingProjectileCasts, p)
 	}

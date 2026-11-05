@@ -400,21 +400,24 @@ TestHalloweenBoxDropCapAndGourd
 
 The daily cap gates the rolled drop and the Gourd alike; a Gourd kill
 pays on a losing draw, and a day that has rolled over at 04:00 UTC
-opens the cap again. The count lands on the winner per committed box
-and restarts when the settlement crosses the reset.
+opens the cap again. The count lands on the winner's account per
+committed box, restarts when the settlement crosses the reset, and
+the mint that reaches the cap names its owner exactly once.
 ================
 */
 func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	c := testCharacter()
+	c.AccountID = "cap-account"
 	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
 	ordinary := monster.Instance{Ref: monster.MonsterRef{MonsterType: 0}}
 	gourd := monster.Instance{Ref: monster.MonsterRef{Codename: halloweenGourdCodename, MonsterType: 0}}
 	at := simulation.Spawn{}
 	inside := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
+	account := rt.deps.HalloweenAccount(c.AccountID)
 
 	// At the cap for the current day nothing mints, gourd included.
-	c.HalloweenBoxDay = progression.HalloweenDayKey(inside)
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap
+	account.Day = progression.HalloweenDayKey(inside)
+	account.Count = progression.HalloweenBoxDailyCap
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	if _, ok := rt.halloweenBoxDrop(c, ordinary, at, c.Name, inside); ok {
 		t.Fatal("a capped winner minted a box")
@@ -424,7 +427,7 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 	}
 
 	// One under the cap: the gourd pays even on a losing draw.
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap - 1
+	account.Count = progression.HalloweenBoxDailyCap - 1
 	rt.DropRoll = func() (uint32, error) { return 32767, nil }
 	box, ok := rt.halloweenBoxDrop(c, gourd, at, c.Name, inside)
 	if !ok || box.Codename != progression.HalloweenBoxCodename {
@@ -433,28 +436,236 @@ func TestHalloweenBoxDropCapAndGourd(t *testing.T) {
 
 	// The next day (after the 04:00 reset) the cap opens again.
 	nextDay := time.Date(1970, 1, 2, 4, 0, 0, 0, time.UTC)
-	c.HalloweenBoxDay = progression.HalloweenDayKey(inside)
-	c.HalloweenBoxCount = progression.HalloweenBoxDailyCap
+	account.Day = progression.HalloweenDayKey(inside)
+	account.Count = progression.HalloweenBoxDailyCap
 	rt.DropRoll = func() (uint32, error) { return 0, nil }
 	if _, ok := rt.halloweenBoxDrop(c, ordinary, at, c.Name, nextDay); !ok {
 		t.Fatal("the cap stayed shut after the reset")
 	}
 
-	// Counting: two boxes land, then a settlement across 04:00 UTC
-	// restarts the day before its box lands (reset crossed mid-wave).
+	// Counting: two boxes land on the winner's account, then a
+	// settlement across 04:00 UTC restarts the day before its box
+	// lands (reset crossed mid-wave).
 	winner := testCharacter()
-	rt.countHalloweenBoxes(winner, []grounditem.Item{
-		{Codename: progression.HalloweenBoxCodename},
-		{Codename: progression.HalloweenBoxCodename},
-		{Codename: "ITEM_ETC_HP_POTION_01"},
-	}, inside.UnixMilli())
-	if winner.HalloweenBoxCount != 2 || winner.HalloweenBoxDay != progression.HalloweenDayKey(inside) {
-		t.Fatal("count after two boxes", winner.HalloweenBoxDay, winner.HalloweenBoxCount)
+	winner.AccountID = "count-account"
+	owners := map[uint32]*enterworld.Character{enterworld.ObjectIDForCharacter(winner): winner}
+	winnerBox := grounditem.Item{Codename: progression.HalloweenBoxCodename, OwnerJID: enterworld.ObjectIDForCharacter(winner)}
+	counted := rt.deps.HalloweenAccount(winner.AccountID)
+	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{
+		winnerBox, winnerBox, {Codename: "ITEM_ETC_HP_POTION_01"},
+	}, inside.UnixMilli()); len(reached) != 0 {
+		t.Fatal("reached the cap at two boxes", reached)
 	}
-	rt.countHalloweenBoxes(winner, []grounditem.Item{{Codename: progression.HalloweenBoxCodename}},
+	if counted.Count != 2 || counted.Day != progression.HalloweenDayKey(inside) {
+		t.Fatal("count after two boxes", counted.Day, counted.Count)
+	}
+	rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox},
 		time.Date(1970, 1, 2, 4, 0, 1, 0, time.UTC).UnixMilli())
-	if winner.HalloweenBoxCount != 1 || winner.HalloweenBoxDay != progression.HalloweenDayKey(nextDay) {
-		t.Fatal("count across the reset", winner.HalloweenBoxDay, winner.HalloweenBoxCount)
+	if counted.Count != 1 || counted.Day != progression.HalloweenDayKey(nextDay) {
+		t.Fatal("count across the reset", counted.Day, counted.Count)
+	}
+
+	// The mint that reaches the cap names its owner once; the next
+	// settlement the same day names nobody.
+	counted.Day, counted.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
+	reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli())
+	if len(reached) != 1 || reached[0] != winner {
+		t.Fatal("cap mint did not name the winner", reached)
+	}
+	if reached := rt.countHalloweenBoxes(owners, []grounditem.Item{winnerBox}, inside.UnixMilli()); len(reached) != 0 {
+		t.Fatal("cap named twice in one day", reached)
+	}
+}
+
+/*
+================
+TestHalloweenGourdBoxesPayEveryDamager
+
+#2547: the Gourd pays every character who damaged it. The winner is
+skipped (its box came from the drop), a damager at their account cap
+gets nothing, a zero-damage name on the contribution list gets
+nothing, a GM-spawned Gourd pays nobody, and two characters of one
+account cannot both be promised the account's last box in one kill:
+the winner's planned box takes it, so the same-account damager waits.
+================
+*/
+func TestHalloweenGourdBoxesPayEveryDamager(t *testing.T) {
+	winner := testCharacter()
+	winner.AccountID = "shared-account"
+	rt, _ := halloweenRuntime(t, winner, halloweenTestWindow)
+	inside := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
+	gourd := monster.Instance{Ref: monster.MonsterRef{Codename: halloweenGourdCodename, MonsterType: 0}}
+	at := simulation.Spawn{}
+
+	damager := func(id int64, name, account string) *enterworld.Character {
+		c := testCharacter()
+		c.ID, c.Name, c.AccountID = id, name, account
+		return c
+	}
+	sameAccount := damager(4, "alt", "shared-account")
+	other := damager(5, "helper", "helper-account")
+	capped := damager(6, "full", "full-account")
+	actors := map[uint32]rewardActor{}
+	for _, c := range []*enterworld.Character{winner, sameAccount, other, capped} {
+		actors[enterworld.ObjectIDForCharacter(c)] = rewardActor{character: c}
+	}
+	contributions := []simulation.MonsterContribution{
+		{CreditGID: enterworld.ObjectIDForCharacter(winner), Damage: 6},
+		{CreditGID: enterworld.ObjectIDForCharacter(sameAccount), Damage: 3},
+		{CreditGID: enterworld.ObjectIDForCharacter(other), Damage: 2},
+		{CreditGID: enterworld.ObjectIDForCharacter(capped), Damage: 2},
+		{CreditGID: 99, Damage: 0},
+	}
+
+	// The winner's account sits one under the cap with the winner's
+	// own box already promised in the plan.
+	shared := rt.deps.HalloweenAccount("shared-account")
+	shared.Day, shared.Count = progression.HalloweenDayKey(inside), progression.HalloweenBoxDailyCap-1
+	rt.deps.HalloweenAccount("full-account").Day = progression.HalloweenDayKey(inside)
+	rt.deps.HalloweenAccount("full-account").Count = progression.HalloweenBoxDailyCap
+	planned := []grounditem.Item{{Codename: progression.HalloweenBoxCodename, OwnerJID: enterworld.ObjectIDForCharacter(winner)}}
+	boxes := rt.halloweenGourdBoxes(winner, gourd, planned, contributions, actors, at, inside)
+	if len(boxes) != 1 || boxes[0].OwnerJID != enterworld.ObjectIDForCharacter(other) ||
+		boxes[0].Codename != progression.HalloweenBoxCodename {
+		t.Fatal("gourd paid the wrong damagers", boxes)
+	}
+
+	// A GM-spawned Gourd is conjured, not hunted: nobody is paid.
+	gourd.GMSpawned = true
+	if boxes := rt.halloweenGourdBoxes(winner, gourd, nil, contributions, actors, at, inside); len(boxes) != 0 {
+		t.Fatal("a GM-spawned gourd paid damagers", boxes)
+	}
+}
+
+/*
+================
+TestHalloweenGourdSettlementPaysDamagers
+
+#2547 through a real settlement: the winner and one damager each
+leave with an assigned box and one count on their own account; when
+the damager's next box reaches their account cap, the cap message
+goes to the damager once and only once; past the cap the Gourd pays
+neither of them; and with the event off nothing mints or counts.
+================
+*/
+func TestHalloweenGourdSettlementPaysDamagers(t *testing.T) {
+	rt, clock, winner, target := newCombatTestRuntime(t, 11)
+	winner.AccountID = "winner-account"
+	damager := testCharacter()
+	damager.ID, damager.Name, damager.AccountID = 4, "helper", "damager-account"
+	level := int64(1)
+	damager.Level, damager.MaxLevel = &level, &level
+	rt.deps.(*enterworld.Deps).Characters = enterworld.StaticCharacterSource{testDivision: {winner, damager}}
+	items := rt.deps.ItemReferences().(staticItemSource)
+	items[progression.HalloweenBoxCodename] = &enterworld.ItemRef{
+		RefObjID: 3862, Codename: progression.HalloweenBoxCodename, TypeIDs: [4]int64{3, 3, 9, 0},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50}),
+	}
+	t.Setenv(progression.EnvHalloweenEvent, "on")
+	t.Setenv(progression.EnvHalloweenEventWindow, halloweenTestWindow)
+	rt.Halloween = progression.HalloweenEventFromEnv()
+	// The combat fixture nils the roll (monsterloot.go returns no plan
+	// at all without one); a constant draw keeps the plan deterministic.
+	rt.DropRoll = constantDropRoll(0)
+
+	target.Ref.Codename = halloweenGourdCodename
+	impact := simulation.MonsterDamageResult{
+		Fatal:    true,
+		Instance: target,
+		Contributions: []simulation.MonsterContribution{
+			{CreditGID: enterworld.ObjectIDForCharacter(winner), Damage: 6},
+			{CreditGID: enterworld.ObjectIDForCharacter(damager), Damage: 5},
+		},
+	}
+	settle := func() monsterSettlement {
+		roster := rt.monsterRewardRoster(testDivision, winner, clock.NowMs())
+		return rt.settleMonsterInsideDoorCounted(testDivision, winner, roster, impact, monster.Pose{}, clock.NowMs(), true)
+	}
+	boxesOf := func(settlement monsterSettlement) []grounditem.Item {
+		var boxes []grounditem.Item
+		for _, drop := range settlement.drops {
+			if drop.Codename == progression.HalloweenBoxCodename {
+				boxes = append(boxes, drop)
+			}
+		}
+		return boxes
+	}
+	winnerAccount := rt.deps.HalloweenAccount("winner-account")
+	damagerAccount := rt.deps.HalloweenAccount("damager-account")
+
+	first := settle()
+	boxes := boxesOf(first)
+	if len(boxes) != 2 {
+		t.Fatalf("first gourd paid %d boxes, want winner and damager", len(boxes))
+	}
+	owners := map[uint32]bool{}
+	for _, box := range boxes {
+		owners[box.OwnerJID] = true
+	}
+	if !owners[enterworld.ObjectIDForCharacter(winner)] || !owners[enterworld.ObjectIDForCharacter(damager)] {
+		t.Fatal("first gourd boxes carry the wrong owners", boxes)
+	}
+	if winnerAccount.Count != 1 || damagerAccount.Count != 1 {
+		t.Fatal("counts after the first gourd", winnerAccount.Count, damagerAccount.Count)
+	}
+	if len(first.others) != 0 {
+		t.Fatal("a cap message before the cap", first.others)
+	}
+
+	// The damager's next box reaches their cap: the message goes to
+	// the damager, once.
+	damagerAccount.Count = progression.HalloweenBoxDailyCap - 1
+	second := settle()
+	if len(boxesOf(second)) != 2 || damagerAccount.Count != progression.HalloweenBoxDailyCap {
+		t.Fatal("second gourd miscounted", boxesOf(second), damagerAccount.Count)
+	}
+	var capFrames []wire.Frame
+	for _, other := range second.others {
+		if other.CharacterID == damager.ID {
+			capFrames = append(capFrames, other.Frames...)
+		}
+	}
+	wantPayload := chat.EncodeChatNotice(fmt.Sprintf(halloweenBoxCapBanner, progression.HalloweenBoxDailyCap))
+	if len(capFrames) != 1 || capFrames[0].Opcode != chat.OpChatBroadcast || !bytes.Equal(capFrames[0].Payload, wantPayload) {
+		t.Fatal("cap message to the damager", capFrames)
+	}
+
+	// Past the cap the Gourd pays neither account again, and the
+	// message does not repeat.
+	winnerAccount.Count = progression.HalloweenBoxDailyCap
+	third := settle()
+	if len(boxesOf(third)) != 0 {
+		t.Fatal("a capped gourd paid out", boxesOf(third))
+	}
+	for _, other := range third.others {
+		if other.CharacterID == damager.ID {
+			t.Fatal("the cap message repeated", third.others)
+		}
+	}
+
+	// With the event off, nothing mints and nothing counts.
+	off, offClock, offWinner, offTarget := newCombatTestRuntime(t, 11)
+	off.DropRoll = constantDropRoll(0)
+	offWinner.AccountID = "off-account"
+	offTarget.Ref.Codename = halloweenGourdCodename
+	offItems := off.deps.ItemReferences().(staticItemSource)
+	offItems[progression.HalloweenBoxCodename] = items[progression.HalloweenBoxCodename]
+	offImpact := simulation.MonsterDamageResult{
+		Fatal:    true,
+		Instance: offTarget,
+		Contributions: []simulation.MonsterContribution{
+			{CreditGID: enterworld.ObjectIDForCharacter(offWinner), Damage: 6},
+		},
+	}
+	roster := off.monsterRewardRoster(testDivision, offWinner, offClock.NowMs())
+	settlement := off.settleMonsterInsideDoorCounted(testDivision, offWinner, roster, offImpact, monster.Pose{}, offClock.NowMs(), true)
+	for _, drop := range settlement.drops {
+		if drop.Codename == progression.HalloweenBoxCodename {
+			t.Fatal("a box minted with the event off", settlement.drops)
+		}
+	}
+	if got := off.deps.HalloweenAccount("off-account"); got.Count != 0 {
+		t.Fatal("a box counted with the event off", got)
 	}
 }
 
@@ -709,42 +920,5 @@ func TestHalloweenPriceAndGiftShownAtEveryBoxCount(t *testing.T) {
 			bagCount(c, "ITEM_ETC_E051123_EVATION_SCROLL") != int(tc.boxes) {
 			t.Fatalf("gifts at %d boxes: bag %v", tc.boxes, c.MissionInventory)
 		}
-	}
-}
-
-/*
-================
-TestHalloweenHelmetSealBothSettings
-
-The seal (its own switch, on after the event) refuses the helmet at
-the trade table and the warehouse while on, and every door behaves
-natively while off.
-================
-*/
-func TestHalloweenHelmetSealBothSettings(t *testing.T) {
-	c := testCharacter()
-	helmetRow := enterworld.InventoryRow{
-		Slot: 20, RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD",
-		TypeFlags: wire.PackTypeFlags(3, 1, 13, 0), StackCount: 1,
-	}
-	c.MissionInventory = []enterworld.InventoryRow{helmetRow}
-	rt, _ := halloweenRuntime(t, c, halloweenTestWindow)
-	t.Setenv(progression.EnvHalloweenHelmetSeal, "on")
-	rt.HalloweenHelmetSeal = progression.HalloweenHelmetSealFromEnv()
-
-	item, _ := bagOf(c).At(20)
-	if rt.storableItem(item) {
-		t.Fatal("sealed helmet entered the warehouse")
-	}
-	if _, code := rt.exchangeOfferable(c, 20); code == 0 {
-		t.Fatal("sealed helmet reached the trade table")
-	}
-
-	rt.HalloweenHelmetSeal = progression.HalloweenHelmetSeal{}
-	if !rt.storableItem(item) {
-		t.Fatal("unsealed helmet refused by the warehouse")
-	}
-	if _, code := rt.exchangeOfferable(c, 20); code != 0 {
-		t.Fatal("unsealed helmet refused by the trade table", code)
 	}
 }

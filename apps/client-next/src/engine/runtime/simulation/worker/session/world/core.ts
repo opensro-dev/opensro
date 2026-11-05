@@ -65,6 +65,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
+		structureName: refObjId => entities.structureName( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
 		npcs: () => entities.npcs()
 	} );
@@ -506,6 +507,7 @@ the entry continues it like the one after a world transfer.
 		},
 		receive,
 		outstandingSince: gameplay.outstandingSince,
+		outstandingLane: gameplay.outstandingLane,
 		noteInput: gameplay.noteInput,
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,

@@ -171,6 +171,25 @@ func hasBroodFrom(c *enterworld.Character, gid uint32) bool {
 
 /*
 ================
+crowRechargeRow
+
+The crow's recharge row at now, and whether it moves the stored row.
+Pure on the live pet, so a tick judges it under the read door and
+only a moving row opens the update door (#2139).
+================
+*/
+func crowRechargeRow(live *enterworld.CharacterCOS, now int64) (domain.PetRowCooldown, bool) {
+	row := companion.AdvanceCharges(live.Training.Rows[1], now)
+	for _, def := range companion.SkillsForPet(live) {
+		if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
+			row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
+		}
+	}
+	return row, row != live.Training.Rows[1]
+}
+
+/*
+================
 advanceCrowBrood
 
 Only the original crow runs the lifecycle. Removal never grants back a cast.
@@ -207,24 +226,32 @@ func (rt *Runtime) advanceCrowBrood(key petOwnerKey, now int64) []simulation.Fra
 	}
 	var output []wire.Frame
 	var reuse []wire.Frame
-	rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
+	// The recharge row is pure on the live pet: judge it under the
+	// read door and open the update door only on a tick whose row
+	// actually moves (#2139); the door re-derives the same row.
+	recharges := false
+	rt.deps.Read(key.division, func() {
 		live := state.character.CompanionByGID(key.gid)
 		if live == nil {
-			return false
+			return
 		}
-		row := companion.AdvanceCharges(live.Training.Rows[1], now)
-		for _, def := range companion.SkillsForPet(live) {
-			if def.EffectName() == companion.BroodSkill && companion.Level(live, def) > 0 {
-				row = companion.BroodRow(row, def, companion.EffectiveLevel(live, def, companion.ModifiersFor(live)), now, companion.ModifiersFor(live))
-			}
-		}
-		if row == live.Training.Rows[1] {
-			return false
-		}
-		live.Training.Rows[1] = row
-		reuse = rt.petTrainingStateFrames(live, now)
-		return true
+		_, recharges = crowRechargeRow(live, now)
 	})
+	if recharges {
+		rt.deps.UpdateDeferred(state.character, "crow-brood-recharge", func() bool {
+			live := state.character.CompanionByGID(key.gid)
+			if live == nil {
+				return false
+			}
+			row, changed := crowRechargeRow(live, now)
+			if !changed {
+				return false
+			}
+			live.Training.Rows[1] = row
+			reuse = rt.petTrainingStateFrames(live, now)
+			return true
+		})
+	}
 	if snapshot == nil {
 		return simFrames(reuse)
 	}

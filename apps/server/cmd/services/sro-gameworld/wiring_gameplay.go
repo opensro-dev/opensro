@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/gmcommand"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/restriction"
@@ -61,13 +62,16 @@ ports. Runtimes retain only the capabilities declared by their packages.
 ================
 */
 type gameplayPlane struct {
-	divisionID    string
-	hub           *transport.Hub
-	deps          *enterworld.Deps
-	items         *action.Runtime
-	movement      *movement.Runtime
-	water         *movement.WaterValidator
-	presence      *livepresence.Directory
+	divisionID string
+	hub        *transport.Hub
+	deps       *enterworld.Deps
+	items      *action.Runtime
+	movement   *movement.Runtime
+	water      *movement.WaterValidator
+	presence   *livepresence.Directory
+	// mutes is the chat mute book (moderation_wiring.go), set once the
+	// shard is known; the console's conduct actions reach it.
+	mutes         *moderation.Book
 	chat          *chat.Runtime
 	chatFeed      *chatfeed.Feed
 	parties       *party.Runtime

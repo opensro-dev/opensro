@@ -38,6 +38,7 @@ export interface SystemNotice {
 	readonly plusSeven?: true;
 	readonly itemBreak?: true;
 	readonly sunDrop?: true;
+	readonly shardEvent?: true;
 }
 /*
 ================
@@ -220,6 +221,22 @@ export function serverNotification( opcode: number, p: Uint8Array ): SystemNotic
 		if ( links && announcedPlusSeven( p, 3 + 2 * n ) ) {
 			return { ...notice, notificationBanner: true, plusSeven: true };
 		}
+		// Port-only, not native (owner 2026-11-05): a shard event notice
+		// (the Halloween waves) also prints in the bottom-right message log,
+		// under its game tab as a native type-7 line would sort, because a
+		// player who missed the banner has nowhere else to read it. It stays
+		// dropPlus: the drop/plus row has always hidden these too.
+		if ( links && announcedShardEvent( p, 3 + 2 * n ) ) {
+			return {
+				key: "",
+				text,
+				value: 0,
+				nativeType: 7,
+				notificationBanner: true,
+				dropPlus: true,
+				shardEvent: true
+			};
+		}
 		// Port-only, not native: Seal of Sun drop announcements highlight in
 		// gold on the top banner and chat log; Star/Moon and plus notices stay unchanged.
 		const sun = isSunDropNoticeText( text ) ? ({ sunDrop: true } as const) : {};
@@ -246,6 +263,26 @@ and frames without a readable body stay with dropPlus.
 function announcedPlusSeven( p: Uint8Array, linksOffset: number ): boolean {
 	const body = decodeNoticeLinks( p, linksOffset )?.body;
 	return body !== undefined && body.length >= ITEM_BODY_HEADER_BYTES && body[ITEM_BODY_PLUS_BYTE] === 7;
+}
+
+/*
+================
+announcedShardEvent
+
+Whether a drop/plus frame is a shard event notice: its link section is
+exactly the empty one, a zero name length and a zero body length.
+Every seal drop names its dropper and every plus notice its player and
+item (server announce.go), so only the event notices
+(halloween_waves.go, sent with an empty wire.NoticeLink) read this way.
+decodeNoticeLinks answers null for this section, as it does for a
+malformed one, so the four bytes are read here.
+================
+*/
+const EMPTY_NOTICE_LINKS_BYTES = 4;
+
+function announcedShardEvent( p: Uint8Array, linksOffset: number ): boolean {
+	if ( p.length !== linksOffset + EMPTY_NOTICE_LINKS_BYTES ) return false;
+	return p.subarray( linksOffset ).every( b => b === 0 );
 }
 
 /*

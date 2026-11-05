@@ -84,6 +84,8 @@ referenceFlags
 
 The flags the old per-request path computed: 1d gold_net groups read
 from the ledger, folded and held against the netMintWindow percentile.
+Since #2643 this is the rule's daily-total fallback reading, which
+netMintFlags must reproduce exactly when it has no online-hour data.
 ================
 */
 func referenceFlags(t *testing.T, db *sql.DB, w window, division string) []Flag {
@@ -112,7 +114,7 @@ func referenceFlags(t *testing.T, db *sql.DB, w window, division string) []Flag 
 		}
 		flags = append(flags, Flag{
 			ID: fmt.Sprintf("net_mint_p95:%s:%d", division, point.T), Rule: "net_mint_p95", At: point.T,
-			Division: division, Value: point.Sum, Threshold: decimal(threshold),
+			Division: division, Value: point.Sum, Threshold: decimal(threshold), Basis: flagBasisDailyTotal,
 		})
 	}
 	return flags
@@ -165,7 +167,7 @@ func TestRollupMatchesReadGroups(t *testing.T) {
 	flagWin := window{bucket: "1d", size: 86400, from: dayStart + 8*86400, to: dayStart + 10*86400 - 1}
 	for _, division := range []string{"", "d1", "d2"} {
 		want := referenceFlags(t, db, flagWin, division)
-		got := netMintFlags(entries, flagWin, division)
+		got := netMintFlags(entries, nil, flagWin, division)
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("division %q: flags differ\nwant %+v\ngot  %+v", division, want, got)
 		}
@@ -246,9 +248,136 @@ func TestParseWindowCountsWholeBuckets(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := referenceFlags(t, db, w, "d1")
-	got := netMintFlags(entries, w, "d1")
+	got := netMintFlags(entries, nil, w, "d1")
 	if !reflect.DeepEqual(want, got) || len(got) == 0 {
 		t.Fatalf("flags on the aligned window differ or never fired\nwant %+v\ngot  %+v", want, got)
+	}
+}
+
+/*
+================
+mintDayEntries
+
+One mint-only rollup entry per day (monster_gold at the day's first
+hour); mints[i] is day i's net mint. Enough history for netMintFlags to
+compare the last day against its netMintWindow predecessors.
+================
+*/
+func mintDayEntries(mints ...int64) []rollupEntry {
+	entries := make([]rollupEntry, 0, len(mints))
+	for day, mint := range mints {
+		entries = append(entries, rollupEntry{
+			t: dayStart + int64(day)*86400, reason: "monster_gold", gain: true,
+			sum: mint, min: mint, max: mint, count: 1,
+		})
+	}
+	return entries
+}
+
+/*
+================
+onlineHours
+
+The onlineMs map netMintFlags reads: hours[i] whole online hours on
+day i, in milliseconds. Days left out have no online-hour data.
+================
+*/
+func onlineHours(hours map[int]int64) map[int64]int64 {
+	out := make(map[int64]int64, len(hours))
+	for day, h := range hours {
+		out[dayStart+int64(day)*86400] = h * 3600000
+	}
+	return out
+}
+
+/*
+================
+TestNetMintFlagsGrowthIsNotAFlag
+
+#2643: a shard whose mint and online hours grow together at the same
+rate mints the same gold per online hour every day, so the per-hour
+rule stays silent - while the raw-total rule (no hours given) flags
+every record day, which is the noise this fix removes.
+================
+*/
+func TestNetMintFlagsGrowthIsNotAFlag(t *testing.T) {
+	mints := make([]int64, 15)
+	hours := map[int]int64{}
+	for day := range mints {
+		mints[day] = 1000 << day
+		hours[day] = int64(100 << day)
+	}
+	entries := mintDayEntries(mints...)
+	win := window{bucket: "1d", size: 86400, from: dayStart + 14*86400, to: dayStart + 15*86400 - 1}
+
+	if flags := netMintFlags(entries, onlineHours(hours), win, ""); len(flags) != 0 {
+		t.Fatalf("steady growth raised flags: %+v", flags)
+	}
+	flags := netMintFlags(entries, nil, win, "")
+	if len(flags) == 0 {
+		t.Fatal("the raw-total rule should still flag a record day with no hours given")
+	}
+	for _, flag := range flags {
+		if flag.Basis != flagBasisDailyTotal {
+			t.Fatalf("fallback flag basis = %q, want %q", flag.Basis, flagBasisDailyTotal)
+		}
+	}
+}
+
+/*
+================
+TestNetMintFlagsDoubledMintPerHour
+
+#2643: flat population, one day minting two and a half times the usual
+gold per online hour: exactly one flag, on the per-hour reading.
+================
+*/
+func TestNetMintFlagsDoubledMintPerHour(t *testing.T) {
+	mints := make([]int64, 15)
+	hours := map[int]int64{}
+	for day := range mints {
+		mints[day] = 100_000
+		hours[day] = 100
+	}
+	mints[14] = 250_000
+	win := window{bucket: "1d", size: 86400, from: dayStart + 14*86400, to: dayStart + 15*86400 - 1}
+
+	flags := netMintFlags(mintDayEntries(mints...), onlineHours(hours), win, "")
+	if len(flags) != 1 {
+		t.Fatalf("flags = %+v, want exactly one", flags)
+	}
+	flag := flags[0]
+	if flag.Basis != flagBasisPerOnlineHour || flag.Value != "2500" || flag.Threshold != "1000" {
+		t.Fatalf("flag = %+v, want basis %q value 2500 threshold 1000", flag, flagBasisPerOnlineHour)
+	}
+}
+
+/*
+================
+TestNetMintFlagsMissingHoursFallBack
+
+#2643: one window day without online-hour data sends that comparison
+back to the raw-total rule, and the flag says so.
+================
+*/
+func TestNetMintFlagsMissingHoursFallBack(t *testing.T) {
+	mints := make([]int64, 15)
+	hours := map[int]int64{}
+	for day := range mints {
+		mints[day] = 100_000
+		hours[day] = 100
+	}
+	mints[14] = 250_000
+	delete(hours, 10)
+	win := window{bucket: "1d", size: 86400, from: dayStart + 14*86400, to: dayStart + 15*86400 - 1}
+
+	flags := netMintFlags(mintDayEntries(mints...), onlineHours(hours), win, "")
+	if len(flags) != 1 {
+		t.Fatalf("flags = %+v, want exactly one", flags)
+	}
+	flag := flags[0]
+	if flag.Basis != flagBasisDailyTotal || flag.Value != "250000" {
+		t.Fatalf("flag = %+v, want basis %q value 250000", flag, flagBasisDailyTotal)
 	}
 }
 
@@ -294,7 +423,7 @@ func BenchmarkRollupEconomyPage(b *testing.B) {
 		points := foldSeries("gold_minted", groups)
 		points = append(points, foldSeries("gold_burned", groups)...)
 		_, flows := foldFlows(win, groups)
-		flags := netMintFlags(entries, win, "d1")
+		flags := netMintFlags(entries, nil, win, "d1")
 		foldSink += len(points) + len(flows) + len(flags)
 	}
 }

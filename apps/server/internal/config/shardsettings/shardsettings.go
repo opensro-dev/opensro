@@ -81,7 +81,10 @@ type Setting struct {
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
-	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off"},
+	// The catalogue publishes the expansion's derived pet-gear drops
+	// while it runs (items.json's petGear rows, droptables.json's
+	// petGear rule), so it is a catalogue setting (#2542).
+	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,
@@ -98,7 +101,9 @@ var Settings = []Setting{
 	{Env: "SRO_CAP110_LEVEL100", NomadVar: "cap110_level100", Default: "off", Catalogue: true},
 	// Port-only, not native: degree-10/11 equipment set bonuses (#1747);
 	// the v1.150 client ships no set rows, so off is the native state.
-	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off", Catalogue: true},
+	// Server only: the catalogue publishes the set items themselves and
+	// no set-bonus table, so nothing it publishes changes (#2542).
+	{Env: "SRO_CAP110_SET_BONUSES", NomadVar: "cap110_set_bonuses", Default: "off"},
 	// Port-only, not native: the degree-11 equipment and skill tiers
 	// (#1745). Consumed at build time, not at runtime: the variant build's
 	// import tools (cap110_item_import.py, cap110_skill_import.py) read
@@ -106,6 +111,12 @@ var Settings = []Setting{
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
+	// Port-only, not native: the later client's mall avatars (outfits, hats,
+	// attachments). Cosmetic, so the owner approved it on by default
+	// (2026-11-04). Build time only, like the two above: mall_avatar_import.py
+	// reads it when the server data is built and skips when the later client
+	// is absent.
+	{Env: "SRO_MALL_AVATARS", NomadVar: "mall_avatars", Default: "on"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},
@@ -119,12 +130,15 @@ var Settings = []Setting{
 	// consumer refuses the same pairing at load). "off" is native.
 	{Env: "SRO_CAP110_TEMPLE", NomadVar: "cap110_temple", Default: "off", Catalogue: true},
 	// Port-only, not native: a Pharaoh Tomb elite or unique rolls equipment this
-	// many times as often (1 is native; 2 to 20). Server only: the site's drop
-	// lists describe the native rule.
-	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
+	// many times as often (1 is native; 2 to 20). The catalogue models it
+	// on the tomb monsters' drop counts, so it is a catalogue setting.
+	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1", Catalogue: true},
 	// Port-only, not native: the Halloween Day event (#2124). Off is native.
-	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off"},
-	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: ""},
+	// The catalogue publishes its window, box drop and exchange while it
+	// runs (#2540), so the event and window rows are catalogue settings;
+	// the helmet seal outlives the event and stays server-only.
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -170,8 +184,10 @@ var Settings = []Setting{
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-25: the revival's grace after a teleport arrival
-	// (port-only, not native; off is native, #1518).
-	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off", Catalogue: true},
+	// (port-only, not native; off is native, #1518). Server only: the
+	// catalogue publishes no arrival timing; the shard rules page states
+	// the grace instead (#2542).
+	{Env: "SRO_TELEPORT_GRACE", NomadVar: "teleport_grace", Default: "off"},
 	// Owner, 2026-10-25: a strictly higher-grade premium ticket replaces
 	// the running lower one; the replaced ticket's remaining time moves
 	// the new ticket's end later (#1624, port-only, not native; "off"
@@ -201,9 +217,10 @@ var Settings = []Setting{
 	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
-	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only); the site
-	// publishes the pool's odds, so the catalogue reads the setting too.
-	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on", Catalogue: true},
+	// Owner, 2026-10-20: Magic Pop prize pool v2 (port-only). Server
+	// only: the catalogue publishes no Magic Pop pool, so nothing it
+	// publishes changes; a pool export is its own change (#2542).
+	{Env: "SRO_GACHA_POOL_V2", NomadVar: "gacha_pool_v2", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
 	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.
@@ -219,6 +236,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Decision record, 2026-11-04 (#2538): one counting-only cycle
+	// measures Sun drops and their recipients before any Sun knob is
+	// considered. Count-only and off by default: nothing counts.
+	{Env: "SRO_SUN_DROP_COUNT", NomadVar: "sun_drop_count", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
 	// +11 and above. Off is the plain line, byte for byte.
@@ -273,9 +294,11 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
-	// config/shard-settings.json.
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
-		Catalogue: true, Validation: ValueBetaGrowthBands},
+	// config/shard-settings.json. The catalogue prices quest rewards
+	// with the bands (BuildQuests' paidExp and paidSkillExp) but does
+	// not publish the band table (#2542).
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "", Catalogue: true,
+		Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,
 		Validation: ValueBetaGrowth},
 	{Env: "SRO_BETA_DROP_RATE", NomadVar: "beta_drop_rate", Default: "1", Catalogue: true, Validation: ValueBetaGrowth},

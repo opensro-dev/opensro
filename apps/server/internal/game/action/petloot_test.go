@@ -49,6 +49,11 @@ func TestMonsterPetGearAllDegreesAndSlots(t *testing.T) {
 			if !ok || drop.RefObjID != item.ID || drop.StackCount != 1 || len(drop.MagicOptions) != degree.MaxBlues {
 				t.Fatalf("D%d %s drop: %+v", degree.Degree, item.Slot, drop)
 			}
+			rt.AttackPetExpansion = false
+			rt.DropRoll = func() (uint32, error) { t.Fatal("disabled expansion drew a pet-gear roll"); return 0, nil }
+			if _, ok := rt.preparePetGearDrop(c, grounditem.Item{RefObjID: parent.RefObjID}, simulation.Spawn{RegionID: 1}, clock.Now()); ok {
+				t.Fatal("disabled expansion dropped pet gear")
+			}
 		}
 	}
 }

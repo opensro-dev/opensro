@@ -7,6 +7,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
+import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createPetTraining } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts"
 );
@@ -94,4 +95,19 @@ test("paid Bond damage is yellow feedback without another HP debit", () => {
 	assert.equal( combat.state().environmentalDamage.length, 1 );
 	p[8] = 2;
 	assert.throws( () => combat.receive( 0x3fb4, p, 300 ) );
+});
+
+test("selected-player Howl uses server metadata without the removed experimental toggle", t => {
+	const f = uiFixture();
+	t.after( () => f.dispose() );
+	f.state.entities.push( { ...f.state.entities[0], gid: 2, name: "Ally" } );
+	Object.assign( f.state.gameplay, {
+		target: 2,
+		petRecipientBuffs: [ { gid: 2, howl: { gid: 2, book: 3, speedPercent: 500, expiresAtMs: 8000 } } ]
+	} );
+	const visible = defined( f.ui.step( f.state, 100 ) );
+	assert.ok( visible.controls.some( row => row.id === "target-pet-howl" ) );
+	Object.assign( f.state.gameplay, { petRecipientBuffs: [] } );
+	const cleared = defined( f.ui.step( f.state, 200 ) );
+	assert.equal( cleared.controls.some( row => row.id === "target-pet-howl" ), false );
 });

@@ -702,3 +702,34 @@ func TestManualRoarCancelsOnTownEntry(t *testing.T) {
 		t.Fatal("Roar released after its owner entered town")
 	}
 }
+
+/*
+================
+TestPetTrainingStateFollowsServerFlag
+
+An unconditional summon probe is silent while off and admits controls only
+through the matching state push while on.
+================
+*/
+func TestPetTrainingStateFollowsServerFlag(t *testing.T) {
+	rt, _, c, _ := newPetCombatRuntime(t, 10000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_WOLF_030", 30)
+	result := train(rt, c, petTrainingState, 2)
+	if len(result.Frames) != 0 {
+		t.Fatal("off state probe emitted a frame or trainer receipt")
+	}
+	if len(train(rt, c, petTrainingLearn, 1).Frames) == 0 {
+		t.Fatal("disabled mutations must still be refused")
+	}
+	rt.AttackPetExpansion = true
+	result = train(rt, c, petTrainingState, 2)
+	_, skills := stateSkills(t, result)
+	if skills != 15 {
+		t.Fatalf("on state skills=%d, want15", skills)
+	}
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpPetTrainingState && binary.LittleEndian.Uint32(frame.Payload) != c.ActiveCOS.GID {
+			t.Fatal("state admitted another pet")
+		}
+	}
+}

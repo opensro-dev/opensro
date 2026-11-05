@@ -32,7 +32,7 @@ import {
 	type AttachedEffectReference
 } from "@/engine/foundation/gameplay/attached-effects";
 import type { CastState } from "@/engine/contracts/gameplay";
-import { castPhase, skillPulse } from "@/engine/foundation/gameplay/combat-result";
+import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
 /*
 ================
@@ -470,6 +470,38 @@ export function createCombat(
 		receive( op: number, p: Uint8Array, now = 0 ) {
 			if ( cooldowns.receiveRecovery( op, p, now ) ) return true;
 			if ( op === 0xb3c6 ) {
+				// Deferred damage is display-only, like the periodic notice
+				// below: the label lane shows the tick, HP and death stay
+				// with the vitals and life-state owners. On the tick's
+				// death byte the native handler enters the death state and
+				// stops the target's motion at once (client 0x775790);
+				// here the server sends the tick in the same broadcast as
+				// the life frames that own that death (the zero baseline,
+				// then the dead state), and this receive pass commits the
+				// whole batch before the next presented frame, so the
+				// death and the stop land at the same presented instant
+				// without this lane writing life state: the LIFE dead
+				// state stops the motion in the entities owner
+				// (motion.stopForDeath), pinned by "a fatal deferred tick
+				// labels the mover" (tests/runtime/world.test.mjs).
+				const ticks = damageTicks( p );
+				if ( ticks ) {
+					if ( readEntity( ticks.target ) ) {
+						for ( const damage of ticks.ticks ) {
+							if ( !damage ) continue;
+							if ( environmentalDamage.length >= 2048 ) {
+								throw Error( "Environmental feedback capacity exceeded" );
+							}
+							environmentalDamage = [ ...environmentalDamage, {
+								sequence: ++feedbackSequence,
+								gid: ticks.target,
+								damage,
+								atMs: now
+							} ];
+						}
+					}
+					return true;
+				}
 				const pulse = skillPulse( p, gid => {
 					const object = readEntity( gid );
 					if ( !object?.skillObject ) return undefined;

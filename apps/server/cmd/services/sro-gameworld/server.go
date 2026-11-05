@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -141,26 +142,65 @@ func applyOwnedShardTransportDefaults(
 ================
 warnTransportCatalogMismatch
 
-Dev-only guard: the catalog transportUrl is the public origin clients
-connect to; TRANSPORT_* is the bind address. They usually match on
-loopback but can diverge behind TLS terminators. Log when they disagree
-so unsupervised local runs do not silently advertise the wrong port.
+Dev-only guard: the catalog transportUrl is the origin the web edge
+proxies to; TRANSPORT_* is the bind address. The hosts diverge on
+purpose - the catalog names the loopback origin while the process
+binds a wildcard or a private address, and deployments may terminate
+TLS in front - so only a port disagreement can silently advertise a
+port nothing listens on (#2441). Log that, and only that, so
+unsupervised local runs do not advertise the wrong port.
 ================
 */
 func warnTransportCatalogMismatch(ownedShard shard.Definition, cfg transport.Config) {
-	endpoint, err := url.Parse(ownedShard.TransportURL)
-	if err != nil || endpoint.Host == "" {
+	if !transportCatalogPortMismatch(ownedShard, cfg) {
 		return
 	}
+	log.Warnf(
+		"shard %q transport bind %s (wt) / %s (ws) differs in port from catalog transportUrl %q",
+		ownedShard.ID,
+		cfg.WTAddr,
+		cfg.WSAddr,
+		ownedShard.TransportURL,
+	)
+}
 
-	catalogHost := endpoint.Host
-	if cfg.WSAddr != catalogHost || cfg.WTAddr != catalogHost {
-		log.Warnf(
-			"shard %q transport bind %s (wt) / %s (ws) differs from catalog transportUrl host %q",
-			ownedShard.ID,
-			cfg.WTAddr,
-			cfg.WSAddr,
-			catalogHost,
-		)
+/*
+================
+transportCatalogPortMismatch
+
+Whether either transport bind port disagrees with the catalog
+transportUrl port (the scheme's default port when the URL names
+none). Hosts are not compared: loopback, wildcard and private binds
+behind the edge are the expected deployment shape.
+================
+*/
+func transportCatalogPortMismatch(ownedShard shard.Definition, cfg transport.Config) bool {
+	endpoint, err := url.Parse(ownedShard.TransportURL)
+	if err != nil || endpoint.Host == "" {
+		return false
 	}
+	catalogPort := endpoint.Port()
+	if catalogPort == "" {
+		catalogPort = "80"
+		if endpoint.Scheme == "https" {
+			catalogPort = "443"
+		}
+	}
+	return transportBindPort(cfg.WTAddr) != catalogPort ||
+		transportBindPort(cfg.WSAddr) != catalogPort
+}
+
+/*
+================
+transportBindPort
+
+The port of a bind address, or "" when it carries none.
+================
+*/
+func transportBindPort(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	return port
 }

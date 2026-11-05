@@ -42,8 +42,10 @@ DB dashboard. Administrator SQL and machine paths stay in this manual.
 
 ## System overview
 
-Server flag: `SRO_ATTACK_PET_EXPANSION=on`. Client setting:
-**Experimental → Game → Attack-pet training**. Both must be enabled.
+Server flag: `SRO_ATTACK_PET_EXPANSION=on`. Pet skills and gear are available
+automatically when the server publishes training state (0x3FB1); no Experimental
+toggle is required. Legacy saved client opt-outs are ignored. With the server
+flag off, state probes are silent and the pet window stays native.
 Open pet information with **Insert**.
 
 ### Bear: Iron Hide shields

@@ -34,7 +34,8 @@ func masteryEnhancement(masteries []domain.CharacterMastery, attack enterworld.S
 SkillMasteryRank
 
 The skill manager's mastery-rank read for a row the formula owners do
-not resolve themselves: the hawk's strike reads it on the summoning row.
+not resolve themselves: the hawk's strike reads it on the caster's
+default attack row (action/hawkMasteryRank).
 ================
 */
 func SkillMasteryRank(masteries []domain.CharacterMastery, attack enterworld.SkillAttack) uint8 {

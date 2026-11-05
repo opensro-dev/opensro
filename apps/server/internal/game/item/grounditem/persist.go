@@ -155,9 +155,9 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		r.counter = domain.MaxGroundItemGIDCounter
 	}
 	r.revision++
-	// The plane is replaced wholesale: rows the snapshot holds but the
-	// registry drops (retired populations, unkeyable gids) are known to
-	// no stamp, so the next commit diffs the whole plane.
+	// Rows the snapshot holds but the registry drops (retired
+	// populations, unkeyable gids) are known to no stamp, so the next
+	// commit diffs the whole plane.
 	r.changes = changeJournal{}
 	r.resyncLocked()
 	for divisionID, rows := range s.Divisions {
@@ -181,5 +181,18 @@ func (r *Registry) Restore(s domain.GroundSnapshot) {
 		if len(items) > 0 {
 			r.byDivision[divisionID] = items
 		}
+	}
+	// The plane was replaced wholesale: every division a per-division
+	// cache could hold - the ones the registry held and the ones the
+	// snapshot brought alike - takes the new global value as its
+	// stamp, so no division keeps serving its pre-restore copy.
+	if r.divRevisions == nil {
+		r.divRevisions = make(map[string]uint64)
+	}
+	for divisionID := range r.divRevisions {
+		r.divRevisions[divisionID] = r.revision
+	}
+	for divisionID := range r.byDivision {
+		r.divRevisions[divisionID] = r.revision
 	}
 }

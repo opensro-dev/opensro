@@ -665,6 +665,18 @@ export function createEntities(
 		},
 		/*
 		================
+		structureName
+
+		Fortress service replies name a zone, not a visible actor. Resolve
+		its structure through the catalog even when it is outside view.
+		================
+		*/
+		structureName( refObjId: number ): string | undefined {
+			const reference = refs.get( refObjId );
+			return reference?.kind === "structure" ? reference.name : undefined;
+		},
+		/*
+		================
 		playerModels
 
 		The player models of one country in reference order, each with its
@@ -1648,13 +1660,20 @@ export function createEntities(
 					// with terrain before core passes it to the actual mover.
 					// Native 775B50/775CB0 pass wire XYZ to that mover's controller.
 					const localMover = source?.kind === "local-player" || entity.kind === "local-player";
-					if ( localMover && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
+					// A correction naming the mount names the same mover (85E000
+					// resolves the rider's active mover). The mount's row is not
+					// exempt above: its entity-motion arbitration never walked
+					// the rider's surface, so it re-seats the wire height at the
+					// terrain below a deck the rider stands on (#2574).
+					const localMount = frame.opcode === 0xb2f5 && !localMover &&
+						entities.get( ownGid )?.mountedOn === entity.gid;
+					if ( (localMover || localMount) && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
 					apply( {
 						kind: "state",
 						entity: Object.freeze( {
 							...entity,
 							movementRevision: (entity.movementRevision ?? 0) + 1,
-							...(localMover ?
+							...((localMover || localMount) ?
 								{
 									...corrected,
 									...(frame.opcode === 0xb2f5 ? { moving: false, movementPath: undefined } : {})
