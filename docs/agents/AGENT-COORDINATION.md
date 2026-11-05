@@ -79,6 +79,32 @@ links. In addition:
   `node_modules/.bin` launcher can point at a removed version. Delete the stale
   launcher and run an offline install; do not copy binaries around.
 
+## Branches
+
+A branch lives exactly as long as the work on it. Short-lived branches on
+one trunk: every branch ends merged, as an open PR, or archived with a
+reason, and none is left behind when its work ends.
+
+- **One branch per piece of work.** A fix to an open PR goes onto that PR's
+  own branch, one fixer at a time. Never cut a copy of someone else's
+  branch to fix it in parallel.
+- **Pushed at birth.** A branch with a commit is pushed and has a PR, a
+  draft while the work is unfinished. Local-only branches with commits are
+  invisible to every review and cleanup and are not allowed.
+- **Ends with its task.** When the task closes and the branch has no open
+  PR, its worktree is removed and the branch ends: work already on `main`
+  is deleted, anything else is first archived on `origin` under
+  `refs/archive/<branch>` with the reason recorded. Restore one with
+  `git fetch origin refs/archive/<branch>` and
+  `git worktree add -b <branch> <path> FETCH_HEAD`.
+- **Reviews create no branches.** A review reads the head through
+  `git fetch origin pull/<n>/head` and `FETCH_HEAD`.
+- **Two days, then seven.** A branch on no PR for two days is listed for its
+  owner to push as a draft PR or drop. Past seven days the coordinator
+  salvages it as a draft PR or archives it.
+
+Merged PR branches on `origin` are deleted by GitHub on merge.
+
 ## Reviews and merges
 
 - **Three approvals on the exact head:** two from Cursor agents and one from
