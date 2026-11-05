@@ -907,9 +907,10 @@ test("terminal asset failures reach the session as asset incidents, once per epi
 		// opening check, failed by the report poll in the same frame -
 		// a worker already dead at the opening check throws instead.
 		let healthReads = 0;
-		owners.assets.health = () => ++healthReads === 1 ?
-			{ phase: "running" } :
-			{ phase: "failed", error: "Asset worker failed" };
+		owners.assets.health = () =>
+			++healthReads === 1 ?
+				{ phase: "running" } :
+				{ phase: "failed", error: "Asset worker failed" };
 		await frame();
 		assert.deepEqual( assetReports().at( -1 ), {
 			kind: "client-report",
