@@ -471,10 +471,36 @@ export function publishCharacters(
 	// /hideme (690C40 case 113): the shown byte (CICPlayer +0xB8) cleared
 	// on the local player's record drops its body like a blinded actor's.
 	const localHiddenGid = local?.debugHidden ? local.gid : -1;
+	// A blinded character hides whole (2570): everything riding on it -
+	// attachments and the staged effects chained through attachment.gid,
+	// the same links the renderer's fades walk - goes invisible with the
+	// body instead of outdrawing it. The native draw submits a character
+	// with its attachments as one unit (8602C0 behind 855DA0), so the
+	// hide resolves the holder chain to its root before publishing.
+	const hiddenGids = new Set<number>();
 	for ( const actor of next.values() ) {
-		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion ||
-			actor.gid === localHiddenGid;
-		presentedActors.push( hidden ? { ...actor, opacity: 0, pickable: false } : actor );
+		if (
+			blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion ||
+			actor.gid === localHiddenGid
+		) hiddenGids.add( actor.gid );
+	}
+	let grew = true;
+	while ( grew ) {
+		grew = false;
+		for ( const actor of next.values() ) {
+			if (
+				actor.attachment && !hiddenGids.has( actor.gid ) &&
+				hiddenGids.has( actor.attachment.gid )
+			) {
+				hiddenGids.add( actor.gid );
+				grew = true;
+			}
+		}
+	}
+	for ( const actor of next.values() ) {
+		presentedActors.push(
+			hiddenGids.has( actor.gid ) ? { ...actor, opacity: 0, pickable: false } : actor
+		);
 		wanted.push( actor.model );
 	}
 	for ( const actor of portraits ) wanted.push( actor.model );
