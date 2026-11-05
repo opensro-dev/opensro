@@ -20,6 +20,7 @@ package main
 // catalogueReaders names, for every shard setting the catalogue build
 // reads, the catalogue function whose output the setting changes.
 var catalogueReaders = map[string]string{
+	"SRO_ATTACK_PET_EXPANSION":               "BuildItems and BuildPetGearRule read it (companion.AttackPetExpansionEnabled): items.json's petGear rows and droptables.json's petGear rule",
 	"SRO_BETA_MASTERY":                       "run passes it (progression.BetaMasteryFromEnv) to BuildLevels: levels.json's beta mastery allowance",
 	"SRO_LEVEL_CAP":                          "run passes it (progression.LevelCapFromEnv) to BuildLevels: levels.json's level cap",
 	"SRO_CAP110_MONSTERS":                    "shardPopulation reads it (monster.Cap110Enabled) to append the cap-110 population",
@@ -65,7 +66,6 @@ var catalogueReaders = map[string]string{
 // catalogueExempt lists every other shard setting with the reason it
 // changes nothing the catalogue publishes.
 var catalogueExempt = map[string]string{
-	"SRO_ATTACK_PET_EXPANSION":                "attack-pet gear drops derive from equipment kills at runtime; the catalogue publishes the base equipment rows, not the derived drops (#2541)",
 	"SRO_BETA_STARTER_KIT":                    "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                     "shows other players on the world map at runtime; the catalogue publishes no live positions",
 	"SRO_CAP110_SET_BONUSES":                  "wearing a set changes derived character stats; the catalogue publishes the set items and no set-bonus table",

@@ -81,7 +81,10 @@ type Setting struct {
 
 // Settings is the table, in the job file's order.
 var Settings = []Setting{
-	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off"},
+	// The catalogue publishes the expansion's derived pet-gear drops
+	// while it runs (items.json's petGear rows, droptables.json's
+	// petGear rule), so it is a catalogue setting (#2542).
+	{Env: "SRO_ATTACK_PET_EXPANSION", NomadVar: "attack_pet_expansion", Default: "off", Catalogue: true},
 	{Env: "SRO_BETA_STARTER_KIT", NomadVar: "beta_starter_kit", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "off", Validation: ValueSwitch},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built,

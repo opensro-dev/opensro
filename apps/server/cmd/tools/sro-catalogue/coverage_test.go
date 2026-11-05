@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -185,7 +186,7 @@ func (fx *flipFixture) buildErr(t *testing.T, family string) ([]byte, error) {
 			t.Fatal(err)
 		}
 		return marshal(catalogue.BuildItems(catalogue.ItemSource{Refs: itemRefs(items),
-			Usable: action.ItemUseSupported})), nil
+			Usable: action.ItemUseSupported, PetGearFactor: store.DefaultPetGearDropFactor})), nil
 	case "shops":
 		shops, err := shardShops(fx.dir, fx.items)
 		if err != nil {
@@ -366,6 +367,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_HALLOWEEN_EVENT", "on", map[string]string{"SRO_HALLOWEEN_EVENT_WINDOW": halloweenWindow}, "events", ""},
 		{"SRO_HALLOWEEN_EVENT_WINDOW", "2026-10-25T00:00:00Z/2026-11-16T00:00:00Z",
 			map[string]string{"SRO_HALLOWEEN_EVENT": "on", "SRO_HALLOWEEN_EVENT_WINDOW": halloweenWindow}, "events", ""},
+		{"SRO_ATTACK_PET_EXPANSION", "on", nil, "items", ""},
 		{"SRO_ALCHEMY_RATES", "off", nil, "alchemy", ""},
 		{"SRO_ALCHEMY_MAX_PLUS", "11", nil, "alchemy", ""},
 	}
