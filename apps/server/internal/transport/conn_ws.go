@@ -181,22 +181,36 @@ func (w *wsConn) WriteUnreliable(Frame) error {
 // either. A write aborted this way errors and the write loop detaches;
 // the frame keeps its stream position, and a resume re-sends it only
 // if the client's position says it never arrived (stream_ring.go).
+//
+// The close frame itself is written from its own goroutine (#2142): a
+// game goroutine closes a session while it holds a division lane (an
+// outbound overflow, an eviction), and a peer that stopped reading made
+// this write wait out its whole deadline with the lane held, stalling
+// every player in the division. Close returns at once; the goroutine owns
+// writeMu until the frame is written or its deadline passes, then closes
+// the socket.
 func (w *wsConn) Close(reason string) error {
 	var err error
 	w.closeOnce.Do(func() {
 		close(w.closed)
 		if w.writeMu.TryLock() {
 			msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason)
-			_ = w.c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-			_ = w.c.WriteMessage(websocket.CloseMessage, msg)
-			err = w.c.Close()
-			w.writeMu.Unlock()
+			go func() {
+				defer w.writeMu.Unlock()
+				_ = w.c.SetWriteDeadline(time.Now().Add(wsCloseFrameDeadline))
+				_ = w.c.WriteMessage(websocket.CloseMessage, msg)
+				_ = w.c.Close()
+			}()
 			return
 		}
 		err = w.c.Close()
 	})
 	return err
 }
+
+// wsCloseFrameDeadline bounds the close frame's write; the socket closes
+// when it passes even if the peer never read the frame.
+const wsCloseFrameDeadline = 2 * time.Second
 
 func (w *wsConn) Kind() string { return "websocket" }
 
