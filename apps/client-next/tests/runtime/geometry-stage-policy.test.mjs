@@ -27,18 +27,21 @@ globalThis.GPUTextureUsage = GPU_TEXTURE_USAGE;
 // struct Material in pipelines.ts: stagePolicy is the sixteenth vec4.
 const MATERIAL_BINDING = 2;
 const STAGE_POLICY_OPAQUE = 15 * 4 + 1;
+const STAGE_POLICY_HEIGHT_SLOPE = 15 * 4 + 3;
+const POLICY_LOCAL_FOG = 5 * 4 + 1;
+const LOCAL_FOG_SETTINGS = 7 * 4;
 const VERTEX_FLOATS = 14;
 const INSTANCE_FLOATS = 16;
 
 /*
 ================
-packedOpacity
+packedMaterial
 
-Uploads one triangle with `material` through a fake device and returns the
-stagePolicy.y its material uniform carries.
+Uploads one triangle with `material` through a fake device and returns its
+material uniform.
 ================
 */
-function packedOpacity( material ) {
+function packedMaterial( material ) {
 	const retirement = createRetirement();
 	const device = {
 		limits: { maxBufferSize: 256 * 1024 * 1024 },
@@ -89,12 +92,37 @@ function packedOpacity( material ) {
 		material
 	} );
 	const buffer = draw.binding.find( entry => entry.binding === MATERIAL_BINDING ).resource.buffer;
-	return new Float32Array( buffer.bytes.buffer )[STAGE_POLICY_OPAQUE];
+	return new Float32Array( buffer.bytes.buffer );
+}
+
+/*
+================
+packedOpacity
+================
+*/
+function packedOpacity( material ) {
+	return packedMaterial( material )[STAGE_POLICY_OPAQUE];
 }
 
 test("an alpha-tested unblended material packs opaque output", () => {
 	assert.equal( packedOpacity( { alphaCutoff: 0.5 } ), 1 );
 	assert.equal( packedOpacity( {} ), 1 );
+});
+
+test("a dungeon block packs its shader fog, and dungeon water its linear ramp", () => {
+	const fog = {
+		color: 0xff3962a0,
+		nearPlane: -200,
+		farPlane: 1000,
+		intensity: .25,
+		heightFog: { unk3: 1000, unk4: 830, unk5: 2, unk6: .5 }
+	};
+	const block = packedMaterial( { fog } );
+	assert.equal( block[POLICY_LOCAL_FOG], 2 );
+	assert.deepEqual( [ ...block.subarray( LOCAL_FOG_SETTINGS, LOCAL_FOG_SETTINGS + 4 ) ], [ 1000, .25, 1000, 830 ] );
+	assert.equal( block[STAGE_POLICY_HEIGHT_SLOPE], .25 );
+	assert.equal( packedMaterial( { fog: { ...fog, linear: true } } )[POLICY_LOCAL_FOG], 1 );
+	assert.equal( packedMaterial( {} )[POLICY_LOCAL_FOG], 0 );
 });
 
 test("blended, faded, decal, sky and lightmap materials keep their alpha", () => {

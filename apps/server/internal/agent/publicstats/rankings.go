@@ -39,7 +39,8 @@ import (
 const rankingPageSize = 50
 
 // The orderings a request may ask for. The three job boards list one
-// job each, by job level then job experience (#2675).
+// job each, by job level then job experience; by=pk is the PK board:
+// the native PK state's total murder count, highest first (#2675).
 const (
 	rankByLevel   = "level"
 	rankByUniques = "uniques"
@@ -47,6 +48,7 @@ const (
 	rankByTrader  = "trader"
 	rankByHunter  = "hunter"
 	rankByThief   = "thief"
+	rankByPK      = "pk"
 )
 
 /*
@@ -85,8 +87,8 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 		by = rankByLevel
 	}
 	if by != rankByLevel && by != rankByUniques && by != rankByGear &&
-		by != rankByTrader && by != rankByHunter && by != rankByThief {
-		return nil, fmt.Errorf("%w: by must be level, uniques, gear, trader, hunter or thief", errBadRequest)
+		by != rankByTrader && by != rankByHunter && by != rankByThief && by != rankByPK {
+		return nil, fmt.Errorf("%w: by must be level, uniques, gear, trader, hunter, thief or pk", errBadRequest)
 	}
 	race := query.Get("race")
 	if race != "" && race != "chinese" && race != "european" {
@@ -152,6 +154,9 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		row := RankingRow{Name: c.Name, Race: race, Gender: gender, Level: level(c), UniqueKills: killsBy[c.ID],
 			ExpPercent: s.expPercent(c), Gear: s.gearScore(c)}
+		if c.PK != nil {
+			row.PKKills = int(c.PK.TotalCount)
+		}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job
 			row.JobLevel = c.Job.Grade
@@ -221,6 +226,13 @@ func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 		}
 		if a.JobExp != b.JobExp {
 			return a.JobExp > b.JobExp
+		}
+		if a.Level != b.Level {
+			return a.Level > b.Level
+		}
+	case rankByPK:
+		if a.PKKills != b.PKKills {
+			return a.PKKills > b.PKKills
 		}
 		if a.Level != b.Level {
 			return a.Level > b.Level

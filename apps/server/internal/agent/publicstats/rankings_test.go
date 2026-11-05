@@ -154,6 +154,41 @@ func TestRankingsJobBoardsListOneJobEach(t *testing.T) {
 
 /*
 ================
+TestRankingsPKBoardCountsMurdersNotPenalty
+
+The PK board's value is the PK state's total murder count, never the
+penalty level it feeds; a character with no record counts zero (#2675).
+================
+*/
+func TestRankingsPKBoardCountsMurdersNotPenalty(t *testing.T) {
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	f.chars = append(f.chars,
+		&domain.Character{ID: 20, Name: "Murderer", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(60),
+			PK: &domain.PKRecord{DailyCount: 2, TotalCount: 41, Penalty: 9000}},
+		&domain.Character{ID: 21, Name: "Brawler", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(80),
+			PK: &domain.PKRecord{TotalCount: 41, Penalty: 10}},
+		&domain.Character{ID: 22, Name: "Hidden", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			PublicHidden: true, PK: &domain.PKRecord{TotalCount: 99}},
+	)
+	s := f.service()
+	byPK := rankingNames(t, s, "/public/v1/rankings?by=pk")
+	if byPK.Rows[0].Name != "Brawler" || byPK.Rows[0].PKKills != 41 ||
+		byPK.Rows[1].Name != "Murderer" || byPK.Rows[1].PKKills != 41 {
+		t.Fatalf("by pk %+v (equal counts: higher level first; penalty never orders)", byPK.Rows[:2])
+	}
+	for _, row := range byPK.Rows {
+		if row.Name == "Hidden" {
+			t.Fatal("a hidden character reached the PK board")
+		}
+	}
+	if byPK.Rows[2].PKKills != 0 {
+		t.Fatalf("a character with no murders counts %d, want 0", byPK.Rows[2].PKKills)
+	}
+}
+
+/*
+================
 join
 ================
 */
