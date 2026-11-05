@@ -392,8 +392,10 @@ interface PortraitBindings {
 		"setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions"
 	>;
 	readonly resources: PortraitResources;
+	readonly modelEmission: Pick<ReturnType<typeof createModelEmission>, "step">;
 	readonly mallPreview: {
 		skin(): { model: number; shape: number; } | null;
+		glow(): { actor: CharacterActor; particles: readonly ModelParticle[]; } | null;
 		step(
 			frame: {
 				resource: Resource;
@@ -425,7 +427,7 @@ export function publishCharacters(
 ) {
 	const { local, gameplay, next, seconds, blindHeld } = frame;
 	const { catalog, dress, manifest } = published;
-	const { renderer, resources, mallPreview } = bindings;
+	const { renderer, resources, mallPreview, modelEmission } = bindings;
 	// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
 	// It remains admitted even when no world entity exists for that member.
 	const portraits: CharacterActor[] = [];
@@ -449,6 +451,21 @@ export function publishCharacters(
 			resources,
 			renderer
 		) );
+		// The mannequin's rare items glow as the player's do (native
+		// 6BBEA0 clones the player's composite, glow attachments
+		// included): its emitters ride the same emission owner as the
+		// world and dock actors, keyed to the mannequin body.
+		const glow = mallPreview.glow();
+		if ( glow ) {
+			portraits.push(
+				...modelEmission.step(
+					[ glow ],
+					seconds,
+					resources.ready,
+					CHARACTER_ACTORS - next.size - portraits.length
+				)
+			);
+		}
 	}
 	for ( const member of gameplay ? partyMembers( gameplay ) : [] ) {
 		const resource = catalog.get( member.model );

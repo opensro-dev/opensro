@@ -13,6 +13,13 @@ const { createMallPreview, MALL_PREVIEW_GID } = await import(
 );
 const { createPortrait } = await import( "../../src/engine/runtime/renderer/characters/portrait.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
+const { createModelEmission } = await import(
+	"../../src/engine/foundation/animation/model-emission.ts"
+);
+const { defined } = await import( "../helpers/defined.mjs" );
+const { equipmentSocket } = await import(
+	"../../src/engine/foundation/animation/equipment-sockets.ts"
+);
 
 /*
 ================
@@ -244,6 +251,95 @@ test("borrowed portrait keeps socket children, retires old models and never clos
 	assert.equal( actors[1].time, 0 );
 	preview.dispose( geometry, images );
 	assert.equal( models.size, 0 );
+});
+
+/*
+================
+glowFixture
+
+A mannequin wearing swords as the build publishes them for a Chinese man:
+two rare swords naming their effect in specialGlows, one plain. The
+emission owner is the real one; allocate hands out descending ids.
+================
+*/
+function glowFixture() {
+	const f = fixture();
+	const sword = () => ({
+		slot: 6,
+		armorClass: 0,
+		thiefSuit: false,
+		visualMask: 1 << 6,
+		visualPriority: 0,
+		model: "res/item/china/weapon/sword_01.bsr",
+		source: null,
+		bodies: {
+			CH_M: {
+				glb: "rare-sword",
+				parts: [ "EQ0" ],
+				branches: [ {
+					part: "EQ0",
+					attachBone: "hand",
+					nodes: [ {
+						name: "ai_end",
+						parent: -1,
+						translation: [ 0, 0, 0 ],
+						rotation: [ 0, 0, 0, 1 ],
+						scale: [ 1, 1, 1 ]
+					} ]
+				} ]
+			}
+		}
+	});
+	const glow = effectPath => [ {
+		effectPath,
+		bone: "ai_end",
+		scale: 1.3,
+		offset: /** @type {[ number, number, number ]} */ ([ 0, 0, 0 ]),
+		root: false
+	} ];
+	const dress = {
+		...f.frame.dress,
+		equipment: { ...f.frame.dress.equipment, 9000: sword(), 9001: sword(), 9002: sword() },
+		specialGlows: {
+			9001: glow( "system/system_raretype_a_step1.efp" ),
+			9002: glow( "system/system_raretype_b_step1.efp" )
+		}
+	};
+	const frame = { ...f.frame, dress, avatars: [], equipment: [ { slot: 6, refObjId: 9001, plus: 0 } ] };
+	let nextId = -1;
+	const emission = createModelEmission( () => nextId-- );
+	return { ...f, frame, emission };
+}
+
+test("mannequin keeps its rare weapon's glow on the portrait pass with the outfit's particle identity", () => {
+	const f = glowFixture();
+	f.owner.request( [] );
+	f.owner.step( f.frame, f.resources, f.renderer );
+	const holder = defined( f.owner.glow(), "the committed mannequin offers its glow holder" );
+	assert.equal( holder.actor.gid, MALL_PREVIEW_GID );
+	assert.equal( holder.particles.length, 1 );
+	const emitted = f.emission.step( [ holder ], 10, () => true, 8 );
+	assert.equal( emitted.length, 1 );
+	assert.equal( defined( defined( emitted[0] ).attachment ).gid, MALL_PREVIEW_GID );
+	assert.equal( defined( defined( emitted[0] ).attachment ).bone, equipmentSocket( 6, "EQ0", "ai_end" ) );
+	// An unchanged outfit keeps its particle array, so the emitter and its
+	// clock continue instead of restarting (the #2416 identity rule).
+	f.owner.step( f.frame, f.resources, f.renderer );
+	assert.equal( defined( f.owner.glow() ).particles, holder.particles );
+	const continued = f.emission.step( [ defined( f.owner.glow() ) ], 11, () => true, 8 );
+	assert.equal( defined( continued[0] ).gid, defined( emitted[0] ).gid );
+	assert.equal( defined( continued[0] ).time, 1 );
+	// A different rare sword is a new outfit: new array, new emitter.
+	const swapped = { ...f.frame, equipment: [ { slot: 6, refObjId: 9002, plus: 0 } ] };
+	f.owner.step( swapped, f.resources, f.renderer );
+	assert.notEqual( defined( f.owner.glow() ).particles, holder.particles );
+	const restarted = f.emission.step( [ defined( f.owner.glow() ) ], 12, () => true, 8 );
+	assert.notEqual( defined( restarted[0] ).gid, defined( emitted[0] ).gid );
+	// A plain sword offers no glow at all.
+	const plain = { ...f.frame, equipment: [ { slot: 6, refObjId: 9000, plus: 0 } ] };
+	f.owner.step( plain, f.resources, f.renderer );
+	assert.equal( defined( f.owner.glow() ).particles.length, 0 );
+	assert.deepEqual( f.emission.step( [ defined( f.owner.glow() ) ], 13, () => true, 8 ), [] );
 });
 
 test("body replacement clears incompatible local try-on before the next UI publication", () => {

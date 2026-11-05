@@ -882,7 +882,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld },
 			output,
 			published,
-			{ renderer, resources, mallPreview }
+			{ renderer, resources, mallPreview, modelEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
