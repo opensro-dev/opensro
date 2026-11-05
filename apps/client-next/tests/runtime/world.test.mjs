@@ -2493,9 +2493,12 @@ test("a fatal deferred tick labels the mover, and the LIFE frame behind it kills
 	core.receive( { opcode: 0xb3c6, payload: tickFrame }, 20 );
 	core.step( 24 );
 	const labelled = flush( core );
-	assert.ok( labelled.events.some( e =>
-		e.kind === "gameplay" && e.state.environmentalDamage?.some( d => d.gid === gid && d.damage === 25 )
-	), "the fatal tick published its damage label" );
+	assert.ok(
+		labelled.events.some( e =>
+			e.kind === "gameplay" && e.state.environmentalDamage?.some( d => d.gid === gid && d.damage === 25 )
+		),
+		"the fatal tick published its damage label"
+	);
 	const alive = labelled.events.filter( e => e.kind === "state" && e.entity.gid === gid ).at( -1 )?.entity;
 	assert.equal( alive?.moving, true, "the tick alone stopped the mover" );
 	assert.notEqual( alive?.appearanceState[0], 2, "the tick alone killed the mover" );
