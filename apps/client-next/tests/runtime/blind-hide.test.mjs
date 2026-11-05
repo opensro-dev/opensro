@@ -79,8 +79,21 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			plan: () => true,
 			retainWanted() {}
 		},
+		// The portrait lane the merged bindings require; the fixture
+		// previews nothing, so both report empty.
+		portraitEmission: {
+			/*
+			================
+			step
+			================
+			*/
+			step() {
+				return [];
+			}
+		},
 		mallPreview: {
 			skin: () => null,
+			glow: () => null,
 			/*
 			================
 			step
