@@ -115,8 +115,8 @@ import {
 	partyMatchRequest,
 	partyMatchRows,
 	partyActiveJob,
-	partyPurposeAllowed,
-	PARTY_FULL_ROSTER
+	partyIsFull,
+	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { NATIVE_LEVEL_CAP, publishedLevelCap } from "@/engine/foundation/gameplay/level-cap";
 import {
@@ -2627,7 +2627,7 @@ state here before a command can claim a native wire conversation.
 						listed: !!partyMatching.own,
 						inParty: social.members.length > 0,
 						master: !!social.leader && social.leader === social.self,
-						partyFull: social.members.length >= PARTY_FULL_ROSTER,
+						partyFull: partyIsFull( social.members.length, social.options ),
 						level: progression.level ?? 1
 					} );
 					if ( refusal ) {
@@ -4543,7 +4543,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// 634DC9: a party that fills while the player's
 					// listing stands arms the delete banner's
 					// COMPLETE2 form (the delete answer consumes it).
-					if ( partyMatching.own && social.members.length >= PARTY_FULL_ROSTER ) partyMatchFullLatch = true;
+					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) partyMatchFullLatch = true;
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||

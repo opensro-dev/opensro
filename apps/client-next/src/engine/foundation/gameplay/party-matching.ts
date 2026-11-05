@@ -376,11 +376,21 @@ export function partyMatchAckNotice( opcode: number, detail: number | undefined 
 	return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 };
 }
 
-// Native parties cap at eight members: the 6356A0 register guard's
-// full query (818820) and the 634DC9 latch watcher read the same fact.
-// The port's social state publishes no capacity, so the constant is
-// the pin both producers share.
-export const PARTY_FULL_ROSTER = 8;
+/*
+================
+partyIsFull
+
+CCharacterDependentData_IsPartyFull (818820), the fact the 6356A0
+register guard's last arm and the 634DC9 latch watcher both read:
+the option word [data+0x20] selects the cap - full is a roster of
+exactly 4 without EXP share, exactly 8 with it. The port compares
+with >= because the server caps the roster at the same bound, so
+the two readings agree everywhere the roster can sit.
+================
+*/
+export function partyIsFull( members: number, options: number ): boolean {
+	return members >= ( ( options & 1 ) ? 8 : 4 );
+}
 
 /*
 ================
@@ -685,7 +695,7 @@ export function partyMatchButtons( input: {
 	readonly level: number;
 	readonly rows: number;
 } ): Readonly<Record<15 | 16 | 17 | 18 | 19 | 20, boolean>> {
-	const full = input.members >= ((input.options & 1) ? 8 : 4),
+	const full = partyIsFull( input.members, input.options ),
 		open = !input.own && !input.inParty && input.level >= 1 && input.rows > 0,
 		form = !input.own &&
 			(!input.inParty && input.level >= 5 || input.inParty && input.leader && !full),

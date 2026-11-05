@@ -29,6 +29,7 @@ const {
 	partyMatchButtons,
 	partyAutoCandidates,
 	partyActiveJob,
+	partyIsFull,
 	partyPurposeAllowed,
 	partyDefaultPurpose,
 	partyDefaultTitleKey,
@@ -472,6 +473,17 @@ test("register, modify and delete successes close as centre banners", () => {
 		notificationBanner: true,
 		bannerOnly: true
 	} );
+});
+
+test("party fullness follows the native cap for the share option (818820)", () => {
+	// Without EXP share the roster caps at four: the register guard's
+	// last arm and the delete latch both read this, not a constant 8.
+	assert.equal( partyIsFull( 4, 0 ), true );
+	assert.equal( partyIsFull( 3, 0 ), false );
+	// With EXP share the cap is eight.
+	assert.equal( partyIsFull( 8, 1 ), true );
+	assert.equal( partyIsFull( 7, 1 ), false );
+	assert.equal( partyIsFull( 4, 1 ), false );
 });
 
 test("auto chain reports progress or failure only while its session lives", () => {
