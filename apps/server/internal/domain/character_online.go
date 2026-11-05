@@ -37,6 +37,9 @@ const onlineWindowDays = 7
 // tick. Session close ignores it and credits whatever is owed.
 const onlineCreditIntervalMs = 60_000
 
+// onlineDayMs is one UTC day in milliseconds.
+const onlineDayMs = 24 * 60 * 60 * 1000
+
 /*
 ================
 OnlineDay
@@ -161,7 +164,12 @@ func (c *Character) CreditOnline(nowMs int64) bool {
 	for left > 0 {
 		t := time.UnixMilli(cursor).UTC()
 		dayStart := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC).UnixMilli()
-		toMidnight := (dayStart + 24*60*60*1000 - cursor) / 1000
+		// Round up: an anchor less than a second before midnight
+		// (a fractional anchor) would floor to 0, credit nothing
+		// and never advance the cursor. The cursor is always
+		// strictly before the next midnight, so this is at least 1;
+		// the second that straddles midnight counts to the old day.
+		toMidnight := (dayStart + onlineDayMs - cursor + 999) / 1000
 		share := left
 		if share > toMidnight {
 			share = toMidnight

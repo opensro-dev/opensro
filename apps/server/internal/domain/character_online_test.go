@@ -224,3 +224,60 @@ func TestCreditOnlineIgnoresSubSecondAndAbsentRecords(t *testing.T) {
 		t.Fatalf("total = %d, want 0", c.Online.TotalSeconds)
 	}
 }
+
+/*
+================
+TestCreditOnlineFractionalAnchorBeforeMidnight
+
+An anchor less than a second before UTC midnight once floored the
+day's remaining share to zero and looped forever (#2688 review). The
+straddling second counts to the old day; the total is unchanged.
+================
+*/
+func TestCreditOnlineFractionalAnchorBeforeMidnight(t *testing.T) {
+	midnight := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC).UnixMilli()
+	c := &Character{Online: &OnlineRecord{LastCreditMs: midnight - 500}}
+	if !c.CreditOnline(midnight + 2_000) {
+		t.Fatal("credit reported no change")
+	}
+	if c.Online.TotalSeconds != 2 {
+		t.Fatalf("total = %d, want 2", c.Online.TotalSeconds)
+	}
+	if c.Online.LastCreditMs != midnight+1_500 {
+		t.Fatalf("anchor = %d, want midnight+1500", c.Online.LastCreditMs-midnight)
+	}
+	want := []OnlineDay{{Day: 20261105, Seconds: 1}, {Day: 20261106, Seconds: 1}}
+	if len(c.Online.Days) != 2 || c.Online.Days[0] != want[0] || c.Online.Days[1] != want[1] {
+		t.Fatalf("days = %v, want %v", c.Online.Days, want)
+	}
+}
+
+/*
+================
+TestCreditOnlineEveryOffsetAroundMidnightTerminates
+
+Every millisecond offset in the two seconds around midnight, credited
+across it for a range of spans: each call returns, the buckets sum to
+the total, and the anchor advances by exactly the credited seconds.
+================
+*/
+func TestCreditOnlineEveryOffsetAroundMidnightTerminates(t *testing.T) {
+	midnight := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC).UnixMilli()
+	for offset := int64(-2_000); offset < 2_000; offset++ {
+		for _, span := range []int64{999, 1_000, 1_001, 2_500, 90_000, onlineDayMs + 1_234} {
+			anchor := midnight + offset
+			c := &Character{Online: &OnlineRecord{LastCreditMs: anchor}}
+			c.CreditOnline(anchor + span)
+			var sum int64
+			for _, day := range c.Online.Days {
+				sum += day.Seconds
+			}
+			if sum != c.Online.TotalSeconds || c.Online.TotalSeconds != span/1000 {
+				t.Fatalf("offset %d span %d: days %v total %d", offset, span, c.Online.Days, c.Online.TotalSeconds)
+			}
+			if c.Online.LastCreditMs != anchor+span/1000*1000 {
+				t.Fatalf("offset %d span %d: anchor moved %d", offset, span, c.Online.LastCreditMs-anchor)
+			}
+		}
+	}
+}
