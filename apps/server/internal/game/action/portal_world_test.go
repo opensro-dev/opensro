@@ -200,7 +200,7 @@ func TestReturnScrollLeavesTheFortressForTheAppointedTown(t *testing.T) {
 		t.Fatalf("recall point inside the fortress: %+v", c.World.LastRecallPoint)
 	}
 	clock.Advance(30 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	inField(t, rt, c, "the return scroll")
 }
 
