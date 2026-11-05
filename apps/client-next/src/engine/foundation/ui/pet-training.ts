@@ -3,8 +3,9 @@
 
 pet-training.ts - how the pet window presents the attack-pet tree and gear
 
-Port-only, not native (the server's SRO_ATTACK_PET_EXPANSION and the
-Experimental window's attack-pet training row). The server decides every
+Port-only, not native: the server's SRO_ATTACK_PET_EXPANSION owns admission.
+The client requests state on summon and shows training only after 0x3FB1.
+The server decides every
 rule and sends each skill's level, requirement and effect values (0x3FB1);
 names, effect text, ranks, icons and affix text come from the design
 workbook's export (pet-design-data.ts). Pure.
