@@ -509,13 +509,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				timing?.submitted();
 			};
 			if ( !deferred ) return finish( encoder );
-			if ( deferred.asynchronous ) {
-				commands.submit( encoder.finish() );
-				return Promise.resolve( deferred.prepare() ).then( extra => finish( commands.createEncoder(), extra ) );
-			}
-			const extra = deferred.prepare();
-			if ( extra instanceof Promise ) throw Error( "Unexpected asynchronous deferred pass" );
-			return finish( encoder, extra );
+			// The deferred tail joins this frame's one submit; the
+			// visibility query behind it never holds a frame (#2573).
+			return finish( encoder, deferred.prepare() );
 		}
 	};
 }

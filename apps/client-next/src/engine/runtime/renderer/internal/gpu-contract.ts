@@ -211,8 +211,7 @@ DeferredDraw
 ================
 */
 export interface DeferredDraw {
-	readonly asynchronous: boolean;
-	prepare(): readonly GeometryDraw[] | Promise<readonly GeometryDraw[]>;
+	prepare(): readonly GeometryDraw[];
 }
 /*
 ================
@@ -251,7 +250,7 @@ export interface FrameOwner {
 		reflection?: { encode( encoder: GPUCommandEncoder ): void; },
 		experimental?: ExperimentalFrame,
 		presentation?: SurfaceOwner
-	): void | Promise<void>;
+	): void;
 }
 
 /*

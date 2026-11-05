@@ -368,7 +368,7 @@ export interface Renderer extends Disposable {
 	setGeometryTransform( transform: Float32Array ): void;
 	setGeometry( data: Geometry | null ): void;
 	setImage( image: ImageBitmap | null ): void;
-	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void | Promise<void>;
+	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void;
 	phase(): RuntimePhase;
 	error(): string | null;
 }

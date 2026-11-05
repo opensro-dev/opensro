@@ -138,6 +138,10 @@ export function createRenderer(
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
 	let readbackWait = 0;
+	// #2573: a visibility answer lands here and applies at the next frame's
+	// head; no presented frame ever waits for the readback to finish.
+	let deferredAnswer: { results: readonly boolean[]; waitedMs: number; } | null = null,
+		deferredQueryInFlight = false;
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
 	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
@@ -167,8 +171,9 @@ export function createRenderer(
 		================
 		readbackWaitMs
 
-		Only the pending visibility query is wait time. Deferred preparation
-		and the second submission remain CPU work in the runtime's budget.
+		How long the visibility query's last answer took to land, charged
+		to the frame that applies it (#2573): a stalled GPU queue still
+		shows up in the frame stats, but no presented frame waits for it.
 		================
 		*/
 		readbackWaitMs() {
@@ -677,6 +682,13 @@ export function createRenderer(
 					instancesDirty = false;
 				}
 				probe?.renderMark( "renderer-setup" );
+				if ( deferredAnswer ) {
+					// Before begin() resets the queue: complete() still sees
+					// the issuing frame's plan, so its answers land whole.
+					readbackWait += deferredAnswer.waitedMs;
+					characters.completeDeferred( deferredAnswer.results );
+					deferredAnswer = null;
+				}
 				const scene = world.prepare(
 					device.geometry()!,
 					device.images()!,
@@ -879,10 +891,10 @@ export function createRenderer(
 						experimental.postProcessing || !!deferredPlan?.query,
 						renderScale
 					);
-				const finishDeferred = ( results?: readonly boolean[] ) => {
-					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred( results );
-					// The continuation's draws reach the second submit: same rule.
+				const finishDeferred = () => {
+					characters.completeDeferred( undefined );
+					// The tail joins this frame's own submit on the last
+					// completed visibility; answers land between frames.
 					return staleDraws.live(
 						"deferred-particles",
 						characters.prepare(
@@ -896,25 +908,7 @@ export function createRenderer(
 						).filter( draw => draw.deferredParticle )
 					);
 				};
-				const deferredPass = deferredPlan ?
-					{
-						asynchronous: deferredPlan.query,
-						prepare: () => {
-							if ( !deferredPlan.query ) return finishDeferred();
-							const query = device.particleQuery(
-								deferredPlan.points,
-								scene.matrix,
-								color,
-								targetSurface.depth()
-							);
-							const started = performance.now();
-							return query.then( results => {
-								readbackWait += performance.now() - started;
-								return finishDeferred( results );
-							} );
-						}
-					} :
-					undefined;
+				const deferredPass = deferredPlan ? { prepare: finishDeferred } : undefined;
 				// Each owner's list is checked under its own name.
 				// Slices keep the scene's terrain/transparent boundaries exact.
 				const terrainDraws = staleDraws.live( "world-terrain", scene.draws.slice( 0, scene.terrainEnd ?? 0 ) ),
@@ -939,7 +933,7 @@ export function createRenderer(
 						[ scene.environment[84]!, scene.environment[85]!, scene.environment[86]! ] :
 						[ 0.70710678, 0.70710678, 0 ];
 				sunShadow.prepare( shadowOn, scene.camera.eye, shadowLight );
-				const pending = frame!.draw(
+				frame!.draw(
 					scaled ? targetSurface.frameView() : color,
 					draw ?? (scene.sky ? device.sky() ?? undefined : undefined),
 					staleDraws.single( "mesh", meshDraw ?? undefined ),
@@ -1006,14 +1000,29 @@ export function createRenderer(
 					targetSurface
 				);
 				probe?.renderMark( "submit" );
-				if ( pending ) {
-					// The deferred pass records its second command buffer after the
-					// visibility query: the frame stays open until that one is submitted.
-					const frameDevice = open;
-					open = null;
-					return pending.catch( error => {
-						if ( !disposed ) failure = String( error );
-					} ).finally( () => frameDevice.endFrame() );
+				if ( deferredPlan?.query && !deferredQueryInFlight ) {
+					// #2573: the query samples the depth this frame just
+					// submitted, but the presentation never waits for the
+					// answer: it lands in the mailbox above and applies at
+					// the next frame's head. While a round is in flight the
+					// draws keep the last completed visibility.
+					const started = performance.now(),
+						points = deferredPlan.points,
+						answer = device.particleQuery( points, scene.matrix, color, targetSurface.depth() );
+					deferredQueryInFlight = true;
+					answer.then( results => {
+						deferredQueryInFlight = false;
+						deferredAnswer = { results, waitedMs: performance.now() - started };
+					}, () => {
+						// The query settles with points even on failure; a
+						// rejection still releases the round as no point
+						// visible (#2560) and never fails a presented frame.
+						deferredQueryInFlight = false;
+						deferredAnswer = {
+							results: new Array( points.length / 4 ).fill( false ),
+							waitedMs: performance.now() - started
+						};
+					} );
 				}
 			} catch ( error ) {
 				failure = String( error );

@@ -51,6 +51,29 @@ test("deferred visibility controls native 50-ms ticks and strict query cadence",
 	assert.equal( owner.sample( 1 ), undefined );
 	owner.reset();
 });
+test("a visibility answer landing after its frame applies whole before the next plan (#2573)", () => {
+	const owner = createDeferredParticles();
+	const at = time => ({ ...actor, time });
+	owner.begin( 0, [ at( 0 ) ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.begin( .6, [ at( .6 ) ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	// The frame presented without waiting; holding the previous
+	// visibility while the answer is in flight is not an error.
+	owner.complete( undefined );
+	assert.equal( owner.sample( 1 ).visible, false );
+	assert.equal( owner.sample( 1 ).draw, false );
+	// The answer lands before the next frame begins and applies in full.
+	owner.complete( [ true ] );
+	assert.equal( owner.sample( 1 ).visible, true );
+	assert.ok( owner.sample( 1 ).alpha > 0 );
+	owner.begin( .7, [ at( .7 ) ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.complete( undefined );
+	assert.equal( owner.sample( 1 ).visible, true );
+	owner.reset();
+	assert.equal( owner.sample( 1 ), undefined );
+});
 test("missing visible frames reset fading, retired IDs and model replacements cannot inherit query results", () => {
 	const owner = createDeferredParticles();
 	owner.begin( 0, [ actor ] );

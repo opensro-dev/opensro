@@ -37,7 +37,7 @@ export function createDeferredParticles() {
 			draw: boolean;
 		}
 	>();
-	let queued: readonly number[] = [], eligible: readonly number[] = [], due = false;
+	let queued: readonly number[] = [], eligible: readonly number[] = [], due = false, awaiting = false;
 	return {
 		begin( seconds: number, actors: readonly CharacterActor[], enabled = true, night = true ) {
 			if ( previousSeconds !== null && seconds < previousSeconds ) tickRemainder = 0;
@@ -98,14 +98,20 @@ export function createDeferredParticles() {
 			queryRemainder += delta;
 			due = queryRemainder > 500;
 			if ( due ) queryRemainder %= 500;
-			return due && eligible.length > 0;
+			const fires = due && eligible.length > 0;
+			if ( fires ) awaiting = true;
+			return fires;
 		},
 		eligible: () => eligible,
 		complete( results?: readonly boolean[] ) {
-			if ( results && (results.length !== eligible.length || !due) ) {
-				throw Error( "Invalid particle query results" );
-			}
-			if ( due && eligible.length && !results ) throw Error( "Missing particle query results" );
+			if ( results ) {
+				if ( results.length !== eligible.length || !due ) throw Error( "Invalid particle query results" );
+				awaiting = false;
+			} else if ( awaiting ) {
+				// #2573: the answer is still in flight; this frame holds the
+				// previous visibility. It applies before the next plan.
+				return;
+			} else if ( due && eligible.length ) throw Error( "Missing particle query results" );
 			const enabled = new Set( eligible ),
 				visibility = new Map( eligible.map( ( id, i ) => [ id, results?.[i] ] ) );
 			for ( const id of queued ) {
@@ -131,6 +137,8 @@ export function createDeferredParticles() {
 			rows.clear();
 			queued = [];
 			eligible = [];
+			due = false;
+			awaiting = false;
 			deltaFor = createModifierDelta();
 			frame =
 				delta =

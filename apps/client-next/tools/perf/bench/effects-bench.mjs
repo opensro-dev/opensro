@@ -6,6 +6,7 @@ effects-bench.mjs - frame rate of many skill effects, without a server
   node tools/perf/bench/effects-bench.mjs [--count N] [--seconds S]
                                           [--match REGEX] [--size WxH]
                                           [--warmup S] [--cpu-rate N]
+                                          [--light on|off] [--deferred OFFSET]
                                           [--cpu] [--heap] [--trace] [--gpu] [--counts] [--out DIR]
 
 Renders count published effect programs (those whose name matches) at
@@ -44,16 +45,21 @@ in globalThis.__effectsBench for measureEffects. It runs in the page, so
 it closes over nothing.
 ================
 */
-async function admitEffects( { count, match, width, height, counts, gpu } ) {
+async function admitEffects( { count, match, width, height, counts, gpu, light, deferred } ) {
 	const GRID_SPACING = 40;
 	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 	const { createAssets } = await import( "/src/engine/runtime/assets/assets.ts" );
 	const { createCharacterResources } = await import( "/src/engine/runtime/characters/resources/resources.ts" );
+	const { defaultVideoOptions, changeVideo } = await import(
+		"/src/engine/foundation/rendering/video-options.ts"
+	);
 	const canvas = document.createElement( "canvas" );
 	canvas.width = width;
 	canvas.height = height;
 	document.body.append( canvas );
 	const renderer = createRenderer( canvas, undefined, undefined, { gpuTiming: gpu } ), assets = createAssets();
+	// Light Effect is video slot 7; the default record carries it on.
+	if ( light === "off" ) renderer.videoOptions( changeVideo( defaultVideoOptions(), 7, 0 ) );
 	const resources = createCharacterResources( assets, renderer, location.origin );
 	const catalog = await (await fetch( "/assets/effects/programs.json" )).json();
 	const pattern = new RegExp( match );
@@ -92,6 +98,7 @@ async function admitEffects( { count, match, width, height, counts, gpu } ) {
 		};
 		wrap( GPUDevice.prototype, "createRenderBundleEncoder", "bundles recorded" );
 		wrap( GPUQueue.prototype, "writeBuffer", "writeBuffer" );
+		wrap( GPUQueue.prototype, "submit", "submits" );
 		wrap( GPUComputePassEncoder.prototype, "dispatchWorkgroups", "dispatches" );
 		wrap( GPUComputePassEncoder.prototype, "setBindGroup", "compute bind groups" );
 		wrap( GPUCommandEncoder.prototype, "copyBufferToBuffer", "buffer copies" );
@@ -146,7 +153,11 @@ async function admitEffects( { count, match, width, height, counts, gpu } ) {
 				clip: "effect",
 				time: time + i * .137,
 				loop: true,
-				scale: 1
+				scale: 1,
+				// The presenter marks light-effect emitters with their EFP
+				// query offset; stock bench actors carry none, so the
+				// occlusion-query route never engages without this.
+				...(deferred > 0 ? { deferredParticle: { offset: deferred } } : {})
 			}) );
 		globalThis.__effectsBench = { renderer, resources, assets, actors, probe, tally, ready, width, height };
 	} catch ( error ) {
@@ -197,6 +208,7 @@ async function measureEffects( { seconds, warmup } ) {
 		}
 		const sorted = frames.slice( 2 ).sort( ( a, b ) => a - b ),
 			mainSorted = main.slice( 2 ).sort( ( a, b ) => a - b ),
+			readbackSorted = readback.slice( 2 ).sort( ( a, b ) => a - b ),
 			mean = list => list.reduce( ( a, b ) => a + b, 0 ) / Math.max( 1, list.length );
 		const counts = {};
 		for ( const key in tally ) counts[key] = Number( (tally[key] / measured).toFixed( key[0] === "@" ? 2 : 1 ) );
@@ -218,6 +230,9 @@ async function measureEffects( { seconds, warmup } ) {
 			mainOver50ms: mainSorted.filter( value => value > 50 ).length,
 			cpuMain: mean( cpu.slice( 2 ) ),
 			readback: mean( readback.slice( 2 ) ),
+			readbackP99: readbackSorted[Math.floor( readbackSorted.length * .99 )],
+			readbackMax: readbackSorted.at( -1 ),
+			readbackFrames: readbackSorted.filter( value => value > .5 ).length,
 			draws: renderer.characterStats().draws,
 			gpuTiming: renderer.gpuTiming(),
 			counts
@@ -237,6 +252,8 @@ const options = parseOptions(
 		warmup: 5,
 		match: "^skill/",
 		size: "1600x900",
+		light: "on",
+		deferred: 0,
 		cpu: false,
 		heap: false,
 		trace: false,
@@ -251,7 +268,9 @@ const [width, height] = options.size.split( "x" ).map( Number );
 if (
 	!Number.isFinite( options.cpuRate ) || options.cpuRate < 1 ||
 	!Number.isFinite( options.warmup ) || options.warmup < 0 ||
-	!Number.isFinite( options.seconds ) || options.seconds <= 0
+	!Number.isFinite( options.seconds ) || options.seconds <= 0 ||
+	(options.light !== "on" && options.light !== "off") ||
+	!Number.isInteger( options.deferred ) || options.deferred < 0 || options.deferred > 255
 ) throw Error( "Invalid effects benchmark timing" );
 process.env.SRO_PROBE_UNLOCK_FPS = "1";
 const { browser, page } = await launchProbeBrowser();
@@ -265,7 +284,9 @@ try {
 		width,
 		height,
 		counts: options.counts,
-		gpu: options.gpu
+		gpu: options.gpu,
+		light: options.light,
+		deferred: options.deferred
 	} );
 	if ( options.cpuRate !== 1 ) {
 		const cdp = await page.context().newCDPSession( page );
@@ -289,16 +310,20 @@ try {
 				...result,
 				cpuRate: options.cpuRate,
 				warmup: options.warmup,
-				seconds: options.seconds
+				seconds: options.seconds,
+				light: options.light,
+				deferred: options.deferred
 			},
 			null,
 			2
 		)
 	);
 	console.log(
-		`${CLIENT_NEXT_BASE_URL}  ${result.effects} effects  ${result.fps.toFixed( 0 )} fps  frame p50 ${
-			result.p50.toFixed( 2 )
-		} p99 ${result.p99.toFixed( 2 )} ms  main ${result.main.toFixed( 2 )} ms/f  draws ${result.draws}  | ${
+		`${CLIENT_NEXT_BASE_URL}  ${result.effects} effects  light ${options.light}  deferred ${options.deferred}  ${
+			result.fps.toFixed( 0 )
+		} fps  frame p50 ${result.p50.toFixed( 2 )} p99 ${result.p99.toFixed( 2 )} ms  main ${
+			result.main.toFixed( 2 )
+		} ms/f  readback ${result.readback.toFixed( 2 )} ms/f  draws ${result.draws}  | ${
 			Object.entries( result.counts ).map( ( [key, value] ) => `${key} ${value}` ).join( ", " )
 		}`
 	);

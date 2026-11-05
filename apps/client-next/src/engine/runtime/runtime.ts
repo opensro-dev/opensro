@@ -1313,11 +1313,11 @@ export function startRuntime(
 				// screen finishes in CPSMission_OnUpdate (728E10, sends 0x324C). A background
 				// tab must finish its entry too.
 				const admitting = !readySent && sessionState?.phase === "world";
-				const rendered = visible || admitting ?
-					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() ) :
-					undefined;
-				if ( rendered ) {
-					await rendered;
+				// The frame is presented whole; the deferred visibility
+				// query behind it lands between frames (#2573), so the
+				// tick never waits on the readback here.
+				if ( visible || admitting ) {
+					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
 				}
 				waitMs = visible || admitting ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
