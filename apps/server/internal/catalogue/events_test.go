@@ -1,18 +1,22 @@
 /*
 ===========================================================================
 
-events_test.go - the events file publishes a running event, and only then
+events_test.go - the events file publishes a configured event, and only then
 
 The published row follows the same readers the GameWorld runs, in both
 settings: off (or without a usable window) nothing is published, and a
 configured window carries the box's per-kill chance, the daily cap and
-the exchange's rows so the site can state the event's terms.
+the exchange's rows so the site can state the event's terms. One export
+carries no state of the export instant: the window it publishes is
+what a page compares with its own clock, before, during and after.
 
 ===========================================================================
 */
 package catalogue
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -55,38 +59,34 @@ func halloweenItemID(codename string) uint32 { return halloweenItemIDs[codename]
 
 /*
 ================
-TestEventsPublishHalloweenOnlyWhileItRuns
+TestEventsPublishHalloweenForTheWholeWindow
+
+One export serves the event's whole life: the row carries the window
+and the terms, and a reader comparing that window with its own clock
+finds the event off just before, on inside and off at the end — from
+the same exported file. The export itself holds no "active" state.
 ================
 */
-func TestEventsPublishHalloweenOnlyWhileItRuns(t *testing.T) {
+func TestEventsPublishHalloweenForTheWholeWindow(t *testing.T) {
 	const window = "2026-11-01T00:00:00Z/2026-11-15T00:00:00Z"
-	inside := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-	before := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
-	after := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
 
 	cases := []struct {
-		name       string
-		enabled    string
-		window     string
-		now        time.Time
-		wantRows   int
-		wantActive bool
+		name     string
+		enabled  string
+		window   string
+		wantRows int
 	}{
-		{name: "off shows nothing", enabled: "off", window: window, now: inside},
-		{name: "on without a window shows nothing", enabled: "on", window: "", now: inside},
+		{name: "off shows nothing", enabled: "off", window: window},
+		{name: "on without a window shows nothing", enabled: "on", window: ""},
 		{name: "backwards window shows nothing", enabled: "on",
-			window: "2026-11-15T00:00:00Z/2026-11-01T00:00:00Z", now: inside},
-		{name: "before the window is listed, inactive", enabled: "on", window: window,
-			now: before, wantRows: 1},
-		{name: "inside the window is active", enabled: "on", window: window,
-			now: inside, wantRows: 1, wantActive: true},
-		{name: "at the end it is over", enabled: "on", window: window, now: after, wantRows: 1},
+			window: "2026-11-15T00:00:00Z/2026-11-01T00:00:00Z"},
+		{name: "configured publishes for the whole window", enabled: "on", window: window, wantRows: 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv(progression.EnvHalloweenEvent, c.enabled)
 			t.Setenv(progression.EnvHalloweenEventWindow, c.window)
-			file := BuildEvents(Header{}, halloweenItemID, c.now)
+			file := BuildEvents(Header{}, halloweenItemID)
 			if len(file.Events) != c.wantRows {
 				t.Fatalf("events = %d, want %d", len(file.Events), c.wantRows)
 			}
@@ -94,11 +94,41 @@ func TestEventsPublishHalloweenOnlyWhileItRuns(t *testing.T) {
 				return
 			}
 			event := file.Events[0]
-			if event.ID != "halloween" || event.Active != c.wantActive {
-				t.Fatalf("event = %+v, want halloween active=%v", event, c.wantActive)
+			if event.ID != "halloween" {
+				t.Fatalf("event = %+v, want halloween", event)
 			}
 			if event.StartsAt != "2026-11-01T00:00:00Z" || event.EndsAt != "2026-11-15T00:00:00Z" {
 				t.Fatalf("window = %s..%s", event.StartsAt, event.EndsAt)
+			}
+			// Decide from the exported window alone, the way a page
+			// does at render time: off just before, on inside, off at
+			// the end — all from this one export.
+			startsAt, err := time.Parse(time.RFC3339, event.StartsAt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			endsAt, err := time.Parse(time.RFC3339, event.EndsAt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			running := func(now time.Time) bool {
+				return !now.Before(startsAt) && now.Before(endsAt)
+			}
+			if running(time.Date(2026, 10, 31, 23, 59, 59, 0, time.UTC)) {
+				t.Fatal("export says the event runs before its window")
+			}
+			if !running(time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)) {
+				t.Fatal("export says the event is off inside its window")
+			}
+			if running(time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)) {
+				t.Fatal("export says the event still runs at its end")
+			}
+			data, err := json.Marshal(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(data, []byte(`"active"`)) {
+				t.Fatalf("export carries export-instant state: %s", data)
 			}
 			if len(event.Drops) != 1 || event.Drops[0].ItemID != 3862 ||
 				event.Drops[0].ChancePercent != progression.HalloweenBoxDropChancePercent ||
