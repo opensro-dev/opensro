@@ -146,3 +146,124 @@ func TestMentalBlessingRaisesIntellect(t *testing.T) {
 		t.Fatalf("int %v -> %v, str %v -> %v", before.Intellect, after.Intellect, before.Strength, after.Strength)
 	}
 }
+
+/*
+==================
+TestBlessingRunsItsTimerAfterCasterDisconnect
+
+#2569: the caster disconnects after blessing an ally. Native buff
+entries belong to the recipient (0x59CDC0) and the logout cleanup
+cancels only the departing character's own list (0x4AA340 -> 0x5A0100),
+so the ally keeps the blessing and its stri write until the recipient
+half's own timer runs out - including in the spawn row a reconnected
+caster is shown (the EntrySkills this test reads feed BuildPeerSpawnRow).
+==================
+*/
+func TestBlessingRunsItsTimerAfterCasterDisconnect(t *testing.T) {
+	rt, clock, c := concealmentFixture(t, forceBlessingA1)
+	ally := nearbyCharacter(rt, c, 21, "ally", 1)
+	before, _, err := rt.playerCombatStats(testDivision, ally)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cast := wire.SkillAction{ActionId: forceBlessingA1, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(ally)}.Encode()
+	if r := rt.HandleTargetInteract(testDivision, c, cast); r.DiagnosticRefusal != "" {
+		t.Fatalf("cast refused: %+v", r)
+	}
+	if got := linkedHalves(rt, ally.Name, forceBlessingA1); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("ally halves %v, want the recipient", got)
+	}
+
+	rt.ForgetCharacter(testDivision, c.Name)
+	for i := 0; i < 5; i++ {
+		clock.Advance(2 * time.Second)
+		rt.advanceLinkedEffects(clock.NowMs())
+		rt.effects.Expire(clock.NowMs())
+		rt.drainStoppedCharacterEffects()
+	}
+	if got := linkedHalves(rt, c.Name, forceBlessingA1); len(got) != 0 {
+		t.Fatalf("departed caster kept halves %v", got)
+	}
+	if got := linkedHalves(rt, ally.Name, forceBlessingA1); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("ally halves after the disconnect %v, want the recipient", got)
+	}
+	if blessed, _, _ := rt.playerCombatStats(testDivision, ally); blessed.Strength-before.Strength != 4 {
+		t.Fatalf("ally strength bonus %v after the disconnect, want 4", blessed.Strength-before.Strength)
+	}
+	// The reconnecting caster's view of the ally: the spawn row still
+	// carries the blessing with time left.
+	shown := false
+	for _, s := range rt.EntrySkills(testDivision, ally.Name) {
+		if s.ID == forceBlessingA1 && s.Token != nil && s.Remaining != nil && *s.Remaining > 0 {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Fatalf("ally spawn rows after the disconnect: %+v", rt.EntrySkills(testDivision, ally.Name))
+	}
+
+	// The recipient half ends by its own timer, not before.
+	var expiresAtMs int64
+	for _, e := range rt.effects.Snapshot(testDivision, ally.Name) {
+		if e.SkillID == forceBlessingA1 {
+			expiresAtMs = e.ExpiresAtMs
+		}
+	}
+	clock.Advance(time.Duration(expiresAtMs-clock.NowMs()) * time.Millisecond)
+	rt.effects.Expire(clock.NowMs())
+	rt.drainStoppedCharacterEffects()
+	if got := linkedHalves(rt, ally.Name, forceBlessingA1); len(got) != 1 {
+		t.Fatalf("ally halves at the timer equality %v, want them kept", got)
+	}
+	clock.Advance(time.Millisecond)
+	rt.effects.Expire(clock.NowMs())
+	rt.drainStoppedCharacterEffects()
+	if got := linkedHalves(rt, ally.Name, forceBlessingA1); len(got) != 0 {
+		t.Fatalf("ally halves past the timer %v", got)
+	}
+	if after, _, _ := rt.playerCombatStats(testDivision, ally); after.Strength != before.Strength {
+		t.Fatalf("ally strength %v after the timer, want %v", after.Strength, before.Strength)
+	}
+}
+
+/*
+==================
+TestBlessingRecastAfterReconnectReplaces
+
+#2569: the caster returns while its blessing still runs on the ally and
+casts again. The fresh cast replaces the orphaned half - one live
+recipient half, one stri write - instead of stacking a second copy.
+==================
+*/
+func TestBlessingRecastAfterReconnectReplaces(t *testing.T) {
+	rt, clock, c := concealmentFixture(t, forceBlessingA1)
+	ally := nearbyCharacter(rt, c, 21, "ally", 1)
+	before, _, err := rt.playerCombatStats(testDivision, ally)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cast := wire.SkillAction{ActionId: forceBlessingA1, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(ally)}.Encode()
+	if r := rt.HandleTargetInteract(testDivision, c, cast); r.DiagnosticRefusal != "" {
+		t.Fatalf("cast refused: %+v", r)
+	}
+	rt.ForgetCharacter(testDivision, c.Name)
+	clock.Advance(2 * time.Second)
+	rt.advanceLinkedEffects(clock.NowMs())
+	rt.drainStoppedCharacterEffects()
+
+	if r := rt.HandleTargetInteract(testDivision, c, cast); r.DiagnosticRefusal != "" {
+		t.Fatalf("recast refused: %+v", r)
+	}
+	clock.Advance(2 * time.Second)
+	rt.drainSkillFinalizes(clock.NowMs())
+	rt.drainStoppedCharacterEffects()
+	if got := linkedHalves(rt, ally.Name, forceBlessingA1); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("ally halves after the recast %v, want one recipient", got)
+	}
+	if got := linkedHalves(rt, c.Name, forceBlessingA1); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("caster halves after the recast %v, want the source", got)
+	}
+	if blessed, _, _ := rt.playerCombatStats(testDivision, ally); blessed.Strength-before.Strength != 4 {
+		t.Fatalf("ally strength bonus %v after the recast, want 4 (not stacked)", blessed.Strength-before.Strength)
+	}
+}
