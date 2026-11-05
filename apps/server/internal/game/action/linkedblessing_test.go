@@ -152,8 +152,8 @@ func TestMentalBlessingRaisesIntellect(t *testing.T) {
 TestBlessingRunsItsTimerAfterCasterDisconnect
 
 #2569: the caster disconnects after blessing an ally. Native buff
-entries belong to the recipient (0x59CDC0) and the logout cleanup
-cancels only the departing character's own list (0x4AA340 -> 0x5A0100),
+entries belong to the recipient and the logout cleanup cancels only
+the departing character's own list,
 so the ally keeps the blessing and its stri write until the recipient
 half's own timer runs out - including in the spawn row a reconnected
 caster is shown (the EntrySkills this test reads feed BuildPeerSpawnRow).

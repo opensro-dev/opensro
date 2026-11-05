@@ -40,7 +40,7 @@ func (rt *Runtime) advanceLinkedEffectInDivision(link statuseffect.Link, nowMs i
 	if !rt.effects.SourceHalfPresent(link) {
 		// The source half left with its caster. There is no live pair
 		// to tether: the recipient half runs its own timer, as native
-		// buff entries belong to the recipient (0x59CDC0).
+		// buff entries belong to the recipient's own list.
 		return
 	}
 	source := rt.findCharacter(link.DivisionID, link.SourceName)

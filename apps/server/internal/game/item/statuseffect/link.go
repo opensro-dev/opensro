@@ -68,18 +68,18 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 		return 0x3011
 	}
 	e.CharacterName, e.OwnerGID, e.InstanceToken, e.Phase = link.SourceName, link.SourceGID, link.SourceToken, 1
-	// A caster back from a disconnect re-installing its own blessing
-	// replaces the recipient half its departure left behind: the
-	// recipient holds one entry for the buff, never a stacked copy
-	// beside the orphan. A live pair is refused above and never reaches
-	// here, and another caster's halves are not this caster's to replace.
+	// A fresh cast on the recipient replaces the half an earlier
+	// departure orphaned there, whoever cast it: the entry belongs to
+	// the recipient, so the recipient holds one entry for the buff,
+	// never a stacked copy beside the orphan. A live pair is refused
+	// above and never reaches here, and a live caster's halves are not
+	// replaced - only a source-retired link leaves an orphan behind.
 	for i, old := range r.byOwner[target] {
 		if old.Phase != 2 || old.LinkToken == 0 || old.StopRequested ||
 			(old.SkillID != link.SkillID && (link.SkillGroup == 0 || old.SkillGroup != link.SkillGroup)) {
 			continue
 		}
-		if orphan, ok := r.links[linkKey(link.DivisionID, old.LinkToken)]; ok && orphan.sourceRetired &&
-			strings.EqualFold(orphan.SourceName, link.SourceName) {
+		if orphan, ok := r.links[linkKey(link.DivisionID, old.LinkToken)]; ok && orphan.sourceRetired {
 			r.requestReplacementStopLocked(target, i)
 		}
 	}
@@ -219,13 +219,12 @@ detachLinkHalfLocked
 
 Forget's half of a pair: the owner is leaving, so its half is marked
 retired without asking the other half to stop. The native logout cleanup
-cancels only the departing character's own buff list (CGObjChar
-0x4AA340 -> CSkillManager_CancelAllBuffSkills 0x5A0100); nothing walks
+cancels only the departing character's own buff list; nothing walks
 another character's entries, whose buffs serialize out of each owner's
-own manager (0x59CDC0) and run their own timers. The retired mark still
-ends the pair's live exchanges at once: the threat, fence, quota, mana
-and hunt readers all refuse a link with a retired half. The surviving
-half retires by its own expiry through the ordinary teardown.
+own manager and run their own timers. The retired mark still ends the
+pair's live exchanges at once: the threat, fence, quota, mana and hunt
+readers all refuse a link with a retired half. The surviving half
+retires by its own expiry through the ordinary teardown.
 ================
 */
 func (r *Registry) detachLinkHalfLocked(e Effect) {

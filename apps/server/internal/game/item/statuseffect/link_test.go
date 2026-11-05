@@ -176,6 +176,44 @@ func TestApplyLinkReplacesOwnOrphanedRecipientHalf(t *testing.T) {
 	}
 }
 
+// Another cleric casting the same blessing on the same recipient while
+// the first caster's orphan still runs its timer replaces the orphan
+// too: the recipient never holds two live halves of one buff, whoever
+// cast the replacement.
+func TestApplyLinkFromAnotherCasterReplacesTheOrphan(t *testing.T) {
+	r := NewRegistry()
+	l := testLink()
+	if r.ApplyLink(l) != 0 {
+		t.Fatal("apply")
+	}
+	r.Forget("g", "warrior")
+	other := l
+	other.SourceName, other.SourceGID, other.SourceToken, other.TargetToken = "cleric", 7, 22, 23
+	if code := r.ApplyLink(other); code != 0 {
+		t.Fatalf("second cast refused: %x", code)
+	}
+	live := 0
+	for _, e := range r.Snapshot("g", "friend") {
+		if e.StopRequested {
+			continue
+		}
+		live++
+		if e.InstanceToken != 23 {
+			t.Fatalf("live half token %d, want the new cast's", e.InstanceToken)
+		}
+	}
+	if live != 1 {
+		t.Fatalf("recipient rows after the second cast: %+v", r.Snapshot("g", "friend"))
+	}
+	b := r.DrainStopRequested()
+	if len(b) != 1 || len(b[0].Effects) != 1 || b[0].Effects[0].InstanceToken != 11 {
+		t.Fatalf("orphan retirement: %+v", b)
+	}
+	if len(r.Links()) != 1 {
+		t.Fatalf("links after the second cast: %+v", r.Links())
+	}
+}
+
 func TestLinkedThreatUsesSingleNativeOwnerWithoutRestoringPrevious(t *testing.T) {
 	r := NewRegistry()
 	l := testLink()
