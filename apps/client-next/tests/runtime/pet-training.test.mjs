@@ -456,7 +456,7 @@ test("a held 0x3FB1 max survives a travel reset and the pet's re-spawn (#2564)",
 	}, 1000 );
 	// 0x3158, band 3: hp, mp, exp, level 90, satiety, command mode, an
 	// empty name, no bag, alive, bag slot 14.
-	const spawn = () => ( {
+	const spawn = () => ({
 		opcode: 0x3158,
 		payload: Uint8Array.from( [
 			...u32le( GID ),
@@ -475,7 +475,7 @@ test("a held 0x3FB1 max survives a travel reset and the pet's re-spawn (#2564)",
 			...u32le( 0 ),
 			14
 		] )
-	} );
+	});
 	// The pet window's own read (ui.ts): the published state merges only
 	// under the record's gid; the text divides HP by the merged max.
 	const windowText = snapshot => {
