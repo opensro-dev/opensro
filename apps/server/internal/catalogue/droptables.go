@@ -105,10 +105,6 @@ type BetaRates struct {
 	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
 	// while it runs, Rare's named tables carry the widened Sun class.
 	SunDropRate int `json:"sunDropRate,omitempty" doc:"Port-only beta balance: the degree-9 Seal of Sun class of the rare table is 30 times this rate as wide on levels 76-90, so each Sun item's chance is that multiple of its native one; every other class is unchanged. Rare's named tables already carry the widened chances."`
-	// Unique carries the unique-reward rules (UniqueRulesFromEnv) the
-	// GameWorld applies on top of these tables; absent, every rule is
-	// off (native) and a unique's rows above read exactly as published.
-	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only: the unique-reward rules (gapExempt, popTicket, maxLevelLoot, sealDrops) this server applies to unique kills on top of these tables, so a unique's guaranteed rows read as guaranteed instead of at their capped chances. Absent: every rule is off and the native rows apply."`
 }
 
 /*
@@ -116,9 +112,10 @@ type BetaRates struct {
 UniqueRules
 
 The unique-reward rules (progression.UniqueRules) a kill applies after
-admission and the drop cap. They ride inside the beta object because
-they are this server's rule set beside the native tables, and they are
-read from the same UniqueRulesFromEnv the GameWorld wires, so the
+admission and the drop cap. They ride at the top of the drop tables,
+not inside the beta object: the GameWorld wires them whether or not
+the beta growth runs, so the export must publish them either way. They
+are read from the same UniqueRulesFromEnv the GameWorld wires, so the
 export cannot drift from the planner.
 ================
 */
@@ -156,7 +153,13 @@ type DropTablesFile struct {
 	Special map[string][]DropChance `json:"special"`
 	// Consumables is keyed "family/level".
 	Consumables map[string][]DropChance `json:"consumables"`
-	Beta        *BetaRates              `json:"beta,omitempty"`
+	// Unique carries the unique-reward rules (UniqueRulesFromEnv) the
+	// GameWorld applies on top of these tables; absent, every rule is
+	// off (native) and a unique's rows above read exactly as published.
+	// It sits beside Beta, not inside it: the rules run with the beta
+	// growth on or off, so the export publishes them either way.
+	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only: the unique-reward rules (gapExempt, popTicket, maxLevelLoot, sealDrops) this server applies to unique kills on top of these tables, so a unique's guaranteed rows read as guaranteed instead of at their capped chances. Absent: every rule is off and the native rows apply."`
+	Beta   *BetaRates   `json:"beta,omitempty"`
 	// SunEventOnly says degree-9 Seal of Sun gear neither drops nor is sold
 	// (progression.SunEventOnly); its chances are already left out.
 	SunEventOnly bool `json:"sunEventOnly,omitempty" doc:"Port-only: degree-9 Seal of Sun gear (rarity 2, ItemClass 27) neither drops nor is sold; it comes only as an event reward. Its chances are left out of these tables, and a Sun pick drops nothing, so every other chance is unchanged."`
@@ -227,17 +230,18 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
 			file.Beta.Mix = mix
 		}
-		// The unique rules ride from the same read the GameWorld wires
-		// (UniqueRulesFromEnv), so the export cannot drift; all four off
-		// is native and publishes no object.
-		if unique := progression.UniqueRulesFromEnv(); unique != (progression.UniqueRules{}) {
-			published := &UniqueRules{GapExempt: unique.GapExempt, PopTicket: unique.PopTicket,
-				MaxLevelLoot: unique.MaxLevelLoot, SealDrops: unique.SealDrops}
-			if unique.PopTicket {
-				published.PopTicketItem = itemID(gacha.CardCodename)
-			}
-			file.Beta.Unique = published
+	}
+	// The unique rules ride from the same read the GameWorld wires
+	// (UniqueRulesFromEnv), so the export cannot drift; they run with
+	// the beta growth on or off, so they publish either way. All four
+	// off is native and publishes no object.
+	if unique := progression.UniqueRulesFromEnv(); unique != (progression.UniqueRules{}) {
+		published := &UniqueRules{GapExempt: unique.GapExempt, PopTicket: unique.PopTicket,
+			MaxLevelLoot: unique.MaxLevelLoot, SealDrops: unique.SealDrops}
+		if unique.PopTicket {
+			published.PopTicketItem = itemID(gacha.CardCodename)
 		}
+		file.Unique = published
 	}
 	return file
 }

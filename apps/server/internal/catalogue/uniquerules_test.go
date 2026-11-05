@@ -25,9 +25,11 @@ Every unique rule the shard runs reaches the site: the export is built
 from the same UniqueRulesFromEnv the GameWorld wires (wiring_gameplay),
 so it cannot drift; flipping a flag in the catalogue build flips the
 export, the ticket's item id rides with popTicket, and all four rules
-off publishes no unique object at all (native). Every setting the shard
-table marks for the catalogue and names a unique rule must be one of
-the exported keys, in both settings.
+off publishes no unique object at all (native). The GameWorld wires
+the rules with the beta growth on or off, so they publish either way;
+a beta-off build publishes no beta object but still carries the unique
+rules. Every setting the shard table marks for the catalogue and names
+a unique rule must be one of the exported keys, in both settings.
 ================
 */
 func TestDropTablesPublishUniqueRules(t *testing.T) {
@@ -44,7 +46,23 @@ func TestDropTablesPublishUniqueRules(t *testing.T) {
 
 	// Shard defaults: gap exempt and the pop ticket on, the opt-ins off.
 	setUniqueEnv(t, "", "", "", "")
-	unique := build().Beta.Unique
+	unique := build().Unique
+	if unique == nil || !unique.GapExempt || !unique.PopTicket || unique.PopTicketItem != 4055 ||
+		unique.MaxLevelLoot || unique.SealDrops {
+		t.Fatalf("defaults: unique %+v, want gapExempt and popTicket(4055) only", unique)
+	}
+
+	// Beta off: no beta object, and the unique rules still publish
+	// (the GameWorld applies them with the beta growth off too).
+	t.Setenv(progression.EnvBetaGrowth, "off")
+	built := build()
+	if built.Beta != nil {
+		t.Fatalf("beta off: beta %+v, want no beta object", built.Beta)
+	}
+	if built.Unique == nil || !built.Unique.GapExempt || !built.Unique.PopTicket {
+		t.Fatalf("beta off: unique %+v, want gapExempt and popTicket", built.Unique)
+	}
+	t.Setenv(progression.EnvBetaGrowth, "on")
 	if unique == nil || !unique.GapExempt || !unique.PopTicket || unique.PopTicketItem != 4055 ||
 		unique.MaxLevelLoot || unique.SealDrops {
 		t.Fatalf("defaults: unique %+v, want gapExempt and popTicket(4055) only", unique)
@@ -78,15 +96,15 @@ func TestDropTablesPublishUniqueRules(t *testing.T) {
 
 		setUniqueEnv(t, "off", "off", "off", "off")
 		t.Setenv(setting.Env, "on")
-		if u := build().Beta.Unique; u == nil || !keys[found].enabled(u) {
+		if u := build().Unique; u == nil || !keys[found].enabled(u) {
 			t.Fatalf("%s on: unique %+v, want %s set", setting.Env, u, found)
 		}
-		raw, err := json.Marshal(build().Beta)
+		raw, err := json.Marshal(build().Unique)
 		if err != nil || !strings.Contains(string(raw), `"`+found+`":true`) {
-			t.Fatalf("%s on: beta JSON %s, want %q present", setting.Env, raw, found)
+			t.Fatalf("%s on: unique JSON %s, want %q present", setting.Env, raw, found)
 		}
 		setUniqueEnv(t, "off", "off", "off", "off")
-		if u := build().Beta.Unique; u != nil {
+		if u := build().Unique; u != nil {
 			t.Fatalf("%s back off: unique %+v, want no unique object (native)", setting.Env, u)
 		}
 	}
@@ -98,7 +116,7 @@ func TestDropTablesPublishUniqueRules(t *testing.T) {
 
 	// The ticket's id rides only with the ticket on.
 	setUniqueEnv(t, "on", "off", "off", "off")
-	if u := build().Beta.Unique; u == nil || u.PopTicket || u.PopTicketItem != 0 {
+	if u := build().Unique; u == nil || u.PopTicket || u.PopTicketItem != 0 {
 		t.Fatalf("gap only: unique %+v, want no ticket and no ticket item", u)
 	}
 }
