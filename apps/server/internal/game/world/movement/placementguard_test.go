@@ -165,3 +165,64 @@ func TestRelocateStrandedSpawnSkipsAnEnclosedTileCentre(t *testing.T) {
 		t.Fatalf("the rescue point is itself stranded: %+v", rescued)
 	}
 }
+
+/*
+================
+TestRelocateStrandedSpawnRescuesTheGateLionSeam
+
+#2359: a character parked at region 0x62A8 (25256) local (913, 258), in
+the seam between the west gate lion (asset 87, genuinely closed) and the
+gate wall, is inside neither object's cells - the pose is ~2.7/~2.9 units
+past the lion's footprint edges and the gate mesh holds it in no cell -
+so InsideClosedObject answers false while every walk out is refused.
+The stranded verdict must see the seam pocket: stranded and rescued
+with the rule on, untouched with it off.
+================
+*/
+func TestRelocateStrandedSpawnRescuesTheGateLionSeam(t *testing.T) {
+	v := realAuthorityValidator(t)
+	ground, ok := v.TerrainHeightAt(0x62A8, 913, 258)
+	if !ok {
+		t.Fatal("no terrain height under the gate lion seam")
+	}
+	seam := simulation.Spawn{RegionID: 0x62A8, X: 913, Y: ground, Z: 258, Angle: 9}
+	if asset, inside := v.InsideClosedObject(seam); inside {
+		t.Fatalf("the seam pose is inside asset %d; the test no longer pins the blind spot", asset)
+	}
+	if _, stranded, _ := v.RelocateStrandedSpawn(seam); stranded {
+		t.Fatal("with the rule off, the seam pose must pass through")
+	}
+	v.SetClosedObjectRescue(true)
+	rescued, stranded, found := v.RelocateStrandedSpawn(seam)
+	if !stranded || !found {
+		t.Fatalf("in the seam: stranded=%v found=%v, want both", stranded, found)
+	}
+	if _, again, _ := v.RelocateStrandedSpawn(rescued); again {
+		t.Fatalf("the rescue point is itself stranded: %+v", rescued)
+	}
+	if rescued.Angle != seam.Angle {
+		t.Fatalf("rescue must keep the facing, got %d", rescued.Angle)
+	}
+}
+
+/*
+================
+TestRelocateStrandedSpawnLeavesOpenGroundAlone
+
+The open-field pin for the seam verdict: ground on the gate road south
+of the lion seam has a legal walk out and must never be stranded, with
+the rule on.
+================
+*/
+func TestRelocateStrandedSpawnLeavesOpenGroundAlone(t *testing.T) {
+	v := realAuthorityValidator(t)
+	v.SetClosedObjectRescue(true)
+	ground, ok := v.TerrainHeightAt(0x62A8, 913, 200)
+	if !ok {
+		t.Fatal("no terrain height on the gate road")
+	}
+	open := simulation.Spawn{RegionID: 0x62A8, X: 913, Y: ground, Z: 200}
+	if _, stranded, _ := v.RelocateStrandedSpawn(open); stranded {
+		t.Fatal("open gate road must pass through with the rule on")
+	}
+}

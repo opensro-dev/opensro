@@ -176,13 +176,25 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 		closedAsset, enclosed = v.InsideClosedObject(spawn)
 	}
 	verdicts := map[uint64]bool{}
+	seam := false
 	if !enclosed && deckVerdict == objectDeckNone && walkable && v.tileOnMainland(origin, tilesPerAxis, verdicts) {
-		return spawn, false, false
+		// InsideClosedObject is the fast path and has already answered
+		// false; only then does the bounded seam flood run (#2359), and
+		// only behind the same flag.
+		if !v.closedObjectRescue || !v.poseSealedInSeam(spawn) {
+			return spawn, false, false
+		}
+		seam = true
 	}
 	startRadius := 1
 	if enclosed {
 		log.Infof("movement: enter-world spawn 0x%04X (%.1f, %.1f, %.1f) is inside closed object asset %d; relocating",
 			spawn.RegionID, spawn.X, spawn.Y, spawn.Z, closedAsset)
+		startRadius = 0
+	}
+	if seam {
+		log.Infof("movement: enter-world spawn 0x%04X (%.1f, %.1f, %.1f) is sealed in an object seam; relocating",
+			spawn.RegionID, spawn.X, spawn.Y, spawn.Z)
 		startRadius = 0
 	}
 	if deckVerdict == objectDeckSealed {
@@ -251,12 +263,17 @@ func (v *WaterValidator) rescueStand(center simulation.Spawn, spawnY float64) si
 rescueEnclosed
 
 Whether a candidate tile centre, at the height rescueStand would place the
-player, is inside a closed object.
+player, is inside a closed object or sealed in an object seam.
 ================
 */
 func (v *WaterValidator) rescueEnclosed(center simulation.Spawn, spawnY float64) bool {
-	_, inside := v.InsideClosedObject(v.rescueStand(center, spawnY))
-	return inside
+	stand := v.rescueStand(center, spawnY)
+	if _, inside := v.InsideClosedObject(stand); inside {
+		return true
+	}
+	// A tile centre in a seam pocket is no safer a landing than the
+	// pocket the spawn came from (#2359).
+	return v.poseSealedInSeam(stand)
 }
 
 /*
