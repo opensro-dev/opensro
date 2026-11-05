@@ -10,7 +10,9 @@ the session record is what the send gates read. Moderation must not end at
 logoff, so installing or clearing on a character-bound session also records
 against the character in the hub, where by-character readers
 (Hub.CharacterRestricted; the site chat feed) find it after the session is
-gone. Both records die with the process.
+gone, and a session bound later takes the record at bind. Both records
+die with the process; game/moderation persists the mutes it installs and
+reinstalls them at boot.
 
 ===========================================================================
 */
@@ -180,4 +182,97 @@ func (h *Hub) CharacterRestricted(divisionID, characterName string, kind uint8) 
 		}
 	}
 	return false
+}
+
+/*
+================
+SetCharacterRestriction
+
+Installs kind on characterName's hub record and on every live session bound
+to the character. This is the moderation owner's entry point
+(game/moderation): it acts on a character, not on a session it happens to
+hold, and a session bound later picks the record up at bind
+(applyCharacterRestrictions). The hub record stays process-lived; the
+owner persists its own book and reinstalls it at boot.
+================
+*/
+func (h *Hub) SetCharacterRestriction(divisionID, characterName string, kind uint8, until [8]uint16) bool {
+	return h.setCharacterRestriction(divisionID, characterName, kind, until, true)
+}
+
+/*
+================
+ClearCharacterRestriction
+================
+*/
+func (h *Hub) ClearCharacterRestriction(divisionID, characterName string, kind uint8) bool {
+	return h.setCharacterRestriction(divisionID, characterName, kind, [8]uint16{}, false)
+}
+
+func (h *Hub) setCharacterRestriction(divisionID, characterName string, kind uint8, until [8]uint16, enabled bool) bool {
+	if kind < 3 || kind > 4 || characterName == "" {
+		return false
+	}
+	key := characterRestrictionKey(divisionID, characterName)
+	h.restrictionMu.Lock()
+	rec := h.restrictions[key]
+	if rec == nil {
+		rec = &characterRestrictions{}
+		h.restrictions[key] = rec
+	}
+	rec.until[kind-3] = until
+	rec.enabled[kind-3] = enabled
+	if !rec.enabled[0] && !rec.enabled[1] {
+		delete(h.restrictions, key)
+	}
+	h.restrictionMu.Unlock()
+	for _, s := range h.CharacterSessions(divisionID, characterName) {
+		s.setRestrictionLocal(kind, until, enabled)
+	}
+	return true
+}
+
+/*
+================
+applyCharacterRestrictions
+
+Copies the bound character's enabled restrictions onto the session. Before
+this ran at bind, a relog opened a fresh session with no record and walked
+out of any mute (#2671). It only adds: a restriction already on the
+session stays, because natively the record belongs to the connection and
+a bind does not touch it (TestCommandRestrictionsKeepNativeSessionOwnership).
+================
+*/
+func (h *Hub) applyCharacterRestrictions(s *Session) {
+	divisionID, characterName, ok := s.CharacterBinding()
+	if !ok {
+		return
+	}
+	key := characterRestrictionKey(divisionID, characterName)
+	h.restrictionMu.RLock()
+	var rec characterRestrictions
+	if found := h.restrictions[key]; found != nil {
+		rec = *found
+	}
+	h.restrictionMu.RUnlock()
+	for i := range rec.enabled {
+		if rec.enabled[i] {
+			s.setRestrictionLocal(uint8(i)+CommandRestrictionTrade, rec.until[i], true)
+		}
+	}
+}
+
+/*
+================
+setRestrictionLocal
+
+The session record alone, without touching the hub record: the hub-side
+writers above already hold the truth.
+================
+*/
+func (s *Session) setRestrictionLocal(kind uint8, until [8]uint16, enabled bool) {
+	s.restrictions.mu.Lock()
+	s.restrictions.until[kind-3] = until
+	s.restrictions.enabled[kind-3] = enabled
+	s.restrictions.mu.Unlock()
 }
