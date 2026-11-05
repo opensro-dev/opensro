@@ -207,7 +207,7 @@ func (game *gameplayPlane) creditOnlineSessions(views []simulation.SessionView, 
 			continue
 		}
 		game.deps.UpdateDeferred(character, "online-credit", func() bool {
-			return character.CreditOnline(nowMs)
+			return character.CreditOnlinePeriodic(nowMs)
 		})
 	}
 }

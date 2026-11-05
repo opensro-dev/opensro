@@ -154,7 +154,7 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		}
 		if c.Online != nil {
 			row.OnlineSeconds = c.Online.TotalSeconds
-			row.OnlineWeekSeconds = c.Online.WeekSeconds()
+			row.OnlineWeekSeconds = c.Online.WeekSeconds(s.now().UnixMilli())
 		}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job

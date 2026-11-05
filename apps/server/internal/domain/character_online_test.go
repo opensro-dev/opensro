@@ -51,7 +51,7 @@ func TestCreditOnlineSplitsAtUTCMidnight(t *testing.T) {
 	if c.Online.Days[1] != (OnlineDay{Day: 20261106, Seconds: 60}) {
 		t.Fatalf("second bucket = %v", c.Online.Days[1])
 	}
-	if got := c.Online.WeekSeconds(); got != 90 {
+	if got := c.Online.WeekSeconds(start + 90_000); got != 90 {
 		t.Fatalf("week = %d, want 90", got)
 	}
 }
@@ -139,8 +139,69 @@ func TestCreditOnlinePrunesBucketsOlderThanTheWeek(t *testing.T) {
 	if c.Online.TotalSeconds != 3660 {
 		t.Fatalf("total = %d, want 3660", c.Online.TotalSeconds)
 	}
-	if got := c.Online.WeekSeconds(); got != 70 {
+	if got := c.Online.WeekSeconds(start + 60_000); got != 70 {
 		t.Fatalf("week = %d, want 70", got)
+	}
+}
+
+/*
+================
+TestCreditOnlinePeriodicWaitsForTheInterval
+
+The periodic pass leaves a character untouched until a full interval
+is owed, then credits the whole owed span at once; the session-close
+credit (CreditOnline) never waits.
+================
+*/
+func TestCreditOnlinePeriodicWaitsForTheInterval(t *testing.T) {
+	start := onlineTestMs()
+	c := &Character{}
+	c.AnchorOnline(start)
+	if c.CreditOnlinePeriodic(start + 59_999) {
+		t.Fatal("periodic credit fired before the interval was owed")
+	}
+	if c.Online.TotalSeconds != 0 {
+		t.Fatalf("total = %d, want 0 before the interval", c.Online.TotalSeconds)
+	}
+	if !c.CreditOnlinePeriodic(start + 60_000) {
+		t.Fatal("periodic credit did not fire at the interval")
+	}
+	if c.Online.TotalSeconds != 60 {
+		t.Fatalf("total = %d, want 60", c.Online.TotalSeconds)
+	}
+	if c.CreditOnlinePeriodic(start + 90_000) {
+		t.Fatal("periodic credit fired again inside the next interval")
+	}
+	// Session close owes nothing to the interval.
+	if !c.CreditOnline(start+95_000) || c.Online.TotalSeconds != 95 {
+		t.Fatalf("close credit total = %d, want 95", c.Online.TotalSeconds)
+	}
+}
+
+/*
+================
+TestWeekSecondsIgnoresBucketsOlderThanTheWindow
+
+A record last credited ten days ago reads as a zero week today: its
+stale buckets are history, not this week's time. Its total stands.
+================
+*/
+func TestWeekSecondsIgnoresBucketsOlderThanTheWindow(t *testing.T) {
+	start := onlineTestMs()
+	c := &Character{Online: &OnlineRecord{
+		TotalSeconds: 3600,
+		Days:         []OnlineDay{{Day: 20261105, Seconds: 3600}},
+		LastCreditMs: start,
+	}}
+	tenDaysLater := start + 10*24*60*60*1000
+	if got := c.Online.WeekSeconds(tenDaysLater); got != 0 {
+		t.Fatalf("week ten days later = %d, want 0", got)
+	}
+	if got := c.Online.WeekSeconds(start); got != 3600 {
+		t.Fatalf("week on the day itself = %d, want 3600", got)
+	}
+	if c.Online.TotalSeconds != 3600 {
+		t.Fatalf("total = %d, want 3600 untouched", c.Online.TotalSeconds)
 	}
 }
 

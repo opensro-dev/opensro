@@ -31,6 +31,12 @@ import (
 // plus the previous six, the board's rolling week.
 const onlineWindowDays = 7
 
+// onlineCreditIntervalMs is the periodic pass's minimum owed span: a
+// character is credited at most once a minute, so the tick's batched
+// commit writes an online character's row once a minute, not once a
+// tick. Session close ignores it and credits whatever is owed.
+const onlineCreditIntervalMs = 60_000
+
 /*
 ================
 OnlineDay
@@ -183,18 +189,43 @@ func (c *Character) CreditOnline(nowMs int64) bool {
 
 /*
 ================
-WeekSeconds
+CreditOnlinePeriodic
 
-The rolling week's credited seconds: the sum of the kept buckets.
+The periodic pass's credit: nothing until onlineCreditIntervalMs is
+owed, then the whole owed span. Reports whether anything was credited.
 ================
 */
-func (r *OnlineRecord) WeekSeconds() int64 {
+func (c *Character) CreditOnlinePeriodic(nowMs int64) bool {
+	if c == nil || c.Online == nil {
+		return false
+	}
+	if nowMs-c.Online.LastCreditMs < onlineCreditIntervalMs {
+		return false
+	}
+	return c.CreditOnline(nowMs)
+}
+
+/*
+================
+WeekSeconds
+
+The rolling week's credited seconds at nowMs: the buckets inside the
+window ending today. Pruning keeps stored buckets inside it, but a
+record read long after its last credit (a player offline for weeks)
+must not present those stale buckets as this week's time, so the read
+applies the same cutoff.
+================
+*/
+func (r *OnlineRecord) WeekSeconds(nowMs int64) int64 {
 	if r == nil {
 		return 0
 	}
+	cutoff := onlineCutoffKey(nowMs)
 	var total int64
 	for _, day := range r.Days {
-		total += day.Seconds
+		if day.Day >= cutoff {
+			total += day.Seconds
+		}
 	}
 	return total
 }
