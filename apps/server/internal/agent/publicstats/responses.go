@@ -369,6 +369,7 @@ type RulesResponse struct {
 
 // GuildsResponse is GET /public/v1/guilds: one page of 50 (guilds.go).
 type GuildsResponse struct {
+	Sort        string     `json:"sort" doc:"The ordering: level (default), or power - total gear points of members who are not hidden (#2675)."`
 	Page        int        `json:"page" doc:"1-based page number."`
 	Pages       int        `json:"pages" doc:"Pages in the full list (at least 1)."`
 	Total       int        `json:"total" doc:"Guilds matching the query."`
@@ -379,12 +380,16 @@ type GuildsResponse struct {
 
 // GuildRow is one guild on the list.
 type GuildRow struct {
-	Rank     int      `json:"rank" doc:"Place on the full list: level, then members, then name."`
-	Name     string   `json:"name"`
-	Level    int      `json:"level" doc:"Guild level, 1 to 5."`
-	Members  int      `json:"members"`
-	Master   string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
-	Union    []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
-	Fortress *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
-	Founded  *string  `json:"founded,omitempty" doc:"When the guild was founded (RFC 3339, UTC); absent when it predates the record."`
+	Rank    int    `json:"rank" doc:"Place on the full list: level, then members, then name."`
+	Name    string `json:"name"`
+	Level   int    `json:"level" doc:"Guild level, 1 to 5."`
+	Members int    `json:"members"`
+	// GearPoints is the guild-power board's value: the gear points
+	// (rankings.go's site-only score) of every member who is not
+	// hidden, summed. A hidden member's gear never reaches it (#2675).
+	GearPoints int      `json:"gearPoints"`
+	Master     string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
+	Union      []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
+	Fortress   *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
+	Founded    *string  `json:"founded,omitempty" doc:"When the guild was founded (RFC 3339, UTC); absent when it predates the record."`
 }
