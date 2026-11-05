@@ -40,6 +40,10 @@ const { cosHpText, cosStatusRatios } = await import( "../../src/engine/foundatio
 const { quickSlotDrag, quickSlotDrop, quickSlotCommand, PET_SKILL_SHORTCUT_BASE } = await import(
 	"../../src/engine/foundation/gameplay/quickslots.ts"
 );
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+const { resetTravelRegion } = await import( "../../src/engine/foundation/gameplay/travel.ts" );
 
 /*
 ================
@@ -396,6 +400,107 @@ test("a pet at its pushed server max reads 350/350 (100%), not 5% of the catalog
 	assert.equal( cosHpText( pet, reference ), "350/350 (100%)" );
 	assert.equal( cosStatusRatios( pet, reference ).hp, 1 );
 	assert.equal( cosHpText( pet, catalog ), "350/6858 (5%)" );
+});
+
+/*
+================
+held state survives a travel reset
+
+#2564: a level-90 wolf at its server max (8100 of a 39434 catalog row)
+read 8100/39434 (20%) in the pet window. That reading is the no-state
+fallback, reached only while no 0x3FB1 is held: a crossing runs
+resetTravelRegion -> gameplay.resetWorld(), which retires the COS
+records but not the training state, and the pet's 0x3158 record comes
+back under the same gid, so the window must keep dividing by the held
+max. Only a session teardown (core.clear -> clearState) drops the
+state, and the server's login restore push replaces it there.
+================
+*/
+test("a held 0x3FB1 max survives a travel reset and the pet's re-spawn (#2564)", () => {
+	const u32le = n => [ n & 255, (n >>> 8) & 255, (n >>> 16) & 255, n >>> 24 ];
+	const GID = 0x2000001;
+	const catalog = {
+		maxHp: 39434,
+		physicalDefence: 100,
+		magicalDefence: 100,
+		icon: "",
+		rideable: false,
+		skills: [],
+		hit: 100,
+		parry: 100
+	};
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 103, tidWord: 3 << 11 | 0x1c6 } ]
+	} );
+	game.seed( { gid: 1, refObjId: 1907, kind: "player", name: "Player", regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	// The login restore push (#1899): the wolf's effective max is 8100
+	// under the server's authored curve, not the catalog's 39434.
+	const tail = new Uint8Array( 10 ), view = new DataView( tail.buffer );
+	tail[0] = 1;
+	view.setUint32( 1, 8100, true );
+	view.setUint16( 5, 100, true );
+	view.setUint16( 7, 100, true );
+	tail[9] = 0;
+	game.receive( {
+		opcode: OP_PET_TRAINING_STATE,
+		payload: Uint8Array.from( [
+			...statePayload(
+				[ { id: wolf.id, level: 1, effective: 1, next: 15, flags: 9, value: 50, nextValue: 60 } ],
+				[]
+			),
+			...tail
+		] )
+	}, 1000 );
+	// 0x3158, band 3: hp, mp, exp, level 90, satiety, command mode, an
+	// empty name, no bag, alive, bag slot 14.
+	const spawn = () => ( {
+		opcode: 0x3158,
+		payload: Uint8Array.from( [
+			...u32le( GID ),
+			...u32le( 103 ),
+			...u32le( 8100 ),
+			...u32le( 0 ),
+			...u32le( 0 ),
+			...u32le( 0 ),
+			90,
+			16,
+			39,
+			...u32le( 0 ),
+			0,
+			0,
+			0,
+			...u32le( 0 ),
+			14
+		] )
+	} );
+	// The pet window's own read (ui.ts): the published state merges only
+	// under the record's gid; the text divides HP by the merged max.
+	const windowText = snapshot => {
+		const record = snapshot?.cosRecords?.find( r => r.gid === GID );
+		if ( !record ) return undefined;
+		const published = snapshot?.petTraining?.gid === record.gid ? snapshot.petTraining : undefined;
+		return cosHpText( record, petReference( catalog, published, undefined, 0, record.level ?? 0 ) );
+	};
+	game.receive( spawn(), 1001 );
+	const before = game.take();
+	assert.equal( before?.petTraining?.stats?.maxHp, 8100, "the restore push is held" );
+	assert.equal( windowText( before ), "8100/8100 (100%)" );
+	// The reported reading is what the same window shows with no held
+	// state: the catalog fallback, not a crossing's doing.
+	const record = before?.cosRecords?.find( r => r.gid === GID );
+	assert.equal( cosHpText( record, petReference( catalog, undefined ) ), "8100/39434 (20%)" );
+	// A crossing: core.ts answers a reset frame with gameplay.resetWorld()
+	// and the pet's record re-spawns on the far side under the same gid.
+	assert.equal( resetTravelRegion( { opcode: 0x3369, payload: Uint8Array.of( 0x6f, 0x5c ) } ), 0x5c6f );
+	game.resetWorld();
+	game.receive( spawn(), 2000 );
+	const after = game.take();
+	assert.equal( after?.petTraining?.stats?.maxHp, 8100, "the held state survived the reset" );
+	assert.equal( windowText( after ), "8100/8100 (100%)" );
+	game.dispose();
 });
 
 /*
