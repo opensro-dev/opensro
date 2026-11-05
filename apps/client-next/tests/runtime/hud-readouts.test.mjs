@@ -59,7 +59,8 @@ test("native XP formatting caps incomplete bars and coordinates truncate negativ
 	assert.equal( experienceReadout( "118", 1, levels ), "99.99 %" );
 	assert.equal( experienceReadout( "0", 255, levels ), "" );
 	assert.deepEqual( minimapCoordinates( { regionId: 92 * 256 + 135, x: -19, z: 19 } ), [ "X: -1", "Y:  1" ] );
-	assert.deepEqual( minimapCoordinates( { regionId: 0x8001, x: 0, z: 0 } ), [ "", "" ] );
+	// A cave reads from its own origin, signed, truncating toward zero.
+	assert.deepEqual( minimapCoordinates( { regionId: 0x8007, x: -19, z: 8025 } ), [ "X: -1", "Y:802" ] );
 	assert.ok( minimapRotation( 0 ) === 0 );
 	assert.ok( Math.abs( minimapRotation( 65535 ) - minimapRotation( 0 ) + Math.PI * 2 ) < 1e-9 );
 });
