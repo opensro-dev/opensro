@@ -5,11 +5,11 @@ world-map-dungeon.test.mjs - the M map inside a dungeon keeps its page
 
 5758D0 probes town pages 1..5 for the local player's point and returns 0
 when none holds it; 57FE60 then leaves the loaded page and the stored
-scroll untouched (no LoadMapPage, no recentre). A cave region therefore
-never derives a page: the window shows the page it already had. The port
-used to re-derive the page from the cave pose every frame, land on the
-overview and centre it on cave sector coordinates outside the overview
-box, which clamped the view onto the Europe edge.
+page untouched. A cave region therefore never derives a page: the window
+shows the page it already had. 57A570 then recentres on the dungeon's map
+point (575660): Donwhang Stone Cave and the Ch'in Tomb each have one. The
+port used to centre on cave coordinates outside the overview box, which
+clamped the view onto the Europe edge.
 
 ===========================================================================
 */
@@ -18,6 +18,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { createWorldMapHud } = await import( "../../src/engine/runtime/ui/hud/world-map.ts" );
+const { worldMapDungeonPose } = await import( "../../src/engine/foundation/ui/world-map.ts" );
 
 // The authored automatic-move button sits near the 652-wide window's right edge.
 const AUTO_MOVE_RECT = [ 560, 8, 80, 22 ];
@@ -109,4 +110,37 @@ test("a world map first opened inside a dungeon derives no town page", () => {
 	assert.ok(
 		!textures.some( texture => /map_(jangan|donhwang|khotan|samarkand|constantinople)\.png/.test( texture ) )
 	);
+});
+
+/*
+================
+overviewTiles
+
+The overview tiles a pose's map shows, without the sign drawn over them.
+================
+*/
+/**
+ * @param {object} pose
+ * @returns {string[]}
+ */
+function overviewTiles( pose ) {
+	return present( [ pose ] ).textures.filter( texture => texture.includes( "map_world_" ) ).sort();
+}
+
+test("each dungeon has the map point 575660 gives it", () => {
+	// 7200, 2102 and 2465, 2693 from sectors 0x87 and 0x5C, 192 units each.
+	assert.deepEqual( worldMapDungeonPose( 0x8007 ), { regionId: (102 << 8) | 172, x: 960, y: 0, z: 1820, angle: 0 } );
+	assert.deepEqual( worldMapDungeonPose( 0x8002 ), worldMapDungeonPose( 0x8007 ) );
+	assert.deepEqual( worldMapDungeonPose( 0x8001 ), { regionId: (106 << 8) | 147, x: 1610, y: 0, z: 50, angle: 0 } );
+	assert.equal( worldMapDungeonPose( 0x8008 ), null );
+	assert.equal( worldMapDungeonPose( JANGAN_POSE.regionId ), null );
+});
+
+test("the overview centres on the dungeon's map point", () => {
+	for ( const regionId of [ 0x8001, 0x8007 ] ) {
+		const tiles = overviewTiles( { ...CAVE_POSE, regionId } );
+		assert.ok( tiles.length > 0 );
+		assert.deepEqual( tiles, overviewTiles( worldMapDungeonPose( regionId ) ) );
+	}
+	assert.notDeepEqual( overviewTiles( CAVE_POSE ), overviewTiles( { ...CAVE_POSE, regionId: 0x8001 } ) );
 });
