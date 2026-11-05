@@ -76,7 +76,10 @@ function tickPacket( flags = 0, ticks = [ 25, 300 ] ) {
 }
 
 test("deferred ticks decode to display-only damage without HP or a cast", () => {
-	assert.deepEqual( damageTicks( tickPacket() ), { target: 2, ticks: [ 25, 300 ] } );
+	assert.deepEqual( damageTicks( tickPacket() ), { target: 2, fatal: false, ticks: [ 25, 300 ] } );
+	// The 0x80 death byte reports the killing blow; the death itself is
+	// left to the life frames that follow in the same broadcast.
+	assert.deepEqual( damageTicks( tickPacket( 0x80 ) ), { target: 2, fatal: true, ticks: [ 25, 300 ] } );
 	assert.equal( damageTicks( pulsePacket() ), null );
 	for ( let length = 1; length < tickPacket().length; length++ ) {
 		assert.throws( () => damageTicks( tickPacket().slice( 0, length ) ) );
@@ -93,6 +96,16 @@ test("deferred ticks decode to display-only damage without HP or a cast", () => 
 	assert.deepEqual(
 		combat.state().environmentalDamage.map( row => [ row.gid, row.damage ] ),
 		[ [ 2, 25 ], [ 2, 300 ] ]
+	);
+	// A fatal tick still only labels here: the death arrives on the life
+	// frames in the same broadcast, so this lane debits no HP for it.
+	const fatalCombat = createCombat( gid => gid === 2 ? { gid: 2 } : undefined, () => {} );
+	fatalCombat.seed( 2, { hp: 100 } );
+	assert.equal( fatalCombat.receive( 0xb3c6, tickPacket( 0x80, [ 25 ] ), 3000 ), true );
+	assert.equal( fatalCombat.state().vitals.find( row => row.gid === 2 )?.hp, 100 );
+	assert.deepEqual(
+		fatalCombat.state().environmentalDamage.map( row => [ row.gid, row.damage ] ),
+		[ [ 2, 25 ] ]
 	);
 });
 

@@ -148,7 +148,9 @@ damageTicks
 Mode 1 is deferred damage shown as a victim label: a source word the
 client does not resolve, a death byte, one target, then one three-byte
 damage value per tick. The ticks carry no cast and no HP; the vitals
-owner keeps the life change and the death the byte mirrors.
+owner keeps the life change. The death byte (0x80) says the ticks were
+the killing blow and is reported, not dropped: the caller leaves the
+death itself to the life frames.
 ================
 */
 export function damageTicks( payload: Uint8Array ) {
@@ -156,13 +158,13 @@ export function damageTicks( payload: Uint8Array ) {
 	const reader = resultReader( payload, 0 );
 	reader.u8();
 	reader.u32();
-	reader.u8();
+	const fatal = (reader.u8() & 0x80) !== 0;
 	const target = reader.u32(), count = reader.u8(), ticks: number[] = [];
 	for ( let tick = 0; tick < count; tick++ ) {
 		ticks.push( reader.u8() | reader.u8() << 8 | reader.u8() << 16 );
 	}
 	reader.assertEnd();
-	return { target, ticks };
+	return { target, fatal, ticks };
 }
 
 /*

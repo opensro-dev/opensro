@@ -471,7 +471,15 @@ export function createCombat(
 			if ( op === 0xb3c6 ) {
 				// Deferred damage is display-only, like the periodic notice
 				// below: the label lane shows the tick, HP and death stay
-				// with the vitals and life-state owners.
+				// with the vitals and life-state owners. On the tick's
+				// death byte the native handler enters the death state and
+				// stops the target's motion at once (client 0x775790);
+				// here the server sends the tick in the same broadcast as
+				// the life frames that own that death (the zero baseline,
+				// then the dead state), and this receive pass commits the
+				// whole batch before the next presented frame, so the
+				// death and the stop land at the same presented instant
+				// without this lane writing life state.
 				const ticks = damageTicks( p );
 				if ( ticks ) {
 					if ( readEntity( ticks.target ) ) {

@@ -184,7 +184,11 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 		// The reference server publishes the landed share as a deferred
 		// damage tick, not as the attacker's cast result: the taker shows
 		// the tick number without a hit reaction, and its HP reaches
-		// observers on the vitals refresh, never on the tick itself.
+		// observers on the vitals refresh, never on the tick itself. A
+		// killing share sets the tick's death byte, and the life frames
+		// in public (the zero baseline, then the dead state) ride this
+		// same broadcast after it, so observers commit the number and
+		// the death together.
 		if ticks := struckTicks(struck); len(ticks) != 0 {
 			result.Broadcast = append(result.Broadcast,
 				wire.SkillDamageTickFrame(source, struck.fatal, move.gid, ticks),

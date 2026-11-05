@@ -97,6 +97,47 @@ func TestFenceMovesThePhysicalShareToTheWarrior(t *testing.T) {
 
 /*
 ================
+TestFenceKillingShareSetsTheTicksDeathByte
+
+A share larger than the warrior's remaining HP sets the tick's death
+byte, and the dead-state frame that owns the death rides the same
+broadcast after the tick, so observers commit the number and the
+death in one batch.
+================
+*/
+func TestFenceKillingShareSetsTheTicksDeathByte(t *testing.T) {
+	rt, c, warrior, now := linkedShareFixture(t, 33, 0)
+	*warrior.CurrentHP = 10
+	var out playerStruck
+	rt.shareLinkedDamageInDoor(playerStrike{division: testDivision, victim: c, now: now},
+		combat.Result{Damage: 100, PhysicalDamage: 70, MagicalDamage: 30, ResultFlags: 1}, &out)
+	if len(out.linkMoves) != 1 {
+		t.Fatalf("moves %+v", out.linkMoves)
+	}
+	shared := rt.strikeLinkedShares(testDivision, 9001, deathKiller{}, enterworld.SkillRow{ID: 1}, out.linkMoves, now, rt.tickDoors())
+	if enterworld.CharacterAlive(warrior) {
+		t.Fatal("warrior survived a killing share")
+	}
+	if len(shared.Broadcast) == 0 || shared.Broadcast[0].Opcode != wire.OpSkillPulse {
+		t.Fatalf("share not published as a tick: %+v", shared.Broadcast)
+	}
+	tick := shared.Broadcast[0].Payload
+	if len(tick) < 6 || tick[0] != 1 || tick[5] != 0x80 {
+		t.Fatalf("killing tick %v, want mode 1 with the death byte set", tick)
+	}
+	dead := false
+	for _, frame := range shared.Broadcast[1:] {
+		if frame.Opcode == wire.OpObjectStateRefresh {
+			dead = true
+		}
+	}
+	if !dead {
+		t.Fatalf("killing tick broadcast carries no dead state: %+v", shared.Broadcast)
+	}
+}
+
+/*
+================
 TestPainQuotaDividesAmongPartyMembersInRange
 
 Pain Quota 35 on c keeps 650 of 1000 and divides 350 between the one
