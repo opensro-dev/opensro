@@ -602,6 +602,10 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 	# a shard from a previous on build so a reused variant cannot retain it.
 	from cap110_item_import import add_items
 	weapons = add_items(vsro_root, native, out)
+	# The mall avatars append their own shard to the manifest the item
+	# import just wrote, so they must follow it.
+	from mall_avatar_import import add_avatars
+	mall_avatars = add_avatars(vsro_root, native, out)
 	from cap110_skill_import import add_skills
 	skill_tier = add_skills(vsro_root, native, out)
 	from cap110_skill_import import add_skill_effects
@@ -634,6 +638,7 @@ def build_variant(vsro_root, native, variant, imported_root=None):
 		"npcs": city_npcs,
 		"npcServices": city_services,
 		"weapons": weapons,
+		"mallAvatars": mall_avatars,
 		"skills": skill_tier,
 		"skillEffects": skill_animation,
 		"linked": linked,
