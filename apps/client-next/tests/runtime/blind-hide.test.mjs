@@ -71,16 +71,28 @@ function fixture( { blindHeld, vHidesCompanions = false } ) {
 			setCharacterActors( actors ) {
 				presented.push( ...actors );
 			},
+			setCharacterAssembly() {},
 			vHidesCompanions: () => vHidesCompanions
 		},
 		resources: {
 			ready: () => true,
+			plan: () => true,
 			retainWanted() {}
 		},
-		mallPreview: { skin: () => null }
+		mallPreview: {
+			skin: () => null,
+			/*
+			================
+			step
+			================
+			*/
+			step() {
+				return [];
+			}
+		}
 	};
 	const frame = { local: undefined, gameplay: null, next, seconds: 0, blindHeld };
-	publishCharacters( frame, {}, { catalog: new Map(), dress: {}, manifest: 0 }, bindings );
+	publishCharacters( frame, { displayed: next }, { catalog: new Map(), dress: {}, manifest: 0 }, bindings );
 	return new Map( presented.map( entry => [ entry.gid, entry ] ) );
 }
 
