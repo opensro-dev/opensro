@@ -13286,6 +13286,7 @@ export function createUi(
 					hudData,
 					trackedQuest,
 					minimapResources,
+					caveMaps: minimapResources.caveMaps(),
 					mapTeleport,
 					reverseScrollHud,
 					text,
