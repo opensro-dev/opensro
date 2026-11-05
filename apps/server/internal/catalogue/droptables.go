@@ -25,6 +25,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/item/gacha"
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 )
@@ -104,6 +105,27 @@ type BetaRates struct {
 	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
 	// while it runs, Rare's named tables carry the widened Sun class.
 	SunDropRate int `json:"sunDropRate,omitempty" doc:"Port-only beta balance: the degree-9 Seal of Sun class of the rare table is 30 times this rate as wide on levels 76-90, so each Sun item's chance is that multiple of its native one; every other class is unchanged. Rare's named tables already carry the widened chances."`
+	// Unique carries the unique rules, present only while at least one
+	// of them runs.
+	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only beta balance: the rules a unique kill runs after admission and the per-kill drop cap (gapExempt, popTicket, maxLevelLoot, sealDrops). Absent when every rule is off, which is the native game; a rule that is off stays absent inside the object too."`
+}
+
+/*
+================
+UniqueRules
+
+The port-only rules a unique kill runs after admission and the drop cap
+(progression.UniqueRulesFromEnv, the same source the GameWorld wires),
+so the export cannot drift from the server (#2537). A rule that is off
+stays absent; without the object the native rules apply.
+================
+*/
+type UniqueRules struct {
+	GapExempt     bool   `json:"gapExempt,omitempty" doc:"Port-only: a unique's drops ignore the killer's level gap (SRO_UNIQUE_GAP_EXEMPT); without it the native gap admission decides."`
+	PopTicket     bool   `json:"popTicket,omitempty" doc:"Port-only: every unique kill adds exactly one Magic Pop card after admission and the per-kill drop cap, so neither can take it (SRO_UNIQUE_POP_TICKET); the card is guaranteed, not a chance."`
+	PopTicketItem uint32 `json:"popTicketItem,omitempty" doc:"The item id of the guaranteed Magic Pop card (popTicketItem); present only while popTicket runs."`
+	MaxLevelLoot  bool   `json:"maxLevelLoot,omitempty" doc:"Port-only: a top-band unique's equipment tables roll at the shard's highest installed level instead of the unique's own (SRO_UNIQUE_MAX_LEVEL_LOOT)."`
+	SealDrops     bool   `json:"sealDrops,omitempty" doc:"Port-only: every unique kill guarantees one Seal of Star plus a one-in-ten Seal of Moon draw (SRO_UNIQUE_SEAL_DROPS)."`
 }
 
 /*
@@ -194,6 +216,15 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		// refuses it before building, so an error here is never published.
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
 			file.Beta.Mix = mix
+		}
+		if rules := progression.UniqueRulesFromEnv(); rules.GapExempt || rules.PopTicket ||
+			rules.MaxLevelLoot || rules.SealDrops {
+			unique := &UniqueRules{GapExempt: rules.GapExempt, PopTicket: rules.PopTicket,
+				MaxLevelLoot: rules.MaxLevelLoot, SealDrops: rules.SealDrops}
+			if rules.PopTicket {
+				unique.PopTicketItem = itemID(gacha.CardCodename)
+			}
+			file.Beta.Unique = unique
 		}
 	}
 	return file

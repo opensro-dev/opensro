@@ -322,6 +322,14 @@ func monsterVariants(ref monster.MonsterRef, promotes bool) []MonsterVariant {
 	out := make([]MonsterVariant, 0, len(grades))
 	for _, grade := range grades {
 		capacity, passes, attempts := loot.MonsterDropBudget(grade, ref.Codename)
+		// Port-only, not native: a Pharaoh Tomb elite (grade 6) or unique
+		// (grade 8) rolls its equipment this many times as often
+		// (monster.EnvPharaohGearRate, action.pharaohGearRate), and the
+		// kill's ordinary passes carry that rate; the tomb stamped it on
+		// the reference when the population loaded.
+		if rate := int(ref.PharaohGearRate); rate > 1 && (grade&0x0f == 6 || grade&0x0f == 8) {
+			passes *= rate
+		}
 		goldMin, goldMax, _ := action.MonsterGoldHeapRange(ref.Level, grade)
 		out = append(out, MonsterVariant{Grade: gradeName(grade), Party: grade>>4 == 1, Capacity: capacity, Passes: passes,
 			Attempts: attempts, GoldMin: goldMin, GoldMax: goldMax})
@@ -365,9 +373,17 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 		return nil
 	}
 	c := action.UniqueDropCounts(ref.MonsterType, ref.Codename)
-	return &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
+	bonus := &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
 		EquipmentMin: c[0].Min + c[1].Min, EquipmentMax: c[0].Max + c[1].Max,
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}
+	// Port-only, not native: the same tomb gear rate multiplies the
+	// prepass equipment count of a tomb unique (grade 8; the only grade
+	// that both runs the prepass and takes the rate on the server).
+	if rate := int(ref.PharaohGearRate); rate > 1 && ref.MonsterType&0x0f == 8 {
+		bonus.EquipmentMin *= rate
+		bonus.EquipmentMax *= rate
+	}
+	return bonus
 }
 
 /*
