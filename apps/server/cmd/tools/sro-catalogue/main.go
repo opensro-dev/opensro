@@ -355,7 +355,7 @@ func run(out, release, textdata string) error {
 		return itemID(codename)
 	}
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
-		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
+		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID, Levels: enterworld.NewTextdataLevels(dir)})
 	skillData := enterworld.NewTextdataSkills(dir)
 	template, err := shardPopulation(dir, cap110)
 	if err != nil {
