@@ -665,6 +665,18 @@ export function createEntities(
 		},
 		/*
 		================
+		structureName
+
+		Fortress service replies name a zone, not a visible actor. Resolve
+		its structure through the catalog even when it is outside view.
+		================
+		*/
+		structureName( refObjId: number ): string | undefined {
+			const reference = refs.get( refObjId );
+			return reference?.kind === "structure" ? reference.name : undefined;
+		},
+		/*
+		================
 		playerModels
 
 		The player models of one country in reference order, each with its

@@ -1297,7 +1297,8 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"callback:createGameplay:1",
-				"callback:createGameplay:4"
+				"callback:createGameplay:4",
+				"structureName"
 			]
 		},
 		{
