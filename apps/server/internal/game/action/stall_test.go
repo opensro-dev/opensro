@@ -471,18 +471,21 @@ func TestStallCreateStopsAWalkingHost(t *testing.T) {
 
 /*
 ================
-TestStallFullRefusalNamesTheMarketFullRow
+TestStallFullRefusalKeepsTheNativeWord
 
 #2357: an offer added to a stall whose slots are all taken is refused
-with the client's market-full notice row (byte 0x18). The byte the port
-used before (0x30) names no row of the client's stall notice category,
-so the refusal printed nothing.
+with the native word 0x30 (result 0x3C30, proven in the native stall
+module). No row of the client's stall notice category names 0x30, so
+the refusal prints nothing, as it does natively. The 0x18 market-full
+row sent for a while (#2414) is a row the native server never sends
+here; this test pins the native word so the silence is not "fixed"
+into a wrong line again.
 ================
 */
-func TestStallFullRefusalNamesTheMarketFullRow(t *testing.T) {
+func TestStallFullRefusalKeepsTheNativeWord(t *testing.T) {
 	rt, owner, _, _ := stallFixture(t)
-	if wire.StallErrStallFull != 0x18 {
-		t.Fatalf("stall-full refusal byte %#x, want 0x18 (the client's market-full row)", wire.StallErrStallFull)
+	if wire.StallErrStallFull != 0x30 {
+		t.Fatalf("stall-full refusal byte %#x, want 0x30 (the native full-stall word)", wire.StallErrStallFull)
 	}
 	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Potions").Payload())
 	// Eleven offerable stacks: the fixture's slot 13 plus slots 21..30
@@ -510,9 +513,40 @@ func TestStallFullRefusalNamesTheMarketFullRow(t *testing.T) {
 	}
 	out := rt.HandleStallEdit(testDivision, owner, stallAddOfferAt(0, 30, 5, false))
 	p := out.Frames[0].Payload
-	if len(p) != 2 || p[0] != 2 || p[1] != 0x18 {
-		t.Fatalf("eleventh offer answered % X, want the market-full refusal [2 0x18]", p)
+	if len(p) != 2 || p[0] != 2 || p[1] != 0x30 {
+		t.Fatalf("eleventh offer answered % X, want the native full-stall refusal [2 0x30]", p)
 	}
+}
+
+/*
+================
+TestStallNoStallRefusalKeepsTheNativeByte
+
+#2357: closing, editing or visiting with no stall in play is refused
+with result byte 0x2A (result 0x3C2A), the native no-stall answer on
+all three lanes. No row of the client's stall notice category names
+0x2A, so the refusal prints nothing, as it does natively; the byte is
+pinned so the silence is not "fixed" into a wrong line.
+================
+*/
+func TestStallNoStallRefusalKeepsTheNativeByte(t *testing.T) {
+	if stallErrNotHost != 0x2A {
+		t.Fatalf("no-stall refusal byte %#x, want 0x2a (the native no-stall word)", stallErrNotHost)
+	}
+	rt, owner, buyer, _ := stallFixture(t)
+	refusal := func(name string, out OpResult, opcode uint16) {
+		t.Helper()
+		if len(out.Frames) != 1 || out.Frames[0].Opcode != opcode {
+			t.Fatalf("%s answered %+v, want one %#x answer", name, out.Frames, opcode)
+		}
+		if p := out.Frames[0].Payload; len(p) != 2 || p[0] != 2 || p[1] != 0x2A {
+			t.Fatalf("%s answered % X, want the native no-stall refusal [2 0x2a]", name, p)
+		}
+	}
+	refusal("close", rt.HandleStallClose(testDivision, buyer, nil), wire.OpStallCloseResult)
+	refusal("edit", rt.HandleStallEdit(testDivision, buyer, stallEdit(wire.StallEditOpen, 1, 1)), wire.OpStallEditResult)
+	refusal("visit", rt.HandleStallVisit(testDivision, buyer,
+		wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(owner)).Payload()), wire.OpStallVisitResult)
 }
 
 /*

@@ -91,6 +91,20 @@ the wait and release verdicts cannot drift apart.
 ==================
 */
 func resourceCostVerdict(maxHP, maxMP, currentHP, currentMP int64, stats combat.Stats, err error, skill enterworld.SkillRow) (int64, uint16) {
+	return resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, err, skill.Consumption, skill.Group)
+}
+
+/*
+==================
+resourceCostVerdictFor
+
+resourceCostVerdict on the price shape alone: the waiting cast's
+prepared snapshot carries only the consumption and group, and the
+verdict reads nothing else of the row (#2139).
+==================
+*/
+func resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP int64, stats combat.Stats, err error, consumption enterworld.SkillConsumption, group uint32) (int64, uint16) {
+	skill := enterworld.SkillRow{Consumption: consumption, Group: group}
 	if refusal := hpCostRefusal(currentHP, maxHP, skill); refusal != 0 {
 		return 0, refusal
 	}
