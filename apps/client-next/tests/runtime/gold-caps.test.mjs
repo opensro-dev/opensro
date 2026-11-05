@@ -176,6 +176,70 @@ test("the warehouse deposit dialog caps at 100m natively and 1b with the raised 
 	}
 });
 
+test("a retained shop catalog does not block the storage deposit dialog", () => {
+	for ( const raised of [ false, true ] ) {
+		const sent = [],
+			f = uiFixture(
+				/** @type {() => void} */ (/** @param {any} command */ command => {
+					sent.push( command );
+				})
+			);
+		try {
+			const game = {
+				...f.state.gameplay,
+				inventoryPending: false,
+				raisedGoldCaps: raised,
+				progression: { gold: "2000000000", masteries: [] },
+				// The merchant is closed: its catalog is retained, but no
+				// shop panel is open. The warehouse keeper holds storage.
+				shop: { npc: 9, name: "Merchant", offers: [] },
+				target: 7,
+				storage: { npc: 7, phase: "open", capacity: 150, gold: "500", items: [] }
+			};
+			const state = { ...f.state, gameplay: game };
+			let now = 0, scene;
+			const click = ( /** @type {string} */ id ) => {
+				f.ui.event( { kind: "activate", id } );
+				scene = f.ui.step( state, ++now ) ?? scene;
+			};
+			f.ui.step( state, now );
+			// Withdraw opens in the same fixture.
+			click( "storage-gold" );
+			assert.ok(
+				defined( scene ).controls.some( c => c.id === "gold-amount" ),
+				"the withdraw dialog opens"
+			);
+			click( "gold-cancel" );
+			// The inventory Gold button still routes to deposit despite
+			// the retained catalog.
+			click( "inventory-gold" );
+			assert.ok(
+				defined( scene ).controls.some( c => c.id === "gold-amount" ),
+				"the deposit dialog opens after shopping"
+			);
+			f.ui.event( {
+				kind: "edit",
+				id: "gold-amount",
+				value: "100",
+				start: 3,
+				end: 3,
+				composing: false
+			} );
+			scene = f.ui.step( state, ++now ) ?? scene;
+			click( "drop-gold" );
+			assert.deepEqual( sent.pop(), {
+				kind: "gameplay",
+				command: {
+					kind: "storage-move",
+					move: { type: 0x0c, source: 0, destination: 0, quantity: 0, gold: 100 }
+				}
+			} );
+		} finally {
+			f.dispose();
+		}
+	}
+});
+
 /*
 ================
 str
