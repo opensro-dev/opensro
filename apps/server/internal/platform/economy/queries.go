@@ -396,7 +396,19 @@ type Flag struct {
 	Ref       *string `json:"ref"`
 	Value     string  `json:"value"`
 	Threshold string  `json:"threshold"`
+	// Basis states how Value and Threshold are measured:
+	// flagBasisPerOnlineHour compares gold per online hour, the
+	// growth-proof reading; flagBasisDailyTotal is the raw day total,
+	// kept (and labelled) when there is no online-hour data to
+	// normalise by (#2643).
+	Basis string `json:"basis,omitempty"`
 }
+
+// The flagBasis values a net_mint_p95 Flag can carry (#2643).
+const (
+	flagBasisPerOnlineHour = "per_online_hour"
+	flagBasisDailyTotal    = "daily_total"
+)
 
 /*
 ================
@@ -407,9 +419,21 @@ netMintWindow days with ledger rows before it, once that many exist (a
 day with no change at all has no point and is skipped). A flag only: no
 rule acts. The day nets come from 1d groups starting netMintWindow days
 before the window.
+
+The comparison is in gold minted per online hour (#2643): on a growing
+shard the raw day total breaks its own record most days (the percentile
+of seven earlier totals sits just under yesterday's, so every new
+record flags), while mint per hour stays flat under ordinary growth and
+still jumps when minting per hour of play doubles. onlineMs maps a day
+start (unix seconds, the kill_stats day_s key) to that day's summed
+online milliseconds and is whole-shard: kill_stats has no division
+column, so only the whole-shard division is normalised. A day whose
+own day - or any of the window's - has no online-hour data falls back
+to the raw-total comparison; either way the flag's Basis says which
+reading it is.
 ================
 */
-func netMintFlags(entries []rollupEntry, w window, division string) []Flag {
+func netMintFlags(entries []rollupEntry, onlineMs map[int64]int64, w window, division string) []Flag {
 	days := window{bucket: "1d", size: bucketSeconds["1d"], from: w.from - netMintWindow*bucketSeconds["1d"], to: w.to, division: division}
 	points := foldSeries("gold_net", rollupGroups(entries, days))
 	var flags []Flag
@@ -417,23 +441,60 @@ func netMintFlags(entries []rollupEntry, w window, division string) []Flag {
 		if point.T < w.from || i < netMintWindow {
 			continue
 		}
-		var earlier []int64
+		value, _ := strconv.ParseInt(point.Sum, 10, 64)
+		priors := make([]int64, 0, netMintWindow)
 		for _, prior := range points[i-netMintWindow : i] {
-			value, _ := strconv.ParseInt(prior.Sum, 10, 64)
-			earlier = append(earlier, value)
+			priorValue, _ := strconv.ParseInt(prior.Sum, 10, 64)
+			priors = append(priors, priorValue)
+		}
+		basis := flagBasisDailyTotal
+		compared, earlier := value, priors
+		if division == "" {
+			dayRate, ok := mintPerOnlineHour(value, onlineMs[point.T])
+			if ok {
+				rates := make([]int64, 0, netMintWindow)
+				for j, prior := range priors {
+					rate, has := mintPerOnlineHour(prior, onlineMs[points[i-netMintWindow+j].T])
+					if !has {
+						rates = nil
+						break
+					}
+					rates = append(rates, rate)
+				}
+				if rates != nil {
+					basis, compared, earlier = flagBasisPerOnlineHour, dayRate, rates
+				}
+			}
 		}
 		slices.Sort(earlier)
 		threshold := percentile(earlier, 0.95)
-		value, _ := strconv.ParseInt(point.Sum, 10, 64)
-		if value <= threshold {
+		if compared <= threshold {
 			continue
 		}
 		flags = append(flags, Flag{
 			ID: fmt.Sprintf("net_mint_p95:%s:%d", division, point.T), Rule: "net_mint_p95", At: point.T,
-			Division: division, Value: point.Sum, Threshold: decimal(threshold),
+			Division: division, Value: decimal(compared), Threshold: decimal(threshold), Basis: basis,
 		})
 	}
 	return flags
+}
+
+/*
+================
+mintPerOnlineHour
+
+The day's net mint per whole online hour of play, 3600-seconds
+normalised so the value stays a plain gold-per-hour figure. ok is
+false when the day has no online-hour data (the caller falls back to
+the raw-total rule).
+================
+*/
+func mintPerOnlineHour(netMint, onlineMs int64) (int64, bool) {
+	hours := onlineMs / 3600000
+	if hours <= 0 {
+		return 0, false
+	}
+	return netMint / hours, true
 }
 
 /*
