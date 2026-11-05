@@ -24,6 +24,7 @@ import (
 
 	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -316,7 +317,12 @@ func run(out, release, textdata string) error {
 	if len(refs) == 0 {
 		return fmt.Errorf("no item references loaded from %s", dir)
 	}
-	items := catalogue.BuildItems(catalogue.ItemSource{Refs: refs, Usable: action.ItemUseSupported})
+	// The pet gear export (catalogue petgear.go) publishes at the
+	// petGearDropFactor the shard runs by default: store.DefaultPetGearDropFactor.
+	// An operator can retune the setting while the shard is stopped; the
+	// live rule follows the database, the export the shipped default.
+	items := catalogue.BuildItems(catalogue.ItemSource{Refs: refs, Usable: action.ItemUseSupported,
+		PetGearFactor: store.DefaultPetGearDropFactor})
 	itemSource, err := shardItems(dir)
 	if err != nil {
 		return err
@@ -422,6 +428,8 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return err
 	}
+	dropTables := catalogue.BuildDropTables(monsters, dropItemID, header)
+	dropTables.PetGear = catalogue.BuildPetGearRule(store.DefaultPetGearDropFactor, itemID)
 	files := map[string]any{
 		"items.json":    catalogue.ItemsFile{Header: header, Items: items},
 		"quests.json":   catalogue.QuestsFile{Header: header, Quests: quests},
@@ -441,7 +449,7 @@ func run(out, release, textdata string) error {
 		"notes.json":      catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
 		"levels.json":     catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery, levelCap),
 		"trade.json":      catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(), Quotes: tradeQuotes},
-		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
+		"droptables.json": dropTables,
 		"events.json":     catalogue.BuildEvents(header, itemID),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
