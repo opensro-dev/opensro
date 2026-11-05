@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 const { createCombat } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts"
 );
-const { skillPulse } = await import( "../../src/engine/foundation/gameplay/combat-result.ts" );
+const { damageTicks, skillPulse } = await import( "../../src/engine/foundation/gameplay/combat-result.ts" );
 
 /*
 ================
@@ -59,6 +59,41 @@ test("truncated or trailing pulse bytes leave owner state unchanged", () => {
 	}
 	assert.throws( () => skillPulse( Uint8Array.from( [ ...packet, 0 ] ) ) );
 	assert.equal( skillPulse( Uint8Array.of( 4 ) ), null );
+});
+
+/*
+================
+tickPacket
+
+Native deferred tick: mode, source, flags, target, count, then one
+three-byte damage value per tick.
+================
+*/
+function tickPacket( flags = 0, ticks = [ 25, 300 ] ) {
+	const packet = [ 1, 0x29, 0x23, 0, 0, flags, 2, 0, 0, 0, ticks.length ];
+	for ( const tick of ticks ) packet.push( tick & 255, (tick >> 8) & 255, (tick >> 16) & 255 );
+	return Uint8Array.from( packet );
+}
+
+test("deferred ticks decode to display-only damage without HP or a cast", () => {
+	assert.deepEqual( damageTicks( tickPacket() ), { target: 2, ticks: [ 25, 300 ] } );
+	assert.equal( damageTicks( pulsePacket() ), null );
+	for ( let length = 1; length < tickPacket().length; length++ ) {
+		assert.throws( () => damageTicks( tickPacket().slice( 0, length ) ) );
+	}
+	const events = [];
+	const combat = createCombat( gid => gid === 2 ? { gid: 2 } : undefined, event => events.push( event ) );
+	combat.seed( 2, { hp: 100 } );
+	assert.equal( combat.receive( 0xb3c6, tickPacket(), 2000 ), true );
+	// HP and death stay with the vitals owner; the tick only feeds the
+	// victim-label feedback lane, so no cast opens and nothing debits.
+	assert.equal( combat.state().vitals.find( row => row.gid === 2 )?.hp, 100 );
+	assert.equal( combat.state().casts.length, 0 );
+	assert.equal( events.filter( event => event.kind === "cast-finalize" ).length, 0 );
+	assert.deepEqual(
+		combat.state().environmentalDamage.map( row => [ row.gid, row.damage ] ),
+		[ [ 2, 25 ], [ 2, 300 ] ]
+	);
 });
 
 test("compact bootstrap flags admit the linked source before pulse and paired teardown", () => {

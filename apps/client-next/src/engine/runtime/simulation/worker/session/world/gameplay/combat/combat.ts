@@ -31,7 +31,7 @@ import {
 	type AttachedEffectReference
 } from "@/engine/foundation/gameplay/attached-effects";
 import type { CastState } from "@/engine/contracts/gameplay";
-import { castPhase, skillPulse } from "@/engine/foundation/gameplay/combat-result";
+import { castPhase, damageTicks, skillPulse } from "@/engine/foundation/gameplay/combat-result";
 import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
 /*
 ================
@@ -469,6 +469,27 @@ export function createCombat(
 		receive( op: number, p: Uint8Array, now = 0 ) {
 			if ( cooldowns.receiveRecovery( op, p, now ) ) return true;
 			if ( op === 0xb3c6 ) {
+				// Deferred damage is display-only, like the periodic notice
+				// below: the label lane shows the tick, HP and death stay
+				// with the vitals and life-state owners.
+				const ticks = damageTicks( p );
+				if ( ticks ) {
+					if ( readEntity( ticks.target ) ) {
+						for ( const damage of ticks.ticks ) {
+							if ( !damage ) continue;
+							if ( environmentalDamage.length >= 2048 ) {
+								throw Error( "Environmental feedback capacity exceeded" );
+							}
+							environmentalDamage = [ ...environmentalDamage, {
+								sequence: ++feedbackSequence,
+								gid: ticks.target,
+								damage,
+								atMs: now
+							} ];
+						}
+					}
+					return true;
+				}
 				const pulse = skillPulse( p, gid => {
 					const object = readEntity( gid );
 					if ( !object?.skillObject ) return undefined;

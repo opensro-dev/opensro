@@ -9,12 +9,14 @@ linkeddamage_test.go - fence and Pain Quota shares of a member's hit
 package action
 
 import (
+	"bytes"
 	"testing"
 
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -46,7 +48,7 @@ func linkedShareFixture(t *testing.T, fence, quota uint32) (*Runtime, *enterworl
 TestFenceMovesThePhysicalShareToTheWarrior
 
 A Physical Fence of 33 takes 23 of a 70 physical / 30 magical hit; the
-member keeps 77 and the warrior takes 23 as the attacker's pulse hit.
+member keeps 77 and the warrior takes 23 as a deferred damage tick.
 ================
 */
 func TestFenceMovesThePhysicalShareToTheWarrior(t *testing.T) {
@@ -62,8 +64,28 @@ func TestFenceMovesThePhysicalShareToTheWarrior(t *testing.T) {
 	if got := before - *warrior.CurrentHP; got != 23 {
 		t.Fatalf("warrior lost %d, want 23", got)
 	}
+	// A share reaches the taker as a deferred damage tick (the pulse
+	// packet's tick mode), never as a cast result: observers show the
+	// tick number and take the taker's HP from the vitals refresh.
 	if len(shared.Broadcast) == 0 || shared.Broadcast[0].Opcode != wire.OpSkillPulse {
-		t.Fatalf("share not published as a pulse: %+v", shared.Broadcast)
+		t.Fatalf("share not published as a tick: %+v", shared.Broadcast)
+	}
+	tick := shared.Broadcast[0].Payload
+	warriorGID := enterworld.ObjectIDForCharacter(warrior)
+	wantTick := []byte{1, 0x29, 0x23, 0x00, 0x00, 0,
+		byte(warriorGID), byte(warriorGID >> 8), byte(warriorGID >> 16), byte(warriorGID >> 24),
+		1, 23, 0, 0}
+	if !bytes.Equal(tick, wantTick) {
+		t.Fatalf("tick payload %v, want %v", tick, wantTick)
+	}
+	vitals := false
+	for _, frame := range shared.Broadcast {
+		if frame.Opcode == simulation.OpVitalsUpdate {
+			vitals = true
+		}
+	}
+	if !vitals {
+		t.Fatalf("share carries no vitals refresh: %+v", shared.Broadcast)
 	}
 	// A moved share does not run the taker's own links again.
 	var again playerStruck
