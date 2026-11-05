@@ -389,7 +389,7 @@ the two readings agree everywhere the roster can sit.
 ================
 */
 export function partyIsFull( members: number, options: number ): boolean {
-	return members >= ( ( options & 1 ) ? 8 : 4 );
+	return members >= ((options & 1) ? 8 : 4);
 }
 
 /*

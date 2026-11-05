@@ -4543,7 +4543,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					// 634DC9: a party that fills while the player's
 					// listing stands arms the delete banner's
 					// COMPLETE2 form (the delete answer consumes it).
-					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) partyMatchFullLatch = true;
+					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) {
+						partyMatchFullLatch = true;
+					}
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
