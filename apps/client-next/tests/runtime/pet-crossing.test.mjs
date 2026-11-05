@@ -118,8 +118,8 @@ test("a held 0x3FB1 max survives a travel reset and the pet's re-spawn (#2564)",
 		refObjSnapshot: [ { kind: "cos", refObjId: 103, tidWord: 3 << 11 | 0x1c6 } ]
 	} );
 	game.seed( { gid: 1, refObjId: 1907, kind: "player", name: "Player", regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
-	// The login restore push (#1899): the wolf's effective max is 8100
-	// under the server's authored curve, not the catalog's 39434.
+	// The login restore push (#1899) holds an effective max of 8100,
+	// which the window must keep instead of the catalog's 39434.
 	game.receive( { opcode: OP_PET_TRAINING_STATE, payload: statePayload( GID, 8100 ) }, 1000 );
 	// The pet window's own read (ui.ts): the published state merges only
 	// under the record's gid; the text divides HP by the merged max.
