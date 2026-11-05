@@ -163,6 +163,9 @@ type DropTablesFile struct {
 	// SunEventOnly says degree-9 Seal of Sun gear neither drops nor is sold
 	// (progression.SunEventOnly); its chances are already left out.
 	SunEventOnly bool `json:"sunEventOnly,omitempty" doc:"Port-only: degree-9 Seal of Sun gear (rarity 2, ItemClass 27) neither drops nor is sold; it comes only as an event reward. Its chances are left out of these tables, and a Sun pick drops nothing, so every other chance is unchanged."`
+	// PetGear is the attack-pet gear derived drop (petgear.go), present
+	// only while the expansion runs at a positive factor.
+	PetGear *PetGearRule `json:"petGear,omitempty"`
 }
 
 /*
