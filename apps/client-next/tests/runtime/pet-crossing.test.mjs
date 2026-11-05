@@ -17,6 +17,7 @@ drops the state, and the restore push replaces it there.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -30,6 +31,7 @@ const { OP_PET_TRAINING_STATE } = await import(
 
 const wolf = PET_DESIGN.treeSkills.find( s => s.pet === "Wolf" && s.row === 0 && s.status === "Implemented" );
 if ( !wolf ) throw new Error( "Missing implemented wolf fixture" );
+const WOLF_SKILL = wolf.id;
 
 /*
 ================
@@ -56,7 +58,7 @@ function statePayload( gid, maxHp ) {
 	bytes.push( 0 );
 	bytes.push( 0, 0, 0 );
 	bytes.push( 1 );
-	bytes.push( wolf.id, 1, 1, 15, 9 );
+	bytes.push( WOLF_SKILL, 1, 1, 15, 9 );
 	u16( 50 );
 	u16( 60 );
 	bytes.push( 0 );
@@ -133,7 +135,7 @@ test("a held 0x3FB1 max survives a travel reset and the pet's re-spawn (#2564)",
 	assert.equal( windowText( before ), "8100/8100 (100%)" );
 	// The reported reading is what the same window shows with no held
 	// state: the catalog fallback, not a crossing's doing.
-	const record = before?.cosRecords?.find( r => r.gid === GID );
+	const record = defined( before?.cosRecords?.find( r => r.gid === GID ) );
 	assert.equal( cosHpText( record, petReference( catalog, undefined ) ), "8100/39434 (20%)" );
 	// A crossing: core.ts answers a reset frame with gameplay.resetWorld()
 	// and the pet's record re-spawns on the far side under the same gid.
