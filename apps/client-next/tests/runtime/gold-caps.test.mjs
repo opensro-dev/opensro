@@ -205,6 +205,7 @@ test("a retained shop catalog does not block the storage deposit dialog", () => 
 			f.ui.step( state, now );
 			// Withdraw opens in the same fixture.
 			click( "storage-gold" );
+			scene = f.ui.step( state, ++now ) ?? scene;
 			assert.ok(
 				defined( scene ).controls.some( c => c.id === "gold-amount" ),
 				"the withdraw dialog opens"
@@ -213,6 +214,7 @@ test("a retained shop catalog does not block the storage deposit dialog", () => 
 			// The inventory Gold button still routes to deposit despite
 			// the retained catalog.
 			click( "inventory-gold" );
+			scene = f.ui.step( state, ++now ) ?? scene;
 			assert.ok(
 				defined( scene ).controls.some( c => c.id === "gold-amount" ),
 				"the deposit dialog opens after shopping"
