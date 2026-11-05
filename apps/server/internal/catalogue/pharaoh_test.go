@@ -69,6 +69,13 @@ func TestPharaohGearRateScalesTheTombDrops(t *testing.T) {
 	if geared.RecipesMin != native.RecipesMin || geared.ScrollsMin != native.ScrollsMin {
 		t.Error("the rate scaled the prepass recipes or scrolls; it multiplies equipment only")
 	}
+	// The runtime reads the grade's low nibble (Instance.Rarity), so a
+	// party nibble on the authored byte changes nothing it rolls; the
+	// published bonus must read the same nibble.
+	if flagged := uniqueBonus(ref(0x18, 3)); flagged == nil || *flagged != *geared {
+		t.Errorf("party-flagged unique bonus %+v, want the grade-8 bonus %+v (the runtime reads the low nibble)",
+			flagged, geared)
+	}
 	if bonus := uniqueBonus(ref(6, 3)); bonus != nil {
 		t.Errorf("grade 6 published a unique bonus %+v; it runs no prepass", bonus)
 	}

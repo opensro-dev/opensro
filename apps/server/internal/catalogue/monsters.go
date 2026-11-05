@@ -378,7 +378,11 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 	if !action.RollsUniqueDrops(ref.MonsterType) {
 		return nil
 	}
-	c := action.UniqueDropCounts(ref.MonsterType, ref.Codename)
+	// The runtime reads the grade's low nibble (Instance.Rarity), so
+	// a party nibble on the authored byte changes none of its counts;
+	// the published counts read the same nibble.
+	grade := ref.MonsterType & 0x0f
+	c := action.UniqueDropCounts(grade, ref.Codename)
 	bonus := &UniqueBonus{Table: equipmentTableKey(ref.Level, ref.Country),
 		EquipmentMin: c[0].Min + c[1].Min, EquipmentMax: c[0].Max + c[1].Max,
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}
@@ -387,7 +391,7 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 	// above (action.RollsUniqueDrops, grades 3 and 8) is wider than the
 	// gear rate's own gate (action.PharaohGearRate, grades 6 and 8), so
 	// of the prepass grades only the grade-8 tomb uniques take it.
-	if rate := action.PharaohGearRate(ref.MonsterType, int(ref.PharaohGearRate)); rate > 1 {
+	if rate := action.PharaohGearRate(grade, int(ref.PharaohGearRate)); rate > 1 {
 		bonus.EquipmentMin *= rate
 		bonus.EquipmentMax *= rate
 	}
