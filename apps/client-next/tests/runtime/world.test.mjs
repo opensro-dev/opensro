@@ -38,6 +38,7 @@ const { createEntities } = await load( "src/engine/runtime/simulation/worker/ses
 const { createWorldSession } = await load( "src/engine/runtime/simulation/worker/session/world/world.ts" );
 const { outOfMemoryFailure } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
 const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/session/http/http.ts" );
+const { equipmentBand } = await load( "src/engine/foundation/gameplay/peer-appearance.ts" );
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
 
@@ -1424,6 +1425,162 @@ for ( const row of peerFixture.scenarios ) {
 		assert.equal( owner.count(), 0 );
 	});
 }
+test("player churn keeps the world registries flat (#2299)", () => {
+	const row = peerFixture.scenarios[0];
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: row.modelRefObjId, kind: "player" } ],
+		refItemSnapshot: row.equipment ?? []
+	} );
+	flush( owner );
+	const POPULATION = 60, CYCLES = 20000;
+	/*
+	================
+	playerSpawnFrame
+
+	A peer spawn (0x30D7) encoded field for field the way
+	decodePeerAppearance reads it, wearing the fixture's first items so
+	every arrival carries real equipment state.
+	================
+	*/
+	function playerSpawnFrame( gid ) {
+		const bytes = [];
+		const u8 = ( n ) => bytes.push( n & 255 );
+		const u16 = ( n ) => {
+			const b = Buffer.alloc( 2 );
+			b.writeUInt16LE( n );
+			bytes.push( ...b );
+		};
+		const u32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeUInt32LE( n >>> 0 );
+			bytes.push( ...b );
+		};
+		const f32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeFloatLE( n );
+			bytes.push( ...b );
+		};
+		const str = ( s ) => {
+			u16( s.length );
+			for ( const c of s ) bytes.push( c.charCodeAt( 0 ) );
+		};
+		u32( row.modelRefObjId );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		const worn = (row.equipment ?? []).slice( 0, 3 );
+		u8( worn.length );
+		for ( const item of worn ) {
+			u32( item.refObjId );
+			if ( equipmentBand( item.typeFlags ) ) u8( 1 );
+		}
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u32( gid );
+		u16( 25256 );
+		f32( 10 );
+		f32( 20 );
+		f32( 1 );
+		u16( 0 );
+		u8( 0 );
+		u8( 1 );
+		u8( 0 );
+		u16( 0 );
+		u8( 1 );
+		u8( 0 );
+		u8( 0 );
+		f32( 5 );
+		f32( 16 );
+		f32( 1 );
+		u8( 0 );
+		str( "P" + gid );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		str( "" );
+		u32( 0 );
+		str( "" );
+		u32( 0 );
+		u32( 0 );
+		u32( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		return { opcode: 0x30d7, payload: Uint8Array.from( bytes ) };
+	}
+	/*
+	================
+	gidFrame
+
+	A one-gid frame: a despawn (0x36AB) or a speed update (0x376F), the
+	two packets a busy area applies to other players all session long.
+	================
+	*/
+	function gidFrame( opcode, gid ) {
+		const payload = new Uint8Array( opcode === 0x376f ? 12 : 4 ),
+			v = new DataView( payload.buffer );
+		v.setUint32( 0, gid, true );
+		if ( opcode === 0x376f ) {
+			v.setFloat32( 4, 6.5, true );
+			v.setFloat32( 8, 17.5, true );
+		}
+		return { opcode, payload };
+	}
+	let nextGid = 1000, firstRetired = 0;
+	const alive = [];
+	/*
+	================
+	spawnOne / retireOne
+
+	One arrival and one departure, so the visible population holds at
+	POPULATION while identities churn under it.
+	================
+	*/
+	function spawnOne() {
+		const gid = nextGid++;
+		owner.receive( playerSpawnFrame( gid ) );
+		alive.push( gid );
+	}
+	function retireOne() {
+		const gid = alive.shift();
+		if ( !firstRetired ) firstRetired = gid;
+		owner.receive( gidFrame( 0x36ab, gid ) );
+	}
+	for ( let i = 0; i < POPULATION; i++ ) spawnOne();
+	flush( owner );
+	assert.equal( owner.count(), POPULATION );
+	// Retention is judged on the registries themselves: every structure
+	// that can hold a player past its despawn roots in the entity table
+	// or the journal, and both are observable here. (A heap reading
+	// cannot separate retention from uncollected churn garbage in this
+	// harness; the GC-forced probe behind this test read a flat
+	// 17.6 MB across 40,000 of these cycles.)
+	for ( let cycle = 0; cycle < CYCLES; cycle++ ) {
+		retireOne();
+		spawnOne();
+		owner.receive( gidFrame( 0x376f, alive[cycle % POPULATION] ) );
+		if ( cycle % 50 === 49 ) flush( owner );
+		if ( cycle % 5000 === 4999 ) assert.equal( owner.count(), POPULATION );
+	}
+	flush( owner );
+	assert.equal( owner.count(), POPULATION, "population holds while identities churn" );
+	assert.equal( owner.read( firstRetired ), undefined, "a retired player leaves no entity behind" );
+	while ( alive.length ) retireOne();
+	flush( owner );
+	assert.equal( owner.count(), 0, "every registry entry leaves with its player" );
+	assert.equal( owner.take(), null, "the journal holds nothing back after the last departure" );
+	owner.dispose();
+});
+
 test("retail ordered equipment replacement and clear-by-slot accept zero and absent references", () => {
 	const row = peerFixture.scenarios[1], owner = createEntities();
 	owner.bootstrap( {
@@ -2859,10 +3016,14 @@ for ( const queuedReceipt of [ true, false ] ) {
 		assert.equal( world.status().phase, "reconnecting" );
 		assert.equal( incidents.length, 1 );
 		// Nothing at all arrived for 12 s while the move waited: the link
-		// stalled (#1418), so the incident names the link, not the move.
+		// stalled (#1418), so the incident names the link and the lane
+		// that waited (#2148), not the move's own watchdog.
 		assert.equal( incidents[0].code, "transport_stalled" );
 		assert.equal( incidents[0].category, "unknown" );
-		assert.match( incidents[0].message, /Transport stalled: a request waited 12001 ms with no frame arriving/ );
+		assert.match(
+			incidents[0].message,
+			/Transport stalled: the movement lane waited 12001 ms with no frame arriving/
+		);
 		assert.throws( () => world.command( { kind: "move", destination } ), /not ready/ );
 		world.step( 12256 );
 		await settle();
@@ -2981,7 +3142,7 @@ test("a stalled link is named and resumed at 8 s, before the receipt watchdog", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8000 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8000 ms with no frame arriving/ );
 });
 
 /*
@@ -3030,7 +3191,7 @@ test("a frozen tab's backlog ages on the event clock in the stall incident", asy
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 	const age = /last inbound (\d+) ms ago/.exec( incidents[0].message );
 	assert.ok( age, "the incident ages the last frame" );
 	assert.ok(
@@ -3073,7 +3234,7 @@ test("a frame landing in the request's own step does not prove the link alive", 
 	assert.equal( world.status().phase, "reconnecting" );
 	assert.equal( incidents.length, 1 );
 	assert.equal( incidents[0].code, "transport_stalled" );
-	assert.match( incidents[0].message, /a request waited 8005 ms with no frame arriving/ );
+	assert.match( incidents[0].message, /the movement lane waited 8005 ms with no frame arriving/ );
 });
 
 /*

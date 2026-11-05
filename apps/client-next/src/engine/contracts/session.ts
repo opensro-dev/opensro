@@ -119,12 +119,15 @@ export type SessionState = Readonly<{
 	error?: string;
 	// The last world failure's evidence, for the
 	// world_entry_rejected incident (#2311 item 4): the world phase
-	// that failed (a mid-world drop reports "world") and how much wire
-	// arrived on the attempt that failed.
+	// that failed (a mid-world drop reports "world"), how much wire
+	// arrived on the attempt that failed, and the typed refusal the
+	// mint answered with when it answered one (#2557: "MAINTENANCE"
+	// files apart from real rejections).
 	entryFailure?: {
 		readonly stage: string;
 		readonly bytesReceived: number;
 		readonly framesReceived: number;
+		readonly refusal?: string;
 	};
 	code?: string;
 	nativeTitleStatus?: number;

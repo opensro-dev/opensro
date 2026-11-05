@@ -302,6 +302,23 @@ func (s *monsterStorage) hotRow(gid uint32) (residentMonster, bool) {
 
 /*
 ================
+hotRowAt
+
+hotRow through a slot carried from the last batch build, verified
+against the gid before use (#2133): a miss is the signal, exactly
+lookupAt's contract - the caller resolves by gid, so the read is
+the storage's either way.
+================
+*/
+func (s *monsterStorage) hotRowAt(slot uint32, gid uint32) (residentMonster, bool) {
+	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
+		return residentMonster{}, false
+	}
+	return s.hot[slot].row, true
+}
+
+/*
+================
 hotRowSlot
 
 hotRow with the dense slot the row sits in: the behaviour batch

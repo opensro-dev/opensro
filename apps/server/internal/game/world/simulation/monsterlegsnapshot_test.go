@@ -36,7 +36,7 @@ func TestLegSnapshotMatchesDispatchRead(t *testing.T) {
 	}
 	for _, batch := range batches {
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
-		defer view.release()
+		defer ops.Monsters.releaseLegSnapshot(view)
 		for i, ref := range batch.actors {
 			want := ops.Monsters.behaviorActorMover(batch.key, ref)
 			got, ok := view.actorAt(i)
@@ -80,8 +80,8 @@ func TestLegSnapshotConcurrentBuildersAgree(t *testing.T) {
 			}()
 		}
 		wg.Wait()
-		defer views[0].release()
-		defer views[1].release()
+		defer ops.Monsters.releaseLegSnapshot(views[0])
+		defer ops.Monsters.releaseLegSnapshot(views[1])
 		if !reflect.DeepEqual(views[0].actors, views[1].actors) {
 			t.Fatalf("concurrent snapshot builds disagree over %d actors", len(batch.actors))
 		}
@@ -155,11 +155,11 @@ func TestLegSnapshotStaleCommitDrops(t *testing.T) {
 ================
 TestLegSnapshotBuildAllocations
 
-The pooled slice view builds with no steady-state allocation: the
+The retained slice view builds with no steady-state allocation: the
 map it replaces charged every batch a fresh view and a fresh set of
 buckets - 3.6 GB a minute of copies on the live shard (#2030, two
 heap pulls 60 s apart on 2026-11-03). The window runs warm first;
-the pool is only empty once.
+the state's retained stack is only empty once.
 ================
 */
 func TestLegSnapshotBuildAllocations(t *testing.T) {
@@ -171,7 +171,7 @@ func TestLegSnapshotBuildAllocations(t *testing.T) {
 	batch := batches[0]
 	build := func() {
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
-		view.release()
+		ops.Monsters.releaseLegSnapshot(view)
 	}
 	build()
 	fewest := testing.AllocsPerRun(50, build)
@@ -182,5 +182,39 @@ func TestLegSnapshotBuildAllocations(t *testing.T) {
 	}
 	if fewest > 0.5 {
 		t.Fatalf("leg snapshot build allocates %.2f per run in steady state, want at most 0.5", fewest)
+	}
+}
+
+/*
+================
+TestLegSnapshotViewReturnsToTheState
+
+A released view is the next build's view, backing included: the
+state's retained stack, not the collector's pool, carries it across
+batches, so a collection between legs cannot charge the next leg a
+fresh multi-megabyte backing. The retained view comes back empty -
+nothing of the dispatched batch survives in it.
+================
+*/
+func TestLegSnapshotViewReturnsToTheState(t *testing.T) {
+	ops, _, now := seededLegWorld(t, 24)
+	batches := ops.Monsters.behaviorBatches(*now)
+	if len(batches) == 0 {
+		t.Fatal("seeded leg produced no behavior batches")
+	}
+	batch := batches[0]
+	view := ops.Monsters.legSnapshot(batch.key, batch.actors)
+	if len(batch.actors) == 0 || len(view.actors) != len(batch.actors) {
+		t.Fatalf("view holds %d actors for a batch of %d", len(view.actors), len(batch.actors))
+	}
+	backing := &view.actors[0]
+	ops.Monsters.releaseLegSnapshot(view)
+	next := ops.Monsters.legSnapshot(batch.key, batch.actors)
+	defer ops.Monsters.releaseLegSnapshot(next)
+	if next != view {
+		t.Fatal("the next build did not reuse the released view")
+	}
+	if len(next.actors) == 0 || &next.actors[0] != backing {
+		t.Fatal("the reused view lost its backing array")
 	}
 }

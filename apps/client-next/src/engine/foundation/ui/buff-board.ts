@@ -71,7 +71,9 @@ export function buffBoard(
 			}
 			continue;
 		}
-		const remaining = effectRemainingMs( effect, timeMs ), duration = effect.durationMs;
+		const remaining = effectRemainingMs( effect, timeMs ),
+			duration = effect.durationMs,
+			isSuppressed = suppressed.has( slot.serial );
 		// 6E5D40 stores slot kind 1 for every 0xB419 effect, so 6E51A0 always takes
 		// the single-bar branch of 6E7FA0. The alternate s_stateodd_time02_gauge slot
 		// belongs to kind 3, which only 6E6E00 (opcode 0x3691) creates. This phase
@@ -85,11 +87,17 @@ export function buffBoard(
 					instance: effect.token
 				} :
 				undefined,
-			helpSource: { kind: "effect" as const, gid: effect.gid, token: effect.token, skill: effect.skill },
+			helpSource: {
+				kind: "effect" as const,
+				gid: effect.gid,
+				token: effect.token,
+				skill: effect.skill,
+				...(isSuppressed ? { suppressed: true } : {})
+			},
 			id: "buff:" + effect.token + ":" + effect.skill,
 			path,
 			label: skill?.name ?? "",
-			suppressed: suppressed.has( slot.serial ),
+			suppressed: isSuppressed,
 			fraction: remaining !== null && duration !== undefined && duration > 0 ?
 				Math.min( 1, remaining / duration ) :
 				1
@@ -233,6 +241,11 @@ export function buffBoard(
 		}) )
 	];
 }
+/*
+================
+Entry
+================
+*/
 interface Entry {
 	suppressed?: boolean;
 	cancel?: { mode: "direct" | "confirm"; skillId: number; token: number; instance: number; };

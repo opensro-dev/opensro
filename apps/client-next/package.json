@@ -17,6 +17,8 @@
     "verify:dependencies": "node tools/verify-dependencies.mjs",
     "verify:move-identity": "node tools/move-identity.mjs",
     "verify:allocations": "node --expose-gc tools/perf/bench/ui-allocation-gauge.mjs",
+    "verify:ui-census": "node tools/ui-census.mjs",
+    "verify:ui-action-census": "node tools/ui-action-census-gate.mjs",
     "verify:capabilities": "node tools/verify-capabilities.mjs",
     "verify:execution": "node tools/generate-execution-map.mjs",
     "verify:layout": "node tools/verify-layout.mjs",

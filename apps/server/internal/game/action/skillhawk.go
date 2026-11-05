@@ -231,7 +231,7 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 	if err != nil {
 		return OpResult{}
 	}
-	rank := combat.SkillMasteryRank(snapshot.Masteries, row.Attack)
+	rank := rt.hawkMasteryRank(snapshot)
 	damage, err := combat.HawkDamage(defender, row.TimedEffect.Hawk.Physical, row.TimedEffect.Hawk.Magical, rank, rt.CombatRoll)
 	if err != nil {
 		return OpResult{}
@@ -264,6 +264,27 @@ func (rt *Runtime) hawkStrike(h summonedHawk, c, snapshot *enterworld.Character,
 		word |= wire.HawkFatalBit
 	}
 	return rt.creditedHitResult(h.division, target, hit, []wire.Frame{wire.HawkStrikeFrame(h.token, target.Gid, word)}, now)
+}
+
+/*
+================
+hawkMasteryRank
+
+Natively, before each of its lanes the periodic damage asks the caster
+for its main weapon's default attack skill, looks that skill up in the
+caster's skill manager, and reads the mastery rank on THAT row. It never
+reads the summon row: no hawk row carries MAAT, so reading the rank
+there always answered zero and every hawk struck at rank 0 (#2500).
+The row read is the one a basic attack resolves; a caster with no
+resolvable default attack row reads rank 0.
+================
+*/
+func (rt *Runtime) hawkMasteryRank(caster *enterworld.Character) uint8 {
+	base, _, refusal := rt.resolveBasicAttack(caster)
+	if refusal != "" {
+		return 0
+	}
+	return combat.SkillMasteryRank(caster.Masteries, base.Attack)
 }
 
 /*
