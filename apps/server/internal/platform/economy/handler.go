@@ -9,8 +9,9 @@ the shard's economy-token file; without that file every route is 404).
 The one exception is POST /economy/v1/sealcensus, which runs a census
 (census.go). Contract v1 errors are {"error":{"code","message"}} with
 the codes bad_metric, bad_bucket, range_too_wide, no_snapshot,
-no_census, census_running and unauthorized. /economy/v1/trade is not
-served yet (its shape follows with the trade ledger reasons).
+no_census, census_running and unauthorized. /economy/v1/trade answers
+the flows shape folded from the trade reasons alone (queries.go
+foldTrade), for the console's Trade tab.
 
 ===========================================================================
 */
@@ -114,7 +115,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, block)
 		return
 	}
-	if route != "series" && route != "flows" && route != "flags" {
+	if route != "series" && route != "flows" && route != "flags" && route != "trade" {
 		http.NotFound(w, r)
 		return
 	}
@@ -128,6 +129,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveSeries(w, entries, q.Get("metric"), win)
 	case "flows":
 		buckets, reasons := foldFlows(win, rollupGroups(entries, win))
+		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
+	case "trade":
+		buckets, reasons := foldTrade(win, rollupGroups(entries, win))
 		writeJSON(w, map[string]any{"bucket": win.bucket, "t": buckets, "reasons": reasons})
 	case "flags":
 		// The flag's lookback starts netMintWindow days before the
