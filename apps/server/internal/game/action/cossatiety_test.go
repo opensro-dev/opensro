@@ -64,3 +64,48 @@ func TestShippedPetSatietyTickFeedingAndDeath(t *testing.T) {
 		t.Fatal("death replayed", again)
 	}
 }
+
+/*
+================
+TestPetSatietyIdleTickTakesNoUpdateDoor
+
+#2139: a tick that moves no whole point of hunger and crosses no
+rental deadline is judged under the read door alone; the deferred
+update door opens only on the tick that commits the point.
+================
+*/
+func TestPetSatietyIdleTickTakesNoUpdateDoor(t *testing.T) {
+	items := shippedItems(t)
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, items)
+	equipShippedPet(t, rt, c, items, "COS_P_WOLF_002")
+	pet := c.ActiveCOS
+	pet.Satiety = 3000
+	pet.StateFlags = 3
+	rt.BindPetSession(testDivision, c, 1)
+	doors := 0
+	rt.deps.(*enterworld.Deps).UpdateCharacterDeferred = func(_ *enterworld.Character, label string, update func() bool) bool {
+		if label == "cos-satiety" {
+			doors++
+		}
+		return update()
+	}
+	// Five seconds at five minutes per point: the first tick starts
+	// the clock, the next two bank fractions of a point.
+	for _, now := range []int64{1000, 2000, 3000} {
+		rt.advancePets(now)
+	}
+	if doors != 0 {
+		t.Fatalf("idle satiety ticks opened %d update doors", doors)
+	}
+	if pet.Satiety != 3000 {
+		t.Fatalf("idle ticks drained satiety: %d", pet.Satiety)
+	}
+	rt.advancePets(5000)
+	if pet.Satiety != 2999 {
+		t.Fatalf("due tick failed to drain: %d", pet.Satiety)
+	}
+	if doors != 1 {
+		t.Fatalf("due tick opened %d update doors, want 1", doors)
+	}
+}
