@@ -338,3 +338,57 @@ func TestSlowCommitNamesItsDoor(t *testing.T) {
 		t.Fatalf("slow-commit lines %d after a fast and a rate-limited slow commit, want 1", got)
 	}
 }
+
+/*
+================
+TestWALResetNeverHoldsTheDoorBehindAReader
+
+TRUNCATE holds off writers while it is pending and waits on any reader
+still using the WAL. A reader at the latest snapshot lets PASSIVE drain
+every frame, so the cycle reaches the reset with that reader open: the
+reset must answer busy at once (and retry next cycle), never wait out
+the handle's 5 s busy_timeout with every door commit queued behind it.
+================
+*/
+func TestWALResetNeverHoldsTheDoorBehindAReader(t *testing.T) {
+	s := openTest(t, t.TempDir(), newTestClock())
+	const ceiling = 256 << 10
+	s.checkpoints.ceiling.Store(ceiling)
+	for i := 0; walFileBytes(s.dbPath) <= ceiling && i < 1000; i++ {
+		c := &enterworld.Character{Name: fmt.Sprintf("door%04d", i)}
+		if err := s.CreateCharacter(testDivision, fmt.Sprintf("dacc%04d", i), c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := walFileBytes(s.dbPath); got <= ceiling {
+		t.Fatalf("WAL at %d bytes, want past the %d-byte ceiling", got, ceiling)
+	}
+
+	// A reader on the newest snapshot: nothing is past its mark, so
+	// PASSIVE copies every frame, but the WAL is still in use.
+	pin, err := connectDB(s.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pin.Close() })
+	tx, err := pin.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	var count int
+	if err := tx.QueryRow("SELECT count(*) FROM characters").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	s.checkpoints.cycle()
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("the cycle took %v behind a reader; the reset waited out its busy timeout", took)
+	}
+	timing := s.LockTiming()
+	if timing.CheckpointResets != 0 || timing.CheckpointResetBusy < 1 {
+		t.Fatalf("resets %d busy %d with a reader open, want 0 and at least 1",
+			timing.CheckpointResets, timing.CheckpointResetBusy)
+	}
+}

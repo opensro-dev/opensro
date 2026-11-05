@@ -35,8 +35,10 @@ that mysteriously replays for minutes.
 package store
 
 import (
+	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -258,15 +260,36 @@ One wal_checkpoint(TRUNCATE) on the cycle's own handle: the same
 reset Close runs, taken here because a completed checkpoint left
 the file past the ceiling and PASSIVE alone never returns those
 pages to the filesystem. Only a drained cycle reaches it, so the
-reader that pinned the file is already gone; a reader that slips
-in between makes the call busy instead of blocking (the handle's
-busy_timeout bounds it), which counts and retries next cycle.
+reader that pinned the file is already gone.
+
+TRUNCATE, unlike PASSIVE, holds off new writers while it is pending
+and waits on any reader still using the WAL through the busy handler.
+Under the handle's busy_timeout (5 s) one live read would stall every
+door commit behind this lane for up to that long. The reset therefore
+runs on a pinned connection with busy_timeout=0: a writer or reader in
+the way makes it busy at once, which counts and retries next cycle.
 Returns whether the file was reset.
 ================
 */
 func (c *walCheckpointer) resetWAL(db *sql.DB) bool {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Warnf("store: wal reset connection: %v", err)
+		return false
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "PRAGMA busy_timeout=0"); err != nil {
+		log.Warnf("store: wal reset busy_timeout: %v", err)
+		return false
+	}
 	var busyFlag, walPages, checkpointedPages int
-	if err := db.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busyFlag, &walPages, &checkpointedPages); err != nil {
+	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busyFlag, &walPages, &checkpointedPages)
+	if isBusy(err) {
+		c.resetBusy.Add(1)
+		return false
+	}
+	if err != nil {
 		log.Warnf("store: wal_checkpoint(TRUNCATE) failed: %v", err)
 		return false
 	}
@@ -326,4 +349,21 @@ func walFileBytes(dbPath string) int64 {
 		return 0
 	}
 	return info.Size()
+}
+
+/*
+================
+isBusy
+
+Whether err is SQLite's SQLITE_BUSY ("database is locked"): with
+busy_timeout=0 a reset that meets a writer or reader returns it at
+once instead of waiting.
+================
+*/
+func isBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "SQLITE_BUSY") || strings.Contains(msg, "database is locked")
 }
