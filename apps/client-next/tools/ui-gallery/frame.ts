@@ -669,9 +669,9 @@ async function draw( time: number ) {
 				}
 			} );
 		}
-		// The production renderer owns an asynchronous second particle submission.
-		// Do not advance presentation or schedule another frame before it finishes.
-		await renderer.frame( platform.readViewport(), clock / 1000 );
+		// The production renderer presents each frame whole; the deferred
+		// visibility query behind it settles between frames (#2573).
+		renderer.frame( platform.readViewport(), clock / 1000 );
 		if ( stopped ) return;
 		if ( entryBaseline ) entryFrames++;
 		if ( entryStep && ++entryStep.frames >= 3 && ui.stats().pending === 0 && !ui.stats().hudSettling ) {

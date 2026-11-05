@@ -5,7 +5,7 @@ frame-hdr-order.test.mjs - frame formats, retained depth and overlay ordering
 
 The command fake checks attachment compatibility and executes depth tests.
 It distinguishes stored scene depth from discarded or cleared attachments,
-including across the asynchronous particle continuation's second encoder.
+including across the deferred particle tail in the frame's one submit.
 
 ===========================================================================
 */
@@ -241,19 +241,16 @@ function fixture( hdr, scaled = false ) {
 
 test("HDR deferred UI uses the canvas format and retains world-label occlusion with either bloom setting", async () => {
 	for ( const bloom of [ false, true ] ) {
-		for ( const mode of [ "none", "synchronous", "asynchronous" ] ) {
+		for ( const mode of [ "none", "synchronous" ] ) {
 			const f = fixture( true );
-			const deferred = mode === "none" ? undefined : {
-				asynchronous: mode === "asynchronous",
-				prepare: () => mode === "asynchronous" ? Promise.resolve( [] ) : []
-			};
+			const deferred = mode === "none" ? undefined : { prepare: () => [] };
 			await f.draw( { bloom, deferred } );
 			assert.equal( f.visible.includes( "label" ), false, "labels behind the scene stay occluded" );
 			assert.deepEqual( f.visible, [ "world", "background", "foreground" ] );
 			const labelPass = f.passes.find( p => p.draws.includes( "label" ) );
 			assert.equal( labelPass.descriptor.depthStencilAttachment.depthLoadOp, "load" );
 			assert.equal( labelPass.descriptor.colorAttachments[0].view.format, CANVAS_FORMAT );
-			assert.deepEqual( f.submits, mode === "asynchronous" ? [ 1, 2 ] : [ 1 ] );
+			assert.deepEqual( f.submits, [ 1 ] );
 			if ( deferred ) {
 				assert.deepEqual( f.passes.find( p => p.descriptor.label === "deferred-particles" ).draws, [] );
 			}
@@ -264,20 +261,18 @@ test("HDR deferred UI uses the canvas format and retains world-label occlusion w
 test("scaled frames retain labels and depth across deferred particles with HDR and bloom", async () => {
 	for ( const hdr of [ false, true ] ) {
 		for ( const bloom of [ false, true ] ) {
-			for ( const asynchronous of [ false, true ] ) {
-				const f = fixture( hdr, true );
-				await f.draw( {
-					bloom,
-					flares: true,
-					deferred: { asynchronous, prepare: () => asynchronous ? Promise.resolve( [] ) : [] }
-				} );
-				const labels = f.passes.filter( p => p.draws.includes( "label" ) );
-				assert.equal( labels.length, 1, "labels execute exactly once" );
-				assert.equal( labels[0].descriptor.depthStencilAttachment.depthLoadOp, "load" );
-				assert.equal( f.visible.includes( "label" ), false, "occluded labels stay hidden" );
-				assert.deepEqual( f.visible, [ "world", "background", "foreground" ] );
-				assert.deepEqual( f.submits, asynchronous ? [ 1, 2 ] : [ 1 ] );
-			}
+			const f = fixture( hdr, true );
+			await f.draw( {
+				bloom,
+				flares: true,
+				deferred: { prepare: () => [] }
+			} );
+			const labels = f.passes.filter( p => p.draws.includes( "label" ) );
+			assert.equal( labels.length, 1, "labels execute exactly once" );
+			assert.equal( labels[0].descriptor.depthStencilAttachment.depthLoadOp, "load" );
+			assert.equal( f.visible.includes( "label" ), false, "occluded labels stay hidden" );
+			assert.deepEqual( f.visible, [ "world", "background", "foreground" ] );
+			assert.deepEqual( f.submits, [ 1 ] );
 		}
 	}
 });
@@ -293,12 +288,9 @@ test("native-off frame and preview keep their original pass and UI order", async
 });
 
 test("bloom without HDR or scene scaling retains scene depth for world labels", async () => {
-	for ( const mode of [ "none", "synchronous", "asynchronous" ] ) {
+	for ( const mode of [ "none", "synchronous" ] ) {
 		const f = fixture( false );
-		const deferred = mode === "none" ? undefined : {
-			asynchronous: mode === "asynchronous",
-			prepare: () => mode === "asynchronous" ? Promise.resolve( [] ) : []
-		};
+		const deferred = mode === "none" ? undefined : { prepare: () => [] };
 		await f.draw( { bloom: true, deferred } );
 		assert.equal(
 			f.visible.includes( "label" ),
@@ -313,56 +305,52 @@ test("bloom without HDR or scene scaling retains scene depth for world labels", 
 });
 
 test("HDR weather and flares finish before depth-tested labels and foreground UI", async () => {
-	for ( const asynchronous of [ false, true ] ) {
-		const f = fixture( true );
-		await f.draw( {
-			flares: true,
-			thunder: true,
-			deferred: { asynchronous, prepare: () => asynchronous ? Promise.resolve( [] ) : [] }
-		} );
-		assert.deepEqual( f.passes.map( p => p.descriptor.label ), [
-			"main-pass",
-			"deferred-particles",
-			"weather-thunder",
-			"hdr-resolve",
-			"flare-chain",
-			"hdr-world-ui",
-			"hud-after-flares"
-		] );
-		assert.deepEqual( f.visible, [ "world", "thunder", "background", "foreground" ] );
-	}
+	const f = fixture( true );
+	await f.draw( {
+		flares: true,
+		thunder: true,
+		deferred: { prepare: () => [] }
+	} );
+	assert.deepEqual( f.passes.map( p => p.descriptor.label ), [
+		"main-pass",
+		"deferred-particles",
+		"weather-thunder",
+		"hdr-resolve",
+		"flare-chain",
+		"hdr-world-ui",
+		"hud-after-flares"
+	] );
+	assert.deepEqual( f.visible, [ "world", "thunder", "background", "foreground" ] );
 });
 
 test("HDR preview preserves scene depth consumers and composites between background and foreground", async () => {
 	for ( const bloom of [ false, true ] ) {
-		for ( const asynchronous of [ false, true ] ) {
-			const f = fixture( true );
-			await f.draw( {
-				bloom,
-				flares: true,
-				preview: /** @type {any} */ ([ f.geometry( "preview" ) ]),
-				deferred: { asynchronous, prepare: () => asynchronous ? Promise.resolve( [] ) : [] }
-			} );
-			assert.deepEqual( f.visible, [ "world", "background", "preview", "foreground" ] );
-			const rows = f.passes.map( p => p.descriptor.label );
-			assert.ok( rows.indexOf( "hdr-world-ui" ) < rows.indexOf( "character-preview" ) );
-			assert.deepEqual( rows.slice( -4 ), [
-				"hud-after-flares",
-				"character-preview",
-				"preview-resolve",
-				"hdr-preview-ui"
-			] );
-			const preview = f.passes.find( p => p.descriptor.label === "character-preview" );
-			assert.deepEqual( preview.descriptor.colorAttachments[0].clearValue, [ 0, 0, 0, 0 ] );
-			assert.equal( preview.descriptor.colorAttachments[0].loadOp, "clear" );
-			if ( bloom ) {
-				assert.notEqual(
-					preview.descriptor.colorAttachments[0].view,
-					f.passes[0].descriptor.colorAttachments[0].view
-				);
-			}
-			assert.equal( preview.id, asynchronous ? 2 : 1 );
+		const f = fixture( true );
+		await f.draw( {
+			bloom,
+			flares: true,
+			preview: /** @type {any} */ ([ f.geometry( "preview" ) ]),
+			deferred: { prepare: () => [] }
+		} );
+		assert.deepEqual( f.visible, [ "world", "background", "preview", "foreground" ] );
+		const rows = f.passes.map( p => p.descriptor.label );
+		assert.ok( rows.indexOf( "hdr-world-ui" ) < rows.indexOf( "character-preview" ) );
+		assert.deepEqual( rows.slice( -4 ), [
+			"hud-after-flares",
+			"character-preview",
+			"preview-resolve",
+			"hdr-preview-ui"
+		] );
+		const preview = f.passes.find( p => p.descriptor.label === "character-preview" );
+		assert.deepEqual( preview.descriptor.colorAttachments[0].clearValue, [ 0, 0, 0, 0 ] );
+		assert.equal( preview.descriptor.colorAttachments[0].loadOp, "clear" );
+		if ( bloom ) {
+			assert.notEqual(
+				preview.descriptor.colorAttachments[0].view,
+				f.passes[0].descriptor.colorAttachments[0].view
+			);
 		}
+		assert.equal( preview.id, 1 );
 	}
 });
 

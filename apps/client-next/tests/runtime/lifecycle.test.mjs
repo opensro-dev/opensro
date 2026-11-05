@@ -166,14 +166,13 @@ test("surface configures on resize and forbids use after disposal", () => {
 	assert.throws( () => surface.acquire( { width: 1, height: 1 } ) );
 });
 
-test("deferred frames acquire the swapchain only after readback and present in the final submit", async () => {
+test("deferred frames acquire the swapchain once, at present in the only submit", () => {
 	const log = [];
 	const target = {};
-	let turn = 0;
 	const canvas = {
 		getContext: () => ({
 			getCurrentTexture() {
-				log.push( `acquire ${turn}` );
+				log.push( "acquire" );
 				return target;
 			},
 			unconfigure() {}
@@ -206,12 +205,12 @@ test("deferred frames acquire the swapchain only after readback and present in t
 		},
 		submit: id => log.push( `submit ${id}` )
 	} );
-	let resolveReadback;
-	const ready = new Promise( resolve => resolveReadback = resolve );
 	try {
 		const view = surface.acquire( { width: 32, height: 32 }, true );
 		assert.deepEqual( log, [], "retention must not acquire a canvas texture" );
-		const pending = frame.draw(
+		// #2573: the deferred tail joins this frame; nothing waits on a
+		// readback, so the swapchain is acquired once, at present.
+		frame.draw(
 			view,
 			undefined,
 			undefined,
@@ -225,24 +224,13 @@ test("deferred frames acquire the swapchain only after readback and present in t
 			undefined,
 			[],
 			undefined,
-			{ asynchronous: true, prepare: () => ready },
+			{ prepare: () => [] },
 			undefined,
 			undefined,
 			undefined,
 			surface
 		);
-		assert.deepEqual( log, [ "main-pass", "submit 1" ] );
-		turn = 1;
-		defined( resolveReadback )( [] );
-		await pending;
-		assert.deepEqual( log, [
-			"main-pass",
-			"submit 1",
-			"deferred-particles",
-			"acquire 1",
-			"present 2",
-			"submit 2"
-		] );
+		assert.deepEqual( log, [ "main-pass", "deferred-particles", "acquire", "present 1", "submit 1" ] );
 	} finally {
 		surface.dispose();
 	}
