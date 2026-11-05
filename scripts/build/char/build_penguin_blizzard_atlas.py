@@ -21,7 +21,7 @@ def main():
 	root = Path(__file__).resolve().parents[3]
 	symbol = "penguinBlizzardAtlas"
 	filename = "frost-wind.png"
-	source = root / "apps/client-next/art/pets" / name / filename
+	source = root / "docs/pet-expansion/art" / name / filename
 	image = Image.open(source).convert("RGBA")
 	atlas = Image.new("RGBA", (512, 512))
 	for cell in range(4):
