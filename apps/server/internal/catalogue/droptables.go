@@ -105,9 +105,6 @@ type BetaRates struct {
 	// SunDropRate is the degree-9 Sun class rate (progression.SunRate);
 	// while it runs, Rare's named tables carry the widened Sun class.
 	SunDropRate int `json:"sunDropRate,omitempty" doc:"Port-only beta balance: the degree-9 Seal of Sun class of the rare table is 30 times this rate as wide on levels 76-90, so each Sun item's chance is that multiple of its native one; every other class is unchanged. Rare's named tables already carry the widened chances."`
-	// Unique carries the unique rules, present only while at least one
-	// of them runs.
-	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only beta balance: the rules a unique kill runs after admission and the per-kill drop cap (gapExempt, popTicket, maxLevelLoot, sealDrops). Absent when every rule is off, which is the native game; a rule that is off stays absent inside the object too."`
 }
 
 /*
@@ -116,8 +113,10 @@ UniqueRules
 
 The port-only rules a unique kill runs after admission and the drop cap
 (progression.UniqueRulesFromEnv, the same source the GameWorld wires),
-so the export cannot drift from the server (#2537). A rule that is off
-stays absent; without the object the native rules apply.
+so the export cannot drift from the server (#2537). The object stands on
+its own, outside the beta rates: the GameWorld runs the rules whether or
+not beta growth runs. A rule that is off stays absent; without the
+object the native rules apply.
 ================
 */
 type UniqueRules struct {
@@ -153,6 +152,11 @@ type DropTablesFile struct {
 	// PetGear is the attack-pet gear derived drop (petgear.go), present
 	// only while the expansion runs at a positive factor.
 	PetGear *PetGearRule `json:"petGear,omitempty"`
+	// Unique carries the unique rules, present only while at least one
+	// of them runs. It sits outside the beta object on purpose: the
+	// GameWorld wires the rules whether or not beta growth runs, so a
+	// beta-off shard running them must still publish them (#2537).
+	Unique *UniqueRules `json:"unique,omitempty" doc:"Port-only: the rules a unique kill runs after admission and the per-kill drop cap (gapExempt, popTicket, maxLevelLoot, sealDrops). Absent when every rule is off, which is the native game; a rule that is off stays absent inside the object too."`
 }
 
 /*
@@ -220,15 +224,18 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
 			file.Beta.Mix = mix
 		}
-		if rules := progression.UniqueRulesFromEnv(); rules.GapExempt || rules.PopTicket ||
-			rules.MaxLevelLoot || rules.SealDrops {
-			unique := &UniqueRules{GapExempt: rules.GapExempt, PopTicket: rules.PopTicket,
-				MaxLevelLoot: rules.MaxLevelLoot, SealDrops: rules.SealDrops}
-			if rules.PopTicket {
-				unique.PopTicketItem = itemID(gacha.CardCodename)
-			}
-			file.Beta.Unique = unique
+	}
+	// The unique rules are not a beta rule: the GameWorld wires them
+	// (UniqueRulesFromEnv) whether or not beta growth runs, so they are
+	// published here, outside the beta gate, while any of them runs.
+	if rules := progression.UniqueRulesFromEnv(); rules.GapExempt || rules.PopTicket ||
+		rules.MaxLevelLoot || rules.SealDrops {
+		unique := &UniqueRules{GapExempt: rules.GapExempt, PopTicket: rules.PopTicket,
+			MaxLevelLoot: rules.MaxLevelLoot, SealDrops: rules.SealDrops}
+		if rules.PopTicket {
+			unique.PopTicketItem = itemID(gacha.CardCodename)
 		}
+		file.Unique = unique
 	}
 	return file
 }

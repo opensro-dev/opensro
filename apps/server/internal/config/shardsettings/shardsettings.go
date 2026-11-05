@@ -285,9 +285,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
-	// config/shard-settings.json. Server only: the catalogue publishes
-	// the flat skill EXP rate, not the band table (#2542).
-	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "",
+	// config/shard-settings.json. The catalogue prices quest rewards
+	// with the bands (BuildQuests' paidExp and paidSkillExp) but does
+	// not publish the band table (#2542).
+	{Env: "SRO_BETA_GROWTH_BANDS", NomadVar: "beta_growth_bands", Default: "", Catalogue: true,
 		Validation: ValueBetaGrowthBands},
 	{Env: "SRO_BETA_SKILL_EXP_RATE", NomadVar: "beta_skill_exp_rate", Default: "1", Catalogue: true,
 		Validation: ValueBetaGrowth},

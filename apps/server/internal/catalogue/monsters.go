@@ -377,8 +377,12 @@ func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
 		EquipmentMin: c[0].Min + c[1].Min, EquipmentMax: c[0].Max + c[1].Max,
 		RecipesMin: c[2].Min, RecipesMax: c[2].Max, ScrollsMin: c[3].Min, ScrollsMax: c[3].Max}
 	// Port-only, not native: the same tomb gear rate multiplies the
-	// prepass equipment count of a tomb unique (grade 8; the only grade
-	// that both runs the prepass and takes the rate on the server).
+	// prepass equipment count of a tomb unique. The prepass admission
+	// (action.RollsUniqueDrops, grades 3 and 8) is the wider gate above;
+	// of those two grades only the tomb uniques (grade 8, the rate
+	// monster.AppendPharaohTomb stamps) take the rate here, so this
+	// grade-8 check restates the admission's tomb half and must change
+	// with it.
 	if rate := int(ref.PharaohGearRate); rate > 1 && ref.MonsterType&0x0f == 8 {
 		bonus.EquipmentMin *= rate
 		bonus.EquipmentMax *= rate

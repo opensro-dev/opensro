@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"opensro.online/server/internal/catalogue"
 	"opensro.online/server/internal/config/shardsettings"
@@ -24,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -253,8 +253,20 @@ func (fx *flipFixture) buildErr(t *testing.T, family string) ([]byte, error) {
 			t.Fatal("SRO_ALEXANDRIA=on left npcs.json unchanged over the variant roster")
 		}
 		return nil, nil
+	case "quests":
+		itemSource, err := shardItems(fx.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		catalog := quest.NewCatalog(fx.dir)
+		definitions, err := quest.LoadDefinitions(catalog, itemSource)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return marshal(catalogue.BuildQuests(catalogue.QuestSource{Catalog: catalog, Definitions: definitions,
+			Text: englishText(fx.dir), Listed: listedQuests(fx.dir), ItemID: fx.itemID, Levels: fx.levels})), nil
 	case "events":
-		return marshal(catalogue.BuildEvents(fx.header, fx.itemID, time.Now().UTC())), nil
+		return marshal(catalogue.BuildEvents(fx.header, fx.itemID)), nil
 	case "alchemy":
 		catalog := *fx.alchemy
 		rates, err := alchemy.ReinforceRatesFromEnv()
@@ -286,9 +298,11 @@ deployment defaults, each modelled setting is flipped to a non-default
 value on top of its prerequisites, and the output it feeds must differ -
 a reader that ignores its setting fails here. Prerequisites pin the
 posture a setting only matters in (a tomb rate needs the tomb), on both
-sides alike. The beta rules ride droptables.json's beta object (#2537),
-which the deployed shard runs with beta growth on, so their flips sit on
-that posture too. Two settings can show no flip over the shipped data
+sides alike. The beta rules ride droptables.json's beta object, which
+the deployed shard runs with beta growth on, so their flips sit on that
+posture too; the unique rules stand outside it (#2537), so their flips
+sit on the defaults alone. Two settings can show no flip over the
+shipped data
 (their variant populations are not in it); flipUnitProven names the
 unit test that proves each of those readers instead.
 ================
@@ -328,11 +342,12 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_ALCHEMY_MATERIAL_DROPS_OFF", "on", growth, "droptables", ""},
 		{"SRO_SUN_EVENT_ONLY", "on", nil, "droptables", ""},
 		{"SRO_SUN_DROP_RATE", "5", growth, "droptables", ""},
-		{"SRO_UNIQUE_GAP_EXEMPT", "off", growth, "droptables", ""},
-		{"SRO_UNIQUE_POP_TICKET", "off", growth, "droptables", ""},
-		{"SRO_UNIQUE_MAX_LEVEL_LOOT", "on", growth, "droptables", ""},
-		{"SRO_UNIQUE_SEAL_DROPS", "on", growth, "droptables", ""},
+		{"SRO_UNIQUE_GAP_EXEMPT", "off", nil, "droptables", ""},
+		{"SRO_UNIQUE_POP_TICKET", "off", nil, "droptables", ""},
+		{"SRO_UNIQUE_MAX_LEVEL_LOOT", "on", nil, "droptables", ""},
+		{"SRO_UNIQUE_SEAL_DROPS", "on", nil, "droptables", ""},
 		{"SRO_BETA_MASTERY", "off", nil, "levels", ""},
+		{"SRO_BETA_GROWTH_BANDS", "1-110:2", growth, "quests", ""},
 		{"SRO_LEVEL_CAP", "110", nil, "levels", ""},
 		{"SRO_STACK_SIZES", "off", nil, "items", ""},
 		{"SRO_TRADE_TIERS", "off", nil, "items", ""},
