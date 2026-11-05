@@ -93,7 +93,6 @@ const OFF = Object.freeze( {
 	noticeLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
-	attackPetTraining: false,
 	autoSelect: false,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
 	confirmGuildBan: true,
@@ -884,4 +883,17 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+});
+
+test("attack-pet training has no experimental toggle or saved opt-out", () => {
+	for ( const enabled of [ false, true ] ) {
+		assert.equal(
+			Object.hasOwn( experimentalOptions( { attackPetTraining: enabled } ), "attackPetTraining" ),
+			false
+		);
+	}
+	assert.equal(
+		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		false
+	);
 });
