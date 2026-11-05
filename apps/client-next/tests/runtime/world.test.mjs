@@ -2461,6 +2461,57 @@ test("production core LIFE stops a nonlocal monster and rejects late advisory tr
 	core.dispose();
 });
 
+test("a fatal deferred tick labels the mover, and the LIFE frame behind it kills and stops it in the same commit", async () => {
+	const { createWorldCore } = await load( "src/engine/runtime/simulation/worker/session/world/core.ts" );
+	const core = createWorldCore( () => {} );
+	core.bootstrap( bootstrap );
+	flush( core );
+	for ( const row of rows ) core.receive( row, 0 );
+	flush( core );
+	const gid = fixture.expect.gid, move = Buffer.alloc( 14 );
+	move.writeUInt32LE( gid );
+	move[4] = 1;
+	move.writeUInt16LE( 25256, 5 );
+	move.writeInt16LE( 1000, 7 );
+	move.writeInt16LE( 1000, 11 );
+	core.receive( { opcode: 0xb738, payload: move }, 1 );
+	core.step( 16 );
+	assert.ok( flush( core ).events.some( e => e.kind === "state" && e.entity.gid === gid && e.entity.moving ) );
+	// The server's fatal-share broadcast (server action/linkeddamage.go):
+	// the deferred tick with its death byte first, the life frames behind
+	// it. Native enters the death state and stops the mover inside the
+	// tick handler (client 0x775790); here the tick only labels, and the
+	// LIFE frame in the same broadcast owns the death and the stop, so
+	// both land at the same presented instant.
+	const tick = Buffer.alloc( 11 );
+	tick[0] = 1;
+	tick.writeUInt32LE( 9001, 1 );
+	tick[5] = 0x80;
+	tick.writeUInt32LE( gid, 6 );
+	tick[10] = 1;
+	const tickFrame = Buffer.concat( [ tick, Buffer.from( [ 25, 0, 0 ] ) ] );
+	core.receive( { opcode: 0xb3c6, payload: tickFrame }, 20 );
+	core.step( 24 );
+	const labelled = flush( core );
+	assert.ok(
+		labelled.events.some( e =>
+			e.kind === "gameplay" && e.state.environmentalDamage?.some( d => d.gid === gid && d.damage === 25 )
+		),
+		"the fatal tick published its damage label"
+	);
+	const alive = labelled.events.filter( e => e.kind === "state" && e.entity.gid === gid ).at( -1 )?.entity;
+	assert.equal( alive?.moving, true, "the tick alone stopped the mover" );
+	assert.notEqual( alive?.appearanceState[0], 2, "the tick alone killed the mover" );
+	const life = Buffer.alloc( 6 );
+	life.writeUInt32LE( gid );
+	life[5] = 2;
+	core.receive( { opcode: 0x3122, payload: life }, 24 );
+	const dead = flush( core ).events.find( e => e.kind === "state" && e.entity.gid === gid ).entity;
+	assert.equal( dead.appearanceState[0], 2 );
+	assert.equal( dead.moving, false );
+	core.dispose();
+});
+
 test("monster LIFE preserves native impact displacement but stops cast-owned rush", () => {
 	for ( const kind of [ 4, 5, 8 ] ) {
 		const owner = createEntities();
