@@ -2183,6 +2183,7 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"country",
+				"item",
 				"npcs",
 				"playerModels"
 			]
