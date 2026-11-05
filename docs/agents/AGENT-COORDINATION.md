@@ -112,7 +112,16 @@ Merged PR branches on `origin` are deleted by GitHub on merge.
   wrote the PR; the two Cursor approvals never come from the author. An
   approval covers one commit. A push, rebase or amend needs a fresh look:
   `git range-diff` showing `=` (or only context changes) carries an approval
-  forward; anything else is re-reviewed.
+  forward; any changed commit, a reviewer's fix included, is re-reviewed in
+  full by all three seats.
+- **A reviewer fixes what it finds.** A blocker or major the reviewer can
+  fix and prove within the review (a wrong branch, a missed case, a wrong
+  constant, a missing test) is fixed by the reviewer, not sent back: the
+  reviewer records CHANGES with the finding, pushes a fast-forward commit
+  with a test that fails without it to the PR's own branch, and tells the
+  author to pull. One fixer at a time: when the author is already fixing,
+  the reviewer reports instead. A finding goes back to the author only when
+  it is a design choice, needs the author's state, or is larger than the PR.
 - **The PR body carries its evidence.** The template's Evidence checklist is
   ticked for what was done, or marked `n/a - <reason>`:
   - the rg blast radius;
@@ -171,8 +180,9 @@ Merged PR branches on `origin` are deleted by GitHub on merge.
      new tests catch, and the full gate when a contract changes. Unsure
      findings are listed as questions, not dropped.
 
-  A real gap in any section means CHANGES. A non-blocking finding is filed
-  as an issue, not left in a comment.
+  A real gap in any section means CHANGES, fixed by the reviewer where it
+  can be (above). A non-blocking finding goes on the area's Backlog issue as
+  a checklist line, not left in a comment.
 - **A merged PR is re-reviewed at the merge commit.** The verdict line is
   `Review by <session>: POST-MERGE at <merge sha8>`, the sha of the merge
   commit, not the PR head, with the same five sections.
