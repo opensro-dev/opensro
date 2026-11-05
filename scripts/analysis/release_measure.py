@@ -152,17 +152,31 @@ def incident_rows(agent_history, lo_ms, hi_ms):
 # session_window
 #
 # Connected session time inside the window, overlap-safe: each
-# interval contributes only its overlap, an interval still open
-# (finish at or before its start) runs to the window end. Sessions
-# started and ended in the window and the transport fallback reports
-# (#2148's other face) ride along as context.
+# interval contributes only its overlap, and an interval still open
+# (finish at or before its start) runs only to its session's end or
+# last-seen mark - never to the window end. A session the boot lost
+# track of was not connected until tonight: with no activity past
+# its start it contributes nothing. Sessions started and
+# ended in the window and the transport fallback reports (#2148's
+# other face) ride along as context.
 # ================
 def session_window(authority, lo_ms, hi_ms):
     conn = open_ro(Path(authority) / "history.sqlite")
     try:
+        sessions = {row[0]: (row[1], row[2], row[3]) for row in conn.execute(
+            "SELECT id, started, seen, ended FROM sessions")}
         seconds = 0.0
-        for start, finish in conn.execute("SELECT start, finish FROM intervals"):
-            end = finish if finish and finish > start else hi_ms
+        for start, finish, session_id in conn.execute("SELECT start, finish, session FROM intervals"):
+            end = finish if finish and finish > start else 0
+            if session_id in sessions:
+                _, seen, ended = sessions[session_id]
+                cap = ended if ended and ended > start else seen
+                if cap and cap > start:
+                    end = min(end, cap) if end else cap
+                elif not end:
+                    end = start
+            elif not end:
+                end = start
             overlap = min(end, hi_ms) - max(start, lo_ms)
             if overlap > 0:
                 seconds += overlap / 1000.0
@@ -331,20 +345,27 @@ def self_test():
         authority = Path(tmp) / "authority"
         authority.mkdir()
         conn = sqlite3.connect(authority / "history.sqlite")
-        conn.execute("CREATE TABLE intervals (start INTEGER, finish INTEGER)")
-        conn.execute("CREATE TABLE sessions (started INTEGER, ended INTEGER)")
+        conn.execute("CREATE TABLE intervals (start INTEGER, finish INTEGER, session TEXT)")
+        conn.execute("CREATE TABLE sessions (id TEXT, started INTEGER, seen INTEGER, ended INTEGER)")
         conn.execute("CREATE TABLE events (at INTEGER, kind TEXT)")
-        # One hour fully inside, one hour half inside, one still open
-        # from before the window to its end: 1 + 0.5 + 1 = 2.5 hours.
-        conn.executemany("INSERT INTO intervals VALUES (?, ?)",
-                         [(0, 3_600_000), (1_800_000, 5_400_000), (0, 0)])
-        conn.execute("INSERT INTO sessions VALUES (1000, 2000)")
+        # One hour fully inside, one hour half inside, and one interval
+        # left open by its session (last seen at the window end):
+        # 1 + 0.5 + 1 = 2.5 hours, the open one capped at last-seen,
+        # not at tonight.
+        conn.executemany("INSERT INTO intervals VALUES (?, ?, ?)",
+                         [(0, 3_600_000, "a"), (1_800_000, 5_400_000, "b"), (0, 0, "c"),
+                          (1_000_000, 0, "d")])
+        conn.executemany("INSERT INTO sessions VALUES (?, ?, ?, ?)",
+                         [("a", 0, 3_600_000, 3_600_000), ("b", 1_000, 5_400_000, 5_400_000),
+                          ("c", 2_000, 3_600_000, 0), ("d", 500_000, 1_000_000, 0)])
         conn.execute("INSERT INTO events VALUES (1500, 'transport_reported')")
         conn.commit()
         conn.close()
+        # Session d's interval is open with no activity past its start:
+        # it contributes nothing, not the whole window.
         window = session_window(authority, 0, 3_600_000)
         assert abs(window["hours"] - 2.5) < 1e-9, window
-        assert window["started"] == 1 and window["ended"] == 1 and window["fallbacks"] == 1, window
+        assert window["started"] == 4 and window["ended"] == 1 and window["fallbacks"] == 1, window
     assert lane_of("the targeting lane waited 5 ms") == "targeting"
     assert lane_of("link silent for 9000 ms") == ""
     print("self-test PASS")
