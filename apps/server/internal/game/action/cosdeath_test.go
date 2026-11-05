@@ -386,3 +386,56 @@ func TestMonsterKillOfATransportDropsItsCargo(t *testing.T) {
 		t.Fatal("the dead transport kept its record")
 	}
 }
+
+/*
+================
+TestBurnKillOfATransportFollowsTheFreeBattleRelation
+
+A burn death settles through the abnormal path (cosabnormal.go
+commit), which never saw a direct hit: the fatal periodic hit still
+credits its source, so the cargo gate reads the burn dealer's cape
+exactly as it reads a strike's. An opposing-cape burn keeps the
+cargo with the record; a team-mate's burn drops it.
+================
+*/
+func TestBurnKillOfATransportFollowsTheFreeBattleRelation(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		killerCape int64
+		drops      bool
+	}{
+		{"an opposing-cape burn keeps the cargo", 2, false},
+		{"a team-mate burn drops the cargo", 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, clock, burner, owner := newPvpPair(t)
+			// Equip first: it replaces the item source, and the cape
+			// registration (dressTestCape) writes into that source.
+			equipCombatTestPet(t, rt, owner, cosBandTransport)
+			dressTestCape(t, rt, burner, 0, tc.killerCape)
+			dressTestCape(t, rt, owner, 1, 1)
+			transport := owner.ActiveCOS
+			potion := testItems()["ITEM_ETC_HP_POTION_01"]
+			transport.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+				Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+			transport.CurrentHP = 5
+			record := abnormal.Record{Status: abnormal.Burn, Level: 1, Grade: 1, DurationMs: 10000,
+				PeriodMs: 2000, SourceGID: enterworld.ObjectIDForCharacter(burner), Rate24: 10, Scale20: 1, Param38: 10}
+			abnormalOwner := rt.newCosAbnormalOwner(testDivision, owner, clock.NowMs())
+			abnormalOwner.sources = rt.captureAbnormalSources(testDivision, abnormalOwner.block, []abnormal.Record{record})
+			if !abnormalOwner.block.Apply(abnormalOwner, record, clock.NowMs()) {
+				t.Fatal("status refused")
+			}
+			abnormalOwner.block.Update(abnormalOwner, clock.NowMs())
+			abnormalOwner.commit()
+			if owner.ActiveCOS != nil {
+				t.Fatal("the burned transport kept its record")
+			}
+			ground := rt.Ground.All(testDivision)
+			if dropped := len(ground) == 1; dropped != tc.drops {
+				t.Fatalf("burner cape %d, owner cape 1: cargo dropped %v (ground %+v), want drops %v",
+					tc.killerCape, dropped, ground, tc.drops)
+			}
+		})
+	}
+}

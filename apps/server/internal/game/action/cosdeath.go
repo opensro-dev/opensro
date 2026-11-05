@@ -12,6 +12,8 @@ killed the transport. The fatal dealer is still recorded on the
 settlement, for the scatter's log line only. The one exception is the
 credit itself: a fatal dealer on an opposing free-battle team earns no
 credit, and the cargo stays with the record (dropTransportCargo).
+A periodic (damage-over-time) kill credits its source the same way a
+strike does, so the gate reads the burn dealer's relation too.
 The COS death then releases a vehicle
 with kind 1, deleting its record, as the Clean command does; pets
 keep theirs on the summoner item for revival (cosabnormal.go). A
