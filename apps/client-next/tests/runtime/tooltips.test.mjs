@@ -41,6 +41,7 @@ async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
 const { decodeTooltipSkills } = await load( "src/engine/foundation/ui/skill-tooltip-catalog.ts" );
+const { skillParameterFormatters } = await load( "src/engine/foundation/ui/skill-tooltip-params.ts" );
 const { skillTooltip } = await load( "src/engine/foundation/ui/skill-tooltip.ts" );
 const { itemTooltipStats } = await load( "src/engine/foundation/ui/item-tooltip-stats.ts" );
 const { tooltipBubble } = await load( "src/engine/foundation/ui/helper-bubble.ts" );
@@ -733,6 +734,75 @@ test("native tooltip parameter cursor consumes complete setv saps and stns block
 			);
 		} else assert.deepEqual( row.directTooltipParams.setValues, [ { code: 0x45325341, value: 20 } ] );
 	}
+});
+/*
+================
+paramRow
+
+A synthetic tooltip row carrying exactly the native parameter blocks a
+test names, in the row view's shape.
+================
+*/
+function paramRow( blocks ) {
+	return {
+		nameSymbol: "SN_SKILL_TEST",
+		directTooltipParams: {
+			nativeParamBlocks: blocks.map( ( [offset, values] ) => ({ offset, tag: 0, values }) ),
+			durationMs: null,
+			multiCount: null,
+			downAttackRatio: null,
+			criticalFlat: 0,
+			criticalRatio: 0,
+			tauntFlat: 0,
+			tauntRatio: 0,
+			knockout: null,
+			rangeIncreaseDeci: null,
+			knockback: null,
+			defense: null,
+			recovery: null,
+			setValues: [],
+			area: null,
+			areas: []
+		}
+	};
+}
+
+// #2273 ASM 0x803b5e..0x803c03 (stns), 0x7faa83..0x7fab03 (hwir),
+// 0x7ff48f..0x7ff546 (saps), 0x7ffe70..0x7fff2d (dmgt), 0x7f9f7d..0x7fa039 (da+reqc).
+test("native tooltip lines the port dropped render from their parameters (#2273)", () => {
+	const direct = skillParameterFormatters( text ).direct;
+	// stns: a start delay prints _01; the periodic shape prints _02 with the
+	// interval in seconds and the damage percent.
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 5000, 25, 3000 ] ] ] ) ), [
+		"Damage starts [5] second(s) after petrification"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 25, 3000 ] ] ] ) ), [
+		"Every [3] second(s): [25]% damage"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 0, 3000 ] ] ] ) ), [] );
+	// hwir: the berserk-gauge chance at values[0].
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 30 ] ] ] ) ), [
+		"Chance of Obtaining Berserk Gage 30% Increase"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 0 ] ] ] ) ), [] );
+	// saps: flag bits 4 and 8 print the physical and magical resonance lines.
+	assert.deepEqual( direct( paramRow( [ [ 0x30, [ 12, 25 ] ] ] ) ), [
+		"Phy. skill resonance 25%",
+		"Mag. skill resonance 25%"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x30, [ 4, 25 ] ] ] ) ), [ "Phy. skill resonance 25%" ] );
+	// dmgt: two absorb-rate lines, not the damage-pair text.
+	assert.deepEqual( direct( paramRow( [ [ 0x1a0, [ 30, 40 ] ] ] ) ), [
+		"Absorb Rate 30%",
+		"Absorb Rate 40%"
+	] );
+	// reqc glues its note onto the down-attack row with no separator, and
+	// only when that row prints.
+	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 130 ] ], [ 0x170, [ 1 ] ] ] ) ), [
+		"Down-attack damage 30% Increase(Exclusively use)"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x14, [ 100 ] ], [ 0x170, [ 1 ] ] ] ) ), [] );
+	assert.deepEqual( direct( paramRow( [ [ 0x170, [ 1 ] ] ] ) ), [] );
 });
 test("Ghost Walk shows its travel distance, the second tele argument, like the original", () => {
 	// Client 7FC6CE..7FC731 prints [edi+4] / 10 under the tele row; the first
