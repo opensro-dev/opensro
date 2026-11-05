@@ -128,6 +128,13 @@ func (v *WaterValidator) tileOnMainland(start globalTile, tilesPerAxis int, cach
 // tile centre outside the object, tested at the height the rescue would
 // stand at. Only while SRO_CLOSED_OBJECT_RESCUE is on (SetClosedObjectRescue).
 //
+// A spawn in the seam between objects - inside none, on a walkable
+// mainland tile, yet with no legal walk out of its stand (the gate-lion
+// pocket, seam_rescue.go) - is stranded under the same flag, and a
+// candidate must prove a walk out of its own stand too
+// (rescueCandidateLegal), so the rescue never lands in the pocket it
+// frees a spawn from.
+//
 // Returns (result, stranded, rescueFound):
 //   - on the mainland or no walkability data -> (input, false, false);
 //     unknown never counts as stranded (fail-open, like every gate here).
@@ -176,10 +183,22 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 		closedAsset, enclosed = v.InsideClosedObject(spawn)
 	}
 	verdicts := map[uint64]bool{}
+	seam := false
 	if !enclosed && deckVerdict == objectDeckNone && walkable && v.tileOnMainland(origin, tilesPerAxis, verdicts) {
-		return spawn, false, false
+		if !v.closedObjectRescue || v.poseHasLegalExit(spawn, tilesPerAxis, tileSize, verdicts) {
+			return spawn, false, false
+		}
+		seam = true
 	}
 	startRadius := 1
+	if seam {
+		log.Infof("movement: enter-world spawn 0x%04X (%.1f, %.1f, %.1f) has no legal walk exit from its stand; relocating",
+			spawn.RegionID, spawn.X, spawn.Y, spawn.Z)
+		// Radius 0: the origin tile centre is a candidate like any
+		// other - it must prove its own exit in the search below, and
+		// when it can, it is the nearest legal stand there is.
+		startRadius = 0
+	}
 	if enclosed {
 		log.Infof("movement: enter-world spawn 0x%04X (%.1f, %.1f, %.1f) is inside closed object asset %d; relocating",
 			spawn.RegionID, spawn.X, spawn.Y, spawn.Z, closedAsset)
@@ -209,7 +228,7 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 				if !v.tileOnMainland(candidate, tilesPerAxis, verdicts) {
 					continue
 				}
-				if v.closedObjectRescue && v.rescueEnclosed(tileCenter(candidate, tilesPerAxis, tileSize), spawn.Y) {
+				if v.closedObjectRescue && !v.rescueCandidateLegal(tileCenter(candidate, tilesPerAxis, tileSize), spawn.Y, tilesPerAxis, tileSize, verdicts) {
 					continue
 				}
 				distSq := float64(dx*dx + dz*dz)
@@ -244,19 +263,6 @@ func (v *WaterValidator) rescueStand(center simulation.Spawn, spawnY float64) si
 		center.Y = terrainY
 	}
 	return center
-}
-
-/*
-================
-rescueEnclosed
-
-Whether a candidate tile centre, at the height rescueStand would place the
-player, is inside a closed object.
-================
-*/
-func (v *WaterValidator) rescueEnclosed(center simulation.Spawn, spawnY float64) bool {
-	_, inside := v.InsideClosedObject(v.rescueStand(center, spawnY))
-	return inside
 }
 
 /*
