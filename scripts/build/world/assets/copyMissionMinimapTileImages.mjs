@@ -303,7 +303,7 @@ function resolveDofPath( root, dofName ) {
 	return path.join( root, normalized );
 }
 
-async function readDofFloorLabels( filePath ) {
+export async function readDofFloorLabels( filePath ) {
 	let bytes;
 	try {
 		bytes = await readFile( filePath );

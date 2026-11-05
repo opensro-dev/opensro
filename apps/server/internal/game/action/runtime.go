@@ -125,8 +125,11 @@ type Runtime struct {
 	returnGeneration atomic.Uint64
 	// surpriseFatalCount counts strikes that killed under a plan that
 	// could not kill: the roster gate's invariant made audible (#2030).
-	surpriseFatalCount  atomic.Uint64
-	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	surpriseFatalCount atomic.Uint64
+	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// arrivalLane holds the due return arrivals the tick handed off
+	// for the return lane to complete (returnscroll.go).
+	arrivalLane         returnArrivalLane
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
@@ -391,8 +394,9 @@ type Runtime struct {
 
 	// DropCap bounds the ordinary items one kill leaves once DropPassRate has
 	// grown its capacity: a uniform random subset survives. Gold heaps and a
-	// unique's prepass are never cut. 0 leaves every planned item (port-only,
-	// not native; the closed-beta growth switch sets it).
+	// unique's own first round (prepass plus its native assigned round) are
+	// never cut. 0 leaves every planned item (port-only, not native; the
+	// closed-beta growth switch sets it).
 	DropCap int
 
 	// DropMix gives named item families their own beta drop rate in place
@@ -454,6 +458,12 @@ type Runtime struct {
 	// port-only, not native). Nil, the default, counts nothing; the
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
+
+	// SunDrops counts Sun drops for the #2538 measurement cycle
+	// (sundrops.go; port-only, not native, count-only). Nil, the
+	// default, counts nothing; the composition root installs the
+	// counter only when EnvSunDropCount is on.
+	SunDrops SunDropSink
 
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.

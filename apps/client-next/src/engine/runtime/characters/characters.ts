@@ -135,6 +135,9 @@ export function createCharacterPresentation(
 ) {
 	let probe: CharacterFrameProbe | undefined;
 	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
+	// The frame-clock reading the presenter last published with; step never
+	// lets it run backwards (#2561).
+	let lastSeconds = Number.NEGATIVE_INFINITY;
 	// One id index per published catalogue, as GlobalDataManager keeps it.
 	let concealmentCatalog: readonly import("@/engine/foundation/gameplay/skill-catalog").SkillMetadata[] | undefined,
 		concealmentLookup: SkillLookup = skillLookup( undefined );
@@ -291,6 +294,7 @@ export function createCharacterPresentation(
 		avatarOverrides.clear();
 		auxiliary.resetChildren();
 		posePresentation.reset();
+		lastSeconds = Number.NEGATIVE_INFINITY;
 		presentationState.reset();
 		retiring.clear();
 		disappearing.clear();
@@ -1012,6 +1016,17 @@ export function createCharacterPresentation(
 		/*
 		================
 		step
+
+		One presented frame. The host's frame clock is not monotonic:
+		visible frames carry the animation-frame callback timestamp while
+		maintenance frames carry performance.now(), and their interleave
+		steps the reading back by milliseconds. Every clock inside is
+		stamped from this reading and published as a difference, so a
+		rewound frame would publish negative times (#2561). The presenter
+		therefore presents the latest reading it has ever seen, kept in
+		lastSeconds across frames and reset by teardown. Times anchored
+		on simulationMs offset from the same reading, so they move with
+		it; nothing inside may read the raw argument instead.
 		================
 		*/
 		step(
@@ -1028,9 +1043,17 @@ export function createCharacterPresentation(
 			nativeServerName?: string,
 			normalFortressClothes = false
 		) {
-			const begun = beginFrame( entities, gameplay, seconds, dock, preview );
-			if ( dockPreview.step( { seconds, dock, preview, lizard, nativeServerName }, output, published ) ) return;
-			retireDespawned( seconds, entities );
+			const frameSeconds = Math.max( seconds, lastSeconds );
+			lastSeconds = frameSeconds;
+			const begun = beginFrame( entities, gameplay, frameSeconds, dock, preview );
+			if (
+				dockPreview.step(
+					{ seconds: frameSeconds, dock, preview, lizard, nativeServerName },
+					output,
+					published
+				)
+			) return;
+			retireDespawned( frameSeconds, entities );
 			const presented = selectPresented( entities, gameplay );
 			// GameConfig +0x12E (745D10) forces the death model (8E655D) on an
 			// uncensored Korean shard. It also picks the authored blood over the
@@ -1038,17 +1061,23 @@ export function createCharacterPresentation(
 			// shard shows the authored blood.
 			const uncensored = uncensoredShard( published.dress.defaultWearLanguage ?? 4, nativeServerName );
 			const events = prepareEvents(
-				{ entities, gameplay, seconds, simulationMs, effectDetail, bloodEnabled: true },
+				{ entities, gameplay, seconds: frameSeconds, simulationMs, effectDetail, bloodEnabled: true },
 				begun,
 				presented
 			);
 			const actors = presentActors(
-				{ entities, seconds, simulationMs, nativeServerName, normalFortressClothes, uncensored },
+				{ entities, seconds: frameSeconds, simulationMs, nativeServerName, normalFortressClothes, uncensored },
 				begun,
 				presented,
 				events
 			);
-			finishFrame( { entities, seconds, cameraPitch, blindHeld }, begun, presented, events, actors );
+			finishFrame(
+				{ entities, seconds: frameSeconds, cameraPitch, blindHeld },
+				begun,
+				presented,
+				events,
+				actors
+			);
 		},
 		/*
 		================

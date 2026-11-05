@@ -682,16 +682,9 @@ from other characters' rosters must resolve records on a fresh client too.
 ==================
 */
 func (rt *Runtime) GroundRefItemCodenames(divisionID string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, item := range rt.Ground.All(divisionID) {
-		if item.Codename == "" || seen[item.Codename] {
-			continue
-		}
-		seen[item.Codename] = true
-		out = append(out, item.Codename)
-	}
-	return out
+	// The seam names codenames only; the registry reads them under its
+	// lock without the deep copy of every drop All would pay (#2030).
+	return rt.Ground.Codenames(divisionID)
 }
 
 /*

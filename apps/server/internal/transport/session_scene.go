@@ -11,6 +11,7 @@ game-ready; private authority receipts may follow a bootstrap while loading.
 package transport
 
 import (
+	"errors"
 	"slices"
 
 	log "github.com/sirupsen/logrus"
@@ -654,9 +655,17 @@ func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []
 	conn := s.conn
 	s.mu.Unlock()
 	if conn != nil && conn.SupportsUnreliable() {
-		if err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload}); err == nil {
+		err := conn.WriteUnreliable(Frame{Opcode: opcode, Payload: payload})
+		if err == nil {
 			s.hub.metrics.datagramsOut.Add(1)
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
+			return nil
+		}
+		if errors.Is(err, errDatagramDropped) {
+			// The peer is not draining its datagram queue; the frame is
+			// superseded state on a loss-tolerant lane, so it drops here
+			// instead of parking this caller behind the stall (#2142).
+			s.hub.metrics.datagramsDropped.Add(1)
 			return nil
 		}
 	}

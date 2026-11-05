@@ -123,8 +123,11 @@ var Settings = []Setting{
 	// lists describe the native rule.
 	{Env: "SRO_PHARAOH_TOMB_GEAR_RATE", NomadVar: "pharaoh_tomb_gear_rate", Default: "1"},
 	// Port-only, not native: the Halloween Day event (#2124). Off is native.
-	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off"},
-	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: ""},
+	// The catalogue publishes its window, box drop and exchange while it
+	// runs (#2540), so the event and window rows are catalogue settings;
+	// the helmet seal outlives the event and stays server-only.
+	{Env: "SRO_HALLOWEEN_EVENT", NomadVar: "halloween_event", Default: "off", Catalogue: true},
+	{Env: "SRO_HALLOWEEN_EVENT_WINDOW", NomadVar: "halloween_event_window", Default: "", Catalogue: true},
 	{Env: "SRO_HALLOWEEN_HELMET_SEAL", NomadVar: "halloween_helmet_seal", Default: "off"},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "off", Validation: ValueBetaSilk},
 	{Env: "SRO_BETA_SILK_ACTIVE_ONLY", NomadVar: "beta_silk_active_only", Default: "off", Validation: ValueSwitch},
@@ -219,6 +222,10 @@ var Settings = []Setting{
 	// seal items on the shard by degree and tier, name-free, staff-only.
 	// Off is native: the route does not exist.
 	{Env: "SRO_SEAL_CENSUS", NomadVar: "seal_census", Default: "off"},
+	// Decision record, 2026-11-04 (#2538): one counting-only cycle
+	// measures Sun drops and their recipients before any Sun knob is
+	// considered. Count-only and off by default: nothing counts.
+	{Env: "SRO_SUN_DROP_COUNT", NomadVar: "sun_drop_count", Default: "off"},
 	{Env: "SRO_ANNOUNCE_PLUS", NomadVar: "announce_plus", Default: "on"},
 	// Owner, 2026-10-26 (#1739): the plus notice leads louder at +10 and
 	// +11 and above. Off is the plain line, byte for byte.

@@ -293,6 +293,110 @@ func TestBehaviorQueueUnchangedDeadlineStaysSingleCopy(t *testing.T) {
 
 /*
 ================
+TestBehaviorQueueSetAtCarriesAndRecycles
+
+The drain hands each fired actor's queue slot back in its ref, and
+the batch build re-arms through setAt without resolving the gid
+through byGID again (#2133). The carried slot is verified against
+the gid before use: a slot recycled onto another actor must not
+take the re-arm - the asked actor is scheduled by the gid resolve
+and the slot owner's own due survives. The storage slots noted on
+the re-arm ride the queue slot to the next drain's ref, and a plain
+set re-arm (the commit path) leaves the notes alone.
+================
+*/
+func TestBehaviorQueueSetAtCarriesAndRecycles(t *testing.T) {
+	var q behaviorQueue
+	q.set(1, 100)
+	q.set(2, 100)
+	due := q.takeDue(100, nil)
+	if len(due) != 2 {
+		t.Fatalf("drain fired %v, want gids 1 and 2", due)
+	}
+	refs := make(map[uint32]behaviorActorRef, len(due))
+	for _, ref := range due {
+		if ref.queueSlot == behaviorNoQueueSlot || q.slots[ref.queueSlot].gid != ref.gid {
+			t.Fatalf("drained ref %+v does not carry its queue slot", ref)
+		}
+		refs[ref.gid] = ref
+	}
+	// Re-arm gid 1 through its carried slot, noting storage slots;
+	// the same re-arm again keeps the one placed copy.
+	noted := refs[1]
+	noted.slot = 7
+	noted.monsterSlot = 9
+	q.setAt(noted, 200)
+	q.setAt(noted, 200)
+	// Retire gid 2, then let gid 3 enter: it may take the freed slot.
+	q.removeAt(refs[2].queueSlot, 2)
+	q.set(3, 300)
+	// A stale re-arm for gid 2 through its old slot - recycled or
+	// not - must schedule gid 2 by gid and leave gid 3's due alone.
+	q.setAt(refs[2], 400)
+	if q.Len() != 3 {
+		t.Fatalf("%d actors scheduled, want 3", q.Len())
+	}
+	fired := make(map[uint32]behaviorActorRef)
+	for _, ref := range q.takeDue(400, nil) {
+		if _, dup := fired[ref.gid]; dup {
+			t.Fatalf("gid %d fired twice in one drain", ref.gid)
+		}
+		fired[ref.gid] = ref
+	}
+	if len(fired) != 3 {
+		t.Fatalf("drain fired %v, want gids 1, 2 and 3 once each", fired)
+	}
+	if ref := fired[1]; ref.slot != 7 || ref.monsterSlot != 9 {
+		t.Fatalf("gid 1 ref carries slots (%d, %d), want the noted (7, 9)", ref.slot, ref.monsterSlot)
+	}
+	if ref := fired[3]; ref.slot != behaviorNoMoverSlot || ref.monsterSlot != behaviorNoMonsterSlot {
+		t.Fatalf("gid 3 ref carries slots (%d, %d), want no carried slots", ref.slot, ref.monsterSlot)
+	}
+}
+
+/*
+================
+TestBehaviorQueueRemoveAtVerified
+
+removeAt through the ref's queue slot retires its own actor; a slot
+that names another actor delegates to the gid remove, so the asked
+actor retires and the slot owner keeps its due (#2133).
+================
+*/
+func TestBehaviorQueueRemoveAtVerified(t *testing.T) {
+	var q behaviorQueue
+	q.set(1, 100)
+	q.set(2, 100)
+	slotOf := func(gid uint32) uint32 {
+		t.Helper()
+		slot, ok := q.byGID[gid]
+		if !ok {
+			t.Fatalf("gid %d not scheduled", gid)
+		}
+		return slot
+	}
+	// Another actor's slot: gid 2 retires by gid, gid 1 keeps its due.
+	q.removeAt(slotOf(1), 2)
+	if q.Len() != 1 {
+		t.Fatalf("%d actors scheduled, want 1", q.Len())
+	}
+	if due := q.takeDue(100, nil); len(due) != 1 || due[0].gid != 1 {
+		t.Fatalf("drain fired %v, want gid 1 alone", due)
+	}
+	// A removed actor's slot is unnamed again: it cannot verify for
+	// anyone, so a carried re-arm through it resolves by gid.
+	q.set(1, 100)
+	q.set(2, 100)
+	stale := slotOf(2)
+	q.removeAt(stale, 2)
+	q.setAt(behaviorActorRef{gid: 2, queueSlot: stale, slot: behaviorNoMoverSlot, monsterSlot: behaviorNoMonsterSlot}, 100)
+	if due := q.takeDue(100, nil); len(due) != 2 {
+		t.Fatalf("drain fired %v, want gids 1 and 2", due)
+	}
+}
+
+/*
+================
 BenchmarkBehaviorQueueRescheduleUnchanged
 
 The commit-side reschedule pattern: rows already queued, each

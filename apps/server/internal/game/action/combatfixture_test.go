@@ -129,6 +129,18 @@ newCombatTestRuntimeMonster
 ================
 */
 func newCombatTestRuntimeMonster(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+	return newCombatTestRuntimeMonsterTuned(t, monsterHP, level, typeID4, nil)
+}
+
+/*
+================
+newCombatTestRuntimeMonsterTuned
+
+The combat fixture with its target monster's reference tuned before the
+template is built (a real row's defenses, another codename).
+================
+*/
+func newCombatTestRuntimeMonsterTuned(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8, tune func(*monster.MonsterRef)) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
 	const region = uint16(0x62A8)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
@@ -153,6 +165,9 @@ func newCombatTestRuntimeMonster(t *testing.T, monsterHP uint32, level uint8, ty
 		EvasionRate:     27,
 		HitRate:         27,
 		CriticalRate:    2,
+	}
+	if tune != nil {
+		tune(&ref)
 	}
 	monsters := simulation.NewMonsterState(monster.TemplateFromParts(
 		map[uint32]monster.MonsterRef{ref.RefObjID: ref},

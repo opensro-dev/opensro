@@ -122,14 +122,17 @@ export type SessionState = Readonly<{
 	error?: string;
 	// The last world failure's evidence, for the
 	// world_entry_rejected incident (#2311 item 4): the world phase
-	// that failed (a mid-world drop reports "world") and how much wire
-	// arrived on the attempt that failed. closeReason is the failure's
+	// that failed (a mid-world drop reports "world"), how much wire
+	// arrived on the attempt that failed, the typed refusal the
+	// mint answered with when it answered one (#2557: "MAINTENANCE"
+	// files apart from real rejections), and closeReason, the failure's
 	// code (server_bye_3 when the server's BYE named the end), absent
 	// when the failure named none (#2558).
 	entryFailure?: {
 		readonly stage: string;
 		readonly bytesReceived: number;
 		readonly framesReceived: number;
+		readonly refusal?: string;
 		readonly closeReason?: string;
 	};
 	// The transport session the world is on (NetworkOwner
