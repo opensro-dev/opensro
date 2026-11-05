@@ -127,6 +127,9 @@ func (v *WaterValidator) tileOnMainland(start globalTile, tilesPerAxis int, cach
 // forever. The origin tile is a candidate, so the rescue is the nearest
 // tile centre outside the object, tested at the height the rescue would
 // stand at. Only while SRO_CLOSED_OBJECT_RESCUE is on (SetClosedObjectRescue).
+// The same flag widens the verdict to the seam pocket (seam_rescue.go,
+// #2359): a spawn on legal ground between objects that no walk chord can
+// leave, and no rescue lands on a centre that fails the same exit test.
 //
 // Returns (result, stranded, rescueFound):
 //   - on the mainland or no walkability data -> (input, false, false);
@@ -177,7 +180,15 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 	}
 	verdicts := map[uint64]bool{}
 	if !enclosed && deckVerdict == objectDeckNone && walkable && v.tileOnMainland(origin, tilesPerAxis, verdicts) {
-		return spawn, false, false
+		// Every legacy test calls this spawn legal. The seam pocket is
+		// visible only to the exit search, and only under the same flag:
+		// monotone widening, a stranded verdict the four legacy tests
+		// already cleared.
+		if !v.closedObjectRescue || v.poseHasLegalExit(spawn) {
+			return spawn, false, false
+		}
+		log.Infof("movement: enter-world spawn 0x%04X (%.1f, %.1f, %.1f) has no legal exit from its reachable neighbourhood; relocating",
+			spawn.RegionID, spawn.X, spawn.Y, spawn.Z)
 	}
 	startRadius := 1
 	if enclosed {
@@ -209,7 +220,7 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 				if !v.tileOnMainland(candidate, tilesPerAxis, verdicts) {
 					continue
 				}
-				if v.closedObjectRescue && v.rescueEnclosed(tileCenter(candidate, tilesPerAxis, tileSize), spawn.Y) {
+				if v.closedObjectRescue && !v.rescueCandidateLegal(tileCenter(candidate, tilesPerAxis, tileSize), spawn.Y) {
 					continue
 				}
 				distSq := float64(dx*dx + dz*dz)
@@ -248,15 +259,22 @@ func (v *WaterValidator) rescueStand(center simulation.Spawn, spawnY float64) si
 
 /*
 ================
-rescueEnclosed
+rescueCandidateLegal
 
-Whether a candidate tile centre, at the height rescueStand would place the
-player, is inside a closed object.
+Whether a rescue may land on this tile centre, at the height
+rescueStand would place the player: inside no closed object, and with
+a legal walk out of its own neighbourhood (the seam verdict,
+seam_rescue.go). A centre in the same pocket the spawn is escaping -
+the wedged lion's own tile centre sits in its seam - fails the second
+test.
 ================
 */
-func (v *WaterValidator) rescueEnclosed(center simulation.Spawn, spawnY float64) bool {
-	_, inside := v.InsideClosedObject(v.rescueStand(center, spawnY))
-	return inside
+func (v *WaterValidator) rescueCandidateLegal(center simulation.Spawn, spawnY float64) bool {
+	stand := v.rescueStand(center, spawnY)
+	if _, inside := v.InsideClosedObject(stand); inside {
+		return false
+	}
+	return v.poseHasLegalExit(stand)
 }
 
 /*
