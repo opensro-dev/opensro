@@ -47,6 +47,26 @@ test("the census rewrite is the one allowed difference, in both directions", () 
 	assert.equal( proveMove( removed, added, [ "stallOpen", "stallGrid" ] ).identical, true );
 });
 
+test("a verbatim move that binds a census name still proves identical", () => {
+	// The block's own binding shadows the closure field: the spelling is
+	// the local everywhere in the block, so no rewrite may touch it.
+	const arrow = "const hot = rows.filter( stallOpen => stallOpen > 2 );";
+	assert.equal( proveMove( arrow, arrow, [ "stallOpen" ] ).identical, true );
+	const declared = "function draw( stallGrid ) { let stallOpen = stallGrid; return stallOpen; }";
+	assert.equal( proveMove( declared, declared, [ "stallOpen", "stallGrid" ] ).identical, true );
+	const destructured = "const { stallGrid } = state; return stallGrid;";
+	assert.equal( proveMove( destructured, destructured, [ "stallGrid" ] ).identical, true );
+});
+
+test("a bound census name is not rewritten, but other fields still are", () => {
+	const removed = "const hot = rows.filter( stallOpen => stallOpen > 2 );\nreturn stallGrid;";
+	const added = "const hot = rows.filter( stallOpen => stallOpen > 2 );\nreturn state.stallGrid;";
+	assert.equal( proveMove( removed, added, [ "stallOpen", "stallGrid" ] ).identical, true );
+	// Rewriting the shadowed read itself is a real change, not a move.
+	const rewritten = "const hot = rows.filter( stallOpen => state.stallOpen > 2 );\nreturn state.stallGrid;";
+	assert.equal( proveMove( removed, rewritten, [ "stallOpen", "stallGrid" ] ).identical, false );
+});
+
 test("a rewrite of a field the census does not list is residue, not a move", () => {
 	const proof = proveMove( "return stallGrid;", "return state.stallGrid;", [] );
 	assert.equal( proof.identical, false );

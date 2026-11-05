@@ -93,17 +93,166 @@ function tokenizeWithKinds( text ) {
 
 /*
 ================
+collectGroupBinders
+
+The binding identifiers of one bracket group: a parameter list or a
+destructuring pattern. A name at the group's own level that starts a
+parameter (after `(`, `,` or `...`) binds, and so does a name inside a
+destructuring pattern at a pattern position (after `{`, `[`, `,` or
+`:`; before `,`, the closer, `=` or `:`). Reads inside default values
+sit after `=` or deeper, so they are never collected.
+================
+*/
+function collectGroupBinders( tokens, kinds, openIndex, bound ) {
+	let depth = 0, patternDepth = -1;
+	for ( let j = openIndex; j < tokens.length; j++ ) {
+		const token = tokens[j], previous = tokens[j - 1], next = tokens[j + 1];
+		if (
+			depth === 1 && patternDepth === -1 && isIdentifierToken( kinds, j ) &&
+			(previous === "(" || previous === "," || previous === "...")
+		) {
+			bound.add( token );
+		} else if (
+			patternDepth !== -1 && depth >= patternDepth && isIdentifierToken( kinds, j ) &&
+			(previous === "{" || previous === "[" || previous === "," || previous === ":") &&
+			(next === "," || next === "}" || next === "]" || next === "=" || next === ":")
+		) {
+			bound.add( token );
+		}
+		if (
+			(token === "{" || token === "[") && depth === 1 && patternDepth === -1 &&
+			(previous === "(" || previous === ",")
+		) patternDepth = depth + 1;
+		if ( token === "(" || token === "[" || token === "{" ) depth++;
+		if ( token === ")" || token === "]" || token === "}" ) depth--;
+		if ( patternDepth !== -1 && depth < patternDepth ) patternDepth = -1;
+		if ( depth === 0 ) return j;
+	}
+	return tokens.length - 1;
+}
+
+/*
+================
+collectDeclarationBinders
+
+The binding identifiers of one let/const/var declaration, starting at
+the keyword: the name after the keyword and after each top-level
+comma, plus destructuring patterns in those positions. The scan ends
+at the declaration's `;` or at a closer the declaration did not open
+(the `)` of a for header).
+================
+*/
+function collectDeclarationBinders( tokens, kinds, keywordIndex, bound ) {
+	let depth = 0, patternDepth = -1, expectBinder = true;
+	for ( let j = keywordIndex + 1; j < tokens.length; j++ ) {
+		const token = tokens[j], previous = tokens[j - 1], next = tokens[j + 1];
+		if ( depth === 0 && patternDepth === -1 && token === ";" ) return;
+		if ( patternDepth !== -1 && depth >= patternDepth ) {
+			if (
+				isIdentifierToken( kinds, j ) &&
+				(previous === "{" || previous === "[" || previous === "," || previous === ":") &&
+				(next === "," || next === "}" || next === "]" || next === "=" || next === ":")
+			) bound.add( token );
+		} else if ( expectBinder && depth === 0 && isIdentifierToken( kinds, j ) ) {
+			bound.add( token );
+			expectBinder = false;
+		} else if (
+			expectBinder && depth === 0 && (token === "{" || token === "[") &&
+			(previous === "," || j === keywordIndex + 1)
+		) {
+			patternDepth = depth + 1;
+			expectBinder = false;
+		}
+		if ( token === "(" || token === "[" || token === "{" ) depth++;
+		if ( token === ")" || token === "]" || token === "}" ) depth--;
+		if ( patternDepth !== -1 && depth < patternDepth ) patternDepth = -1;
+		if ( depth < 0 ) return;
+		if ( depth === 0 && token === "," ) expectBinder = true;
+	}
+}
+
+/*
+================
+matchingClose
+
+The index of the bracket closing the one at openIndex, or the last
+token when the text never closes it.
+================
+*/
+function matchingClose( tokens, openIndex ) {
+	let depth = 0;
+	for ( let j = openIndex; j < tokens.length; j++ ) {
+		const token = tokens[j];
+		if ( token === "(" || token === "[" || token === "{" ) depth++;
+		if ( token === ")" || token === "]" || token === "}" ) depth--;
+		if ( depth === 0 ) return j;
+	}
+	return tokens.length - 1;
+}
+
+/*
+================
+boundNamesIn
+
+Every identifier the text binds, at token granularity: let/const/var
+declarators, function names and parameters, arrow parameters, catch
+parameters and class names. The scan is deliberately shallow - it
+knows binding positions, not scopes. A census field the block binds
+anywhere shadows the closure field for the whole block, so the proof
+must not rewrite that spelling at all; anything subtler (a method's
+parameters, a label) fails safe as residue, never as a false identity.
+================
+*/
+function boundNamesIn( tokens, kinds ) {
+	const bound = new Set();
+	for ( let i = 0; i < tokens.length; i++ ) {
+		const kind = kinds[i], token = tokens[i];
+		if (
+			kind === ts.SyntaxKind.LetKeyword || kind === ts.SyntaxKind.ConstKeyword ||
+			kind === ts.SyntaxKind.VarKeyword
+		) {
+			collectDeclarationBinders( tokens, kinds, i, bound );
+		} else if ( kind === ts.SyntaxKind.FunctionKeyword ) {
+			let j = i + 1;
+			if ( tokens[j] === "*" ) j++;
+			if ( isIdentifierToken( kinds, j ) ) {
+				bound.add( tokens[j] );
+				j++;
+			}
+			if ( tokens[j] === "(" ) collectGroupBinders( tokens, kinds, j, bound );
+		} else if ( kind === ts.SyntaxKind.ClassKeyword ) {
+			if ( isIdentifierToken( kinds, i + 1 ) ) bound.add( tokens[i + 1] );
+		} else if ( kind === ts.SyntaxKind.CatchKeyword ) {
+			if ( tokens[i + 1] === "(" ) collectGroupBinders( tokens, kinds, i + 1, bound );
+		} else if ( token === "(" ) {
+			if ( tokens[matchingClose( tokens, i ) + 1] === "=>" ) {
+				collectGroupBinders( tokens, kinds, i, bound );
+			}
+		} else if ( isIdentifierToken( kinds, i ) && tokens[i + 1] === "=>" ) {
+			bound.add( token );
+		}
+	}
+	return bound;
+}
+
+/*
+================
 normaliseRemoved
 
 The ui.ts side of the rewrite: a bare census field `x` becomes the one
 token `state.x`. A field read through a member (`holder.x`) is not the
 closure field and is left alone, as is a field in property-name
 position (`{ x: 1 }` keeps its name; the value position is the read).
+A census name the block itself binds (a parameter, a let/const/var, a
+destructuring target) shadows the closure field: that spelling is the
+local binding everywhere in the block, so it is never rewritten - a
+verbatim move that binds a census name still proves identical.
 ================
 */
 export function normaliseRemoved( text, fields ) {
 	const { tokens, kinds } = tokenizeWithKinds( text );
-	const wanted = new Set( fields );
+	const bound = boundNamesIn( tokens, kinds );
+	const wanted = new Set( fields.filter( name => !bound.has( name ) ) );
 	const out = [];
 	for ( let i = 0; i < tokens.length; i++ ) {
 		const previous = tokens[i - 1], next = tokens[i + 1];
