@@ -262,6 +262,25 @@ test("the designated option reads as a change, a foreign one as assimilation (62
 	);
 });
 
+test("an equal designated reroll still prints the change line (62970B)", () => {
+	// 62970B formats "%d -> %d" for the designated kind whenever it
+	// stands on both items (entered from 6295DB): only a zero amount
+	// gates it, so a reroll landing where it started still reads as a
+	// change. The deviation, which does compare, stays silent beside
+	// it - without the native line nothing at all would print here.
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_STR", 5 ),
+				after: optionItem( "MATTR_STR", 5 ),
+				designated: "MATTR_STR"
+			} ),
+			copy
+		),
+		[ "[PARAM_STR]attribute of Blade has been changed to [5 -> 5]." ]
+	);
+});
+
 test("an attribute stone names the white stat it raised, old value to new", () => {
 	assert.deepEqual( alchemyResultLines( success( { before: weapon( 0 ), after: weapon( 31 ) } ), copy ), [
 		"PARAM_PA changed from 10 ~ 20 (+0%) to 41 ~ 51 (+100%)",

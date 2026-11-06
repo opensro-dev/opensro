@@ -457,9 +457,10 @@ stoneNativeLines
 
 625980's own per-attribute lines for a successful stone (owner
 decision #2377, Option 1), printed after the deviation's wording.
-Every white stat or magic option that changed prints one line: the
-change the stone designates reads UIIT_MSG_ALCHEMY_CHANGE_CATTR, a
-newly granted option UIIT_MSG_ALCHEMY_APPEND_ATTR, and any other
+Every white stat or magic option that changed prints one line, and
+the designated attribute prints even on an equal reroll: the change
+the stone designates reads UIIT_MSG_ALCHEMY_CHANGE_CATTR, a newly
+granted option UIIT_MSG_ALCHEMY_APPEND_ATTR, and any other
 UIIT_MSG_ALCHEMY_ATTR_ASSIMILATION. The presented before/after items
 carry the values, as the saved copy (CEA528) and the created item
 carry them natively; a fortress weapon's attack row carries a fort
@@ -529,7 +530,11 @@ function stoneNativeLines( stone: NonNullable<AlchemyOutcome["stone"]>, copy: ( 
 			if ( granted ) {
 				lines.push( nativeTemplate( copy, "UIIT_MSG_ALCHEMY_APPEND_ATTR", [ granted, item ] ) );
 			}
-		} else if ( kind === stone.designated && oldAmount !== newAmount ) {
+		} else if ( kind === stone.designated ) {
+			// The designated arm formats "%d -> %d" whenever the kind
+			// stands on both items (62970B, entered from 6295DB): an
+			// equal reroll still prints. Its only amount gate is a
+			// zero amount (62970B), which a carried option never has.
 			lines.push(
 				nativeTemplate( copy, "UIIT_MSG_ALCHEMY_CHANGE_CATTR", [
 					nativeBlueLabel( kind, copy, false ),

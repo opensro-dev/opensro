@@ -23,7 +23,10 @@ attribute NATTR_<stat>, a magic stone the option MATTR_<stat> (the five
 disease stones name their MATTR_RESIST_* option). 625980 stages this
 name at request time (CC3E54, from the stone's record) and names the
 designated attribute's change apart from an assimilated one; anything
-else designates nothing the presenter knows.
+else designates nothing the presenter knows. Eight magic-stone stems
+(ABYSS, DEVIL, GUARD, HEAT, IRONWALL, SHARP, STRONGMIND, STUPOR) name
+no MATTR option among the nineteen kinds, so their derived name
+matches nothing and no blue arm designates them, as natively.
 ================
 */
 export function stoneDesignatedAttribute( mode: AlchemyMode, codename: string | undefined ): string | undefined {
