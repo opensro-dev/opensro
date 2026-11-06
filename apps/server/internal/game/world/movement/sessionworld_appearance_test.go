@@ -100,6 +100,40 @@ func TestWorldSnapshotReusesUnchangedAppearance(t *testing.T) {
 
 /*
 ================
+TestWorldSnapshotReusesAppearanceForUnsortedWornRows
+
+The builder sorts a copy of the captured worn rows, never the
+capture: a peer whose stored rows sit out of slot order still
+reuses its appearance. Sorting the capture in place would leave
+the kept fingerprint holding slot order while every fresh capture
+arrives in stored order - never equal, so the peer would rebuild
+on every tick and lose this whole change's saving.
+================
+*/
+func TestWorldSnapshotReusesAppearanceForUnsortedWornRows(t *testing.T) {
+	provider, deps, character, _ := appearanceFixture(t)
+
+	deps.Mutate(character, "memo-test-unsorted", func() {
+		rows := character.MissionInventory
+		rows[0], rows[1] = rows[1], rows[0]
+	})
+
+	first := provider.WorldSnapshot()
+	second := provider.WorldSnapshot()
+	if first.Appearance == nil {
+		t.Fatal("the snapshot lost its appearance")
+	}
+	if first.Appearance != second.Appearance {
+		t.Fatalf("unsorted worn rows rebuilt the appearance: %p then %p", first.Appearance, second.Appearance)
+	}
+	if len(first.Appearance.Equipment) != 2 ||
+		first.Appearance.Equipment[0].RefObjID != 3632 || first.Appearance.Equipment[1].RefObjID != 3653 {
+		t.Fatalf("equipment = %+v, want the two worn rows in slot order", first.Appearance.Equipment)
+	}
+}
+
+/*
+================
 TestWorldSnapshotRebuildsWhenInputsMove
 
 Every face of the appearance rebuilds when its input moves - the
