@@ -371,17 +371,13 @@ interface WorldReferences {
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: (
 		refObjId: number
-	) => { readonly typeFlags: number; readonly name: string; readonly codename: string; } | undefined;
+	) => { readonly typeFlags: number; readonly name: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
 	readonly npcs: () => readonly EntityState[];
 }
-
-// The Christmas exchange's item (702728): row 0x15's send scans the
-// bag for this codename and stays silent without it.
-const EVENT_EXCHANGE_SOCKS = "ITEM_ETC_E041225_RED_SOCKS";
 
 // A dress answer may trail its bar by a server tick and the round trip.
 const JOB_DRESS_ANSWER_GRACE_MS = 5000;
@@ -2452,22 +2448,24 @@ state here before a command can claim a native wire conversation.
 
 			if ( command.kind === "npc-event-exchange" ) {
 				const target = targeting.state(), conversation = npcConversation.state();
-				// Row 0x15's click: 7026B0 scans the bag for the red
-				// socks (702728) and sends only when a pair is held;
-				// without one the click is silent, so every failed
-				// precondition here just does nothing. The phase test
-				// is one of them: while an exchange is waiting (or its
-				// answer window lapsed into uncertain) the row click
-				// stays silent too - the native send has no waiting
-				// state to re-enter, and exchange() would throw.
+				// Row 0x15's click: 7026B0 sends whether or not the
+				// bag holds the red socks - its scan (702728) is never
+				// tested, the empty bag, a match and the exhausted
+				// scan all reach the send block gated only by the
+				// opcode's sendability; whether socks are held is the
+				// server's business, answered 2/3 (ERROR_SOCKS). So
+				// the port's only terms are the row's own existence:
+				// the capability, the conversation standing on the
+				// target, and the phase test - while an exchange is
+				// waiting (or its answer window lapsed into uncertain)
+				// the row click stays silent, since the native send
+				// has no waiting state to re-enter and exchange()
+				// would throw. Every failed term just does nothing.
 				if (
 					!localGid || target.targetPending ||
 					(conversation.phase !== "menu" && conversation.phase !== "ready") ||
 					conversation.gid !== target.target ||
-					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION) ||
-					!inventory.state().inventory.some(
-						item => worldReferences.item( item.refObjId )?.codename === EVENT_EXCHANGE_SOCKS
-					)
+					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION)
 				) return null;
 				npcConversation.exchange( now );
 				return null;

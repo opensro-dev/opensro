@@ -23,8 +23,8 @@ const RESUSCITATION_OPEN = 0x3230;
 const NPC_DIALOG = 0x3773;
 const NPC_ACTION = 0x7338;
 // Row 0x15's send (7026B0) and its answer (75D030): the Christmas
-// event item exchange. The send carries no body; holding the socks is
-// its precondition, checked by the caller before it runs.
+// event item exchange. The send carries no body and no precondition -
+// whether the bag holds the socks is the server's check, answered 2/3.
 const EVENT_EXCHANGE = 0x747c;
 const EVENT_EXCHANGE_RESULT = 0xb47c;
 const TALK_MASK = 2;
@@ -125,8 +125,8 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		exchange
 
 		Row 0x15 (capability EVENT_EXCHANGE_FUNCTION): 7026B0 sends the
-		exchange opcode with no body once the caller has found the red
-		socks in the bag; the answer is the 0xB47C arm in receive().
+		exchange opcode with no body and no bag precondition; the
+		answer is the 0xB47C arm in receive().
 
 		The native send has no answer state - 7026B0 fires and forgets.
 		The port runs the conversation's ordinary request transition, so
