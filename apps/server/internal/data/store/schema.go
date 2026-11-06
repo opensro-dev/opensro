@@ -115,7 +115,12 @@ func isVersionMismatch(err error) bool {
 // account, not per character. The character halloweenBoxDay/Count fields
 // stay as the seed the account record is derived from at first load; the
 // offline upgrade rewrites no record.
-const CurrentVersion = 36
+// Version 37 adds the Academy cumulated-buff state to camp members
+// (buffValue, buffWindowStartMs, buffLive, reservedBuffs; #2270): the
+// saved buff a student accumulates and the received rows it passes to
+// the Guardian. Members saved earlier carry none of it and hold no
+// buff; the offline upgrade rewrites no record.
+const CurrentVersion = 37
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

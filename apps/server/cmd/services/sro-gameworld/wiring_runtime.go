@@ -84,6 +84,12 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.items.AdvanceHuntingPoints(nowMs, sessionViews(ticker.Source))
 		}},
 		{Name: "quest-markers", Hook: game.questMarkerTick()},
+		// The Academy cumulated-buff windows count down on the minute
+		// pulse (#2270); the runtime gates itself to the native cadence.
+		{Name: "academy-buff-pulse", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.mentorInvites.BuffPulse(nowMs)
+			return nil
+		}},
 		{Name: "parties", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)
 			return game.parties.MemberUpdates(sessionViews(ticker.Source), nowMs)

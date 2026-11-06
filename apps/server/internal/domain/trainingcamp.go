@@ -56,6 +56,35 @@ type TrainingCampMemberRecord struct {
 	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
 	JoinLevel   uint8  `json:"joinLevel,omitempty"`
 	HonorPoints uint32 `json:"honorPoints,omitempty"`
+	// The cumulated buff (schema 37): the member's saved buff rides the
+	// member row the way the reference server's buff-status satellite
+	// rides its member (value, window start, live flag), and the buffs
+	// this member RECEIVED from students sit in ReservedBuffs. Zero
+	// value = no buff; rows written before schema 37 read exactly that.
+	BuffValue         uint32                     `json:"buffValue,omitempty"`
+	BuffWindowStartMs int64                      `json:"buffWindowStartMs,omitempty"`
+	BuffLive          bool                       `json:"buffLive,omitempty"`
+	ReservedBuffs     []TrainingCampReservedBuff `json:"reservedBuffs,omitempty"`
+}
+
+// TrainingCampReservedBuff is one buff a student passed to this member:
+// the donor, the points still on it, and the start of its own 24 h
+// window. Received rows drain first-in-first-out as their holder earns.
+type TrainingCampReservedBuff struct {
+	DonorCharID   int64  `json:"donorCharId"`
+	Points        uint32 `json:"points"`
+	WindowStartMs int64  `json:"windowStartMs,omitempty"`
+}
+
+// TrainingCampMemberBuffState is one member's complete cumulated-buff
+// state (the saved row plus the received rows) - the unit the store
+// door replaces wholesale, because the camp is the dirty unit and the
+// mentor runtime's hot path holds the live copy between flushes.
+type TrainingCampMemberBuffState struct {
+	Value         uint32
+	WindowStartMs int64
+	Live          bool
+	Reserved      []TrainingCampReservedBuff
 }
 
 // TrainingCampAdmission is the complete policy input for admitting one
@@ -298,4 +327,9 @@ type TrainingCampStore interface {
 	// SpendHonorPoints deducts cost from the character's camp HonorPoints in one
 	// transaction and returns the new balance and the camp's member list.
 	SpendHonorPoints(divisionID string, charID int64, cost uint32) (uint32, []TrainingCampMemberRecord, bool)
+	// WriteMemberBuffs replaces the cumulated-buff state of the listed
+	// members of one camp under one lock (flush, pass and clear all land
+	// here). Members not in the camp are skipped; false means the camp
+	// itself is gone.
+	WriteMemberBuffs(divisionID string, campID int64, states map[int64]TrainingCampMemberBuffState) bool
 }
