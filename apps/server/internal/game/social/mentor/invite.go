@@ -88,7 +88,11 @@ type InviteRuntime struct {
 	// door, where the authority door cannot be taken. The camp door
 	// stays the durable owner; the ledger is its hot copy, flushed
 	// through WriteMemberBuffs at every lifecycle point and minute.
-	buffMu          sync.Mutex
+	buffMu sync.Mutex
+	// buffFlushMu serialises flushBuffCamp's door writes so two flushes
+	// never land an older snapshot after a newer one. It is taken before
+	// buffMu and is never held by the kill path (see flushBuffCamp).
+	buffFlushMu     sync.Mutex
 	buffLedger      map[buffLedgerKey]*buffLedgerEntry
 	buffCampOf      map[buffCharKey]int64
 	buffPulseMinute int64

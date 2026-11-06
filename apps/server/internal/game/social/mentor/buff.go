@@ -252,18 +252,28 @@ func (r *InviteRuntime) dropBuffCamp(divisionID string, campID int64) {
 flushBuffCamp
 
 Lands the camp's dirty ledger entries through the buff door. The
-caller holds no lock; the ledger lock is held across the door call,
-which is the only lock order this lane ever takes (ledger, then
-store) and nothing under the store calls back.
+caller holds no lock. The ledger lock is never held across the door
+call: the kill path takes the ledger lock while it already holds the
+character door (CampKillGrant runs inside UpdateCharactersDeferred,
+which holds the store lock), so holding the ledger lock while waiting
+for the store lock here would close an AB-BA cycle and stop the store.
+
+The snapshot clears the dirty marks under the ledger lock; a kill that
+lands while the write is in flight marks its entry dirty again, and a
+refused write re-marks every snapshotted entry, so no change is lost.
+buffFlushMu serialises the flushes themselves, so an older snapshot
+can never land after a newer one.
 ================
 */
 func (r *InviteRuntime) flushBuffCamp(divisionID string, campID int64) {
-	r.buffMu.Lock()
-	defer r.buffMu.Unlock()
 	authority := r.deps.TrainingCampAuthority()
 	if authority == nil {
 		return
 	}
+	r.buffFlushMu.Lock()
+	defer r.buffFlushMu.Unlock()
+
+	r.buffMu.Lock()
 	updates := make(map[int64]domain.TrainingCampMemberBuffState)
 	var written []*buffLedgerEntry
 	for key, entry := range r.buffLedger {
@@ -278,16 +288,20 @@ func (r *InviteRuntime) flushBuffCamp(divisionID string, campID int64) {
 		}
 		updates[key.charID] = state
 		written = append(written, entry)
+		entry.dirty = false
 	}
+	r.buffMu.Unlock()
 	if len(updates) == 0 {
 		return
 	}
-	if !authority.WriteMemberBuffs(divisionID, campID, updates) {
+	if authority.WriteMemberBuffs(divisionID, campID, updates) {
 		return
 	}
+	r.buffMu.Lock()
 	for _, entry := range written {
-		entry.dirty = false
+		entry.dirty = true
 	}
+	r.buffMu.Unlock()
 }
 
 /*
