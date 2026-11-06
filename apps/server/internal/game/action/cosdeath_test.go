@@ -192,6 +192,47 @@ func TestTransportDeathDropsCargoAndDeletesRecord(t *testing.T) {
 
 /*
 ================
+TestRiddenTransportDeathDropsCargo
+
+Regression coverage for #2730: a transport that is itself killed while
+its owner rides it drops its goods the same way an unridden one does -
+the cargo scatters unowned, the kind-1 release deletes the record and
+the corpse leaves the world.
+================
+*/
+func TestRiddenTransportDeathDropsCargo(t *testing.T) {
+	rt, clock, character, source := newCombatTestRuntime(t, 100)
+	equipCombatTestPet(t, rt, character, cosBandTransport)
+	pet := character.ActiveCOS
+	pet.Mounted = true
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	pet.Container = &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{{
+		Slot: 0, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 7}}}
+	pet.CurrentHP = 5
+	record := abnormal.Record{Status: abnormal.Burn, Level: 1, Grade: 1, DurationMs: 10000,
+		PeriodMs: 2000, SourceGID: source.Gid, Rate24: 10, Scale20: 1, Param38: 10}
+	owner := rt.newCosAbnormalOwner(testDivision, character, clock.NowMs())
+	owner.sources = rt.captureAbnormalSources(testDivision, owner.block, []abnormal.Record{record})
+	if !owner.block.Apply(owner, record, clock.NowMs()) {
+		t.Fatal("status refused")
+	}
+	owner.block.Update(owner, clock.NowMs())
+	owner.commit()
+	frames := rt.cosAbnormalPublication(pet.GID, owner)
+	if character.ActiveCOS != nil {
+		t.Fatal("a dead ridden transport kept its record")
+	}
+	ground := rt.Ground.All(testDivision)
+	if len(ground) != 1 || ground[0].Codename != potion.Codename || ground[0].StackCount != 7 || ground[0].DroppedBy != "" {
+		t.Fatalf("cargo %+v", ground)
+	}
+	if !saw(frames, wire.OpObjectDespawn) {
+		t.Fatal("the dead ridden transport stayed in view")
+	}
+}
+
+/*
+================
 TestMonsterKillOfATransportDropsItsCargo
 
 A thief or any monster striking a loaded transport dead: its goods drop
