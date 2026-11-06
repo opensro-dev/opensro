@@ -2005,6 +2005,7 @@ state
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
 				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),
+				navigationRoom: navigation.room( pose, owner ),
 				minimapFloors: Object.fromEntries(
 					minimapQueries.map( p => [ minimapPoseKey( p ), navigation.floor( p ) ] )
 				),

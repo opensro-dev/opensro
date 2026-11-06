@@ -317,6 +317,43 @@ companion, a mercenary and the bags riding inside bag and avatar summon
 rows all give theirs up, and every other row stays.
 ================
 */
+/*
+================
+TestHalloweenBoxNeverEntersAWarehouse
+
+The shipped Jewel Box row (3862) carries CanBorrow 0 (itemdata
+token 19, verified in the generated textdata), so the warehouse
+door refuses it at any time, event or not - which is why the
+event-end sweep needs no storage arm (#2590). Both warehouses run
+the one door: account storage refuses in storageMutation, and the
+guild move reaches the same mutation through applyGuildStorageMove.
+The helmet rows beside it carry 255 and pass, so the refusal is
+the box row's own property.
+================
+*/
+func TestHalloweenBoxNeverEntersAWarehouse(t *testing.T) {
+	c := testCharacter()
+	c.MissionInventory = []enterworld.InventoryRow{
+		halloweenBoxRow(20, 5),
+		{Slot: 21, RefObjID: 23455, Codename: "ITEM_ETC_E071030_M_EGHEAD",
+			TypeFlags: wire.PackTypeFlags(3, 1, 13, 0), StackCount: 1},
+	}
+	items := halloweenTestItems()
+	// As shipped: the box row's canBorrow field reads 0.
+	items[progression.HalloweenBoxCodename].NativeFields =
+		items[progression.HalloweenBoxCodename].NativeFields.With("canBorrow", 0)
+	rt, _ := newTestRuntime(c, items)
+
+	box, _ := bagOf(c).At(20)
+	if rt.storableItem(box) {
+		t.Fatal("jewel box entered the warehouse")
+	}
+	helmet, _ := bagOf(c).At(21)
+	if !rt.storableItem(helmet) {
+		t.Fatal("storable helmet refused by the warehouse")
+	}
+}
+
 func TestHalloweenCleanupSweepsEveryContainer(t *testing.T) {
 	bag := func() *domain.COSContainer {
 		return &domain.COSContainer{Capacity: 4, Rows: []enterworld.InventoryRow{

@@ -83,7 +83,11 @@ function equipment( plus = 0 ) {
 function setup() {
 	const sounds = [], frames = [], owner = createInventory( f => frames.push( f ), h => sounds.push( h ) );
 	owner.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c }, { refObjId: 2, typeFlags: 0xf6c }, {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c }, {
+			refObjId: 2,
+			typeFlags: 0xf6c,
+			codename: "ITEM_ETC_ARCHEMY_ATTRSTONE_PA_01"
+		}, {
 			refObjId: 3,
 			typeFlags: 0x176c
 		} ],
@@ -113,6 +117,34 @@ test("Alchemy serializes wire slots and emits use/result only after an atomic re
 	owner.receive( 0xb373, Uint8Array.of( 1, 0, 13, 1 ) );
 	assert.equal( owner.state().inventory.some( i => i.slot === 13 ), false );
 	assert.deepEqual( sounds.slice( -2 ), [ "SND_ELIXIR_USE", "SND_ELIXIR_FAILURE" ] );
+});
+test("a successful attribute stone outcome names the attribute its stone designates (625980)", () => {
+	const { owner } = setup();
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "attribute", slots: [ 13, 14 ] }, 0 );
+	assert.equal( owner.state().alchemy.designated, "NATTR_PA" );
+	owner.receive( 0xb651, Uint8Array.of( 1, 1, 13, ...equipment( 1 ) ) );
+	assert.equal( defined( owner.state().alchemy.outcome ).stone?.designated, "NATTR_PA" );
+});
+test("a successful magic stone outcome names the option its stone designates (625980)", () => {
+	const sounds = [], frames = [], owner = createInventory( f => frames.push( f ), h => sounds.push( h ) );
+	owner.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c }, {
+			refObjId: 2,
+			typeFlags: 0xf6c,
+			codename: "ITEM_ETC_ARCHEMY_MAGICSTONE_STR_09"
+		} ],
+		equipItems: [ { slot: 13, refObjId: 1, body: equipment() }, {
+			slot: 14,
+			refObjId: 2,
+			body: [ 2, 0, 0, 0, 1, 0 ]
+		} ]
+	} );
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "magic", slots: [ 13, 14 ] }, 0 );
+	assert.equal( owner.state().alchemy.designated, "MATTR_STR" );
+	owner.receive( 0xb651, Uint8Array.of( 1, 1, 13, ...equipment( 1 ) ) );
+	assert.equal( defined( owner.state().alchemy.outcome ).stone?.designated, "MATTR_STR" );
 });
 test("Alchemy cancellation uses failure, compound arming is silent, hidden results stay silent", () => {
 	const { owner, sounds } = setup();

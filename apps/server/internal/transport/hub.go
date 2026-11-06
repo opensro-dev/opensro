@@ -38,7 +38,12 @@ Hub
 type Hub struct {
 	// History is installed before admission opens; its queue never calls gameplay.
 	History HistoryObserver
-	cfg     Config
+	// Census, when installed, receives the same lifecycle events as
+	// History (history.go): the connection journal behind the
+	// SRO_CONNECTION_JOURNAL flag (#2716, port-only, not native). Nil
+	// is the native posture: nothing is recorded.
+	Census CensusObserver
+	cfg    Config
 
 	// now and newTicker are the hub's one clock. Production reads the
 	// wall clock (newHub's defaults); a test installs a manual clock so
@@ -602,6 +607,15 @@ func (h *Hub) AcceptConn(conn Conn) {
 	}
 	if resumePresented {
 		h.metrics.resumeFresh.Add(1)
+	}
+
+	if !h.clientSlotOpen(conn.RemoteAddr()) {
+		h.metrics.clientSessionRefusals.Add(1)
+		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "limit": h.cfg.MaxSessionsPerClient}).
+			Warn("transport: client session limit reached, refusing the new session")
+		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonServerBusy}})
+		_ = conn.Close("client session limit reached")
+		return
 	}
 
 	sess, err := h.createSession()

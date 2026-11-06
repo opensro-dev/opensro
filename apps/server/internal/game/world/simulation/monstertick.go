@@ -416,7 +416,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			// (#2047 review, carried by the generation since #2137
 			// slice 1). The direct path below reads the same view at
 			// the same adjacency it always had.
-			if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
+			if !ops.Monsters.behaviorActorLiveAt(batch.key, ref) {
 				continue
 			}
 			if ops.noteResumed(batch.key, ref.gid) {
