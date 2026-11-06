@@ -17,7 +17,9 @@ import { defined } from "../helpers/defined.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
-const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
+const { serverNotification, EVENT_NOTICE_COLOR_ARGB } = await import(
+	"../../src/engine/foundation/gameplay/system-notices.ts"
+);
 const {
 	createNoticeBanner,
 	notificationBannerPaths
@@ -374,4 +376,53 @@ test("a shard event notice (Halloween wave) prints in the bottom-right message l
 	const notices = defined( defined( game.take() ).notices );
 	const rows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, notices, key => key, false );
 	assert.deepEqual( rows.map( r => [ r.value, r.category ] ), [ [ waveText, "game" ] ] );
+});
+
+test("a shard event notice prints in the event colour while the Highlight row is on, beige while off (#2727)", async () => {
+	const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
+	const frame = text =>
+		Buffer.concat( [
+			Buffer.from( [ 0x81, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" ),
+			Buffer.from( [
+				0,
+				0,
+				0,
+				0
+			] )
+		] );
+	const waveText = "Halloween: Gourds land near Jangan in 10 minutes";
+	// On by default (owner ask 2026-11-06): the event line carries the
+	// event colour into the message log; a plain log line (a fortress
+	// announcement) keeps the native beige (0x67A600: every category but
+	// 6 is 0xFFDBC99B).
+	const game = createGameplay( () => {} );
+	game.receive( { opcode: 0x3667, payload: frame( waveText ) }, 100 );
+	game.receive( { opcode: 0x3887, payload: Buffer.from( [ 1 ] ) }, 110 );
+	const notices = defined( defined( game.take() ).notices ),
+		wave = defined( notices.find( n => n.text === waveText ) );
+	assert.equal( wave.colorArgb, EVENT_NOTICE_COLOR_ARGB );
+	const rows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, notices, key => key, false ),
+		waveRow = defined( rows.find( r => r.value === waveText ) ),
+		plainRow = defined( rows.find( r => r.value !== waveText ) );
+	assert.equal( waveRow.colorArgb, EVENT_NOTICE_COLOR_ARGB );
+	assert.equal( plainRow.colorArgb, 0xffdbc99b );
+	// Row off: the line still prints (the Drop & plus row owns hiding),
+	// in the native beige, and the banner is untouched either way.
+	const quiet = createGameplay( () => {} );
+	quiet.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		breakNotices: true,
+		highlightEventNotices: false
+	} );
+	quiet.receive( { opcode: 0x3667, payload: frame( waveText ) }, 100 );
+	const quietNotices = defined( defined( quiet.take() ).notices ),
+		quietWave = defined( quietNotices.find( n => n.text === waveText ) );
+	assert.equal( quietWave.colorArgb, undefined );
+	assert.equal( quietWave.notificationBanner, true );
+	const quietRows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, quietNotices, key => key, false );
+	assert.equal( defined( quietRows.find( r => r.value === waveText ) ).colorArgb, 0xffdbc99b );
 });

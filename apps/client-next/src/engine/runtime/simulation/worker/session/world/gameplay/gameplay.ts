@@ -198,6 +198,7 @@ import {
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
 import { petNameRefusal, petNameRequest, petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import {
+	EVENT_NOTICE_COLOR_ARGB,
 	fortressNotice,
 	isServerNoticeChannel,
 	serverNotification,
@@ -1241,6 +1242,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// The Experimental "Highlight event notices" row (#2727): while on, a
+	// shard event notice queues with the event colour; off is the native
+	// beige line.
+	let highlightEventNotices = true;
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
@@ -1689,6 +1694,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
@@ -4313,7 +4319,17 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( notice?.plusSeven && !plusSevenNotices ) return false;
 				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
-					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// Port-only, not native (#2727): while the "Highlight
+					// event notices" row is on, a shard event notice carries
+					// the event colour into the message log; the banner and
+					// the chat line keep their own presentation.
+					notices = [ ...notices.slice( -99 ), {
+						...notice,
+						sequence: ++noticeSequence,
+						...(notice.shardEvent && highlightEventNotices ?
+							{ colorArgb: EVENT_NOTICE_COLOR_ARGB } :
+							{})
+					} ];
 					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {
 						chat.receive( frame, localGid );
 					}
