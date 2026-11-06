@@ -17,6 +17,7 @@ item's duration, one bar.
 ===========================================================================
 */
 import type { WireFrame } from "@/engine/contracts/network";
+import { remainedPeriodLine } from "./count-job";
 
 export const OP_PARAM_JOB_START = 0x3602;
 export const OP_PARAM_JOB_RESUME = 0x32af;
@@ -102,6 +103,25 @@ export function paramJobPacket( frame: WireFrame, nowMs: number ): ParamJobUpdat
 	return { kind: "set", row: { itemRefObjId, remainingSec: v.getUint32( 4, true ), receivedAtMs: nowMs } };
 }
 
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60000;
+const MS_PER_HOUR = 3600000;
+// Above this many remaining seconds the kind-4 duration line counts whole
+// hours; at or below it, whole minutes (0x6E398E-0x6E399D).
+const DURATION_HOURS_ABOVE_SEC = 60000;
+
+/*
+================
+paramJobRemainingMs
+
+The milliseconds a param job has left: its remaining seconds counted
+down from the receipt, the same left the kind-4 bar drains.
+================
+*/
+export function paramJobRemainingMs( row: ParamJobRow, nowMs: number ): number {
+	return row.remainingSec * MS_PER_SECOND - Math.max( 0, nowMs - row.receivedAtMs );
+}
+
 /*
 ================
 paramJobFraction
@@ -110,8 +130,36 @@ The bar left: remaining against the item's duration, clamped to [0, 1].
 ================
 */
 export function paramJobFraction( row: ParamJobRow, reference: ParamJobReference, nowMs: number ): number {
-	const left = row.remainingSec * 1000 - Math.max( 0, nowMs - row.receivedAtMs );
+	const left = paramJobRemainingMs( row, nowMs );
 	return Math.min( 1, Math.max( 0, left / (reference.durationSec * 1000) ) );
+}
+
+/*
+================
+paramJobHelpText
+
+The kind-4 arm of the board help builder (6E2C90, kind byte 4 at
+0x6E386E): the item's name, a blank line, the duration line, a blank
+line and the remained period. The duration line ("%s: %d%s" at
+0x6E39FB) reads PARAM_DURA with the slot's total duration in whole
+hours (PARAM_HOUR) while more than 60000 s remain, else whole minutes
+(PARAM_MINUTE at 0x6E3A88); the remained period is the line the timed
+arms share. This is the premium service row: a Gold/Premium Time item
+(3/3/13/4) rides this lane, so its hover help is these lines, not the
+name alone. copy is the client text lookup.
+================
+*/
+export function paramJobHelpText(
+	name: string,
+	durationSec: number,
+	remainingMs: number,
+	copy: ( key: string ) => string
+): string {
+	const durationMs = durationSec * MS_PER_SECOND;
+	const duration = remainingMs > DURATION_HOURS_ABOVE_SEC * MS_PER_SECOND ?
+		`${copy( "PARAM_DURA" )}: ${Math.trunc( durationMs / MS_PER_HOUR )}${copy( "PARAM_HOUR" )}` :
+		`${copy( "PARAM_DURA" )}: ${Math.trunc( durationMs / MS_PER_MINUTE )}${copy( "PARAM_MINUTE" )}`;
+	return [ name, " ", duration, " ", remainedPeriodLine( remainingMs, copy ) ].join( "\n" );
 }
 
 // 6E6150 keys rows by kind and id; the server bounds live jobs the same way.
