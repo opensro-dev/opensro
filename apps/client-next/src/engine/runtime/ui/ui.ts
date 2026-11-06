@@ -663,6 +663,7 @@ import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout
 import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
+	minimapAreaName,
 	minimapCoordinates,
 	minimapRotation,
 	skillPointReadouts
@@ -1506,6 +1507,9 @@ export function createUi(
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
 	let chatRows = 2, chatTab = 0, statusRows = 2;
 	let minimapZoom = 160, minimapTarget = 160, minimapLast: number | null = null;
+	// The last dungeon room name the area-name control showed; native
+	// keeps it when the current room has none (865690 returns null).
+	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
 	const title = createTitleUi( assets, base );
 	let serverList = false,
@@ -11078,11 +11082,18 @@ export function createUi(
 					before = text.run( value.slice( 0, start ) ).width,
 					through = text.run( value.slice( 0, end ) ).width,
 					caret = selection[2] === selection[0] ? before : through;
-				// Native CIFEdit places one text line inside the client rect:
-				// GetCharacterScreenPosition (520AA0) aligns the text block's
-				// own height by the authored VAlign, and the render (522B50)
-				// draws the caret as a line of that same height - never the
-				// control's height, however tall the authored box is (#2615).
+				// One text line inside the client rect, banded by the
+				// authored VAlign: the caret and selection are one text
+				// line tall (the font extent), never the control's
+				// height however tall the authored box is (#2615).
+				// Inference, recorded per the scope rule: the real
+				// CIFEdit geometry functions are not yet located in
+				// SRO_Client.exe (a vtable hunt - the class leaves no
+				// name strings), so this follows the port's own
+				// two-line renderer above, which centres its lines the
+				// same way; the earlier 520AA0/522B50 citations were
+				// wrong addresses and are withdrawn (opensro-explore,
+				// PR #2697).
 				const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
 					lineTop = ink[1] + (node.vAlign === 1 ?
 						(ink[3] - lineHeight) / 2 :
@@ -13404,12 +13415,20 @@ export function createUi(
 					}
 					if ( pose ) {
 						const [xText, yText] = minimapCoordinates( pose );
-						authoredText(
-							nodes.GDR_MINIMAP_TEXT_AREANAME!,
-							mx,
-							my,
-							hudData.zones[String( pose.regionId )] ?? ""
-						);
+						const roomLabels = minimapResources.rooms()?.get( pose.regionId ),
+							roomLabel = game?.navigationRoom !== undefined && roomLabels ?
+								roomLabels[game.navigationRoom] :
+								undefined,
+							areaName = minimapAreaName( {
+								dungeon: roomLabels !== undefined,
+								roomLabel,
+								outdoorName: hudData.zones[String( pose.regionId )] ?? "",
+								zones: hudData.zones,
+								strings: hudData.strings,
+								lastRoomName: minimapRoomName
+							} );
+						if ( roomLabels !== undefined ) minimapRoomName = areaName;
+						authoredText( nodes.GDR_MINIMAP_TEXT_AREANAME!, mx, my, areaName );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_X!, mx, my, xText );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_Y!, mx, my, yText );
 						const floor = minimapResources.dungeons()?.get( pose.regionId )?.find( f =>

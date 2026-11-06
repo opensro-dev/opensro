@@ -1,11 +1,15 @@
 /*
 ===========================================================================
 
-wholechat-edit.test.mjs - the Chat to all edit renders one native text line
+wholechat-edit.test.mjs - the Chat to all edit renders one text line
 
-The authored CIFEdit box is 36 px tall, but native CIFEdit aligns a single
-text line inside it (520AA0 by the authored VAlign) and draws the caret as
-a line of the font's height (522B50), never the control's height (#2615).
+The authored CIFEdit box is 36 px tall; the port aligns a single text line
+inside it by the authored VAlign and draws the caret as a line of the font's
+height, never the control's height (#2615). That geometry is inference from
+the authored-layout model (PR #2697's claims table), not yet verified
+against the native CIFEdit, whose functions are unlocated. Only VAlign 0 is
+pinned here; the centre/bottom branches share the formula with the port's
+two-line renderer and are not pinned by this file.
 
 ===========================================================================
 */

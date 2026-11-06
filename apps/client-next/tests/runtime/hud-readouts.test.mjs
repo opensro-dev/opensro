@@ -19,7 +19,7 @@ async function load( file ) {
 	return import( sourceFileUrl( path.join( root, "src/engine", file + ".ts" ) ).href );
 }
 const { bootstrapProgression, progressionPacket } = await load( "foundation/gameplay/progression" );
-const { experienceReadout, minimapCoordinates, minimapRotation, skillPointReadouts } = await load(
+const { experienceReadout, minimapAreaName, minimapCoordinates, minimapRotation, skillPointReadouts } = await load(
 	"foundation/ui/hud-readouts"
 );
 const { movementHeading } = await load( "foundation/gameplay/native-movement" );
@@ -62,6 +62,20 @@ test("native XP formatting caps incomplete bars and coordinates truncate negativ
 	assert.deepEqual( minimapCoordinates( { regionId: 0x8001, x: 0, z: 0 } ), [ "", "" ] );
 	assert.ok( minimapRotation( 0 ) === 0 );
 	assert.ok( Math.abs( minimapRotation( 65535 ) - minimapRotation( 0 ) + Math.PI * 2 ) < 1e-9 );
+});
+test("minimap area name is the dungeon room name, and a nameless room keeps the last name", () => {
+	const zones = { DH_A01_F01_ROOM_01: "1F-Chamber(A)" },
+		strings = { DH_A01_F01_ROOM_02: "1F-Chamber(B)" },
+		base = { outdoorName: "Donwhang", zones, strings, lastRoomName: "1F-Chamber(A)" };
+	// Outdoors the zone name shows, room or not.
+	assert.equal( minimapAreaName( { ...base, dungeon: false, roomLabel: "DH_A01_F01_ROOM_02" } ), "Donwhang" );
+	// A named room shows its text, through zones first, then strings.
+	assert.equal( minimapAreaName( { ...base, dungeon: true, roomLabel: "DH_A01_F01_ROOM_01" } ), "1F-Chamber(A)" );
+	assert.equal( minimapAreaName( { ...base, dungeon: true, roomLabel: "DH_A01_F01_ROOM_02" } ), "1F-Chamber(B)" );
+	// A room with no name (room index -1) leaves the control as it was.
+	assert.equal( minimapAreaName( { ...base, dungeon: true, roomLabel: undefined } ), "1F-Chamber(A)" );
+	// A symbol the text tables do not carry keeps the last name too.
+	assert.equal( minimapAreaName( { ...base, dungeon: true, roomLabel: "DH_A01_F09_ROOM_99" } ), "1F-Chamber(A)" );
 });
 test("skill remainder follows unsigned native arithmetic; malformed packets do not advance it", () => {
 	const owner = createFeedback();
