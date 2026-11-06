@@ -16,6 +16,7 @@ type hubMetrics struct {
 
 	handshakeBusy             atomic.Uint64
 	accountSessionEvictions   atomic.Uint64
+	clientSessionRefusals     atomic.Uint64
 	handshakeHelloTimeout     atomic.Uint64
 	handshakeReadFailed       atomic.Uint64
 	handshakeProtocolRejected atomic.Uint64
@@ -96,6 +97,7 @@ type Metrics struct {
 
 	HandshakeRejectedBusy     uint64  `json:"handshake_rejected_busy"`
 	AccountSessionEvictions   uint64  `json:"account_session_evictions"`
+	ClientSessionRefusals     uint64  `json:"client_session_refusals"`
 	HandshakeHelloTimeout     uint64  `json:"handshake_hello_timeout"`
 	HandshakeReadFailed       uint64  `json:"handshake_read_failed"`
 	HandshakeProtocolRejected uint64  `json:"handshake_protocol_rejected"`
@@ -310,6 +312,7 @@ func (h *Hub) Metrics() Metrics {
 
 		HandshakeRejectedBusy:     h.metrics.handshakeBusy.Load(),
 		AccountSessionEvictions:   h.metrics.accountSessionEvictions.Load(),
+		ClientSessionRefusals:     h.metrics.clientSessionRefusals.Load(),
 		HandshakeHelloTimeout:     h.metrics.handshakeHelloTimeout.Load(),
 		HandshakeReadFailed:       h.metrics.handshakeReadFailed.Load(),
 		HandshakeProtocolRejected: h.metrics.handshakeProtocolRejected.Load(),

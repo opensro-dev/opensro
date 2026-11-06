@@ -3,6 +3,7 @@ package transport
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,6 +119,14 @@ type Config struct {
 	// refused, so a player reloading faster than resume grace expires is
 	// never locked out. 0 takes the default.
 	MaxSessionsPerAccount int
+	// MaxSessionsPerClient caps the live sessions one client address
+	// holds across every account (port-only conduct limit, #2671: the
+	// alt farm is many accounts from one address, which the per-account
+	// cap cannot see). A new session past the cap is refused, never an
+	// eviction: the sessions already there may belong to other people
+	// behind the same NAT. 0 is no cap, the native posture; the
+	// composition sets it from SRO_MAX_SESSIONS_PER_CLIENT.
+	MaxSessionsPerClient int
 	// MaxPendingHandshakes caps connections concurrently waiting for HELLO.
 	// Excess connections are rejected immediately instead of consuming a
 	// goroutine for the full HelloTimeout. 0 takes the default.
@@ -129,6 +138,33 @@ type Config struct {
 	// TRANSPORT_PPROF=1); PprofAddr must be a loopback host:port.
 	EnablePprof bool
 	PprofAddr   string
+}
+
+// EnvMaxSessionsPerClient is the conduct limit's switch (port-only, not
+// native, #2671): the most live sessions one client address may hold.
+// Unset, unreadable or 0 is no limit, the native posture, so a typo can
+// never lock a shard's players out; the composition logs the limit it
+// armed. Longer account-level punishment is a block, not this.
+const EnvMaxSessionsPerClient = "SRO_MAX_SESSIONS_PER_CLIENT"
+
+/*
+================
+MaxSessionsPerClientLimit
+
+The composition's read of EnvMaxSessionsPerClient: a positive whole
+number arms Config.MaxSessionsPerClient with it, anything else is off.
+================
+*/
+func MaxSessionsPerClientLimit() int {
+	raw := strings.TrimSpace(os.Getenv(EnvMaxSessionsPerClient))
+	if raw == "" {
+		return 0
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 0 {
+		return 0
+	}
+	return limit
 }
 
 // EnvWebTransportPublic is the shard switch that permits the public

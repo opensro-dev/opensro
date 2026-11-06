@@ -36,6 +36,7 @@ type fakeConn struct {
 	// recording the frame (a refused or dropped datagram).
 	dgramErr error
 	kind     string // Kind() override; empty means "fake"
+	addr     string // RemoteAddr() override; empty means "fake:0"
 }
 
 func newFakeConn(gated bool) *fakeConn {
@@ -129,7 +130,12 @@ func (f *fakeConn) Kind() string {
 	return "fake"
 }
 
-func (f *fakeConn) RemoteAddr() string { return "fake:0" }
+func (f *fakeConn) RemoteAddr() string {
+	if f.addr != "" {
+		return f.addr
+	}
+	return "fake:0"
+}
 
 func testCfg() Config {
 	cfg := Config{
