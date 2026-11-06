@@ -83,14 +83,18 @@ type ItemRef struct {
 	// Country is media column 14 (native ref[0x27]): 0 China, 1 Europe,
 	// 3 = every character (the client 789C60 bit 0x200 wildcard). Default 3.
 	Country int64
-	// CashItem (column 7), Rarity (column 15) and CanDropOnDeath feed the
-	// server's death-penalty drop gate.
-	// CanDropOnDeath is RefObj m_dwAvailableOPs bit 14, which the
-	// native loader takes from bit 1 of CanDrop (column
-	// 20); a row with CanTrade 0 and CanDrop 1 is cleared first, which
-	// leaves bit 1 clear either way.
+	// CashItem (column 7), Rarity (column 15) and the CanDrop bits feed
+	// the server's drop gates.
+	// CanDrop is RefObj m_dwAvailableOPs bit 4 and CanDropOnDeath is
+	// bit 14, which the native loader takes from bits 0 and 1 of
+	// CanDrop (column 20) after one clamp: a row with CanTrade
+	// (column 16) 0 and CanDrop exactly 1 is cleared first, which
+	// leaves bit 1 clear either way. CanDrop gates the player's
+	// ground drop (action/itemmove.go); CanDropOnDeath gates the
+	// death-penalty drop.
 	CashItem       bool
 	Rarity         int64
+	CanDrop        bool
 	CanDropOnDeath bool
 	// ReqQuadTypes/ReqQuadValues are the four typed requirement pairs
 	// (media columns 32/34/36/38 types + 33/35/37/39 values; native
