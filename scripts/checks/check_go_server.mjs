@@ -36,8 +36,15 @@ operations per package; inside it, a cached run of every package takes 10s.
 SRO_GO_TEST_CACHE=off restores -count=1 (flake hunting).
 Tiers. The everyday gate runs the tests with -short: whole-catalogue and
 brute-force evidence sweeps (marked tier.Long, internal/testsupport/tier)
-skip there, and every package's tests must finish inside
-TEST_BUDGET_SECONDS; a package over it fails the gate unless the shrinking
+skip there, and every package's tests must burn at most
+TEST_BUDGET_SECONDS of CPU (user + system). The tests run through a
+supervisor (apps/server/tools/testcpu, via `go test -exec`) that records
+each test binary's CPU, because a busy box inflates a package's wall
+clock, not the CPU its tests burn: contention alone no longer fails the
+budget (opensro#2582). The wall clock is still printed, and a package
+with no CPU record keeps the wall verdict, so a lost measurement can
+never wave a slow package through. A package over the CPU budget fails
+the gate unless the shrinking
 ledger scripts/checks/go-test-budget.txt names it. `--long`
 (check:server:long, and every release freeze) runs only the test steps,
 without -short, so the sweeps run; neither tier needs a hosted CI.
@@ -67,17 +74,19 @@ makes the race step independent of how the gate was launched.
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
+import { overBudgetPackages, parseTestRuns } from "./goTestBudget.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
 const serverRoot = path.join( rebuildRoot, "apps", "server" );
+const modulePath = /^module\s+(\S+)/m.exec( readFileSync( path.join( serverRoot, "go.mod" ), "utf8" ) )[1];
 const packageParallelism = positiveInteger(
 	process.env.SRO_GO_TEST_PARALLELISM,
 	Math.max( 2, Math.floor( os.availableParallelism() / 2 ) )
@@ -96,8 +105,20 @@ const STEP_ENVIRONMENT = [
 	"CGO_ENABLED",
 	"GOEXPERIMENT"
 ];
-// TEST_BUDGET_SECONDS is the most one package's everyday tests may take.
+// TEST_BUDGET_SECONDS is the most CPU (user + system seconds) one
+// package's everyday tests may burn.
 const TEST_BUDGET_SECONDS = 30;
+// The `go test -exec` supervisor that records each test binary's CPU
+// (prepareTestSupervisor builds it). It is named for this gate process
+// and found through PATH, because go test splits the -exec value on
+// spaces: the binary lives under the spaced checkout, so only its bare
+// name may appear in the argument.
+const supervisorFileName = `sro-testcpu-${process.pid}${process.platform === "win32" ? ".exe" : ""}`;
+const supervisorDirectory = path.join( rebuildRoot, ".state", "test-cpu-bin" );
+const supervisorPath = path.join( supervisorDirectory, supervisorFileName );
+// This process's CPU records (the supervisor writes one JSON per
+// package there; see tools/testcpu).
+const testCpuDirectory = path.join( rebuildRoot, ".state", "test-cpu", String( process.pid ) );
 const VULNERABILITY_DATABASE_INDEX = "https://vuln.go.dev/index/db.json";
 // A database update is noticed within this long; govulncheck itself always
 // scans against the live database. The key is kept under .state.
@@ -150,7 +171,14 @@ const testKeys = [
 const longTier = process.argv.includes( "--long" ) || process.env.SRO_GO_LONG_TESTS === "1";
 const tierArgs = longTier ? [] : [ "-short" ];
 testKeys.push( `=tier ${longTier ? "long" : "short"}` );
-const testArgs = [ "test", `-p=${packageParallelism}`, ...tierArgs, ...(testCache ? [] : [ "-count=1" ]), "./..." ];
+const testArgs = [
+	"test",
+	`-p=${packageParallelism}`,
+	`-exec=${supervisorFileName}`,
+	...tierArgs,
+	...(testCache ? [] : [ "-count=1" ]),
+	"./..."
+];
 const budgetLedger = readBudgetLedger();
 const changedScope = process.argv.includes( "--changed" ) || process.env.SRO_GO_SCOPE === "changed";
 if ( changedScope && longTier ) throw new Error( "--changed and --long do not combine: the long tier is a full run" );
@@ -197,9 +225,12 @@ const steps = selectSteps(
 			label: longTier ? "tests (long tier)" : "tests",
 			command: "go",
 			args: testArgs,
-			accept: longTier ? undefined : withinTestBudget,
+			accept: longTier ? undefined : acceptTestBudget,
 			select: () => true,
-			keys: [ ...testKeys, `=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
+			// The budget key carries the rule, not just the number: bump
+			// it when the rule changes, or a pass recorded under the old
+			// rule would bless the new one.
+			keys: [ ...testKeys, `=budget cpu ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
 		},
 		{
 			label: "race",
@@ -230,9 +261,15 @@ const steps = selectSteps(
 	] )
 );
 
-// The test step runs alone first: its per-package times are what the budget
-// measures, and racing it against the race step (most of the gate's time)
-// inflated them past the budget. Every wave still runs, so one failure never
+const runsTestStep = steps.some( ( step ) => step.label.startsWith( "tests" ) );
+const budgetApplies = steps.some( ( step ) => step.label === "tests" );
+if ( runsTestStep ) {
+	prepareTestSupervisor();
+}
+
+// The test step runs alone first: its per-package CPU times are what the
+// budget measures, and racing it against the race step (most of the gate's
+// time) would smear even those. Every wave still runs, so one failure never
 // hides another; the first failure is thrown at the end.
 const isTestStep = ( step ) => step.label.startsWith( "tests" );
 let firstFailure = null;
@@ -258,34 +295,128 @@ console.log(
 
 /*
 ================
-withinTestBudget
+prepareTestSupervisor
 
-Accepts the everyday test output when every package that ran finished
-inside TEST_BUDGET_SECONDS, or is still named in the budget ledger. Cached
-packages ("(cached)") cost nothing and are not timed. Prints every package
-over budget, ledger or not, so the ledger can only shrink.
+Builds the -exec supervisor (apps/server/tools/testcpu) this process's
+test runs resolve through PATH, and gives this process a fresh CPU
+record directory when the budget applies. Supervisors older gate
+processes left behind are retired past an hour; one a live gate is
+executing cannot be removed on Windows, and that is fine - it is
+skipped and left for the next run.
 ================
 */
-function withinTestBudget( output ) {
-	const over = [];
-	for ( const match of output.matchAll( /^ok\s+(\S+)\s+([0-9.]+)s/gm ) ) {
-		const seconds = Number( match[2] );
-		if ( seconds > TEST_BUDGET_SECONDS ) over.push( { pkg: match[1], seconds } );
+function prepareTestSupervisor() {
+	mkdirSync( supervisorDirectory, { recursive: true } );
+	if ( budgetApplies ) {
+		rmSync( testCpuDirectory, { recursive: true, force: true } );
+		mkdirSync( testCpuDirectory, { recursive: true } );
 	}
-	for ( const { pkg, seconds } of over ) {
-		const listed = budgetLedger.includes( pkg );
+	for ( const name of readdirSync( supervisorDirectory ) ) {
+		if ( name === supervisorFileName || !name.startsWith( "sro-testcpu-" ) ) {
+			continue;
+		}
+		try {
+			if ( Date.now() - statSync( path.join( supervisorDirectory, name ) ).mtimeMs > 60 * 60 * 1000 ) {
+				rmSync( path.join( supervisorDirectory, name ), { force: true } );
+			}
+		} catch {
+			// Still executing, or already gone.
+		}
+	}
+	const built = spawnSync( "go", [ "build", "-o", supervisorPath, "./tools/testcpu" ], {
+		windowsHide: true,
+		cwd: serverRoot,
+		env: { ...goEnvironment(), CGO_ENABLED: "0" },
+		encoding: "utf8"
+	} );
+	if ( built.status !== 0 ) {
+		throw new Error( `building the test supervisor (apps/server/tools/testcpu): ${built.stderr || built.stdout}` );
+	}
+}
+
+/*
+================
+acceptTestBudget
+
+Accepts the everyday test output when every package that ran burned at
+most TEST_BUDGET_SECONDS of CPU (readTestCpuSeconds collects what the
+supervisor recorded), or is still named in the budget ledger. Cached
+packages ("(cached)") cost nothing and are not timed. The wall clock
+go test prints no longer decides (opensro#2582) but is still printed,
+and a package with no CPU record keeps the wall verdict. Prints every
+package over budget, ledger or not, so the ledger can only shrink,
+and every package the wall alone would have convicted, so a busy box
+leaves evidence instead of a rejection.
+================
+*/
+async function acceptTestBudget( output ) {
+	const { over, forgiven, offenders } = overBudgetPackages(
+		parseTestRuns( output ),
+		readTestCpuSeconds(),
+		budgetLedger,
+		TEST_BUDGET_SECONDS
+	);
+	for ( const entry of forgiven ) {
 		console.log(
-			`test budget: ${pkg} took ${seconds}s (budget ${TEST_BUDGET_SECONDS}s)${listed ? ", in ledger" : ""}`
+			`test budget: ${entry.pkg} took ${entry.wallSeconds}s wall but ` +
+				`${formatSeconds( entry.cpuSeconds * 1000 )}s CPU (budget ${TEST_BUDGET_SECONDS}s CPU); ` +
+				"the wall clock is not counted on a busy box"
 		);
 	}
-	const offenders = over.filter( ( { pkg } ) => !budgetLedger.includes( pkg ) );
+	for ( const entry of over ) {
+		const measured = entry.cpuSeconds === null ?
+			`${entry.wallSeconds}s wall (no CPU record; the wall verdict stands)` :
+			`${formatSeconds( entry.cpuSeconds * 1000 )}s CPU (${entry.wallSeconds}s wall)`;
+		console.log(
+			`test budget: ${entry.pkg} took ${measured} (budget ${TEST_BUDGET_SECONDS}s CPU)` +
+				`${entry.listed ? ", in ledger" : ""}`
+		);
+	}
 	if ( offenders.length ) {
 		console.log(
-			`test budget: ${offenders.length} package(s) over ${TEST_BUDGET_SECONDS}s; make them faster or move ` +
+			`test budget: ${offenders.length} package(s) over ${TEST_BUDGET_SECONDS}s CPU; make them faster or move ` +
 				"evidence sweeps to tier.Long (internal/testsupport/tier)"
 		);
 	}
 	return offenders.length === 0;
+}
+
+/*
+================
+readTestCpuSeconds
+
+The CPU seconds (user + system) the supervisor recorded per package
+this run, by import path. A torn or unreadable record counts as no
+record: the package keeps the wall verdict.
+================
+*/
+function readTestCpuSeconds() {
+	const cpu = new Map();
+	let names = [];
+	try {
+		names = readdirSync( testCpuDirectory );
+	} catch {
+		return cpu;
+	}
+	for ( const name of names ) {
+		if ( !name.endsWith( ".json" ) ) {
+			continue;
+		}
+		try {
+			const entry = JSON.parse( readFileSync( path.join( testCpuDirectory, name ), "utf8" ) );
+			if ( !Number.isFinite( entry.userMs ) || !Number.isFinite( entry.sysMs ) ) {
+				continue;
+			}
+			const relative = path.relative( serverRoot, entry.dir ).split( path.sep ).join( "/" );
+			cpu.set(
+				relative === "" ? modulePath : `${modulePath}/${relative}`,
+				(entry.userMs + entry.sysMs) / 1000
+			);
+		} catch {
+			// No usable record: the wall verdict stands for that package.
+		}
+	}
+	return cpu;
 }
 
 /*
@@ -554,7 +685,17 @@ step is up to date, no compiler lookup runs.
 ================
 */
 function goEnvironment() {
-	goEnvironmentValue ??= { ...compilerFirstEnvironment(), SRO_GAME_DATA_IDENTITY: gameIdentity };
+	if ( goEnvironmentValue === undefined ) {
+		const env = { ...compilerFirstEnvironment(), SRO_GAME_DATA_IDENTITY: gameIdentity };
+		// The -exec supervisor's directory goes first, so the bare name
+		// in -exec resolves to the binary prepareTestSupervisor built.
+		const pathKey = Object.keys( env ).find( ( key ) => key.toUpperCase() === "PATH" ) ?? "PATH";
+		env[pathKey] = `${supervisorDirectory}${path.delimiter}${env[pathKey] ?? ""}`;
+		if ( budgetApplies ) {
+			env.SRO_GO_TEST_CPU_DIR = testCpuDirectory;
+		}
+		goEnvironmentValue = env;
+	}
 	return goEnvironmentValue;
 }
 
@@ -584,8 +725,8 @@ function runStep( label, command, args, accept ) {
 		child.on( "error", ( error ) => {
 			output += String( error );
 		} );
-		child.on( "close", ( code, signal ) => {
-			const ok = code === 0 && (accept === undefined || accept( output ));
+		child.on( "close", async ( code, signal ) => {
+			const ok = code === 0 && (accept === undefined || (await accept( output )));
 			resolve( { label, ok, code, signal, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
 		} );
 	} );
