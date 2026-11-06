@@ -13,6 +13,7 @@ commands and cannot bypass actor eligibility.
 // player to trade.
 const ACTION_EXCHANGE = 1006;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
+import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
@@ -2454,10 +2455,16 @@ state here before a command can claim a native wire conversation.
 				// Row 0x15's click: 7026B0 scans the bag for the red
 				// socks (702728) and sends only when a pair is held;
 				// without one the click is silent, so every failed
-				// precondition here just does nothing.
+				// precondition here just does nothing. The phase test
+				// is one of them: while an exchange is waiting (or its
+				// answer window lapsed into uncertain) the row click
+				// stays silent too - the native send has no waiting
+				// state to re-enter, and exchange() would throw.
 				if (
-					!localGid || target.targetPending || conversation.phase === "closed" ||
-					conversation.gid !== target.target || !((target.targetCapabilities ?? 0) & 0x40000) ||
+					!localGid || target.targetPending ||
+					(conversation.phase !== "menu" && conversation.phase !== "ready") ||
+					conversation.gid !== target.target ||
+					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION) ||
 					!inventory.state().inventory.some(
 						item => worldReferences.item( item.refObjId )?.codename === EVENT_EXCHANGE_SOCKS
 					)

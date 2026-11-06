@@ -124,9 +124,16 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		================
 		exchange
 
-		Row 0x15 (capability 0x40000): 7026B0 sends the exchange opcode
-		with no body once the caller has found the red socks in the bag;
-		the answer is the 0xB47C arm in receive().
+		Row 0x15 (capability EVENT_EXCHANGE_FUNCTION): 7026B0 sends the
+		exchange opcode with no body once the caller has found the red
+		socks in the bag; the answer is the 0xB47C arm in receive().
+
+		The native send has no answer state - 7026B0 fires and forgets.
+		The port runs the conversation's ordinary request transition, so
+		an exchange the server never answers sits in waiting until the
+		generic deadline marks it uncertain; that wait is the port's,
+		not the native client's. Clicks landing inside it are refused
+		silently by the gameplay guard, never by a throw from here.
 		================
 		*/
 		exchange( now: number ) {

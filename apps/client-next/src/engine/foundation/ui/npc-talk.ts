@@ -19,6 +19,18 @@ import type { MerchantBranch } from "@/engine/foundation/gameplay/merchant-branc
 
 /*
 ================
+EVENT_EXCHANGE_FUNCTION
+
+The NPC capability bit the event exchange hangs on: 5D9100 tests
+capabilities & 0x40000 at 5D9409 (the prompt becomes the SO-OK line)
+and at 5D96BD (row 0x15 joins the menu). Named once here because the
+runtime UI and the gameplay guard both test it.
+================
+*/
+export const EVENT_EXCHANGE_FUNCTION = 0x40000;
+
+/*
+================
 npcChoiceColor
 
 5D31D0: signed difference of two level bytes. Only SN_ choices consult

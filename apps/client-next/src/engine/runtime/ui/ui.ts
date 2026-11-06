@@ -177,7 +177,7 @@ import {
 	skillTrainingReason
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
-import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
+import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
@@ -16615,9 +16615,9 @@ export function createUi(
 						canTalk: !!(capabilities & 2),
 						prompt: game.npcEventGreeting ?
 							copy( game.npcEventGreeting ) :
-							// 5D9409: capability 0x40000 replaces the
-							// greeting with the event's own line.
-							(capabilities & 0x40000) ?
+						// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+						// greeting with the event's own line.
+						(capabilities & EVENT_EXCHANGE_FUNCTION) ?
 							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
 							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
@@ -16678,7 +16678,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
-						canEventExchange: !!(capabilities & 0x40000),
+						canEventExchange: !!(capabilities & EVENT_EXCHANGE_FUNCTION),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
