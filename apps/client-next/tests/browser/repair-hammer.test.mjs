@@ -206,6 +206,16 @@ test( "repair hammer consumes pickup, modifier clicks and right-button equipment
 		await page.locator( '[data-ui-id="shop-repair:GDR_STORE_BTN_REPAIRALL"]' ).click();
 		await draw();
 		assert.equal( await page.evaluate( () => inventoryFixture.ui.cursor() ), null );
+		// 530E91: the repair box's action button is captioned UIIT_CTL_REPAIR_ALL,
+		// not a generic Yes (#2276).
+		assert.deepEqual(
+			await page.evaluate( () =>
+				inventoryFixture.semantics.controls
+					.filter( c => [ "repair-all-confirm", "repair-all-cancel" ].includes( c.id ) )
+					.map( c => [ c.id, c.label ] )
+			),
+			[ [ "repair-all-confirm", "Repair all" ], [ "repair-all-cancel", "No" ] ]
+		);
 		await page.locator( '[data-ui-id="repair-all-cancel"]' ).click();
 		await draw();
 		await page.locator( '[data-ui-id="shop-repair:GDR_STORE_BTN_REPAIRALL"]' ).click();
