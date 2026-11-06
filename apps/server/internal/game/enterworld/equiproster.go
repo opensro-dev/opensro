@@ -174,6 +174,27 @@ func (r *ItemRef) TypeFlags() uint16 {
 }
 
 /*
+================
+itemDropPermissions
+
+The two drop permissions read off one itemdata row: bits 0 and 1 of
+CanDrop (column 20) after the native loader's clamp - the byte is
+cleared first when CanTrade (column 16) is 0 and CanDrop is exactly
+1, so a non-tradable row authored droppable-only is neither player-
+nor death-droppable. No shipped v1.150 row hits the clamp; it is
+kept so the two bits can never disagree with the loader.
+================
+*/
+func itemDropPermissions(fields []string) (canDrop, canDropOnDeath bool) {
+	trade, _ := textdataInt(fields[16])
+	drop, _ := textdataInt(fields[20])
+	if trade == 0 && drop == 1 {
+		drop = 0
+	}
+	return drop&1 != 0, drop&2 != 0
+}
+
+/*
 ==================
 ItemRefSource
 

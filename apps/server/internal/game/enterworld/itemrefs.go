@@ -597,19 +597,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		cash, _ := textdataInt(fields[7])
 		ref.CashItem = cash != 0
 		ref.Rarity, _ = textdataInt(fields[15])
-		// CanDrop (column 20) feeds both drop gates off the one
-		// clamped byte: the native loader clears the byte first when
-		// CanTrade (column 16) is 0 and CanDrop is exactly 1, so a
-		// non-tradable row authored droppable-only is neither player-
-		// nor death-droppable. No shipped v1.150 row hits the clamp;
-		// it is kept so the two bits can never disagree with native.
-		trade, _ := textdataInt(fields[16])
-		drop, _ := textdataInt(fields[20])
-		if trade == 0 && drop == 1 {
-			drop = 0
-		}
-		ref.CanDrop = drop&1 != 0
-		ref.CanDropOnDeath = drop&2 != 0
+		ref.CanDrop, ref.CanDropOnDeath = itemDropPermissions(fields)
 	}
 	// The four typed requirement pairs: types at 32/34/36/38, values at
 	// 33/35/37/39 (interleaved; verified against the shipped rows - CH
