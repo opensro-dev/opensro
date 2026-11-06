@@ -34,6 +34,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
@@ -70,6 +71,8 @@ writer, releases the lease, and closes durable authority last.
 
 type gameWorldApplication struct {
 	history *history.Journal
+	// connJournal is the connection census (port-only, #2716); nil off.
+	connJournal *connjournal.Journal
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
@@ -267,6 +270,10 @@ func newGameWorldApplication(
 	}
 	application.history = journal
 	ts.Hub.History = historyObserver{journal}
+	// Port-only, not native (SRO_CONNECTION_JOURNAL): wiring_census.go.
+	if err := installConnectionJournal(application, ts, journal, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	log.AddHook(journal)
 	// Port-only: the staff console's read of every tunable and SRO_ flag.
 	settingsHandler, err := settingsapi.Handler(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"),
@@ -651,6 +658,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	log.Info("shutdown: complete")
 	if application.history != nil {
 		drainErr = errors.Join(drainErr, application.history.Close())
+	}
+	if application.connJournal != nil {
+		drainErr = errors.Join(drainErr, application.connJournal.Close())
 	}
 	// The tick has stopped, so the rollup is final: write it before the
 	// economy history closes (#1639).

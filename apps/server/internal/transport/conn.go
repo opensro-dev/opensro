@@ -53,6 +53,14 @@ type datagramSendFailureReporter interface {
 	DatagramSendFailures() uint64
 }
 
+// clientFacter is the optional Conn extension carrying the client
+// facts the accept request presented (clientaddr.go): the User-Agent
+// header. The session snapshots them at attach for the connection
+// census (#2716); connections built in-process report none.
+type clientFacter interface {
+	ClientUserAgent() string
+}
+
 // streamWriteChunk is the piece size writeAllWithinStall offers a
 // connection per deadline arming. It sits below the flow-control
 // windows a reading peer advertises, so a piece is accepted as fast
