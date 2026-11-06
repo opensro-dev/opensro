@@ -450,7 +450,7 @@ func (ops *MonsterMoverOps) runPooledBatch(batch behaviorBatch, view *legSnapsho
 		// The scheduler carries identities, not a second copy of the
 		// world: the same dispatch decisions, in the same order, as
 		// the serial loop (monstertick.go) makes them.
-		if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
+		if !ops.Monsters.behaviorActorLiveAt(batch.key, ref) {
 			continue
 		}
 		if ops.noteResumed(batch.key, ref.gid) {

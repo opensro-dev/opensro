@@ -89,7 +89,7 @@ func TestEveryAuthoredNpcHasTravelPublication(t *testing.T) {
 	tier.Long(t, "every authored NPC publishes its travel")
 	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
+	roster, err := AppendTeleportGates(dir, sharedNpcWorldRoster(dir))
 	if err != nil || len(roster) < 150 {
 		t.Fatalf("published roster unavailable: %d %v", len(roster), err)
 	}

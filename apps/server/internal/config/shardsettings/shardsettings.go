@@ -111,6 +111,12 @@ var Settings = []Setting{
 	// Server only: the catalogue reads the built data, not its inputs.
 	{Env: "SRO_CAP110_ITEMS", NomadVar: "cap110_items", Default: "off"},
 	{Env: "SRO_CAP110_SKILLS", NomadVar: "cap110_skills", Default: "off"},
+	// Port-only, not native: the later client's mall avatars (outfits, hats,
+	// attachments). Cosmetic, so the owner approved it on by default
+	// (2026-11-04). Build time only, like the two above: mall_avatar_import.py
+	// reads it when the server data is built and skips when the later client
+	// is absent.
+	{Env: "SRO_MALL_AVATARS", NomadVar: "mall_avatars", Default: "on"},
 	// Port-only, not native: the Pharaoh Tomb 1-3 population and gates. Needs
 	// SRO_CAP110_MONSTERS (its equipment drops).
 	{Env: "SRO_PHARAOH_TOMB", NomadVar: "pharaoh_tomb", Default: "off", Catalogue: true},

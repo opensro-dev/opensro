@@ -14984,7 +14984,6 @@
 				},
 				"experimental-tab:6": {
 					"added": [
-						"experimental-attack-pet-training",
 						"experimental-expanded-world-map",
 						"experimental-pet-click-opens-window",
 						"experimental-pet-pickup-filter",
@@ -14994,7 +14993,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "4b079413807873a7",
+					"hash": "1935b5b8cc3c36b3",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -32554,7 +32553,27 @@
 				"party-match:18": null,
 				"party-match:19": null,
 				"party-match:20": null,
-				"party-match:55": null,
+				"party-match:55": {
+					"added": [],
+					"commands": [
+						{
+							"command": {
+								"filter": {
+									"max": 90,
+									"min": 1,
+									"name": "",
+									"purpose": 4
+								},
+								"kind": "party-match-search"
+							},
+							"kind": "gameplay"
+						}
+					],
+					"focus": null,
+					"hash": "9050a6eae7e39be9",
+					"panel": "Party Matching",
+					"removed": []
+				},
 				"party-match:56": null,
 				"party-match:60": null,
 				"party-match:61": null,

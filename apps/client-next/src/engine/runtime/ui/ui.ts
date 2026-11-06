@@ -668,6 +668,7 @@ import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout
 import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
+	minimapAreaName,
 	minimapCoordinates,
 	minimapRotation,
 	skillPointReadouts
@@ -1512,6 +1513,9 @@ export function createUi(
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
 	let chatRows = 2, chatTab = 0, statusRows = 2;
 	let minimapZoom = 160, minimapTarget = 160, minimapLast: number | null = null;
+	// The last dungeon room name the area-name control showed; native
+	// keeps it when the current room has none (865690 returns null).
+	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
 	const title = createTitleUi( assets, base );
 	let serverList = false,
@@ -3605,8 +3609,8 @@ export function createUi(
 			executeCosCommand( Number( id.slice( 12 ) ) );
 			return;
 		}
-		// Port-only wolf skill tree (pet-training.ts): learn a level or reset.
-		if ( id.startsWith( "pet-skill-up:" ) && experimental.state().saved.attackPetTraining ) {
+		// Port-only: the server's 0x3FB1 state admits training; no saved client setting.
+		if ( id.startsWith( "pet-skill-up:" ) && view?.gameplay?.petTraining?.gid === cosGid ) {
 			sendGameplay( {
 				kind: "cos-training",
 				gid: cosGid,
@@ -3615,7 +3619,7 @@ export function createUi(
 			} );
 			return;
 		}
-		if ( id.startsWith( "pet-skill:" ) && experimental.state().saved.attackPetTraining ) {
+		if ( id.startsWith( "pet-skill:" ) && view?.gameplay?.petTraining?.gid === cosGid ) {
 			const skill = view?.gameplay?.petTraining?.skills.find( entry => entry.id === Number( id.slice( 10 ) ) );
 			if ( skill?.action && skill.level > 0 ) {
 				sendGameplay( {
@@ -3628,7 +3632,7 @@ export function createUi(
 			}
 			return;
 		}
-		if ( id === "pet-skill-reset" && experimental.state().saved.attackPetTraining ) {
+		if ( id === "pet-skill-reset" && view?.gameplay?.petTraining?.gid === cosGid ) {
 			sendGameplay( { kind: "cos-training", gid: cosGid, operation: PET_TRAINING_OP.refund, arg: 0 } );
 			return;
 		}
@@ -4811,6 +4815,17 @@ export function createUi(
 				partySearch = { ...partySearchDraft, min, max };
 				partyMatchOffset = 0;
 				partyMatchSelection = 0;
+				// The committed search is one answer, not a reopen:
+				// the worker prints PSEARCH_NORESULT on an empty list.
+				sendGameplay( {
+					kind: "party-match-search",
+					filter: {
+						name: partySearch.name,
+						purpose: partySearch.purpose,
+						min,
+						max
+					}
+				} );
 			}
 		} else if ( id === "party-match:purpose" ) partyPurposeOpen = !partyPurposeOpen;
 		else if ( id.startsWith( "party-purpose:" ) ) {
@@ -5135,10 +5150,8 @@ export function createUi(
 					if (
 						binding.payload > PET_SKILL_SHORTCUT_BASE && binding.payload <= PET_SKILL_SHORTCUT_BASE + 255
 					) {
-						if ( experimental.state().saved.attackPetTraining ) {
-							const command = quickSlotCommand( binding, game! );
-							if ( command ) sendGameplay( command );
-						}
+						const command = quickSlotCommand( binding, game! );
+						if ( command ) sendGameplay( command );
 						return;
 					}
 					executeAction( binding.payload & 0xffffff );
@@ -5890,7 +5903,7 @@ export function createUi(
 		} else if ( id.startsWith( "cos-tab:" ) ) {
 			const tab = Number( id.slice( 8 ) ),
 				record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
-			const training = record?.band === 3 && experimental.state().saved.attackPetTraining;
+			const training = record?.band === 3 && view.gameplay?.petTraining?.gid === record.gid;
 			if (
 				tab === 0 || tab === 1 && (cosHasInventory( record ) || training) ||
 				tab === 2 && (record?.band === 4 || training)
@@ -12237,8 +12250,7 @@ export function createUi(
 				if ( hudData && game && hudData.root.GDR_MAGICSTATEBOARD ) {
 					const origin = authoredRect( hudData.root.GDR_MAGICSTATEBOARD, 0, 0 );
 					if ( game.buffSlots?.length ) paths.push( "/assets/images/Media_extracted/icon/buf_effect.png" );
-					const ownerPet = experimental.state().saved.attackPetTraining &&
-							game.cosRecords?.some( pet => pet.gid === game.petTraining?.gid && pet.hp > 0 ) ?
+					const ownerPet = game.cosRecords?.some( pet => pet.gid === game.petTraining?.gid && pet.hp > 0 ) ?
 						game.petTraining :
 						undefined;
 					for (
@@ -12247,7 +12259,7 @@ export function createUi(
 							next.simulationTimeMs ?? 0,
 							boardSuppressed,
 							ownerPet,
-							experimental.state().saved.attackPetTraining,
+							true,
 							hudCopy,
 							experimental.state().saved.mostWantedBuff
 						)
@@ -13048,7 +13060,7 @@ export function createUi(
 					if ( !attackPet ) petTrainingAskedRef = 0;
 					const stateAsk = petStateAsk(
 						petStateAsked,
-						experimental.state().saved.attackPetTraining ? attackPet : undefined,
+						attackPet,
 						game?.petTraining?.gid,
 						Date.now()
 					);
@@ -13076,9 +13088,8 @@ export function createUi(
 					const petDesign = binding?.kind === 0x4a && binding.payload > PET_SKILL_SHORTCUT_BASE ?
 						petSkillDesign( binding.payload - PET_SKILL_SHORTCUT_BASE ) :
 						undefined;
-					const petAvailable =
-						!!(petDesign && binding && game && experimental.state().saved.attackPetTraining &&
-							quickSlotCommand( binding, game ));
+					const petAvailable = !!(petDesign && binding && game &&
+						quickSlotCommand( binding, game ));
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
@@ -13468,12 +13479,20 @@ export function createUi(
 					}
 					if ( pose ) {
 						const [xText, yText] = minimapCoordinates( pose );
-						authoredText(
-							nodes.GDR_MINIMAP_TEXT_AREANAME!,
-							mx,
-							my,
-							hudData.zones[String( pose.regionId )] ?? ""
-						);
+						const roomLabels = minimapResources.rooms()?.get( pose.regionId ),
+							roomLabel = game?.navigationRoom !== undefined && roomLabels ?
+								roomLabels[game.navigationRoom] :
+								undefined,
+							areaName = minimapAreaName( {
+								dungeon: roomLabels !== undefined,
+								roomLabel,
+								outdoorName: hudData.zones[String( pose.regionId )] ?? "",
+								zones: hudData.zones,
+								strings: hudData.strings,
+								lastRoomName: minimapRoomName
+							} );
+						if ( roomLabels !== undefined ) minimapRoomName = areaName;
+						authoredText( nodes.GDR_MINIMAP_TEXT_AREANAME!, mx, my, areaName );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_X!, mx, my, xText );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_Y!, mx, my, yText );
 						const floor = minimapResources.dungeons()?.get( pose.regionId )?.find( f =>
@@ -18487,7 +18506,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						bindCosDraft( records[0] );
 					}
 					const record = records.find( r => r.gid === cosGid ),
-						training = record?.band === 3 && experimental.state().saved.attackPetTraining,
+						training = record?.band === 3 && game?.petTraining?.gid === record.gid,
 						hasInventory = cosHasInventory( record ) || training,
 						busy = !!game?.inventoryPending;
 					// 7785D9..77864C: 0xB05B selector 2 re-binds CIFCOSSetup (6A95E0) when
@@ -18643,12 +18662,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							}
 						}
 					} else if ( cosTab === 0 && record ) {
-						// Every number is the server's (#1548): the published training
-						// whatever the row; the row gates only the training UI.
+						// Every number is the server's (#1548); only this pet's
+						// published state may override its native reference.
 						const publishedTraining = game?.petTraining?.gid === record.gid ? game.petTraining : undefined;
-						const trainingState = experimental.state().saved.attackPetTraining ?
-							publishedTraining :
-							undefined;
+						const trainingState = publishedTraining;
 						const reference = petReference(
 							hudData.cosReferences.get( record.refObjId ),
 							publishedTraining,

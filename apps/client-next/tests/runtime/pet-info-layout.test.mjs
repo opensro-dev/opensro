@@ -7,25 +7,56 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 
-test("trained attack pets retain HP labels and hide pickup-only info", t => {
-	const f = uiFixture();
-	t.after( () => f.dispose() );
-	Object.assign( f.state.gameplay, {
-		cosRecords: [ { gid: 7, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false } ]
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
+for ( const [name, stateGid] of [ [ "on", 7 ], [ "off", undefined ], [ "another pet", 8 ] ] ) {
+	test( "server " + name + ": training controls follow the matching state, not saved preferences", t => {
+		const commands = [];
+		const f = uiFixture( command => commands.push( command ) );
+		t.after( () => f.dispose() );
+		Object.assign( f.state.gameplay, {
+			cosRecords: [ { gid: 7, refObjId: 2183, band: 3, hp: 1000, mp: 0, status: 0, dead: false } ],
+			petTraining: stateGid === undefined ?
+				undefined :
+				{
+					gid: stateGid,
+					points: 0,
+					attackPercent: 100,
+					defensePercent: 100,
+					rows: [],
+					slotted: [ 0, 0, 0 ],
+					skills: [],
+					gear: [],
+					receivedAtMs: 0,
+					stats: { maxHp: 4321, magicPercent: 0, magicDefensePercent: 0, magicPrimary: false }
+				}
+		} );
+		f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { attackPetTraining: false } ) } );
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
+		let scene = f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "cos-tab:0" } );
+		for ( let i = 1; i <= 4; i++ ) scene = f.ui.step( f.state, i * 100 ) ?? scene;
+		assert.equal( f.ui.stats().error, null );
+		const enabled = ( id ) => !!scene?.controls.some( c => c.id === id && !c.disabled );
+		assert.equal(
+			enabled( "cos-tab:1" ),
+			stateGid === 7,
+			"gear is offered only after the server admits this pet"
+		);
+		assert.equal( enabled( "cos-tab:2" ), stateGid === 7, "skills follow the same server state" );
+		assert.ok(
+			f.hasText( stateGid === 7 ? "1000/4321 (23%)" : "1000/3933 (25%)", "1" ),
+			"HP uses the admitted server pool, otherwise the native reference"
+		);
+		assert.ok(
+			commands.some( c =>
+				c.kind === "gameplay" && c.command.kind === "cos-training" && c.command.operation === 0
+			),
+			"summoning asks for state even with the legacy setting off"
+		);
 	} );
-	f.ui.step( f.state, 0 );
-	f.ui.event( { kind: "experimental-preferences", value: experimentalOptions( { attackPetTraining: true } ) } );
-	f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
-	f.ui.step( f.state, 0 );
-	f.ui.event( { kind: "activate", id: "cos-tab:0" } );
-	for ( let i = 1; i <= 4; i++ ) f.ui.step( f.state, i * 100 );
-	assert.equal( f.ui.stats().error, null );
-	assert.ok( f.hasText( "HP" ), "attack pet HP label must remain visible" );
-	assert.ok( !f.hasText( "Rental period" ), "pickup pet rental label must stay hidden" );
-	assert.ok( !f.hasText( "<Stat does not exist>" ), "attack pet stats must not show the no-ability placeholder" );
-});
+}
 
 test("pet mini shield stays inside the native three-pixel HP fill", t => {
 	const f = uiFixture();
@@ -53,12 +84,12 @@ test("pet mini shield stays inside the native three-pixel HP fill", t => {
 	assert.equal( f.ui.stats().error, null );
 });
 
-test("with the training row off, the pet's HP still uses the server's pool (#1548)", t => {
+test("pet HP uses the server pool without a client opt-in (#1548)", t => {
 	const f = uiFixture();
 	t.after( () => f.dispose() );
 	// The expansion is on at the server: it publishes the pet's training and
 	// with it the pool its curve and gear give (4321). The player's display
-	// row is off (the default).
+	// opt-out is no longer consulted.
 	Object.assign( f.state.gameplay, {
 		// 2183's native reference holds 3933 HP (cosPresentation.json).
 		cosRecords: [ { gid: 7, refObjId: 2183, band: 3, hp: 1000, mp: 0, status: 0, dead: false } ],

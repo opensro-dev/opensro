@@ -82,6 +82,13 @@ type wtConn struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
+	// clientAddr and userAgent are the accept request's client facts,
+	// set by the listener before AcceptConn (server.go): the real
+	// client (clientaddr.go) and its User-Agent. The WebTransport
+	// session itself keeps neither once Upgrade returns.
+	clientAddr string
+	userAgent  string
+
 	strReady chan struct{}
 	str      *webtransport.Stream
 
@@ -338,4 +345,29 @@ func (w *wtConn) Close(reason string) error {
 
 func (w *wtConn) Kind() string { return "webtransport" }
 
-func (w *wtConn) RemoteAddr() string { return w.sess.RemoteAddr().String() }
+/*
+================
+RemoteAddr
+
+The client this connection serves: the accept request's forwarded
+client when the listener recorded one, else the QUIC session's peer.
+WebTransport is dialed directly in the public posture, so the peer
+already is the client; the forwarded form only matters if an edge
+ever fronts it (clientaddr.go).
+================
+*/
+func (w *wtConn) RemoteAddr() string {
+	if w.clientAddr != "" {
+		return w.clientAddr
+	}
+	return w.sess.RemoteAddr().String()
+}
+
+/*
+================
+ClientUserAgent
+
+The accept request's User-Agent, "" when none was recorded.
+================
+*/
+func (w *wtConn) ClientUserAgent() string { return w.userAgent }

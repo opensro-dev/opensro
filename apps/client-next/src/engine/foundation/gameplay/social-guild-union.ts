@@ -13,6 +13,7 @@ on the arms are the handlers the printers follow.
 
 ===========================================================================
 */
+import { MASTER_RELEASE_VOTE } from "./guild-manager";
 import { guildWarProposalReply } from "./guild-war";
 import { withVoteBallot, withVoteCandidates } from "./guild-vote";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
@@ -170,7 +171,21 @@ export function socialGuildUnionPacket( lane: SocialGuildLane ): SocialState | n
 			next = { ...next, notice: resolution.kind === "notice" ? resolution.notice : undefined };
 		}
 	} else if ( op === 0x32c4 ) {
-		next = { ...next, guild: guildBlock( lane ) };
+		const guild = guildBlock( lane );
+		next = { ...next, guild };
+		// 75FDC3 calls 82D030: the master-release vote's ID gates the
+		// Event Guide dialog (75FE5D), not its remaining time.
+		if ( guild.votes?.find( vote => vote.kind === MASTER_RELEASE_VOTE )?.id ) {
+			next = {
+				...next,
+				notice: {
+					key: "",
+					value: 0,
+					bannerOnly: true,
+					dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_MASTERRELEASE_NOTICE" ] }
+				}
+			};
+		}
 	} else if ( op === 0x3a6c ) {
 		// 7603D0: 1 opens a vote, 3 closes it (1 elected, 2 broken), 4 moves
 		// a ballot, 5 restates the time; 2 is an assert in v1.150.
