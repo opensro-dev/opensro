@@ -99,6 +99,33 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 
 /*
 ================
+TestRankingsOnlineBoardOrdersByTotalThenWeek
+
+The time-online board (#2675): the credited totals order the rows, the
+rolling week breaks a tie, and hidden players stay off the board even
+with the largest total on the shard.
+================
+*/
+func TestRankingsOnlineBoardOrdersByTotalThenWeek(t *testing.T) {
+	f := newFixture()
+	f.chars[0].Online = &domain.OnlineRecord{TotalSeconds: 7200, Days: []domain.OnlineDay{{Day: 20260101, Seconds: 3600}}}
+	f.chars[1].Online = &domain.OnlineRecord{TotalSeconds: 7200, Days: []domain.OnlineDay{{Day: 20260101, Seconds: 7200}}}
+	f.chars[2].Online = &domain.OnlineRecord{TotalSeconds: 999999}
+	s := f.service()
+	byOnline := rankingNames(t, s, "/public/v1/rankings?by=online")
+	if len(byOnline.Rows) != 2 {
+		t.Fatalf("by online rows = %d, want 2 (Shy hidden)", len(byOnline.Rows))
+	}
+	if byOnline.Rows[0].Name != "Lune" || byOnline.Rows[0].OnlineSeconds != 7200 || byOnline.Rows[0].OnlineWeekSeconds != 7200 {
+		t.Fatalf("by online first row %+v, want Lune (week breaks the tie)", byOnline.Rows[0])
+	}
+	if byOnline.Rows[1].Name != "Kekw" || byOnline.Rows[1].OnlineWeekSeconds != 3600 || byOnline.Rows[1].Rank != 2 {
+		t.Fatalf("by online second row %+v", byOnline.Rows[1])
+	}
+}
+
+/*
+================
 TestRankingsJobBoardsListOneJobEach
 
 Each job board lists only its own job, ordered by job level, then job
