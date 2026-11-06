@@ -12178,8 +12178,7 @@ export function createUi(
 							boardSuppressed,
 							ownerPet,
 							true,
-							hudCopy,
-							experimental.state().saved.mostWantedBuff
+							hudCopy
 						)
 					) {
 						if ( !icon.path ) continue;

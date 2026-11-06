@@ -55,8 +55,7 @@ export function buffBoard(
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
 	showPetTraining = true,
-	copy: ( key: string ) => string = key => key,
-	showMostWanted = false
+	copy: ( key: string ) => string = key => key
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -211,10 +210,13 @@ export function buffBoard(
 			} );
 		}
 	}
-	// Port-only (#1849): the streak holder's own wanted row, opted into
-	// in the Experimental window. It wears the dressed job's icon (the
-	// row waits while the suit is off, as its bonuses do).
-	const wantedRow = showMostWanted ? mostWantedRow( game.mostWanted, timeMs ) : null;
+	// Port-only (#1849): the streak holder's own wanted row, shown
+	// whenever the shard sends the 0x3FBA state (owner 2026-11-06,
+	// #2721: the server's SRO_MOST_WANTED flag is the only switch, with
+	// no client opt-in; no state leaves the native board). It wears the
+	// dressed job's icon (the row waits while the suit is off, as its
+	// bonuses do).
+	const wantedRow = mostWantedRow( game.mostWanted, timeMs );
 	if ( wantedRow ) {
 		primary.push( {
 			id: "most-wanted",
