@@ -22,6 +22,7 @@ const {
 	partyMatchCompletionNotice,
 	partyMatchDeleteNotice,
 	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
 	partyMatchNoResultNotice,
 	partyMatchRequest,
 	partyMatchPacket,
@@ -206,6 +207,9 @@ test("native local search uses exact names, overlapping ranges; auto-match limit
 
 const { createGameplay } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" ).href
+);
+const { createWorldCore } = await import(
+	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/core.ts" ).href
 );
 test("gameplay owns the ten-second no-reply deadline and reset retires it", () => {
 	const frames = [], g = createGameplay( f => frames.push( f ) );
@@ -503,9 +507,89 @@ test("auto chain reports progress or failure only while its session lives", () =
 	);
 	assert.equal( partyMatchAutoNotice( { sessionOpen: true, accepted: true, candidatesRemain: false } ), null );
 	assert.equal( partyMatchAutoNotice( { sessionOpen: false, accepted: false, candidatesRemain: true } ), null );
+	// A sent round opens with the progress line before any answer
+	// (63B383); only an empty round stays on the no-result line.
+	assert.deepEqual( partyMatchAutoStartNotice(), {
+		key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS",
+		value: 0,
+		nativeType: 4
+	} );
 	assert.deepEqual( partyMatchNoResultNotice(), {
 		key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT",
 		value: 0,
 		nativeType: 4
 	} );
+});
+
+/*
+================
+autoMatchWorld
+
+A world whose party board the 0xB588 answer fills with the given
+listing ids (page 1 of 1), ready for an auto-match command.
+================
+*/
+function autoMatchWorld( t, ids ) {
+	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
+	t.after( () => core.dispose() );
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		refItemSnapshot: [],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 0x6b4f, x: 1, y: 2, z: 3, angle: 0 } }
+	} );
+	const flush = () => {
+		core.step( 0, false );
+		const batch = core.take();
+		if ( batch ) core.ack( batch.sequence );
+		return batch?.events ?? [];
+	};
+	flush();
+	core.command( { kind: "party-match-page", page: 1 }, 0 );
+	const rows = [];
+	for ( const id of ids ) {
+		const header = Buffer.alloc( 10 );
+		header.writeUInt32LE( id );
+		header.writeUInt32LE( 99, 4 );
+		header.writeUInt16LE( 4, 8 );
+		const size = Buffer.alloc( 2 );
+		size.writeUInt16LE( 5 );
+		rows.push( Buffer.concat( [
+			header,
+			Buffer.from( "Peer" ),
+			Buffer.from( [ 0, 3, 2, 0, 1, 20 ] ),
+			size,
+			Buffer.from( "Title", "utf16le" )
+		] ) );
+	}
+	core.receive(
+		{ opcode: 0xb588, payload: Buffer.concat( [ Buffer.from( [ 1, 1, 1, ids.length ] ), ...rows ] ) },
+		0
+	);
+	flush();
+	const gameplay = events => {
+		const event = events.find( row => row.kind === "gameplay" );
+		assert.ok( event?.kind === "gameplay", "the world publishes gameplay" );
+		return event.state;
+	};
+	return { core, sent, flush, gameplay };
+}
+
+test("a sent auto round prints progress at once; an empty one prints no-result", t => {
+	const world = autoMatchWorld( t, [ 7 ] );
+	world.core.command( { kind: "party-match-auto", ids: [ 7 ] }, 0 );
+	assert.ok( world.sent.some( frame => frame.opcode === 0x75bf ), "the first candidate was not sent" );
+	// No join answer has arrived: the line is already printed (63B383).
+	const notices = world.gameplay( world.flush() ).notices ?? [];
+	assert.deepEqual(
+		{ key: notices.at( -1 )?.key, nativeType: notices.at( -1 )?.nativeType },
+		{ key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS", nativeType: 4 }
+	);
+	const empty = autoMatchWorld( t, [] );
+	empty.core.command( { kind: "party-match-auto", ids: [] }, 0 );
+	assert.ok( !empty.sent.some( frame => frame.opcode === 0x75bf ), "an empty round sent a candidate" );
+	const emptyNotices = empty.gameplay( empty.flush() ).notices ?? [];
+	assert.equal( emptyNotices.at( -1 )?.key, "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT" );
+	assert.ok( !emptyNotices.some( notice => notice.key === "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS" ) );
 });
