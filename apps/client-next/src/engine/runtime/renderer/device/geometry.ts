@@ -14,6 +14,7 @@ writes a member's stream (or a patched range of it) straight to its slot.
 import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
 import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
+import { dungeonHeightFog } from "@/engine/foundation/rendering/dungeon-fog";
 import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
@@ -35,6 +36,9 @@ type Binding = BufferSlice["binding"];
 // The packed vertex (14 floats) and a uint32 index, in bytes.
 const VERTEX_BYTES = 56;
 const INDEX_BYTES = 4;
+// policy.y, the local fog a material carries; the shader tests above 1.5.
+const LOCAL_FOG_LINEAR = 1;
+const LOCAL_FOG_SHADER = 2;
 /*
 ================
 geometryPipelineState
@@ -1047,7 +1051,7 @@ export function createGeometryResources(
 						mat?.instanceFade ? 2 : mat?.objectFade ? 1 : 0,
 						mat?.fadeAlphaOnly ? 1 : 0,
 						mat?.fogDisabled ? 1 : 0,
-						mat?.fog ? 1 : 0,
+						mat?.fog ? (mat.fog.linear ? LOCAL_FOG_LINEAR : LOCAL_FOG_SHADER) : 0,
 						mat?.textureAlpha === false ? 1 : 0,
 						mat?.instanceMaterialTint ? 1 : 0,
 						...(mat?.fog ?
@@ -1058,8 +1062,7 @@ export function createGeometryResources(
 								mat.fog.nearPlane,
 								mat.fog.farPlane,
 								mat.fog.intensity,
-								0,
-								0
+								...dungeonHeightFog( mat.fog ).slice( 0, 2 )
 							] :
 							[ 0, 0, 0, 0, 0, 0, 0, 0 ]),
 						...(mat?.ambient ?? [ 1, 1, 1 ]),
@@ -1089,11 +1092,12 @@ export function createGeometryResources(
 						...packTextureStage( mat?.textureStage ),
 						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
 						// draw blends nothing, so its surviving pixels are opaque; z, stage 1
-						// is the object's lightmap (binding 8 at the second UV set).
+						// is the object's lightmap (binding 8 at the second UV set); w, the
+						// slope of the block's height fog.
 						mat?.shaderDiffuse ? 1 : 0,
 						geometryPipelineState( mat ).blend ? 0 : 1,
 						mat?.objectLightmap ? 1 : 0,
-						0,
+						mat?.fog ? dungeonHeightFog( mat.fog )[2] : 0,
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),

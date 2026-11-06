@@ -46,6 +46,15 @@ export interface WorldMaterial {
 		readonly nearPlane: number;
 		readonly farPlane: number;
 		readonly intensity: number;
+		/** The .dof height term; dungeon-fog.ts names its fields. */
+		readonly heightFog?: {
+			readonly unk3: number;
+			readonly unk4: number;
+			readonly unk5: number;
+			readonly unk6: number;
+		} | null;
+		/** Table fog over near..far (dungeon water, 8AEEAC), not the block's shader fog. */
+		readonly linear?: boolean;
 	};
 	readonly fogDisabled?: boolean;
 	readonly instanceFade?: boolean;

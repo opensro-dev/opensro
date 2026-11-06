@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
@@ -73,6 +74,9 @@ type gameWorldApplication struct {
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// mutes is the staff chat mute book (#2671): opened before admission,
+	// reaped on a timer.
+	mutes *moderation.Book
 	// certificateWatch is the served WebTransport pair's staff alert
 	// (ops only, #1447); it reports nothing outside the public posture.
 	certificateWatch *transport.CertificateWatch
@@ -385,6 +389,13 @@ func newGameWorldApplication(
 	// one history event per committed grant.
 	gameplay.items.SilkWallet = authority.store
 	gameplay.items.RecordSilkGrant = func(grant action.SilkGrant) { journal.Record(silkGrantEvent(grant)) }
+	// The mute book opens before admission: a muted character's first
+	// bind after a restart must already find its record (#2671).
+	application.mutes, err = openMuteBook(ts.Hub, ownedShard.ID)
+	if err != nil {
+		return nil, err
+	}
+	gameplay.mutes = application.mutes
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
@@ -567,6 +578,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.sealBoard != nil {
 		group.Go(func() error {
 			application.sealBoard.Run(groupContext)
+			return nil
+		})
+	}
+	if application.mutes != nil {
+		group.Go(func() error {
+			runMuteReaper(groupContext, application.mutes)
 			return nil
 		})
 	}

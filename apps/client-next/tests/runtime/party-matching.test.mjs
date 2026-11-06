@@ -18,12 +18,18 @@ const source = "src/engine/foundation/gameplay/party-matching.ts";
 const {
 	emptyPartyMatching,
 	partyMatchAckNotice,
+	partyMatchRegisterNotice,
+	partyMatchCompletionNotice,
+	partyMatchDeleteNotice,
+	partyMatchAutoNotice,
+	partyMatchNoResultNotice,
 	partyMatchRequest,
 	partyMatchPacket,
 	partyMatchRows,
 	partyMatchButtons,
 	partyAutoCandidates,
 	partyActiveJob,
+	partyIsFull,
 	partyPurposeAllowed,
 	partyDefaultPurpose,
 	partyDefaultTitleKey,
@@ -410,4 +416,96 @@ test("a join answer raises its native surface per detail (75EBD0)", () => {
 	// and no other opcode raises a line here.
 	assert.deepEqual( partyMatchAckNotice( 0xb5bf, 3 ), { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 } );
 	assert.equal( partyMatchAckNotice( 0xb588, 1 ), null );
+});
+
+test("register refusal names its line in the native order and sends nothing (6356A0)", () => {
+	// An existing listing refuses first - listed beats even the
+	// partyless level arm below it.
+	assert.deepEqual(
+		partyMatchRegisterNotice( { listed: true, inParty: false, master: false, partyFull: false, level: 1 } ),
+		{ key: "UIIT_MSG_PARTYMATCH_RECORD_ERROR_AGAIN", value: 0, nativeType: 4 }
+	);
+	assert.deepEqual(
+		partyMatchRegisterNotice( { listed: false, inParty: false, master: false, partyFull: false, level: 4 } ),
+		{ key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_LEVEL", value: 0, nativeType: 4 }
+	);
+	assert.equal(
+		partyMatchRegisterNotice( { listed: false, inParty: false, master: false, partyFull: false, level: 5 } ),
+		null
+	);
+	assert.deepEqual(
+		partyMatchRegisterNotice( { listed: false, inParty: true, master: false, partyFull: false, level: 40 } ),
+		{ key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_PARTY", value: 0, nativeType: 4 }
+	);
+	assert.deepEqual(
+		partyMatchRegisterNotice( { listed: false, inParty: true, master: true, partyFull: true, level: 40 } ),
+		{ key: "UIIT_MSG_PARTYERR_ALREADY_FULL", value: 0, nativeType: 4 }
+	);
+	assert.equal(
+		partyMatchRegisterNotice( { listed: false, inParty: true, master: true, partyFull: false, level: 40 } ),
+		null
+	);
+});
+
+test("register, modify and delete successes close as centre banners", () => {
+	assert.deepEqual( partyMatchCompletionNotice( 0xb6ff ), {
+		key: "UIIT_MSG_PARTYMATCH_RECORD_COMPLETE",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
+	assert.deepEqual( partyMatchCompletionNotice( 0xb3dc ), {
+		key: "UIIT_MSG_PARTYMATCH_MODIFY_COMPLETE",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
+	assert.equal( partyMatchCompletionNotice( 0xb5bf ), null );
+	assert.deepEqual( partyMatchDeleteNotice( false ), {
+		key: "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
+	assert.deepEqual( partyMatchDeleteNotice( true ), {
+		key: "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE2",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	} );
+});
+
+test("party fullness follows the native cap for the share option (818820)", () => {
+	// Without EXP share the roster caps at four: the register guard's
+	// last arm and the delete latch both read this, not a constant 8.
+	assert.equal( partyIsFull( 4, 0 ), true );
+	assert.equal( partyIsFull( 3, 0 ), false );
+	// With EXP share the cap is eight.
+	assert.equal( partyIsFull( 8, 1 ), true );
+	assert.equal( partyIsFull( 7, 1 ), false );
+	assert.equal( partyIsFull( 4, 1 ), false );
+	// The query compares the whole option word: any other word is
+	// never full, at either count.
+	for ( const word of [ 4, 5 ] ) {
+		assert.equal( partyIsFull( 4, word ), false );
+		assert.equal( partyIsFull( 8, word ), false );
+	}
+});
+
+test("auto chain reports progress or failure only while its session lives", () => {
+	assert.deepEqual(
+		partyMatchAutoNotice( { sessionOpen: true, accepted: false, candidatesRemain: true } ),
+		{ key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS", value: 0, nativeType: 4 }
+	);
+	assert.deepEqual(
+		partyMatchAutoNotice( { sessionOpen: true, accepted: false, candidatesRemain: false } ),
+		{ key: "UIIT_MSG_PARTYMATCH_AUTO_FAILURE", value: 0, nativeType: 4 }
+	);
+	assert.equal( partyMatchAutoNotice( { sessionOpen: true, accepted: true, candidatesRemain: false } ), null );
+	assert.equal( partyMatchAutoNotice( { sessionOpen: false, accepted: false, candidatesRemain: true } ), null );
+	assert.deepEqual( partyMatchNoResultNotice(), {
+		key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT",
+		value: 0,
+		nativeType: 4
+	} );
 });
