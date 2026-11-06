@@ -420,8 +420,12 @@ nativeBlueGrant
 
 The [%s] a newly granted option is announced with (62964D and kin):
 the label, the granted amount and the increase word - percents ride
-the amount, the evade options drop the word, the count options read
-as the tooltip counts them.
+the amount, the evade options drop the word. The count options name
+the bare label (62A91B and kin: the arm swprintf's the PARAM_* text
+with a plain "%s" into APPEND_ATTR; the amount only gates whether
+the line prints, and the presenter never reads UIIT_STT_COUNT - the
+count composites are the tooltip's wording, not the presenter's).
+Repair speaks only when the granted count exceeds one (62AC3F).
 ================
 */
 function nativeBlueGrant(
@@ -443,11 +447,10 @@ function nativeBlueGrant(
 	if ( optionName === "MATTR_EVADE_BLOCK" || optionName === "MATTR_EVADE_CRITICAL" ) {
 		return `${label} ${amount}`;
 	}
-	if ( [ "MATTR_ATHANASIA", "MATTR_SOLID", "MATTR_LUCK" ].includes( optionName ) ) {
-		return `${label}(${amount}${copy( "UIIT_STT_COUNT" )})`;
+	if ( [ "MATTR_ATHANASIA", "MATTR_SOLID", "MATTR_LUCK", "MATTR_ASTRAL" ].includes( optionName ) ) {
+		return label;
 	}
-	if ( optionName === "MATTR_ASTRAL" ) return `${label} ${amount} ${copy( "UIIT_STT_COUNT" )}`;
-	if ( optionName === "MATTR_REPAIR" ) return `${label} (${Math.max( 0, amount - 1 )}${copy( "UIIT_STT_COUNT" )})`;
+	if ( optionName === "MATTR_REPAIR" ) return amount > 1 ? label : "";
 	return `${label} ${amount} ${copy( "PARAM_INCREASE" )}`;
 }
 
@@ -535,11 +538,17 @@ function stoneNativeLines( stone: NonNullable<AlchemyOutcome["stone"]>, copy: ( 
 			// stands on both items (62970B, entered from 6295DB): an
 			// equal reroll still prints. Its only amount gate is a
 			// zero amount (62970B), which a carried option never has.
+			// Repair's arm (62AC3F) is gated harder: the old count
+			// must exceed one, and both counts print decremented.
+			if ( kind === "MATTR_REPAIR" && oldAmount <= 1 ) continue;
+			const bracket = kind === "MATTR_REPAIR" ?
+				nativeBlueBracket( kind, oldAmount - 1, newAmount - 1 ) :
+				nativeBlueBracket( kind, oldAmount, newAmount );
 			lines.push(
 				nativeTemplate( copy, "UIIT_MSG_ALCHEMY_CHANGE_CATTR", [
 					nativeBlueLabel( kind, copy, false ),
 					item,
-					nativeBlueBracket( kind, oldAmount, newAmount )
+					bracket
 				] )
 			);
 		}

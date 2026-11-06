@@ -342,6 +342,200 @@ test("a defence rise prints one decimal, designated or assimilated (625980 arms 
 	);
 });
 
+test("a granted athanasia option names the bare label (62A91B)", () => {
+	// The grant arm swprintf's the PARAM_* label with a plain "%s"
+	// (format at BC88E0) into UIIT_MSG_ALCHEMY_APPEND_ATTR: the amount
+	// only gates whether the line prints. The count composite
+	// ("Athanasia(2 times)") is the tooltip's wording, and the native
+	// presenter never reads UIIT_STT_COUNT. The designated change arm
+	// formats "%d -> %d" into UIIT_MSG_ALCHEMY_CHANGE_CATTR (62A9D0).
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_ATHANASIA", 0 ),
+				after: optionItem( "MATTR_ATHANASIA", 2 ),
+				designated: "MATTR_ATHANASIA"
+			} ),
+			copy
+		),
+		[
+			"PARAM_ATHANASIA changed from 0 to (2UIIT_STT_COUNT)",
+			"[PARAM_ATHANASIA]attribute has been granted on Blade."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_ATHANASIA", 2 ),
+				after: optionItem( "MATTR_ATHANASIA", 5 ),
+				designated: "MATTR_ATHANASIA"
+			} ),
+			copy
+		),
+		[
+			"PARAM_ATHANASIA changed from (2UIIT_STT_COUNT) to (5UIIT_STT_COUNT)",
+			"[PARAM_ATHANASIA]attribute of Blade has been changed to [2 -> 5]."
+		]
+	);
+});
+
+test("a granted solid option names the bare label (62AA09)", () => {
+	// Same arm shape as athanasia: grant reads PARAM_SOLID bare,
+	// change prints "%d -> %d" through the shared tail at 62ACAD.
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_SOLID", 0 ),
+				after: optionItem( "MATTR_SOLID", 2 ),
+				designated: "MATTR_SOLID"
+			} ),
+			copy
+		),
+		[
+			"PARAM_SOLID changed from 0 to (2UIIT_STT_COUNT)",
+			"[PARAM_SOLID]attribute has been granted on Blade."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_SOLID", 1 ),
+				after: optionItem( "MATTR_SOLID", 4 ),
+				designated: "MATTR_SOLID"
+			} ),
+			copy
+		),
+		[
+			"PARAM_SOLID changed from (1UIIT_STT_COUNT) to (4UIIT_STT_COUNT)",
+			"[PARAM_SOLID]attribute of Blade has been changed to [1 -> 4]."
+		]
+	);
+});
+
+test("a granted luck option names the bare label (62AAF5)", () => {
+	// Same arm shape as athanasia: grant reads PARAM_LUCK bare,
+	// change prints "%d -> %d" (62A3D5).
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_LUCK", 0 ),
+				after: optionItem( "MATTR_LUCK", 3 ),
+				designated: "MATTR_LUCK"
+			} ),
+			copy
+		),
+		[
+			"PARAM_LUCK changed from 0 to (3UIIT_STT_COUNT)",
+			"[PARAM_LUCK]attribute has been granted on Blade."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_LUCK", 3 ),
+				after: optionItem( "MATTR_LUCK", 2 ),
+				designated: "MATTR_LUCK"
+			} ),
+			copy
+		),
+		[
+			"PARAM_LUCK changed from (3UIIT_STT_COUNT) to (2UIIT_STT_COUNT)",
+			"[PARAM_LUCK]attribute of Blade has been changed to [3 -> 2]."
+		]
+	);
+});
+
+test("a granted astral option names the bare label (62ABE1)", () => {
+	// The grant arm jumps to the shared "%s" tail at 62A942 and reads
+	// PARAM_ASTRAL bare; "Astral 2 times" is again the tooltip's
+	// wording only. The change arm formats "%d -> %d" (62A9A4).
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_ASTRAL", 0 ),
+				after: optionItem( "MATTR_ASTRAL", 2 ),
+				designated: "MATTR_ASTRAL"
+			} ),
+			copy
+		),
+		[
+			"PARAM_ASTRAL changed from 0 to 2 UIIT_STT_COUNT",
+			"[PARAM_ASTRAL]attribute has been granted on Blade."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_ASTRAL", 2 ),
+				after: optionItem( "MATTR_ASTRAL", 6 ),
+				designated: "MATTR_ASTRAL"
+			} ),
+			copy
+		),
+		[
+			"PARAM_ASTRAL changed from 2 UIIT_STT_COUNT to 6 UIIT_STT_COUNT",
+			"[PARAM_ASTRAL]attribute of Blade has been changed to [2 -> 6]."
+		]
+	);
+});
+
+test("repair grants above one and counts down by one (62AC3F)", () => {
+	// A repair grant speaks only when the new count exceeds one, and
+	// then with the bare label; a count of one prints nothing. The
+	// change arm needs an old count above one and brackets both
+	// counts decremented ("(old-1) -> (new-1)", 62ACD9).
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_REPAIR", 0 ),
+				after: optionItem( "MATTR_REPAIR", 1 ),
+				designated: "MATTR_REPAIR"
+			} ),
+			copy
+		),
+		[ "PARAM_REPAIR changed from 0 to (0UIIT_STT_COUNT)" ]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_REPAIR", 0 ),
+				after: optionItem( "MATTR_REPAIR", 3 ),
+				designated: "MATTR_REPAIR"
+			} ),
+			copy
+		),
+		[
+			"PARAM_REPAIR changed from 0 to (2UIIT_STT_COUNT)",
+			"[PARAM_REPAIR]attribute has been granted on Blade."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_REPAIR", 4 ),
+				after: optionItem( "MATTR_REPAIR", 2 ),
+				designated: "MATTR_REPAIR"
+			} ),
+			copy
+		),
+		[
+			"PARAM_REPAIR changed from (3UIIT_STT_COUNT) to (1UIIT_STT_COUNT)",
+			"[PARAM_REPAIR]attribute of Blade has been changed to [3 -> 1]."
+		]
+	);
+	assert.deepEqual(
+		alchemyResultLines(
+			success( {
+				before: optionItem( "MATTR_REPAIR", 1 ),
+				after: optionItem( "MATTR_REPAIR", 3 ),
+				designated: "MATTR_REPAIR"
+			} ),
+			copy
+		),
+		[ "PARAM_REPAIR changed from (0UIIT_STT_COUNT) to (2UIIT_STT_COUNT)" ]
+	);
+});
+
 test("an elixir keeps the native enhancement-level line", () => {
 	assert.deepEqual( alchemyResultLines( success(), copy ), [ "level [2]" ] );
 	// A stone that changed nothing visible falls back to the native line.
