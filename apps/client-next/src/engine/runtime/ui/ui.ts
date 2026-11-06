@@ -16615,9 +16615,9 @@ export function createUi(
 						canTalk: !!(capabilities & 2),
 						prompt: game.npcEventGreeting ?
 							copy( game.npcEventGreeting ) :
-						// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
-						// greeting with the event's own line.
-						(capabilities & EVENT_EXCHANGE_FUNCTION) ?
+							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+							// greeting with the event's own line.
+							(capabilities & EVENT_EXCHANGE_FUNCTION) ?
 							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
 							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
