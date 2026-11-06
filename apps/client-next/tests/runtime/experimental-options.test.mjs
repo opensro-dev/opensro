@@ -75,6 +75,8 @@ const OFF = Object.freeze( {
 	plusSevenNotices: true,
 	// On by default: the shard's item break notices show (#1738).
 	breakNotices: true,
+	// On by default (owner ask 2026-11-06, #2727): shard event notices print red in the message log.
+	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
 	// Off by default: each player opts in to the Most Wanted buff row (#1849).
@@ -549,6 +551,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -567,6 +570,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
