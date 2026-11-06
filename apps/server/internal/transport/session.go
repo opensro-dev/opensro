@@ -164,8 +164,14 @@ type Session struct {
 	// the latest attach and the fallback reason the client reported for
 	// it ("" until an OpTransportReport arrives). History reads both;
 	// they describe how the session got here, never how it behaves.
-	transport   string
-	fallback    string
+	transport string
+	fallback  string
+	// clientAddr and userAgent are the client facts of the latest
+	// attach (clientaddr.go): the real client address and the accept
+	// request's User-Agent. The connection census (#2716) reads them at
+	// world entry; a resume replaces them with its own attachment's.
+	clientAddr  string
+	userAgent   string
 	expireTimer *time.Timer
 	drainTimer  *time.Timer // CloseWhenDrained's cap; stopped once the session closes
 
@@ -552,6 +558,13 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	// previous connection reported says nothing about this one (#1449).
 	s.transport = conn.Kind()
 	s.fallback = ""
+	// The census facts likewise belong to this attachment (conn already
+	// resolved its real client address at accept, clientaddr.go).
+	s.clientAddr = conn.RemoteAddr()
+	s.userAgent = ""
+	if facter, ok := conn.(clientFacter); ok {
+		s.userAgent = facter.ClientUserAgent()
+	}
 	s.lastRecv = s.now()
 	// The new attachment starts with a clean ack clock: it gets the
 	// full park bound to acknowledge what the ring re-sends.

@@ -38,7 +38,12 @@ Hub
 type Hub struct {
 	// History is installed before admission opens; its queue never calls gameplay.
 	History HistoryObserver
-	cfg     Config
+	// Census, when installed, receives the same lifecycle events as
+	// History (history.go): the connection journal behind the
+	// SRO_CONNECTION_JOURNAL flag (#2716, port-only, not native). Nil
+	// is the native posture: nothing is recorded.
+	Census CensusObserver
+	cfg    Config
 
 	// now and newTicker are the hub's one clock. Production reads the
 	// wall clock (newHub's defaults); a test installs a manual clock so
