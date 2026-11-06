@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 
-import { readDofFloorLabels } from "../../build/world/assets/copyMissionMinimapTileImages.mjs";
+import { readDofFloorLabels, readDofRoomLabels } from "../../build/world/assets/copyMissionMinimapTileImages.mjs";
 import { readDungeonInfoRows } from "../../build/world/assets/dungeonInfo.mjs";
 import { dataExtractedRoot } from "../../build/world/paths.mjs";
 import { readPublishedAssetJsonSync } from "../../lib/publishedAsset.mjs";
@@ -62,6 +62,14 @@ test("every dungeon row ships, and a floor resolves exactly when retail art exis
 		const dungeon = manifest.dungeons[index];
 		assert.equal( dungeon.regionId, row.regionId, `admission row ${index} region` );
 		assert.equal( dungeon.dofName, row.dofName, `admission row ${index} DOF` );
+
+		// The room-name symbols ship whole, by room index, for the
+		// minimap area-name readout (#2705).
+		assert.deepEqual(
+			dungeon.rooms,
+			await readDofRoomLabels( dofPathForRow( row.dofName ) ),
+			`${row.dofName} shipped room labels`
+		);
 
 		const labels = await readDofFloorLabels( dofPathForRow( row.dofName ) );
 		const floorsByIndex = new Map( dungeon.floors.map( floor => [ floor.floorIndex, floor ] ) );
