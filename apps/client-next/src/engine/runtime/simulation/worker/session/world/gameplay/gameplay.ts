@@ -107,6 +107,7 @@ import {
 	emptyPartyMatching,
 	partyMatchAckNotice,
 	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
 	partyMatchCompletionNotice,
 	partyMatchDeleteNotice,
 	partyMatchNoResultNotice,
@@ -2641,6 +2642,12 @@ state here before a command can claim a native wire conversation.
 				const next = partyMatchRequest( partyMatching, command, now, levelCap );
 				if ( command.kind === "party-match-auto" ) {
 					if ( next.frame ) {
+						// A sent round announces itself at once
+						// (63B383); the answer path reports the
+						// chain from the first answer on.
+						const notice = partyMatchAutoStartNotice();
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
 						partyMatchAutoSession = true;
 					} else if ( next.state.result === 2 ) {
 						// An auto round with nobody to ask (63B130

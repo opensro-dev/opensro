@@ -22,6 +22,7 @@ const {
 	partyMatchCompletionNotice,
 	partyMatchDeleteNotice,
 	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
 	partyMatchNoResultNotice,
 	partyMatchRequest,
 	partyMatchPacket,
@@ -503,6 +504,13 @@ test("auto chain reports progress or failure only while its session lives", () =
 	);
 	assert.equal( partyMatchAutoNotice( { sessionOpen: true, accepted: true, candidatesRemain: false } ), null );
 	assert.equal( partyMatchAutoNotice( { sessionOpen: false, accepted: false, candidatesRemain: true } ), null );
+	// A sent round opens with the progress line before any answer
+	// (63B383); only an empty round stays on the no-result line.
+	assert.deepEqual( partyMatchAutoStartNotice(), {
+		key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS",
+		value: 0,
+		nativeType: 4
+	} );
 	assert.deepEqual( partyMatchNoResultNotice(), {
 		key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT",
 		value: 0,
