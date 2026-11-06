@@ -222,9 +222,14 @@ import {
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
-	academyOpenRequest
+	academyOpenRequest,
+	academyPassBuffRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
+import {
+	academyAcknowledgment,
+	academyBuffNotices,
+	academyStatusNotice
+} from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -2720,6 +2725,10 @@ state here before a command can claim a native wire conversation.
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
 			}
+			if ( command.kind === "academy-pass-buff" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyPassBuffRequest() );
+			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
 			if ( command.kind === "cos-name" ) {
@@ -4148,11 +4157,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame );
+					const next = academyPacket( academy, frame, now );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
 							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
+						}
+						for ( const buffNotice of academyBuffNotices( academy, frame ) ) {
+							notices = [ ...notices.slice( -99 ), { ...buffNotice, sequence: ++noticeSequence } ];
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (

@@ -1375,6 +1375,8 @@ export function createUi(
 	}
 	let recallConfirm: number | null = null;
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
+	// The saved Academy buff's pass question (6E2840's simple-box type 9).
+	let academyBuffPass = false;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
 	// The europe variant the next plain load draws, chosen a load ahead so
@@ -7133,6 +7135,32 @@ export function createUi(
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
 			}
+			if ( academyBuffPass ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-buff-pass-cancel"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-buff-pass-confirm"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.academy?.savedBuff ) {
+						sendGameplay( { kind: "academy-pass-buff" } );
+					}
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
 
 			if ( groundDrop ) {
 				if ( event.kind === "key" ) {
@@ -8846,7 +8874,7 @@ export function createUi(
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const cancel = buffBoard(
+				const boardRow = buffBoard(
 					view.gameplay,
 					view.simulationTimeMs ?? 0,
 					undefined,
@@ -8854,8 +8882,15 @@ export function createUi(
 					undefined,
 					hudCopy
 				)
-					.find( row => row.id === event.id )
-					?.cancel;
+					.find( row => row.id === event.id );
+				// 6E2840: the saved Academy buff's slot asks the pass
+				// question; its Yes is the academy-buff-pass-confirm box.
+				if ( boardRow?.passBuff ) {
+					academyBuffPass = true;
+					dirty = true;
+					return;
+				}
+				const cancel = boardRow?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
 					buffDismiss = { skillId: cancel.skillId, instance: cancel.instance };
@@ -9925,6 +9960,10 @@ export function createUi(
 					buffDismiss = null;
 					dirty = true;
 				}
+			}
+			if ( (phase !== "world" || !next.gameplay?.academy?.savedBuff) && academyBuffPass ) {
+				academyBuffPass = false;
+				dirty = true;
 			}
 			if ( phase !== "world" ) autoPotionInput.reset();
 			else {
@@ -12237,8 +12276,9 @@ export function createUi(
 							helpText: icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
-							// vtable +0x70 left-button handler); the rest only hover.
-							kind: icon.id.startsWith( "count-job:" ) ? "button" : "region",
+							// vtable +0x70 left-button handler), as is the saved
+							// Academy buff's pass slot; the rest only hover.
+							kind: icon.id.startsWith( "count-job:" ) || icon.passBuff ? "button" : "region",
 							rightActivate: !!icon.cancel,
 							rect: r
 						} );
@@ -24618,6 +24658,18 @@ export function createUi(
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
+			}
+			if ( worldVisible && academyBuffPass ) {
+				// 6E2840: the pass question is a plain simple message box
+				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
+					yes: "academy-buff-pass-confirm",
+					no: "academy-buff-pass-cancel"
+				} );
 			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
