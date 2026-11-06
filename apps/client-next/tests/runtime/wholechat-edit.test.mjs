@@ -18,7 +18,7 @@ const BAG_SLOT = 13;
 
 test("wholechat caret spans one text line at the top of the tall edit box", () => {
 	const f = uiFixture();
-	let now = 0, presentation = /** @type {any} */ ( null );
+	let now = 0, presentation = /** @type {any} */ (null);
 	const step = () => {
 		for ( let i = 0; i < 16; i++ ) presentation = f.ui.step( f.state, now += 100 ) ?? presentation;
 	};
