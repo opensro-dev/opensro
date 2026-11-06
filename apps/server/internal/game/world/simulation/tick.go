@@ -425,6 +425,7 @@ type divisionTickState struct {
 	settled             map[string]int64
 	shownPeers          map[string]map[uint32]bool
 	peerPaths           map[string]map[uint32]peerPath
+	peerReferences      map[string]map[uint32]bool
 	peerVisibilityKeys  []peerVisibilityKey
 	peerVisibilityValid bool
 	shownCOS            map[string]map[uint32]shownCOS

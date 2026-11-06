@@ -4,8 +4,8 @@
 most-wanted.test.mjs - the most-wanted buff row (port-only 0x3FBA, #1849)
 
 The worker decodes the state frame whole or not at all, gameplay
-publishes it, the buff-board row shows the level only while the job
-suit is worn and the option is on, and the row is off by default.
+publishes it, and the buff-board row shows the level from the shard
+state alone while the job suit is worn (#2721: no client opt-in).
 
 ===========================================================================
 */
@@ -19,7 +19,6 @@ const { mostWantedRow, mostWantedDamagePercent, mostWantedJobIcon } = await impo
 	"../../src/engine/foundation/gameplay/most-wanted.ts"
 );
 const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
-const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
@@ -119,24 +118,22 @@ test("the row waits for a level, a suit and a live lapse", () => {
 	);
 });
 
-test("the board draws the row only with the option on", () => {
+test("the board draws the row from the shard state alone", () => {
 	const state = { level: 2, killsIntoLevel: 1, dressedJob: 2, killsPerLevel: 5, expiresAtMs: 0 };
 	const game = /** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ ({
 		localGid: 1,
 		mostWanted: state
 	});
-	assert.equal(
-		buffBoard( game, 0, undefined, undefined, false, key => key, false ).some( row => row.id === "most-wanted" ),
-		false
-	);
-	const rows = buffBoard( game, 0, undefined, undefined, false, key => key, true );
+	const rows = buffBoard( game, 0 );
 	const row = rows.find( entry => entry.id === "most-wanted" );
 	assert.equal( row?.label, "Most Wanted Lv 2" );
 	assert.equal( row?.fraction, 1 / 5 );
-});
-
-test("the row is off by default and only an explicit true turns it on", () => {
-	assert.equal( experimentalOptions().mostWantedBuff, false );
-	assert.equal( experimentalOptions( { mostWantedBuff: 1 } ).mostWantedBuff, false );
-	assert.equal( experimentalOptions( { mostWantedBuff: true } ).mostWantedBuff, true );
+	const quiet = /** @type {import("../../src/engine/contracts/gameplay.ts").GameplayState} */ ({
+		localGid: 1
+	});
+	assert.equal(
+		buffBoard( quiet, 0 ).some( entry => entry.id === "most-wanted" ),
+		false,
+		"no shard state, no row: the server flag is the only switch"
+	);
 });

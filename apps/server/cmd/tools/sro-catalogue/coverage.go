@@ -66,12 +66,12 @@ var catalogueReaders = map[string]string{
 // catalogueExempt lists every other shard setting with the reason it
 // changes nothing the catalogue publishes.
 var catalogueExempt = map[string]string{
-	"SRO_MALL_AVATARS":                        "a build input consumed by mall_avatar_import.py; the catalogue publishes the built data",
 	"SRO_BETA_STARTER_KIT":                    "a character-creation grant; the catalogue publishes the granted items, not the grant",
 	"SRO_BETA_PLAYER_MAP":                     "shows other players on the world map at runtime; the catalogue publishes no live positions",
 	"SRO_CAP110_SET_BONUSES":                  "wearing a set changes derived character stats; the catalogue publishes the set items and no set-bonus table",
 	"SRO_CAP110_ITEMS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_CAP110_SKILLS":                       "a build input consumed when the server data is built; the catalogue publishes the built data",
+	"SRO_MALL_AVATARS":                        "a build input consumed when the server data is built; the catalogue publishes the built data",
 	"SRO_HALLOWEEN_HELMET_SEAL":               "the seal restricts trading the event helmets at runtime; items.json publishes the helmets either way",
 	"SRO_BETA_SILK":                           "an hourly silk grant to accounts; the catalogue publishes no account state",
 	"SRO_BETA_SILK_ACTIVE_ONLY":               "which hours count for the silk grant; the catalogue publishes no account state",

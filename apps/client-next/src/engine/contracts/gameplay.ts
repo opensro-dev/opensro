@@ -929,6 +929,7 @@ export interface GameplayState extends MoverPublication {
 		readonly error: string | null;
 	};
 	readonly navigationFloor?: number;
+	readonly navigationRoom?: number;
 	readonly minimapFloors?: Readonly<Record<string, number | undefined>>;
 	readonly navigationRequestId?: number;
 	readonly navigationFailure?: { readonly region: number; readonly requestId?: number; readonly error: string; };

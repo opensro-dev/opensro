@@ -4,14 +4,14 @@
 rankings.go - GET /public/v1/rankings: every visible player, ranked
 
 The /players page lists the whole shard, not a top board: by level, by
-unique kills or by gear, optionally one race, fifty a page. The job
-boards (by=trader, hunter or thief, #2675) list one job each, ordered
-by job level then job experience - the same Grade and Exp the profile
-publishes as jobLevel and job experience, so the board and the profile
-never disagree. Each ordering is built once per shared snapshot (the
-roster and the kill list) for each (by, race) and every page slices it,
-so a crawl of every page costs one sort. Hidden characters are left out
-entirely, as on the leaderboard.
+unique kills, by gear or by time online, optionally one race, fifty a
+page. The job boards (by=trader, hunter or thief, #2675) list one job
+each, ordered by job level then job experience - the same Grade and Exp
+the profile publishes as jobLevel and job experience, so the board and
+the profile never disagree. Each ordering is built once per shared
+snapshot (the roster and the kill list) for each (by, race) and every
+page slices it, so a crawl of every page costs one sort. Hidden
+characters are left out entirely, as on the leaderboard.
 
 Port-only, not native: the original has no public read API.
 
@@ -40,7 +40,9 @@ const rankingPageSize = 50
 
 // The orderings a request may ask for. The three job boards list one
 // job each, by job level then job experience; by=pk is the PK board:
-// the native PK state's total murder count, highest first (#2675).
+// the native PK state's total murder count, highest first; by=online is
+// the time-online board: credited time in the world, all-time first,
+// the rolling week breaking ties (#2675).
 const (
 	rankByLevel   = "level"
 	rankByUniques = "uniques"
@@ -49,6 +51,7 @@ const (
 	rankByHunter  = "hunter"
 	rankByThief   = "thief"
 	rankByPK      = "pk"
+	rankByOnline  = "online"
 )
 
 /*
@@ -87,8 +90,8 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 		by = rankByLevel
 	}
 	if by != rankByLevel && by != rankByUniques && by != rankByGear &&
-		by != rankByTrader && by != rankByHunter && by != rankByThief && by != rankByPK {
-		return nil, fmt.Errorf("%w: by must be level, uniques, gear, trader, hunter, thief or pk", errBadRequest)
+		by != rankByTrader && by != rankByHunter && by != rankByThief && by != rankByPK && by != rankByOnline {
+		return nil, fmt.Errorf("%w: by must be level, uniques, gear, trader, hunter, thief, pk or online", errBadRequest)
 	}
 	race := query.Get("race")
 	if race != "" && race != "chinese" && race != "european" {
@@ -156,6 +159,10 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 			ExpPercent: s.expPercent(c), Gear: s.gearScore(c)}
 		if c.PK != nil {
 			row.PKKills = int(c.PK.TotalCount)
+		}
+		if c.Online != nil {
+			row.OnlineSeconds = c.Online.TotalSeconds
+			row.OnlineWeekSeconds = c.Online.WeekSeconds(s.now().UnixMilli())
 		}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job
@@ -253,6 +260,13 @@ func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 		}
 		if a.Level != b.Level {
 			return a.Level > b.Level
+		}
+	case rankByOnline:
+		if a.OnlineSeconds != b.OnlineSeconds {
+			return a.OnlineSeconds > b.OnlineSeconds
+		}
+		if a.OnlineWeekSeconds != b.OnlineWeekSeconds {
+			return a.OnlineWeekSeconds > b.OnlineWeekSeconds
 		}
 	default:
 		if a.Level != b.Level {

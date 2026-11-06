@@ -714,7 +714,8 @@ Shatter's bonus includes frostbitten, frozen, stunned and rooted enemies. Book I
 kills of frozen, stunned or rooted enemies burst within 5 m: each of up to five
 nearby monsters takes 50% of the final killing attack's damage. A 1,000-damage
 killing attack bursts for 500 per target, not 50% of enemy HP or a 50% chance.
-Pet summoning and dismissal are blocked during active owner/pet attacks and the
-owner's existing 20-second post-hit battle timeout. Scrolls and the pet toolbar
-enforce the same restriction. Casting, teleport, sitting and ownership checks
-still apply. Pet skill upgrades and gear swaps remain allowed during combat.
+Pet summoning and dismissal are blocked while the owner is in the existing
+20-second post-hit battle timeout or any of the owner's summoned companions has
+an active combat session. Scrolls and the pet toolbar enforce the same
+restriction. Casting, teleport, sitting and ownership checks still apply. Pet
+skill upgrades and gear swaps remain allowed during combat.
