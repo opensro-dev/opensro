@@ -808,6 +808,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	// with the quest composition (wiring_quests.go).
 	game.wireQuestDoors(quests)
 	game.items.UpdateExperience = stats.ExperienceUpdater()
+	// The Academy cumulated buff earns and drains on each member's kill
+	// share (#2270); the runtime's ledger keeps it door-free in the grant.
+	game.items.TrainingCampKill = game.mentorInvites.CampKillGrant
 	game.items.RefundExperience = stats.ExperienceRefundUpdater()
 	game.items.RecallStatPoints = stats.StatRecallUpdater()
 	game.items.ApplyDeathPenalty = stats.DeathPenaltyUpdater()

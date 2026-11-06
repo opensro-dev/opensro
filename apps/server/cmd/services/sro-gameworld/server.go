@@ -110,6 +110,13 @@ func gameWorldTransportServer(ownedShard shard.Definition) (*transport.Server, e
 	transportConfig.PrivateNetwork =
 		os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1"
 	transportConfig.WebTransportPublic = transport.WebTransportPublicEnabled()
+	// Port-only, not native (#2671): the conduct cap on live sessions per
+	// client address, off unless SRO_MAX_SESSIONS_PER_CLIENT arms it.
+	transportConfig.MaxSessionsPerClient = transport.MaxSessionsPerClientLimit()
+	if transportConfig.MaxSessionsPerClient > 0 {
+		log.Infof("transport: at most %d live sessions per client address (%s, port-only, not native)",
+			transportConfig.MaxSessionsPerClient, transport.EnvMaxSessionsPerClient)
+	}
 	transportConfig.MaxSessions = ownedShard.Capacity
 	warnTransportCatalogMismatch(ownedShard, transportConfig)
 	return transport.NewServer(transportConfig)

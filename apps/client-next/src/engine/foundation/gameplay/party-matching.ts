@@ -501,6 +501,23 @@ export function partyMatchAutoNotice( facts: {
 
 /*
 ================
+partyMatchAutoStartNotice
+
+The line a round opens with: the candidate collector
+(CIFPartyMatchAuto_CollectCandidates 63B130) sends its first
+candidate and then prints AUTO_PROGRESS at type 4 (63B383 ->
+63B3A0), before any join answer exists - a sent round announces
+itself, where an empty one prints PSEARCH_NORESULT instead. The
+port's answer path could only report the chain from the first
+answer on, so a round started silently (#2628).
+================
+*/
+export function partyMatchAutoStartNotice(): SystemNotice {
+	return { key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS", value: 0, nativeType: 4 };
+}
+
+/*
+================
 partyMatchNoResultNotice
 
 The empty-collection line (63B130 @63B327, 637CF0 @637FC3): an auto

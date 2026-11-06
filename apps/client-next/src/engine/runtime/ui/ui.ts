@@ -1619,7 +1619,7 @@ export function createUi(
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
 	// The structure target window's delete question (517750 -> 517CA0).
-	let structureRemoval: { gid: number; action: number; fortress: number; name: string; } | null = null;
+	let structureRemoval: { gid: number; action: number; fortress: number; name: string; kind: number; } | null = null;
 	/*
 	================
 	followStorageMove
@@ -5998,7 +5998,13 @@ export function createUi(
 			const game = view.gameplay, target = view.entities.find( row => row.gid === game?.target );
 			const action = target ? structureRemoveAction( target ) : 0, fortress = fortressStaffView().fortress;
 			if ( target && action && fortress !== undefined ) {
-				structureRemoval = { gid: target.gid, action, fortress, name: target.name };
+				structureRemoval = {
+					gid: target.gid,
+					action,
+					fortress,
+					name: target.name,
+					kind: fortressTargetKind( target )
+				};
 			}
 		} else if ( id === "inventory-next" ) {
 			// 59DF10 pages the bag alone: the 13 sockets hold no page.
@@ -17560,6 +17566,28 @@ export function createUi(
 							);
 						}
 					}
+					// 660930 (OnCreate) also sets the four style-0x80 help texts:
+					// the info area (502) and the three column heads (511..513)
+					// carry TP explanations, as the tax window's 19..21 do.
+					for (
+						const [id, key] of [
+							[ 502, "UIIT_MSG_TP_FORT_WARAPPLY_INFO" ],
+							[ 511, "UIIT_MSG_TP_FORT_WARAPPLY_FORTRESS" ],
+							[ 512, "UIIT_MSG_TP_FORT_WARAPPLY_GUILD" ],
+							[ 513, "UIIT_MSG_TP_FORT_WARAPPLY_APPLICATION" ]
+						] as const
+					) {
+						const help = byId( id );
+						if ( help ) {
+							controls.push( {
+								id: "fortress-war-help:" + id,
+								label: hudCopy( help.text ),
+								kind: "region",
+								rect: authoredRect( help, px, py ),
+								helpText: hudCopy( key )
+							} );
+						}
+					}
 					const list = byId( 515 );
 					if ( list ) {
 						const [lx, ly] = authoredRect( list, px, py ),
@@ -24392,7 +24420,14 @@ export function createUi(
 						vAlign: 0
 					} ),
 					...text.quads(
-						hudCopy( "UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW" ).replace( "%s", structureRemoval.name ),
+						// 517750 picks the question by the window kind (+0x384):
+						// kinds 1/2 delete a structure, kind 3 dismisses the
+						// summoned monster (517360's 0x64..0x66 boxes).
+						hudCopy(
+							structureRemoval.kind === 3 ?
+								"UIIT_MSG_FORT_SUMMONMON_DISMISS_WINDOW" :
+								"UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW"
+						).replace( "%s", structureRemoval.name ),
 						layout.name,
 						full,
 						white,

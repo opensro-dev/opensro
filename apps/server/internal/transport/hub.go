@@ -609,6 +609,15 @@ func (h *Hub) AcceptConn(conn Conn) {
 		h.metrics.resumeFresh.Add(1)
 	}
 
+	if !h.clientSlotOpen(conn.RemoteAddr()) {
+		h.metrics.clientSessionRefusals.Add(1)
+		log.WithFields(log.Fields{"kind": conn.Kind(), "remote": conn.RemoteAddr(), "limit": h.cfg.MaxSessionsPerClient}).
+			Warn("transport: client session limit reached, refusing the new session")
+		_ = conn.WriteFrame(Frame{Opcode: OpBye, Payload: []byte{ByeReasonServerBusy}})
+		_ = conn.Close("client session limit reached")
+		return
+	}
+
 	sess, err := h.createSession()
 	if err != nil {
 		reason := ByeReasonShutdown

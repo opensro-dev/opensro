@@ -18,7 +18,7 @@ import { petOwnerStacks, petSkillIcon, petSkillIconUV } from "./pet-skill-icons"
 import { PET_DESIGN } from "./pet-design-data";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
-import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
+import { paramJobFraction, paramJobHelpText, paramJobRemainingMs } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
 import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
@@ -120,12 +120,19 @@ export function buffBoard(
 		}
 	}
 	// 6E6E00 kind 4: an EXP/SP scroll job, one bar counted down from the
-	// remaining seconds against the internal item's duration.
+	// remaining seconds against the internal item's duration. The hover
+	// help (6E2C90 kind 4) reads the item's name, its total duration and
+	// the remained period; paramJobHelpText composes it from the text keys.
 	for ( const job of game.paramJobs ?? [] ) {
 		const path = iconPath( job.reference.icon );
 		if ( path ) {
 			primary.push( {
-				helpText: job.reference.name,
+				helpText: paramJobHelpText(
+					job.reference.name ?? "",
+					job.reference.durationSec,
+					paramJobRemainingMs( job, timeMs ),
+					copy
+				),
 				id: "param-job:" + job.itemRefObjId,
 				path,
 				label: job.reference.name ?? "",
