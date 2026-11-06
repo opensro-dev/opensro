@@ -116,6 +116,36 @@ func (rt *Runtime) structureUpgradeTarget(current monster.MonsterRef, index uint
 
 /*
 ================
+FortressUpgradeReferences
+
+The static client lookup used by its upgrade notice and map: 7E14E0 with
+type -1 prefers the second target, then the first, then the structure
+itself if there is no row. A named target without a reference resolves to
+zero. This projects the loaded table; it does not change server admission.
+================
+*/
+func (rt *Runtime) FortressUpgradeReferences() map[uint32]uint32 {
+	refs := make(map[uint32]uint32)
+	if rt.Monsters == nil {
+		return refs
+	}
+	for code, targets := range rt.structureUpgrades {
+		current, ok := rt.Monsters.ReferenceByCodename(code)
+		if !ok || !current.Structure || targets[0] == "" {
+			continue
+		}
+		target := targets[0]
+		if targets[1] != "" {
+			target = targets[1]
+		}
+		next, _ := rt.Monsters.ReferenceByCodename(target)
+		refs[current.RefObjID] = next.RefObjID
+	}
+	return refs
+}
+
+/*
+================
 fortressStructureUpgrade
 
 The original's checks in order: an unknown zone (3), a zone structure with
@@ -195,11 +225,20 @@ func (rt *Runtime) fortressStructureUpgrade(division string, c *enterworld.Chara
 		record, _ := rt.Fortresses.Get(division, fortressID)
 		rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone,
 			RefObjID: target.RefObjID, OwnerGuildID: record.Holder(), HP: built.CurrentHP, MadeAtMs: now})
-		// The fortress world hears the new structure, as after the reference
-		// server's upgrade result (fortress_roster.go).
-		rt.pushStructureRoster(division, fortressID, world)
 		reply := wire.NewWriter(11).U8(siege.ActionUpgrade).U8(1).U32(fortressID).U32(zone).U8(index)
-		return prependOpResult(paid, OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}})
+		result := OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
+		roster := wire.Frame{Opcode: opFortressWarState, Payload: rt.structureRoster(division, fortressID, world)}
+		for _, resident := range rt.fortressResidents(division, world) {
+			if resident.ID == c.ID {
+				// Client 75529A reads the old zone reference and level to choose
+				// construction versus upgrade wording. Publish its replacement
+				// after that reply in the same actor burst, including GM requests.
+				result.Frames = append(result.Frames, roster)
+			} else if rt.PushCharacterFrames != nil {
+				rt.PushCharacterFrames(division, resident.Name, []wire.Frame{roster})
+			}
+		}
+		return prependOpResult(paid, result)
 	}
 	return refuse(fortressErrInvalid)
 }

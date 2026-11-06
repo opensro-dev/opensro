@@ -44,6 +44,10 @@ type RefObjRow struct {
 	Name      string                         `json:"name,omitempty"`
 	Level     uint8                          `json:"level,omitempty"`
 	MaxHP     uint32                         `json:"maxHp,omitempty"`
+	// FortressUpgradeRef is the client's default structure variant (7E14E0,
+	// type -1). Nil means no row, which resolves to this reference; zero is
+	// a named target with no character reference, not a fallback.
+	FortressUpgradeRef *uint32 `json:"fortressUpgradeRef,omitempty"`
 	// BodyRadius is the row's RefObjChar BCRadius: the body combat spacing
 	// adds around the action's reach. A monster's instance grades it (the
 	// client applies the grade from the live spawn's rarity byte); a

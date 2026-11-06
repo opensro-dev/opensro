@@ -159,7 +159,8 @@ import {
 	fortressTaxNotice,
 	fortressDismissNotice,
 	fortressStructureNotice,
-	type FortressApplication
+	type FortressApplication,
+	type FortressStructureNoticeReference
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
@@ -371,7 +372,7 @@ interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
-	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structure?: ( refObjId: number ) => FortressStructureNoticeReference | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -4269,7 +4270,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
 							fortressStructureNotice(
 								fortressNext,
-								structure?.ref ? worldReferences.structureName?.( structure.ref ) : undefined
+								structure?.ref ? worldReferences.structure?.( structure.ref ) : undefined
 							);
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}

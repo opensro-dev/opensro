@@ -1298,7 +1298,7 @@
 			"functions": [
 				"callback:createGameplay:1",
 				"callback:createGameplay:4",
-				"structureName"
+				"structure"
 			]
 		},
 		{
