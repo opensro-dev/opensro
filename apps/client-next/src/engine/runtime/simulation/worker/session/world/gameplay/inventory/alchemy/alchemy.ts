@@ -15,6 +15,33 @@ import type { UiSoundHandle } from "@/engine/foundation/ui/sound-catalog";
 
 /*
 ================
+stoneDesignatedAttribute
+
+The attribute a stone designates, from its codename: an attribute stone
+(ITEM_ETC_ARCHEMY_ATTRSTONE_<stat>_<degree>) designates the white
+attribute NATTR_<stat>, a magic stone the option MATTR_<stat> (the five
+disease stones name their MATTR_RESIST_* option). 625980 stages this
+name at request time (CC3E54, from the stone's record) and names the
+designated attribute's change apart from an assimilated one; anything
+else designates nothing the presenter knows. Eight magic-stone stems
+(ABYSS, DEVIL, GUARD, HEAT, IRONWALL, SHARP, STRONGMIND, STUPOR) name
+no MATTR option among the nineteen kinds, so their derived name
+matches nothing and no blue arm designates them, as natively.
+================
+*/
+export function stoneDesignatedAttribute( mode: AlchemyMode, codename: string | undefined ): string | undefined {
+	if ( !codename ) return undefined;
+	const attribute = /^ITEM_ETC_ARCHEMY_ATTRSTONE_(.+)_\d+$/.exec( codename )?.[1];
+	if ( attribute !== undefined ) return mode === "attribute" ? "NATTR_" + attribute : undefined;
+	const magic = /^ITEM_ETC_ARCHEMY_MAGICSTONE_(.+)_\d+$/.exec( codename )?.[1];
+	if ( magic === undefined || mode !== "magic" ) return undefined;
+	return [ "FROSTBITE", "ESHOCK", "BURN", "POISON", "ZOMBIE" ].includes( magic ) ?
+		"MATTR_RESIST_" + magic :
+		"MATTR_" + magic;
+}
+
+/*
+================
 createAlchemy
 ================
 */
@@ -48,7 +75,8 @@ export function createAlchemy() {
 			selected: readonly number[],
 			items: ReadonlyMap<number, InventoryItem>,
 			now = 0,
-			quantity = 1
+			quantity = 1,
+			designated?: string
 		) {
 			const process = [ "compound", "advanced", "dissolve" ].includes( mode );
 			if (
@@ -111,6 +139,7 @@ export function createAlchemy() {
 					flags: 0,
 					error: null,
 					slot: selected[0]!,
+					designated,
 					remaining: quantity,
 					total: quantity,
 					lockUntil: now + 2000,
@@ -125,7 +154,7 @@ export function createAlchemy() {
 					selected.length,
 					...selected
 				] );
-			state = { visible: true, pending: true, mode, flags: 0, error: null, slot: selected[0]! };
+			state = { visible: true, pending: true, mode, flags: 0, error: null, slot: selected[0]!, designated };
 			return { opcode, payload };
 		},
 		/*
