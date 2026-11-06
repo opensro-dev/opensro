@@ -4776,6 +4776,17 @@ export function createUi(
 				partySearch = { ...partySearchDraft, min, max };
 				partyMatchOffset = 0;
 				partyMatchSelection = 0;
+				// The committed search is one answer, not a reopen:
+				// the worker prints PSEARCH_NORESULT on an empty list.
+				sendGameplay( {
+					kind: "party-match-search",
+					filter: {
+						name: partySearch.name,
+						purpose: partySearch.purpose,
+						min,
+						max
+					}
+				} );
 			}
 		} else if ( id === "party-match:purpose" ) partyPurposeOpen = !partyPurposeOpen;
 		else if ( id.startsWith( "party-purpose:" ) ) {
