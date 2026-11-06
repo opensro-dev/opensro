@@ -370,3 +370,64 @@ test("event exchange send, answer greetings and silent bytes (75D030 / 7026B0)",
 	assert.throws( () => decodeEventExchangeResult( new Uint8Array( 0 ) ), /Truncated/ );
 	assert.throws( () => decodeEventExchangeResult( Uint8Array.of( 2 ) ), /Truncated/ );
 });
+
+test("event exchange click sends only with the capability, the conversation and red socks held (7026B0)", () => {
+	// The gameplay-layer preconditions of the row 0x15 click: the NPC's
+	// grant carries EVENT_EXCHANGE_FUNCTION, the conversation stands on
+	// that NPC, and the bag scan (702728) finds the red socks by item
+	// codename. Any one missing and the click is silent - no frame, no
+	// throw - exactly like a 7026B0 that found nothing to send for.
+	const SOCKS = 4242, OTHER = 99;
+	const exchangeWorld = bag => {
+		const frames = [], game = createGameplay( f => frames.push( f ) );
+		game.bindReferences( {
+			country: () => undefined,
+			playerModels: () => [],
+			item: refObjId => ({
+				typeFlags: 0x6c,
+				name: "",
+				codename: refObjId === SOCKS ? "ITEM_ETC_E041225_RED_SOCKS" : "ITEM_ETC_OTHER"
+			}),
+			monster: () => undefined,
+			npcs: () => []
+		} );
+		game.bootstrap( {
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			refItemSnapshot: [
+				{ refObjId: SOCKS, typeFlags: 0x6c },
+				{ refObjId: OTHER, typeFlags: 0x6c }
+			],
+			equipItems: bag
+		} );
+		game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+		const npc = { gid: 7, kind: "npc", regionId: 1, x: 0, y: 0, z: 0, heading: 0 };
+		game.command( { kind: "select", gid: 7 }, 0, npc );
+		const grant = Buffer.alloc( 11 );
+		grant[0] = 1;
+		grant.writeUInt32LE( 7, 1 );
+		grant.writeUInt32LE( 0x40002, 6 );
+		game.receive( { opcode: 0xb45a, payload: grant }, 1 );
+		assert.equal( game.take().npcConversation.phase, "menu" );
+		frames.length = 0;
+		return { frames, game };
+	};
+	// No socks in the bag: the click does nothing at all.
+	const bare = exchangeWorld( [ { slot: 13, refObjId: OTHER, body: [ OTHER, 0, 0, 0, 1, 0 ] } ] );
+	bare.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.equal( bare.frames.length, 0 );
+	bare.game.dispose();
+	// Socks held: one opcode-only 0x747C. A second click while the first
+	// exchange waits is silent too - the native send has no waiting
+	// state, so the port's invented one must not surface as a throw.
+	const held = exchangeWorld( [ { slot: 13, refObjId: SOCKS, body: [ 0x92, 0x10, 0, 0, 1, 0 ] } ] );
+	held.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.deepEqual( held.frames, [ { opcode: 0x747c, payload: new Uint8Array( 0 ) } ] );
+	assert.equal( held.game.take().npcConversation.phase, "waiting" );
+	held.game.command( { kind: "npc-event-exchange" }, 3 );
+	assert.equal( held.frames.length, 1 );
+	// The answer still lands after the refused second click.
+	assert.equal( held.game.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) }, 4 ), true );
+	assert.equal( held.game.take().npcEventGreeting, "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	held.game.dispose();
+});
