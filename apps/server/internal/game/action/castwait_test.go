@@ -193,12 +193,6 @@ still lands exactly as before.
 */
 func TestProjectileCastWaitTickDoesNotCopyTheBag(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
-	// Production deps carry a magic-option catalogue with a source
-	// identity, so the stats memo serves the wait; the combat fixture
-	// leaves the source unset, and a source without an identity is
-	// computed fresh on every read. The fixture caster's rows carry
-	// no options for the empty catalogue to resolve.
-	rt.deps.(*enterworld.Deps).MagicOptions = &emptyMagicOptionSource{}
 	loadCombatBag(c)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
@@ -232,6 +226,49 @@ func TestProjectileCastWaitTickDoesNotCopyTheBag(t *testing.T) {
 // 12 allocs/run judging on door values and the memoised stats, 42
 // detaching the whole cast copy (companion rows included) each tick.
 const projectileWaitAllocBound = 26
+
+/*
+================
+TestProjectileCastWaitVerdictPricesFromThePreparedSnapshot
+
+#2139: the waiting verdict prices against the cast's prepared cost
+snapshot, not a fresh resolution of the skill row. Repricing the row
+after preparation cannot refuse a cast its resources still cover;
+draining the caster below the snapshot still refuses it on the tick.
+================
+*/
+func TestProjectileCastWaitVerdictPricesFromThePreparedSnapshot(t *testing.T) {
+	rt, c, target, skill, now := arrowFixture(t)
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
+	if decision != skillCastAccepted || len(start.Frames) != 1 {
+		t.Fatalf("arrow did not prepare: %+v %v", start, decision)
+	}
+	if len(rt.pendingProjectileCasts) != 1 || !rt.pendingProjectileCasts[0].verdictCost.Pinned {
+		t.Fatalf("prepare left the cast unpriced: %+v", rt.pendingProjectileCasts)
+	}
+	// Reprice the row far beyond the caster's purse: the snapshot
+	// taken at preparation still governs the wait.
+	priced := rt.pendingProjectileCasts[0].verdictCost
+	row := skill
+	row.Consumption.MP = priced.MP + 100000
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = row
+	if out := rt.advanceProjectileCasts(now + 300); len(out) != 0 {
+		t.Fatalf("repriced row refused a covered cast: %+v", out)
+	}
+	if len(rt.pendingProjectileCasts) != 1 {
+		t.Fatal("repriced row retired the cast")
+	}
+	// Drain the caster below the snapshot price: the wait refuses.
+	c.CurrentMP = testInt64(0)
+	out := rt.advanceProjectileCasts(now + 301)
+	if len(rt.pendingProjectileCasts) != 0 {
+		t.Fatal("drained cast stayed queued")
+	}
+	if len(out) == 0 {
+		t.Fatal("drained cast produced no close")
+	}
+}
 
 /*
 ================

@@ -4,7 +4,8 @@
 combat-result.ts - native cast phases and independent damage result batches
 
 Decode the whole packet before HP or presentation owners change. B245/B505
-carry steering around a result batch; B3C6 mode 2 carries the batch directly.
+carry steering around a result batch; B3C6 mode 2 carries the batch directly
+and mode 1 carries deferred damage ticks.
 
 ===========================================================================
 */
@@ -15,6 +16,7 @@ const MAX_RESULT_RECORDS = 16384;
 const RESULT_TARGETS = 1;
 const RESULT_CORRECTION = 2;
 const RESULT_TRAVEL = 8;
+const DEFERRED_TICKS = 1;
 const PULSE_RESULTS = 2;
 const TRAP_RESULTS = 3;
 
@@ -137,6 +139,32 @@ function resultReader( payload: Uint8Array, offset: number ) {
 		if ( cursor !== payload.length ) throw Error( "Invalid cast result length" );
 	}
 	return { u8, u32, position, batch, assertEnd };
+}
+
+/*
+================
+damageTicks
+
+Mode 1 is deferred damage shown as a victim label: a source word the
+client does not resolve, a death byte, one target, then one three-byte
+damage value per tick. The ticks carry no cast and no HP; the vitals
+owner keeps the life change. The death byte (0x80) says the ticks were
+the killing blow and is reported, not dropped: the caller leaves the
+death itself to the life frames.
+================
+*/
+export function damageTicks( payload: Uint8Array ) {
+	if ( payload[0] !== DEFERRED_TICKS ) return null;
+	const reader = resultReader( payload, 0 );
+	reader.u8();
+	reader.u32();
+	const fatal = (reader.u8() & 0x80) !== 0;
+	const target = reader.u32(), count = reader.u8(), ticks: number[] = [];
+	for ( let tick = 0; tick < count; tick++ ) {
+		ticks.push( reader.u8() | reader.u8() << 8 | reader.u8() << 16 );
+	}
+	reader.assertEnd();
+	return { target, fatal, ticks };
 }
 
 /*

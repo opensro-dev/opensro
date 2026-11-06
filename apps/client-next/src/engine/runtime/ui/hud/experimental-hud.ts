@@ -320,11 +320,6 @@ export const EXPERIMENTAL_TABS: readonly {
 		title: "Pets",
 		section: "Attack pets",
 		rows: [ {
-			key: "attackPetTraining",
-			id: "experimental-attack-pet-training",
-			label: "Attack-pet training",
-			description: "Pet skills and gear; requires server opt-in."
-		}, {
 			key: "transportAutoPotion",
 			id: "experimental-transport-auto-potion",
 			label: "Transport auto-potion",
@@ -397,16 +392,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
-		} ]
-	},
-	{
-		title: "Jobs",
-		section: "Job buffs",
-		rows: [ {
-			key: "mostWantedBuff",
-			id: "experimental-most-wanted-buff",
-			label: "Most Wanted buff",
-			description: "Show your wanted level on the buff board."
 		} ]
 	}
 ];

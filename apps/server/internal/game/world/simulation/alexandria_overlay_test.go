@@ -31,7 +31,7 @@ build over dir.
 */
 func alexandriaWorld(t *testing.T, dir string) []NpcDef {
 	t.Helper()
-	world, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
+	world, err := AppendTeleportGates(dir, sharedNpcWorldRoster(dir))
 	if err != nil {
 		t.Fatal(err)
 	}

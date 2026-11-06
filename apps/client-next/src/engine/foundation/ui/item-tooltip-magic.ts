@@ -164,7 +164,7 @@ resistSymbol
 The resistance options' parameter names.
 ================
 */
-function resistSymbol( kind: string ): string | undefined {
+export function resistSymbol( kind: string ): string | undefined {
 	switch ( kind ) {
 		case "FROSTBITE":
 			return "PARAM_FZ";

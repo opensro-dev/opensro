@@ -227,6 +227,10 @@ type Character struct {
 	// never resurrects a timer belonging to the previous native actor lifetime.
 	NativeTeleportMode uint8     `json:"-"`
 	PK                 *PKRecord `json:"pk,omitempty"`
+	// Online is the port-only time-online record (public boards); nil
+	// until the character first enters the world. character_online.go
+	// owns its crediting rules.
+	Online *OnlineRecord `json:"online,omitempty"`
 	// LastSeenUnixMs is when the character last left the world (guild
 	// votes measure a master's and a voter's absence from it).
 	LastSeenUnixMs  int64             `json:"lastSeenUnixMs,omitempty"`

@@ -77,8 +77,6 @@ const OFF = Object.freeze( {
 	breakNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
-	// Off by default: each player opts in to the Most Wanted buff row (#1849).
-	mostWantedBuff: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
@@ -93,7 +91,6 @@ const OFF = Object.freeze( {
 	noticeLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
-	attackPetTraining: false,
 	autoSelect: false,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
 	confirmGuildBan: true,
@@ -323,7 +320,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Jobs" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
 	// Lighting keeps the direct-light stages, the moving sun among them;
 	// render scale joins Image without changing the indices used to reopen
@@ -884,4 +881,17 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+});
+
+test("attack-pet training has no experimental toggle or saved opt-out", () => {
+	for ( const enabled of [ false, true ] ) {
+		assert.equal(
+			Object.hasOwn( experimentalOptions( { attackPetTraining: enabled } ), "attackPetTraining" ),
+			false
+		);
+	}
+	assert.equal(
+		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		false
+	);
 });

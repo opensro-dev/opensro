@@ -25,6 +25,17 @@ one candidate ("A or B, please merge") assigns nobody: post
 `CLAIM EXECUTOR <item>` first, act only if no earlier claim exists, and the
 earliest claim wins.
 
+## Pulling work
+
+Agents pull work instead of waiting to be handed it (ops #116). When free,
+an agent claims the highest-priority open item with `wf.py next --as
+<agent>`: fixes for CHANGES on its own PRs first, then review seats, then
+fixes by priority and age. Status is read from the workflow state
+(`wf.py status`), never from chat recollection; the coordinator steers
+priorities and handles exceptions. An agent with no open task marks itself
+idle (`wf.py agent idle`) so the board, not a stale claim, says who is
+free.
+
 ## The shared log
 
 One append-only text file is the team's channel. Never rewrite or delete
@@ -79,45 +90,99 @@ links. In addition:
   `node_modules/.bin` launcher can point at a removed version. Delete the stale
   launcher and run an offline install; do not copy binaries around.
 
+## Branches
+
+A branch lives exactly as long as the work on it. Short-lived branches on
+one trunk: every branch ends merged, as an open PR, or archived with a
+reason, and none is left behind when its work ends.
+
+- **One branch per piece of work.** A fix to an open PR goes onto that PR's
+  own branch, one fixer at a time. Never cut a copy of someone else's
+  branch to fix it in parallel.
+- **Pushed at birth.** A branch with a commit is pushed and has a PR, a
+  draft while the work is unfinished. Local-only branches with commits are
+  invisible to every review and cleanup and are not allowed.
+- **Ends with its task.** When the task closes and the branch has no open
+  PR, its worktree is removed and the branch ends: work already on `main`
+  is deleted, anything else is first archived on `origin` under
+  `refs/archive/<branch>` with the reason recorded. Restore one with
+  `git fetch origin refs/archive/<branch>` and
+  `git worktree add -b <branch> <path> FETCH_HEAD`.
+- **Reviews create no branches.** A review reads the head through
+  `git fetch origin pull/<n>/head` and `FETCH_HEAD`.
+- **Two days, then seven.** A branch on no PR for two days is listed for its
+  owner to push as a draft PR or drop. Past seven days the coordinator
+  salvages it as a draft PR or archives it.
+
+Merged PR branches on `origin` are deleted by GitHub on merge.
+
 ## Reviews and merges
 
-- **Three approvals on the exact head:** two from Cursor agents and one from
-  a Claude session. The Claude approval counts even when a Claude session
-  wrote the PR; the two Cursor approvals never come from the author. An
-  approval covers one commit. A push, rebase or amend needs a fresh look:
-  `git range-diff` showing `=` (or only context changes) carries an approval
-  forward; anything else is re-reviewed.
+- **READY is risk-sized (ops #116, 2026-11-06; replaces the 11-03
+  three-seat rule).** A PR is READY with one Cursor APPROVE at the head,
+  green CI at that head, and GitHub not calling it CONFLICTING. Two Cursor
+  APPROVEs when any changed path is server authority
+  (`apps/server/internal/game/`, `apps/server/internal/data/store/`), the
+  wire (`apps/server/internal/wire/`, `apps/server/internal/protocol/`,
+  `apps/client-next/src/engine/runtime/simulation/worker/network/codec/`)
+  or save data (the store, any `/migrations/` path). The Claude seat is an optional spot-check, reported but never
+  required; a CHANGES from anyone at the head still blocks. An APPROVE
+  carries over a push, rebase or amend when the PR's own diff is
+  unchanged (`git patch-id --stable` of base...head equal at both heads);
+  only a changed diff retires it. bn-client and bn-server seats are cut
+  only when the PR body's native-claims table has rows; labelling subs is
+  a background chore, never a seat. `merge_gate.py` reads this rule; the
+  wf planner cuts seats to match.
+- **A reviewer fixes what it finds.** A blocker or major the reviewer can
+  fix and prove within the review (a wrong branch, a missed case, a wrong
+  constant, a missing test) is fixed by the reviewer, not sent back: the
+  reviewer records CHANGES with the finding, pushes a fast-forward commit
+  with a test that fails without it to the PR's own branch, and tells the
+  author to pull. One fixer at a time: when the author is already fixing,
+  the reviewer reports instead. A finding goes back to the author only when
+  it is a design choice, needs the author's state, or is larger than the PR.
 - **The PR body carries its evidence.** The template's Evidence checklist is
   ticked for what was done, or marked `n/a - <reason>`:
   - the rg blast radius;
   - every caller mapped;
   - edge cases mapped;
-  - the native trace in both the client and the server binary;
+  - the native trace (client, and the server binary when the rule is
+    server-only) when the change rests on native behaviour;
   - no unlabelled subs left in what was read.
 
   A reviewer checks each tick against the PR and its own trace. An unticked
   line blocks the merge.
 - **The author does not merge their own refactor** unless no other agent is
   available; name another executor.
-- **Merge pinned:** `gh pr merge <n> --squash --match-head-commit <sha>`, only
-  after every CI check on that head completed with success, or with a skip the
-  workflow expects for that change (a scoped job that does not apply). A
-  check still running, failed or cancelled blocks the merge. The repository
-  allows squash merges only.
-- **An approval reads against completed checks.** An APPROVE counts once
-  that head's checks complete green, whenever the approval was posted. If
-  they fail, the approval does not count: the reviewer acks the green
-  head with a delta before the merge.
+- **Merge pinned:** `gh pr merge <n> --squash --match-head-commit <sha>`,
+  only at READY (the approvals above plus every CI check on that head
+  completed with success, or with a skip the workflow expects for that
+  change; a check still running, failed or cancelled blocks the merge).
+  The gate reads the seats and the CI rollup in one view, so an APPROVE
+  posted before the checks finish counts only once that head is green.
+  The repository allows squash merges only. `merge_gate.py` exits 0 only
+  when every PR named is READY (1 when any is not, 2 for refused
+  arguments), so `merge_gate.py N && gh pr merge N` stops at the gate
+  instead of merging past its verdict (ops #123).
+- **A freeze never holds merges.** Releases run on a daily train (06:00Z,
+  plus on demand) from a freeze commit that sits on `origin/main` and is
+  built in its own clean checkout; main keeps merging while a release is
+  built. The release gate is CI green on the freeze commit, the staging
+  smoke passing, and no open issue labelled `priority: critical` +
+  `regression`; priorities steer work, not shipping, and a bad release
+  rolls back. One owner go per release, after the staging smoke.
 - **Queue merges that touch the same files.** Append-only files
   (`ownership.json`, `execution-contract.json`, size and format ledgers)
   conflict on every merge. Agree the order in the log, and rebase the next PR
   onto the previous squash before its final gate.
-- **Native claims are reviewed row by row.** A PR whose behaviour rests on
-  the original carries the native-claims table ([CONTRIBUTING.md](../../.github/CONTRIBUTING.md)
-  section 6). The reviewer checks each row against the disassembly or the
-  named test, not against a function name, and an approval lists any row it
-  could not check. A missing table, or an unchecked row presented as
-  verified, blocks the merge.
+- **Native claims are reviewed row by row, when they are claimed.** A PR
+  whose behaviour rests on the original carries the native-claims table
+  ([CONTRIBUTING.md](../../.github/CONTRIBUTING.md) section 6). The
+  reviewer checks each row against the disassembly or the named test, not
+  against a function name, and an approval lists any row it could not
+  check. A missing table on a PR that claims native behaviour, or an
+  unchecked row presented as verified, blocks the merge. A PR that makes
+  no native claim needs no table and no bn seat.
 - **A review hunts bugs; it does not restate the PR.** After the verdict line
   (`Review by <session>: APPROVE|CHANGES at <sha8>`) every review has these
   five sections, and an approval without them does not count:
@@ -130,8 +195,9 @@ links. In addition:
   2. **Native trace.** What the v1.150 client does in this exact situation,
      read at MLIL or assembly with the address, not taken from a function
      name. Re-check every native-claims row and list any you could not
-     check. When native has no counterpart, say so, and confirm a behaviour
-     change is flagged port-only.
+     check. When the change claims no native behaviour, this section says
+     so in one line and no trace is owed. When native has no counterpart,
+     say so, and confirm a behaviour change is flagged port-only.
   3. **Edge cases**, enumerated with what the code does for each: a hidden,
      frozen or throttled tab resuming; a reconnect or resume mid-operation;
      death, teleport, mount or transfer mid-operation; empty, zero, maximum
@@ -145,11 +211,15 @@ links. In addition:
      new tests catch, and the full gate when a contract changes. Unsure
      findings are listed as questions, not dropped.
 
-  A real gap in any section means CHANGES. A non-blocking finding is filed
-  as an issue, not left in a comment.
-- **A merged PR is re-reviewed at the merge commit.** The verdict line is
-  `Review by <session>: POST-MERGE at <merge sha8>`, the sha of the merge
-  commit, not the PR head, with the same five sections.
+  A real gap in any section means CHANGES, fixed by the reviewer where it
+  can be (above). A non-blocking finding goes on the area's Backlog issue as
+  a checklist line, not left in a comment.
+- **A merged PR is re-reviewed at the merge commit only when the merge
+  changed the diff.** A squash whose diff patch-ids the same as the
+  approved head (the usual case) keeps its approval; a conflict resolution
+  that changed content is re-reviewed at the merge commit. The verdict
+  line is `Review by <session>: POST-MERGE at <merge sha8>`, the sha of
+  the merge commit, with the same five sections.
 - **PR text states what was checked on which head.** Replace "checks are
   running" with the results before publishing, and never describe a commit
   that is not the one being merged.

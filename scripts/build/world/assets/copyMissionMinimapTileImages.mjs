@@ -215,6 +215,7 @@ async function buildMissionDungeonMinimapManifest( tiles, options = {} ) {
 	for ( const row of dungeonInfoRows ) {
 		const dofPath = resolveDofPath( dofRoot, row.dofName );
 		const floorLabels = dofPath ? await readDofFloorLabels( dofPath ) : [];
+		const roomLabels = dofPath ? await readDofRoomLabels( dofPath ) : [];
 		const floors = floorLabels
 			.map( ( label, floorIndex ) => {
 				const normalizedLabel = label.trim().toLowerCase();
@@ -240,6 +241,7 @@ async function buildMissionDungeonMinimapManifest( tiles, options = {} ) {
 			regionHex: toHex16( row.regionId ),
 			sectorHex: toHex16( row.regionId | 0x8000 ),
 			dofName: row.dofName,
+			rooms: roomLabels,
 			floors
 		} );
 	}
@@ -303,24 +305,42 @@ function resolveDofPath( root, dofName ) {
 	return path.join( root, normalized );
 }
 
-async function readDofFloorLabels( filePath ) {
+export async function readDofFloorLabels( filePath ) {
+	return (await readDofLabels( filePath )).floors;
+}
+
+export async function readDofRoomLabels( filePath ) {
+	return (await readDofLabels( filePath )).rooms;
+}
+
+/*
+================
+readDofLabels
+
+The DOF label section (header offset at 0x1C) holds the room-name
+symbols first, then the floor-name symbols: the two name vectors
+CObj_GetDungeonRoomName (865690) and CObj_GetDungeonFloorName
+(8656E0) index on the dungeon object.
+================
+*/
+async function readDofLabels( filePath ) {
 	let bytes;
 	try {
 		bytes = await readFile( filePath );
 	} catch ( error ) {
 		if ( error?.code === "ENOENT" ) {
-			return [];
+			return { rooms: [], floors: [] };
 		}
 		throw error;
 	}
 
 	if ( bytes.subarray( 0, 12 ).toString( "latin1" ) !== "JMXVDOF 0101" ) {
-		return [];
+		return { rooms: [], floors: [] };
 	}
 
 	const labelOffset = bytes.readUInt32LE( 0x1c );
 	if ( labelOffset <= 0 || labelOffset >= bytes.byteLength ) {
-		return [];
+		return { rooms: [], floors: [] };
 	}
 
 	let offset = labelOffset;
@@ -337,15 +357,16 @@ async function readDofFloorLabels( filePath ) {
 	};
 
 	const roomCount = readU32();
+	const rooms = [];
 	for ( let index = 0; index < roomCount; index += 1 ) {
-		readString();
+		rooms.push( readString() );
 	}
 	const floorCount = readU32();
 	const floors = [];
 	for ( let index = 0; index < floorCount; index += 1 ) {
 		floors.push( readString() );
 	}
-	return floors;
+	return { rooms, floors };
 }
 
 function parseMissionMinimapTileName( relativePath ) {
