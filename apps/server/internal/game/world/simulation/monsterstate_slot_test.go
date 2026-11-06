@@ -329,3 +329,52 @@ func TestBehaviorActorSnapshotCarriesSlots(t *testing.T) {
 	}
 	t.Fatal("fixture actor never came due in a behaviour batch")
 }
+
+/*
+================
+TestBehaviorActorLiveAtAnswersAsGidProbe
+
+The dispatch's existence probe through the monster slot the batch
+carried answers exactly what the gid probe answers: live for the
+actor its own ref names, live for a live actor behind a crossed
+hint (the slot names another actor, so the gid resolve decides),
+and dead for an absent gid behind a live actor's slot or no hint.
+================
+*/
+func TestBehaviorActorLiveAtAnswersAsGidProbe(t *testing.T) {
+	ops, actor := monsterLegFixture(t, passiveTactics())
+	mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+	_, mateSlot := carriedSlots(t, ops, mate.Gid)
+	var key populationKey
+	var own behaviorActorRef
+	found := false
+	for _, batch := range ops.Monsters.behaviorBatches(10000) {
+		for _, ref := range batch.actors {
+			if ref.gid == actor.Gid {
+				key, own, found = batch.key, ref, true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("fixture actor never came due in a behaviour batch")
+	}
+	if !ops.Monsters.behaviorActorLiveAt(key, own) {
+		t.Fatal("carried probe lost its actor")
+	}
+	if !ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: actor.Gid, monsterSlot: behaviorNoMonsterSlot}) {
+		t.Fatal("slotless probe lost its actor")
+	}
+	// A crossed hint names the mate's row: the gid resolve decides.
+	if !ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: actor.Gid, monsterSlot: mateSlot}) {
+		t.Fatal("crossed probe lost its actor")
+	}
+	if ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: 999999, monsterSlot: own.monsterSlot}) {
+		t.Fatal("probe invented an absent actor behind a live slot")
+	}
+	if ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: 999999, monsterSlot: behaviorNoMonsterSlot}) {
+		t.Fatal("slotless probe invented an absent actor")
+	}
+	if !ops.Monsters.behaviorActorLive(key, actor.Gid) || ops.Monsters.behaviorActorLive(key, 999999) {
+		t.Fatal("gid probe disagrees with the carried probe")
+	}
+}

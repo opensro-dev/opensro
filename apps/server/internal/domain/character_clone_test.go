@@ -358,6 +358,7 @@ func clonePopulatedCharacter() *Character {
 	mask := int64(7)
 	return &Character{
 		PK:              &PKRecord{DailyCount: 1},
+		Online:          &OnlineRecord{TotalSeconds: 60, Days: []OnlineDay{{Day: 20260101, Seconds: 60}}},
 		EventMembership: &EventMembership{ID: 1},
 		Aggressions:     map[uint32]uint32{1: 1},
 		Mission:         &MissionRuntime{EventGuideStateMask: &mask, EventGuideStateMaskUpdatedAt: "t"},
