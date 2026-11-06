@@ -666,17 +666,33 @@ type behaviorActorSnapshot struct {
 ================
 MonsterState.behaviorActorLive
 
-The dispatch's existence probe: whether the population still holds
-the actor, without building its instance value. The leg's dispatch
-decides only this; the actor itself comes from the batch's leg-start
-snapshot (monsterlegsnapshot.go).
+behaviorActorLiveAt with no slot carried: the gid resolve.
 ================
 */
 func (s *MonsterState) behaviorActorLive(key populationKey, gid uint32) bool {
+	return s.behaviorActorLiveAt(key, behaviorActorRef{gid: gid, monsterSlot: behaviorNoMonsterSlot})
+}
+
+/*
+================
+MonsterState.behaviorActorLiveAt
+
+The dispatch's existence probe: whether the population still holds
+the actor, without building its instance value. The leg's dispatch
+decides only this; the actor itself comes from the batch's leg-start
+snapshot (monsterlegsnapshot.go). The probe reads through the
+monster slot the batch carried (monsterStorage.containsAt): a slot
+that still names the actor answers from its place in the dense
+slice, and any other slot resolves by gid, so a despawn between
+build and dispatch drops the actor exactly as the gid probe does
+(#2133).
+================
+*/
+func (s *MonsterState) behaviorActorLiveAt(key populationKey, ref behaviorActorRef) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForLease(key.division, key.lease)
-	return state != nil && state.instances.contains(gid)
+	return state != nil && state.instances.containsAt(ref.monsterSlot, ref.gid)
 }
 
 /*
