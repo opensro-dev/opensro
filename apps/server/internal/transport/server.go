@@ -287,7 +287,13 @@ func NewServer(cfg Config) (*Server, error) {
 		if err != nil {
 			return // Upgrade already replied with an error status
 		}
-		go s.Hub.AcceptConn(newWSConn(c))
+		// The edge recorded who really connected (clientaddr.go); the
+		// socket's own peer is the edge, so the fact is taken here,
+		// before the request is gone.
+		conn := newWSConn(c)
+		conn.clientAddr = clientAddr(r.RemoteAddr, r.Header)
+		conn.userAgent = r.Header.Get("User-Agent")
+		go s.Hub.AcceptConn(conn)
 	})
 	tcpMux.HandleFunc(PathCertHash, s.handleCertHash)
 	tcpMux.HandleFunc(PathHealth, func(w http.ResponseWriter, r *http.Request) {
@@ -373,7 +379,12 @@ func NewServer(cfg Config) (*Server, error) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		go s.Hub.AcceptConn(newWTConn(sess))
+		// The session keeps neither the request nor its headers once
+		// Upgrade returns: take the client facts here (clientaddr.go).
+		conn := newWTConn(sess)
+		conn.clientAddr = clientAddr(sess.RemoteAddr().String(), r.Header)
+		conn.userAgent = r.Header.Get("User-Agent")
+		go s.Hub.AcceptConn(conn)
 	})
 	wtMux.HandleFunc(PathCertHash, s.handleCertHash)
 
