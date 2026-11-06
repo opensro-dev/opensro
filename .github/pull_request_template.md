@@ -35,7 +35,10 @@ or "Not affected". See .github/CONTRIBUTING.md section 6.
 <!--
 Tick each line once it is done and shown in this PR, or end the line with
 "n/a - <reason>" (a console-only change has no native trace, for example).
-Keep each line's first word: the work board reads them.
+The two native lines are ticked only when the change rests on native
+behaviour; a change with no native claim ends both with
+"n/a - no native claim". Keep each line's first word: the work board
+reads them.
 -->
 
 - [ ] rg: blast radius pasted
@@ -46,6 +49,10 @@ Keep each line's first word: the work board reads them.
 - [ ] subs: no unlabelled subs left in what was read
 
 ## Native claims
+
+<!-- One row per native fact the change relies on. No native claim:
+write "none" and delete the table; a native-trace seat is cut only when
+the table has rows. -->
 
 | Claim | Native evidence | Checked by | Status |
 | --- | --- | --- | --- |
