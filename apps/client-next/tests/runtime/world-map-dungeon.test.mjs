@@ -95,8 +95,9 @@ function present( poses ) {
 test("the world map keeps its town page inside a dungeon", () => {
 	const { caption, textures } = present( [ JANGAN_POSE, CAVE_POSE ] );
 	// 57FE60 with a page-less point loads nothing: the Jangan page, its
-	// caption and its picture stay exactly as they were.
-	assert.equal( caption, "UIIT_STT_JANGAN" );
+	// caption and its picture stay exactly as they were. The caption is
+	// the native local-map form (5768A0): regional map + town name.
+	assert.equal( caption, "UIIT_PAG_LOCALMAP - UIIT_STT_JANGAN" );
 	assert.ok( textures.some( texture => texture.endsWith( "map_jangan.png" ) ) );
 	assert.ok( !textures.some( texture => texture.includes( "map_world_" ) ) );
 });

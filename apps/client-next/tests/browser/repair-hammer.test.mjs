@@ -211,6 +211,12 @@ test( "repair hammer consumes pickup, modifier clicks and right-button equipment
 		await page.locator( '[data-ui-id="shop-repair:GDR_STORE_BTN_REPAIRALL"]' ).click();
 		await draw();
 		await page.evaluate( () => inventoryFixture.commands.length = 0 );
+		// Native box 0x0C (52F460 case 0xC) captions the action button
+		// "Repair all" (UIIT_CTL_REPAIR_ALL), not a generic Yes.
+		const confirmLabel = await page.evaluate( () =>
+			inventoryFixture.semantics.controls.find( c => c.id === "repair-all-confirm" )?.label
+		);
+		assert.equal( confirmLabel, "Repair all" );
 		await page.locator( '[data-ui-id="repair-all-confirm"]' ).click();
 		await draw();
 		assert.deepEqual( await page.evaluate( () => inventoryFixture.commands ), [

@@ -680,7 +680,11 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter = null;
 				}
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
-					caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
+					// 5768A0: the overview reads UIIT_PAG_WORLDMAP; a town page
+					// reads UIIT_PAG_LOCALMAP + " - " + the town name.
+					caption = page ?
+						hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+						hudCopy( "UIIT_PAG_WORLDMAP" ) || "World Map";
 				windowBox( caption, mx, my, mw, mh );
 				const inner = mapClip;
 				// The map surface is CIFWorldMap itself, not a CIFButton: pressing or

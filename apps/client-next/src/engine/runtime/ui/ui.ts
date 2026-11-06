@@ -19045,12 +19045,14 @@ export function createUi(
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						hudCopy( at( 11 ).text ),
+						state.ownLocked ? hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) : hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
@@ -24221,9 +24223,11 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
+				// 52F460 case 0xC, subtype 0x27: the action button reads
+				// UIIT_CTL_REPAIR_ALL ("Repair all"), not a generic Yes (530E91).
 				button(
 					"repair-all-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
+					hudCopy( "UIIT_CTL_REPAIR_ALL" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
@@ -25034,7 +25038,15 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 case 0xA (the register-item modal) captions the
+					// primary button UIIT_CTL_STALL_REGISTER, not Confirm.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_CTL_CONFIRM" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
