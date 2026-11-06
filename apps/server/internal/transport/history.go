@@ -33,7 +33,12 @@ type LifecycleEvent struct {
 	// reported for not using its first-choice transport ("" when none
 	// was reported). Telemetry only (#1449).
 	Transport, Fallback string
-	Attached, InWorld   bool
+	// ClientAddr and UserAgent are the entered session's wire facts,
+	// snapshotted at attach (clientaddr.go): the real client address
+	// and the accept request's User-Agent. The connection census
+	// (#2716) reads them; history ignores them.
+	ClientAddr, UserAgent string
+	Attached, InWorld     bool
 }
 
 /*
@@ -44,6 +49,22 @@ Installed before admission. RecordLifecycle must enqueue without blocking.
 ================
 */
 type HistoryObserver interface {
+	SessionID(string) string
+	RecordLifecycle(LifecycleEvent)
+}
+
+/*
+================
+CensusObserver
+
+The connection census's half of the same lifecycle stream (#2716):
+it keeps only the entered/ended events, with the session's client
+facts, in its own journal. Installed only behind
+SRO_CONNECTION_JOURNAL (port-only, not native); nil records nothing.
+RecordLifecycle must enqueue without blocking, like History's.
+================
+*/
+type CensusObserver interface {
 	SessionID(string) string
 	RecordLifecycle(LifecycleEvent)
 }
@@ -158,7 +179,8 @@ recordHistoryLocked
 */
 func (s *Session) recordHistoryLocked(kind string, cause error) {
 	j := s.hub.History
-	if j == nil {
+	census := s.hub.Census
+	if j == nil && census == nil {
 		return
 	}
 	account, shard, _ := s.AdmissionIdentity()
@@ -168,9 +190,24 @@ func (s *Session) recordHistoryLocked(kind string, cause error) {
 		category = "expected"
 		code = kind
 	}
-	j.RecordLifecycle(LifecycleEvent{Session: j.SessionID(strconv.FormatUint(s.ID, 10)), Account: account, Shard: shard, Character: character,
+	// One event, both observers: the census journal names a session
+	// exactly as history does, so the two journals join on it.
+	session := ""
+	if j != nil {
+		session = j.SessionID(strconv.FormatUint(s.ID, 10))
+	} else {
+		session = census.SessionID(strconv.FormatUint(s.ID, 10))
+	}
+	event := LifecycleEvent{Session: session, Account: account, Shard: shard, Character: character,
 		Kind: kind, Category: category, Code: code, Message: fmt.Sprint(cause), Transport: s.transport, Fallback: s.fallback,
-		Attached: s.attached, InWorld: s.WorldReady() && kind != "world_left"})
+		ClientAddr: s.clientAddr, UserAgent: s.userAgent,
+		Attached: s.attached, InWorld: s.WorldReady() && kind != "world_left"}
+	if j != nil {
+		j.RecordLifecycle(event)
+	}
+	if census != nil {
+		census.RecordLifecycle(event)
+	}
 }
 
 /*
