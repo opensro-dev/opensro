@@ -39,7 +39,7 @@ same way: a stuck event raised by the judged step takes the copy
 only to answer it.
 ================
 */
-func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
+func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
 	// The forced-copy seam and any live battle state judge on the copy.
 	if rt.companionCopy != nil || state.combat != nil || state.roar != nil || state.pickup != nil {
 		return nil, false
