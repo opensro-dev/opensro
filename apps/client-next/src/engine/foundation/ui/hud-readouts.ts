@@ -79,6 +79,33 @@ export function minimapCoordinates( pose: Pick<Pose, "regionId" | "x" | "z"> ): 
 
 /*
 ================
+minimapAreaName
+
+In a dungeon the area-name control (+0x418, setter +0xB0 in
+CIFMinimap_SyncLocalPlayerPosition 54B430) shows the current room's
+name: CObj_GetDungeonRoomName (865690) feeds the room index
+(CRTDunBlock_GetRoomIndex ACFB60) into the dungeon's room-name vector
+and the symbol resolves through the text tables. When the getter
+returns null (no dungeon, or room index -1) the native control is
+never written, so the port keeps the last name shown. Outdoors the
+zone name for the region is shown, as before.
+================
+*/
+export function minimapAreaName( input: {
+	dungeon: boolean;
+	roomLabel?: string;
+	outdoorName: string;
+	zones: Readonly<Record<string, string>>;
+	strings: Readonly<Record<string, string>>;
+	lastRoomName: string;
+} ): string {
+	if ( !input.dungeon ) return input.outdoorName;
+	if ( input.roomLabel === undefined ) return input.lastRoomName;
+	return input.zones[input.roomLabel] ?? input.strings[input.roomLabel] ?? input.lastRoomName;
+}
+
+/*
+================
 minimapRotation
 
 The authored arrow points right (+X). Map +Z projects upward, while UI

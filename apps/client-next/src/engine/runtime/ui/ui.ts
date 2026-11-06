@@ -663,6 +663,7 @@ import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout
 import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
+	minimapAreaName,
 	minimapCoordinates,
 	minimapRotation,
 	skillPointReadouts
@@ -1506,6 +1507,9 @@ export function createUi(
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
 	let chatRows = 2, chatTab = 0, statusRows = 2;
 	let minimapZoom = 160, minimapTarget = 160, minimapLast: number | null = null;
+	// The last dungeon room name the area-name control showed; native
+	// keeps it when the current room has none (865690 returns null).
+	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
 	const title = createTitleUi( assets, base );
 	let serverList = false,
@@ -13393,12 +13397,20 @@ export function createUi(
 					}
 					if ( pose ) {
 						const [xText, yText] = minimapCoordinates( pose );
-						authoredText(
-							nodes.GDR_MINIMAP_TEXT_AREANAME!,
-							mx,
-							my,
-							hudData.zones[String( pose.regionId )] ?? ""
-						);
+						const roomLabels = minimapResources.rooms()?.get( pose.regionId ),
+							roomLabel = game?.navigationRoom !== undefined && roomLabels ?
+								roomLabels[game.navigationRoom] :
+								undefined,
+							areaName = minimapAreaName( {
+								dungeon: roomLabels !== undefined,
+								roomLabel,
+								outdoorName: hudData.zones[String( pose.regionId )] ?? "",
+								zones: hudData.zones,
+								strings: hudData.strings,
+								lastRoomName: minimapRoomName
+							} );
+						if ( roomLabels !== undefined ) minimapRoomName = areaName;
+						authoredText( nodes.GDR_MINIMAP_TEXT_AREANAME!, mx, my, areaName );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_X!, mx, my, xText );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_Y!, mx, my, yText );
 						const floor = minimapResources.dungeons()?.get( pose.regionId )?.find( f =>
