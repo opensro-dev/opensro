@@ -284,8 +284,9 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 
 	// O earns, then the pulse walks the window down: a cadence
 	// refresh at 10 minutes left, silence inside the same minute,
-	// the state-7 expiry report at the edge, persisted closed with
-	// the first-grant stamp unmoved.
+	// the state-7 expiry report at the edge. The report freezes the
+	// buff - stamp, value and live stand - so the level-cap clear
+	// below still has a saved buff to clear.
 	for kill := 0; kill < 2; kill++ {
 		env.mentorInv.CampKillGrant(campE2EDivision, charO, 1000, 500, 1000, t0)
 	}
@@ -301,18 +302,11 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateExpired, 0, 20)) {
 		t.Fatalf("expiry 0x3CC1 = % X, want state 7 with 0 minutes and 20 points", got)
 	}
-	if member := campBuffMember(t, env, charM.ID, charO.ID); member.BuffLive || member.BuffValue != 0 || member.BuffWindowStartMs != t0 {
-		t.Fatalf("stored O after expiry = live %v value %d stamp %d, want closed, 0, the first-grant stamp %d",
-			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
-	}
-
-	// The time-over closed the window, so O's next kill is a first
-	// grant again: a state-0 show stamped at that kill and carrying
-	// only its own points - the expired 20 do not come back.
-	_, _, restart := env.mentorInv.CampKillGrant(campE2EDivision, charO, 1000, 500, 1000, t0+1440*60_000)
-	if len(restart) != 1 || restart[0].Opcode != mentor.OpTCBuffState ||
-		!bytes.Equal(restart[0].Payload, mentor.EncodeBuffStateShow3CC1(mentor.BuffStateKillRefresh, 1440, 10)) {
-		t.Fatalf("post-expiry kill frames = %v, want a fresh state-0 show of 10 points", restart)
+	// The expired buff is frozen, not closed: the next kill earns
+	// nothing and shows nothing (the level-cap clear below proves
+	// the saved buff still stands to be cleared).
+	if bonus, _, frames := env.mentorInv.CampKillGrant(campE2EDivision, charO, 1000, 500, 1000, t0+1440*60_000); bonus != 0 || len(frames) != 0 {
+		t.Fatalf("post-expiry kill = bonus %d frames %v, want nothing (frozen)", bonus, frames)
 	}
 
 	// The level-40 transition clears the saved buff for everyone to
@@ -422,15 +416,17 @@ func TestAcademyBuffLoginKeepsWindow(t *testing.T) {
 
 /*
 ================
-TestAcademyBuffNoResurrectAfterTimeOver
+TestAcademyBuffTimeOverFreezesTheSavedBuff
 
-The state-7 expiry report is the saved buff's end: it goes out
-once, the stored record closes with the first-grant stamp
-unmoved, a later login shows nothing, and the next kill is a
-first grant carrying only its own points.
+The state-7 expiry report goes out once and freezes the saved
+buff: no kill earns against it, the stored record keeps the
+value live on the first-grant stamp (landed by the exit and
+entry flushes), and a later login reports the expiry again -
+the frozen buff stands until a membership clear, which the
+grant-level test pins.
 ================
 */
-func TestAcademyBuffNoResurrectAfterTimeOver(t *testing.T) {
+func TestAcademyBuffTimeOverFreezesTheSavedBuff(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 	race := func() *int64 { v := enterworld.RaceChina; return &v }
 	gender := func() *int64 { v := enterworld.GenderMale; return &v }
@@ -466,12 +462,18 @@ func TestAcademyBuffNoResurrectAfterTimeOver(t *testing.T) {
 	// The next minute stays silent: the report is not repeated.
 	env.mentorInv.BuffPulse(t0 + 1441*60_000)
 	wiretest.AssertQueueDrained(t, wsS, "post-expiry pulse silence")
-	if member := campBuffMember(t, env, charM.ID, charS.ID); member.BuffLive || member.BuffValue != 0 || member.BuffWindowStartMs != t0 {
-		t.Fatalf("stored S after expiry = live %v value %d stamp %d, want closed, 0, the first-grant stamp %d",
-			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
+
+	// Frozen: a kill past the window earns nothing and shows
+	// nothing.
+	if bonus, _, frames := env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0+1441*60_000); bonus != 0 || len(frames) != 0 {
+		t.Fatalf("post-expiry kill = bonus %d frames %v, want nothing (frozen)", bonus, frames)
 	}
 
-	// A fresh login shows no saved buff at all.
+	// A fresh login reports the expiry again: the entry leg is
+	// gated on the live flag alone, and the frozen buff still
+	// stands. The exit and entry flushes have landed the record
+	// by now: live, 20 points, the first-grant stamp.
+	clock.advance(1442 * time.Minute)
 	campSendFrame(t, wsS, transport.OpBye, []byte{transport.ByeReasonNormal})
 	wsS.Close()
 	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S offline push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, true)) {
@@ -480,15 +482,15 @@ func TestAcademyBuffNoResurrectAfterTimeOver(t *testing.T) {
 	wsS2 := campDialWS(t, env.srv)
 	campHelloWS(t, wsS2)
 	campEnterWorldExpectBuff(t, wsS2, campE2ENameS)
-	wiretest.AssertQueueDrained(t, wsS2, "re-entry after expiry shows no buff")
+	if got := campExpectFrame(t, wsS2, mentor.OpTCBuffState, "S re-entry expiry report"); !bytes.Equal(got,
+		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateExpired, 0, 20)) {
+		t.Fatalf("re-entry 0x3CC1 = % X, want state 7 with 0 minutes and the frozen 20 points", got)
+	}
 	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S online push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, false)) {
 		t.Fatalf("online 0x3AC5 = % X", got)
 	}
-
-	// The next kill opens a fresh window with only its own points.
-	_, _, frames := env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0+1442*60_000)
-	if len(frames) != 1 || frames[0].Opcode != mentor.OpTCBuffState ||
-		!bytes.Equal(frames[0].Payload, mentor.EncodeBuffStateShow3CC1(mentor.BuffStateKillRefresh, 1440, 10)) {
-		t.Fatalf("post-expiry kill frames = %v, want a fresh state-0 show of 10 points", frames)
+	if member := campBuffMember(t, env, charM.ID, charS.ID); !member.BuffLive || member.BuffValue != 20 || member.BuffWindowStartMs != t0 {
+		t.Fatalf("stored S after expiry = live %v value %d stamp %d, want live, 20, the first-grant stamp %d",
+			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
 	}
 }

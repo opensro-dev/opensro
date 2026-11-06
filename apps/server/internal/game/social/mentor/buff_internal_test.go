@@ -197,6 +197,65 @@ func TestCampKillGrantLedgerRules(t *testing.T) {
 
 /*
 ================
+TestCampKillGrantFrozenAfterExpiry
+
+Past the window the saved buff freezes: a kill earns nothing and
+first-grants nothing, though a held received row still drains.
+The membership clear is the reset - it drops the ledger entry
+with the membership, and the kill after rejoining on a clean
+record is a first grant again, stamped at that kill.
+================
+*/
+func TestCampKillGrantFrozenAfterExpiry(t *testing.T) {
+	const t0 = int64(1_762_934_400_000)
+	rt := &InviteRuntime{}
+	rt.hydrateBuffCamp(buffTestDivision, 7, []domain.TrainingCampMemberRecord{
+		{CharID: 10, Kind: MemberKindMaster},
+		{CharID: 12, Kind: MemberKindStudent},
+	})
+	student := buffTestCharacter(12, 20)
+	key := buffLedgerKey{divisionID: buffTestDivision, campID: 7, charID: 12}
+
+	// Earn inside the window, and hold a received row.
+	rt.CampKillGrant(buffTestDivision, student, 1000, 500, 1000, t0)
+	rt.buffMu.Lock()
+	rt.buffLedger[key].state.Reserved = []domain.TrainingCampReservedBuff{
+		{DonorCharID: 10, Points: 25, WindowStartMs: t0},
+	}
+	rt.buffMu.Unlock()
+
+	// Past the window the saved buff is frozen: no points and no
+	// state-0 show - but the received row still drains.
+	bonusExp, _, frames := rt.CampKillGrant(buffTestDivision, student, 2000, 1000, 2000, t0+1441*60_000)
+	if len(frames) != 0 {
+		t.Fatalf("post-expiry kill frames = %v, want none", frames)
+	}
+	if bonusExp != 200 {
+		t.Fatalf("post-expiry drain bonus = %d, want 200 (the row still drains)", bonusExp)
+	}
+	rt.buffMu.Lock()
+	state := rt.buffLedger[key].state
+	rt.buffMu.Unlock()
+	if !state.Live || state.Value != 10 || state.WindowStartMs != t0 {
+		t.Fatalf("frozen state = %+v, want 10 points live since %d", state, t0)
+	}
+
+	// The membership ends (its clear drops the entry) and the
+	// student rejoins on a clean record: the next kill is a
+	// first grant again, stamped at that kill.
+	rt.dropBuffMember(buffTestDivision, 7, 12)
+	rt.hydrateBuffCamp(buffTestDivision, 7, []domain.TrainingCampMemberRecord{
+		{CharID: 12, Kind: MemberKindStudent},
+	})
+	_, _, frames = rt.CampKillGrant(buffTestDivision, student, 1000, 500, 1000, t0+1442*60_000)
+	if len(frames) != 1 || frames[0].Opcode != OpTCBuffState ||
+		string(frames[0].Payload) != string(EncodeBuffStateShow3CC1(BuffStateKillRefresh, 1440, 10)) {
+		t.Fatalf("post-clear kill frames = %v, want the state-0 show of 10 points", frames)
+	}
+}
+
+/*
+================
 TestCampKillGrantOutsideCamp
 
 A character the ledger does not know (never admitted, or the camp
