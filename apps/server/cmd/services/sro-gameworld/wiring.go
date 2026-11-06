@@ -295,6 +295,11 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("chat log: %w", err)
 	}
 	authority.agentAPI.InstallChatLog(chatlog.OperatorPath, chatLogHandler)
+	// Port-only: the staff console's census reads over the journal
+	// (part 2, #2717); installs only while the journal runs.
+	if err := installCensusReads(application, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
 		return nil, err
 	}
