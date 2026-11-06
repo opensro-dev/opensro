@@ -541,6 +541,44 @@ export function fortressDismissNotice( state: FortressState ): SystemNotice | nu
 	return { key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE", value: 0, nativeType: 0 };
 }
 
+// 754A40's direct construction and repair success arms. Upgrade (0x0B)
+// has its own type/rank-dependent construction or upgrade wording.
+const STRUCTURE_CONSTRUCTION_COMPLETE = 0x0a;
+const STRUCTURE_REPAIR_COMPLETE = 0x0c;
+const STRUCTURE_NOTICE_CAPACITY = 0x100;
+
+/*
+================
+fortressStructureNotice
+
+7551BA and 7554F9 resolve the reply's event zone to its structure reference;
+the caller supplies that catalog name. 755277/755287 and 7555B7/7555C7 send
+the same line to type-0 chat and the banner. No resolved name means no line.
+================
+*/
+export function fortressStructureNotice(
+	state: FortressState,
+	name: string | undefined
+): SystemNotice | null {
+	const service = state.service;
+	if ( !service || service.result !== 1 ) return null;
+	if ( service.action !== STRUCTURE_CONSTRUCTION_COMPLETE && service.action !== STRUCTURE_REPAIR_COMPLETE ) {
+		return null;
+	}
+	if ( name === undefined ) return null;
+	return {
+		key: service.action === STRUCTURE_CONSTRUCTION_COMPLETE ?
+			"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" :
+			"UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE",
+		value: 0,
+		arguments: [ name ],
+		formatKinds: [ "s" ],
+		formatCapacity: STRUCTURE_NOTICE_CAPACITY,
+		nativeType: 0,
+		banner: true
+	};
+}
+
 /*
 ================
 fortressMusicActive

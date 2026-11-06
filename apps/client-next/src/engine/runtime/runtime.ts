@@ -17,6 +17,7 @@ import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
+import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
@@ -1168,12 +1169,19 @@ export function startRuntime(
 							followedRoom,
 							presentation.gameplay()?.navigationBlock
 						) === true;
+				// Holding V hides the followed character whole (2570): the ring
+				// belongs to the published body, so it goes with the body,
+				// like the room-culled ring above.
+				const followedBlind = followed !== undefined && input.blindHeld() &&
+					(blindableCharacter( followed, presentation.gameplay()?.localGid ) ||
+						renderer.vHidesCompanions?.() === true &&
+							blindableCompanion( followed, presentation.gameplay()?.localGid ));
 				renderer.setSelectionDecal(
 					frontendState.phase !== "world" || !decal ?
 						null :
 						decal.kind === "ground" ?
 						{ pose: decal.pose, slot: 0 } :
-						followed && !followedHidden ?
+						followed && !followedHidden && !followedBlind ?
 						{
 							pose: {
 								regionId: followed.regionId,

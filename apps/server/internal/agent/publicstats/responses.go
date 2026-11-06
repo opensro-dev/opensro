@@ -346,6 +346,8 @@ type RankingRow struct {
 	ReachedAt  *string `json:"reachedAt"`
 	Guild      string  `json:"guild,omitempty"`
 	Job        string  `json:"job,omitempty"`
+	JobLevel   uint8   `json:"jobLevel,omitempty"`
+	JobExp     uint32  `json:"jobExp,omitempty"`
 	// PKKills is the PK board's value: the native PK state's total
 	// murder count (PKRecord.TotalCount), not the penalty level the
 	// count feeds (#2675). Zero - and absent - for a character who
@@ -353,6 +355,10 @@ type RankingRow struct {
 	PKKills     int  `json:"pkKills,omitempty"`
 	UniqueKills int  `json:"uniqueKills"`
 	Gear        Gear `json:"gear"`
+	// OnlineSeconds is the character's credited time in the world, all
+	// time and for the rolling UTC week (the by=online board's keys).
+	OnlineSeconds     int64 `json:"onlineSeconds,omitempty"`
+	OnlineWeekSeconds int64 `json:"onlineWeekSeconds,omitempty"`
 }
 
 // RankingsResponse is GET /public/v1/rankings: one page of 50.
