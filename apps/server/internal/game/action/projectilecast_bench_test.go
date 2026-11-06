@@ -237,3 +237,59 @@ func BenchmarkWaitingProjectileCast(b *testing.B) {
 		}
 	}
 }
+
+// dueProjectileSink keeps the compiler from discarding a measured release.
+var dueProjectileSink []simulation.DivisionFrames
+
+/*
+================
+BenchmarkDueProjectileCast
+
+One prepared bow cast is due against a live monster: the measured call
+is the production release lane (advanceProjectileCasts), from the queue
+verdict through acceptSkillStagePhaseAt and the damage commit. The
+target carries enough HP that no measured release can kill it, and each
+iteration re-arms exactly one cast and restores the MP and arrow stack
+the previous release spent.
+================
+*/
+func BenchmarkDueProjectileCast(b *testing.B) {
+	rt, c, target, skill, now := arrowFixtureHP(b, 1_000_000_000)
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
+	cost, err := rt.preparedExecutionMPCost(testDivision, c, skill)
+	if err != nil {
+		b.Fatalf("price due cast: %v", err)
+	}
+	prepared := newPendingProjectileCast(testDivision, c.Name)
+	prepared.executionCost = skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(testDivision, c, skill)}
+	prepared.verdictCost, prepared.verdictGroup = skill.Consumption, skill.Group
+	prepared.characterID = c.ID
+	prepared.cast = cast
+	prepared.releaseAtMs = now
+	queue := make([]pendingProjectileCast, 0, 1)
+	seed := func(token uint32) {
+		*c.CurrentMP = 100
+		c.MissionInventory[1].StackCount = 250
+		pending := prepared
+		pending.token = token
+		rt.pendingProjectileCasts = append(queue[:0], pending)
+	}
+	before, found := rt.Monsters.Get(testDivision, target)
+	if !found {
+		b.Fatal("due-cast target vanished before warmup")
+	}
+	seed(10_000)
+	if out := rt.advanceProjectileCasts(now); len(out) != 2 {
+		b.Fatalf("warmup release produced %d division frames, want 2", len(out))
+	}
+	after, found := rt.Monsters.Get(testDivision, target)
+	if !found || after.CurrentHP >= before.CurrentHP {
+		b.Fatalf("warmup release dealt no damage: before %+v after %+v", before, after)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		seed(uint32(10_001 + i))
+		dueProjectileSink = rt.advanceProjectileCasts(now)
+	}
+}
