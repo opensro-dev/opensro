@@ -24222,10 +24222,11 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
-				// 52F460, the repair-all confirm (raised as type 0x0C): the
-				// stored-kind 0x27 branch captions the action button
+				// 52F460, the repair-all confirm: the store button raises
+				// it as type 0x0C (5B2B84), and the message-box kind-0x0C
+				// arm (530D51) captions the action button
 				// UIIT_CTL_REPAIR_ALL ("Repair all"), not a generic Yes
-				// (kind branch 530CCC, string xref 530E91).
+				// (string xref 530E91).
 				button(
 					"repair-all-confirm",
 					hudCopy( "UIIT_CTL_REPAIR_ALL" ),
