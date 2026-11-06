@@ -402,6 +402,21 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 	assert.deepEqual( control( "stall-prompt-quantity" )?.rect, [ x + 20, y + 102, 42, 20 ] );
 	assert.deepEqual( control( "stall-prompt-ok" )?.rect, [ x + 123, y + 101, 76, 24 ] );
 	assert.deepEqual( control( "stall-prompt-cancel" )?.rect, [ x + 203, y + 101, 76, 24 ] );
+	// 528920 cases 0xA (register) and 0xB (modify) both caption the
+	// primary button UIIT_CTL_STALL_REGISTER, never Confirm.
+	const okRect = control( "stall-prompt-ok" )?.rect ?? [ 0, 0, 0, 0 ];
+	const captionRun = f.products.at( -1 )?.quads.find( quad =>
+		quad.run && quad.run.glyphs.length === "Register".length &&
+		quad.rect[0] >= okRect[0] && quad.rect[1] >= okRect[1] &&
+		quad.rect[0] + quad.rect[2] <= okRect[0] + okRect[2] &&
+		quad.rect[1] + quad.rect[3] <= okRect[1] + okRect[3]
+	);
+	assert.ok( captionRun, "the modify prompt's primary button carries an 8-glyph caption" );
+	assert.deepEqual(
+		captionRun.run.glyphs.map( glyph => glyph.uv ),
+		glyphWindows( "Register" ),
+		"the modify prompt's primary button reads Register"
+	);
 	assert.ok(
 		f.scenes.at( -1 )?.quads.some( quad =>
 			quad.texture === ITEM_ICON && quad.rect.every( ( value, i ) => value === [ x + 25, y + 51, 32, 32 ][i] )

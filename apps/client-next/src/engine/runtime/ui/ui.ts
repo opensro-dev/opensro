@@ -25040,14 +25040,18 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					// 528920 case 0xA (the register-item modal) captions the
-					// primary button UIIT_CTL_STALL_REGISTER, not Confirm.
+					// 528920 cases 0xA and 0xB both caption the primary
+					// button UIIT_CTL_STALL_REGISTER, not Confirm: the
+					// register-item modal pushes 0xA (5999F1), the
+					// modify-item modal pushes 0xB (599D8A), and both
+					// arms share the tail at 52918F that sets the string
+					// on the +0x800 button.
 					authoredLabeledButton(
 						at( 215 ),
 						x,
 						y,
 						"stall-prompt-ok",
-						hudCopy( stallBox.modify ? "UIIT_CTL_CONFIRM" : "UIIT_CTL_STALL_REGISTER" )
+						hudCopy( "UIIT_CTL_STALL_REGISTER" )
 					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
