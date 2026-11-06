@@ -284,7 +284,8 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 
 	// O earns, then the pulse walks the window down: a cadence
 	// refresh at 10 minutes left, silence inside the same minute,
-	// the state-7 expiry report at the edge, persisted re-stamped.
+	// the state-7 expiry report at the edge, persisted closed with
+	// the first-grant stamp unmoved.
 	for kill := 0; kill < 2; kill++ {
 		env.mentorInv.CampKillGrant(campE2EDivision, charO, 1000, 500, 1000, t0)
 	}
@@ -300,8 +301,18 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateExpired, 0, 20)) {
 		t.Fatalf("expiry 0x3CC1 = % X, want state 7 with 0 minutes and 20 points", got)
 	}
-	if member := campBuffMember(t, env, charM.ID, charO.ID); member.BuffWindowStartMs != t0+1440*60_000 {
-		t.Fatalf("stored O stamp = %d, want the expiry re-stamp %d", member.BuffWindowStartMs, t0+1440*60_000)
+	if member := campBuffMember(t, env, charM.ID, charO.ID); member.BuffLive || member.BuffValue != 0 || member.BuffWindowStartMs != t0 {
+		t.Fatalf("stored O after expiry = live %v value %d stamp %d, want closed, 0, the first-grant stamp %d",
+			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
+	}
+
+	// The time-over closed the window, so O's next kill is a first
+	// grant again: a state-0 show stamped at that kill and carrying
+	// only its own points - the expired 20 do not come back.
+	_, _, restart := env.mentorInv.CampKillGrant(campE2EDivision, charO, 1000, 500, 1000, t0+1440*60_000)
+	if len(restart) != 1 || restart[0].Opcode != mentor.OpTCBuffState ||
+		!bytes.Equal(restart[0].Payload, mentor.EncodeBuffStateShow3CC1(mentor.BuffStateKillRefresh, 1440, 10)) {
+		t.Fatalf("post-expiry kill frames = %v, want a fresh state-0 show of 10 points", restart)
 	}
 
 	// The level-40 transition clears the saved buff for everyone to
@@ -328,5 +339,156 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 	}
 	if member := campBuffMember(t, env, charM.ID, charO.ID); member.BuffLive || member.BuffValue != 0 {
 		t.Fatalf("stored O after level cap = live %v value %d, want cleared", member.BuffLive, member.BuffValue)
+	}
+}
+
+/*
+================
+TestAcademyBuffLoginKeepsWindow
+
+Logging in must not restart the saved buff's 24 h window: the
+entry show (state 1) reports the minutes left in the window the
+first grant stamped, the stored record keeps that stamp, and the
+minute pulse continues the same countdown - where a restarted
+window would hand back a fresh 1440.
+================
+*/
+func TestAcademyBuffLoginKeepsWindow(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "authority")
+	race := func() *int64 { v := enterworld.RaceChina; return &v }
+	gender := func() *int64 { v := enterworld.GenderMale; return &v }
+	gold := int64(500000)
+	env := startCampServer(t, dir, []*enterworld.Character{
+		{Name: campE2ENameM, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender(), Level: campLevel(60), Gold: &gold},
+		{Name: campE2ENameS, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender(), Level: campLevel(20)},
+	})
+	clock := newCampClock(time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC))
+	env.mentorInv.Now = clock.now
+
+	wsM := campDialWS(t, env.srv)
+	campHelloWS(t, wsM)
+	campEnterWorld(t, wsM, campE2ENameM)
+	wsS := campDialWS(t, env.srv)
+	campHelloWS(t, wsS)
+	campEnterWorld(t, wsS, campE2ENameS)
+
+	charM := campE2ECharacter(t, env.authority, campE2ENameM)
+	charS := campE2ECharacter(t, env.authority, campE2ENameS)
+	gidS := enterworld.ObjectIDForCharacter(charS)
+	campOpenAndInvite(t, wsM, wsS, gidS)
+
+	t0 := clock.now().UnixMilli()
+	for kill := 0; kill < 2; kill++ {
+		env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0)
+	}
+	campSendFrame(t, wsS, transport.OpBye, []byte{transport.ByeReasonNormal})
+	wsS.Close()
+	wait.Eventually(t, 5*time.Second, "the exit flush to persist 20 points", func() bool {
+		member := campBuffMember(t, env, charM.ID, charS.ID)
+		return member.BuffLive && member.BuffValue == 20 && member.BuffWindowStartMs == t0
+	})
+	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S offline push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, true)) {
+		t.Fatalf("offline 0x3AC5 = % X", got)
+	}
+
+	// A thousand minutes pass offline. The re-entry show must read
+	// the window the first grant stamped: 440 minutes left, not a
+	// fresh 1440.
+	clock.advance(1000 * time.Minute)
+	wsS2 := campDialWS(t, env.srv)
+	campHelloWS(t, wsS2)
+	campEnterWorldExpectBuff(t, wsS2, campE2ENameS)
+	if got := campExpectFrame(t, wsS2, mentor.OpTCBuffState, "S entry buff show"); !bytes.Equal(got,
+		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateEntry, 440, 20)) {
+		t.Fatalf("entry 0x3CC1 = % X, want state 1 with 440 minutes and 20 points", got)
+	}
+	wiretest.AssertQueueDrained(t, wsS2, "entry buff tail")
+	if member := campBuffMember(t, env, charM.ID, charS.ID); !member.BuffLive || member.BuffValue != 20 || member.BuffWindowStartMs != t0 {
+		t.Fatalf("stored S after re-entry = live %v value %d stamp %d, want live, 20, the first-grant stamp %d",
+			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
+	}
+	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S online push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, false)) {
+		t.Fatalf("online 0x3AC5 = % X", got)
+	}
+
+	// And the countdown keeps walking from that same stamp: at
+	// 1040 minutes in, the cadence refresh says 400, not 1400.
+	env.mentorInv.BuffPulse(t0 + 1040*60_000)
+	if got := campExpectFrame(t, wsS2, mentor.OpTCBuffState, "S cadence refresh"); !bytes.Equal(got,
+		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateKillRefresh, 400, 20)) {
+		t.Fatalf("cadence 0x3CC1 = % X, want state 0 with 400 minutes and 20 points", got)
+	}
+}
+
+/*
+================
+TestAcademyBuffNoResurrectAfterTimeOver
+
+The state-7 expiry report is the saved buff's end: it goes out
+once, the stored record closes with the first-grant stamp
+unmoved, a later login shows nothing, and the next kill is a
+first grant carrying only its own points.
+================
+*/
+func TestAcademyBuffNoResurrectAfterTimeOver(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "authority")
+	race := func() *int64 { v := enterworld.RaceChina; return &v }
+	gender := func() *int64 { v := enterworld.GenderMale; return &v }
+	gold := int64(500000)
+	env := startCampServer(t, dir, []*enterworld.Character{
+		{Name: campE2ENameM, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender(), Level: campLevel(60), Gold: &gold},
+		{Name: campE2ENameS, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender(), Level: campLevel(20)},
+	})
+	clock := newCampClock(time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC))
+	env.mentorInv.Now = clock.now
+
+	wsM := campDialWS(t, env.srv)
+	campHelloWS(t, wsM)
+	campEnterWorld(t, wsM, campE2ENameM)
+	wsS := campDialWS(t, env.srv)
+	campHelloWS(t, wsS)
+	campEnterWorld(t, wsS, campE2ENameS)
+
+	charM := campE2ECharacter(t, env.authority, campE2ENameM)
+	charS := campE2ECharacter(t, env.authority, campE2ENameS)
+	gidS := enterworld.ObjectIDForCharacter(charS)
+	campOpenAndInvite(t, wsM, wsS, gidS)
+
+	t0 := clock.now().UnixMilli()
+	for kill := 0; kill < 2; kill++ {
+		env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0)
+	}
+	env.mentorInv.BuffPulse(t0 + 1440*60_000)
+	if got := campExpectFrame(t, wsS, mentor.OpTCBuffState, "S expiry report"); !bytes.Equal(got,
+		mentor.EncodeBuffStateShow3CC1(mentor.BuffStateExpired, 0, 20)) {
+		t.Fatalf("expiry 0x3CC1 = % X, want state 7 with 0 minutes and 20 points", got)
+	}
+	// The next minute stays silent: the report is not repeated.
+	env.mentorInv.BuffPulse(t0 + 1441*60_000)
+	wiretest.AssertQueueDrained(t, wsS, "post-expiry pulse silence")
+	if member := campBuffMember(t, env, charM.ID, charS.ID); member.BuffLive || member.BuffValue != 0 || member.BuffWindowStartMs != t0 {
+		t.Fatalf("stored S after expiry = live %v value %d stamp %d, want closed, 0, the first-grant stamp %d",
+			member.BuffLive, member.BuffValue, member.BuffWindowStartMs, t0)
+	}
+
+	// A fresh login shows no saved buff at all.
+	campSendFrame(t, wsS, transport.OpBye, []byte{transport.ByeReasonNormal})
+	wsS.Close()
+	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S offline push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, true)) {
+		t.Fatalf("offline 0x3AC5 = % X", got)
+	}
+	wsS2 := campDialWS(t, env.srv)
+	campHelloWS(t, wsS2)
+	campEnterWorldExpectBuff(t, wsS2, campE2ENameS)
+	wiretest.AssertQueueDrained(t, wsS2, "re-entry after expiry shows no buff")
+	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S online push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, false)) {
+		t.Fatalf("online 0x3AC5 = % X", got)
+	}
+
+	// The next kill opens a fresh window with only its own points.
+	_, _, frames := env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0+1442*60_000)
+	if len(frames) != 1 || frames[0].Opcode != mentor.OpTCBuffState ||
+		!bytes.Equal(frames[0].Payload, mentor.EncodeBuffStateShow3CC1(mentor.BuffStateKillRefresh, 1440, 10)) {
+		t.Fatalf("post-expiry kill frames = %v, want a fresh state-0 show of 10 points", frames)
 	}
 }

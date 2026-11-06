@@ -12,11 +12,13 @@ grant and its per-minute buff-time updates:
     the grant path pays: min(30, trunc(10 * exp / monsterExp)) per
     kill. Sub-mentors (kind 1) neither earn nor drain; the master
     earns no points but drains received rows like a student.
-  - The saved buff lives in a 24 h (1440-minute) window. Show sends
-    (entry, first grant, expiry report) re-stamp the window; the
-    per-minute refresh goes out only when the remaining minutes cross
-    a multiple of 10 or fall to 10 or less. At zero the state-7 send
-    prints the client's time-over line and starts a fresh window.
+  - The saved buff lives in a 24 h (1440-minute) window stamped
+    once, by the first-grant show (state 0); the entry show and the
+    per-minute refresh read the stamp without moving it. The refresh
+    goes out only when the remaining minutes cross a multiple of 10
+    or fall to 10 or less. At zero the state-7 send prints the
+    client's time-over line and closes the window - the value is
+    gone, and the next earned kill is a first grant again.
   - While a received row is held, each kill grant drains 10 points
     off the first row (floor 0) and the drained share feeds the
     grant's bonus: grant * drained / 100, capped at 30 % of the
@@ -447,9 +449,12 @@ buffEntrySends
 The world-entry buff legs for one member, against the camp snapshot
 the entry already read: a live saved buff shows (state 1, or state 7
 when the window ran out while offline - the send the client prints
-the time-over line for), show sends re-stamp the window, expired
-received rows drop, and the surviving rows ride as one silent
-mode-1 refresh. The caller (WorldBound) holds no lock.
+the time-over line for) with the minutes left in the window the
+first grant stamped; entry never moves that stamp, so a login
+restarts nothing. A window that ran out reports state 7 here and
+closes (not live, no value), which keeps the report a one-time
+send. Expired received rows drop, and the surviving rows ride as
+one silent mode-1 refresh. The caller (WorldBound) holds no lock.
 ================
 */
 func (r *InviteRuntime) buffEntrySends(s *transport.Session, divisionID string, character *enterworld.Character, campID int64, members []domain.TrainingCampMemberRecord) {
@@ -473,9 +478,16 @@ func (r *InviteRuntime) buffEntrySends(s *transport.Session, divisionID string, 
 			state = BuffStateExpired
 		}
 		frames = append(frames, wire.Frame{Opcode: OpTCBuffState, Payload: EncodeBuffStateShow3CC1(state, uint32(remaining), entry.state.Value)})
-		// A show send runs its transition: the window re-stamps.
-		entry.state.WindowStartMs = nowMs
-		entry.dirty = true
+		if remaining == 0 {
+			// The window ran out: this show is its only report,
+			// and the window closes here - live off, value gone,
+			// the stamp left where the first grant put it. Closing
+			// (not re-stamping) is what stops the next pulse from
+			// reporting the same expiry again.
+			entry.state.Live = false
+			entry.state.Value = 0
+			entry.dirty = true
+		}
 	}
 	rows := make([]BuffListRow, 0, len(entry.state.Reserved))
 	kept := entry.state.Reserved[:0]
@@ -531,7 +543,7 @@ BuffPulse
 
 The minute pass over every ledger entry whose member is online:
 the saved buff refreshes at the cadence crossings and reports its
-expiry (state 7, which re-stamps the window), received rows refresh
+expiry (state 7, which closes the window), received rows refresh
 the same way and are pruned at their expiry. Called from the
 world tick's minute boundary, outside any character door.
 ================
@@ -582,7 +594,7 @@ func (r *InviteRuntime) BuffPulse(nowMs int64) {
 buffPulseMember
 
 One online member's minute evaluation. Returns whether the ledger
-changed (a restamp or a pruned row), so the caller flushes the camp.
+changed (an expiry close or a pruned row), so the caller flushes the camp.
 Frames are composed under the ledger lock and sent after it.
 ================
 */
@@ -600,8 +612,13 @@ func (r *InviteRuntime) buffPulseMember(key buffLedgerKey, character *enterworld
 		switch {
 		case remaining == 0:
 			frames = append(frames, wire.Frame{Opcode: OpTCBuffState, Payload: EncodeBuffStateShow3CC1(BuffStateExpired, 0, entry.state.Value)})
-			// The expiry send re-stamps, like every show send.
-			entry.state.WindowStartMs = nowMs
+			// The expiry report closes the window instead of
+			// re-stamping it: the stamp keeps the first grant's
+			// time and the value is gone, so the report goes out
+			// once and no later show can resurrect the buff at a
+			// fresh 1440.
+			entry.state.Live = false
+			entry.state.Value = 0
 			entry.dirty = true
 			changed = true
 		case buffCadenceDue(remaining):
