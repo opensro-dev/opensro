@@ -196,6 +196,15 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 			}
 		}
 	}
+	// The unique rules are the server's own (UniqueRulesFromEnv), not a
+	// second reading of the flags, and publish with beta growth off too.
+	if unique := progression.UniqueRulesFromEnv(); unique != (progression.UniqueRules{}) {
+		file.Unique = &UniqueRules{GapExempt: unique.GapExempt, PopTicket: unique.PopTicket,
+			MaxLevelLoot: unique.MaxLevelLoot, SealDrops: unique.SealDrops}
+		if unique.PopTicket {
+			file.Unique.PopTicketItem = itemID(gacha.CardCodename)
+		}
+	}
 	sunRate := progression.SunRateFromEnv()
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled || sunRate.Active() {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate, SkillExpRate: beta.SkillExpRate,
