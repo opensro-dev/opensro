@@ -911,7 +911,7 @@ The bootstrap list placed each pet silently (grouped records carry no
 sub-state byte, so no client shows an appear for them), so after the
 list the owner is shown the arrival itself: one single spawn per living
 attack or pickup pet, its sub-state byte 1, which the client answers
-with the appear effect and the summon sound (854CD0) exactly as at a
+with the appear effect and the summon sound (client 854CD0) exactly as at a
 summon, replacing the listed entity in place. Fresh is the gate: only
 the summon and arrival stamps set it, and a summon cannot race a
 teleport, so at a re-entry seam Fresh means arrived.
