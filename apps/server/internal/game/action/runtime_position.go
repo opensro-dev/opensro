@@ -338,8 +338,11 @@ func (rt *Runtime) readPetTickFacts(
 	divisionID string,
 	character *enterworld.Character,
 	gid uint32,
-) petTickFacts {
-	var facts petTickFacts
+) *petTickFacts {
+	// The facts travel by pointer: the record copy inside is wide, and a
+	// by-value hand-off to advancePetJudged heap-copied it a second time
+	// every pet tick (#2030). The judged path reads the same values.
+	facts := &petTickFacts{}
 	if character == nil {
 		return facts
 	}
