@@ -68,11 +68,17 @@ const (
 	// buffDrainPerKill is what one kill grant takes off the first
 	// received row (the native fixed 0xA).
 	buffDrainPerKill = 10
-	// buffPassMinRemainingMinutes is the saved window the pass needs:
-	// the client offers its confirm only when the slot's accumulated
-	// time reaches one hour (0x36EE80 ms), so the server asks the
-	// same of the window the member would pass.
-	buffPassMinRemainingMinutes = 60
+	// buffPassMinAccumulatedMinutes is the accumulated time the
+	// pass needs, from the client's own confirm gate: the slot-7
+	// click handler (client 0x6E2840) offers the pass confirm
+	// when the slot's accumulated-ms field (+0x20) reaches
+	// 0x36EE80 (one hour), and that field is 0x5265C00 (24 h)
+	// minus the remaining time the shows carry (client 0x6E7014,
+	// merged into the slot at 0x6E61B6). The gate is on the time
+	// the window has run, not the time left in it. The client's
+	// +1 ms store puts its offer edge one whole minute past the
+	// hour, so the pass asks for more than the hour accumulated.
+	buffPassMinAccumulatedMinutes = 60
 	// buffLevelCap is the student level at which accumulation stops
 	// (the native 0x28 test in the grant helper).
 	buffLevelCap = 40
@@ -692,9 +698,12 @@ mode 2 (the client's pass-error print):
 
   - not in a camp, or the camp has no Guardian distinct from the
     requester;
-  - no live saved buff, or a value of zero;
-  - under an hour of window remaining (the client's own confirm
-    gate, asked server-side because a crafted request skips it).
+  - no live saved buff, or a value of zero, or a window that has
+    run out (the expired slot leaves the board, so no confirm can
+    be offered against it);
+  - an hour or less accumulated on the window (the client's own
+    confirm gate, asked server-side because a crafted request
+    skips it).
 
 The reference server computes the pass in its camp manager, which
 is not in the available binaries; these conditions are modelled
@@ -738,8 +747,9 @@ func (r *InviteRuntime) handlePassBuff(s *transport.Session, opcode uint16, payl
 	r.buffMu.Lock()
 	key := buffLedgerKey{divisionID: divisionID, campID: campID, charID: actor.ID}
 	entry := r.buffLedger[key]
+	remaining := buffRemainingMinutes(entry.state.WindowStartMs, nowMs)
 	if guardian == nil || guardian.CharID == actor.ID || entry == nil || !entry.state.Live || entry.state.Value == 0 ||
-		buffRemainingMinutes(entry.state.WindowStartMs, nowMs) < buffPassMinRemainingMinutes {
+		remaining == 0 || int64(buffWindowMinutes)-remaining <= buffPassMinAccumulatedMinutes {
 		r.buffMu.Unlock()
 		refuse()
 		return

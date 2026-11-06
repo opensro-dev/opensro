@@ -191,11 +191,14 @@ func TestAcademyBuffEarnPersistEntryShow(t *testing.T) {
 ================
 TestAcademyBuffPassDrainPulseLevelCap
 
-The pass moves the student's 30 points onto the Guardian as a
-received row; the Guardian's kills drain it for the 10 % bonus with
-a mode-5 removal at zero. The minute pulse refreshes at the cadence
-crossing, reports expiry (state 7) at the window edge, and the
-level-40 transition clears the saved buff (state 8).
+The pass waits out the client's own gate (an hour or less
+accumulated on the window is the byte-only refusal; the pass
+lands at 61 minutes) and moves the student's 30 points onto the
+Guardian as a received row; the Guardian's kills drain it for
+the 10 % bonus with a mode-5 removal at zero. The minute pulse
+refreshes at the cadence crossing, reports expiry (state 7) at
+the window edge, and the level-40 transition clears the saved
+buff (state 8).
 ================
 */
 func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
@@ -241,8 +244,24 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 		env.mentorInv.CampKillGrant(campE2EDivision, charS, 1000, 500, 1000, t0)
 	}
 
-	// The pass: S's slot 7 clears (state 5), the Guardian's board
+	// The pass is gated on the window's accumulated time, not on
+	// the time left in it: fresh from the first grant, and again
+	// at exactly an hour accumulated, it is the byte-only refusal.
+	campSendFrame(t, wsS, mentor.OpTCPassBuffRequest, nil)
+	if got := campExpectFrame(t, wsS, mentor.OpTCBuffList, "S fresh pass refusal"); !bytes.Equal(got, []byte{2}) {
+		t.Fatalf("fresh refusal 0xB00C = % X, want [02]", got)
+	}
+	clock.advance(60 * time.Minute)
+	campSendFrame(t, wsS, mentor.OpTCPassBuffRequest, nil)
+	if got := campExpectFrame(t, wsS, mentor.OpTCBuffList, "S one-hour pass refusal"); !bytes.Equal(got, []byte{2}) {
+		t.Fatalf("one-hour refusal 0xB00C = % X, want [02]", got)
+	}
+
+	// One minute later the confirm the client would now offer is
+	// honoured: S's slot 7 clears (state 5), the Guardian's board
 	// gains the row (mode 0), and both sides persist at once.
+	clock.advance(time.Minute)
+	t1 := clock.now().UnixMilli()
 	campSendFrame(t, wsS, mentor.OpTCPassBuffRequest, nil)
 	if got := campExpectFrame(t, wsS, mentor.OpTCBuffState, "S pass clear"); !bytes.Equal(got, mentor.EncodeBuffStateClear3CC1(mentor.BuffStateRemoval)) {
 		t.Fatalf("pass 0x3CC1 = % X, want the state-5 clear", got)
@@ -256,8 +275,8 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 	}
 	if member := campBuffMember(t, env, charM.ID, charM.ID); len(member.ReservedBuffs) != 1 ||
 		member.ReservedBuffs[0].DonorCharID != charS.ID || member.ReservedBuffs[0].Points != 30 ||
-		member.ReservedBuffs[0].WindowStartMs != t0 {
-		t.Fatalf("stored M after pass = %+v, want one 30-point row from S stamped %d", member.ReservedBuffs, t0)
+		member.ReservedBuffs[0].WindowStartMs != t1 {
+		t.Fatalf("stored M after pass = %+v, want one 30-point row from S stamped %d", member.ReservedBuffs, t1)
 	}
 	// A second pass with nothing saved is the byte-only refusal.
 	campSendFrame(t, wsS, mentor.OpTCPassBuffRequest, nil)
@@ -268,7 +287,7 @@ func TestAcademyBuffPassDrainPulseLevelCap(t *testing.T) {
 	// The Guardian drains 10 a kill for 10 % of the grant; the third
 	// kill empties the row and removes it; the fourth pays nothing.
 	for kill, wantBonus := range []int64{200, 200, 200, 0} {
-		bonusExp, bonusSkill, frames := env.mentorInv.CampKillGrant(campE2EDivision, charM, 2000, 1000, 2000, t0)
+		bonusExp, bonusSkill, frames := env.mentorInv.CampKillGrant(campE2EDivision, charM, 2000, 1000, 2000, t1)
 		if bonusExp != wantBonus || bonusSkill != wantBonus/2 {
 			t.Fatalf("guardian kill %d bonus = %d/%d, want %d/%d", kill, bonusExp, bonusSkill, wantBonus, wantBonus/2)
 		}
@@ -488,6 +507,13 @@ func TestAcademyBuffTimeOverFreezesTheSavedBuff(t *testing.T) {
 	}
 	if got := campExpectFrame(t, wsM, mentor.OpTCStatus, "S online push"); !bytes.Equal(got, mentor.EncodeCampMemberOnlineUpdate3AC5(gidS, false)) {
 		t.Fatalf("online 0x3AC5 = % X", got)
+	}
+	// The frozen buff cannot be passed either: the window has run
+	// out, so no confirm can be offered against it and the pass
+	// request is the byte-only refusal.
+	campSendFrame(t, wsS2, mentor.OpTCPassBuffRequest, nil)
+	if got := campExpectFrame(t, wsS2, mentor.OpTCBuffList, "S frozen pass refusal"); !bytes.Equal(got, []byte{2}) {
+		t.Fatalf("frozen pass refusal 0xB00C = % X, want [02]", got)
 	}
 	if member := campBuffMember(t, env, charM.ID, charS.ID); !member.BuffLive || member.BuffValue != 20 || member.BuffWindowStartMs != t0 {
 		t.Fatalf("stored S after expiry = live %v value %d stamp %d, want live, 20, the first-grant stamp %d",
