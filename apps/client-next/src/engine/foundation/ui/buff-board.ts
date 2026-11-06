@@ -18,7 +18,7 @@ import { petOwnerStacks, petSkillIcon, petSkillIconUV } from "./pet-skill-icons"
 import { PET_DESIGN } from "./pet-design-data";
 import { effectRemainingMs } from "@/engine/foundation/gameplay/attached-effects";
 import { cosTimerBars } from "@/engine/foundation/gameplay/cos-timer";
-import { paramJobFraction } from "@/engine/foundation/gameplay/param-job";
+import { paramJobFraction, paramJobHelpText, paramJobRemainingMs } from "@/engine/foundation/gameplay/param-job";
 import { iconPath } from "./icon";
 import { skillMetadataById } from "@/engine/foundation/gameplay/skill-catalog";
 import { mostWantedRow } from "@/engine/foundation/gameplay/most-wanted";
@@ -55,8 +55,7 @@ export function buffBoard(
 	suppressed: ReadonlySet<number> = new Set(),
 	ownerPet?: PetTraining,
 	showPetTraining = true,
-	copy: ( key: string ) => string = key => key,
-	showMostWanted = false
+	copy: ( key: string ) => string = key => key
 ) {
 	const primary: Entry[] = [], secondary: Entry[] = [];
 	for ( const slot of game.buffSlots ?? [] ) {
@@ -121,12 +120,19 @@ export function buffBoard(
 		}
 	}
 	// 6E6E00 kind 4: an EXP/SP scroll job, one bar counted down from the
-	// remaining seconds against the internal item's duration.
+	// remaining seconds against the internal item's duration. The hover
+	// help (6E2C90 kind 4) reads the item's name, its total duration and
+	// the remained period; paramJobHelpText composes it from the text keys.
 	for ( const job of game.paramJobs ?? [] ) {
 		const path = iconPath( job.reference.icon );
 		if ( path ) {
 			primary.push( {
-				helpText: job.reference.name,
+				helpText: paramJobHelpText(
+					job.reference.name ?? "",
+					job.reference.durationSec,
+					paramJobRemainingMs( job, timeMs ),
+					copy
+				),
 				id: "param-job:" + job.itemRefObjId,
 				path,
 				label: job.reference.name ?? "",
@@ -211,10 +217,13 @@ export function buffBoard(
 			} );
 		}
 	}
-	// Port-only (#1849): the streak holder's own wanted row, opted into
-	// in the Experimental window. It wears the dressed job's icon (the
-	// row waits while the suit is off, as its bonuses do).
-	const wantedRow = showMostWanted ? mostWantedRow( game.mostWanted, timeMs ) : null;
+	// Port-only (#1849): the streak holder's own wanted row, shown
+	// whenever the shard sends the 0x3FBA state (owner 2026-11-06,
+	// #2721: the server's SRO_MOST_WANTED flag is the only switch, with
+	// no client opt-in; no state leaves the native board). It wears the
+	// dressed job's icon (the row waits while the suit is off, as its
+	// bonuses do).
+	const wantedRow = mostWantedRow( game.mostWanted, timeMs );
 	if ( wantedRow ) {
 		primary.push( {
 			id: "most-wanted",

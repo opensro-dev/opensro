@@ -119,7 +119,12 @@ func isVersionMismatch(err error) bool {
 // port-only, #2675): the credited total and rolling UTC week the public
 // boards rank by. Characters saved earlier carry none and start
 // counting at their next login; the offline upgrade rewrites no record.
-const CurrentVersion = 37
+// Version 38 adds the Academy cumulated-buff state to camp members
+// (buffValue, buffWindowStartMs, buffLive, reservedBuffs; #2270): the
+// saved buff a student accumulates and the received rows it passes to
+// the Guardian. Members saved earlier carry none of it and hold no
+// buff; the offline upgrade rewrites no record.
+const CurrentVersion = 38
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

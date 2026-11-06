@@ -137,7 +137,9 @@ export function buffTooltip(
 	const row = catalog.get( source.skill );
 	if ( !effect || !row ) return [];
 	// 4FC730 returns one on equality. Soldier and pet exceptions use only a name.
+	// 6E2F61: the basic premium buff is name-only on an exact symbol match too.
 	const nameOnlySkills = [
+		"SN_SKILL_MALL_PRE_APRU_4W",
 		"SN_SKILL_ASSAULTING_SOILDER",
 		"SN_SKILL_ELITE_ASSAULTING_SOILDER",
 		"SN_SKILL_CENTURION",

@@ -260,10 +260,10 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Item break notices",
 			description: "Show the shard's item break announcements."
 		}, {
-			key: "uniqueDamageRank",
-			id: "experimental-unique-damage-rank",
-			label: "Unique damage ranking",
-			description: "When a unique you hit dies, show who did the most."
+			key: "highlightEventNotices",
+			id: "experimental-highlight-event-notices",
+			label: "Highlight event notices",
+			description: "Show shard event announcements in red in the message log."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
@@ -352,6 +352,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-quest-tracker-markers",
 			label: "Quest target markers",
 			description: "Show every active quest's target on M and the minimap."
+		}, {
+			// Moved from Notices (#2727): the window fits seven rows a
+			// tab and the event highlight row joins Shard notices; the
+			// option, its key and its default are unchanged.
+			key: "uniqueDamageRank",
+			id: "experimental-unique-damage-rank",
+			label: "Unique damage ranking",
+			description: "When a unique you hit dies, show who did the most."
 		} ]
 	},
 	{
@@ -392,16 +400,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
-		} ]
-	},
-	{
-		title: "Jobs",
-		section: "Job buffs",
-		rows: [ {
-			key: "mostWantedBuff",
-			id: "experimental-most-wanted-buff",
-			label: "Most Wanted buff",
-			description: "Show your wanted level on the buff board."
 		} ]
 	}
 ];
