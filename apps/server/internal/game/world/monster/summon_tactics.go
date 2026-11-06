@@ -58,6 +58,7 @@ func loadSummonTactics() map[string][2][]SummonTactics {
 		})
 		out[cols[0]] = rows
 	}
+	attachSummonTacticsControls(out, loadTacticsPolicies(tacticsControlsJSON))
 	loadSupplementalSummonTactics(out)
 	return out
 }

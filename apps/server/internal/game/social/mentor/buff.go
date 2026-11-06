@@ -27,7 +27,7 @@ grant and its per-minute buff-time updates:
     native server would compute in its camp manager are modelled on
     the client's own gates (see handlePassBuff).
 
-State lives in the authority store on the member record (schema 37).
+State lives in the authority store on the member record (schema 38).
 This runtime keeps the live copy in a ledger because the kill path
 runs inside the fatal-hit character door, where the store door
 cannot be taken again; the ledger is flushed through

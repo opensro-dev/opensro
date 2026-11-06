@@ -56,11 +56,11 @@ type TrainingCampMemberRecord struct {
 	JoinedAtMs  int64  `json:"joinedAtMs,omitempty"`
 	JoinLevel   uint8  `json:"joinLevel,omitempty"`
 	HonorPoints uint32 `json:"honorPoints,omitempty"`
-	// The cumulated buff (schema 37): the member's saved buff rides the
+	// The cumulated buff (schema 38): the member's saved buff rides the
 	// member row the way the reference server's buff-status satellite
 	// rides its member (value, window start, live flag), and the buffs
 	// this member RECEIVED from students sit in ReservedBuffs. Zero
-	// value = no buff; rows written before schema 37 read exactly that.
+	// value = no buff; rows written before schema 38 read exactly that.
 	BuffValue         uint32                     `json:"buffValue,omitempty"`
 	BuffWindowStartMs int64                      `json:"buffWindowStartMs,omitempty"`
 	BuffLive          bool                       `json:"buffLive,omitempty"`

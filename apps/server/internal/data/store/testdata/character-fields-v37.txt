@@ -338,6 +338,12 @@ mostWanted.expiresAtMs
 mostWanted.streak
 name
 offensiveSkillCooldowns
+online
+online.days
+online.days[].day
+online.days[].seconds
+online.lastCreditMs
+online.totalSeconds
 paramJobs
 paramJobs[].codename
 paramJobs[].endUnixMs

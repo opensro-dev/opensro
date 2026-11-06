@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-academy_buff_upgrade_test.go - the schema 37 step (Academy cumulated buff)
+academy_buff_upgrade_test.go - the schema 38 step (Academy cumulated buff)
 
 ===========================================================================
 */
@@ -16,7 +16,7 @@ import (
 ================
 TestAcademyBuffUpgradeRewritesNothing
 
-A schema 36 authority upgrades to 37 with its camp records untouched
+A schema 37 authority upgrades to 38 with its camp records untouched
 (the cumulated-buff state is optional and absent, so its members hold
 no buff); a second upgrade has nothing to do.
 ================

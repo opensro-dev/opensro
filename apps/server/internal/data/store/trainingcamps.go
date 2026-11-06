@@ -574,7 +574,7 @@ holding s.mu.
 ================
 cloneCampMember
 
-cloneCampMember detaches one member record: since schema 37 a member
+cloneCampMember detaches one member record: since schema 38 a member
 carries its received-buff rows in a slice, and a copy that shared it
 would let a caller mutate the store's live rows (or the reverse).
 ================
