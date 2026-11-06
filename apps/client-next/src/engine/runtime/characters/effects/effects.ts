@@ -3891,7 +3891,7 @@ export function createCharacterEffects(
 					const action = entity.emote?.action ?? 0;
 					if (
 						!(entity.kind === "cos" && action >= 1 && action <= 6) && !(action >= 0xf0 && action <= 0xf4) &&
-						!(action >= 0xd0 && action <= 0xd6)
+						!(action >= 0xd0 && action <= 0xda)
 					) {
 						continue;
 					}
@@ -3917,9 +3917,10 @@ export function createCharacterEffects(
 					const entity = byGid.get( gid );
 					const elapsed = Math.max( 0, now - skill.startedAt );
 					const frost = skill.action >= 0xd0 && skill.action <= 0xd6;
+					const gear = skill.action >= 0xd7 && skill.action <= 0xda;
 					// Ground frost outlives its victim; retain the latched pose for its bounded lifetime.
 					if (
-						!frost && (!entity || entity.emote?.revision !== skill.revision) ||
+						!frost && !gear && (!entity || entity.emote?.revision !== skill.revision) ||
 						!entity && elapsed >= WOLF_EFFECT_SECONDS
 					) {
 						wolfSkills.delete( gid );

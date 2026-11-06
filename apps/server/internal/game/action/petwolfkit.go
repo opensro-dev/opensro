@@ -44,6 +44,7 @@ type wolfKitState struct {
 const wolfHowlHoldMs int64 = 1400
 
 type wolfHowl struct {
+	book    uint8
 	until   int64
 	percent float64
 	members map[uint32]string
@@ -156,7 +157,7 @@ func (rt *Runtime) castWolfHowl(division string, owner *enterworld.Character, gi
 	}) {
 		return petTrainingReceipt("The howl could not be cast.")
 	}
-	howl := wolfHowl{until: now + 8000, percent: skill.ValueAt(level), members: make(map[uint32]string)}
+	howl := wolfHowl{book: skill.ID, until: now + 8000, percent: skill.ValueAt(level), members: make(map[uint32]string)}
 	if skill.Option >= 2 {
 		howl.members[enterworld.ObjectIDForCharacter(step.snapshot)] = owner.Name
 	}
@@ -200,21 +201,35 @@ No authority reads here: stat projections also run inside character writes.
 ================
 */
 func (rt *Runtime) wolfHowlWrites(division string, c *enterworld.Character) []paramkeeper.Write {
-	if !rt.AttackPetExpansion || c == nil || !enterworld.CharacterAlive(c) || rt.inFreeBattle(c) || wearsJobSuit(c, rt.deps.ItemReferences()) || rt.inTown(division, c) || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance {
+	howl := rt.wolfHowlFor(division, c)
+	if howl.percent <= 0 {
 		return nil
 	}
-	now, percent := rt.Now().UnixMilli(), 0.0
+	return []paramkeeper.Write{{Parameter: actionSpeedParameter, Channel: paramkeeper.FactorProduct, Source: 0x7ffffd00, Value: float32(100 / (1 + howl.percent/100))}}
+}
+
+/*
+================
+wolfHowlFor
+
+The stat keeper and owner indicator share the strongest eligible grant.
+================
+*/
+func (rt *Runtime) wolfHowlFor(division string, c *enterworld.Character) wolfHowl {
+	if !rt.AttackPetExpansion || c == nil || !enterworld.CharacterAlive(c) || rt.inFreeBattle(c) || wearsJobSuit(c, rt.deps.ItemReferences()) || rt.inTown(division, c) || domain.CharacterWorldInstance(c) != domain.DefaultWorldInstance {
+		return wolfHowl{}
+	}
+	now, selected := rt.Now().UnixMilli(), (wolfHowl{})
 	rt.wolfHowls.Lock()
 	for key, howl := range rt.wolfHowls.rows {
 		if key.division == division && howl.until > now && howl.members[enterworld.ObjectIDForCharacter(c)] == c.Name {
-			percent = max(percent, howl.percent)
+			if howl.percent > selected.percent || howl.percent == selected.percent && howl.until > selected.until {
+				selected = howl
+			}
 		}
 	}
 	rt.wolfHowls.Unlock()
-	if percent <= 0 {
-		return nil
-	}
-	return []paramkeeper.Write{{Parameter: actionSpeedParameter, Channel: paramkeeper.FactorProduct, Source: 0x7ffffd00, Value: float32(100 / (1 + percent/100))}}
+	return selected
 }
 
 /*
@@ -226,6 +241,10 @@ func (rt *Runtime) wolfHowlFrames(division string, howl wolfHowl) []wire.Frame {
 	var frames []wire.Frame
 	for gid, name := range howl.members {
 		frames = append(frames, wire.ActionSpeedFrame(gid, rt.EntryActionSpeed(division, name)))
+		active := rt.wolfHowlFor(division, rt.characterSnapshotCast(division, rt.findCharacter(division, name)))
+		// Port-only: recipient, book, speed percent x10, remaining milliseconds.
+		frames = append(frames, wire.Frame{Opcode: 0x3fbd, Payload: wire.NewWriter(11).U32(gid).U8(active.book).
+			U16(uint16(active.percent * 10)).U32(uint32(max(int64(0), active.until-rt.Now().UnixMilli()))).Payload()})
 	}
 	return frames
 }

@@ -12,6 +12,43 @@ const { createPetTraining } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts"
 );
 const { petSkillDesign, petEffect, petRowCooldown } = await import( "../../src/engine/foundation/ui/pet-training.ts" );
+test("Hunting Howl accepts only local recipient state, expires and clears", async () => {
+	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+	const owner = createPetTraining( () => null ), bytes = new Uint8Array( 11 ), v = new DataView( bytes.buffer );
+	v.setUint32( 0, 100002, true );
+	bytes[4] = 3;
+	v.setUint16( 5, 5000, true );
+	v.setUint32( 7, 8000, true );
+	// Exercise dispatch too: unique rankings own 0x3FBC and parse before pets.
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const gameplay = createGameplay( () => {} );
+	assert.equal( gameplay.receive( { opcode: 0x3fbd, payload: bytes }, 100 ), true );
+	owner.receive( { opcode: 0x3fbd, payload: bytes }, 100, 100002 );
+	const game = { localGid: 100002, vitals: [], petHowl: owner.howl() };
+	const row = buffBoard( game, 4100 ).find( row => row.id === "pet-howl" );
+	assert.equal( row?.fraction, 0.5 );
+	assert.match( row?.helpText ?? "", /Attack speed \+500%/ );
+	assert.equal( buffBoard( game, 8100 ).some( row => row.id === "pet-howl" ), false );
+	const first = owner.howl();
+	v.setUint32( 0, 99999, true );
+	owner.receive( { opcode: 0x3fbd, payload: bytes }, 200, 100002 );
+	assert.equal( owner.howl(), first );
+	bytes[4] = 1;
+	assert.throws( () => owner.receive( { opcode: 0x3fbd, payload: bytes }, 200, 100002 ) );
+	assert.equal( owner.howl(), first );
+	v.setUint32( 0, 100002, true );
+	bytes.fill( 0, 4 );
+	owner.receive( { opcode: 0x3fbd, payload: bytes }, 300, 100002 );
+	assert.equal( owner.howl(), undefined );
+	bytes[4] = 2;
+	v.setUint16( 5, 1000, true );
+	v.setUint32( 7, 8000, true );
+	owner.receive( { opcode: 0x3fbd, payload: bytes }, 300, 100002 );
+	owner.clear();
+	assert.equal( owner.howl(), undefined );
+});
 
 test("Tailwind private state validates atomically and clears on session reset", () => {
 	const owner = createPetTraining( () => null );

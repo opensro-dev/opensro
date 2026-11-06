@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -507,6 +508,47 @@ func TestPetsRefuseSummonInBattle(t *testing.T) {
 	}
 	c.BattleUntilMs = 0
 	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
+}
+
+/*
+================
+TestExpansionAttackPetSummonAndDismissDelay
+================
+*/
+func TestExpansionAttackPetSummonAndDismissDelay(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, clock := newTestRuntime(c, refs)
+	rt.AttackPetExpansion = true
+	rt.BindPetSession(testDivision, c, 101)
+	ref := refs.staticItemSource["SUMMON_ATTACK"]
+	body := wire.NewWriter(3).U8(23).U16(ref.TypeFlags()).Payload()
+	c.BattleUntilMs = clock.NowMs() + battleStateMs
+	assertItemUseRefusedUnchanged(t, rt, c, body, cosSummonInBattle)
+	clock.Advance(time.Duration(battleStateMs) * time.Millisecond)
+	useSummonerFixture(t, rt, c, 23, ref)
+	pet := c.MissionInventory[len(c.MissionInventory)-2].Summon
+	cancel := wire.NewWriter(4).U32(pet.GID).Payload()
+	c.BattleUntilMs = clock.NowMs() + battleStateMs
+	assertItemUseRefusedUnchanged(t, rt, c, body, cosSummonInBattle)
+	result := rt.HandleCosCancel(testDivision, c, cancel)
+	if !pet.Summoned || len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 || result.Frames[0].Payload[1] != cosSummonInBattle {
+		t.Fatal("toolbar bypassed the attack delay", result)
+	}
+	clock.Advance(time.Duration(battleStateMs-1) * time.Millisecond)
+	assertItemUseRefusedUnchanged(t, rt, c, body, cosSummonInBattle)
+	clock.Advance(time.Millisecond)
+	useSummonerFixture(t, rt, c, 23, ref)
+	if c.MissionInventory[len(c.MissionInventory)-2].Summon.Summoned {
+		t.Fatal("scroll did not dismiss after the delay")
+	}
+	useSummonerFixture(t, rt, c, 23, ref)
+	result = rt.HandleCosCancel(testDivision, c, cancel)
+	if result.Frames[0].Payload[0] != 1 {
+		t.Fatal("toolbar did not dismiss after the delay", result)
+	}
+	c.BattleUntilMs = clock.NowMs() + battleStateMs
+	ref = refs.staticItemSource["SUMMON_PICKUP"]
+	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(24).U16(ref.TypeFlags()).Payload(), cosSummonInBattle)
 }
 
 /*

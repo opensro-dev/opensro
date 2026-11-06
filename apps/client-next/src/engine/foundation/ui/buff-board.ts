@@ -45,7 +45,7 @@ export function buffBoard(
 		| "abnormalRecords"
 		| "petTailwind"
 		| "petGuidance"
-		| "petGuidance"
+		| "petHowl"
 		| "petTraining"
 		| "mostWanted"
 		| "skillCatalog"
@@ -194,6 +194,20 @@ export function buffBoard(
 			} );
 		}
 	}
+	const howl = game.petHowl;
+	if ( showPetTraining && howl && howl.gid === game.localGid && howl.expiresAtMs > timeMs ) {
+		const design = PET_DESIGN.treeSkills.find( row => row.id === howl.book );
+		if ( design ) {
+			primary.push( {
+				id: "pet-howl",
+				path: petSkillIcon( design ),
+				uv: petSkillIconUV( design ),
+				label: "Hunting Howl",
+				helpText: `Hunting Howl\nAttack speed +${howl.speedPercent}%`,
+				fraction: Math.min( 1, (howl.expiresAtMs - timeMs) / 8000 )
+			} );
+		}
+	}
 	const tailwind = game.petTailwind;
 	if ( showPetTraining && tailwind && tailwind.gid === game.localGid ) {
 		const design = PET_DESIGN.treeSkills.find( row => row.id === tailwind.book );
@@ -203,7 +217,7 @@ export function buffBoard(
 				path: petSkillIcon( design ),
 				uv: petSkillIconUV( design ),
 				label: `Tailwind: ${tailwind.stacks}/10${
-					tailwind.stacks === 10 && tailwind.book >= 56 ? " â€” Stun ready" : ""
+					tailwind.stacks === 10 && tailwind.book >= 56 ? " - Stun ready" : ""
 				}`,
 				helpText:
 					`Tailwind\nMovement speed +${tailwind.speedPercent}%\n${tailwind.stacks} / 10 stacks\nOne stack every 5 s without dealing or taking damage.\n` +
@@ -320,4 +334,24 @@ export function abnormalBuffIcons( mask: number ) {
 		if ( mask & (2 ** bit) ) rows.push( { id: "abnormal:" + bit, ...abnormalIcon( bit ) } );
 	}
 	return rows;
+}
+
+/*
+================
+targetPetBuffs
+
+Port-only public recipient metadata, using the same icons as the local board.
+================
+*/
+export function targetPetBuffs( game: Pick<GameplayState, "petRecipientBuffs">, gid: number, now: number ) {
+	const row = game.petRecipientBuffs?.find( row => row.gid === gid );
+	return row ?
+		buffBoard( {
+			localGid: gid,
+			vitals: [],
+			petTailwind: row.tailwind?.stacks ? row.tailwind : undefined,
+			petGuidance: row.guidance?.stacks ? row.guidance : undefined,
+			petHowl: row.howl
+		}, now ).map( row => ({ ...row, helpText: row.label }) ) :
+		[];
 }

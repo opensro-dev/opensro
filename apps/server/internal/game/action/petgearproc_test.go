@@ -6,8 +6,11 @@ petgearproc_test.go - striking/struck proc isolation and credited spell damage
 package action
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
@@ -15,7 +18,112 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"strings"
 	"testing"
+	"time"
 )
+
+/*
+================
+TestPetGearDamageRollFailureDoesNotSpendProc
+================
+*/
+func TestPetGearDamageRollFailureDoesNotSpendProc(t *testing.T) {
+	rt, clock, c, mob := wolfFieldFixture(t, 1)
+	wearProc(t, c, "ProcFire", 9)
+	calls := 0
+	rt.CombatRoll = func() (uint32, error) {
+		calls++
+		if calls > 1 {
+			return 0, errors.New("damage RNG unavailable")
+		}
+		return 0, nil
+	}
+	rt.petGearProcs(testDivision, c, c.ActiveCOS.GID, mob.Gid, simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X, Y: mob.Spawn.Y, Z: mob.Spawn.Z}, false, clock.NowMs())
+	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+	if after.CurrentHP != mob.CurrentHP || rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID).trained.procReadyAt != 0 {
+		t.Fatal("failed damage roll dealt damage or spent cooldown")
+	}
+}
+
+/*
+================
+TestPetGearProcRangeEndpoints
+================
+*/
+func TestPetGearProcRangeEndpoints(t *testing.T) {
+	for kind, group := range []string{"ProcChain", "ProcBlizzard", "ProcFire"} {
+		for _, degree := range []int{1, 9} {
+			for _, taken := range []bool{false, true} {
+				for end := range 2 {
+					t.Run(fmt.Sprint(group, degree, taken, end), func(t *testing.T) {
+						rt, clock, c, mob := wolfFieldFixture(t, 1)
+						name := group
+						if taken {
+							name += "Taken"
+						}
+						wearProc(t, c, name, degree)
+						span := companion.D.Gear[degree-1].ProcRanges[kind]
+						draw := uint32(0)
+						if end == 1 {
+							draw = span[1] - span[0]
+						}
+						rt.CombatRoll = func() (uint32, error) { return draw, nil }
+						now := clock.NowMs()
+						rt.petGearProcs(testDivision, c, c.ActiveCOS.GID, mob.Gid, simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X, Y: mob.Spawn.Y, Z: mob.Spawn.Z}, taken, now)
+						for i := int64(1); i <= 3; i++ {
+							rt.advancePetGearFields(petOwnerKey{testDivision, strings.ToLower(c.Name), c.ActiveCOS.GID}, now+i*1000)
+						}
+						after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+						if got := mob.CurrentHP - after.CurrentHP; got != span[end] {
+							t.Fatalf("damage=%d want=%d", got, span[end])
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+/*
+================
+TestPetGearFireBurnAndBlizzardControl
+================
+*/
+func TestPetGearFireBurnAndBlizzardControl(t *testing.T) {
+	for _, kind := range []int{companion.ProcFire, companion.ProcBlizzard} {
+		t.Run(fmt.Sprint(kind), func(t *testing.T) {
+			rt, clock, c, mob := wolfFieldFixture(t, 1)
+			rt.Monsters.SetAbnormalContext(monsterAbnormalContext{rt})
+			rt.CombatRoll = func() (uint32, error) { return 0, nil }
+			step, _ := rt.wolfCompanion(testDivision, c, c.ActiveCOS.GID, clock.NowMs())
+			at := simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X, Y: mob.Spawn.Y, Z: mob.Spawn.Z}
+			rt.petGearArea(step, at, 1000, 50, kind, false)
+			live, _ := rt.Monsters.Get(testDivision, mob.Gid)
+			if live.Abnormal == nil {
+				t.Fatal("gear proc installed no native status")
+			}
+			if kind == companion.ProcFire {
+				if !live.Abnormal.Has(abnormal.Burn) {
+					t.Fatal("fire did not burn")
+				}
+				clock.Advance(2100 * time.Millisecond)
+				rt.advanceMonsterAbnormals(clock.NowMs())
+				after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+				if after.CurrentHP >= live.CurrentHP {
+					t.Fatal("burn status did not deal periodic damage")
+				}
+			} else {
+				if !live.Abnormal.Has(abnormal.Frostbite) || live.Abnormal.Has(abnormal.Freeze) {
+					t.Fatal("early Blizzard pulse did not slow exclusively")
+				}
+				rt.petGearArea(step, at, 1000, 50, kind, true)
+				after, _ := rt.Monsters.Get(testDivision, mob.Gid)
+				if !after.Abnormal.Has(abnormal.Freeze) {
+					t.Fatal("final Blizzard pulse could not freeze")
+				}
+			}
+		})
+	}
+}
 
 /*
 ================
@@ -52,6 +160,10 @@ func TestPetGearProcDamageAndTriggerIsolation(t *testing.T) {
 			t.Run(fmt.Sprint(group, taken), func(t *testing.T) {
 				rt, clock, c, mob := wolfFieldFixture(t, 1)
 				name := group
+				want := uint32(1000)
+				if group == "ProcChain" {
+					want = 1500
+				}
 				if taken {
 					name += "Taken"
 				}
@@ -82,8 +194,29 @@ func TestPetGearProcDamageAndTriggerIsolation(t *testing.T) {
 					if *c.CurrentHP <= 1 || after.CurrentHP != mob.CurrentHP {
 						t.Fatal("Mend failed to heal owner exclusively")
 					}
-				} else if mob.CurrentHP-after.CurrentHP != 1000 {
-					t.Fatalf("total damage=%d, want1000", mob.CurrentHP-after.CurrentHP)
+				} else if mob.CurrentHP-after.CurrentHP != want {
+					t.Fatalf("total damage=%d, want%d", mob.CurrentHP-after.CurrentHP, want)
+				}
+				var shown uint32
+				var visuals int
+				for _, batch := range rt.drainMonsterLegRecipients() {
+					for _, frame := range batch.Frames {
+						if frame.Opcode == abnormalDamageCreditOpcode {
+							if batch.OnlyCharacterID != c.ID {
+								t.Fatal("proc number leaked to wrong recipient")
+							}
+							shown += binary.LittleEndian.Uint32(frame.Payload[4:])
+						}
+						if frame.Opcode == 0x324b {
+							visuals++
+						}
+					}
+				}
+				if group != "ProcMend" && shown != want {
+					t.Fatal("missing visible proc damage", group, shown)
+				}
+				if visuals == 0 {
+					t.Fatal("missing proc animation", group)
 				}
 				if len(state.trained.gearFields) != 0 {
 					t.Fatal("field outlived four pulses")
@@ -144,6 +277,29 @@ TestPetGearProcsUseCommittedCombatHooks
 ================
 */
 func TestPetGearProcsUseCommittedCombatHooks(t *testing.T) {
+	t.Run("five-percent-charm", func(t *testing.T) {
+		rt, clock, c, mob := wolfFieldFixture(t, 1)
+		charm := companion.D.Gear[0].Items[2]
+		c.ActiveCOS.Training.Gear[2] = domain.PetGear{RefObjID: charm.ID}
+		c.ActiveCOS.Training.Gear[2].Options[0] = companion.EncodeAffix(84, 5)
+		if companion.ModifiersFor(c.ActiveCOS).Procs[companion.ProcChain][0].Chance != 5 {
+			t.Fatal("charm lost 5 percent roll")
+		}
+		rt.CombatRoll = func() (uint32, error) { return 499, nil }
+		if !rt.petChance(5) {
+			t.Fatal("5 percent excluded roll499")
+		}
+		rt.CombatRoll = func() (uint32, error) { return 500, nil }
+		if rt.petChance(5) {
+			t.Fatal("5 percent included roll500")
+		}
+		rt.CombatRoll = func() (uint32, error) { return 0, nil }
+		state := rt.petSessionFor(testDivision, c.Name, c.ActiveCOS.GID)
+		attackUntil(t, rt, clock, c, mob, func() bool { return state.trained.procReadyAt > 0 })
+		if state.trained.procReadyAt == 0 {
+			t.Fatal("5 percent charm never entered committed proc hook")
+		}
+	})
 	t.Run("attack", func(t *testing.T) {
 		rt, clock, c, mob := wolfFieldFixture(t, 1)
 		wearProc(t, c, "ProcFire", 9)
@@ -203,7 +359,7 @@ func TestPetGearChainDistinctHopsAndSight(t *testing.T) {
 	}
 	rt.LineOfSight = func(simulation.Spawn, simulation.NavOwner, simulation.Spawn) bool { return false }
 	before, _ := rt.Monsters.Get(testDivision, mob.Gid)
-	rt.petGearArea(step, simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X, Y: mob.Spawn.Y, Z: mob.Spawn.Z}, 1000, 50)
+	rt.petGearArea(step, simulation.Spawn{RegionID: mob.Spawn.RegionID, X: mob.Spawn.X, Y: mob.Spawn.Y, Z: mob.Spawn.Z}, 1000, 50, companion.ProcFire, false)
 	after, _ := rt.Monsters.Get(testDivision, mob.Gid)
 	if before.CurrentHP != after.CurrentHP {
 		t.Fatal("proc bypassed line of sight")

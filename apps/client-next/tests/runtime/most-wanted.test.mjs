@@ -43,6 +43,7 @@ function wantedFrame( { level = 2, kills = 3, job = 2, per = 5, lapse = 0 } = {}
 
 test("the worker decodes a state whole, and only its own opcode", () => {
 	const owner = createMostWanted();
+	assert.equal( owner.receive( { opcode: 0x3fbe, payload: new Uint8Array( 18 ) } ), false );
 	assert.equal( owner.receive( { opcode: 0x3fb7, payload: new Uint8Array( 12 ) } ), false );
 	assert.equal( owner.receive( wantedFrame( { lapse: 123_000 } ) ), true );
 	assert.deepEqual(

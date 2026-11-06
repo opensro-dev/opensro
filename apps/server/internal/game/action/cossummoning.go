@@ -97,7 +97,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	// the persistent-summoner toggle opens with the same test.
 	// UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE's text names vehicles,
 	// but the server sends it for attack and pickup pets as well.
-	if inBattleState(c, use.nowMs) {
+	if inBattleState(c, use.nowMs) || rt.AttackPetExpansion && use.ref.TypeIDs[3]+2 == attackPetBand && rt.attackPetSummonBlocked(use.division, c, use.nowMs) {
 		*result = itemUseFailure(cosSummonInBattle)
 		return false
 	}

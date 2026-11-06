@@ -122,7 +122,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 			continue
 		}
 		state.trained.counterHits[index] = 0
-		stunned := rt.applyPetCounterStun(step, row, hit.attacker)
+		stunned := rt.applyPetStatus(step, row, hit.attacker)
 		frames = append(frames, stunned...)
 		nearby, areaStunned := 0, 0
 		if skill.Option == 3 {
@@ -136,7 +136,7 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 					}
 					nearby++
 					if rt.petChance(50) {
-						extra := rt.applyPetCounterStun(step, row, mob.Gid)
+						extra := rt.applyPetStatus(step, row, mob.Gid)
 						frames = append(frames, extra...)
 						if len(extra) > 0 {
 							areaStunned++
@@ -159,13 +159,13 @@ func (rt *Runtime) petCounterStun(hit petCounterHit) []wire.Frame {
 
 /*
 ================
-applyPetCounterStun
+applyPetStatus
 
 Reuse native status resolution/publication with a zero-damage plan, as Scream
-Mask does. Unique monsters keep their immunity; retaliation deals no damage.
+Mask does. Unique monsters keep their immunity; applying the status deals no immediate damage.
 ================
 */
-func (rt *Runtime) applyPetCounterStun(step petCombatStep, row enterworld.SkillRow, gid uint32) []wire.Frame {
+func (rt *Runtime) applyPetStatus(step petCombatStep, row enterworld.SkillRow, gid uint32) []wire.Frame {
 	target, ok := rt.resolvePetCombatTarget(step, gid)
 	if !ok || target.monster == nil {
 		return nil

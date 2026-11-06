@@ -1588,7 +1588,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 100
+			"procDamage": 100,
+			"procRanges": [
+				[
+					100,
+					100
+				],
+				[
+					100,
+					100
+				],
+				[
+					100,
+					100
+				]
+			]
 		},
 		{
 			"degree": 2,
@@ -1651,7 +1665,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 213
+			"procDamage": 213,
+			"procRanges": [
+				[
+					275,
+					338
+				],
+				[
+					213,
+					275
+				],
+				[
+					213,
+					463
+				]
+			]
 		},
 		{
 			"degree": 3,
@@ -1714,7 +1742,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 325
+			"procDamage": 325,
+			"procRanges": [
+				[
+					450,
+					575
+				],
+				[
+					325,
+					450
+				],
+				[
+					325,
+					825
+				]
+			]
 		},
 		{
 			"degree": 4,
@@ -1777,7 +1819,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 438
+			"procDamage": 438,
+			"procRanges": [
+				[
+					625,
+					813
+				],
+				[
+					438,
+					625
+				],
+				[
+					438,
+					1188
+				]
+			]
 		},
 		{
 			"degree": 5,
@@ -1840,7 +1896,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 550
+			"procDamage": 550,
+			"procRanges": [
+				[
+					800,
+					1050
+				],
+				[
+					550,
+					800
+				],
+				[
+					550,
+					1550
+				]
+			]
 		},
 		{
 			"degree": 6,
@@ -1903,7 +1973,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 663
+			"procDamage": 663,
+			"procRanges": [
+				[
+					975,
+					1288
+				],
+				[
+					663,
+					975
+				],
+				[
+					663,
+					1913
+				]
+			]
 		},
 		{
 			"degree": 7,
@@ -1966,7 +2050,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 775
+			"procDamage": 775,
+			"procRanges": [
+				[
+					1150,
+					1525
+				],
+				[
+					775,
+					1150
+				],
+				[
+					775,
+					2275
+				]
+			]
 		},
 		{
 			"degree": 8,
@@ -2029,7 +2127,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 888
+			"procDamage": 888,
+			"procRanges": [
+				[
+					1325,
+					1763
+				],
+				[
+					888,
+					1325
+				],
+				[
+					888,
+					2638
+				]
+			]
 		},
 		{
 			"degree": 9,
@@ -2092,7 +2204,21 @@ export const PET_DESIGN = {
 					}
 				}
 			],
-			"procDamage": 1000
+			"procDamage": 1000,
+			"procRanges": [
+				[
+					1500,
+					2000
+				],
+				[
+					1000,
+					1500
+				],
+				[
+					1000,
+					3000
+				]
+			]
 		}
 	],
 	"affixes": [
@@ -5287,21 +5413,21 @@ export const PET_DESIGN = {
 	"procs": [
 		{
 			"name": "Chain Lightning",
-			"effect": "Lightning that jumps between enemies for {v} damage each.",
+			"effect": "Gear-degree lightning damage; each of up to 5 targets retains 80% of the previous hit. Normal D9: 1,500–2,000 first-hit damage.",
 			"base": 20,
 			"perLevel": 15,
 			"unit": "damage"
 		},
 		{
-			"name": "Frost Nova",
-			"effect": "Cold burst around the pet for {v} damage, frostbite 3 s.",
+			"name": "Blizzard",
+			"effect": "Gear-degree damage across four ticks in 5 m; attempts frostbite slow, with 10% freeze chance on the last tick. Normal D9: 1,000–1,500 total damage.",
 			"base": 15,
 			"perLevel": 12,
 			"unit": "damage"
 		},
 		{
 			"name": "Fire Burst",
-			"effect": "Flames on the target for {v} damage, burn 4 s.",
+			"effect": "Gear-degree damage in 3 m, with 25% chance to burn. Normal D9: 1,000–3,000 immediate damage, plus native burn damage.",
 			"base": 18,
 			"perLevel": 14,
 			"unit": "damage"
@@ -5817,13 +5943,13 @@ export const PET_DESIGN = {
 			"cooldown": 30,
 			"cooldownUnit": "s",
 			"cooldownPerLevel": -1,
-			"value": 30.0,
-			"valuePerLevel": 2.5,
+			"value": 20,
+			"valuePerLevel": 1.5,
 			"valueUnit": "% max HP",
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 50% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -5843,13 +5969,13 @@ export const PET_DESIGN = {
 			"cooldown": 30,
 			"cooldownUnit": "s",
 			"cooldownPerLevel": -1,
-			"value": 55.0,
-			"valuePerLevel": 2.5,
+			"value": 35,
+			"valuePerLevel": 1.5,
 			"valueUnit": "% max HP",
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 50% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -5864,18 +5990,18 @@ export const PET_DESIGN = {
 			"theme": "Endurance",
 			"option": 3,
 			"name": "Iron Hide III",
-			"effect": "Shields the bear and its owner for {v}% of maximum HP for 5 s. Also shields party members within 20 m. On expiry, each recipient's remaining shield (including the bear) explodes within 8 m for 50% of its remaining value as damage to monsters.",
+			"effect": "Shields the bear and its owner for {v}% of maximum HP for 5 s. Also shields party members within 20 m. On expiry, each recipient's remaining shield (including the bear) explodes within 8 m for 40% of its remaining value as damage to monsters.",
 			"trigger": "Timer",
 			"cooldown": 30,
 			"cooldownUnit": "s",
 			"cooldownPerLevel": -1,
-			"value": 80.0,
-			"valuePerLevel": 2.5,
+			"value": 50,
+			"valuePerLevel": 1.5,
 			"valueUnit": "% max HP",
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Tier II also shields party members within 20 m.",
-			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 50% of its remaining value within 8 m.",
+			"rank3": "Tier III detonates each recipient's remaining shield (including the bear) after 5 s for 40% of its remaining value within 8 m.",
 			"animation": "emote0",
 			"status": "Implemented",
 			"icon": "skill\\europe\\warrior_guarda_physical_a.ddj",
@@ -6280,7 +6406,7 @@ export const PET_DESIGN = {
 			"theme": "Frozen prey",
 			"option": 1,
 			"name": "Shatter I",
-			"effect": "Penguin damage against frostbitten or frozen enemies +{v}%.",
+			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6291,7 +6417,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 10,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Frozen kills release ice shards within 5 m for 50% of the killing damage; maximum 5 targets.",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6306,7 +6432,7 @@ export const PET_DESIGN = {
 			"theme": "Frozen prey",
 			"option": 2,
 			"name": "Shatter II",
-			"effect": "Penguin damage against frostbitten or frozen enemies +{v}%. Owner hits gain the same bonus.",
+			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus.",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6317,7 +6443,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 40,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Frozen kills release ice shards within 5 m for 50% of the killing damage; maximum 5 targets.",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
@@ -6332,7 +6458,7 @@ export const PET_DESIGN = {
 			"theme": "Frozen prey",
 			"option": 3,
 			"name": "Shatter III",
-			"effect": "Penguin damage against frostbitten or frozen enemies +{v}%. Owner hits gain the same bonus. Frozen kills release ice shards within 5 m for 50% of the killing damage; maximum 5 targets.",
+			"effect": "Penguin damage against frostbitten, frozen, stunned or rooted enemies +{v}%. Owner hits gain the same bonus. Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"trigger": "Passive",
 			"cooldown": null,
 			"cooldownUnit": "",
@@ -6343,7 +6469,7 @@ export const PET_DESIGN = {
 			"maxLevel": 10,
 			"unlockLevel": 90,
 			"rank2": "Owner hits gain the same bonus.",
-			"rank3": "Frozen kills release ice shards within 5 m for 50% of the killing damage; maximum 5 targets.",
+			"rank3": "Killing a frozen, stunned or rooted enemy bursts ice shards within 5 m. Each of up to 5 nearby monsters takes half the final killing attack’s damage (1,000 damage killing hit: 500 per nearby monster).",
 			"animation": "",
 			"status": "Implemented",
 			"icon": "skill\\europe\\wizard_spiritp_cold_a.ddj",
