@@ -124,8 +124,8 @@ Merged PR branches on `origin` are deleted by GitHub on merge.
   APPROVEs when any changed path is server authority
   (`apps/server/internal/game/`, `apps/server/internal/data/store/`), the
   wire (`apps/server/internal/wire/`, `apps/server/internal/protocol/`,
-  the client wire codecs) or save data (the store, any `/migrations/`
-  path). The Claude seat is an optional spot-check, reported but never
+  `apps/client-next/src/engine/runtime/simulation/worker/network/codec/`)
+  or save data (the store, any `/migrations/` path). The Claude seat is an optional spot-check, reported but never
   required; a CHANGES from anyone at the head still blocks. An APPROVE
   carries over a push, rebase or amend when the PR's own diff is
   unchanged (`git patch-id --stable` of base...head equal at both heads);
@@ -160,7 +160,10 @@ Merged PR branches on `origin` are deleted by GitHub on merge.
   change; a check still running, failed or cancelled blocks the merge).
   The gate reads the seats and the CI rollup in one view, so an APPROVE
   posted before the checks finish counts only once that head is green.
-  The repository allows squash merges only.
+  The repository allows squash merges only. `merge_gate.py` exits 0 only
+  when every PR named is READY (1 when any is not, 2 for refused
+  arguments), so `merge_gate.py N && gh pr merge N` stops at the gate
+  instead of merging past its verdict (ops #123).
 - **A freeze never holds merges.** Releases run on a daily train (06:00Z,
   plus on demand) from a freeze commit that sits on `origin/main` and is
   built in its own clean checkout; main keeps merging while a release is
