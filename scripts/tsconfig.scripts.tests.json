@@ -95,6 +95,7 @@
 		"test/world/outdoorWorldRegionResources.test.mjs",
 		"test/assets/pythonRun.test.mjs",
 		"test/assets/rebuildLockInterop.test.mjs",
+		"test/pipeline/goTestBudget.test.mjs",
 		"test/world/worldFormats.test.mjs"
 	]
 }

@@ -43,7 +43,7 @@ jobs:
           match() { printf '%s\n' "$files" | grep -qE "$1|$shared" && echo true || echo false; }
           echo "client=$(match '^(apps/client-next/|packages/)')" >> "$GITHUB_OUTPUT"
           # The Go gate also reads the pipeline paths and its own scripts.
-          echo "server=$(match '^(apps/server/|scripts/checks/(check_go_server|checkStamps)\.mjs|scripts/build/world/paths\.mjs)')" >> "$GITHUB_OUTPUT"
+          echo "server=$(match '^(apps/server/|scripts/checks/((check_go_server|checkStamps|goTestBudget)\.mjs|goTestCPU\.go|go-test-budget\.txt)|scripts/build/world/paths\.mjs)')" >> "$GITHUB_OUTPUT"
 
   client-source:
     needs: changes

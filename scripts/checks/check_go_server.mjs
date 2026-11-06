@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-Go Server Verification Gate
+check_go_server.mjs - Go server verification gate
 
 Module hygiene (`go mod tidy -diff` for the module and the lint tool module,
 gofmt, `go vet`, golangci-lint), every package's tests, the race detector on
@@ -36,9 +36,10 @@ operations per package; inside it, a cached run of every package takes 10s.
 SRO_GO_TEST_CACHE=off restores -count=1 (flake hunting).
 Tiers. The everyday gate runs the tests with -short: whole-catalogue and
 brute-force evidence sweeps (marked tier.Long, internal/testsupport/tier)
-skip there, and every package's tests must finish inside
-TEST_BUDGET_SECONDS; a package over it fails the gate unless the shrinking
-ledger scripts/checks/go-test-budget.txt names it. `--long`
+skip there. A package over TEST_BUDGET_SECONDS wall time is rechecked
+uncached and must fit the same budget in process CPU time (user + system),
+so CPU contention is not a regression. The shrinking ledger
+scripts/checks/go-test-budget.txt keeps its exemptions. `--long`
 (check:server:long, and every release freeze) runs only the test steps,
 without -short, so the sweeps run; neither tier needs a hosted CI.
 SRO_GO_GATES=label,label runs only the named steps (CI spreads the gate
@@ -74,6 +75,7 @@ import { fileURLToPath } from "node:url";
 import { publicAssetsRoot, retailTextdataRoot } from "../build/world/paths.mjs";
 import { findPass, fingerprintOf, recordPass, snapshotAsync } from "./checkStamps.mjs";
 import { failureSummary, persistFailureReports, printFailureReports } from "./failureReport.mjs";
+import { checkTestBudget } from "./goTestBudget.mjs";
 
 const scriptDirectory = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDirectory, "..", ".." );
@@ -96,8 +98,9 @@ const STEP_ENVIRONMENT = [
 	"CGO_ENABLED",
 	"GOEXPERIMENT"
 ];
-// TEST_BUDGET_SECONDS is the most one package's everyday tests may take.
+// A slow wall-time result is confirmed against this many CPU seconds.
 const TEST_BUDGET_SECONDS = 30;
+const budgetInputs = [ "scripts/checks/goTestBudget.mjs", "scripts/checks/goTestCPU.go" ];
 const VULNERABILITY_DATABASE_INDEX = "https://vuln.go.dev/index/db.json";
 // A database update is noticed within this long; govulncheck itself always
 // scans against the live database. The key is kept under .state.
@@ -119,7 +122,7 @@ const racePackages = [
 // digests its share. The snapshot, the toolchain query and the database
 // key are independent and run concurrently.
 const [moduleFiles, goVersion, vulnerabilityDatabase] = await Promise.all( [
-	snapshotAsync( [ "apps/server" ] ),
+	snapshotAsync( [ "apps/server", ...budgetInputs ] ),
 	commandOutput( "go", [ "version" ] ),
 	vulnerabilityDatabaseModified()
 ] );
@@ -199,7 +202,7 @@ const steps = selectSteps(
 			args: testArgs,
 			accept: longTier ? undefined : withinTestBudget,
 			select: () => true,
-			keys: [ ...testKeys, `=budget ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
+			keys: [ ...testKeys, `=budget cpu-recheck ${TEST_BUDGET_SECONDS} ${budgetLedger.join( "," )}` ]
 		},
 		{
 			label: "race",
@@ -230,9 +233,8 @@ const steps = selectSteps(
 	] )
 );
 
-// The test step runs alone first: its per-package times are what the budget
-// measures, and racing it against the race step (most of the gate's time)
-// inflated them past the budget. Every wave still runs, so one failure never
+// The test step runs alone first to avoid unnecessary CPU budget rechecks
+// caused by this gate's own race step. Every wave still runs, so one failure never
 // hides another; the first failure is thrown at the end.
 const isTestStep = ( step ) => step.label.startsWith( "tests" );
 let firstFailure = null;
@@ -260,32 +262,54 @@ console.log(
 ================
 withinTestBudget
 
-Accepts the everyday test output when every package that ran finished
-inside TEST_BUDGET_SECONDS, or is still named in the budget ledger. Cached
-packages ("(cached)") cost nothing and are not timed. Prints every package
-over budget, ledger or not, so the ledger can only shrink.
+Keep the ordinary cached run cheap; confirm only unlisted slow packages
+using uncached process CPU time. Cached packages cost nothing.
 ================
 */
-function withinTestBudget( output ) {
-	const over = [];
-	for ( const match of output.matchAll( /^ok\s+(\S+)\s+([0-9.]+)s/gm ) ) {
-		const seconds = Number( match[2] );
-		if ( seconds > TEST_BUDGET_SECONDS ) over.push( { pkg: match[1], seconds } );
-	}
-	for ( const { pkg, seconds } of over ) {
-		const listed = budgetLedger.includes( pkg );
-		console.log(
-			`test budget: ${pkg} took ${seconds}s (budget ${TEST_BUDGET_SECONDS}s)${listed ? ", in ledger" : ""}`
-		);
-	}
-	const offenders = over.filter( ( { pkg } ) => !budgetLedger.includes( pkg ) );
-	if ( offenders.length ) {
-		console.log(
-			`test budget: ${offenders.length} package(s) over ${TEST_BUDGET_SECONDS}s; make them faster or move ` +
-				"evidence sweeps to tier.Long (internal/testsupport/tier)"
-		);
-	}
-	return offenders.length === 0;
+async function withinTestBudget( output ) {
+	const diagnostics = [];
+	const accepted = await checkTestBudget( output, {
+		budgetSeconds: TEST_BUDGET_SECONDS,
+		ledger: budgetLedger,
+		measure: measureTestCPU,
+		log: ( line ) => diagnostics.push( line )
+	} );
+	// A rejection's CPU evidence belongs in the persisted failure report too.
+	if ( !accepted ) throw new Error( diagnostics.join( "\n" ) );
+	for ( const line of diagnostics ) console.log( line );
+	return true;
+}
+
+/*
+================
+measureTestCPU
+
+Only the recheck uses -exec: Go disables its test input log with an exec
+wrapper, so using one for the normal run would lose file/environment cache
+invalidation. -count=1 makes every CPU measurement fresh. Build from one
+standard-library-only Go file with the server's own toolchain.
+================
+*/
+async function measureTestCPU( packages ) {
+	const timer = path.join( rebuildRoot, ".state", "go-test-cpu" + (process.platform === "win32" ? ".exe" : "") );
+	mkdirSync( path.dirname( timer ), { recursive: true } );
+	const built = await runStep( "test CPU timer", "go", [
+		"build",
+		"-o",
+		timer,
+		path.join( rebuildRoot, "scripts", "checks", "goTestCPU.go" )
+	] );
+	if ( !built.ok ) return built;
+	// Go parses -exec itself; quotes preserve worktrees whose paths contain spaces.
+	return runStep( "test CPU recheck", "go", [
+		"test",
+		`-p=${packageParallelism}`,
+		"-short",
+		"-count=1",
+		"-json",
+		`-exec="${timer}"`,
+		...packages
+	] );
 }
 
 /*
@@ -567,7 +591,7 @@ runStep
  * @param {string} label
  * @param {string} command
  * @param {string[]} args
- * @param {((output: string) => boolean) | undefined} accept
+ * @param {((output: string) => boolean | Promise<boolean>) | undefined} [accept]
  * @returns {Promise<{ label: string, ok: boolean, code: number | null, signal: string | null, output: string, seconds: string }>}
  */
 function runStep( label, command, args, accept ) {
@@ -584,8 +608,14 @@ function runStep( label, command, args, accept ) {
 		child.on( "error", ( error ) => {
 			output += String( error );
 		} );
-		child.on( "close", ( code, signal ) => {
-			const ok = code === 0 && (accept === undefined || accept( output ));
+		child.on( "close", async ( code, signal ) => {
+			let ok = code === 0;
+			try {
+				if ( ok && accept ) ok = await accept( output );
+			} catch ( error ) {
+				output += `\nacceptance check failed: ${error}\n`;
+				ok = false;
+			}
 			resolve( { label, ok, code, signal, output, seconds: formatSeconds( performance.now() - stepStarted ) } );
 		} );
 	} );
