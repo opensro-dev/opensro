@@ -785,9 +785,13 @@ test("native tooltip lines the port dropped render from their parameters (#2273)
 		"Every [3] second(s): [25]% damage"
 	] );
 	assert.deepEqual( direct( paramRow( [ [ 0x70, [ 0, 0, 3000 ] ] ] ) ), [] );
-	// hwir: the berserk-gauge chance at values[0].
+	// hwir: the berserk-gauge chance at values[0]. The native gate
+	// is cmp/jbe (unsigned), so a negative chance prints too (#2628).
 	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 30 ] ] ] ) ), [
 		"Chance of Obtaining Berserk Gage 30% Increase"
+	] );
+	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ -5 ] ] ] ) ), [
+		"Chance of Obtaining Berserk Gage -5% Increase"
 	] );
 	assert.deepEqual( direct( paramRow( [ [ 0x1e0, [ 0 ] ] ] ) ), [] );
 	// saps: flag bits 4 and 8 print the physical and magical resonance lines.
