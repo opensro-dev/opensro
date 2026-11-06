@@ -125,11 +125,6 @@ export interface ExperimentalOptions {
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
-	// Port-only, not native (#1849): the buff board shows the Most Wanted
-	// row (the shard's 0x3FBA state, server SRO_MOST_WANTED) while the
-	// player's job suit is worn. Off unless turned on, so each player
-	// opts in; off is the native board.
-	readonly mostWantedBuff: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -431,7 +426,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		plusSevenNotices: record.plusSevenNotices !== false,
 		breakNotices: record.breakNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
-		mostWantedBuff: enabled( "mostWantedBuff" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,

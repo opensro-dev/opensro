@@ -393,16 +393,6 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
 		} ]
-	},
-	{
-		title: "Jobs",
-		section: "Job buffs",
-		rows: [ {
-			key: "mostWantedBuff",
-			id: "experimental-most-wanted-buff",
-			label: "Most Wanted buff",
-			description: "Show your wanted level on the buff board."
-		} ]
 	}
 ];
 
