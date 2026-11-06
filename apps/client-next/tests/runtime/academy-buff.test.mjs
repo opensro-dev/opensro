@@ -38,9 +38,42 @@ function state() {
 		result: null,
 		localMemberId: 11,
 		members: [
-			{ id: 10, name: "Master", kind: 0 },
-			{ id: 11, name: "Me", kind: 2 },
-			{ id: 12, name: "Donor", kind: 2 }
+			{
+				id: 10,
+				name: "Master",
+				kind: 0,
+				level: 80,
+				entryLevel: 80,
+				model: 1907,
+				offline: false,
+				announced: true,
+				honor: 0,
+				location: ""
+			},
+			{
+				id: 11,
+				name: "Me",
+				kind: 2,
+				level: 30,
+				entryLevel: 20,
+				model: 1907,
+				offline: false,
+				announced: true,
+				honor: 0,
+				location: ""
+			},
+			{
+				id: 12,
+				name: "Donor",
+				kind: 2,
+				level: 30,
+				entryLevel: 20,
+				model: 1907,
+				offline: false,
+				announced: true,
+				honor: 0,
+				location: ""
+			}
 		]
 	};
 }
