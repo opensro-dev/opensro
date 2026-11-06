@@ -60,6 +60,9 @@ squadAdmits
 Whether gid may take target without forcing it: fewer than SquadMemberLimit
 other actors of its population hold that target. A forced join (retaliation,
 help, assist, the fixed-query uniques, flag 4/0x80 rows) is never refused.
+A dead actor is no member: the reference server's DEAD state entry clears
+the combat target, which leaves the squad at death, while the port keeps
+the corpse registered for the action layer's death presentation.
 ==================
 */
 func (s *MonsterState) squadAdmits(division string, gid, target uint32) bool {
@@ -68,7 +71,7 @@ func (s *MonsterState) squadAdmits(division string, gid, target uint32) bool {
 	state := s.populationForObject(division, gid)
 	members := 0
 	for other, record := range state.movers.records() {
-		if other == gid || record.live == nil || record.live.TargetGID() != target {
+		if other == gid || record.live == nil || record.live.TargetGID() != target || state.instances.isDead(other) {
 			continue
 		}
 		members++

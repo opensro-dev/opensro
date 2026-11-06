@@ -96,6 +96,12 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.items.JobWeekTick(game.divisionID, nowMs)
 			return nil
 		}},
+		// Port-only (#2675): the periodic time-online credit; the
+		// session-close credit in sessionClosed covers the tail.
+		{Name: "online-credit", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.creditOnlineSessions(sessionViews(ticker.Source), nowMs)
+			return nil
+		}},
 	}
 	// Native/off installs no hook and takes no extra session snapshots.
 	if game.betaSilk != nil {

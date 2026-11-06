@@ -63,3 +63,52 @@ func BenchmarkMoverGenerationCarried(b *testing.B) {
 		}
 	})
 }
+
+/*
+================
+BenchmarkBehaviorActorLiveCarried
+
+The dispatch's existence probe over a harvested behaviour batch,
+resolved by gid against the same probe through the monster slot
+each actor's ref carried from the build. Both arms probe the same
+actors under the same state lock and population resolve; only the
+storage probe differs (#2133).
+================
+*/
+func BenchmarkBehaviorActorLiveCarried(b *testing.B) {
+	ops, sessions, now := seededLegWorld(b, 1200)
+	settle := &fakePusher{}
+	for tick := 0; tick < 10; tick++ {
+		*now = seededLegBaseMs + int64(tick)*100
+		ops.RunMonsterLeg(*now, sessions, settle)
+	}
+	*now += 60000
+	var key populationKey
+	var refs []behaviorActorRef
+	for _, batch := range ops.Monsters.behaviorBatches(*now) {
+		if len(batch.actors) > 0 {
+			key, refs = batch.key, batch.actors
+			break
+		}
+	}
+	if len(refs) < 500 {
+		b.Fatalf("harvested %d due actors, want the population", len(refs))
+	}
+	b.ReportAllocs()
+	b.Run("gid", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			ref := refs[i%len(refs)]
+			if !ops.Monsters.behaviorActorLive(key, ref.gid) {
+				b.Fatal("gid probe lost a seeded actor")
+			}
+		}
+	})
+	b.Run("carried", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			ref := refs[i%len(refs)]
+			if !ops.Monsters.behaviorActorLiveAt(key, ref) {
+				b.Fatal("carried probe lost a seeded actor")
+			}
+		}
+	})
+}

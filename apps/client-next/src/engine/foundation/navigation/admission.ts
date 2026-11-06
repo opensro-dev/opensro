@@ -45,7 +45,8 @@ export function admitObjectProduct( product: NavigationProduct, regionId: number
 		}
 		if (
 			!p || ![ p.x, p.y, p.z, p.yaw ].every( Number.isFinite ) || !p.mesh ||
-			p.floor !== undefined && (!Number.isInteger( p.floor ) || p.floor < 0 || p.floor > 0xffffffff)
+			p.floor !== undefined && (!Number.isInteger( p.floor ) || p.floor < 0 || p.floor > 0xffffffff) ||
+			p.room !== undefined && (!Number.isInteger( p.room ) || p.room < 0 || p.room > 0xffffffff)
 		) throw new Error( "Invalid collision placement" );
 		if (
 			p.obstacles &&
