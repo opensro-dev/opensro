@@ -36,7 +36,10 @@ type fakeConn struct {
 	// recording the frame (a refused or dropped datagram).
 	dgramErr error
 	kind     string // Kind() override; empty means "fake"
-	addr     string // RemoteAddr() override; empty means "fake:0"
+	// addr and userAgent are the accept facts RemoteAddr and
+	// ClientUserAgent report; empty keeps the stand-in peer.
+	addr      string
+	userAgent string
 }
 
 func newFakeConn(gated bool) *fakeConn {
@@ -136,6 +139,8 @@ func (f *fakeConn) RemoteAddr() string {
 	}
 	return "fake:0"
 }
+
+func (f *fakeConn) ClientUserAgent() string { return f.userAgent }
 
 func testCfg() Config {
 	cfg := Config{
