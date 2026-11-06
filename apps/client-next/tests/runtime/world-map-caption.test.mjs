@@ -37,7 +37,7 @@ function captionAt( pose ) {
 	} );
 	try {
 		let caption = "";
-		hud.present( {
+		hud.present( /** @type {any} */ ({
 			next: { entities: [] },
 			game: { pose },
 			pose,
@@ -71,7 +71,7 @@ function captionAt( pose ) {
 			authoredLabeledButton: () => {},
 			closeButton: () => {},
 			image: () => {}
-		} );
+		}) );
 		return caption;
 	} finally {
 		hud.dispose();
