@@ -205,3 +205,35 @@ func TestFlagRowsRedirectBetweenTraderAndVehicle(t *testing.T) {
 		t.Fatal("a flag-0x80 row kept aiming at a thief beside its vehicle")
 	}
 }
+
+/*
+================
+TestDeadSquadMemberFreesItsSlotAtDeath
+
+The reference server's DEAD state entry clears the combat target, so a
+killed member leaves the squad at once. The port keeps the corpse
+registered (and its mover's target) for the death presentation; that corpse
+must not hold the slot a waiting monster would take.
+================
+*/
+func TestDeadSquadMemberFreesItsSlotAtDeath(t *testing.T) {
+	ops, actors, target := squadFixture(t)
+	for _, actor := range actors[:monster.SquadMemberLimit] {
+		squadEngage(t, ops, actor.Gid, target.Gid)
+	}
+	last := actors[monster.SquadMemberLimit]
+	from := monster.Pose{RegionID: last.Spawn.RegionID, X: last.Spawn.X, Y: last.Spawn.Y, Z: last.Spawn.Z}
+	if _, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, aggressiveTactics()); ok {
+		t.Fatal("an unforced seventh joined a full squad")
+	}
+	killed := actors[0]
+	if hit, _ := ops.Monsters.ApplyDamage(monsterTestDivision, killed.Gid, killed.CurrentHP); !hit.Fatal {
+		t.Fatal("fixture kill was not fatal")
+	}
+	if mover, ok := ops.Monsters.Mover(monsterTestDivision, killed.Gid); !ok || mover.TargetGID() != target.Gid {
+		t.Fatal("fixture no longer keeps the corpse's target; this test no longer covers the retention window")
+	}
+	if got, ok := ops.acquireSightTarget(monsterTestDivision, last, from, []playerPose{target}, aggressiveTactics()); !ok || got.Gid != target.Gid {
+		t.Fatal("a corpse kept its squad slot")
+	}
+}

@@ -23,9 +23,19 @@ import (
 arrowFixture
 ================
 */
-func arrowFixture(t *testing.T) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+func arrowFixture(t testing.TB) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
 	t.Helper()
-	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	return arrowFixtureHP(t, 100000)
+}
+
+/*
+================
+arrowFixtureHP
+================
+*/
+func arrowFixtureHP(t testing.TB, monsterHP uint32) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+	t.Helper()
+	rt, clock, c, target := newCombatTestRuntime(t, monsterHP)
 	items := rt.deps.ItemReferences().(staticItemSource)
 	weapon := items[c.MissionInventory[0].Codename]
 	weapon.TypeIDs[3] = 6
