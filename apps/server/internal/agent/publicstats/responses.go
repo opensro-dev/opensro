@@ -355,6 +355,10 @@ type RankingRow struct {
 	PKKills     int  `json:"pkKills,omitempty"`
 	UniqueKills int  `json:"uniqueKills"`
 	Gear        Gear `json:"gear"`
+	// OnlineSeconds is the character's credited time in the world, all
+	// time and for the rolling UTC week (the by=online board's keys).
+	OnlineSeconds     int64 `json:"onlineSeconds,omitempty"`
+	OnlineWeekSeconds int64 `json:"onlineWeekSeconds,omitempty"`
 }
 
 // RankingsResponse is GET /public/v1/rankings: one page of 50.
