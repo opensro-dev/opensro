@@ -74,7 +74,7 @@ const (
 	// when the slot's accumulated-ms field (+0x20) reaches
 	// 0x36EE80 (one hour), and that field is 0x5265C00 (24 h)
 	// minus the remaining time the shows carry (client 0x6E7014,
-	// merged into the slot at 0x6E61B6). The gate is on the time
+	// merged into the slot by the client at 0x6E61B6). The gate is on the time
 	// the window has run, not the time left in it. The client's
 	// +1 ms store puts its offer edge one whole minute past the
 	// hour, so the pass asks for more than the hour accumulated.
