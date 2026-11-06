@@ -38,6 +38,7 @@ function flatView() {
 		available: () => true,
 		block: () => 0,
 		floor: () => undefined,
+		room: () => undefined,
 		pick: query => ({ ...query.ray.target }),
 		clip: ( _from, to, query ) => {
 			if ( query ) query.status = 0;
