@@ -683,6 +683,19 @@ type Runtime struct {
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
 
+	// TrainingCampKill is the Academy cumulated-buff kill hook (#2270). The
+	// group reward loop calls it for each member's share before the grant:
+	// it accumulates the member's saved buff (or drains a received row for
+	// the bonus it returns, folded into the grant) and returns the private
+	// academy frames for that member's own session. Nil leaves
+	// cumulated-buff earning off (a unit runtime carries no camp door).
+	TrainingCampKill func(
+		divisionID string,
+		character *enterworld.Character,
+		exp, skillExp, monsterBaseExp int64,
+		nowMs int64,
+	) (bonusExp, bonusSkillExp int64, frames []wire.Frame)
+
 	// RefundExperience is the stat authority's door-free refund of EXP lost
 	// at death (a resurrection's share). Unlike UpdateExperience it is not a
 	// gain, so the growth rates never scale it. Nil grants no refund.

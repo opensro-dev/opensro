@@ -89,6 +89,64 @@ const OpTCStatus uint16 = 0x3AC5
 // precedent - the import may not point back through party).
 const OpInvitationProposal uint16 = 0x3393
 
+// OpTCBuffState is the S->C 0x3CC1 saved-buff state frame (the client
+// handler CPSMission_OnTrainingCampBuffState0x3CC1): a state byte, and
+// for the show states two u32s (window minutes remaining, accumulated
+// value) that light magic-state slot 7.
+const OpTCBuffState uint16 = 0x3CC1
+
+// OpTCBuffList is the S->C 0xB00C buff list (the client handler
+// CNetProcessThird_HandleTrainingCampBuffListB00C): a mode byte and,
+// for the row modes, a signed count byte and [minutes][member id]
+// [value] rows that render as list kind 8 on the receiver's board
+// (slot 8, the received/reserved buffs).
+const OpTCBuffList uint16 = 0xB00C
+
+// OpTCPassBuffRequest is the C->S 0x700C pass-to-Guardian request:
+// the slot-7 pass confirm's Yes (simple-box type 9's dispatch case)
+// sends it with an EMPTY payload. The client offers the confirm only
+// when the slot's accumulated time is at least one hour.
+const OpTCPassBuffRequest uint16 = 0x700C
+
+// Saved-buff states (0x3CC1). The client legs: 0/1 show slot 7 with
+// [minutes][value]; 7 prints UIIT_CTL_TC_SAVE_BUFF_TIME_OVER and shows
+// the same; 5/8/9 are the byte-only clears; 2/3/4/6 are no-ops.
+const (
+	// BuffStateKillRefresh is the kill-path refresh (the first grant
+	// of a window sends it; later cadence refreshes reuse it).
+	BuffStateKillRefresh uint8 = 0
+	// BuffStateEntry is the world-entry show of a live saved buff.
+	BuffStateEntry uint8 = 1
+	// BuffStateRemoval clears slot 7 (leave, kick, disband, pass).
+	BuffStateRemoval uint8 = 5
+	// BuffStateExpired reports the run-out window (entry after an
+	// offline expiry, or the minute pass reaching zero).
+	BuffStateExpired uint8 = 7
+	// BuffStateGraduated clears on graduation (the level transition
+	// into the graduation band and the graduation itself).
+	BuffStateGraduated uint8 = 8
+)
+
+// Buff-list modes (0xB00C). Modes 0/1 carry rows; 5/8/9 remove the
+// rows they carry; 2 is the byte-only pass refusal (the client prints
+// UIIT_MSG_TC_PASS_ERROR).
+const (
+	BuffListAdd            uint8 = 0
+	BuffListRefresh        uint8 = 1
+	BuffListPassError      uint8 = 2
+	BuffListRemove         uint8 = 5
+	BuffListRemoveGraduate uint8 = 8
+)
+
+// BuffListRow is one 0xB00C row: the window minutes remaining, the
+// camp member id the row keys on (the donor for a received row), and
+// the points on it.
+type BuffListRow struct {
+	Minutes  uint32
+	MemberID uint32
+	Value    uint32
+}
+
 // InvitationTypeTC is the CPSMission_OnConfirmBoxPrompt0x3393 type
 // byte for the mentor/TC arm (inviteType 9 -> the IDCLOSE case,
 // simple msgbox type 8).
@@ -491,4 +549,54 @@ CNetProcess_OnNotification0x3AC5 case 11): {u8 12}
 */
 func EncodeCampEvaluationUpdate3AC5(evaluationRank uint8) []byte {
 	return []byte{12, evaluationRank}
+}
+
+/*
+================
+EncodeBuffStateShow3CC1
+
+EncodeBuffStateShow3CC1 renders a 0x3CC1 show state (0, 1 or 7):
+{u8 state}{u32 minutes}{u32 value} - the client stores the value and
+lights slot 7 with a duration of minutes*60000+1 ms (1 ms at zero).
+================
+*/
+func EncodeBuffStateShow3CC1(state uint8, minutes, value uint32) []byte {
+	return wire.NewWriter(9).U8(state).U32(minutes).U32(value).Payload()
+}
+
+/*
+================
+EncodeBuffStateClear3CC1
+
+EncodeBuffStateClear3CC1 renders a 0x3CC1 clear state (5, 8 or 9):
+{u8 state} and nothing else - the client's clear arm reads no body,
+clears the stored value and removes the slot-7 row.
+================
+*/
+func EncodeBuffStateClear3CC1(state uint8) []byte {
+	return []byte{state}
+}
+
+/*
+================
+EncodeBuffListB00C
+
+EncodeBuffListB00C renders one 0xB00C buff-list frame: {u8 mode} and,
+for the row modes, {i8 count}{rows of u32 minutes, u32 member id,
+u32 value}. Mode 2 (the pass refusal) is the mode byte alone. The
+client's count test is signed, so the row count must stay under 128;
+a camp's received rows can never approach it (one per camp member).
+================
+*/
+func EncodeBuffListB00C(mode uint8, rows []BuffListRow) []byte {
+	if mode == BuffListPassError {
+		return []byte{mode}
+	}
+	writer := wire.NewWriter(2 + 12*len(rows))
+	writer.U8(mode)
+	writer.U8(uint8(len(rows)))
+	for _, row := range rows {
+		writer.U32(row.Minutes).U32(row.MemberID).U32(row.Value)
+	}
+	return writer.Payload()
 }
