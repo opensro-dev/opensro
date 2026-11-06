@@ -11067,12 +11067,23 @@ export function createUi(
 					before = text.run( value.slice( 0, start ) ).width,
 					through = text.run( value.slice( 0, end ) ).width,
 					caret = selection[2] === selection[0] ? before : through;
+				// Native CIFEdit places one text line inside the client rect:
+				// GetCharacterScreenPosition (520AA0) aligns the text block's
+				// own height by the authored VAlign, and the render (522B50)
+				// draws the caret as a line of that same height - never the
+				// control's height, however tall the authored box is (#2615).
+				const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
+					lineTop = ink[1] + (node.vAlign === 1 ?
+						(ink[3] - lineHeight) / 2 :
+						node.vAlign === 2 ?
+						ink[3] - lineHeight :
+						0);
 				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
 				const scroll = focus === id && width > ink[2] ? Math.max( 0, caret - ink[2] + EDIT_CARET_WIDTH ) : 0,
-					box: UiRect = [ ink[0] - scroll, ink[1], Math.max( ink[2], width ), ink[3] ];
+					box: UiRect = [ ink[0] - scroll, lineTop, Math.max( ink[2], width ), lineHeight ];
 				if ( focus === id && end > start ) {
 					rect(
-						[ ink[0] + offset + before - scroll, ink[1], through - before, ink[3] ],
+						[ ink[0] + offset + before - scroll, lineTop, through - before, lineHeight ],
 						[ .2, .4, .7, .6 ],
 						"",
 						[
@@ -11084,7 +11095,7 @@ export function createUi(
 						ink
 					);
 				}
-				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
+				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign, vAlign: 0 } ) );
 				if ( focus === id && caretVisible ) {
 					// A right-aligned empty edit puts the caret on the clip's right
 					// edge, which the clip excludes; keep the native-looking caret
@@ -11093,7 +11104,7 @@ export function createUi(
 						ink[0] + ink[2] - EDIT_CARET_WIDTH,
 						Math.max( ink[0], ink[0] + offset + caret - scroll )
 					);
-					rect( [ caretX, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
+					rect( [ caretX, lineTop, EDIT_CARET_WIDTH, lineHeight ], white, "", [
 						0,
 						0,
 						1,
