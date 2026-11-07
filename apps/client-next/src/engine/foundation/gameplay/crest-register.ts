@@ -116,9 +116,10 @@ export function crestRegisterUploadPayload(
 	image: Uint8Array
 ): Uint8Array {
 	let binary = "";
-	const CHUNK = 0x8000;
-	for ( let offset = 0; offset < image.length; offset += CHUNK ) {
-		binary += String.fromCharCode( ...image.subarray( offset, offset + CHUNK ) );
+	// Bytes per fromCharCode chord: stack-safe for a cap-sized image.
+	const CHORD = 32768;
+	for ( let offset = 0; offset < image.length; offset += CHORD ) {
+		binary += String.fromCharCode( ...image.subarray( offset, offset + CHORD ) );
 	}
 	return new TextEncoder().encode(
 		JSON.stringify( { kind, slot, image: btoa( binary ) } )
