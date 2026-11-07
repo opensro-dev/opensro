@@ -447,3 +447,52 @@ func TestBetaUniqueRespawnWindow(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestJanganCaveRespawnWindow
+
+With SRO_JANGAN_CAVE_RESPAWN on, a respawning nest in the Ch'in Tomb cave
+regions (32770-32775) draws its respawn interval over 1-3 seconds instead
+of the authored 6-8 seconds, while the off setting, a non-cave region (the
+neighbouring Donwhang Stone Cave, 32769) and a non-respawning nest keep the
+authored seconds (#2719).
+================
+*/
+func TestJanganCaveRespawnWindow(t *testing.T) {
+	ordinaryRef := lifecycleRef(1)
+	caveNest := lifecycleNest(100)
+	caveNest.SpawnPoint.RegionID = 32774
+	// The shipped cave rows' authored range (qinshi_tomb_nests.tsv).
+	caveNest.RespawnDelayMinSec = 6
+	caveNest.RespawnDelayMaxSec = 8
+	stoneCaveNest := caveNest
+	stoneCaveNest.SpawnPoint.RegionID = 32769
+	noRespawnNest := caveNest
+	noRespawnNest.Respawn = false
+	for _, tc := range []struct {
+		name string
+		env  string
+		nest monster.NestRow
+		min  uint32
+		max  uint32
+	}{
+		{"cave off", "off", caveNest, 6_000, 8_000},
+		{"cave on", "on", caveNest, 1_000, 3_000},
+		{"stone cave on", "on", stoneCaveNest, 6_000, 8_000},
+		{"non-respawning cave on", "on", noRespawnNest, 6_000, 8_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(EnvJanganCaveRespawn, tc.env)
+			w := newLifecycleWorld(t, ordinaryRef, tc.nest)
+			// The synthetic nest position stands on no cave floor, so the
+			// spawn itself never materializes here; assert the rolled
+			// interval the nest runtime starts with.
+			w.s.StartDivision("division")
+			got := w.nest(0).intervalMs
+			if got < tc.min || got > tc.max {
+				t.Fatalf("intervalMs = %d, want in [%d, %d]", got, tc.min, tc.max)
+			}
+		})
+	}
+}

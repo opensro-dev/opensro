@@ -151,5 +151,6 @@ var catalogueExempt = map[string]string{
 	"SRO_WHISPER_JOB_ALIAS":                   "how a whisper resolves its target; the catalogue publishes no chat routing",
 	"SRO_THIEF_CART_TOWN_AREAS":               "where a thief cart is stopped at runtime; npcs.json publishes the townspeople, not town protection",
 	"SRO_BETA_UNIQUE_RESPAWN":                 "unique respawn timing; monsters.json publishes nests, not timers",
+	"SRO_JANGAN_CAVE_RESPAWN":                 "monster respawn timing in the Ch'in Tomb caves; monsters.json publishes nests, not timers",
 	"SRO_WEBTRANSPORT_PUBLIC":                 "how the shard's transport is served; no catalogue file carries it",
 }

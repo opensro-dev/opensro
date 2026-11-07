@@ -44,6 +44,7 @@ var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:            "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
+	simulation.EnvJanganCaveRespawn:     "spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",
 	// The tunables a rule's own text shows (game/tunables).
 	"SRO_MOST_WANTED_TEST_KILLS":      "shown in the Most Wanted test pacing rule",
