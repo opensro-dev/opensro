@@ -96,6 +96,13 @@ export type AssetRequest = {
 	// for the originals (foundation/assets/texture-variants.ts). Sent once.
 	kind: "texture-variant";
 	variant: import("@/engine/foundation/assets/texture-variants").TextureVariant | null;
+} | {
+	// Port-only: the HD set this device is served (#2061), or null while
+	// the Experimental row is off (foundation/assets/texture-variants.ts).
+	// Unlike the variant it may change while the worker runs: switching
+	// the row on starts the set's download, off stops it.
+	kind: "hd-textures";
+	format: import("@/engine/foundation/assets/texture-variants").HdTextureVariant | null;
 };
 /*
 ================
@@ -201,6 +208,8 @@ export interface AssetOwner {
 	// Port-only: the device's texture features, given once when known
 	// (foundation/assets/texture-variants.ts).
 	textureFeatures( features: readonly string[] ): void;
+	// Port-only: the Experimental "HD textures" row's live state (#2061).
+	hdTextures( enabled: boolean ): void;
 	cancel( id: number ): void;
 	// Starts the worker's background install once; uses no request slot.
 	install( listUrl: string ): void;

@@ -61,6 +61,9 @@ const OFF = Object.freeze( {
 	enchantSparks: true,
 	// On by default (owner 2026-10-14); it changes only devices without BC.
 	compressedTextures: true,
+	// Off by default (owner 2026-11-07, #2061): off fetches none of the
+	// HD set, not even its index.
+	hdTextures: false,
 	// On by default (owner 2026-10-14): near effects outrank far characters.
 	sharedActorRoom: true,
 	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
@@ -325,7 +328,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "HD" ]
 	);
 	// Lighting keeps the direct-light stages, the moving sun among them,
 	// and holds the silk history row for room (#2269); render scale joins
@@ -659,6 +662,13 @@ test("compressed textures are on unless explicitly false, and the stored reader 
 	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
 	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
+});
+
+test("HD textures are off unless explicitly true, so an old profile never downloads the set", () => {
+	for ( const value of [ undefined, null, {}, { hdTextures: 1 }, { hdTextures: "true" }, { hdTextures: false } ] ) {
+		assert.equal( experimentalOptions( value ).hdTextures, false, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { hdTextures: true } ).hdTextures, true );
 });
 
 test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {
