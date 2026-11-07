@@ -12,7 +12,12 @@ later floor catalogue holds the Ch'in Tomb art the v1.150 archives lack
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { type CaveMapCatalog, caveMapCatalog } from "@/engine/foundation/ui/cave-map";
 import { minimapNpcPositions } from "@/engine/foundation/ui/minimap-catalog";
-import { minimapArt, minimapDungeonRooms, minimapDungeons, minimapWithLaterFloors } from "@/engine/foundation/ui/minimap-tiles";
+import {
+	minimapArt,
+	minimapDungeonRooms,
+	minimapDungeons,
+	minimapWithLaterFloors
+} from "@/engine/foundation/ui/minimap-tiles";
 
 const RETAIL_FLOOR_CATALOG = "/assets/data/mission-dungeon-minimap.json";
 const LATER_FLOOR_CATALOG = "/assets/data/later-dungeon-minimap.json";

@@ -778,7 +778,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					caption = (cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
 						(page ?
 							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
-							hudCopy( "UIIT_PAG_WORLDMAP" )) || "World Map";
+							hudCopy( "UIIT_PAG_WORLDMAP" )) ||
+						"World Map";
 				windowBox( caption, mx, my, mw, mh );
 				const inner = mapClip;
 				// The map surface is CIFWorldMap itself, not a CIFButton: pressing or
