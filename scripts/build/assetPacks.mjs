@@ -186,11 +186,15 @@ export async function buildAssetPacks( options = {} ) {
 	// The build/server contract for the HD channel (#2800): the main index
 	// certifies that this published tree carries the HD set's own index, so
 	// the client can list the Experimental row without ever fetching /hd.
-	// The stamp names no HD byte and is absent whenever no HD index is
-	// published (an ordinary build, or an HD build that produced no set).
-	if (
-		packRoot === "/assets" && await stat( path.join( root, "hd", "packs", "manifest.json" ) ).catch( () => null )
-	) {
+	// The stamp names no HD byte and follows what this build published
+	// (#2812): the full build passes its own HD step's outcome as
+	// hdPublished, so a first HD build stamps and a build that skipped the
+	// set never does - a stale hd/ tree on disk certifies nothing. Callers
+	// that run no HD step (the standalone repack) leave it unset, and the
+	// tree's already-published HD index certifies as before.
+	const hdPublished = options.hdPublished ??
+		Boolean( await stat( path.join( root, "hd", "packs", "manifest.json" ) ).catch( () => null ) );
+	if ( packRoot === "/assets" && hdPublished ) {
 		index.hd = true;
 	}
 	validateAssetPackIndex( index, packRoot );

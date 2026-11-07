@@ -591,6 +591,13 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// Every producing lane has finished: list what the client installs in the
 	// background after world entry, so it is packed with the other game data.
 	const backgroundInstall = await timed( "backgroundInstall", () => steps.buildBackgroundInstallAsset() );
+	// The HD set packs behind its own index (hd/packs/manifest.json), so
+	// the pack tail below never names an HD byte (#2061). It runs before
+	// the final pack: the main index's hd stamp certifies what this build
+	// published (#2812), so the pack tail must already know the outcome -
+	// a first HD build stamps, and a build that skipped the set does not,
+	// however stale an hd/ tree the disk holds.
+	const hdTexturePacks = await timed( "hdTexturePacks", () => steps.buildHdTexturePacks() );
 	// The ordered pack tail lives in packPublicTree.mjs, shared with the
 	// standalone repack. Only the outdoor gate is per-caller: when the world lane
 	// produced no outdoor region group there is nothing to list. A full build
@@ -599,6 +606,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		timed,
 		retireSidecars: true,
 		auditClaims: true,
+		hdPublished: !hdTexturePacks.skipped,
 		groupInputs: {
 			uiImagePreloadPaths: uiImagePreload.images.map( ( image ) => image.path ),
 			missionMinimapTilePaths: missionMinimapTiles.map( ( tile ) => tile.publicPath ),
@@ -607,9 +615,6 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	} );
 	const { jsonOptimization, packGroups, claimAudit, assetPacks, sidecarRetirement, manifest, finalJsonOptimization } =
 		packed;
-	// The HD set packs behind its own index (hd/packs/manifest.json), so
-	// the pack tail above never names an HD byte (#2061).
-	const hdTexturePacks = await timed( "hdTexturePacks", () => steps.buildHdTexturePacks() );
 	return {
 		laneMemo: memo,
 		stepTimings,
