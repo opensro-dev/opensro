@@ -673,6 +673,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Port-only, not native: a GM's /FORGE item forge (issue #1980).
+	game.items.GMItemForge = action.GMItemForgeFromEnv()
+	if game.items.GMItemForge {
+		log.Infof("gm: /FORGE ON (%s); forged items are bound", action.EnvGMItemForge)
+	}
 	// Capture the Flag (native): the daily start and the house minimum.
 	flagWar, err := action.FlagWarSettingsFromEnv()
 	if err != nil {

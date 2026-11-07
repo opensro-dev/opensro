@@ -282,6 +282,10 @@ var Settings = []Setting{
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
+	// Port-only GM item forge (issue #1980): off is native; test shards
+	// enable it. Forged items are bound, so an enabled shard can only
+	// mint items its GMs cannot move into the economy.
+	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).

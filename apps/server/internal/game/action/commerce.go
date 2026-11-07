@@ -458,6 +458,12 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if !found || !isCOS && q.SourceSlot < inventory.EquipmentSlotEnd {
 				return false
 			}
+			// Port-only (forge.go, issue #1980): a bound forged item
+			// cannot be sold to a merchant, from bag or COS bag alike.
+			if item.ForgeBound {
+				refusal = wire.ErrCodeCannotDealAtShop
+				return false
+			}
 			// Port-only, not native (halloween.go): the seal leaves the
 			// merchant open. A sealed event helmet may be sold; the sale
 			// destroys it (the bag row drops) and the item classes a

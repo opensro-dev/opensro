@@ -295,6 +295,9 @@ type WireItem struct {
 	// wire grammar and content authority).
 	MagicOptions      []uint64
 	TransformRefObjID uint32 // monster capsule Data
+	// ForgeBound mirrors InventoryRow.ForgeBound for the roster path
+	// (port only, issue #1980); never set for starter items.
+	ForgeBound bool
 }
 
 /*
@@ -413,6 +416,7 @@ func EnsureMissionInventory(character *Character, equipRoster []WireItem) []Inve
 				StackCount:        stackCount,
 				MagicOptions:      copyMagicOptions(item.MagicOptions),
 				TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
+				ForgeBound: item.ForgeBound,
 			})
 		}
 		character.MissionInventory = rows
@@ -536,6 +540,7 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			StackCount:        row.StackCount,
 			MagicOptions:      copyMagicOptions(row.MagicOptions),
 			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+			ForgeBound: row.ForgeBound,
 		})
 	}
 	return out

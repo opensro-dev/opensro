@@ -87,6 +87,7 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 			Quantity:          uint16(quantity),
 			MagicOptions:      append([]uint64(nil), row.MagicOptions...),
 			TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
+			ForgeBound: row.ForgeBound,
 		})
 	}
 
@@ -122,6 +123,7 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 			StackCount:        int64(item.Quantity),
 			MagicOptions:      append([]uint64(nil), item.MagicOptions...),
 			TransformRefObjID: item.TransformRefObjID, Summon: summon,
+			ForgeBound: item.ForgeBound,
 		})
 	}
 

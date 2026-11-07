@@ -61,6 +61,10 @@ type InventoryRow struct {
 	// TransformRefObjID is a monster capsule's Data (item record +0x38,
 	// the capsule's data word): the monster the mask turns its user into.
 	TransformRefObjID uint32 `json:"transformRefObjId,omitempty"`
+	// ForgeBound marks an item forged by the GM item-forge tool (port
+	// only, issue #1980): it refuses trade, NPC sale, stall offer, mail
+	// attach and player drop. Absent on every native row.
+	ForgeBound bool `json:"forgeBound,omitempty"`
 }
 
 /*
