@@ -151,6 +151,10 @@ var Settings = []Setting{
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
+	// Port-only, not native: every pet bag holds five pages of 28 slots
+	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// native: a grab pet holds 28 slots and a transport its authored size.
+	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
@@ -282,6 +286,10 @@ var Settings = []Setting{
 	{Env: "SRO_HUNTING_GUIDE", NomadVar: "hunting_guide", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_GM_TRAINING_DUMMY", NomadVar: "gm_training_dummy", Default: "off"},
+	// Port-only GM item forge (issue #1980): off is native; test shards
+	// enable it. Forged items are bound, so an enabled shard can only
+	// mint items its GMs cannot move into the economy.
+	{Env: "SRO_GM_ITEM_FORGE", NomadVar: "gm_item_forge", Default: "off"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},
 	// Owner, 2026-10-18: reversed the 2026-10-13 +11 cap; the deployment
 	// default stays native ("off", ceiling 250).
@@ -292,6 +300,11 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2769): port-only, not native - a character's
+	// inventory base is 2.5 pages from creation instead of the native one
+	// page the expansion quests then grow. On by the owner's call; "off"
+	// is native. Existing records keep whatever capacity they hold.
+	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json. The catalogue prices quest rewards
@@ -309,6 +322,10 @@ var Settings = []Setting{
 	// elixirs off the smith. On by default (it extends the extra goods);
 	// off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
+	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
+	// potion merchant, at Hotan's native price of 900. On by default;
+	// off restores the native Jangan shop.
+	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
@@ -382,6 +399,11 @@ var Settings = []Setting{
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
 	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "off", Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2719): the Ch'in Tomb cave's authored 6-8 second
+	// respawn delays keep it feeling empty; when on, respawning cave nests
+	// (regions 32770-32775) draw over 1-3 seconds instead. Nests and drops
+	// are unchanged. "off" is native.
+	{Env: "SRO_JANGAN_CAVE_RESPAWN", NomadVar: "jangan_cave_respawn", Default: "off"},
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native. The catalogue
 	// publishes the caps the shard runs, so it reads the setting too.

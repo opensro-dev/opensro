@@ -2451,6 +2451,30 @@ test("GPU management controls send typed intent and preserve the selected guild 
 		f.dispose();
 	}
 });
+test("Space with a digit uses the extended quickslot bar whatever the page", () => {
+	// Game_OnKeyDown 68111A adds 0x28 to the digit while GetKeyState(VK_SPACE)
+	// is down; 572990 takes a key above 10 as the slot itself (41..50).
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		f.state.gameplay.skills = [ 7, 8, 9 ];
+		f.state.gameplay.quickSlots = [
+			{ slot: 31, kind: 0x49, payload: 9 },
+			{ slot: 41, kind: 0x49, payload: 7 },
+			{ slot: 50, kind: 0x49, payload: 8 }
+		];
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "F4" } );
+		f.ui.step( f.state, 100 );
+		f.ui.event( { kind: "key", code: "Digit1", space: true } );
+		assert.equal( sent.pop().skillId, 7 );
+		f.ui.event( { kind: "key", code: "Digit0", space: true } );
+		assert.equal( sent.pop().skillId, 8 );
+		f.ui.event( { kind: "key", code: "Digit1" } );
+		assert.equal( sent.pop().skillId, 9 );
+	} finally {
+		f.dispose();
+	}
+});
 test("hotbar page keys, clearing and IME suppression are distinct from skill execution", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

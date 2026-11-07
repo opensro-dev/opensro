@@ -66,6 +66,10 @@ type PlayerOperation struct {
 	// Clause is the rule clause a conduct action (mute-chat, unmute-chat,
 	// kick) cites; required for those, refused on the others.
 	Clause string `json:"clause,omitempty"`
+	// Crest is a remove-crest operation's target: "guild" for the
+	// named character's guild crest, "union" for the crest of the
+	// union that guild stands in (#2282).
+	Crest string `json:"crest,omitempty"`
 }
 
 /*
@@ -102,6 +106,10 @@ type PlayerOperations struct {
 	MuteChat   func(PlayerOperation) (any, error)
 	UnmuteChat func(PlayerOperation) (any, error)
 	Kick       func(PlayerOperation) (any, error)
+	// RemoveCrest clears the named character's guild crest, or the
+	// crest of the union that guild stands in, reverting it to none
+	// (#2282); the game world audits the removal itself.
+	RemoveCrest func(PlayerOperation) (any, error)
 }
 
 /*
@@ -201,6 +209,10 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "minutes belong to mute-chat only", http.StatusBadRequest)
 		return
 	}
+	if request.Action != "remove-crest" && request.Crest != "" {
+		http.Error(w, "a crest target belongs to remove-crest only", http.StatusBadRequest)
+		return
+	}
 	operation := endpoint.config.Rescue
 	switch request.Action {
 	case "", "rescue":
@@ -256,6 +268,13 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = hook
+	case "remove-crest":
+		if endpoint.config.RemoveCrest == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 ||
+			(request.Crest != "guild" && request.Crest != "union") {
+			http.Error(w, "invalid crest removal", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.RemoveCrest
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return

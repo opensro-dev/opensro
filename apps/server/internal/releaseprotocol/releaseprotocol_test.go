@@ -49,6 +49,24 @@ func TestTheCurrentProtocolPasses(t *testing.T) {
 
 /*
 ================
+TestExpandedPetFramesDoNotReuseReleasedProtocolThirteen
+================
+*/
+func TestExpandedPetFramesDoNotReuseReleasedProtocolThirteen(t *testing.T) {
+	previous, ok := ContractsOf(13)
+	if !ok || previous.Wanted != 2 || previous.Companions != 2 {
+		t.Fatalf("released protocol 13 changed: %+v", previous)
+	}
+	if Current <= 13 || WantedContract != 2 || CompanionsContract != 3 {
+		t.Fatal("expanded pet frames need a new protocol while retaining main's wanted contract")
+	}
+	if reached, recorder := serve(t, http.MethodPost, "13"); reached || recorder.Code != http.StatusUpgradeRequired {
+		t.Fatal("a protocol-13 browser would receive incompatible pet frames")
+	}
+}
+
+/*
+================
 TestAnyOtherDeclarationIsRefusedAsOutdated
 
 Browsers older than the handshake declare nothing; a stale or garbled

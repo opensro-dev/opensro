@@ -8,6 +8,7 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
 import {
+	browserDisplayClass,
 	experimentalOptions,
 	experimentalVideo,
 	phoneDisplay,
@@ -62,12 +63,10 @@ export function createRenderer(
 	let video = defaultVideoOptions();
 	// Experimental > Video, all off (native) until the saved preference arrives.
 	let experimental = experimentalVideo( experimentalOptions() );
-	// #1806: a phone gets the Phone resolution cap. Read once: the display
-	// class does not change while the page lives.
-	const phone = phoneDisplay( {
-		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
-		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
-	} );
+	// #1806: a phone gets the Phone resolution cap. Read once, through the
+	// one display-class reader the UI runtime also uses: the display class
+	// does not change while the page lives.
+	const phone = phoneDisplay( browserDisplayClass() );
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(
@@ -137,7 +136,6 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
-	let readbackWait = 0;
 	// Port-only (the 3D viewer): the studio light written over the frame
 	// environment, or null for the environment's own.
 	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
@@ -162,17 +160,6 @@ export function createRenderer(
 		setFrameWork( value ) {
 			world.frameWork( value );
 			characters.frameWork( value );
-		},
-		/*
-		================
-		readbackWaitMs
-
-		Only the pending visibility query is wait time. Deferred preparation
-		and the second submission remain CPU work in the runtime's budget.
-		================
-		*/
-		readbackWaitMs() {
-			return readbackWait;
 		},
 		/*
 		================
@@ -591,7 +578,6 @@ export function createRenderer(
 		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
-			readbackWait = 0;
 			probe?.renderBegin();
 			characters.profile( probe );
 			world.profile( probe );
@@ -879,9 +865,9 @@ export function createRenderer(
 						experimental.postProcessing || !!deferredPlan?.query,
 						renderScale
 					);
-				const finishDeferred = ( results?: readonly boolean[] ) => {
+				const finishDeferred = () => {
 					if ( disposed ) throw Error( "Renderer disposed during particle query" );
-					characters.completeDeferred( results );
+					characters.completeDeferred();
 					// The continuation's draws reach the second submit: same rule.
 					return staleDraws.live(
 						"deferred-particles",
@@ -900,18 +886,21 @@ export function createRenderer(
 					{
 						asynchronous: deferredPlan.query,
 						prepare: () => {
-							if ( !deferredPlan.query ) return finishDeferred();
-							const query = device.particleQuery(
-								deferredPlan.points,
-								scene.matrix,
-								color,
-								targetSurface.depth()
-							);
-							const started = performance.now();
-							return query.then( results => {
-								readbackWait += performance.now() - started;
-								return finishDeferred( results );
-							} );
+							if ( deferredPlan.query ) {
+								// The answer lands between frames (deliverDeferred):
+								// the frame never waits for the queue to drain (#2573).
+								device.particleQuery(
+									deferredPlan.points,
+									scene.matrix,
+									color,
+									targetSurface.depth()
+								).then( results => {
+									if ( !disposed ) characters.deliverDeferred( results );
+								} ).catch( error => {
+									if ( !disposed ) failure = String( error );
+								} );
+							}
+							return finishDeferred();
 						}
 					} :
 					undefined;

@@ -16,6 +16,8 @@ func TestInitializeRequiresAuthorityDirectory(t *testing.T) {
 }
 
 func TestInitializeCreatesFreshProductionStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	if err := Initialize(dir); err != nil {

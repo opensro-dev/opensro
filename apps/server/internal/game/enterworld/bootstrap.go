@@ -174,7 +174,12 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).
+	// The port-only inventory-pages base rides the same presentation: the
+	// encoded entry shows it, and the live record adopts it on encode.
 	presented := character.PresentInventoryExpansion()
+	if deps.InventoryPages {
+		presented = character.RaiseInventoryFloor(domain.InventoryPagesBase) || presented
+	}
 	result := buildCharacterProjection(deps, divisionID, character)
 	if result.NativeResult == nativeResultSuccess {
 		result.liveOwner = liveCharacter
@@ -296,6 +301,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		AvatarMagicOptions:   buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:    siegeFortressRows(deps),
+		SiegeStructUpgrades:  deps.SiegeStructUpgrades,
 		GameWorldData:        DefaultGameWorldDataRows(),
 		AvatarItems:          avatarItems,
 		EquipItems:           equipItems,

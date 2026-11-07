@@ -52,6 +52,50 @@ func petBondFrame(recipient, bear uint32, kind uint8) wire.Frame {
 
 /*
 ================
+bondSourceRefused
+
+The bond source's refusal judged on door-read values (#2030), so an
+owner whose record already refuses - deletion-pending, no live
+summoned bear under this gid, the expansion's owner half refused, or
+no Guardian's Bond passive slotted - never pays for the pet-owner
+copy bondSource used to take first. Every input weighs the same facts
+the copy path weighs: the admission's own bear test, the summoned
+flag, petExpansionAllowed's owner half (its pet half is the bear kind
+the admission already enforced), and the passive scan over a detached
+row - CharacterCOS's only deep children are its container and its
+rentals, neither of which makes a Guardian's Bond verdict, so the row
+rides out with both nil. A source the facts admit still takes the
+copy: transfer and revival read its owner and pet roots, and only a
+refusal is provable from values. The companionCopy seam abstains the
+same way petjudged's does.
+================
+*/
+func (rt *Runtime) bondSourceRefused(key petOwnerKey, state *petSession) (refused, judged bool) {
+	if rt.companionCopy != nil {
+		return false, false
+	}
+	rt.deps.Read(key.division, func() {
+		owner := state.character
+		pet := owner.CompanionByGID(key.gid)
+		if owner.DeletePending || pet == nil || pet.CurrentHP == 0 || companion.PetKind(pet.Codename) != "Bear" || !pet.Summoned {
+			refused = true
+			return
+		}
+		if rt.inFreeBattle(owner) || wearsJobSuit(owner, rt.deps.ItemReferences()) ||
+			domain.CharacterWorldInstance(owner) != domain.DefaultWorldInstance {
+			refused = true
+			return
+		}
+		row := *pet
+		row.Container, row.Rentals = nil, nil
+		_, _, slotted := companion.Passive(&row, "Guardian's Bond", companion.ModifiersFor(&row))
+		refused = !slotted
+	})
+	return refused, true
+}
+
+/*
+================
 bondSource
 
 The same opt-in, session, job, world and town gates protect transfer and revival.
@@ -60,6 +104,11 @@ Owner death is allowed here so a living bear can revive its own owner.
 */
 func (rt *Runtime) bondSource(key petOwnerKey, state *petSession) (*enterworld.Character, *domain.CharacterCOS, companion.SkillDef, uint8, bool) {
 	if !rt.AttackPetExpansion || state == nil || !state.ready || state.follower == nil {
+		return nil, nil, companion.SkillDef{}, 0, false
+	}
+	// A refusal the door-read facts already decide never reaches the
+	// copy below (#2030); an admitted source judges as before.
+	if refused, judged := rt.bondSourceRefused(key, state); judged && refused {
 		return nil, nil, companion.SkillDef{}, 0, false
 	}
 	// Runs for every bear source per bond plan: copy the owner only when

@@ -376,6 +376,7 @@ export function startRuntime(
 				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
 				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
@@ -502,28 +503,28 @@ export function startRuntime(
 			} )
 		);
 		const ui = own(
-			createUi(
+			createUi( {
 				assets,
-				sessionCommand,
-				renderer.setUi,
-				renderer.setUiTexture,
-				new URL( "/", import.meta.url ).href,
+				commands: sessionCommand,
+				publish: renderer.setUi,
+				texture: renderer.setUiTexture,
+				base: new URL( "/", import.meta.url ).href,
 				apiBase,
-				audio.uiClick,
-				audio.uiSound,
-				() => random.range( 1, 3 ),
-				count => random.range( 0, count ),
-				value => platform.saveGameOptions( value ),
-				( value, commit ) => {
+				clickSound: audio.uiClick,
+				sound: audio.uiSound,
+				loadingVariant: () => random.range( 1, 3 ),
+				chooseTip: count => random.range( 0, count ),
+				saveOptions: value => platform.saveGameOptions( value ),
+				audioPreference: ( value, commit ) => {
 					audio.options( value );
 					if ( commit ) platform.saveAudioOptions( value );
 				},
-				value => platform.saveSightMode( value ),
-				value => platform.saveInputOptions( value ),
-				value => platform.saveVideoOptions( value ),
-				value => platform.saveChatBlocks( value ),
-				value => platform.saveQuickslotOptions( value ),
-				{
+				saveSight: value => platform.saveSightMode( value ),
+				saveBindings: value => platform.saveInputOptions( value ),
+				saveVideo: value => platform.saveVideoOptions( value ),
+				saveBlocks: value => platform.saveChatBlocks( value ),
+				saveQuickslots: value => platform.saveQuickslotOptions( value ),
+				extensions: {
 					bugReport,
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
@@ -539,11 +540,12 @@ export function startRuntime(
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
+					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
-			)
+			} )
 		);
 		let lastDockPick = "none";
 		// Deliberate deviation (see world-double-click.ts): a drifted second
@@ -1042,7 +1044,6 @@ export function startRuntime(
 			frameWork.begin( now, visible );
 			renderer.setFrameWork?.( frameWork );
 			characters.frameWork( frameWork );
-			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -1431,7 +1432,6 @@ export function startRuntime(
 				if ( rendered ) {
 					await rendered;
 				}
-				waitMs = visible || admitting ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
@@ -1495,11 +1495,10 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				const cpuMs = performance.now() - cpuStart - waitMs;
+				const cpuMs = performance.now() - cpuStart;
 				sample( cpuHistory, cpuMs );
 				frameWork.recordCpu( cpuMs );
 				frameProbe()?.characterCount( "cpu-ms", cpuMs );
-				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
 				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
@@ -1647,6 +1646,10 @@ export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanv
 	const random = createPresentationRandom( 1 );
 	const assets = createAssets();
 	const renderer = createRenderer( canvas, random );
+	// Port-only: as startRuntime, the asset owner learns the device's
+	// texture features once, so a native texture read never waits on an
+	// answer this page would never give (texture-variants.ts, #2772).
+	void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 	const characters = createCharacterPresentation(
 		assets,
 		renderer,

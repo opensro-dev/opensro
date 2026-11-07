@@ -22,7 +22,7 @@ apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/mov
 apps/client-next/src/engine/runtime/simulation/worker/network/network.ts # one link owner: WebSocket and WebTransport lifecycles, framing, acks and close facts share one connection state
 apps/client-next/src/engine/runtime/simulation/worker/session/session.ts # one session owner: login and character commands, the native refusal ingest and the world-entry handoff share one state machine; the blocked refusal's strings (#2271) ride the same publish as its status, and no responsibility boundary runs inside the login answer handling
 apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts # one world-session owner: entry, the retry ladder, reference loading and the bind share each attempt's deadline, epoch and failure state; the #2311 failure evidence is read at the same attempt boundary, so no responsibility boundary runs inside the file
-apps/client-next/src/engine/runtime/ui/ui.ts # one closure holds state, input and rendering for every window; split per window
+apps/client-next/src/engine/runtime/ui/ui.ts # frame primitives and admission live in runtime/ui/frame; the remaining closure holds state, input and per-window drawing, to split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-presentation.test.mjs # test file; split by feature
@@ -32,6 +32,7 @@ apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every w
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/session.test.mjs # test file; split by feature
+apps/server/internal/game/action/petai.go # one pet-tick coordinator: the pet session book, the per-owner lane sequence and its frame routing share the tick's ordering; the lanes it calls are separate owners, and the sequence must stay readable in call order
 apps/server/internal/game/quest/runtime.go # one quest-runtime owner: definition lookup, acceptance, NPC option projection and the reward transaction share the character door and the active-quest list; the per-programme composition rows (acceptance grants, grant-day stamps, offer and re-grant hooks) join their programmes here, with no responsibility boundary inside the transaction owner
 apps/server/internal/game/world/simulation/monstertick.go # one leg orchestrator: scope visibility, the activity gate, batch dispatch and publication share the leg's ordered phases and its stats record; the batch-release defer (#2030) has no responsibility boundary to split on
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted

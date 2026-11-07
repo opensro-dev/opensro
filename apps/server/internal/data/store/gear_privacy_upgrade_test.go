@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -22,6 +24,7 @@ nothing to do.
 ================
 */
 func TestGearPrivacyUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-22 layout-9 authority upgrades to 23 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

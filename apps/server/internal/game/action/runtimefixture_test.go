@@ -46,10 +46,12 @@ func testItems() staticItemSource {
 		"ITEM_ETC_HP_POTION_01": {
 			RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", TypeIDs: [4]int64{3, 3, 1, 1},
 			NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50, "canUse": 1}), RecoveryHP: 120,
+			CanDrop: true, CanDropOnDeath: true,
 		},
 		"ITEM_CH_SWORD_01_A_RARE": {
 			RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeIDs: [4]int64{3, 1, 6, 2},
 			Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
+			CanDrop: true, CanDropOnDeath: true,
 			Combat: &enterworld.ItemCombatRef{
 				PhysicalAttack: enterworld.ItemAttackRange{
 					Minimum: enterworld.ItemStatRange{Min: 15, Max: 16, PerPlus: 2.4},

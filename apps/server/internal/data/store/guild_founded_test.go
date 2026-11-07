@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -25,6 +26,8 @@ in the record; no update may move it, and it survives a reopen.
 ================
 */
 func TestCreateGuildStampsFoundingTime(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	clock.Advance(time.Hour)
@@ -69,6 +72,8 @@ A second upgrade has nothing to do.
 ================
 */
 func TestGuildFoundedUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-25 authority upgrades to 26 with its guild row untouched")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := guildTestCharacter("Elder")

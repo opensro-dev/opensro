@@ -14,7 +14,9 @@ package movement
 
 import (
 	"opensro.online/server/internal/domain"
+	"slices"
 	"sort"
+	"sync"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -69,6 +71,17 @@ type sessionWorld struct {
 	rt         *Runtime
 	divisionID string
 	character  *enterworld.Character
+
+	// The peer appearance last handed to a tick and the exact inputs
+	// that produced it: WorldSnapshot rebuilds the appearance only
+	// when an input moved, so an unchanged peer costs a fingerprint
+	// compare per tick instead of a fresh build. Guarded because
+	// WorldSnapshot may run concurrently (the snapshot race test
+	// drives it so).
+	appearanceMu       sync.Mutex
+	appearancePrimed   bool
+	appearanceInputs   peerAppearanceFingerprint
+	appearanceSnapshot *simulation.PeerAppearance
 }
 
 /*
@@ -149,19 +162,7 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 	if p.rt.CompanionPresentations == nil && p.rt.PetPresentation != nil {
 		cos = p.rt.PetPresentation(p.divisionID, captured.name)
 	}
-	appearance := peerAppearance(p.rt.deps.GuildAuthority(), p.rt.Unions, p.divisionID, captured)
-	if appearance != nil && p.rt.Stalls != nil {
-		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
-			appearance.StallTitle = s.Title
-			appearance.StallDecoration = s.Decoration
-		}
-	}
-	if appearance != nil && p.rt.ActionSpeed != nil {
-		appearance.ActionSpeed = p.rt.ActionSpeed(p.divisionID, captured.name)
-	}
-	if appearance != nil && p.rt.SpawnSkills != nil {
-		appearance.SpawnSkills = peerSpawnSkills(p.rt.SpawnSkills(p.divisionID, captured.name))
-	}
+	appearance := p.appearanceFor(captured)
 	return simulation.SessionSnapshot{
 		DivisionID:       p.divisionID,
 		WorldInstance:    worldInstance,
@@ -177,6 +178,62 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 		COS:              cos,
 		Companions:       companions,
 	}
+}
+
+/*
+==================
+sessionWorld.appearanceFor
+
+The session's peer appearance for one snapshot: the build of the
+last WorldSnapshot, handed out again while every input that feeds
+it - the door capture, the guild half, the stall, the action
+speed, the spawn skills - is unchanged. A peer's faces change
+rarely next to the tick rate, so the unchanged case (the common
+one) costs a fingerprint compare instead of a fresh build.
+
+The kept appearance is shared across ticks, which is safe here
+because no reader mutates a snapshot's appearance: the peer leg
+copies the struct before stamping walk/run speeds onto its copy,
+and the rest only read. Any input change rebuilds and replaces
+the kept value; the replaced one is never written again.
+==================
+*/
+func (p *sessionWorld) appearanceFor(captured peerAppearanceCapture) *simulation.PeerAppearance {
+	if !captured.hasModel {
+		return nil
+	}
+	inputs := peerAppearanceFingerprint{captured: captured}
+	inputs.guild = resolvePeerGuild(p.rt.deps.GuildAuthority(), p.rt.Unions, p.divisionID, captured)
+	if p.rt.Stalls != nil {
+		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
+			inputs.stallTitle, inputs.stallDecor = s.Title, s.Decoration
+		}
+	}
+	if p.rt.ActionSpeed != nil {
+		inputs.actionSpeed = p.rt.ActionSpeed(p.divisionID, captured.name)
+	}
+	var skillRows []enterworld.EntrySkill
+	if p.rt.SpawnSkills != nil {
+		skillRows = p.rt.SpawnSkills(p.divisionID, captured.name)
+	}
+	p.appearanceMu.Lock()
+	defer p.appearanceMu.Unlock()
+	if p.appearancePrimed && p.appearanceInputs.equal(inputs) &&
+		spawnSkillsMatch(skillRows, p.appearanceInputs.spawnSkills) {
+		return p.appearanceSnapshot
+	}
+	inputs.spawnSkills = peerSpawnSkills(skillRows)
+	appearance := buildPeerAppearance(inputs.guild, captured)
+	if appearance != nil {
+		appearance.StallTitle = inputs.stallTitle
+		appearance.StallDecoration = inputs.stallDecor
+		appearance.ActionSpeed = inputs.actionSpeed
+		appearance.SpawnSkills = inputs.spawnSkills
+	}
+	p.appearanceInputs = inputs
+	p.appearanceSnapshot = appearance
+	p.appearancePrimed = true
+	return appearance
 }
 
 /*
@@ -278,7 +335,22 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 		}
 	}
 	captured.skin = enterworld.CharacterTransformSkin(character)
-	captured.worn = make([]wornEquipRow, 0, len(character.MissionInventory))
+	// Size the worn copy by the rows that pass the filter, counted first:
+	// the old make sized it by the whole mission inventory (up to the bag
+	// capacity), so every session paid a full-bag allocation per tick for
+	// the handful of equipment rows the appearance actually carries (#2030).
+	wornCount := 0
+	for _, row := range character.MissionInventory {
+		if row.RefObjID == 0 || row.Slot < 0 || row.Slot > 0xff {
+			continue
+		}
+		if inventory.IsEquipmentSlot(uint8(row.Slot)) {
+			wornCount++
+		}
+	}
+	if wornCount > 0 {
+		captured.worn = make([]wornEquipRow, 0, wornCount)
+	}
 	for _, row := range character.MissionInventory {
 		if row.RefObjID == 0 || row.Slot < 0 || row.Slot > 0xff {
 			continue
@@ -298,6 +370,15 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	// that loop from the avatar inventory, the only place a worn dress is
 	// kept; this server sent it empty, so other players never saw a dress.
 	if character.AvatarInventory != nil {
+		avatarCount := 0
+		for _, row := range character.AvatarInventory.Rows {
+			if row.RefObjID != 0 {
+				avatarCount++
+			}
+		}
+		if avatarCount > 0 {
+			captured.avatars = make([]wornEquipRow, 0, avatarCount)
+		}
 		for _, row := range character.AvatarInventory.Rows {
 			if row.RefObjID == 0 {
 				continue
@@ -336,6 +417,154 @@ would deadlock, which is why the FK copies out and resolves here).
 ==================
 */
 func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divisionID string, captured peerAppearanceCapture) *simulation.PeerAppearance {
+	return buildPeerAppearance(resolvePeerGuild(guilds, unions, divisionID, captured), captured)
+}
+
+/*
+==================
+peerGuildHalf
+
+The guild fields of one peer appearance (name, id, crest, the guild's
+union and this member's grant and fortress role), resolved through
+the guild door. The zero half is a guildless peer - a non-member or a
+dangling FK, which leaves the client's BindGuild leg unreached
+exactly like the retail no-guild row.
+==================
+*/
+type peerGuildHalf struct {
+	name     string
+	id       uint32
+	grant    string
+	crest    uint32
+	alliance uint32
+	emblem   uint32
+	fortRole uint8
+}
+
+/*
+==================
+resolvePeerGuild
+
+Resolve the guild half of one peer appearance from the captured FK:
+the guild identity the client CICPlayer_DeserializeSpawnData
+non-local tail carries, through the SAME guild door the 0x32C4 seed
+encodes from. Runs OUTSIDE the character read door: guilds.Guild
+takes the store lock, which must not be taken inside the door.
+==================
+*/
+func resolvePeerGuild(guilds enterworld.GuildStore, unions *union.Authority, divisionID string, captured peerAppearanceCapture) peerGuildHalf {
+	var half peerGuildHalf
+	if guilds == nil || !captured.hasGuild {
+		return half
+	}
+	record, members, ok := guilds.Guild(divisionID, captured.guildID)
+	if !ok {
+		return half
+	}
+	half.name = record.Name
+	half.id = uint32(record.ID)
+	half.crest = record.CrestParam
+	if alliance, ok := unions.Of(divisionID, record.ID); ok {
+		half.alliance, half.emblem = uint32(alliance.AllianceID), alliance.Crest
+	}
+	for _, member := range members {
+		if member.CharID == captured.charID {
+			half.grant = member.GrantName
+			// The member row's fortress-war role byte rides the
+			// spawn guild sub-block's trailing team byte (client
+			// CICPlayer_DeserializeSpawnData @0x0086a1b2 -> CICPlayer+0x7e0) - the
+			// same persisted byte the 0x32C4 member loop encodes.
+			half.fortRole = member.FortressRole
+			break
+		}
+	}
+	return half
+}
+
+/*
+==================
+peerAppearanceFingerprint
+
+Everything one built PeerAppearance is a pure function of: the door
+capture, the resolved guild half, the stall face, the action speed
+and the spawn skills. WorldSnapshot's memo (sessionWorld.appearanceFor)
+keeps the last fingerprint beside the appearance it built; the next
+snapshot reuses the build while its fingerprint still matches.
+==================
+*/
+type peerAppearanceFingerprint struct {
+	captured    peerAppearanceCapture
+	guild       peerGuildHalf
+	stallTitle  string
+	stallDecor  uint32
+	actionSpeed float32
+	spawnSkills []wire.SpawnSkillEntry
+}
+
+/*
+==================
+peerAppearanceFingerprint.equal
+
+Whether two fingerprints describe the same appearance, spawn skills
+aside (spawnSkillsMatch, which compares the unconverted rows): every
+scalar compared plainly, the worn and avatar slices by value.
+Nothing here allocates.
+==================
+*/
+func (f peerAppearanceFingerprint) equal(other peerAppearanceFingerprint) bool {
+	a, b := f.captured, other.captured
+	return a.pvpState == b.pvpState && a.eventTeam == b.eventTeam && a.hasEvent == b.hasEvent &&
+		a.hasModel == b.hasModel && a.modelRef == b.modelRef && a.name == b.name &&
+		a.displayName == b.displayName && a.charID == b.charID && a.hasGuild == b.hasGuild &&
+		a.guildID == b.guildID && a.bodyShapeByte == b.bodyShapeByte && a.visualFlags == b.visualFlags &&
+		a.jobType == b.jobType && a.jobGrade == b.jobGrade && a.skin == b.skin &&
+		slices.Equal(a.worn, b.worn) && slices.Equal(a.avatars, b.avatars) &&
+		f.guild == other.guild && f.stallTitle == other.stallTitle && f.stallDecor == other.stallDecor &&
+		f.actionSpeed == other.actionSpeed
+}
+
+/*
+==================
+spawnSkillsMatch
+
+Whether the entry rows this snapshot's SpawnSkills hook returned
+are the rows the kept fingerprint's converted entries were built
+from: the compare runs on the unconverted rows so an unchanged
+peer pays no conversion slice per tick. Mirrors peerSpawnSkills
+field for field.
+==================
+*/
+func spawnSkillsMatch(rows []enterworld.EntrySkill, built []wire.SpawnSkillEntry) bool {
+	if len(rows) != len(built) {
+		return false
+	}
+	for i, row := range rows {
+		entry := built[i]
+		if entry.SkillID != row.ID || entry.Status != row.Status || entry.HasStatus != row.HasStatus {
+			return false
+		}
+		if row.Token == nil {
+			if entry.HasToken {
+				return false
+			}
+		} else if !entry.HasToken || entry.Token != *row.Token {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+==================
+buildPeerAppearance
+
+Assemble the PeerAppearance from the resolved faces. The worn and
+avatar rows arrive in inventory order and the wire wants slot
+order; the sort runs on a copy, because the caller's capture backs
+a fingerprint the next tick still compares against.
+==================
+*/
+func buildPeerAppearance(half peerGuildHalf, captured peerAppearanceCapture) *simulation.PeerAppearance {
 	if !captured.hasModel {
 		return nil
 	}
@@ -353,28 +582,15 @@ func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divis
 		team := captured.eventTeam
 		appearance.EventTeam = &team
 	}
-	if guilds != nil && captured.hasGuild {
-		if record, members, ok := guilds.Guild(divisionID, captured.guildID); ok {
-			appearance.GuildName = record.Name
-			appearance.GuildID = uint32(record.ID)
-			appearance.CrestParam = record.CrestParam
-			if alliance, ok := unions.Of(divisionID, record.ID); ok {
-				appearance.AllianceID, appearance.AllianceCrest = uint32(alliance.AllianceID), alliance.Crest
-			}
-			for _, member := range members {
-				if member.CharID == captured.charID {
-					appearance.GuildGrantName = member.GrantName
-					// The member row's fortress-war role byte rides the
-					// spawn guild sub-block's trailing team byte (client
-					// CICPlayer_DeserializeSpawnData @0x0086a1b2 -> CICPlayer+0x7e0) - the
-					// same persisted byte the 0x32C4 member loop encodes.
-					appearance.FortSiegeAuthority = member.FortressRole
-					break
-				}
-			}
-		}
-	}
-	worn := captured.worn
+	appearance.GuildName = half.name
+	appearance.GuildID = half.id
+	appearance.GuildGrantName = half.grant
+	appearance.CrestParam = half.crest
+	appearance.AllianceID = half.alliance
+	appearance.AllianceCrest = half.emblem
+	appearance.FortSiegeAuthority = half.fortRole
+	worn := make([]wornEquipRow, len(captured.worn))
+	copy(worn, captured.worn)
 	sort.Slice(worn, func(i, j int) bool { return worn[i].slot < worn[j].slot })
 	for _, row := range worn {
 		plus := row.plus
@@ -390,7 +606,8 @@ func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divis
 			OptLevel:  uint8(plus),
 		})
 	}
-	avatars := captured.avatars
+	avatars := make([]wornEquipRow, len(captured.avatars))
+	copy(avatars, captured.avatars)
 	sort.Slice(avatars, func(i, j int) bool { return avatars[i].slot < avatars[j].slot })
 	for _, row := range avatars {
 		appearance.Avatars = append(appearance.Avatars, wire.PlayerEquipItem{RefObjID: row.refObjID, TypeFlags: row.typeFlags})

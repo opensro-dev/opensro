@@ -53,15 +53,20 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	// Protocol 13 includes main's wanted state and the expanded pet frames.
-	Current = 13
+	// Protocol 14 adds expanded pet frames to protocol 13's wanted contract.
+	Current = 14
 	// The wanted contract: 1 sends the port-only 0x3FBA most-wanted
 	// state (level, kills into the level, dressed job, kills per level,
 	// lapse) to a streak holder for the buff-board row (#1849). A
 	// protocol-11 client decodes nothing wrong but never shows the row;
 	// the bump sends every open tab the 426 that reloads it onto a
-	// client that can.
-	WantedContract = 1
+	// client that can. 2 grows the body with the level's bounty gold
+	// and the milliseconds until the next decay step (a duration the
+	// server measures, never a clock time), so the row shows the
+	// bounty and counts down on any client clock (#2721). A
+	// protocol-12 client refuses the longer body as malformed; the
+	// bump exists to reload it away, as contract 1's did.
+	WantedContract = 2
 	// The movement contract: 1 carries the 0xB738 acknowledgement's
 	// source block as [f32 x][f32 y][f32 z] on every floor (#1744). The
 	// retail i16 x10 source words cap at +-3276.7 units, which the
@@ -124,6 +129,7 @@ var history = map[int]Contracts{
 	10: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1},
 	11: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1},
 	12: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 1},
+	13: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1, Wanted: 2},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
 		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract},
 }

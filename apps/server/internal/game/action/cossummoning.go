@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -50,6 +51,22 @@ const (
 	// broadcast and carries sub-state 1; later scope entries carry 0.
 	petAppearWindowMs = 1000
 )
+
+/*
+================
+petInventoryCapacity
+
+The capacity a pet bag is created or re-summoned with: the native size,
+or the five-page size while the shard rule is on. Never smaller than the
+native size, so a bag is only ever raised and its rows always survive.
+================
+*/
+func (rt *Runtime) petInventoryCapacity(native uint8) uint8 {
+	if rt.PetInventoryPages && native < companion.PetInventorySlots {
+		return companion.PetInventorySlots
+	}
+	return native
+}
 
 /*
 ================
@@ -171,7 +188,7 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		// bypass this arm so upgrades and player-selected modes survive.
 		if ref.TidWord>>11 == 4 {
 			pet.CommandMode = initialPickupCompanionMode
-			pet.Container = &domain.COSContainer{Capacity: initialPickupCompanionSlots}
+			pet.Container = &domain.COSContainer{Capacity: rt.petInventoryCapacity(initialPickupCompanionSlots)}
 			minutes, present := use.ref.NativeFields.Lookup("itemParam1_29c")
 			if !present || math.IsNaN(minutes) || math.IsInf(minutes, 0) || minutes <= 0 || minutes > math.MaxInt32/60 || math.Trunc(minutes) != minutes {
 				return false
@@ -196,6 +213,11 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	pet.StateFlags |= cosStateSummoned
 	pet.NativeBodyStatus = domain.InitialCOSBodyStatus(c.NativeBodyStatus)
 	pet.RefreshRentalTimes(use.nowMs / 1000)
+	// A retained pet keeps its bag; the five-page rule only ever raises
+	// it, so rows above the old capacity stay valid and nothing is lost.
+	if pet.Container != nil {
+		pet.Container.Capacity = rt.petInventoryCapacity(pet.Container.Capacity)
+	}
 	record, err := enterworld.BuildCOSRecord(pet, ref, rt.deps.ItemReferences())
 	if err != nil {
 		return false

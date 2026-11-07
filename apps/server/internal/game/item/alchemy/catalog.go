@@ -225,6 +225,20 @@ func (c *Catalog) Option(name string, degree int) (Magic, bool) {
 
 /*
 ================
+Catalog.MagicLimit
+
+The most magic options an item may carry: its reference's MaxMagic,
+one more per 'dura'/'nrep' option already on it, hard-capped at 12 -
+magicLimit, exported for the GM item forge, which must refuse a blue
+set the alchemy lanes would refuse to grow (action/forge.go).
+================
+*/
+func (c *Catalog) MagicLimit(item inventory.Item) int {
+	return c.magicLimit(item)
+}
+
+/*
+================
 Reference.Degree
 
 The item's degree: equipment classes come in threes per degree.

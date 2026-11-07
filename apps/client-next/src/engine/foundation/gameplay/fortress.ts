@@ -119,6 +119,10 @@ export interface FortressState {
 	// Each event zone's structure (fortress-map.ts): the 0x0F roster fills a
 	// record, 0x0B moves its state word and the 0x18 list its minutes.
 	readonly zones?: readonly FortressZoneRecord[];
+	// Each structure reference's upgrade targets, resolved by the server
+	// bootstrap from siegestructupgradedata.txt: 754A40's upgrade arm
+	// resolves the standing structure's variant from the same table.
+	readonly structureUpgrades?: ReadonlyMap<number, readonly number[]>;
 }
 
 /*
@@ -161,6 +165,7 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			officialRefObjId?: number;
 			taxTargets?: number;
 		}[];
+		siegeStructureUpgrades?: { ref: number; targets: number[]; }[];
 	};
 	const worlds = (b.gameWorldData ?? []).map( r => ({ id: r.gameWorldId, code: r.warName }) ),
 		fortresses = (b.siegeFortressData ?? []).map( r => ({
@@ -179,12 +184,31 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			rows.some( r => !Number.isInteger( r.id ) || r.id < 0 || r.id > 0xffffffff || typeof r.code !== "string" )
 		) throw Error( "Invalid fortress reference table" );
 	}
+	const structureUpgrades = new Map<number, readonly number[]>();
+	for ( const row of b.siegeStructureUpgrades ?? [] ) {
+		if (
+			!Number.isInteger( row?.ref ) || row.ref < 0 || row.ref > 0xffffffff ||
+			!Array.isArray( row.targets ) || row.targets.length > 16 ||
+			row.targets.some( target => !Number.isInteger( target ) || target < 0 || target > 0xffffffff )
+		) throw Error( "Invalid fortress structure upgrade table" );
+		structureUpgrades.set( row.ref, [ ...row.targets ] );
+	}
+	if ( structureUpgrades.size > 65536 ) throw Error( "Invalid fortress structure upgrade table" );
 	// 77B220 -> 862B80: preserve the complete packed word, then resolve its low u16.
 	const worldId = b.localPlayerEntry?.fortressWorld ?? 0x10001;
 	if ( !Number.isInteger( worldId ) || worldId < 0 || worldId > 0xffffffff ) {
 		throw Error( "Invalid packed fortress world" );
 	}
-	return { worldId, worlds, fortresses, forge: fortressForgeCatalog( value ), wars: [], registered: [], listId: 0 };
+	return {
+		worldId,
+		worlds,
+		fortresses,
+		forge: fortressForgeCatalog( value ),
+		wars: [],
+		registered: [],
+		listId: 0,
+		structureUpgrades
+	};
 }
 
 const FORTRESS_TIMER_PERIOD_MS = 1000;
@@ -541,35 +565,73 @@ export function fortressDismissNotice( state: FortressState ): SystemNotice | nu
 	return { key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE", value: 0, nativeType: 0 };
 }
 
-// 754A40's direct construction and repair success arms. Upgrade (0x0B)
-// has its own type/rank-dependent construction or upgrade wording.
+// 754A40's construction, upgrade and repair success arms.
 const STRUCTURE_CONSTRUCTION_COMPLETE = 0x0a;
+const STRUCTURE_UPGRADE_COMPLETE = 0x0b;
 const STRUCTURE_REPAIR_COMPLETE = 0x0c;
 const STRUCTURE_NOTICE_CAPACITY = 0x100;
+const STRUCTURE_TYPE_MASK = 0xfffc;
+const STRUCTURE_HEADQUARTERS = 0x2ac4;
+const STRUCTURE_DEFENSIVE_POSITION = 0x22c4;
+
+/*
+================
+FortressStructureNoticeReference
+
+The standing structure's catalog fields, independent of visible actors.
+upgradeName is the default variant's name (7E14E0 with type -1).
+================
+*/
+export type FortressStructureNoticeReference = {
+	readonly name?: string;
+	readonly tidWord: number;
+	readonly level: number;
+	readonly upgradeName?: string;
+};
 
 /*
 ================
 fortressStructureNotice
 
-7551BA and 7554F9 resolve the reply's event zone to its structure reference;
-the caller supplies that catalog name. 755277/755287 and 7555B7/7555C7 send
-the same line to type-0 chat and the banner. No resolved name means no line.
+7551BA, 75529A and 7554F9 resolve the reply's event zone to its current
+structure. 75537A uses construction wording for headquarters; 7553DC does
+so for a level-0 defensive position, naming its default upgrade instead.
+The roster copies RefObjChar+1A8 to zone+18 at 76E2A7/76E2B5: this is level,
+not the roster's state word or the reply's tower variant. Every branch
+sends the same line to type-0 chat and the banner. Missing names skip it.
 ================
 */
 export function fortressStructureNotice(
 	state: FortressState,
-	name: string | undefined
+	reference: FortressStructureNoticeReference | undefined
 ): SystemNotice | null {
 	const service = state.service;
 	if ( !service || service.result !== 1 ) return null;
-	if ( service.action !== STRUCTURE_CONSTRUCTION_COMPLETE && service.action !== STRUCTURE_REPAIR_COMPLETE ) {
-		return null;
+	let name = reference?.name;
+	let key: string;
+	switch ( service.action ) {
+		case STRUCTURE_CONSTRUCTION_COMPLETE:
+			key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
+			break;
+		case STRUCTURE_REPAIR_COMPLETE:
+			key = "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE";
+			break;
+		case STRUCTURE_UPGRADE_COMPLETE: {
+			if ( !reference ) return null;
+			const type = reference.tidWord & STRUCTURE_TYPE_MASK;
+			const building = type === STRUCTURE_DEFENSIVE_POSITION && reference.level === 0;
+			key = type === STRUCTURE_HEADQUARTERS || building ?
+				"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" :
+				"UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE";
+			if ( building ) name = reference.upgradeName;
+			break;
+		}
+		default:
+			return null;
 	}
 	if ( name === undefined ) return null;
 	return {
-		key: service.action === STRUCTURE_CONSTRUCTION_COMPLETE ?
-			"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" :
-			"UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE",
+		key,
 		value: 0,
 		arguments: [ name ],
 		formatKinds: [ "s" ],

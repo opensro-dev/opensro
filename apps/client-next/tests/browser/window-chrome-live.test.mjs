@@ -18,7 +18,7 @@ test('live window chrome drags through real pointer input',{timeout:300000},asyn
   await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
    const response=await route.fetch(),source=await response.text();
    assert.ok(source.includes('export function createUi('));
-   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(...args){const owner=createObservedUi(...args);globalThis.__chromeProbe={owner};return {...owner,step(view,now){globalThis.__chromeProbe.view=view;return owner.step(view,now);}};}`;
+   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(ports){const owner=createObservedUi(ports);globalThis.__chromeProbe={owner};return {...owner,step(view,now){globalThis.__chromeProbe.view=view;return owner.step(view,now);}};}`;
    await route.fulfill({response,body,contentType:'application/javascript'});
   });
   await bootPlayableSession(page,'asd2');

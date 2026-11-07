@@ -24,7 +24,7 @@ import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
-import { chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
+import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 const REQUEST_CAPACITY = 4;
 // A load's watchdog is a stall window, not a total budget: the worker notes
 // the bytes it reads per job (job-progress), and a job that keeps moving
@@ -261,6 +261,14 @@ export function createAssets(): AssetOwner {
 			if ( !disposed && !failure ) noteJobFetching( event.data.id );
 			return;
 		}
+		if ( event.data.kind === "hd-availability" ) {
+			if ( !disposed && !failure && event.data.available !== hdSetAvailable ) {
+				hdSetAvailable = event.data.available;
+				// A saved "on" wakes only now that a set exists to serve.
+				if ( lastFeatures ) sendHdTextures( lastFeatures );
+			}
+			return;
+		}
 		if ( event.data.kind === "released" ) {
 			const job = jobs.get( event.data.id );
 			if ( job?.cancelled ) jobs.delete( event.data.id );
@@ -329,12 +337,38 @@ export function createAssets(): AssetOwner {
 	// so with the switch off it is given at once, else when the device knows
 	// its features (textureFeatures).
 	let compressedTextures = false, variantSent = false;
+	// Port-only (#2061): the HD set's row, read from the same stored
+	// record. Nothing is sent while it is off, so the worker fetches
+	// none of the set; when it is on, the format follows the device's
+	// features (textureFeatures), and a live toggle re-sends it.
+	// Port-only (#2800): whether the published build carries the set at
+	// all, told by the worker with the main pack index. Until it does,
+	// the saved row is inert: no format is ever sent.
+	let hdTexturesEnabled = false, hdSetAvailable = false, lastFeatures: readonly string[] | null = null;
 	try {
-		compressedTextures = storedExperimentalOptions( globalThis.localStorage ).options.compressedTextures;
+		const options = storedExperimentalOptions( globalThis.localStorage ).options;
+		compressedTextures = options.compressedTextures;
+		hdTexturesEnabled = options.hdTextures;
 	} catch {}
 	if ( !compressedTextures ) {
 		send( { kind: "texture-variant", variant: null } );
 		variantSent = true;
+	}
+	/*
+	================
+	sendHdTextures
+
+	The HD decision as it stands: the chosen format once the device's
+	features are known, nothing before (the worker's set is off until
+	then, and no texture waits on it - the originals serve).
+	================
+	*/
+	function sendHdTextures( features: readonly string[] ) {
+		if ( disposed ) return;
+		send( {
+			kind: "hd-textures",
+			format: hdTexturesEnabled && hdSetAvailable ? chooseHdTextureVariant( new Set( features ), true ) : null
+		} );
 	}
 	return {
 		/*
@@ -347,7 +381,35 @@ export function createAssets(): AssetOwner {
 		textureFeatures( features: readonly string[] ) {
 			if ( disposed || variantSent ) return;
 			variantSent = true;
+			lastFeatures = features;
 			send( { kind: "texture-variant", variant: chooseTextureVariant( new Set( features ), true ) } );
+			sendHdTextures( features );
+		},
+		/*
+		================
+		hdTextures
+
+		The HD row's live state. The device's features are the owner's to
+		remember, so a toggle after they arrive re-sends the decision at
+		once; before they arrive it only records the row.
+		================
+		*/
+		hdTextures( enabled: boolean ) {
+			if ( disposed ) return;
+			hdTexturesEnabled = enabled;
+			if ( lastFeatures ) sendHdTextures( lastFeatures );
+		},
+		/*
+		================
+		hdAvailable
+
+		Whether the published build carries the HD set (#2800), as the
+		worker reported with the main pack index; false until it does, so
+		the Experimental row stays hidden and the saved row inert.
+		================
+		*/
+		hdAvailable() {
+			return hdSetAvailable;
 		},
 		/*
 		================

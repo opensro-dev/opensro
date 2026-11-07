@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 // mutationTimeType is the one struct kind whose fields reflection may not
@@ -161,6 +162,8 @@ committed clone: the section comparison must convict every one.
 ================
 */
 func TestCharacterSectionsDetectEveryPersistedField(t *testing.T) {
+	t.Parallel()
+
 	characterType := reflect.TypeOf(domain.Character{})
 	detected := 0
 	for i := 0; i < characterType.NumField(); i++ {
@@ -195,6 +198,8 @@ runtime churn would buy back the encodes the skip removed.
 ================
 */
 func TestCharacterSectionsIgnoreEveryEphemeralField(t *testing.T) {
+	t.Parallel()
+
 	characterType := reflect.TypeOf(domain.Character{})
 	ignored := 0
 	for i := 0; i < characterType.NumField(); i++ {
@@ -234,6 +239,8 @@ what covers ID's conviction.
 ================
 */
 func TestCommitWritesEveryPersistedFieldChange(t *testing.T) {
+	tier.Long(t, "every persisted character field's change is written by its scoped commit")
+
 	characterType := reflect.TypeOf(domain.Character{})
 	for i := 0; i < characterType.NumField(); i++ {
 		field := characterType.Field(i)
@@ -244,6 +251,8 @@ func TestCommitWritesEveryPersistedFieldChange(t *testing.T) {
 			if field.Name == "ID" {
 				t.Skip("ID is the row identity, not section data; the comparison test covers it")
 			}
+			t.Parallel()
+
 			s := openTest(t, t.TempDir(), newTestClock())
 			c, _ := stageCommittedCopy(t, s)
 			s.MutateCharacter(c, "sections-fields", func() {

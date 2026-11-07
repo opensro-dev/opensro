@@ -72,18 +72,21 @@ listPublicAssetFiles
 */
 export async function listPublicAssetFiles( options = {} ) {
 	const root = path.resolve( options.publicRoot ?? publicRoot );
+	// The subtree the listing is admitted under: /assets for the default
+	// index, the caller's own root (e.g. /hd) for a separate index.
+	const admission = options.root ?? "/assets";
 	const roots = options.roots ?? [ "/assets" ];
 	const extensions = new Set( (options.extensions ?? []).map( ( extension ) => normalizeExtension( extension ) ) );
 	const exclude = new Set(
-		(options.exclude ?? []).map( ( publicPath ) => normalizePublicPath( publicPath ).toLowerCase() )
+		(options.exclude ?? []).map( ( publicPath ) => normalizePublicPath( publicPath, admission ).toLowerCase() )
 	);
 	const files = [];
 
 	for ( const rootPublicPath of roots ) {
-		const absoluteRoot = containedPublicFile( root, rootPublicPath );
+		const absoluteRoot = containedPublicFile( root, rootPublicPath, admission );
 		const rootStat = await stat( absoluteRoot );
 		if ( rootStat.isFile() ) {
-			const publicPath = normalizePublicPath( rootPublicPath );
+			const publicPath = normalizePublicPath( rootPublicPath, admission );
 			if ( matchesPublicAsset( publicPath, extensions, exclude ) ) {
 				files.push( publicPath );
 			}
@@ -98,7 +101,7 @@ export async function listPublicAssetFiles( options = {} ) {
 		}
 	}
 
-	return uniquePublicPaths( files ).sort( ( left, right ) => left.localeCompare( right ) );
+	return uniquePublicPaths( files, admission ).sort( ( left, right ) => left.localeCompare( right ) );
 }
 
 /*
@@ -109,6 +112,12 @@ buildAssetPacks
 export async function buildAssetPacks( options = {} ) {
 	const root = path.resolve( options.publicRoot ?? publicRoot );
 	const outputRoot = path.resolve( options.outputRoot ?? packsRoot );
+	// The subtree this index serves, and so the root every path in it is
+	// admitted under: the packs directory's parent (/assets for the
+	// default index, /hd for the HD set's own index, buildHdTexturePacks).
+	// An output below the packs directory (a slot or a test fixture) still
+	// names the same subtree.
+	const packRoot = toPublicAssetPath( outputRoot, root ).replace( /\/packs(\/.*)?$/, "" );
 	const indexPath = path.join( outputRoot, "manifest.json" );
 	const defaultTargetBytes = options.targetBytes ?? DEFAULT_ASSET_PACK_TARGET_BYTES;
 	const groups = options.groups ?? [];
@@ -134,7 +143,7 @@ export async function buildAssetPacks( options = {} ) {
 	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
 	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
 
-	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
+	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, hd?: boolean, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
 		format: "sro-asset-pack-index",
 		version: ASSET_PACK_VERSION,
@@ -156,6 +165,7 @@ export async function buildAssetPacks( options = {} ) {
 		buildAssetPackGroup( {
 			publicRoot: root,
 			outputRoot,
+			packRoot,
 			group,
 			targetBytes: group.targetBytes ?? defaultTargetBytes,
 			reusablePacks,
@@ -173,7 +183,21 @@ export async function buildAssetPacks( options = {} ) {
 
 	index.groups.sort( ( left, right ) => left.name.localeCompare( right.name ) );
 	index.assets.sort( ( left, right ) => left.path.localeCompare( right.path ) );
-	validateAssetPackIndex( index );
+	// The build/server contract for the HD channel (#2800): the main index
+	// certifies that this published tree carries the HD set's own index, so
+	// the client can list the Experimental row without ever fetching /hd.
+	// The stamp names no HD byte and follows what this build published
+	// (#2812): the full build passes its own HD step's outcome as
+	// hdPublished, so a first HD build stamps and a build that skipped the
+	// set never does - a stale hd/ tree on disk certifies nothing. Callers
+	// that run no HD step (the standalone repack) leave it unset, and the
+	// tree's already-published HD index certifies as before.
+	const hdPublished = options.hdPublished ??
+		Boolean( await stat( path.join( root, "hd", "packs", "manifest.json" ) ).catch( () => null ) );
+	if ( packRoot === "/assets" && hdPublished ) {
+		index.hd = true;
+	}
+	validateAssetPackIndex( index, packRoot );
 	await prepareAssetDelivery( index, root );
 	// Sparse builders publish partial indexes; the final merged publication
 	// requires every descriptor dependency before it replaces the live index.
@@ -198,7 +222,7 @@ export async function buildAssetPacks( options = {} ) {
 	if ( !skipIndexWrite ) {
 		await publishIndex( indexPath, Buffer.from( JSON.stringify( index ), "utf8" ) );
 	}
-	await archiveStaleOutputs( root, outputRoot, index, indexPath );
+	await archiveStaleOutputs( root, outputRoot, index, indexPath, packRoot );
 	// The main index is the delivery authority: retire every file under the
 	// packs root it no longer uses, including superseded slots and retired
 	// transport files outside this build's own output root. Only a full build
@@ -262,6 +286,7 @@ async function buildAssetPackGroup(
 	{
 		publicRoot,
 		outputRoot,
+		packRoot,
 		group,
 		targetBytes,
 		reusablePacks,
@@ -273,9 +298,9 @@ async function buildAssetPackGroup(
 	}
 ) {
 	const name = normalizeGroupName( group.name );
-	const publicPaths = uniquePublicPaths( group.files ?? [] );
+	const publicPaths = uniquePublicPaths( group.files ?? [], packRoot );
 	const files = await mapWithConcurrency( publicPaths, FILE_STAT_CONCURRENCY, async ( publicPath ) => {
-		const absolutePath = containedPublicFile( publicRoot, publicPath );
+		const absolutePath = containedPublicFile( publicRoot, publicPath, packRoot );
 		const fileStat = await stat( absolutePath );
 		if ( !fileStat.isFile() ) {
 			throw new Error( `Asset pack input is not a file: ${publicPath}` );
@@ -319,8 +344,9 @@ async function buildAssetPackGroup(
 			buildOrReusePack( {
 				name,
 				plan,
-				outputRoot: plan.dir ? containedPublicFile( publicRoot, plan.dir ) : outputRoot,
+				outputRoot: plan.dir ? containedPublicFile( publicRoot, plan.dir, packRoot ) : outputRoot,
 				publicRoot,
+				packRoot,
 				reusablePacks,
 				hashCache,
 				memberCompression,
@@ -419,8 +445,8 @@ An unchanged pack is reusable only while its file is on disk at its
 recorded size.
 ================
 */
-async function packOutputIntact( publicRoot, pack ) {
-	const packStat = await stat( containedPublicFile( publicRoot, pack.path ) ).catch( () => undefined );
+async function packOutputIntact( publicRoot, pack, packRoot = "/assets" ) {
+	const packStat = await stat( containedPublicFile( publicRoot, pack.path, packRoot ) ).catch( () => undefined );
 	return packStat?.isFile() === true && packStat.size === pack.bytes;
 }
 
@@ -430,7 +456,7 @@ buildOrReusePack
 ================
 */
 async function buildOrReusePack(
-	{ name, plan, outputRoot, publicRoot, reusablePacks, hashCache, memberCompression, counters }
+	{ name, plan, outputRoot, publicRoot, packRoot, reusablePacks, hashCache, memberCompression, counters }
 ) {
 	const { slot, files: chunk } = plan;
 	const plannedKey = packContentKey(
@@ -448,7 +474,7 @@ async function buildOrReusePack(
 	const intact = reusable && reusable.groupName === name &&
 		packSlotOf( reusable.pack.path ) === slot &&
 		reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir &&
-		await packOutputIntact( publicRoot, reusable.pack );
+		await packOutputIntact( publicRoot, reusable.pack, packRoot );
 	if ( reusable && intact ) {
 		counters.reused += 1;
 		return {
@@ -552,10 +578,10 @@ archiveStaleOutputs
 Soft-archive files under the packs root that the freshly published manifest does not reference.
 ================
 */
-async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath ) {
+async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath, packRoot = "/assets" ) {
 	// The live set includes the index's precompressed sidecars; deleting them
 	// forced a pointless recompression of the manifest every build.
-	const keep = livePackFiles( publicRoot, indexPath, index );
+	const keep = livePackFiles( publicRoot, indexPath, index, packRoot );
 
 	for ( const filename of await listFiles( outputRoot ) ) {
 		if ( keep.has( path.resolve( filename ).toLowerCase() ) ) continue;
@@ -575,12 +601,12 @@ async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath ) {
 uniquePublicPaths
 ================
 */
-function uniquePublicPaths( paths ) {
+function uniquePublicPaths( paths, packRoot = "/assets" ) {
 	const seen = new Set();
 	const output = [];
 
 	for ( const pathLike of paths ) {
-		const publicPath = normalizePublicPath( pathLike );
+		const publicPath = normalizePublicPath( pathLike, packRoot );
 		if ( !seen.has( publicPath.toLowerCase() ) ) {
 			seen.add( publicPath.toLowerCase() );
 			output.push( publicPath );

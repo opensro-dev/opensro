@@ -205,6 +205,8 @@ export interface Platform extends Disposable {
 	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	/** /cwsave's browser form: download the waypoint store's text as cw.txt (#1716). */
 	saveCameraWaypoints( text: string ): void;
+	/** The crest register's image pick (#2282): the chosen file's bytes, or null on cancel. */
+	pickCrestImage(): Promise<Uint8Array | null>;
 	saveGameOptions( value: import("@/engine/foundation/gameplay/game-options").GameOptions ): void;
 	presentWorldCursor( cursor: import("@/engine/foundation/ui/world-cursor").WorldCursor ): void;
 	setCursorVisible( visible: boolean ): void;
@@ -243,7 +245,6 @@ The runtime grants scene and resource commands without exposing device ownership
 */
 export interface Renderer extends Disposable {
 	setFrameWork?( work: FrameWork ): void;
-	readbackWaitMs?(): number;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	/** The current device's adapter facts for bug reports, null before one. */

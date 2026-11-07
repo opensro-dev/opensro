@@ -54,3 +54,15 @@ test("a key goes up as the letter it went down with", () => {
 	assert.equal( keys.down( undefined, undefined ), "" );
 	assert.equal( keys.up( undefined, undefined ), "" );
 });
+
+test("a held key reads down until it goes up or focus is lost", () => {
+	const keys = createLayoutKeys();
+	assert.equal( keys.held( "Space" ), false );
+	keys.down( "Space", " " );
+	assert.equal( keys.held( "Space" ), true );
+	keys.up( "Space", " " );
+	assert.equal( keys.held( "Space" ), false );
+	keys.down( "Space", " " );
+	keys.clear();
+	assert.equal( keys.held( "Space" ), false );
+});

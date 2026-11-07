@@ -424,7 +424,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		}
 		return bytes;
 	}
-	const packs = createPacks( download, activity );
+	/*
+	================
+	hdAvailability
+
+	The published build's word on the HD set (#2800), as the main pack
+	index carries it, posted to the page that lists the row.
+	================
+	*/
+	function hdAvailability( available: boolean ) {
+		send( { kind: "hd-availability", available }, [] );
+	}
+	const packs = createPacks( download, activity, hdAvailability );
 	// The texture variant this device is served (texture-variants.ts): the
 	// page answers once its device knows its features; native texture reads
 	// wait for the answer.
@@ -891,6 +902,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "texture-variant" ) {
 				textureVariant( request.variant );
+				return;
+			}
+			if ( request.kind === "hd-textures" ) {
+				packs.hdTextures( request.format );
 				return;
 			}
 			if (

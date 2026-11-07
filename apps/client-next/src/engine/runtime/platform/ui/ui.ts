@@ -277,7 +277,7 @@ export function createUiBridge(
 		if (
 			code !== "Escape" && code !== "Space" && event.key !== "Enter" &&
 			!editing && !event.repeat
-		) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey, space: layoutKeys.held( "Space" ) } );
 		if ( code === "Escape" && !event.repeat ) {
 			emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 			// The GM prompt owns Escape: it dismisses the catalogue and keeps
@@ -994,6 +994,45 @@ export function createUiBridge(
 			link.download = "cw.txt";
 			link.click();
 			setTimeout( () => URL.revokeObjectURL( url ), 0 );
+		},
+		/*
+		================
+		pickCrestImage
+
+		The crest register's image source (owner's 2026-11-07 contract,
+		#2282): a hidden file input offers the native formats; the chosen
+		file's bytes resolve, a cancel resolves null. Nothing is read
+		server-side from these bytes - the server re-judges and
+		re-encodes them - so no client-side format check lives here.
+		================
+		*/
+		pickCrestImage(): Promise<Uint8Array | null> {
+			if ( lifetime.signal.aborted ) return Promise.resolve( null );
+			return new Promise( resolve => {
+				const input = document.createElement( "input" );
+				input.type = "file";
+				input.accept = ".bmp,.png,.jpg,.jpeg,image/bmp,image/png,image/jpeg";
+				let settled = false;
+				const settle = ( value: Uint8Array | null ) => {
+					if ( settled ) return;
+					settled = true;
+					resolve( value );
+				};
+				input.addEventListener( "change", () => {
+					const file = input.files?.[0];
+					if ( !file ) {
+						settle( null );
+						return;
+					}
+					void file.arrayBuffer().then(
+						buffer => settle( new Uint8Array( buffer ) ),
+						() => settle( null )
+					);
+				} );
+				input.addEventListener( "cancel", () => settle( null ) );
+				lifetime.signal.addEventListener( "abort", () => settle( null ), { once: true } );
+				input.click();
+			} );
 		},
 		/*
 		================

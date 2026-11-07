@@ -67,12 +67,13 @@ type playerKill struct {
 	victimLevel int64
 	// Port-only, not native (mostwanted.go): whether killer and victim are
 	// strangers (no shared account, party, guild or union), which both the
-	// streak count and the bounty require, and the victim's wanted level and
-	// lapse before its death cleared them (the kill door judges the lapse
-	// from this snapshot; the record itself is already gone by then).
+	// streak count and the bounty require, and the victim's wanted streak
+	// and decay stamp before its death cleared them (the kill door judges
+	// the decay from this snapshot; the record itself is already gone by
+	// then).
 	mostWantedStrangers bool
-	victimWanted        int64
-	victimWantedLapse   int64
+	victimWantedStreak  int64
+	victimWantedStamp   int64
 }
 
 /*
@@ -113,9 +114,9 @@ func (kill playerKill) withVictim(killer, victim *enterworld.Character) playerKi
 	kill.murderer = murderer(victim) && kill.kind != pk.DeathGuildWar
 	kill.legalEnemy = kill.enemyRules.enemy(killer, victim)
 	kill.victimLevel = rewardLevel(victim)
-	kill.victimWanted = mostWantedLevel(victim)
 	if victim != nil && victim.MostWanted != nil {
-		kill.victimWantedLapse = victim.MostWanted.ExpiresAtMs
+		kill.victimWantedStreak = victim.MostWanted.Streak
+		kill.victimWantedStamp = victim.MostWanted.NextDecayAtMs
 	}
 	return kill
 }

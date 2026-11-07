@@ -367,6 +367,7 @@ that reached the worker.
 		owners.input.blindHeld = () => false;
 		owners.input.altHeld = () => false;
 		owners.assets.progress = () => 0;
+		owners.assets.hdTextures = () => {};
 		owners["bug-report"].movement = () => {};
 		globalThis.__runtimeOwners = owners;
 		globalThis.__runtimeCalls = [];
@@ -547,6 +548,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.input.blindHeld = () => false;
 	owners.input.altHeld = () => false;
 	owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 	owners["bug-report"].movement = () => {};
 	globalThis.__runtimeOwners = owners;
 	globalThis.__runtimeCalls = [];
@@ -561,7 +563,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	const runtime = startRuntime( {}, {} );
 	try {
 		const calls = globalThis.__runtimeCalls ?? [];
-		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[1];
+		const sessionCommand = defined( calls.find( call => call.owner === "ui" ) ).args[0].commands;
 		const uiEvent = defined( calls.find( call => call.owner === "platform" ) ).args[5];
 		const drive = async now => {
 			defined( callback )( now );
@@ -662,7 +664,7 @@ dispose
 	const runtime = startRuntime( {}, {} );
 	try {
 		const call = (globalThis.__runtimeCalls ?? []).find( recorded => recorded.owner === "ui" );
-		const extensions = defined( call ).args.at( -1 );
+		const extensions = defined( call ).args[0].extensions;
 		assert.equal(
 			typeof extensions.setWorldFieldOfView,
 			"function",

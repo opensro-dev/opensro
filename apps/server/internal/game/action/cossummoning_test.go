@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -696,4 +697,96 @@ func TestTransportSummonInBattleAnswersBattleBeforeBusy(t *testing.T) {
 	assertItemUseRefusedUnchanged(t, rt, c, use, cosSummonInBattle)
 	c.BattleUntilMs = 0
 	assertItemUseRefusedUnchanged(t, rt, c, use, cosSummonBusy)
+}
+
+/*
+================
+TestPickupPetBagSizeFollowsPetInventoryPages
+================
+*/
+func TestPickupPetBagSizeFollowsPetInventoryPages(t *testing.T) {
+	for _, check := range []struct {
+		name string
+		on   bool
+		want uint8
+	}{
+		{"rule off is native", false, initialPickupCompanionSlots},
+		{"rule on is five pages", true, companion.PetInventorySlots},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			c, refs := persistentSummonFixture()
+			rt, _ := newTestRuntime(c, refs)
+			rt.PetInventoryPages = check.on
+			useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
+			pet := c.Companions()[0]
+			if pet == nil || pet.Container == nil || pet.Container.Capacity != check.want {
+				t.Fatalf("pickup bag = %+v, want capacity %d", pet, check.want)
+			}
+		})
+	}
+}
+
+/*
+================
+TestRetainedPetBagRaisedOnSummonNeverLowered
+================
+*/
+func TestRetainedPetBagRaisedOnSummonNeverLowered(t *testing.T) {
+	dismissAndResummon := func(t *testing.T, rt *Runtime, c *enterworld.Character, ref *enterworld.ItemRef) {
+		t.Helper()
+		c.BattleUntilMs = 0
+		pet := c.Companions()[0]
+		payload := wire.NewWriter(4).U32(pet.GID).Payload()
+		if result := rt.HandleCosCancel(testDivision, c, payload); len(result.Frames) == 0 || result.Frames[0].Payload[0] != 1 {
+			t.Fatalf("cancel refused: %+v", result)
+		}
+		if c.Companions()[0].Summoned {
+			t.Fatal("cancel did not dismiss the pet")
+		}
+		useSummonerFixture(t, rt, c, 24, ref)
+	}
+
+	c, refs := persistentSummonFixture()
+	rt, clock := newTestRuntime(c, refs)
+	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
+	rt.BindPetSession(testDivision, c, 101)
+	ref := refs.staticItemSource["SUMMON_PICKUP"]
+	useSummonerFixture(t, rt, c, 24, ref)
+	rt.advancePets(clock.NowMs())
+	potion := testItems()["ITEM_ETC_HP_POTION_01"]
+	row := domain.InventoryRow{Slot: 30, RefObjID: potion.RefObjID, Codename: potion.Codename, TypeFlags: potion.TypeFlags(), StackCount: 4}
+	pet := c.Companions()[0]
+	pet.Container.Rows = []domain.InventoryRow{row}
+
+	rt.PetInventoryPages = true
+	dismissAndResummon(t, rt, c, ref)
+	pet = c.Companions()[0]
+	if pet.Container.Capacity != companion.PetInventorySlots || len(pet.Container.Rows) != 1 ||
+		pet.Container.Rows[0].Slot != row.Slot || pet.Container.Rows[0].RefObjID != row.RefObjID || pet.Container.Rows[0].StackCount != row.StackCount {
+		t.Fatalf("summon did not raise the retained bag or lost its rows: %+v", pet.Container)
+	}
+
+	// Off again: nothing already raised shrinks and no row is lost.
+	rt.PetInventoryPages = false
+	dismissAndResummon(t, rt, c, ref)
+	pet = c.Companions()[0]
+	if pet.Container.Capacity != companion.PetInventorySlots || len(pet.Container.Rows) != 1 ||
+		pet.Container.Rows[0].Slot != row.Slot || pet.Container.Rows[0].RefObjID != row.RefObjID || pet.Container.Rows[0].StackCount != row.StackCount {
+		t.Fatalf("turning the rule off shrank the bag or lost its rows: %+v", pet.Container)
+	}
+
+	// A bag already larger than the five-page size is never lowered either.
+	c2, refs2 := persistentSummonFixture()
+	rt2, clock2 := newTestRuntime(c2, refs2)
+	rt2.CompanionRoll = func() (uint32, error) { return 0, nil }
+	rt2.BindPetSession(testDivision, c2, 101)
+	ref2 := refs2.staticItemSource["SUMMON_PICKUP"]
+	useSummonerFixture(t, rt2, c2, 24, ref2)
+	rt2.advancePets(clock2.NowMs())
+	c2.Companions()[0].Container.Capacity = 200
+	rt2.PetInventoryPages = true
+	dismissAndResummon(t, rt2, c2, ref2)
+	if got := c2.Companions()[0].Container.Capacity; got != 200 {
+		t.Fatalf("larger bag lowered to %d", got)
+	}
 }

@@ -57,14 +57,14 @@ test( "quest details survive popup changes and own their close and abandon actio
 			const renderer = createRenderer( canvas ), assets = createAssets();
 			const commands = [], worldClicks = [];
 			let semantics;
-			const ui = createUi(
+			const ui = createUi( {
 				assets,
-				command => commands.push( command ),
-				scene => renderer.setUi( scene ),
-				( id, image ) => renderer.setUiTexture( id, image ),
-				location.origin,
-				"https://fixture.invalid"
-			);
+				commands: command => commands.push( command ),
+				publish: scene => renderer.setUi( scene ),
+				texture: ( id, image ) => renderer.setUiTexture( id, image ),
+				base: location.origin,
+				apiBase: "https://fixture.invalid"
+			} );
 			const platform = createPlatform(
 				canvas,
 				document.createElement( "output" ),

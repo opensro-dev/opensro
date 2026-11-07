@@ -74,6 +74,8 @@ type BrowserReferenceSources struct {
 	// Monsters are the monster rows every viewer needs
 	// (PublicMonsterRefObjRows).
 	Monsters []RefObjRow
+	// FortressUpgradeRefs projects the siege upgrade table's default variant.
+	FortressUpgradeRefs map[uint32]uint32
 	// Port-only, not native. Read only when SRO_HUNTING_GUIDE is enabled.
 	HuntingGuide HuntingGuideSource
 	// ReverseMapPoints is the reverse return scroll's map table: empty
@@ -137,6 +139,14 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		return nil, fmt.Errorf("invalid public monster catalogue size: %d", len(sources.Monsters))
 	}
 	objectRows := sources.Monsters
+	if len(sources.FortressUpgradeRefs) > 0 {
+		objectRows = append([]RefObjRow(nil), objectRows...)
+		for i := range objectRows {
+			if target, ok := sources.FortressUpgradeRefs[objectRows[i].RefObjID]; ok && objectRows[i].Kind == "structure" {
+				objectRows[i].FortressUpgradeRef = &target
+			}
+		}
+	}
 	if objectRows == nil {
 		objectRows = []RefObjRow{}
 	}

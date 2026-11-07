@@ -18,8 +18,9 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-// Protocol 13 adds pet passive cooldowns, paid Bond feedback and public
+// Protocol 14 adds pet passive cooldowns, paid Bond feedback and public
 // buffs, with crow wind moved to 0x3FBE so most-wanted keeps 0x3FBA.
+// Protocol 13 extends most-wanted with bounty and a relative decay timer.
 // Protocol 12 shows the port-only 0x3FBA most-wanted state on the buff
 // board (most-wanted.ts); the frame is never offered to an 11 browser,
 // whose release the server refuses with 426 at connect, so no client
@@ -37,7 +38,7 @@ checks) reads the same numbers the client ships.
 // item-mall transports hold 141 to 177 slots, which 6 refused); 6 publishes
 // every creatable monster's row in the reference file (#369); 5 added
 // populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 13;
+export const RELEASE_PROTOCOL = 14;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

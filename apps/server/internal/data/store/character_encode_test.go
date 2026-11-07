@@ -33,6 +33,8 @@ TestEncodeCharacterBorrowedMatchesMarshal
 ================
 */
 func TestEncodeCharacterBorrowedMatchesMarshal(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := seededCharacter()
 	c.Aggressions = map[uint32]uint32{300: 3, 20: 2, 1: 1}

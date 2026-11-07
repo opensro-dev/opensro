@@ -1,9 +1,19 @@
+/*
+===========================================================================
+
+monsterobjectlist.go - monster entry frames and static character references
+
+The entry stream includes nearby live actors; the reference catalog covers
+every creatable monster and every fortress rank, even outside view.
+
+===========================================================================
+*/
 package enterworld
 
 import (
-	"opensro.online/server/internal/domain"
 	"os"
 
+	"opensro.online/server/internal/domain"
 	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -13,7 +23,13 @@ import (
 // scoped to the same native interest area used by live visibility updates.
 // The environment flag is a diagnostic kill switch, not a prerequisite gate.
 
-// MonsterSpawnConfig carries the diagnostic population kill switch.
+/*
+================
+MonsterSpawnConfig
+
+The diagnostic population kill switch.
+================
+*/
 type MonsterSpawnConfig struct {
 	// Enabled is the monster population plane, ON BY DEFAULT: retail has
 	// monsters, so requiring an env var to get them was itself a
@@ -24,29 +40,44 @@ type MonsterSpawnConfig struct {
 	Enabled bool
 }
 
-// MonsterSpawnConfigFromEnv reads the population kill switch (unset = ON,
-// "0" = off, matching the retail posture).
+/*
+================
+MonsterSpawnConfigFromEnv
+
+Reads the population kill switch (unset = ON, "0" = off).
+================
+*/
 func MonsterSpawnConfigFromEnv() MonsterSpawnConfig {
 	return MonsterSpawnConfig{
 		Enabled: os.Getenv("MISSION_SPAWN_MONSTERS") != "0",
 	}
 }
 
-// monsterWireDef converts a registry instance to the mission-plane row.
-// Client 859D40 consumes name-mask bit 0 as the visible CIGIDObject
-// name at +0x108, so this is the localized characterdata/textdataname value,
-// never the internal MOB_* codename during a healthy retail-data load.
+/*
+================
+monsterWireDef
+
+Converts a registry instance to the mission-plane row. Client 859D40
+consumes name-mask bit 0 as the visible CIGIDObject name at +0x108, so this
+is the localized characterdata/textdataname value, never the internal
+MOB_* codename during a healthy retail-data load.
+================
+*/
 func monsterWireDef(instance monster.Instance, nowMs int64) simulation.MonsterDef {
 	return simulation.MonsterWireDefFromInstance(instance, nowMs)
 }
 
-// MonsterObjectListInstances resolves which monster instances ride this
-// bootstrap's object list: the native interest area at the login pose (the
-// 320-unit block neighbourhood the tick's visibility stream also diffs
-// against; see worldgeom.InterestVisible). The tick seeds from the recorded
-// list rather than assuming the sets still agree after the client loads.
-// Development rooms add their anchors to the normal immutable population
-// template; this resolver has no synthetic at-player lane.
+/*
+================
+MonsterObjectListInstances
+
+Resolves the instances on the entry's object list: the native interest area
+at the login pose (the 320-unit block neighbourhood the tick's visibility
+stream also diffs against; see worldgeom.InterestVisible). The tick seeds
+from the recorded list rather than assuming the sets still agree after
+loading. Development rooms add anchors to the immutable population template.
+================
+*/
 func (c MonsterSpawnConfig) MonsterObjectListInstances(registry *simulation.MonsterState, divisionID string, entry *LocalPlayerEntry) []monster.Instance {
 	if !c.Enabled || registry == nil || entry == nil {
 		return nil
@@ -58,8 +89,14 @@ func (c MonsterSpawnConfig) MonsterObjectListInstances(registry *simulation.Mons
 	}, registry.CurrentTimeMillis())
 }
 
-// RecordMonsterObjectList stores the gids a player's object list created so
-// the first visibility tick reconciles against what the client holds.
+/*
+================
+RecordMonsterObjectList
+
+Stores the gids a player's object list created so the first visibility
+tick reconciles against what the client holds.
+================
+*/
 func RecordMonsterObjectList(registry *simulation.MonsterState, divisionID string, character *Character, instances []monster.Instance) {
 	if registry == nil || character == nil {
 		return
@@ -71,9 +108,14 @@ func RecordMonsterObjectList(registry *simulation.MonsterState, divisionID strin
 	registry.RecordObjectList(divisionID, simulation.PlayerObjectID(character.ID), gids)
 }
 
-// MonsterObjectListRows builds the 0x3417 create rows for the resolved
-// instances (rides between the 0x30CB start and 0x330A finalize like the
-// NPC and ground rows).
+/*
+================
+MonsterObjectListRows
+
+Builds the 0x3417 create rows for resolved instances, between the 0x30CB
+start and 0x330A finalize like the NPC and ground rows.
+================
+*/
 func MonsterObjectListRows(
 	registry *simulation.MonsterState,
 	divisionID string,
@@ -108,15 +150,17 @@ func MonsterObjectListRows(
 	return rows
 }
 
-// MonsterRefObjSnapshot builds the refObjSnapshot mirror rows (kind
-// "monster") for the FULL spawnable roster, not just the instances on
-// this object list. The client seeds its RefObj mirror ONCE per session
-// before the packet loop; a refObjId first seen on a later 0x30D7 (the
-// player walked into a new region) is silently dropped if it was not in
-// the snapshot (WIP seq70 C contract - soft-assert at
-// remoteSpawnHost.ts:405-411; incremental roster streaming has no client
-// seam and would be divergence). 178 rows against the shipped v1.150
-// npcpos (RZ seq234 admit set) - snapshot-sized, not object-list-sized.
+/*
+================
+MonsterRefObjSnapshot
+
+Builds the mirror rows for the full spawnable roster, including structures.
+The client seeds its RefObj mirror before the packet loop; a reference
+first seen on a later 0x30D7 must already be in the catalog. The public
+reference file now covers these rows; detached entry fixtures still use
+this snapshot, and filteredRefObjSnapshot removes published duplicates.
+================
+*/
 func (c MonsterSpawnConfig) MonsterRefObjSnapshot(registry *simulation.MonsterState) []RefObjRow {
 	if !c.Enabled || registry == nil {
 		return []RefObjRow{}
@@ -133,10 +177,12 @@ func (c MonsterSpawnConfig) MonsterRefObjSnapshot(registry *simulation.MonsterSt
 ================
 PublicMonsterRefObjRows
 
-The monster rows of the public reference file: every monster the server
-can create (Template.CreatableRefs), so a GM LOADMONSTER or a quest
+The monster and structure rows of the public reference file: every monster
+the server can create (Template.CreatableRefs), so a GM LOADMONSTER or a quest
 script spawn resolves in the browser as it does in the native client,
-which holds the whole characterdata (#369). A thief or hunter's row also
+which holds the whole characterdata (#369). Every structure rank is included,
+even without a starting nest, so upgrades can resolve their names and types.
+A thief or hunter's row also
 carries its country byte: 861720 picks the skin pool its body comes from by
 record +0x9d, the Country column (client 808AD0 stores it at +0x9c and +0x9d).
 ================
@@ -146,7 +192,7 @@ func PublicMonsterRefObjRows(registry *simulation.MonsterState) []RefObjRow {
 		return nil
 	}
 	var rows []RefObjRow
-	for _, ref := range registry.CreatableRefs() {
+	for _, ref := range append(registry.CreatableRefs(), registry.StructureRefs()...) {
 		row := monsterRefObjRow(ref)
 		if ref.TradeAppearance() {
 			row.CountryByte9C = bytePointer(ref.Country)

@@ -261,6 +261,11 @@ func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inven
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
+	// Port-only (forge.go, issue #1980): a bound forged item never
+	// reaches the table, however tradeable its row is.
+	if item.ForgeBound {
+		return inventory.Item{}, wire.ExchangeErrCannotTrade
+	}
 	if item.Summon != nil && item.Summon.Summoned {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}

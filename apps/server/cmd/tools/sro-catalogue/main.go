@@ -192,6 +192,12 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	if err != nil {
 		return nil, err
 	}
+	// The GameWorld appends the same X-Large potions (SRO_JANGAN_XL_POTIONS).
+	xl, err := commerce.JanganXLPotionGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	extra = append(extra, xl...)
 	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
 	if err != nil {
 		return nil, err

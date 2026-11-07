@@ -26,6 +26,7 @@ import { questMarkerTargets, rosterPositions } from "@/engine/foundation/ui/mini
 import {
 	worldMapDemand,
 	MAP_LOCAL_MARKER,
+	worldMapDungeonPose,
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
@@ -186,9 +187,32 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	let mapSmall = false, mapFollow = true, mapPage = 0, mapX = 100, mapY = 100;
 	let mapPan: [number, number] = [ 0, 0 ], mapCenter: Pose | null = null;
 	// The last pose the world map could place. 5758D0 finds no page for a
-	// dungeon point and 57FE60 then keeps the loaded page and its scroll,
-	// so while the player is off the map this pose holds the view.
+	// dungeon point, so 57FE60 keeps the loaded page; a dungeon without a map
+	// point (worldMapDungeonPose) holds the view here instead.
 	let mapPose: Pose | null = null;
+	/*
+	================
+	mapViewPose
+
+	The pose the view centres on. 57A570 centres a dungeon on its map point,
+	never on the cave's own coordinates, which lie off every page.
+	================
+	*/
+	function mapViewPose<T extends Pose | null | undefined>( pose: T ): T | Pose {
+		if ( !pose || featuresAt( pose.regionId ).worldMap ) return pose;
+		return worldMapDungeonPose( pose.regionId ) ?? mapPose ?? pose;
+	}
+	/*
+	================
+	heldCenter
+
+	A manual view's centre: its own copy of the pose the view shows now.
+	================
+	*/
+	function heldCenter( pose: Pose | null | undefined ): Pose | null {
+		const view = mapViewPose( pose );
+		return view ? { ...view } : null;
+	}
 	let guideAvailable = false;
 	// The expanded world map's layout (port-only, Experimental), as the last
 	// presented frame read it; undefined is the native layout.
@@ -264,7 +288,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage = page;
 					mapFollow = false;
 					mapPan = [ 0, 0 ];
-					mapCenter = pose ? { ...pose } : null;
+					mapCenter = heldCenter( pose );
 				}
 				return true;
 			}
@@ -272,13 +296,13 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			if ( id === "map-size" ) {
 				mapSmall = !mapSmall;
 				mapPan = [ 0, 0 ];
-				mapCenter = mapFollow ? null : pose ? { ...pose } : null;
+				mapCenter = mapFollow ? null : heldCenter( pose );
 				return true;
 			}
 			// 575E90 flips AUTO MOVE only; keep the last automatic centre.
 			if ( id === "map-follow" ) {
 				mapFollow = !mapFollow;
-				mapCenter = pose ? { ...pose } : null;
+				mapCenter = heldCenter( pose );
 				mapPan = [ 0, 0 ];
 				return true;
 			}
@@ -286,7 +310,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 			if ( id === "map-world" ) {
 				mapPage = 0;
 				mapFollow = false;
-				mapCenter = pose ? { ...pose } : null;
+				mapCenter = heldCenter( pose );
 				mapPan = [ 0, 0 ];
 				return true;
 			}
@@ -483,7 +507,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					mapCenter ?? mapViewPose( pose ),
 					mapLayout
 				);
 			}
@@ -493,7 +517,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					mapCenter ?? mapViewPose( pose ),
 					mapLabels,
 					mapIcons,
 					mapMarkers,
@@ -516,7 +540,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					mapCenter ?? mapViewPose( pose ),
 					hover,
 					mapLayout
 				) :
@@ -528,7 +552,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					page: mapPage,
 					clip: mapClip,
 					pan: mapPan,
-					center: mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					center: mapCenter ?? mapViewPose( pose ),
 					points: roster,
 					layout: mapLayout
 				} ) :
@@ -630,7 +654,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 						page: mapPage,
 						clip,
 						pan: mapPan,
-						center: mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+						center: mapCenter ?? mapViewPose( pose ),
 						points: game?.reverseMapPoints ?? [],
 						layout: mapLayout
 					} )
@@ -660,7 +684,7 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapPage,
 					mapClip,
 					mapPan,
-					mapCenter ?? (poseOnMap ?? mapPose ?? pose),
+					mapCenter ?? mapViewPose( pose ),
 					mapIcons ?? [],
 					paths,
 					mapLayout
@@ -680,7 +704,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter = null;
 				}
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
-					caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
+					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
+					// wide chars at 0xBD959C (space dash space), then the town's
+					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC).
+					caption = (page ?
+						hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+						hudCopy( "UIIT_PAG_WORLDMAP" )) || "World Map";
 				windowBox( caption, mx, my, mw, mh );
 				const inner = mapClip;
 				// The map surface is CIFWorldMap itself, not a CIFButton: pressing or
