@@ -20,8 +20,8 @@ before anything is stored:
   - the decode must consume the whole body - a polyglot (a real image
     with bytes appended) is refused, so nothing smuggled can ride in;
   - the decoded pixels are resized to 16x16 and quantized to the silk
-    palette by the native metric (4B3900: Manhattan distance, last
-    index winning a tie). Only those 256 re-encoded bytes ever reach
+    palette by the native metric (Manhattan distance, last index
+    winning a tie). Only those 256 re-encoded bytes ever reach
     storage, which strips metadata, profiles and trailing data by
     construction.
 
@@ -150,7 +150,7 @@ quantizeCrest
 The resized, quantized payload: each of the 16x16 cells averages its
 source box (a single sampled pixel when the source is smaller than
 the crest), then takes the nearest palette colour by the native
-Manhattan metric, the last index winning a tie (4B3900). Rows are
+Manhattan metric, the last index winning a tie. Rows are
 written bottom-up, the .crb order.
 ================
 */

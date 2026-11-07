@@ -8,9 +8,8 @@ a15e9392b2f59d20b29227282ab7c50ccd4623d5492a832b888ee23003de75cc of
 the 768 palette bytes) - the same table the client decodes .crb
 payloads with (foundation/ui/guild-crest.ts), kept here so the server
 can re-encode an upload into the native 16x16 palette-index payload.
-The native client quantizes with this palette in
-Crest_LoadBitmap16x16ToPaletteIndices (4B3900) by Manhattan distance,
-last index winning a tie.
+The native client quantizes uploads with this palette by Manhattan
+distance, last index winning a tie.
 
 ===========================================================================
 */
