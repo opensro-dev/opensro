@@ -64,6 +64,9 @@ const OFF = Object.freeze( {
 	enchantSparks: true,
 	// On by default (owner 2026-10-14); it changes only devices without BC.
 	compressedTextures: true,
+	// Off by default (owner 2026-11-07, #2061): off fetches none of the
+	// HD set, not even its index.
+	hdTextures: false,
 	// On by default (owner 2026-10-14): near effects outrank far characters.
 	sharedActorRoom: true,
 	// On by default (owner 2026-10-25): the own walk is stepped on the main thread.
@@ -101,8 +104,9 @@ const OFF = Object.freeze( {
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
-	// Off by default: the automatic potion watches only the player (70C550).
-	transportAutoPotion: false,
+	// On by default (owner 2026-11-07, #2741): companion and vigor auto-potions;
+	// off, the automatic potion watches only the player (70C550).
+	transportAutoPotion: true,
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
 	petClickOpensWindow: true,
@@ -148,6 +152,20 @@ test("touch inspection defaults on and only an explicit false turns it off", () 
 		assert.equal( experimentalOptions( value ).touchInspect, true, JSON.stringify( value ) );
 	}
 	assert.equal( experimentalOptions( { touchInspect: false } ).touchInspect, false );
+});
+
+test("companion auto-potion defaults on; a saved record without the key keeps its other choices", () => {
+	for (
+		const value of [ undefined, null, {}, { transportAutoPotion: true }, { transportAutoPotion: "false" } ]
+	) {
+		assert.equal( experimentalOptions( value ).transportAutoPotion, true, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { transportAutoPotion: false } ).transportAutoPotion, false );
+	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, confirmGuildBan: false } );
+	assert.equal( saved.transportAutoPotion, true );
+	assert.equal( saved.chatTimestamps, true );
+	assert.equal( saved.skyDetail, true );
+	assert.equal( saved.confirmGuildBan, false );
 });
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -329,7 +347,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects", "HD" ]
 	);
 	// Lighting keeps the direct-light stages, the moving sun among them,
 	// and holds the silk history row for room (#2269); render scale joins
@@ -346,8 +364,10 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 			"silkHistory"
 		]
 	);
-	// Effects, appended last, holds the port-only image effects.
+	// Effects holds the port-only image effects; HD, appended last, holds
+	// the HD texture set's row (#2061).
 	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail" ] );
+	assert.deepEqual( EXPERIMENTAL_TABS[9].rows.map( row => row.key ), [ "hdTextures" ] );
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
@@ -690,6 +710,13 @@ test("compressed textures are on unless explicitly false, and the stored reader 
 	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
 	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
+});
+
+test("HD textures are off unless explicitly true, so an old profile never downloads the set", () => {
+	for ( const value of [ undefined, null, {}, { hdTextures: 1 }, { hdTextures: "true" }, { hdTextures: false } ] ) {
+		assert.equal( experimentalOptions( value ).hdTextures, false, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { hdTextures: true } ).hdTextures, true );
 });
 
 test("a profile saved before the flip loads with WebTransport on; a choice under the current key is kept", () => {

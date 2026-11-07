@@ -120,6 +120,8 @@ is never edited after it ships.
 ================
 */
 func TestRecordFieldsBelongToTheCurrentSchema(t *testing.T) {
+	t.Parallel()
+
 	for _, record := range strictRecords {
 		t.Run(record.name, func(t *testing.T) {
 			var fields []string
@@ -164,6 +166,8 @@ a schema step to make the receiver run its offline upgrade.
 ================
 */
 func TestSchemaStepCarriesAFieldChange(t *testing.T) {
+	t.Parallel()
+
 	if reason, tableOnly := tableOnlySchemaSteps[CurrentVersion]; tableOnly {
 		t.Logf("schema %d is a table-only step: %s", CurrentVersion, reason)
 		return

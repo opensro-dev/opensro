@@ -206,6 +206,7 @@ for ( const targetBone of [ null, "missing-target-marker" ] ) {
 				health: () => ({ phase: "running" }),
 				install: () => {},
 				textureFeatures() {},
+				hdTextures() {},
 				dispose: () => jobs.clear(),
 				/*
 				================

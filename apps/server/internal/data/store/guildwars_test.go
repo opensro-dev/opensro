@@ -19,6 +19,8 @@ TestGuildWarAtomicLifecycle
 ================
 */
 func TestGuildWarAtomicLifecycle(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	var masters [2]*domain.Character
@@ -128,6 +130,8 @@ TestGuildWarNativeTermsAndScores
 ================
 */
 func TestGuildWarNativeTermsAndScores(t *testing.T) {
+	t.Parallel()
+
 	for _, test := range []struct {
 		delta int64
 		score uint8

@@ -11,6 +11,8 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -23,6 +25,7 @@ the empty name_reservations table. A second upgrade has nothing to do.
 ================
 */
 func TestRenameUpgradeAddsReservationTable(t *testing.T) {
+	tier.Long(t, "a schema-32 layout-10 authority upgrades to 33/11 with the empty name_reservations table")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

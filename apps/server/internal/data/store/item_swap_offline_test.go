@@ -44,6 +44,8 @@ TestSwapItemsOfflineCoversEveryContainer
 ================
 */
 func TestSwapItemsOfflineCoversEveryContainer(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	sun := domain.InventoryRow{Slot: 13, RefObjID: 1, Codename: "SUN", Plus: 7, VarianceBits: "12345", Durability: 99, StackCount: 1, MagicOptions: []uint64{4<<32 | 50}}

@@ -12,6 +12,8 @@ import (
 // round-trip (commit through the scoped door, close, reopen), and a
 // non-GM record never carries the key at all (omitempty).
 func TestGMPrivilegePersistsAcrossReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -45,6 +47,8 @@ func TestGMPrivilegePersistsAcrossReopen(t *testing.T) {
 // TestGMPrivilegeAbsentKeyDecodesNonGM pins the current optional-field
 // semantics under the strict decoder.
 func TestGMPrivilegeAbsentKeyDecodesNonGM(t *testing.T) {
+	t.Parallel()
+
 	ordinary, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"Ordinary"}`))
 	if err != nil {
 		t.Fatalf("decoding a keyless record: %v", err)
@@ -65,6 +69,8 @@ func TestGMPrivilegeAbsentKeyDecodesNonGM(t *testing.T) {
 // (case-insensitively), unlisted GMs demote, the result persists, and a
 // second run with the same list is a no-op.
 func TestReconcileGMPrivilegeAllowlistIsSoleAuthority(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -137,6 +143,8 @@ func TestGMCharactersFromEnv(t *testing.T) {
 }
 
 func TestParseGMCharactersMatchesEnvironmentContract(t *testing.T) {
+	t.Parallel()
+
 	got, err := ParseGMCharacters(" global-official:asd2 , test:Probe ")
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +159,8 @@ func TestParseGMCharactersMatchesEnvironmentContract(t *testing.T) {
 }
 
 func TestReconcileGMPrivilegeIsDivisionQualified(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	for _, divisionID := range []string{"d1", "d2"} {
 		if err := s.CreateCharacter(divisionID, "test-account", &enterworld.Character{Name: "SameName"}); err != nil {

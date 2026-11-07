@@ -28,6 +28,8 @@ TestCommitSkipsUnchangedMetaPlanes
 ================
 */
 func TestCommitSkipsUnchangedMetaPlanes(t *testing.T) {
+	t.Parallel()
+
 	s, c := commitSkipFixture(t)
 	s.meta.TradeRewards = map[string]domain.TradeRewardPool{testDivision: {Hunters: 3}}
 	s.meta.JobRankings = map[string]domain.JobRankings{testDivision: {}}
@@ -88,6 +90,8 @@ the failed attempt's.
 ================
 */
 func TestFailedCommitRetainsNoMetaDigest(t *testing.T) {
+	t.Parallel()
+
 	s, c := commitSkipFixture(t)
 	s.meta.TradeRewards = map[string]domain.TradeRewardPool{testDivision: {Hunters: 7}}
 

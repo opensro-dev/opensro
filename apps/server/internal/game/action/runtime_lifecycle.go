@@ -410,6 +410,11 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 		// The native pickup owner gate (0x1812): the drop is another's for now.
 		return pickupRefusal(wire.ErrCodeLockedByOther), character
 	}
+	// Port-only (forge.go, issue #1980): a bound forged drop is its
+	// forger's for good, not just for the reservation window.
+	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, snapshot.Name) {
+		return pickupRefusal(wire.ErrCodeLockedByOther), character
+	}
 
 	worldKey := simulation.WorldKey(pending.DivisionID, character.Name)
 	live := rt.liveSpawn(worldKey, snapshot, now.UnixMilli())

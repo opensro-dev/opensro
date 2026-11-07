@@ -48,6 +48,7 @@ func persistedFromItem(item Item) domain.GroundItemRecord {
 		Heading:    item.Heading,
 		OwnerJID:   item.OwnerJID,
 		DroppedBy:  item.DroppedBy,
+		ForgeBound: item.ForgeBound,
 	}
 	if item.VarianceBits != 0 {
 		row.VarianceBits = strconv.FormatUint(item.VarianceBits, 10)
@@ -89,6 +90,7 @@ func itemFromPersisted(row domain.GroundItemRecord) Item {
 		Heading:      row.Heading,
 		OwnerJID:     row.OwnerJID,
 		DroppedBy:    row.DroppedBy,
+		ForgeBound:   row.ForgeBound,
 	}
 	// The ORIGINAL drop timestamp comes back so the fixture TTL continues
 	// across a restart as if it never happened (witnessed red: without this

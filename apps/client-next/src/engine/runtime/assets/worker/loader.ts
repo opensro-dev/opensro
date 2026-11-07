@@ -893,6 +893,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				textureVariant( request.variant );
 				return;
 			}
+			if ( request.kind === "hd-textures" ) {
+				packs.hdTextures( request.format );
+				return;
+			}
 			if (
 				pending.has( request.id ) || !Number.isSafeInteger( request.limit ) ||
 				request.limit < 1 || request.limit > assetRequestBudget( request.decode )

@@ -33,6 +33,8 @@ func rewriteDatabaseMeta(t *testing.T, dir, key string, value int) {
 }
 
 func TestDatabaseVersionMismatchRefusesInPlace(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name  string
 		key   string
@@ -150,6 +152,8 @@ func TestLoadRefusesIdentityAliasingAndExhaustedWatermark(t *testing.T) {
 }
 
 func TestDecodeCharacterStrictRefusesUnknownField(t *testing.T) {
+	t.Parallel()
+
 	_, err := decodeCharacterStrict([]byte(`{"id":1,"accountId":"test-account","name":"asd2","mysteryKey":true}`))
 	if err == nil {
 		t.Fatal("unknown character field must refuse")
@@ -169,6 +173,8 @@ is data this binary cannot represent and refuses.
 ================
 */
 func TestDecodeCharacterStrictDropsEmptyRetiredFields(t *testing.T) {
+	t.Parallel()
+
 	for _, record := range []string{
 		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":[],"weaponSetKeys":[]}`,
 		`{"id":1,"accountId":"test-account","name":"asd2","dressSetKeys":null,"weaponSetKeys":null}`,

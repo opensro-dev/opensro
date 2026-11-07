@@ -376,6 +376,7 @@ export function startRuntime(
 				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
 				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );

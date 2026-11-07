@@ -18,6 +18,8 @@ TestPetGearDropFactorDB
 ================
 */
 func TestPetGearDropFactorDB(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	if value, err := s.PetGearDropFactor(); err != nil || value != 0.1 {
