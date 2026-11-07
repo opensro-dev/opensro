@@ -65,10 +65,8 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 // the peek and the sweep's lock) only costs one no-op commit - both self-heal.
 func (rt *Runtime) hasExpired(now time.Time) bool {
 	for _, divisionID := range rt.Ground.DivisionIDs() {
-		for _, item := range rt.Ground.All(divisionID) {
-			if !item.DroppedAt.IsZero() && now.Sub(item.DroppedAt) >= grounditem.FixtureLifetime {
-				return true
-			}
+		if rt.Ground.HasExpired(divisionID, now, grounditem.FixtureLifetime) {
+			return true
 		}
 	}
 	return false

@@ -3,6 +3,7 @@ package transport
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,8 +71,25 @@ type Config struct {
 	GracePeriod time.Duration
 	// KeepaliveInterval is how often a quiet attached client is pinged.
 	KeepaliveInterval time.Duration
+	// WireProofInterval is how long a live session may stay silent
+	// outbound before the keepalive proves the wire with a PING (#2148).
+	// It must stay inside the client's stall window (7 s + 1 s confirm).
+	WireProofInterval time.Duration
 	// IdleTimeout detaches a client that answered nothing at all.
 	IdleTimeout time.Duration
+	// EntryBootstrapBound caps how long a scene admission may sit with
+	// its bootstrap (or refusal) still unenqueued before the session is
+	// closed with a logged cause. A completed entry enqueues in well
+	// under a second; this bound only fires when the entry lane is
+	// wedged, so a slow real entry can never hit it.
+	EntryBootstrapBound time.Duration
+	// RingParkBound caps how long the session writer may stay parked on
+	// a full resume ring (stream_ring.go) with no stream-ack progress
+	// before the session detaches into its resume grace window. A
+	// client that is applying frames acks within a frame or two, so
+	// the bound only fires when the applier is wedged; an unbounded
+	// park would hold the burst, and the session, forever (#2146).
+	RingParkBound time.Duration
 	// OutboundQueue and OutboundQueueBytes bound pending reliable and
 	// coalesced frames per session. Keeping both limits prevents tiny-frame
 	// floods and a few catalogue-sized frames from consuming unbounded memory.
@@ -101,6 +119,14 @@ type Config struct {
 	// refused, so a player reloading faster than resume grace expires is
 	// never locked out. 0 takes the default.
 	MaxSessionsPerAccount int
+	// MaxSessionsPerClient caps the live sessions one client address
+	// holds across every account (port-only conduct limit, #2671: the
+	// alt farm is many accounts from one address, which the per-account
+	// cap cannot see). A new session past the cap is refused, never an
+	// eviction: the sessions already there may belong to other people
+	// behind the same NAT. 0 is no cap, the native posture; the
+	// composition sets it from SRO_MAX_SESSIONS_PER_CLIENT.
+	MaxSessionsPerClient int
 	// MaxPendingHandshakes caps connections concurrently waiting for HELLO.
 	// Excess connections are rejected immediately instead of consuming a
 	// goroutine for the full HelloTimeout. 0 takes the default.
@@ -112,6 +138,33 @@ type Config struct {
 	// TRANSPORT_PPROF=1); PprofAddr must be a loopback host:port.
 	EnablePprof bool
 	PprofAddr   string
+}
+
+// EnvMaxSessionsPerClient is the conduct limit's switch (port-only, not
+// native, #2671): the most live sessions one client address may hold.
+// Unset, unreadable or 0 is no limit, the native posture, so a typo can
+// never lock a shard's players out; the composition logs the limit it
+// armed. Longer account-level punishment is a block, not this.
+const EnvMaxSessionsPerClient = "SRO_MAX_SESSIONS_PER_CLIENT"
+
+/*
+================
+MaxSessionsPerClientLimit
+
+The composition's read of EnvMaxSessionsPerClient: a positive whole
+number arms Config.MaxSessionsPerClient with it, anything else is off.
+================
+*/
+func MaxSessionsPerClientLimit() int {
+	raw := strings.TrimSpace(os.Getenv(EnvMaxSessionsPerClient))
+	if raw == "" {
+		return 0
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 0 {
+		return 0
+	}
+	return limit
 }
 
 // EnvWebTransportPublic is the shard switch that permits the public
@@ -151,7 +204,10 @@ func DefaultConfig() Config {
 		HelloTimeout:          10 * time.Second,
 		GracePeriod:           30 * time.Second,
 		KeepaliveInterval:     20 * time.Second,
+		WireProofInterval:     4 * time.Second,
 		IdleTimeout:           60 * time.Second,
+		EntryBootstrapBound:   30 * time.Second,
+		RingParkBound:         30 * time.Second,
 		OutboundQueue:         8192,
 		OutboundQueueBytes:    32 << 20,
 		RateLimitPerSec:       25,
@@ -182,8 +238,17 @@ func (c *Config) applyDefaults() {
 	if c.KeepaliveInterval == 0 {
 		c.KeepaliveInterval = d.KeepaliveInterval
 	}
+	if c.WireProofInterval == 0 {
+		c.WireProofInterval = d.WireProofInterval
+	}
 	if c.IdleTimeout == 0 {
 		c.IdleTimeout = d.IdleTimeout
+	}
+	if c.EntryBootstrapBound == 0 {
+		c.EntryBootstrapBound = d.EntryBootstrapBound
+	}
+	if c.RingParkBound == 0 {
+		c.RingParkBound = d.RingParkBound
 	}
 	if c.OutboundQueue == 0 {
 		c.OutboundQueue = d.OutboundQueue

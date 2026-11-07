@@ -18,7 +18,8 @@ async function load( file ) {
 	return import( sourceFileUrl( "src/engine/" + file ).href );
 }
 const { createNpcConversation } = await load( "runtime/simulation/worker/session/world/gameplay/npc/npc.ts" );
-const { decodeNpcDialogue } = await load( "foundation/gameplay/npc-dialogue.ts" );
+const { decodeNpcDialogue, decodeEventExchangeResult } = await load( "foundation/gameplay/npc-dialogue.ts" );
+const { serverNotification } = await load( "foundation/gameplay/system-notices.ts" );
 const { createGameplay } = await load( "runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 function packet( kind, prompt, options = [] ) {
 	const string = s => {
@@ -41,7 +42,36 @@ test("NPC wire grammar, exact choices and malformed admission are atomic", () =>
 	assert.deepEqual( decodeNpcDialogue( frame.payload ).options.map( x => x.choice ), [ 5, 7, 8 ] );
 	assert.deepEqual( decodeNpcDialogue( packet( 3, "PROMPT" ).payload ).options.map( x => x.choice ), [ 2, 3 ] );
 	assert.deepEqual( decodeNpcDialogue( packet( 1, "PROMPT" ).payload ).options.map( x => x.choice ), [ 1 ] );
-	assert.throws( () => decodeNpcDialogue( packet( 5, "PROMPT" ).payload ), /Unsupported/ );
+	assert.throws( () => decodeNpcDialogue( packet( 6, "PROMPT" ).payload ), /Unsupported/ );
+	// Kind 5: the kind-4 rows, then a wide item codename and a u32 count
+	// that format into the prompt as %s and %d (763C10 / 5D60C0).
+	const narrow = s => {
+		const p = Buffer.from( s ), n = Buffer.alloc( 2 );
+		n.writeUInt16LE( p.length );
+		return Buffer.concat( [ n, p ] );
+	};
+	const wide = s => {
+		const n = Buffer.alloc( 2 );
+		n.writeUInt16LE( s.length );
+		return Buffer.concat( [ n, Buffer.from( s, "utf16le" ) ] );
+	};
+	const count60 = Buffer.alloc( 4 );
+	count60.writeUInt32LE( 60 );
+	const kind5Payload = Buffer.concat( [
+		Buffer.from( [ 5 ] ),
+		narrow( "GIVE %s FOR %d" ),
+		Buffer.from( [ 1 ] ),
+		narrow( "SN_TALK_COMMON_EXIT" ),
+		wide( "ITEM_ETC_BOX" ),
+		count60
+	] );
+	const decoded5 = decodeNpcDialogue( kind5Payload );
+	assert.equal( decoded5.kind, 5 );
+	assert.equal( decoded5.prompt, "GIVE %s FOR %d" );
+	assert.deepEqual( decoded5.options.map( x => x.choice ), [ 5 ] );
+	assert.deepEqual( decoded5.item, { codename: "ITEM_ETC_BOX", count: 60 } );
+	assert.throws( () => decodeNpcDialogue( Buffer.concat( [ kind5Payload, Buffer.of( 0 ) ] ) ), /trailing/ );
+	assert.throws( () => decodeNpcDialogue( kind5Payload.subarray( 0, kind5Payload.length - 1 ) ), /Truncated/ );
 	const owner = createNpcConversation( () => {} );
 	owner.select( 7 );
 	owner.talk( 0 );
@@ -223,4 +253,197 @@ test("recall appointment uses granted capability and publishes only authoritativ
 		assert.equal( frames.length, 0 );
 		game.dispose();
 	}
+});
+
+test("So-ok helmet and gift clicks at 0, 1, 59 and 60 boxes show the price or the result", () => {
+	// The exact frames the server emits for one So-ok row click: a kind-4
+	// closing answer (prompt line, one Exit row) and, except for the gift
+	// click on an empty bag, a channel-7 top banner. Short of 60 boxes the
+	// banner names the price and the holding; at the price it names what
+	// was spent; every gift click answers with its line. Nothing is silent.
+	const narrow = s => {
+		const p = Buffer.from( s ), n = Buffer.alloc( 2 );
+		n.writeUInt16LE( p.length );
+		return Buffer.concat( [ n, p ] );
+	};
+	const answer = symbol =>
+		Buffer.concat( [
+			Buffer.from( [ 4 ] ),
+			narrow( symbol ),
+			Buffer.from( [ 1 ] ),
+			narrow( "SN_TALK_COMMON_EXIT" )
+		] );
+	const banner = text =>
+		Buffer.concat( [
+			Buffer.from( [ 7, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" )
+		] );
+	const NO_BOX = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_E";
+	const GRANTED = "SN_TALK_QEV_CH_EVENT_KISAENG_071030_C";
+	const cases = [
+		{
+			boxes: 0,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 0.",
+			gift: NO_BOX,
+			giftBanner: ""
+		},
+		{
+			boxes: 1,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 1.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 1 gift(s) received."
+		},
+		{
+			boxes: 59,
+			helmet: NO_BOX,
+			helmetBanner: "A helmet costs 60 Jewel Boxes. You have 59.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 59 gift(s) received."
+		},
+		{
+			boxes: 60,
+			helmet: GRANTED,
+			helmetBanner: "Exchanged 60 Jewel Boxes for a helmet.",
+			gift: GRANTED,
+			giftBanner: "Exchanged your Jewel Boxes: 60 gift(s) received."
+		}
+	];
+	const assertAnswer = ( symbol, bannerText ) => {
+		const owner = createNpcConversation( () => {} );
+		owner.select( 7 );
+		owner.talk( 0 );
+		const payload = answer( symbol );
+		owner.receive( { opcode: 0x3773, payload } );
+		assert.equal( owner.state().phase, "ready" );
+		const dialogue = decodeNpcDialogue( payload );
+		assert.equal( dialogue.prompt, symbol );
+		assert.deepEqual( dialogue.options.map( x => x.choice ), [ 5 ] );
+		if ( bannerText ) {
+			const notice = serverNotification( 0x3667, banner( bannerText ) );
+			assert.equal( notice?.text, bannerText );
+			assert.equal( notice?.notificationBanner, true );
+		}
+	};
+	for ( const row of cases ) {
+		assertAnswer( row.helmet, row.helmetBanner );
+		assertAnswer( row.gift, row.giftBanner );
+	}
+});
+
+test("event exchange send, answer greetings and silent bytes (75D030 / 7026B0)", () => {
+	const sent = [];
+	const owner = createNpcConversation( frame => sent.push( frame ) );
+	owner.select( 7 );
+	owner.exchange( 0 );
+	assert.deepEqual( sent, [ { opcode: 0x747c, payload: new Uint8Array( 0 ) } ] );
+	assert.equal( owner.state().phase, "waiting" );
+	// Result 1: the compensation greeting, back on the menu page.
+	assert.equal( owner.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) } ), true );
+	assert.equal( owner.eventGreeting(), "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	assert.equal( owner.state().phase, "menu" );
+	// A new conversation drops the greeting.
+	owner.select( 9 );
+	assert.equal( owner.eventGreeting(), null );
+	// Result 2's sub-bytes: 3 the socks error, 4 the inventory error;
+	// every other byte is silent and leaves the wait standing.
+	const answer = ( payload, want ) => {
+		const fresh = createNpcConversation( () => {} );
+		fresh.select( 7 );
+		fresh.exchange( 0 );
+		assert.equal( fresh.receive( { opcode: 0xb47c, payload } ), true );
+		assert.equal( fresh.eventGreeting(), want );
+		assert.equal( fresh.state().phase, want ? "menu" : "waiting" );
+	};
+	answer( Uint8Array.of( 2, 3 ), "UIIT_MSG_XMAS_EVENT_ERROR_SOCKS" );
+	answer( Uint8Array.of( 2, 4 ), "UIIT_MSG_XMAS_EVENT_ERROR_INVENTORY" );
+	answer( Uint8Array.of( 2, 9 ), null );
+	answer( Uint8Array.of( 7 ), null );
+	// A firing answer with no conversation open is consumed and inert.
+	const closed = createNpcConversation( () => {} );
+	assert.equal( closed.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) } ), true );
+	assert.equal( closed.eventGreeting(), null );
+	// The decoder: truncated bodies throw, unknown bytes return null.
+	assert.equal( decodeEventExchangeResult( Uint8Array.of( 1 ) ), "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	assert.equal( decodeEventExchangeResult( Uint8Array.of( 0 ) ), null );
+	assert.throws( () => decodeEventExchangeResult( new Uint8Array( 0 ) ), /Truncated/ );
+	assert.throws( () => decodeEventExchangeResult( Uint8Array.of( 2 ) ), /Truncated/ );
+});
+
+test("event exchange click sends with the capability and the conversation, socks or none (7026B0)", () => {
+	// The gameplay-layer terms of the row 0x15 click: the NPC's grant
+	// carries EVENT_EXCHANGE_FUNCTION and the conversation stands on
+	// that NPC. The bag is not a term: 7026B0's scan (702728) is never
+	// tested, so the sock-less click sends and the server's 2/3 answer
+	// says ERROR_SOCKS. A missing term is silent - no frame, no throw.
+	const SOCKS = 4242, OTHER = 99;
+	// capabilities 0 means no grant is delivered at all (closed case).
+	const exchangeWorld = ( bag, capabilities = 0x40002 ) => {
+		const frames = [], game = createGameplay( f => frames.push( f ) );
+		game.bindReferences( {
+			country: () => undefined,
+			playerModels: () => [],
+			item: () => ({ typeFlags: 0x6c, name: "" }),
+			monster: () => undefined,
+			npcs: () => []
+		} );
+		game.bootstrap( {
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			refItemSnapshot: [
+				{ refObjId: SOCKS, typeFlags: 0x6c },
+				{ refObjId: OTHER, typeFlags: 0x6c }
+			],
+			equipItems: bag
+		} );
+		game.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+		const npc = { gid: 7, kind: "npc", regionId: 1, x: 0, y: 0, z: 0, heading: 0 };
+		game.command( { kind: "select", gid: 7 }, 0, npc );
+		if ( capabilities !== 0 ) {
+			const grant = Buffer.alloc( 11 );
+			grant[0] = 1;
+			grant.writeUInt32LE( 7, 1 );
+			grant.writeUInt32LE( capabilities, 6 );
+			game.receive( { opcode: 0xb45a, payload: grant }, 1 );
+			assert.equal( game.take().npcConversation.phase, "menu" );
+		}
+		frames.length = 0;
+		return { frames, game };
+	};
+	// No socks in the bag: the click still sends - the native scan is
+	// never tested - a second click while the exchange waits is silent
+	// (the native send has no waiting state, so the port's invented one
+	// must not surface as a throw), and the server's 2/3 answer lands
+	// as the socks error.
+	const bare = exchangeWorld( [ { slot: 13, refObjId: OTHER, body: [ OTHER, 0, 0, 0, 1, 0 ] } ] );
+	bare.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.deepEqual( bare.frames, [ { opcode: 0x747c, payload: new Uint8Array( 0 ) } ] );
+	assert.equal( bare.game.take().npcConversation.phase, "waiting" );
+	bare.game.command( { kind: "npc-event-exchange" }, 3 );
+	assert.equal( bare.frames.length, 1 );
+	assert.equal( bare.game.receive( { opcode: 0xb47c, payload: Uint8Array.of( 2, 3 ) }, 4 ), true );
+	assert.equal( bare.game.take().npcEventGreeting, "UIIT_MSG_XMAS_EVENT_ERROR_SOCKS" );
+	bare.game.dispose();
+	// Socks held: the same single send, and the byte-1 answer still
+	// lands after the refused second click.
+	const held = exchangeWorld( [ { slot: 13, refObjId: SOCKS, body: [ 0x92, 0x10, 0, 0, 1, 0 ] } ] );
+	held.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.deepEqual( held.frames, [ { opcode: 0x747c, payload: new Uint8Array( 0 ) } ] );
+	assert.equal( held.game.take().npcConversation.phase, "waiting" );
+	held.game.command( { kind: "npc-event-exchange" }, 3 );
+	assert.equal( held.frames.length, 1 );
+	assert.equal( held.game.receive( { opcode: 0xb47c, payload: Uint8Array.of( 1 ) }, 4 ), true );
+	assert.equal( held.game.take().npcEventGreeting, "UIIT_MSG_XMAS_EVENT_COMPENSATION" );
+	held.game.dispose();
+	// Without the capability, and with no conversation open at all,
+	// the click is silent.
+	const ungranted = exchangeWorld( [], 0x2 );
+	ungranted.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.equal( ungranted.frames.length, 0 );
+	ungranted.game.dispose();
+	const closed = exchangeWorld( [], 0 );
+	closed.game.command( { kind: "npc-event-exchange" }, 2 );
+	assert.equal( closed.frames.length, 0 );
+	closed.game.dispose();
 });

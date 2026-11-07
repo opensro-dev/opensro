@@ -32,7 +32,14 @@ type fakeConn struct {
 	inFlight      atomic.Int32
 	maxInFlight   atomic.Int32
 	supportsDgram bool
-	kind          string // Kind() override; empty means "fake"
+	// dgramErr, when set, is the error WriteUnreliable returns instead of
+	// recording the frame (a refused or dropped datagram).
+	dgramErr error
+	kind     string // Kind() override; empty means "fake"
+	// addr and userAgent are the accept facts RemoteAddr and
+	// ClientUserAgent report; empty keeps the stand-in peer.
+	addr      string
+	userAgent string
 }
 
 func newFakeConn(gated bool) *fakeConn {
@@ -97,6 +104,9 @@ func (f *fakeConn) written() []Frame {
 func (f *fakeConn) SupportsUnreliable() bool { return f.supportsDgram }
 
 func (f *fakeConn) WriteUnreliable(fr Frame) error {
+	if f.dgramErr != nil {
+		return f.dgramErr
+	}
 	f.mu.Lock()
 	f.dgrams = append(f.dgrams, Frame{Opcode: fr.Opcode, Payload: append([]byte(nil), fr.Payload...)})
 	f.mu.Unlock()
@@ -123,7 +133,14 @@ func (f *fakeConn) Kind() string {
 	return "fake"
 }
 
-func (f *fakeConn) RemoteAddr() string { return "fake:0" }
+func (f *fakeConn) RemoteAddr() string {
+	if f.addr != "" {
+		return f.addr
+	}
+	return "fake:0"
+}
+
+func (f *fakeConn) ClientUserAgent() string { return f.userAgent }
 
 func testCfg() Config {
 	cfg := Config{
@@ -339,6 +356,99 @@ func TestUnreliableAllowlist(t *testing.T) {
 	metrics := hub.Metrics()
 	if metrics.DatagramsOut != 2 || metrics.DatagramBytesOut != 6 {
 		t.Fatalf("datagram metrics = frames %d bytes %d, want 2/6", metrics.DatagramsOut, metrics.DatagramBytesOut)
+	}
+}
+
+// TestUnreliableDropIsCountedNotRerouted pins the #2142 contract at
+// the session seam: when the connection's datagram queue is full, the
+// frame drops and the drop is counted, and the frame must not reappear
+// on the reliable lane or in the keyed lossy slots — rerouting would
+// queue loss-tolerant traffic behind the very stall that filled the
+// datagram queue.
+func TestUnreliableDropIsCountedNotRerouted(t *testing.T) {
+	hub := newHub(testCfg())
+	sess, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := newFakeConn(false)
+	fc.supportsDgram = true
+	fc.dgramErr = errDatagramDropped
+	if err := sess.attach(fc, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(sess, nil) })
+
+	if err := sess.SendUnreliable(OpObjectSourceMove, []byte{0x01}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.SendUnreliableKeyed(OpObjectSourceCorrection, 42, []byte{0x02}); err != nil {
+		t.Fatal(err)
+	}
+
+	metrics := hub.Metrics()
+	if metrics.DatagramsDropped != 2 {
+		t.Fatalf("datagrams dropped = %d, want 2", metrics.DatagramsDropped)
+	}
+	if metrics.DatagramsOut != 0 {
+		t.Fatalf("datagrams out = %d, want 0 (a drop is not a send)", metrics.DatagramsOut)
+	}
+	if dgrams := fc.datagrams(); len(dgrams) != 0 {
+		t.Fatalf("connection recorded %d datagrams, want 0", len(dgrams))
+	}
+
+	// The keyed frame must not be parked in a lossy slot either.
+	sess.mu.Lock()
+	lossy := len(sess.lossy)
+	sess.mu.Unlock()
+	if lossy != 0 {
+		t.Fatalf("lossy slots hold %d frames, want 0", lossy)
+	}
+
+	// A reliable marker proves the write loop ran; the dropped frames
+	// must not ride behind it.
+	if err := sess.Send(0xB06D, []byte{0x03}); err != nil {
+		t.Fatal(err)
+	}
+	frames := waitWritten(t, fc, 2)
+	if len(frames) != 2 || frames[1].Opcode != 0xB06D {
+		t.Fatalf("reliable frames = %v, want WELCOME + the marker only", frames)
+	}
+}
+
+// TestUnreliableRefusalGoesReliable pins the other half of the
+// contract: when the connection refuses a frame outright
+// (ErrFrameTooLarge, the synchronous size refusal), the frame still
+// matters - it is delivered on the reliable lane - and nothing
+// counts it as sent or dropped.
+func TestUnreliableRefusalGoesReliable(t *testing.T) {
+	hub := newHub(testCfg())
+	sess, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := newFakeConn(false)
+	fc.supportsDgram = true
+	fc.dgramErr = ErrFrameTooLarge
+	if err := sess.attach(fc, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hub.closeSession(sess, nil) })
+
+	if err := sess.SendUnreliable(OpObjectSourceMove, []byte{0x01}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.SendUnreliableKeyed(OpObjectSourceCorrection, 42, []byte{0x02}); err != nil {
+		t.Fatal(err)
+	}
+
+	frames := waitWritten(t, fc, 3)
+	if len(frames) != 3 || frames[1].Opcode != OpObjectSourceMove || frames[2].Opcode != OpObjectSourceCorrection {
+		t.Fatalf("reliable frames = %v, want WELCOME + both refused frames", frames)
+	}
+	metrics := hub.Metrics()
+	if metrics.DatagramsOut != 0 || metrics.DatagramsDropped != 0 {
+		t.Fatalf("datagram metrics = %d out, %d dropped, want 0/0 (a refusal is neither)", metrics.DatagramsOut, metrics.DatagramsDropped)
 	}
 }
 

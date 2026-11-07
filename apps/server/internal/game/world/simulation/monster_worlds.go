@@ -176,6 +176,14 @@ func (s *MonsterState) populationForLease(division string, lease instance.Lease)
 
 // populationForObject follows a native GID lookup back to its population.
 // Unknown GIDs return an empty lookup state; queries never allocate a world.
+// Callers resolve one population's actors back to back, so the population
+// the last scan answered with is remembered (popHint) and asked first. The
+// hint is believed only while the registry still maps its key to that very
+// population and the population's rows still hold the gid - a retired
+// population's storage can outlive its registration and still answer
+// contains, which the scan could never return again - and any miss falls
+// through to the scan, so the hint can only ever repeat the scan's own
+// answer (#2029). Callers hold s.mu, as the maps above already require.
 /*
 ================
 populationForObject
@@ -187,9 +195,17 @@ func (s *MonsterState) populationForObject(division string, gid uint32) *divisio
 			return state
 		}
 	}
+	if s.popHintState != nil {
+		if s.popHintKey.division == division && s.worldPopulations[s.popHintKey] == s.popHintState &&
+			s.popHintState.instances.contains(gid) {
+			return s.popHintState
+		}
+		s.popHintState = nil
+	}
 	for key, state := range s.worldPopulations {
 		if key.division == division {
 			if state.instances.contains(gid) {
+				s.popHintKey, s.popHintState = key, state
 				return state
 			}
 		}
@@ -397,53 +413,268 @@ func (s *MonsterState) PopulationInterestInstances(division string, lease instan
 
 /*
 ================
-populationInterestGIDs
+interestMemoStamp
 
-The spawn index owns nest/lifecycle queries. Visibility instead queries the
-mover's live region bounds: a pursuing actor can leave its spawn region ring.
-Filter exact live blocks before any archived actor read (the retail
-server's neighbour-block resolution).
-Caller holds MonsterState.mu.
-
-A mover whose segment spans regions is listed in each; the index marks
-those, and only they go through a seen set, made on the first one. A mover
-in one region is visited once without it. Static entries are unchanged.
+What a memoized viewer answer depends on.
 ================
 */
-func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
-	var out []uint32
+type interestMemoStamp struct {
+	blocks    uint64
+	instances uint64
+	statics   interestStaticsStamp
+}
+
+/*
+================
+interestStaticsStamp
+
+movers is compared too: a population can be handed a fresh storage whose
+counters restart.
+================
+*/
+type interestStaticsStamp struct {
+	movers   *moverStorage
+	roster   uint64
+	byRegion uint64
+}
+
+/*
+================
+interestStaticsNow
+================
+*/
+func (state *divisionMonsterState) interestStaticsNow() interestStaticsStamp {
+	stamp := interestStaticsStamp{movers: state.movers, byRegion: state.byRegionGeneration}
 	if state.movers != nil {
-		var seen map[uint32]struct{}
-		for region := range moverCandidateRegions(viewer).regions() {
-			for gid, spans := range state.movers.spatial[region] {
-				if gid == 0 {
-					continue
-				}
-				if spans {
-					if _, duplicate := seen[gid]; duplicate {
-						continue
-					}
-					if seen == nil {
-						seen = make(map[uint32]struct{})
-					}
-					seen[gid] = struct{}{}
-				}
-				if !state.instances.contains(gid) {
-					continue
-				}
-				pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
-				if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
-					out = append(out, gid)
+		stamp.roster = state.movers.blocks.rosterGeneration
+	}
+	return stamp
+}
+
+/*
+================
+interestStampAt
+
+The stamp a viewer answer for block keys on: the generations of the
+blocks the answer reads (moverBlockIndex.stampBlocks), the instance
+view generation and the statics stamp. The caller reconciles the
+block index at the read instant first (populationInterestGIDs does;
+so does the scope stamp read).
+================
+*/
+func (state *divisionMonsterState) interestStampAt(block worldgeom.InterestBlock) interestMemoStamp {
+	stamp := interestMemoStamp{instances: state.instances.viewGeneration, statics: state.interestStaticsNow()}
+	if state.movers != nil {
+		stamp.blocks = state.movers.blocks.stampBlocks(block)
+	}
+	return stamp
+}
+
+/*
+================
+scopeInterestStamp
+
+The interest stamp a scope leg for this viewer keys on, sampled under
+the population lock after reconciling the block index at the leg
+instant - the same inputs populationInterestGIDs memoizes on, so a
+leg whose block and stamp both match its last full pass provably
+faces the same in-scope set (#2134).
+================
+*/
+func (s *MonsterState) scopeInterestStamp(division string, lease instance.Lease, viewer worldgeom.RegionXZ, nowMs int64) (interestMemoStamp, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(division, lease)
+	if state == nil {
+		return interestMemoStamp{}, false
+	}
+	if state.movers != nil {
+		state.movers.reconcileBlocks(nowMs)
+	}
+	return state.interestStampAt(worldgeom.InterestBlockAt(viewer)), true
+}
+
+/*
+================
+regionStatics
+
+The entries of byRegion[region] that have no mover. Most generated actors
+have a mover once their population is active, so this keeps a scan from
+probing each of them per viewer. A duplicate listing stays duplicated,
+as byRegion lists it.
+================
+*/
+func (state *divisionMonsterState) regionStatics(region uint16) []uint32 {
+	now := state.interestStaticsNow()
+	if state.interestStatics == nil || state.interestStaticsStamp != now {
+		state.interestStatics = make(map[uint16][]uint32, len(state.byRegion))
+		state.interestStaticsStamp = now
+		for key, gids := range state.byRegion {
+			for _, gid := range gids {
+				if !state.movers.has(gid) {
+					state.interestStatics[key] = append(state.interestStatics[key], gid)
 				}
 			}
 		}
 	}
-	// Static entries without a mover still use their immutable spawn position.
+	return state.interestStatics[region]
+}
+
+/*
+================
+interestMemoEntry
+
+One block's memoized viewer answer: the gid set as last computed, the
+stamp it was computed under, and how it changed from the answer it
+replaced. A scope leg whose viewer still holds the replaced answer
+applies entered/left instead of re-reading the whole set (#2134).
+Only one replacement is remembered; a viewer older than that runs
+the full pass, which is always correct.
+================
+*/
+type interestMemoEntry struct {
+	gids  []uint32
+	stamp interestMemoStamp
+	// fromStamp is the stamp gids' predecessor was computed under;
+	// entered and left bridge exactly fromStamp -> stamp.
+	fromStamp interestMemoStamp
+	entered   []uint32
+	left      []uint32
+}
+
+/*
+================
+interestGidDifference
+
+The entered and left halves of the symmetric difference of two
+gid-sorted answers.
+================
+*/
+func interestGidDifference(before, after []uint32) (entered, left []uint32) {
+	i, j := 0, 0
+	for i < len(before) && j < len(after) {
+		switch {
+		case before[i] == after[j]:
+			i++
+			j++
+		case before[i] < after[j]:
+			left = append(left, before[i])
+			i++
+		default:
+			entered = append(entered, after[j])
+			j++
+		}
+	}
+	left = append(left, before[i:]...)
+	entered = append(entered, after[j:]...)
+	return entered, left
+}
+
+/*
+================
+populationInterestGIDs
+
+The spawn index owns nest/lifecycle queries. Visibility instead asks the
+mover block index: a pursuing actor can leave its spawn region ring.
+Filter exact live blocks before any archived actor read (the retail
+server's neighbour-block resolution).
+Caller holds MonsterState.mu.
+
+Static entries still use their immutable spawn position. The returned
+slice is the memo's own once stored: callers read it, never mutate it
+(#2134 slice 2a - the per-leg clone cost a copy per viewer per leg and
+nobody consumed the isolation).
+
+The memo is per block and rewritten in place: an entry lives until one
+of its own blocks' generations moves, so churn in a far neighbourhood
+never retires it (#2134). Entries are never pruned; the blocks viewers
+stand in bound the count, like the per-session shown sets.
+================
+*/
+func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
+	if state.movers == nil {
+		return appendInterestStatics(state, viewer, nil)
+	}
+	block := worldgeom.InterestBlockAt(viewer)
+	state.movers.reconcileBlocks(nowMs)
+	stamp := state.interestStampAt(block)
+	if state.interestMemo == nil {
+		state.interestMemo = make(map[worldgeom.InterestBlock]*interestMemoEntry)
+	}
+	entry, ok := state.interestMemo[block]
+	if ok && entry.stamp == stamp {
+		return entry.gids
+	}
+	members := state.movers.blockMembers(block, nil)
+	out := members[:0]
+	for _, gid := range members {
+		if state.instances.contains(gid) {
+			out = append(out, gid)
+		}
+	}
+	out = appendInterestStatics(state, viewer, out)
+	if !ok {
+		entry = &interestMemoEntry{}
+		state.interestMemo[block] = entry
+	}
+	entry.entered, entry.left = interestGidDifference(entry.gids, out)
+	entry.fromStamp, entry.gids, entry.stamp = entry.stamp, out, stamp
+	return out
+}
+
+/*
+================
+populationInterestBlockDelta
+
+The scope leg's fast path (#2134): the viewer's shown set still equals
+the block answer computed under base, and the memo remembers how that
+answer changed, so the leg applies only the difference. entered is
+filtered to gids the viewer does not show, with their snapshots; left
+to gids it does. total is the current answer's size, for the scope
+budget read. ok is false when the memo cannot bridge base - the
+caller then runs the full pass.
+================
+*/
+func (s *MonsterState) populationInterestBlockDelta(division string, lease instance.Lease, viewer worldgeom.RegionXZ, nowMs int64, base interestMemoStamp, known map[uint32]bool) (entered []uint32, snapshots map[uint32]monster.Instance, left []uint32, total int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(division, lease)
+	if state == nil || state.movers == nil {
+		return nil, nil, nil, 0, false
+	}
+	gids := populationInterestGIDs(state, viewer, nowMs)
+	entry := state.interestMemo[worldgeom.InterestBlockAt(viewer)]
+	if entry == nil || entry.fromStamp != base {
+		return nil, nil, nil, 0, false
+	}
+	for _, gid := range entry.entered {
+		if known[gid] {
+			continue
+		}
+		entered = append(entered, gid)
+		if snapshots == nil {
+			snapshots = make(map[uint32]monster.Instance, len(entry.entered))
+		}
+		snapshots[gid] = state.instances.get(gid)
+	}
+	for _, gid := range entry.left {
+		if known[gid] {
+			left = append(left, gid)
+		}
+	}
+	return entered, snapshots, left, len(gids), true
+}
+
+/*
+================
+appendInterestStatics
+
+Add the viewer's visible static entries and sort the result by gid.
+================
+*/
+func appendInterestStatics(state *divisionMonsterState, viewer worldgeom.RegionXZ, out []uint32) []uint32 {
 	for _, region := range RegionScopeRing(viewer.RegionID) {
-		for _, gid := range state.byRegion[region] {
-			if state.movers.has(gid) {
-				continue
-			}
+		for _, gid := range state.regionStatics(region) {
 			actor := state.instances.get(gid)
 			position := worldgeom.RegionXZ{RegionID: actor.Spawn.RegionID, X: actor.Spawn.X, Z: actor.Spawn.Z}
 			if worldgeom.InterestVisible(viewer, position) {

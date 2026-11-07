@@ -18,7 +18,7 @@ worker-side clear or failure then retires it without a guess here.
 */
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Pose, GameplayCommand } from "@/engine/contracts/gameplay";
-import { assetFailure, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
+import { assetFailure, assetFailurePath, createAssetRecovery } from "@/engine/foundation/assets/asset-recovery";
 import { featuresAt } from "@/engine/foundation/world/plane";
 import { createNavigation, type NavigationView } from "@/engine/foundation/navigation/clipper";
 
@@ -45,6 +45,12 @@ export function createNavigationStream(
 		| { phase: "failed"; region: number; error: string; } = { phase: "idle" };
 	let disposed = false, requestId = 0, deadline = 0, progressBytes = -1;
 	const recovery = createAssetRecovery();
+	// The asset the open request is loading, and the latest failure's
+	// facts for the incident its terminal state files (#2337).
+	// terminalFailure hands each terminal episode out exactly once.
+	let loadPath: string | undefined;
+	let lastFailure: { error: string; path?: string; } | undefined;
+	let reportedFailure: { error: string; path?: string; } | undefined;
 	// The main thread's clipper and the request id of the product it holds
 	// (0: none). The same product goes to the worker under that id.
 	const clipper = createNavigation();
@@ -83,6 +89,18 @@ export function createNavigationStream(
 	}
 	/*
 	================
+	forgetFailure
+
+	Drops the facts of the last asset failure, so a later admission
+	timeout or an unrelated refusal can't report them (#2337).
+	================
+	*/
+	function forgetFailure() {
+		lastFailure = undefined;
+		loadPath = undefined;
+	}
+	/*
+	================
 	cancel
 	================
 	*/
@@ -101,28 +119,41 @@ export function createNavigationStream(
 			admittedRegion?: number,
 			failure?: { region: number; requestId?: number; error: string; },
 			admittedRequestId?: number,
-			now = performance.now()
+			now = performance.now(),
+			visibilityReturned = false
 		) {
 			if ( disposed ) return;
 			if ( !pose ) {
 				cancel();
 				recovery.reset();
+				forgetFailure();
 				return;
 			}
 			if ( state.phase !== "idle" && state.region !== pose.regionId ) {
 				cancel();
 				recovery.reset();
+				forgetFailure();
 			}
 			if ( state.phase === "failed" && recovery.due( now ) ) state = { phase: "idle" };
 			if ( state.phase === "admitting" && failure?.region === state.region && failure.requestId === requestId ) {
 				state = { phase: "failed", region: state.region, error: failure.error };
+				// The worker's admission answer is not an asset failure:
+				// it files no asset incident (#2337).
+				lastFailure = undefined;
 				recovery.reset();
 				return;
 			}
 			if ( state.phase === "admitting" && admittedRegion === state.region && admittedRequestId === requestId ) {
 				state = { phase: "ready", region: state.region };
 				recovery.reset();
+				forgetFailure();
 			}
+			// A page that slept or was frozen could not step at all, and
+			// neither could the simulation it waits on: the admission
+			// window never really ran. The frame that returns visibility
+			// re-arms it instead of failing a wait nobody attended
+			// (#2337). An attended window still expires below.
+			if ( visibilityReturned && state.phase === "admitting" ) deadline = now + ADMISSION_TIMEOUT_MS;
 			try {
 				if ( state.phase === "admitting" && now >= deadline ) {
 					throw Error( "Navigation admitting timed out for region " + state.region );
@@ -172,6 +203,7 @@ export function createNavigationStream(
 					}
 				}
 				if ( state.phase !== "idle" || !assets.available() ) return;
+				loadPath = undefined;
 				const dungeon = !featuresAt( pose.regionId ).regionCatalog, isCatalog = !dungeon && !catalog;
 				const path = dungeon ?
 					"/assets/world/dungeon/dungeon-resources.json" :
@@ -183,6 +215,7 @@ export function createNavigationStream(
 				}
 				const url = new URL( path, origin );
 				if ( !isCatalog ) url.hash = String( pose.regionId );
+				loadPath = path;
 				progressBytes = loadProgressBytes();
 				deadline = now + LOAD_TIMEOUT_MS;
 				state = {
@@ -196,6 +229,11 @@ export function createNavigationStream(
 					)
 				};
 			} catch ( error ) {
+				// The admitting deadline is the worker's silence, not an
+				// asset failure: it files no asset incident (#2337).
+				lastFailure = state.phase === "admitting" ?
+					undefined :
+					{ error: String( error ), path: assetFailurePath( error ) ?? loadPath };
 				cancel();
 				state = { phase: "failed", region: pose.regionId, error: String( error ) };
 				recovery.failed( error, now );
@@ -227,12 +265,36 @@ export function createNavigationStream(
 		},
 		/*
 		================
+		terminalFailure
+
+		The failure that ended this stream's retries, once per episode:
+		a permanent failure at once, a transient one only when its
+		automatic retries are used up. The runtime files it as a client
+		incident (#2337); a later failure is a new episode and reports
+		again under its own facts.
+		================
+		*/
+		terminalFailure() {
+			if ( state.phase !== "failed" || recovery.reconnecting() ) return undefined;
+			const failure = lastFailure;
+			if ( !failure || failure === reportedFailure ) return undefined;
+			reportedFailure = failure;
+			return {
+				error: failure.error,
+				path: failure.path,
+				transient: recovery.transient(),
+				attempts: recovery.attempts()
+			};
+		},
+		/*
+		================
 		retryTransient
 		================
 		*/
 		retryTransient() {
 			if ( !disposed && state.phase === "failed" && recovery.transient() ) {
 				recovery.reset();
+				forgetFailure();
 				state = { phase: "idle" };
 			}
 		},
@@ -244,6 +306,7 @@ export function createNavigationStream(
 		retry() {
 			if ( disposed || state.phase !== "failed" ) return;
 			recovery.reset();
+			forgetFailure();
 			state = { phase: "idle" };
 		},
 		/*
@@ -266,6 +329,7 @@ export function createNavigationStream(
 		reset() {
 			cancel();
 			recovery.reset();
+			forgetFailure();
 		},
 		/*
 		================
@@ -276,6 +340,7 @@ export function createNavigationStream(
 			if ( disposed ) return;
 			cancel();
 			recovery.reset();
+			forgetFailure();
 			catalog = null;
 			clipper.clear();
 			viewRequestId = 0;

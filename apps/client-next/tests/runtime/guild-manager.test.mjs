@@ -186,6 +186,20 @@ test("the compensation quote waits for the claim box", () => {
 	assert.equal( state.compensation, undefined );
 });
 
+test("a compensation refusal shows the event guide's no-compensation line", () => {
+	// 760A55: {2, 0x45} on 0xB140 raises the EVENTGUIDE dialog, not a
+	// category-table row; the same byte on another carrier stays silent.
+	const state = packet( { ...emptySocial( "Master" ), guild }, 0xb140, Uint8Array.of( 2, 0x45 ) );
+	assert.deepEqual( state.notice, {
+		key: "",
+		value: 0,
+		bannerOnly: true,
+		dialog: { title: "UIIT_STT_EVENTGUIDE", lines: [ "UIIT_CTL_GUILDWAR_NOTCOMPENSATION" ] }
+	} );
+	const other = packet( { ...emptySocial( "Master" ), guild }, 0xb3f0, Uint8Array.of( 2, 0x45 ) );
+	assert.equal( other.notice, undefined );
+});
+
 test("the guild warehouse claims, lists and releases its room", () => {
 	const sent = [], room = createStorageRoom( frame => sent.push( frame ) );
 	room.openGuild( 300 );

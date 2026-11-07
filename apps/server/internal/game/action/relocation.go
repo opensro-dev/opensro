@@ -99,6 +99,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	rt.retireReturnForReentry(division, c)
 	corpses, _ := rt.retireCompanionCorpses(division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
+	frames = append(frames, rt.petArrivalFrames(division, c)...)
 	if _, _, bodyStatus := rt.characterLifeState(division, c); bodyStatus != 0 {
 		frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), bodyStatus))
 	}

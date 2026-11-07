@@ -32,6 +32,7 @@ const { SYSTEM_MENU_HEIGHT } = await load( "src/engine/foundation/ui/system-menu
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
+const { emptyStall } = await load( "src/engine/foundation/gameplay/stall.ts" );
 /*
 ================
 assetFixture
@@ -63,7 +64,11 @@ function assetFixture() {
 		},
 		cancel: id => cancelled.push( id )
 	};
-	const resources = createUiAssets( assets, ( ...args ) => published.push( args ), "https://fixture.invalid/" );
+	const resources = createUiAssets(
+		assets,
+		( ...args ) => published.push( args ),
+		"https://fixture.invalid/"
+	);
 	return { assets, resources, requests, results, cancelled, published };
 }
 /*
@@ -1498,6 +1503,19 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
 		step( 8320 );
 		assert.equal( labelOf( "rebirth-point" ), pointLabel );
+		// 52ff1b is dormant: the native camp-resurrection label tests a
+		// marker no reachable writer sets, so a running flag war never
+		// changes the death box; the team-death label stands (#2428).
+		f.state = {
+			...f.state,
+			gameplay: {
+				...f.state.gameplay,
+				rebirthMode: 2,
+				flagWar: { timerEndsAt: 1, carrierGid: 0 }
+			}
+		};
+		step( 8330 );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "a flag war does not change the death box" );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );
@@ -1828,6 +1846,118 @@ test("chat tabs focus their prefixed draft; missing membership emits native stat
 	}
 });
 
+test("a chat line the chat column bans prints the filter line in red and sends nothing", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		"chatword\t0\t1\t0\t0",
+		"namebad\t2\t0\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		const say = ( text, now ) => {
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: text,
+				start: text.length,
+				end: text.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, now );
+		};
+		// The substring row (type 2 in the chat column) refuses the send
+		// and leaves the filter line in the chat pane (790C70 via 545EF0).
+		say( "you chatbad here", 1100 );
+		assert.equal( chatCommands(), 0 );
+		assert.ok( f.hasText( "Some words or expressions" ) );
+		// The whole-word row (type 1) fires on the word alone...
+		say( "a chatword here", 1200 );
+		assert.equal( chatCommands(), 0 );
+		// ...but not inside a longer word.
+		say( "chatwordx is fine", 1300 );
+		assert.equal( chatCommands(), 1 );
+		// The character-name column is a different list: its row does not
+		// block chat.
+		say( "say namebad now", 1400 );
+		assert.equal( chatCommands(), 2 );
+		// And an ordinary line goes out untouched.
+		say( "a clean line", 1500 );
+		assert.equal( chatCommands(), 3 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a banned line in a missing party or guild prints the membership refusal, not the filter line", () => {
+	const filter = [
+		"#ALLOW_ID_TABLE\t0x0061\t0x007A",
+		"#ALLOW_ID_TABLE\t0x0020\t0x0020",
+		"chatbad\t0\t2\t0\t0",
+		""
+	].join( "\n" );
+	const sent = [],
+		f = uiFixture(
+			c => sent.push( c ),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ "/assets/textdata/abusefilter.txt": new TextEncoder().encode( filter ) }
+		);
+	const chatCommands = () => sent.filter( c => c.command?.kind === "chat" ).length;
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 6AEBD0 refuses on membership (party 6AEFF4, guild 6AF03E)
+		// before the abuse filter is consulted (790C70 at 6AF0B9), so
+		// the banned word in the line never reaches the filter here.
+		for (
+			const [tab, line, refusal] of [ [ 1, "#you chatbad here", "Cannot find the relevant" ], [
+				2,
+				"@you chatbad here",
+				"Cannot carry this function"
+			] ]
+		) {
+			f.ui.event( { kind: "activate", id: "chat-tab:" + tab } );
+			f.ui.step( { ...f.state }, 1100 );
+			f.ui.event( {
+				kind: "edit",
+				id: "chat-text",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "chat-send" } );
+			f.ui.step( f.state, 1200 );
+			assert.ok( f.hasText( refusal ) );
+			assert.equal( f.hasText( "Some words or expressions" ), false );
+			assert.equal( chatCommands(), 0 );
+		}
+	} finally {
+		f.dispose();
+	}
+});
+
 test("guild-war notice modal owns input, dismisses locally and reopens only for a new notice", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -1865,6 +1995,31 @@ test("guild-war notice modal owns input, dismisses locally and reopens only for 
 		f.state.gameplay = { ...f.state.gameplay, notices: [ notice, { ...notice, sequence: 2 } ] };
 		scene = f.rawStep( { ...f.state }, 1150 );
 		assert.deepEqual( confirm().rect, original );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the friend-conclusion box formats the two-name line and leaves the acceptance plain", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	try {
+		for ( let now = 0; now < 1000; now += 100 ) f.ui.step( f.state, now );
+		// 52F460 case 0x21: "[%s]and [%s]'s" (UIIT_MSG_YOUNME) takes the
+		// friend's name, then the local player's; the acceptance line
+		// (UIIT_MSG_FRIEND_CONCLUSION) carries no placeholder.
+		f.state.gameplay = {
+			...f.state.gameplay,
+			friends: { conclusion: "Cale" },
+			social: { invitation: null, localName: "Player", members: [] }
+		};
+		const scene = f.ui.step( { ...f.state }, 1100 );
+		assert.ok( scene?.controls.some( c => c.id === "friend-conclusion-confirm" ) );
+		assert.ok( f.hasText( "[Cale]and [Player]'s" ) );
+		assert.ok( f.hasText( "The proposal to make friends is accepted." ) );
+		assert.equal( f.hasText( "%s" ), false, "no raw placeholder reaches the pane" );
+		f.ui.event( { kind: "activate", id: "friend-conclusion-confirm" } );
+		f.ui.step( f.state, 1200 );
+		assert.deepEqual( sent, [ { kind: "gameplay", command: { kind: "friend-conclusion-close" } } ] );
 	} finally {
 		f.dispose();
 	}
@@ -3057,10 +3212,72 @@ test("Character and Party use native main-popup art and share drag placement wit
 		f.ui.event( { kind: "activate", id: "party-settings" } );
 		for ( let i = 28; i < 35; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
 		assert.ok( result.controls.some( c => c.id === "party-settings-ok" ) );
-		f.ui.event( { kind: "activate", id: "party-setting:1:1" } );
+		f.ui.event( { kind: "activate", id: "party-setting:1:0" } );
 		f.ui.event( { kind: "activate", id: "party-settings-cancel" } );
 		f.ui.step( f.state, 3600 );
 		assert.ok( !f.scenes.at( -1 ).quads.some( q => q.texture.endsWith( "/messagebox/msgbox_blackbox_03.png" ) ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("party properties puts Auto Share above Distribution and OK keeps the chosen bits", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	// A target so the Party window's invite button sends the formation bits.
+	f.state.gameplay.target = 2;
+	const step = ( from, to ) => {
+		let result;
+		for ( let i = from; i < to; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		return result;
+	};
+	const control = ( result, id ) => {
+		const found = result.controls.find( c => c.id === id );
+		assert.ok( found, "the dialog publishes " + id );
+		return found;
+	};
+	const openSettings = from => {
+		f.ui.event( { kind: "activate", id: "party-settings" } );
+		return step( from, from + 7 );
+	};
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Party" } );
+		step( 1, 8 );
+
+		let dialog = openSettings( 8 );
+		const expShare = control( dialog, "party-setting:1:0" ),
+			expSelf = control( dialog, "party-setting:1:1" ),
+			itemShare = control( dialog, "party-setting:2:0" ),
+			itemSelf = control( dialog, "party-setting:2:1" );
+		assert.equal( expShare.label, "Exp Auto Share", "row 0 is the EXP share option" );
+		assert.equal( expSelf.label, "Exp Distribution", "row 1 is the EXP self option" );
+		assert.equal( itemShare.label, "Item Auto Share", "row 0 is the item share option" );
+		assert.equal( itemSelf.label, "Item Distribution", "row 1 is the item self option" );
+		assert.ok( expShare.rect[1] < expSelf.rect[1], "the share radio is the top row" );
+		assert.ok( itemShare.rect[1] < itemSelf.rect[1], "the share radio is the top row" );
+		// Default formation is invitation only, so Distribution is the chosen row.
+		assert.equal( expShare.selected, false );
+		assert.equal( expSelf.selected, true );
+
+		// The top row selects the share bit; OK carries 1, 2 and the invitation bit.
+		f.ui.event( { kind: "activate", id: "party-setting:1:0" } );
+		f.ui.event( { kind: "activate", id: "party-setting:2:0" } );
+		dialog = step( 15, 17 );
+		assert.equal( control( dialog, "party-setting:1:0" ).selected, true );
+		assert.equal( control( dialog, "party-setting:1:1" ).selected, false );
+		f.ui.event( { kind: "activate", id: "party-settings-ok" } );
+		step( 17, 20 );
+		f.ui.event( { kind: "activate", id: "party-invite" } );
+		assert.equal( sent.pop().options, 7, "top rows set EXP and item share over the invitation bit" );
+
+		// The bottom row clears it again.
+		dialog = openSettings( 20 );
+		f.ui.event( { kind: "activate", id: "party-setting:1:1" } );
+		f.ui.event( { kind: "activate", id: "party-setting:2:1" } );
+		f.ui.event( { kind: "activate", id: "party-settings-ok" } );
+		step( 27, 30 );
+		f.ui.event( { kind: "activate", id: "party-invite" } );
+		assert.equal( sent.pop().options, 4, "bottom rows leave only the invitation bit" );
 	} finally {
 		f.dispose();
 	}
@@ -3549,6 +3766,41 @@ test("party matching native form, local filters and owner approval are actionabl
 			kind: "gameplay",
 			command: { kind: "party-match-answer", a: 7, b: 42, answer: 2 }
 		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the record form opens on its purpose's default title and a purpose change follows it", () => {
+	const f = uiFixture();
+	try {
+		f.state.gameplay.partyMatching = {
+			page: 0,
+			pages: 1,
+			rows: [],
+			own: null,
+			request: null,
+			pending: null,
+			result: null,
+			auto: []
+		};
+		f.state.gameplay.social = { localName: "Player", self: 1, leader: 0, options: 3, members: [] };
+		f.state.gameplay.progression = { level: 10, masteries: [] };
+		for ( let t = 0; t < 1600; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "key", code: "KeyE" } );
+		f.ui.step( f.state, 1700 );
+		f.ui.event( { kind: "activate", id: "party-match:18" } );
+		let scene = f.ui.step( f.state, 1800 );
+		const title = () => scene.controls.find( c => c.id === "party-form-title" ).value;
+		// No job suit: purpose 0 (hunting), filled by 63BE00 when the form opens.
+		assert.equal( title(), "For open hunting on the Silk Road!" );
+		f.ui.event( { kind: "activate", id: "party-form-purpose:1" } );
+		scene = f.ui.step( f.state, 1900 );
+		assert.equal( title(), "When will the quests end on the Silk Road?", "the default follows the purpose" );
+		f.ui.event( { kind: "edit", id: "party-form-title", value: "Mine", start: 4, end: 4, composing: false } );
+		f.ui.event( { kind: "activate", id: "party-form-purpose:0" } );
+		scene = f.ui.step( f.state, 2000 );
+		assert.equal( title(), "Mine", "a typed title is never replaced" );
 	} finally {
 		f.dispose();
 	}
@@ -5391,6 +5643,47 @@ test("world admission failures publish a visible native retry dialog and clear a
 	}
 });
 
+test("a UI image still retrying in world keeps the game on screen and draws once it arrives (#2444)", () => {
+	const icon = "/assets/images/Media_extracted/interface/targetwindow/tw_icon_giant.png";
+	const published = {};
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {}, published );
+	try {
+		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		// The live stall: the giant grade icon's download makes no progress.
+		published[icon] = { error: "Error: No download progress for 15000 ms" };
+		f.state.entities.push( {
+			gid: 9,
+			regionId: 1,
+			x: 0,
+			y: 0,
+			z: 0,
+			heading: 0,
+			kind: "monster",
+			name: "Giant",
+			level: 1,
+			rarity: 4,
+			maxHp: 100
+		} );
+		f.state.gameplay.target = 9;
+		f.state.gameplay.vitals = [ { gid: 9, hp: 100, abnormal: 0 } ];
+		let result;
+		for ( let i = 20; i < 30; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.includes( icon ), "the target window asked for the grade icon" );
+		assert.equal( result.loadingError, undefined, "a retrying image is not a loading failure" );
+		assert.ok( !f.hasText( "Unable to finish loading" ) );
+		assert.equal( f.ui.resourceError(), null, "a retrying image is not a client error" );
+		// The download recovers: the next retry delivers and the icon draws.
+		delete published[icon];
+		const before = f.requested.filter( path => path === icon ).length;
+		for ( let i = 30; i < 120; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		assert.ok( f.requested.filter( path => path === icon ).length > before, "the image was retried" );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture === icon ), "the icon draws once it arrives" );
+		assert.equal( result.loadingError, undefined );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("inventory ground drop confirms once, cancels and rejects a replaced source", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -6396,6 +6689,101 @@ test("store window shows Repair and Repair All buttons only when targetCapabilit
 		game.targetCapabilities = 3;
 		scene = f.ui.step( f.state, now += 100 ) ?? scene;
 		assert.equal( f.ui.cursor(), null, "switching to a non-repair store disarms the repair cursor" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("showing a stall switches the main popup to Inventory once", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const control = id => scene.controls.find( row => row.id === id );
+		const inventory = () => !!control( "close-window:Inventory" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		draw();
+		assert.equal( inventory(), false, "a closed stall leaves the popup alone" );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.equal( inventory(), true, "5A0DC0 shows the inventory beside the stall" );
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		assert.ok( control( "close-window:Character" ), "the player can switch to another tab" );
+		draw();
+		assert.equal( inventory(), false, "later frames do not force the tab back" );
+		// Closing and showing the stall again is a new edge.
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "visitor", owner: 2, open: true }
+		};
+		draw();
+		assert.equal( inventory(), true, "a visitor's stall show opens the inventory too" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a stall beside a separate window keeps that window open", () => {
+	const f = uiFixture();
+	try {
+		let now = 0, scene;
+		const draw = () => {
+			for ( let i = 0; i < 10; i++ ) scene = f.ui.step( f.state, now += 100 ) ?? scene;
+			assert.ok( scene );
+			return scene;
+		};
+		const open = name => !!scene.controls.find( row => row.id === "close-window:" + name );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			stall: emptyStall()
+		};
+		// 69C7C0 looks at the main popup: another tab of it gives way to
+		// Inventory, while a separate window stays open when the stall appears
+		// (the port keeps its one panel slot on that window instead of drawing
+		// the popup beside it).
+		f.ui.event( { kind: "activate", id: "open-window:Character" } );
+		draw();
+		f.state.gameplay = {
+			...f.state.gameplay,
+			stall: { ...emptyStall(), phase: "owner", owner: 1 }
+		};
+		draw();
+		assert.ok( open( "Inventory" ), "the stall selects Inventory over another main popup tab" );
+		f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+		for ( const window of [ "Guild", "Option" ] ) {
+			draw();
+			f.ui.event( { kind: "activate", id: "open-window:" + window } );
+			draw();
+			assert.ok( open( window ), `${window} did not open` );
+			f.state.gameplay = {
+				...f.state.gameplay,
+				stall: { ...emptyStall(), phase: "owner", owner: 1 }
+			};
+			draw();
+			assert.ok( open( window ), `the stall closed ${window}` );
+			assert.equal( open( "Inventory" ), false, `the stall forced Inventory over ${window}` );
+			// Closing the stall again arms the next rising edge.
+			f.state.gameplay = { ...f.state.gameplay, stall: emptyStall() };
+			draw();
+			f.ui.event( { kind: "activate", id: "close-window:" + window } );
+		}
 	} finally {
 		f.dispose();
 	}

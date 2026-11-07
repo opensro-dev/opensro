@@ -54,6 +54,10 @@ type offensiveStage struct {
 	actionReach         simulation.ActionReach
 	lifecycleMs         uint64
 	now                 int64
+	// doors is the admitting lane's commit pair (characterDoors): a
+	// stage admitted by a packet handler commits before its answer,
+	// one released on the tick joins the batch.
+	doors characterDoors
 }
 
 /*
@@ -347,7 +351,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 		rt.noteHawkOwnerAttack(division, snapshot, target.gid, now)
 	}
 	if skill.ActionCastingTimeMs != 0 && st.release == nil {
-		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now)
+		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now, st.doors)
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffPlayer(debuffCast{division: division, character: character, snapshot: snapshot,
@@ -358,11 +362,11 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
 	}
 	if skill.OffensiveArea.Radius != 0 {
-		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release)
+		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)
 	}
 	if skill.Attack.Value5 != 0 && skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector {
 		if imbue, _ := rt.activeWeaponImbue(division, snapshot.Name, now); imbue.Pinned && imbue.Area.Radius != 0 {
-			return rt.acceptSkillAreaAt(division, character, snapshot, skill, imbue.Area, true, st.advanced, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release)
+			return rt.acceptSkillAreaAt(division, character, snapshot, skill, imbue.Area, true, st.advanced, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)
 		}
 	}
 	return rt.strikePlayerTarget(st, target, casterAt)
@@ -409,7 +413,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	var battle []wire.Frame
 	var tuning, stolen wire.Frame
 	var refusal uint16
-	if !rt.deps.UpdateMany([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
+	if !st.doors.updateMany([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
 		var cost skillCharge
 		if st.advanced {
 			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {
@@ -502,7 +506,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	for _, formula := range hit.strike.formulas {
 		tally.note(formula.Blocked, true)
 	}
-	wear := rt.applyEquipmentWear(division, character, tally)
+	wear := rt.applyEquipmentWear(division, character, tally, st.doors)
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)
@@ -528,8 +532,8 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private, Recipients: recipients}
 	// The damage-effect pass ran inside the hit outcome; the victim's dmgr returns its share
 	// to the attacker afterwards, as the victim's credited hit.
-	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
-	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now)
+	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now, st.doors)
+	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now, st.doors)
 	// A Scream Mask on the victim rolls its statuses on the attacker (screammask.go).
 	shared = mergeOpResults(shared, rt.screamMaskPlayer(division, target.player, character, now))
 	return mergeOpResults(mergeOpResults(out, returned), shared), skillCastAccepted
@@ -545,12 +549,12 @@ striker and the victim, then the victim's publication. False when nothing
 landed.
 ================
 */
-func (rt *Runtime) creditPlayerHit(in playerHitInput) (playerHit, OpResult, bool) {
+func (rt *Runtime) creditPlayerHit(in playerHitInput, doors characterDoors) (playerHit, OpResult, bool) {
 	hit, planned := rt.planPlayerHit(in)
 	if !planned {
 		return playerHit{}, OpResult{}, false
 	}
-	return rt.commitCreditedPlayerHit(in.division, in.caster, hit, in.now)
+	return rt.commitCreditedPlayerHit(in.division, in.caster, hit, in.now, doors)
 }
 
 /*
@@ -560,9 +564,9 @@ commitCreditedPlayerHit
 A planned credited hit's door and publication.
 ================
 */
-func (rt *Runtime) commitCreditedPlayerHit(division string, caster *enterworld.Character, hit playerHit, now int64) (playerHit, OpResult, bool) {
+func (rt *Runtime) commitCreditedPlayerHit(division string, caster *enterworld.Character, hit playerHit, now int64, doors characterDoors) (playerHit, OpResult, bool) {
 	var commit playerHitCommit
-	if !rt.deps.UpdateMany([]*enterworld.Character{caster, hit.target.player}, "player-credited-hit", func() bool {
+	if !doors.updateMany([]*enterworld.Character{caster, hit.target.player}, "player-credited-hit", func() bool {
 		if caster.DeletePending {
 			return false
 		}

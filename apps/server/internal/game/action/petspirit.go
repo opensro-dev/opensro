@@ -118,37 +118,64 @@ func (rt *Runtime) spendPetSpirit(owner *enterworld.Character, pet *domain.Chara
 
 /*
 ================
-advancePetSpirit
+petSpiritExpires
 
-Expiry, death, town, slot changes and resummons cannot retain a free heal.
+advancePetSpirit's keep-or-expire verdict on door-read values
+(#2030), so a bear holding Resolve stacks stops copying its owner
+every tick just to learn whether the stacks still stand. Every input
+weighs the same facts the copy path weighs: the stack count and the
+Unbroken Spirit book on the pet row (companion.Spirit reads Training
+values only), petExpansionAllowed on the live owner and pet, the
+summoned and life flags, the owner's own life, the session's expiry
+instant, and the town verdict from the owner world the judged pet
+tick reads (WorldStore.SnapshotExisting). No stacks and a standing
+verdict both answer expires=false: nothing to do. Judged is false
+when the facts cannot decide - the forced-copy seam, or the owner
+has no world entry yet, so the copy path seeds and judges it exactly
+as before. Only the expire door below ever writes.
 ================
 */
-func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Frame {
-	state := rt.petSessionFor(key.division, key.name, key.gid)
-	if state == nil || state.character == nil {
-		return nil
+func (rt *Runtime) petSpiritExpires(key petOwnerKey, state *petSession, now int64) (expires, judged bool) {
+	if rt.companionCopy != nil {
+		return false, false
 	}
-	// Runs for every pet per tick: copy the owner only when the pet
-	// still holds Resolve stacks to expire (#1943).
-	owner := rt.characterSnapshotAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
-		pet := c.CompanionByGID(key.gid)
-		return pet != nil && pet.ResolveStacks != 0
+	owner := state.character
+	var stacks, standing bool
+	rt.deps.Read(key.division, func() {
+		pet := owner.CompanionByGID(key.gid)
+		if pet == nil || pet.ResolveStacks == 0 {
+			return
+		}
+		stacks = true
+		skill, _, learned := companion.Spirit(pet)
+		standing = learned && skill.ID == state.trained.resolveBook && rt.petExpansionAllowed(owner, pet) &&
+			pet.Summoned && pet.CurrentHP > 0 && enterworld.CharacterAlive(owner) && now < state.trained.resolveUntil
 	})
-	if owner == nil {
-		return nil
+	if !stacks {
+		return false, true
 	}
-	pet := owner.CompanionByGID(key.gid)
-	if pet == nil || pet.ResolveStacks == 0 {
-		return nil
+	if !standing {
+		return true, true
 	}
-	skill, _, learned := companion.Spirit(pet)
-	if learned && skill.ID == state.trained.resolveBook && rt.petExpansionAllowed(owner, pet) && pet.Summoned && pet.CurrentHP > 0 &&
-		enterworld.CharacterAlive(owner) && !rt.inTown(key.division, owner) && now < state.trained.resolveUntil {
-		return nil
+	ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(key.division, owner.Name))
+	if !ok {
+		return false, false
 	}
-	// updated is captured inside the expire door; the companion is never
-	// re-read unlocked after it closes (it may be unsummoned by then -
-	// checklist item 2).
+	return townRegion(ownerWorld.LiveSpawnAt(now).RegionID), true
+}
+
+/*
+================
+expirePetSpirit
+
+The expiry itself, shared by the facts and copy verdicts: the door
+re-reads the live companion, so the two can never write differently.
+updated is captured inside the expire door; the companion is never
+re-read unlocked after it closes (it may be unsummoned by then -
+checklist item 2).
+================
+*/
+func (rt *Runtime) expirePetSpirit(key petOwnerKey, state *petSession, now int64) []simulation.Frame {
 	var updated *domain.CharacterCOS
 	if !rt.deps.UpdateDeferred(state.character, "pet-spirit-expire", func() bool {
 		live := state.character.CompanionByGID(key.gid)
@@ -165,4 +192,47 @@ func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Fra
 	state.public = append(state.public, petSpiritFrame(updated, now, now), wire.Frame{Opcode: simulation.OpVitalsUpdate,
 		Payload: simulation.HPRefreshPayload(updated.GID, 0, updated.CurrentHP)})
 	return simFrames(append([]wire.Frame{petSpiritFrame(updated, now, now), {Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(updated.GID, 0, updated.CurrentHP)}}, rt.petTrainingStateFrames(updated, now)...))
+}
+
+/*
+================
+advancePetSpirit
+
+Expiry, death, town, slot changes and resummons cannot retain a free heal.
+================
+*/
+func (rt *Runtime) advancePetSpirit(key petOwnerKey, now int64) []simulation.Frame {
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	if state == nil || state.character == nil {
+		return nil
+	}
+	// The verdict on door-read facts first (#2030): only an expiry the
+	// facts cannot judge, or the forced-copy seam, takes the copy.
+	if expires, judged := rt.petSpiritExpires(key, state, now); judged {
+		if !expires {
+			return nil
+		}
+		return rt.expirePetSpirit(key, state, now)
+	}
+	// Runs for every pet per tick: copy the owner only when the pet
+	// still holds Resolve stacks to expire (#1943), and then only the
+	// pet-owner view (#2030): the checks below read the companion, the
+	// job suit slot, life and town.
+	owner := rt.characterSnapshotCompanionAdmitted(key.division, state.character, func(c *enterworld.Character) bool {
+		pet := c.CompanionByGID(key.gid)
+		return pet != nil && pet.ResolveStacks != 0
+	})
+	if owner == nil {
+		return nil
+	}
+	pet := owner.CompanionByGID(key.gid)
+	if pet == nil || pet.ResolveStacks == 0 {
+		return nil
+	}
+	skill, _, learned := companion.Spirit(pet)
+	if learned && skill.ID == state.trained.resolveBook && rt.petExpansionAllowed(owner, pet) && pet.Summoned && pet.CurrentHP > 0 &&
+		enterworld.CharacterAlive(owner) && !rt.inTown(key.division, owner) && now < state.trained.resolveUntil {
+		return nil
+	}
+	return rt.expirePetSpirit(key, state, now)
 }

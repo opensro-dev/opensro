@@ -85,6 +85,35 @@ func (rt *Runtime) characterSnapshotAdmitted(
 
 /*
 ==================
+characterAdmitted
+
+characterSnapshotAdmitted's door contract without the copy: the
+admission verdict alone, judged on the live record under the one read
+door, for readers that ask only whether the record passes (#2139).
+admit reads record fields only, the same contract as above, so its
+verdict weighs the same inputs the copy would carry.
+==================
+*/
+func (rt *Runtime) characterAdmitted(
+	divisionID string,
+	character *enterworld.Character,
+	admit func(*enterworld.Character) bool,
+) bool {
+	if character == nil {
+		return false
+	}
+
+	admitted := false
+
+	rt.deps.Read(divisionID, func() {
+		admitted = admit == nil || admit(character)
+	})
+
+	return admitted
+}
+
+/*
+==================
 characterSnapshotEquipment
 
 characterSnapshot for readers that never leave the worn equipment and
@@ -147,6 +176,43 @@ func (rt *Runtime) characterSnapshotCombat(
 
 /*
 ==================
+characterSnapshotCast
+
+characterSnapshot for the skill press, the prepared-cast release
+(#1943) and the entry action-speed read (#2140): the combat rows plus
+every companion-carrying bag row and the whole avatar inventory. The
+press flows resolve the caster's companions through this copy (the
+crow lane walks the bag-row Summon records, at the strike both routes
+reach); the entry read's load-bearing inventory inputs are its slot-8
+suit and cape verdicts, and its stat writers walk the same kept
+companion rows, so the copy keeps exactly those bag rows; a root takes it only when
+every reader of its copy is cleared for the dropped plain bag rows
+root by root, and the cast-copy differential tests pin every root
+against the full copy.
+==================
+*/
+func (rt *Runtime) characterSnapshotCast(
+	divisionID string,
+	character *enterworld.Character,
+) *enterworld.Character {
+	if character == nil {
+		return nil
+	}
+	if rt.castCopy != nil {
+		return rt.castCopy(divisionID, character)
+	}
+
+	var snapshot *enterworld.Character
+
+	rt.deps.Read(divisionID, func() {
+		snapshot = character.SnapshotCast()
+	})
+
+	return snapshot
+}
+
+/*
+==================
 characterSnapshotCombatAdmitted
 
 characterSnapshotCombat with characterSnapshotAdmitted's door
@@ -196,12 +262,13 @@ func (rt *Runtime) characterSnapshotCombatAdmitted(
 ==================
 characterSnapshotCompanionAdmitted
 
-characterSnapshotAdmitted for the per-tick pet pass (#2030): the copy
-keeps the equipment rows and every companion-carrying row, and no
-avatar inventory (domain SnapshotCompanion). A root takes it only
-when no reader of its copy reads a non-summon bag row or an avatar
-row; companion resolution and equipment reads see exactly what the
-full copy shows. The companionCopy seam replaces the copy in tests
+characterSnapshotAdmitted for the per-tick pet and brood passes
+(#2030): the pet-owner view (domain SnapshotCompanion) - identity,
+world, companions, life and status, the PvP and relation facts, and
+the inventory's companion rows and relation slot. A root takes it only
+when every reader of its copy reads within that list; companion
+resolution and the relation rules see exactly what the full copy
+shows. The companionCopy seam replaces the copy in tests
 exactly as combatCopy does for the combat roots; admission still
 judges the live record first, in its own door pass, so a refused
 record pays for no copy under the seam either.
@@ -238,6 +305,82 @@ func (rt *Runtime) characterSnapshotCompanionAdmitted(
 	})
 
 	return snapshot
+}
+
+/*
+================
+petTickFacts
+
+The facts one pet tick judges on, read as values under one store
+read door (#2139): whether the companion exists at all, whether this
+tick admits pet action (the admitted seam's own verdict), whether
+the owner has fallen, and - only when admitted - the companion
+values the judged lane reads: identity (the ref resolution and the
+follower binding), brood stage (the egg stop) and cosParameter's
+pet inputs (satiety, the installed follow-run factor, and the
+mercenary attributes for that one function's other arm, though the
+band itself abstains before any read). A tick that can finish on
+these values pays for neither an owner copy nor a companion-record
+copy: advancePetJudged rebuilds its pet view from the values, and
+abstains the moment a tick must commit through the record, when the
+companion copy judges exactly as before.
+================
+*/
+type petTickFacts struct {
+	companionSeen bool
+	admitted      bool
+	ownerDead     bool
+
+	petGID                 uint32
+	petRefObjID            uint32
+	petCodename            string
+	petBroodStage          uint8
+	petSatiety             uint16
+	petMercenaryAttributes uint8
+	petFollowRunFactor     float32
+	petFollowRunSet        bool
+}
+
+/*
+================
+readPetTickFacts
+================
+*/
+func (rt *Runtime) readPetTickFacts(
+	divisionID string,
+	character *enterworld.Character,
+	gid uint32,
+) *petTickFacts {
+	// The facts travel by pointer: the container is scalars only, so
+	// the one heap hand-off to advancePetJudged stays a few dozen
+	// bytes and never grows a record copy (#2030).
+	facts := &petTickFacts{}
+	if character == nil {
+		return facts
+	}
+
+	rt.deps.Read(divisionID, func() {
+		pet := character.CompanionByGID(gid)
+		if pet == nil {
+			return
+		}
+		facts.companionSeen = true
+		facts.ownerDead = enterworld.CurrentHP(character) == 0
+		facts.admitted = !character.DeletePending && !facts.ownerDead &&
+			pet.Summoned && !pet.Mounted && pet.CurrentHP != 0
+		if facts.admitted {
+			facts.petGID = pet.GID
+			facts.petRefObjID = pet.RefObjID
+			facts.petCodename = pet.Codename
+			facts.petBroodStage = pet.BroodStage
+			facts.petSatiety = pet.Satiety
+			facts.petMercenaryAttributes = pet.MercenaryAttributes
+			facts.petFollowRunFactor = pet.FollowRunFactor
+			facts.petFollowRunSet = pet.FollowRunSet
+		}
+	})
+
+	return facts
 }
 
 /*

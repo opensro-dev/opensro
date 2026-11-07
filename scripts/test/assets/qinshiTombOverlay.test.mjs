@@ -20,7 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
-import { computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
+import { buildKnobLines, computeResourceBuildFingerprint } from "../../build/shared/resourceBuildFingerprint.mjs";
 import {
 	loadQinShiTombCharacterRows,
 	loadQinShiTombSkillRows,
@@ -95,10 +95,10 @@ function fixtureServerRoot( t, profileValue, registryDefault ) {
 		else process.env.SRO_SERVER_SOURCE_ROOT = ORIGINAL_SERVER_ROOT;
 		fs.rmSync( root, { recursive: true, force: true } );
 	} );
-	fs.mkdirSync( path.join( root, "ops", "release" ), { recursive: true } );
+	fs.mkdirSync( path.join( root, "config" ), { recursive: true } );
 	fs.mkdirSync( path.join( root, "internal", "config", "shardsettings" ), { recursive: true } );
 	const profile = profileValue === undefined ? {} : { SRO_QINSHI_TOMB: profileValue };
-	fs.writeFileSync( path.join( root, "ops", "release", "shard-settings.json" ), JSON.stringify( profile ) );
+	fs.writeFileSync( path.join( root, "config", "shard-settings.json" ), JSON.stringify( profile ) );
 	fs.writeFileSync(
 		path.join( root, "internal", "config", "shardsettings", "shardsettings.go" ),
 		`var Settings = []Setting{\n\t{Env: "SRO_QINSHI_TOMB", NomadVar: "qinshi_tomb", Default: "${registryDefault}", Catalogue: true},\n}\n`
@@ -172,6 +172,39 @@ test("flipping the tomb flag changes the resource build fingerprint", async ( t 
 	process.env.SRO_QINSHI_TOMB = "on";
 	const on = await computeResourceBuildFingerprint();
 	assert.notEqual( on.hash, off.hash );
+});
+
+test("a profile or registry flip with the env unset changes the fingerprint and the lane knobs", async ( t ) => {
+	// The env stays unset and the server root stays the same folder, so
+	// neither the raw knobs nor SRO_SERVER_SOURCE_ROOT move: only the
+	// posture the bake derives from the profile and the registry does.
+	// Hashing the raw env alone would skip the bake here and ship the
+	// other posture's assets (#2024 in reverse).
+	withTombFlag( t, undefined );
+	fixtureServerRoot( t, "off", "on" );
+	const root = process.env.SRO_SERVER_SOURCE_ROOT;
+	const profilePath = path.join( root, "config", "shard-settings.json" );
+	const registryPath = path.join( root, "internal", "config", "shardsettings", "shardsettings.go" );
+	const read = async () => ({
+		fingerprint: (await computeResourceBuildFingerprint()).hash,
+		knobs: buildKnobLines().join( "\n" )
+	});
+
+	const profileOff = await read();
+	fs.writeFileSync( profilePath, JSON.stringify( { SRO_QINSHI_TOMB: "on" } ) );
+	const profileOn = await read();
+	assert.notEqual( profileOn.fingerprint, profileOff.fingerprint, "a profile flip kept the fingerprint" );
+	assert.notEqual( profileOn.knobs, profileOff.knobs, "a profile flip kept the lane knobs" );
+
+	fs.writeFileSync( profilePath, JSON.stringify( {} ) );
+	const registryOn = await read();
+	fs.writeFileSync(
+		registryPath,
+		fs.readFileSync( registryPath, "utf8" ).replace( 'Default: "on"', 'Default: "off"' )
+	);
+	const registryOff = await read();
+	assert.notEqual( registryOff.fingerprint, registryOn.fingerprint, "a registry flip kept the fingerprint" );
+	assert.notEqual( registryOff.knobs, registryOn.knobs, "a registry flip kept the lane knobs" );
 });
 
 test("tomb overlay rows are collision-free", () => {

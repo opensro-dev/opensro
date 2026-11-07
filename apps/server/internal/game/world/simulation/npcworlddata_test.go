@@ -11,12 +11,46 @@ shipped NPC roster.
 package simulation
 
 import (
+	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
+	"opensro.online/server/internal/game/world/alexandria"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
+
+var (
+	sharedRosterMu sync.Mutex
+	sharedRosters  = map[string][]NpcDef{}
+)
+
+/*
+================
+sharedNpcWorldRoster
+
+LoadNpcWorldRoster over dir, parsed once per (dir, feature switches)
+for the whole test process: the loader re-reads and re-projects the
+ten shipped text tables, and a dozen tests each paid that per call
+until the package pressed its test budget (#2562). Callers get a copy
+of the slice header over shared rows - the rows are read-only, and
+the copy keeps an AppendTeleportGates append from writing into the
+shared backing array.
+================
+*/
+func sharedNpcWorldRoster(dir string) []NpcDef {
+	key := dir + "|" + strconv.FormatBool(janganAlchemyShopActive()) + "|" + os.Getenv(alexandria.EnvAlexandria)
+	sharedRosterMu.Lock()
+	roster, ok := sharedRosters[key]
+	if !ok {
+		roster = LoadNpcWorldRoster(dir)
+		sharedRosters[key] = roster
+	}
+	sharedRosterMu.Unlock()
+	return append([]NpcDef(nil), roster...)
+}
 
 /*
 ================
@@ -24,8 +58,8 @@ TestShippedNpcWorldRosterCarriesConversationAndShopAuthority
 ================
 */
 func TestShippedNpcWorldRosterCarriesConversationAndShopAuthority(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	dir := clientdata.RetailTextdataDir(t)
+	roster := sharedNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}
@@ -57,9 +91,9 @@ TestPublishedMerchantBranchesCoverAllTabs
 ================
 */
 func TestPublishedMerchantBranchesCoverAllTabs(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := sharedNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Fatal("published merchant roster missing")
 	}
@@ -92,9 +126,9 @@ TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS
 ================
 */
 func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	roster := sharedNpcWorldRoster(dir)
 	text := map[string]bool{}
 	for _, row := range readNpcTabbed(filepath.Join(dir, "textquest.txt")) {
 		if len(row) > 2 {
@@ -129,8 +163,8 @@ and rows naming no fortress stay untaxed.
 ================
 */
 func TestShippedFortressBindingsComeFromColumn55(t *testing.T) {
-	dir := licensed.RetailTextdataDir(t)
-	roster := LoadNpcWorldRoster(dir)
+	dir := clientdata.RetailTextdataDir(t)
+	roster := sharedNpcWorldRoster(dir)
 	if len(roster) < 150 {
 		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
 	}

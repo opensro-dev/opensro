@@ -1,14 +1,14 @@
 package enterworld
 
 import (
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"strings"
 	"testing"
 )
 
 func TestProjectedConsumableNames(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	for _, tc := range []struct {
@@ -44,7 +44,7 @@ TestItemCommandReferencesCarryDisplayNames
 ================
 */
 func TestItemCommandReferencesCarryDisplayNames(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
 	rows := items.ItemCommandReferences()
 	if len(rows) == 0 {
@@ -68,7 +68,7 @@ func TestItemCommandReferencesCarryDisplayNames(t *testing.T) {
 }
 
 func TestEveryProjectedItemHasDisplayName(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := NewTextdataItems(dir)
 	// 8439 retail rows plus 108 ordinary/sealed pet rows (portItemRows.mjs).
@@ -392,5 +392,44 @@ func TestReturnScrollDestinationIsTextAuthority(t *testing.T) {
 	ref := buildItemRef(fields, nil)
 	if ref.ReturnDestination != "RESURRECT" || ref.NativeFields.Get("itemParam1_29c") != 30000 || ref.NativeFields.Get("itemParam3_2a4") != -1 {
 		t.Fatal("return destination inferred from numeric or name fields")
+	}
+}
+
+// The two drop gates read bits 0 and 1 of the one clamped CanDrop byte
+// (column 20): the native loader clears the byte when CanTrade
+// (column 16) is 0 and CanDrop is exactly 1. Every other combination
+// passes through untouched.
+func TestBuildItemRefCanDropColumns(t *testing.T) {
+	for _, row := range []struct {
+		trade, drop         string
+		canDrop, deathDrops bool
+	}{
+		{"1", "0", false, false},
+		{"1", "1", true, false},
+		{"1", "2", false, true},
+		{"1", "3", true, true},
+		{"0", "0", false, false},
+		{"0", "1", false, false}, // the clamp: authored droppable-only, barred
+		{"0", "2", false, true},
+		{"0", "3", true, true}, // the clamp fires on exactly 1, never on 3
+	} {
+		fields := make([]string, 160)
+		for i := range fields {
+			fields[i] = "0"
+		}
+		fields[1] = "3630"
+		fields[2] = "ITEM_ETC_HP_POTION_01"
+		fields[9], fields[10], fields[11], fields[12] = "3", "3", "1", "1"
+		fields[16] = row.trade
+		fields[20] = row.drop
+
+		ref := buildItemRef(fields, nil)
+		if ref == nil {
+			t.Fatalf("trade %s drop %s: buildItemRef returned nil", row.trade, row.drop)
+		}
+		if ref.CanDrop != row.canDrop || ref.CanDropOnDeath != row.deathDrops {
+			t.Fatalf("trade %s drop %s: CanDrop %v CanDropOnDeath %v, want %v/%v",
+				row.trade, row.drop, ref.CanDrop, ref.CanDropOnDeath, row.canDrop, row.deathDrops)
+		}
 	}
 }

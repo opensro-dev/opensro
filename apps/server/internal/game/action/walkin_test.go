@@ -15,8 +15,8 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 // caveRegion is the Donwhang cave, dungeon 1 (GATE_DUNGEON_DH_OUT's region).
@@ -33,7 +33,7 @@ has no reference row in v1.150, so it moves nobody.
 ================
 */
 func TestWalkInGatesLoadFromTheReferenceData(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ collects the frames pushed to the player.
 */
 func walkInFixture(t *testing.T) (*Runtime, *enterworld.Character, *[][]wire.Frame) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, _, _ := returnFixture(t, 30000)
 	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
 		t.Fatal(err)

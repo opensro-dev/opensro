@@ -60,7 +60,7 @@ no bit in the v1.150 word.
 */
 func TestTalkWordShiftsEachOptionBelowItsNumber(t *testing.T) {
 	for option, want := range map[uint8]uint32{
-		NpcServiceShop: 0x1, NpcServiceStorage: 0x4, NpcServiceGuild: 0x4000, NpcServiceGachaMachine: 0x10000,
+		NpcServiceShop: 0x1, NpcServiceStorage: 0x4, NpcServiceWithdrawSkill: 0x200, NpcServiceGuild: 0x4000, NpcServiceGachaMachine: 0x10000,
 		NpcServiceGachaOperator: 0x20000,
 		NpcServiceJobTrader:     0x80000, NpcServiceJobHunter: 0x200000, NpcServiceTeleportGate: 0x8000000,
 		NpcServiceReverseReturn: 0x20000000, NpcServiceGatePulley: 0x40000000, NpcServiceMagicOption: 0x80000000,
@@ -175,6 +175,32 @@ func TestTownSpecialtyTradersSellTradeGoods(t *testing.T) {
 		if got := ResolveNpcTalkFlags(npc); got != NpcTalkFlagShop|NpcTalkFlagSpecialTrade {
 			t.Errorf("%s resolves %#x, want shop|special trade", codename, got)
 		}
+	}
+}
+
+/*
+================
+TestPotionMerchantsAdvertiseTheWithdrawalRow
+
+The five herbalists carry the withdrawal service (option 0xA, row 0x16),
+the one the quest owner answers with the native 0x3230 open; a smith
+does not.
+================
+*/
+func TestPotionMerchantsAdvertiseTheWithdrawalRow(t *testing.T) {
+	for _, codename := range []string{
+		"NPC_CH_POTION", "NPC_WC_POTION", "NPC_KT_POTION", "NPC_EU_POTION", "NPC_CA_POTION",
+	} {
+		npc := NpcDef{Codename: codename}
+		npc.Services = ResolveNpcServices(npc)
+		if got := ResolveNpcTalkFlags(npc); got != NpcTalkFlagWithdrawSkill {
+			t.Errorf("%s resolves %#x, want %#x", codename, got, NpcTalkFlagWithdrawSkill)
+		}
+	}
+	smith := NpcDef{Codename: "NPC_CH_SMITH"}
+	smith.Services = ResolveNpcServices(smith)
+	if got := ResolveNpcTalkFlags(smith); got&NpcTalkFlagWithdrawSkill != 0 {
+		t.Errorf("smith resolves %#x with the withdrawal bit", got)
 	}
 }
 

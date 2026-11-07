@@ -47,7 +47,7 @@ const write = async ( p, b ) => {
 	await writeFile( p, b, { flag: "wx" } );
 };
 // The application's pages: the game, and the embeddable 3D viewer
-// (docs/VIEWER.md) served beside it at /play/viewer.html.
+// (docs/guides/VIEWER.md) served beside it at /play/viewer.html.
 const APPLICATION_PAGES = [ "index.html", "viewer.html" ];
 
 /*
@@ -247,7 +247,7 @@ export async function buildBeta(
 	const manifest = {
 		format: "sro-beta-release-v1",
 		// The release protocol compiled into this build; release admission
-		// compares it with the declared one (ops/release/client_bundle.py).
+		// compares it with the declared one (the release's client bundler).
 		protocol: RELEASE_PROTOCOL,
 		assetSchema: ASSET_SCHEMA,
 		sourceHash: inputHash,

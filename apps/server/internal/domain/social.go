@@ -108,14 +108,29 @@ func (character *Character) SnapshotCombat() *Character {
 
 /*
 ================
+SnapshotCast
+
+Snapshot's normalized view for the skill press (#1943) and the entry
+action-speed read (#2140): the combat rows plus every companion-carrying
+bag row, because both flows resolve the caster's companions through
+their copy while no reader of either reads a plain bag row. Each
+caller must be cleared for the copy root by root, as for SnapshotCombat.
+================
+*/
+func (character *Character) SnapshotCast() *Character {
+	return character.snapshotWith(cloneCharacterCast)
+}
+
+/*
+================
 SnapshotCompanion
 
-Snapshot's normalized view for the per-tick pet pass (#2030): the
-mission inventory keeps only its equipment rows and the rows carrying
-a companion, and AvatarInventory is nil. Companion resolution walks
-exactly the companions the full copy walks. Each caller must be
-cleared for the narrow copy root by root - a reader of a non-summon
-bag row or an avatar row would silently see it missing.
+Snapshot's normalized pet-owner view for the per-tick pet and brood
+passes (#2030): only the fields the pet chain reads, with the companion
+rows and the relation slot of the inventory (cloneCharacterCompanion
+lists them). Companion resolution walks exactly the companions the full
+copy walks. Each caller must be cleared for the view root by root - a
+reader of any other field would silently see it zero.
 ================
 */
 func (character *Character) SnapshotCompanion() *Character {

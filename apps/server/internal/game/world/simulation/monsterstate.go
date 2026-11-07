@@ -45,9 +45,31 @@ type divisionMonsterState struct {
 	abnormalActive   map[uint32]struct{}          // active-only abnormal tick index; blocks live on instances
 	aiEvents         map[uint32][]monsterAIEvent  // fear/confusion tactics events awaiting the behavior step
 	pendingSummons   map[uint32]pendingMonsterSummon
-	instances        monsterStorage
-	uniqueNotices    []Frame
-	uniqueDeaths     map[uint32]bool
+	// followLeaderMemo is one leg's resolved leader reading per
+	// summoner gid (monsterfollow_transaction.go): the followers of
+	// one leader share the first follower's reading within the leg,
+	// stamped by followLeaderStamp. The follow commit re-reads the
+	// leader, so a leader that moved mid-leg rejects the late
+	// followers' commits rather than being followed from a stale
+	// row; the next leg's stamp re-reads fresh.
+	followLeaderMemo  map[uint32]followLeaderFacts
+	followLeaderStamp int64
+	instances         monsterStorage
+	// interestMemo holds populationInterestGIDs results per viewer
+	// interest block (interestMemoEntry). Reconciled block membership
+	// has already absorbed the instant, so an entry lives until a
+	// mover crosses one of its own block's edges or the actors or
+	// static lists change.
+	interestMemo map[worldgeom.InterestBlock]*interestMemoEntry
+	// interestStatics is byRegion without the gids that have a mover,
+	// rebuilt when interestStaticsStamp stops matching.
+	interestStatics      map[uint16][]uint32
+	interestStaticsStamp interestStaticsStamp
+	// byRegionGeneration advances on every byRegion write
+	// (listRegionGid, removeRegionGid).
+	byRegionGeneration uint64
+	uniqueNotices      []Frame
+	uniqueDeaths       map[uint32]bool
 	// uniqueTimes is the public tracker's spawn and death record
 	// (unique_states.go, port-only).
 	uniqueTimes map[uint32]*uniqueTimeline
@@ -93,13 +115,19 @@ type MonsterState struct {
 	regionDormancy  bool
 	// Installed before listeners. Called outside the population mutex so
 	// character snapshots cannot invert the character -> population lock order.
-	players              func(string, int64) []PopulationPlayer
-	mu                   sync.Mutex
-	template             monster.Template
-	counter              uint32
-	divs                 map[string]*divisionMonsterState
-	worldAllocators      map[string]*instance.Registry
-	worldPopulations     map[populationKey]*divisionMonsterState
+	players          func(string, int64) []PopulationPlayer
+	mu               sync.Mutex
+	template         monster.Template
+	counter          uint32
+	divs             map[string]*divisionMonsterState
+	worldAllocators  map[string]*instance.Registry
+	worldPopulations map[populationKey]*divisionMonsterState
+	// popHint is the population key and population the last
+	// populationForObject scan answered with. populationForObject
+	// verifies it against the registry and the population's own rows
+	// before believing it; see there (#2029).
+	popHintKey           populationKey
+	popHintState         *divisionMonsterState
 	retirementRequests   map[populationKey]struct{}
 	ground               MonsterSpawnGroundResolver
 	collide              MonsterSpawnCollisionTest
@@ -111,6 +139,13 @@ type MonsterState struct {
 	// bandits is built once from the immutable template (BanditTables).
 	banditsOnce sync.Once
 	bandits     *monster.BanditTables
+	// tombChain owns the Qin-Shi tomb trigger chain (#2362); installed
+	// by bootstrap only while SRO_QINSHI_TOMB is on, nil otherwise.
+	tombChain *TombChain
+	// legViews holds dispatched leg-start snapshot views for the next
+	// batch (monsterlegsnapshot.go); legViewMu guards the stack alone.
+	legViewMu sync.Mutex
+	legViews  []*legSnapshot
 }
 
 /*
@@ -430,6 +465,9 @@ func (s *MonsterState) advancePopulationLease(key populationKey, sampleDensity b
 		s.sampleHiveDensity(state, snapshot, nowMs)
 	}
 	s.runDueHiveTicks(state, nowMs)
+	if s.tombChain != nil {
+		s.tombChain.tickLocked(s, state, nowMs)
+	}
 	state.populationTicked = true
 }
 

@@ -133,7 +133,7 @@ test("banner waits for assets, replaces rather than queues, fades and resets acr
 	b.step( [ n ], 24000, true );
 	assert.equal( b.alpha(), 1 );
 });
-test("other 0x3058 kinds show their category 0x11 notice; kinds 7 and 10 stay unpresented", () => {
+test("other 0x3058 kinds show their category 0x11 notice; kind 10 stays unpresented", () => {
 	// 7508C0: kind 1 is the thief's stolen-goods rule (#721).
 	assert.equal(
 		defined( uniqueNotice( 0x3058, Uint8Array.of( 1 ), refs ) ).key,
@@ -144,6 +144,45 @@ test("other 0x3058 kinds show their category 0x11 notice; kinds 7 and 10 stay un
 		defined( uniqueNotice( 0x3058, Uint8Array.of( 1, 9, 9 ), refs ) ).key,
 		"UIIT_MSG_JSERR_ROBBER_CANT_ENTER_TOWN_WITH_CART"
 	);
-	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 7 ), refs ), null );
 	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 10 ), refs ), null );
+});
+/*
+================
+badgePacket
+
+A kind-7 frame: badge byte, then the length-prefixed guild name.
+================
+*/
+function badgePacket( badge, name = "Haneul" ) {
+	const bytes = new TextEncoder().encode( name );
+	return Uint8Array.from( [ 7, badge, bytes.length, 0, ...bytes ] );
+}
+test("kind 7 prints the badge event line for bytes 1..4 and nothing outside them", async () => {
+	const copy = JSON.parse(
+		await readFile( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" )
+	).entries;
+	const keys = [
+		"UIIT_MSG_EVENT_051021_BADGEGAIN_BLUEDRAGON",
+		"UIIT_MSG_EVENT_051021_BADGEGAIN_PHOENIX",
+		"UIIT_MSG_EVENT_051021_BADGEGAIN_WHITETIGER",
+		"UIIT_MSG_EVENT_051021_BADGEGAIN_TURTLE"
+	];
+	for ( let badge = 1; badge <= 4; badge++ ) {
+		const n = defined( uniqueNotice( 0x3058, badgePacket( badge ), refs ) );
+		assert.equal( n.key, keys[badge - 1] );
+		assert.equal( n.banner, true );
+		assert.deepEqual( n.arguments, [ "Haneul" ] );
+		assert.ok( copy[n.key], n.key );
+		const rendered = noticeText( key => copy[key], n );
+		assert.ok( rendered.startsWith( "Haneul guild obtained" ), rendered );
+		assert.ok( !rendered.includes( "%s" ), rendered );
+	}
+	// 750FE7: a badge byte outside 1..4 formats nothing.
+	for ( const badge of [ 0, 5, 255 ] ) {
+		assert.equal( uniqueNotice( 0x3058, badgePacket( badge ), refs ), null );
+	}
+	// The name read is as strict as the killer read: no truncation, no tail.
+	assert.throws( () => uniqueNotice( 0x3058, Uint8Array.of( 7 ), refs ) );
+	assert.throws( () => uniqueNotice( 0x3058, Uint8Array.of( 7, 1, 9 ), refs ) );
+	assert.throws( () => uniqueNotice( 0x3058, Uint8Array.from( [ ...badgePacket( 1 ), 0 ] ), refs ) );
 });

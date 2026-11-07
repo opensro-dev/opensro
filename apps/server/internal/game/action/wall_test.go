@@ -304,7 +304,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 		target: start,
 		goal:   simulation.Spawn{RegionID: start.RegionID, X: start.X + 80, Y: start.Y, Z: start.Z},
 		nowMs:  clock.NowMs(),
-	})
+	}, rt.tickDoors())
 	if len(pursuitRes.Broadcast) != 0 || len(pursuitRes.Frames) != 0 {
 		t.Fatalf("combat pursuit moved the caster out of a standing wall: %+v", pursuitRes)
 	}
@@ -317,7 +317,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 	before, _ := rt.Monsters.Get(testDivision, mob.Gid)
 	held := rt.advanceBasicAttackIntent(c, basicAttackIntent{
 		DivisionID: testDivision, CharacterName: c.Name, TargetGid: mob.Gid, SkillID: 2,
-	}, clock.NowMs())
+	}, clock.NowMs(), rt.tickDoors())
 	if len(held.Frames) != 0 || len(held.Broadcast) != 0 {
 		t.Fatalf("basic attack fired through a standing wall: %+v", held)
 	}
@@ -334,7 +334,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 	c.CurrentMP = testInt64(150)
 	fired := rt.advanceBasicAttackIntent(c, basicAttackIntent{
 		DivisionID: testDivision, CharacterName: c.Name, TargetGid: mob.Gid, SkillID: smash.ID, SingleCast: true,
-	}, clock.NowMs())
+	}, clock.NowMs(), rt.tickDoors())
 	if smash.ActionCastingTimeMs > 0 {
 		clock.Advance(time.Duration(smash.ActionCastingTimeMs+1) * time.Millisecond)
 		releasePreparedSkillForTest(t, rt, clock.NowMs())
@@ -364,7 +364,7 @@ func TestWallRootsItsCasterUntilItRetires(t *testing.T) {
 	before, _ = rt.Monsters.Get(testDivision, mob.Gid)
 	swung := rt.advanceBasicAttackIntent(c, basicAttackIntent{
 		DivisionID: testDivision, CharacterName: c.Name, TargetGid: mob.Gid, SkillID: 2,
-	}, clock.NowMs())
+	}, clock.NowMs(), rt.tickDoors())
 	_, damage, _ := assertSkillDamageOpen(t, swung.Frames, 2, enterworld.ObjectIDForCharacter(c), mob.Gid)
 	if damage == 0 {
 		t.Fatal("basic attack after the wall retired dealt no damage")

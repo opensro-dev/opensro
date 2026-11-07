@@ -10,6 +10,12 @@ else), the other guilds of its union, and the fortress it holds. Nothing
 private leaves: no notice, crest, storage, GP, member names beyond the
 master, or votes (owner decision 2026-10-14: GP stays private).
 
+sort=power is the guild-power board (#2675): the same rows ordered by
+each guild's total gear points over its members who are not hidden,
+then level, members and name. The gear points are the rankings' own
+site-only score, so a guild's power is the sum of what its visible
+members score on the gear board.
+
 ===========================================================================
 */
 
@@ -26,6 +32,34 @@ import (
 
 // guildPageSize is a guild page's length, as the rankings'.
 const guildPageSize = 50
+
+// The orderings a guild request may ask for (#2675).
+const (
+	guildSortLevel = "level"
+	guildSortPower = "power"
+)
+
+/*
+================
+guildPowerBefore
+
+The guild-power ordering: total gear points of visible members first,
+then the list's own keys (level, members, name) so equal-power guilds
+keep one order between snapshots.
+================
+*/
+func guildPowerBefore(a, b GuildRow) bool {
+	if a.GearPoints != b.GearPoints {
+		return a.GearPoints > b.GearPoints
+	}
+	if a.Level != b.Level {
+		return a.Level > b.Level
+	}
+	if a.Members != b.Members {
+		return a.Members > b.Members
+	}
+	return a.Name < b.Name
+}
 
 // guildMasterGrade is the master's member grade (domain.GuildLeaderGrade).
 const guildMasterGrade = 0
@@ -72,6 +106,13 @@ func (s *Service) guilds(r *http.Request) (any, error) {
 	if len(prefix) > maxNameLength {
 		return nil, fmt.Errorf("%w: q is at most %d characters", errBadRequest, maxNameLength)
 	}
+	sortBy := query.Get("sort")
+	if sortBy == "" {
+		sortBy = guildSortLevel
+	}
+	if sortBy != guildSortLevel && sortBy != guildSortPower {
+		return nil, fmt.Errorf("%w: sort must be level or power", errBadRequest)
+	}
 	page := 1
 	if raw := query.Get("page"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -80,13 +121,23 @@ func (s *Service) guilds(r *http.Request) (any, error) {
 		}
 		page = n
 	}
+	all := s.loadGuilds()
+	if sortBy == guildSortPower {
+		// Rank on the power ordering before the name filter, as the
+		// cached list does for level, so a search keeps power places.
+		all = append([]GuildRow{}, all...)
+		sort.SliceStable(all, func(i, j int) bool { return guildPowerBefore(all[i], all[j]) })
+		for i := range all {
+			all[i].Rank = i + 1
+		}
+	}
 	rows := []GuildRow{}
-	for _, row := range s.loadGuilds() {
+	for _, row := range all {
 		if prefix == "" || strings.HasPrefix(strings.ToLower(row.Name), prefix) {
 			rows = append(rows, row)
 		}
 	}
-	out := GuildsResponse{Page: page, Total: len(rows), Pages: max(1, (len(rows)+guildPageSize-1)/guildPageSize),
+	out := GuildsResponse{Sort: sortBy, Page: page, Total: len(rows), Pages: max(1, (len(rows)+guildPageSize-1)/guildPageSize),
 		GeneratedAt: s.now().UTC().Format(time.RFC3339), Rows: []GuildRow{}}
 	if prefix != "" {
 		out.Query = &prefix
@@ -148,6 +199,11 @@ func (s *Service) rankGuilds() []GuildRow {
 		row := GuildRow{Rank: i + 1, Name: entry.Name, Level: int(entry.Level), Members: len(entry.Members),
 			Union: []string{}}
 		for _, member := range entry.Members {
+			// Guild power counts visible members only: a hidden
+			// member's gear is theirs to hide (#2675).
+			if c := r.byID[member.CharID]; c != nil && !c.PublicHidden {
+				row.GearPoints += s.gearScore(c).Points
+			}
 			if member.Grade != guildMasterGrade {
 				continue
 			}

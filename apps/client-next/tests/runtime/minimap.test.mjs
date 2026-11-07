@@ -26,7 +26,9 @@ const {
 } = await import(
 	"../../src/engine/foundation/ui/minimap-markers.ts"
 );
-const { minimapTiles, minimapDungeons, minimapArt } = await import( "../../src/engine/foundation/ui/minimap-tiles.ts" );
+const { minimapTiles, minimapDungeons, minimapDungeonRooms, minimapArt } = await import(
+	"../../src/engine/foundation/ui/minimap-tiles.ts"
+);
 const { minimapNpcPositions } = await import( "../../src/engine/foundation/ui/minimap-catalog.ts" );
 const { minimapSameFloor, minimapPoseKey, minimapFloorQueries } = await import(
 	"../../src/engine/foundation/ui/minimap-floor.ts"
@@ -341,6 +343,26 @@ test("dungeon tiles use floor-specific art and negative logical coordinate secto
 		dungeons: [ { sectorId: 32769, floors: [ floor ] } ]
 	} );
 	assert.equal( defined( map.get( 32769 ) )[0], floor );
+	// The same catalog carries the DOF room-name symbols, by room index.
+	const rooms = minimapDungeonRooms( {
+		format: "sro-mission-dungeon-minimap-manifest",
+		version: 1,
+		dungeons: [
+			{ sectorId: 32769, rooms: [ "DH_A01_F01_ROOM_01", "DH_A01_F01_ROOM_02" ] },
+			{ sectorId: 32770 }
+		]
+	} );
+	assert.deepEqual( rooms.get( 32769 ), [ "DH_A01_F01_ROOM_01", "DH_A01_F01_ROOM_02" ] );
+	assert.deepEqual( rooms.get( 32770 ), [] );
+	assert.throws(
+		() =>
+			minimapDungeonRooms( {
+				format: "sro-mission-dungeon-minimap-manifest",
+				version: 1,
+				dungeons: [ { sectorId: 32769, rooms: [ 1 ] } ]
+			} ),
+		/region/
+	);
 	const p = { ...pose, regionId: 32769, x: -10, z: -10 };
 	assert.equal( minimapTiles( p, 160 ).length, 0 );
 	const art = new Map(

@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/pk"
 	"reflect"
 	"sort"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -50,7 +51,6 @@ rewardActor
 type rewardActor struct {
 	world     uint32
 	character *enterworld.Character
-	pose      simulation.Spawn
 	party     *RewardParty
 }
 
@@ -106,11 +106,26 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 				continue
 			}
 			gid := enterworld.ObjectIDForCharacter(c)
-			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, pose: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), party: memberParty[gid]}
+			r.actors[gid] = rewardActor{world: domain.CharacterWorldInstance(c), character: c, party: memberParty[gid]}
 			r.characters = append(r.characters, c)
 		}
 	})
 	return r
+}
+
+/*
+================
+rewardActorPose
+
+The actor's live position at the moment a settlement or share decision
+reads it. The roster build used to resolve every division member's spawn
+(a world-key build and a mover lookup each) although only the winner and
+its party are ever range-checked (#2030); resolving at the read keeps the
+value at kill-decision time, which is what the range rules judge.
+================
+*/
+func (rt *Runtime) rewardActorPose(division string, a rewardActor, now int64) simulation.Spawn {
+	return rt.liveSpawn(simulation.WorldKey(division, a.character.Name), a.character, now)
 }
 
 /*
@@ -400,7 +415,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 	origin := simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}
 	originWorld := uint32(impact.Population.ID)
 	if a, ok := roster.actors[winner]; ok {
-		origin = a.pose
+		origin = rt.rewardActorPose(division, a, now)
 		originWorld = a.world
 	}
 	var count uint16
@@ -420,7 +435,7 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			factors = []float32{factor}
 		} else {
 			for _, gid := range g.party.Members {
-				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, a.pose) {
+				if a, ok := roster.actors[gid]; ok && a.world == originWorld && enterworld.CharacterAlive(a.character) && withinPartyRewardRange(origin, rt.rewardActorPose(division, a, now)) {
 					members = append(members, a)
 				}
 			}
@@ -432,10 +447,21 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			exp, sexp = paramJobRewardBonus(a.character, exp, sexp, now)
 			// Port-only, not native (thiefparty.go): the member's party's thieves.
 			exp = thiefPartyExp(exp, rt.thiefPartyPercent(division, a.party, settings))
+			// Academy cumulated buff (#2270): the member accumulates (or
+			// drains a received row for the returned bonus) on the native
+			// per-member share, before the grant lands.
+			var buffFrames []wire.Frame
+			if rt.TrainingCampKill != nil && (exp != 0 || sexp != 0) {
+				var bonusExp, bonusSkillExp int64
+				bonusExp, bonusSkillExp, buffFrames = rt.TrainingCampKill(division, a.character, exp, sexp, int64(impact.Instance.Ref.ExpToGive), now)
+				exp += bonusExp
+				sexp += bonusSkillExp
+			}
 			var frames []wire.Frame
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
 			}
+			frames = append(frames, buffFrames...)
 			// Port-only, not native (killstats.go): the award counts in
 			// the recipient's band whether or not a sink is wired.
 			rt.countKillStatAward(a.character, exp, sexp, now)
@@ -463,6 +489,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// Loot generation's player-level admission and ownership both use the
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
+		// Port-only, not native (#2547): a Gourd pays one box to every
+		// character who damaged it, each under their own account's cap;
+		// the boxes join the plan here, after admission and the drop
+		// cap, so neither can take them.
+		planned = append(planned, rt.halloweenGourdBoxes(a.character, impact.Instance, planned, impact.Contributions, roster.actors,
+			simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Angle: pose.Heading}, time.UnixMilli(now).UTC())...)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
 		rt.applyThiefPartyGold(division, a.character, planned, settings)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
@@ -473,6 +505,29 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 		// hunted, so it never counts either, however it died.
 		if countSeals && !impact.Instance.GMSpawned {
 			rt.countSealDrops(a.character, drops, now)
+			// The Sun counting hook (sundrops.go) counts the same
+			// committed loot the same way, Sun tier only and with the
+			// item named, for the #2538 measurement cycle.
+			rt.countSunDrops(a.character, drops, now)
+		}
+		// The Halloween daily cap (halloween.go) counts the same
+		// committed loot the same way: every minted box, GM-spawned
+		// kills excluded, lands on its owner's account before the
+		// next kill. An owner whose mint reached the cap is told so
+		// once, with the reset time (#2547).
+		if !impact.Instance.GMSpawned {
+			owners := make(map[uint32]*enterworld.Character, len(roster.actors))
+			for gid, member := range roster.actors {
+				owners[gid] = member.character
+			}
+			for _, reached := range rt.countHalloweenBoxes(owners, drops, now) {
+				frame := halloweenBoxCapFrame()
+				if reached == actor {
+					out.actorFrames = append(out.actorFrames, frame)
+				} else {
+					out.others = append(out.others, RecipientFrames{reached.ID, []wire.Frame{frame}})
+				}
+			}
 		}
 		if a.character == actor {
 			out.actorFrames = append(out.actorFrames, frames...)

@@ -114,6 +114,66 @@ test("a barricade's delete asks, then demolishes it for the player's fortress", 
 	assert.deepEqual( sent.at( -1 ), { kind: "fortress-dismantle", gid: BARRICADE, action: 0x17, fortress: 1 } );
 });
 
+test("a summoned monster's delete asks the dismiss question, then dismisses it", t => {
+	const sent = [];
+	const f = uiFixture( message => {
+		if ( message.kind === "gameplay" ) sent.push( message.command );
+	} );
+	t.after( () => f.dispose() );
+	// TypeID 1/2/4/3 is window kind 3: a fortress-war summoned monster.
+	f.state.entities.push( {
+		...f.state.entities[0],
+		gid: 32,
+		refObjId: 19566,
+		kind: "npc",
+		tidWord: 0x244 | (3 << 11),
+		guildId: 9,
+		name: "Summoned",
+		maxHp: 80000
+	} );
+	Object.assign( f.state.gameplay, {
+		target: 32,
+		fortress: {
+			...fortress.fortressBootstrap( {
+				gameWorldData: [ { gameWorldId: 7, warName: "FORTRESS_JANGAN" } ],
+				siegeFortressData: [ { fortressId: 1, codeName: "FORTRESS_JANGAN", nameStrId: "SN_FORTRESS_JANGAN" } ]
+			} ),
+			worldId: 7,
+			wars: [ { id: 1, name: "Holders", flags: 1 } ]
+		},
+		social: {
+			...emptySocial( "Player" ),
+			self: SELF,
+			guild: {
+				id: 9,
+				name: "Holders",
+				level: 3,
+				gp: 0,
+				subject: "",
+				contents: "",
+				crest: 0,
+				members: [ { id: SELF, name: "Player", grade: 0, level: 60, permissions: 31, role: 1 } ]
+			}
+		}
+	} );
+	let now = 0, last = null;
+	const step = () => {
+		for ( let i = 0; i < 16; i++ ) last = f.ui.step( f.state, now += 100 ) ?? last;
+		return last;
+	};
+	assert.ok(
+		step().controls.some( c => c.id === "target-structure-remove" ),
+		"no delete on an own summoned monster"
+	);
+	f.ui.event( { kind: "activate", id: "target-structure-remove" } );
+	step();
+	// 517750 by kind: kind 3 asks 517360's 0x66 box, not the structure one.
+	assert.ok( f.hasText( "Do you want exterminate the summoned monster?" ), "asked the structure question" );
+	assert.equal( f.hasText( "Do you want to remove" ), false, "asked the structure question" );
+	f.ui.event( { kind: "activate", id: "structure-remove-confirm" } );
+	assert.deepEqual( sent.at( -1 ), { kind: "fortress-dismantle", gid: 32, action: 0x16, fortress: 1 } );
+});
+
 test("the delete stays hidden outside the war and for other roles", t => {
 	for ( const [role, flags] of [ [ 2, 0 ], [ 8, 1 ] ] ) {
 		const { step } = barricadeFixture( t, role, flags );

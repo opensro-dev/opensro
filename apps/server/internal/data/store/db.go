@@ -31,7 +31,8 @@ import (
 // Durability posture: synchronous=NORMAL under WAL makes every commit
 // durable against process death (process killers, crashes, supervisor
 // restarts); power-loss durability is bounded
-// by WAL checkpoints (boot, clean shutdown, SQLite's auto-checkpoint).
+// by WAL checkpoints (the background checkpoint in wal_checkpoint.go,
+// boot, clean shutdown).
 // SRO_AUTHORITY_SYNC_FULL=1 opts into synchronous=FULL for full
 // power-loss durability at ~1 fsync per commit.
 //
@@ -71,7 +72,7 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + nameReservationsSchema + `
+const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + economyLedgerSchema + nameReservationsSchema + silkHistorySchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -158,9 +159,9 @@ const (
 // for layout 5, the empty fortress and union tables for layout 6, the
 // guild-war tables for layout 7 and the fortress production table for
 // layout 8, the unique-kill record for layout 9, the economy ledger for
-// layout 10 and the name-reservation table for layout 11
-// (authority_upgrade.go). The release receiver runs it.
-const CurrentLayoutVersion = 11
+// layout 10, the name-reservation table for layout 11 and the silk-history
+// table for layout 12 (authority_upgrade.go). The release receiver runs it.
+const CurrentLayoutVersion = 12
 
 /*
 ==================
@@ -192,7 +193,14 @@ configureDB
 ================
 */
 func configureDB(db *sql.DB) error {
-	pragmas := []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=" + sqliteSynchronous()}
+	pragmas := []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=" + sqliteSynchronous(),
+		// #2142 slice 0: the checkpoint leaves the commit. The writer
+		// never auto-checkpoints inside a transaction; wal_checkpoint.go
+		// copies the frames on its own handle between commits, and the
+		// size limit bounds the WAL a finished checkpoint leaves behind
+		// for reuse.
+		"PRAGMA wal_autocheckpoint=0",
+		fmt.Sprintf("PRAGMA journal_size_limit=%d", walJournalSizeLimitBytes)}
 	if !flushToMedia() {
 		// Without media flushes the journal switch must not run under the
 		// connection's default FULL level, which syncs the rollback journal.

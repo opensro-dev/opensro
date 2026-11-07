@@ -13,12 +13,16 @@ spike fixes ship is one prepared run instead of another improvisation:
     ... play window ...
     curl -s http://127.0.0.1:<gameworld-loopback>/transport/metrics > after.json
     python scripts/analysis/tick_acceptance.py --before before.json \
-        --after after.json --spikes tick-spikes.jsonl
+        --after after.json --spikes tick-spikes.jsonl \
+        --window-start 2026-10-28T13:05:26Z --window-end 2026-10-28T15:06:25Z
 
 Everything is a window delta: tick counts, overrun share, the tick
 histogram's percentiles recomputed from bucket deltas, slow-hook and
 slow-division hits per 10k ticks, and the journal bursts whose
-tick_count_end falls inside the window. The filed baseline (7.9 days,
+tick_count_end falls inside the window. The journal outlives the
+process while tick_count restarts at every boot, so pass the
+window's wall-clock span too: a burst must intersect it, on its
+ts_start/ts_end, to count. The filed baseline (7.9 days,
 ~35 sessions, ~6.8M ticks at the 100 ms interval) is printed beside
 each row. Verdict thresholds are proposals stated in the code, for
 the acceptance reader to ratify - the table is the deliverable.
@@ -32,6 +36,7 @@ import json
 import math
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 # The filed baseline (#1820, production host, 7.9 days uptime, ~35
@@ -76,6 +81,19 @@ def percentile_from_buckets(bounds, buckets, q, open_value):
 
 
 # ================
+# histogram_counts
+#
+# One snapshot's bucket counts. The served metrics name the field
+# "counts" (bounds_ms plus one open last bucket, with the server's own
+# percentiles beside it); "buckets" is accepted for snapshots taken
+# before the rename. Reading only "buckets" made every real window
+# delta empty, so the report refused live input as sample-less.
+# ================
+def histogram_counts(hist):
+    return hist.get("counts") or hist.get("buckets") or []
+
+
+# ================
 # window_histogram
 #
 # Percentiles of the tick histogram over the window between the two
@@ -86,8 +104,8 @@ def window_histogram(before, after, spike_max_ms):
     hb = before.get("tick_ms_histogram") or {}
     ha = after.get("tick_ms_histogram") or {}
     bounds = ha.get("bounds_ms") or hb.get("bounds_ms") or []
-    bb = hb.get("buckets") or [0] * len(ha.get("buckets") or [])
-    ba = ha.get("buckets") or []
+    ba = histogram_counts(ha)
+    bb = histogram_counts(hb) or [0] * len(ba)
     deltas = [max(0, a - b) for a, b in zip(ba, bb)]
     return {
         "p50_ms": percentile_from_buckets(bounds, deltas, 0.50, spike_max_ms),
@@ -125,12 +143,55 @@ def slow_totals(before_map, after_map):
 
 
 # ================
+# parse_ts
+#
+# One journal timestamp as an aware datetime, or None when the value
+# is absent or unreadable. Journal rows carry Go's RFC 3339 form; a
+# trailing Z and numeric offsets both parse, and a value with no
+# offset reads as UTC so naive and aware rows still compare.
+# ================
+def parse_ts(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+# ================
+# ts_intersects
+#
+# Whether a burst's [ts_start, ts_end] span touches the wall-clock
+# window. A row whose timestamps are absent or unreadable makes no
+# wall-clock claim and keeps the tick_count bound alone.
+# ================
+def ts_intersects(row, win_lo, win_hi):
+    start = parse_ts(row.get("ts_start"))
+    end = parse_ts(row.get("ts_end"))
+    if start is None or end is None:
+        return True
+    if win_hi is not None and start > win_hi:
+        return False
+    if win_lo is not None and end < win_lo:
+        return False
+    return True
+
+
+# ================
 # read_spikes
 #
 # Journal bursts inside the window, by tick_count_end: the burst a
-# reader sees is the one that closed between the two snapshots.
+# reader sees is the one that closed between the two snapshots. The
+# journal outlives the process while tick_count restarts at every
+# boot, so a previous boot's burst can carry a tick_count_end inside
+# a later window; when the caller passes the window's wall-clock
+# bounds, a burst must also intersect them to count.
 # ================
-def read_spikes(path, tick_lo, tick_hi):
+def read_spikes(path, tick_lo, tick_hi, win_lo=None, win_hi=None):
     bursts = []
     if not path:
         return bursts
@@ -145,8 +206,12 @@ def read_spikes(path, tick_lo, tick_hi):
         if not isinstance(row, dict):
             continue
         end = row.get("tick_count_end", 0)
-        if tick_lo < end <= tick_hi:
-            bursts.append(row)
+        if not tick_lo < end <= tick_hi:
+            continue
+        if win_lo is not None or win_hi is not None:
+            if not ts_intersects(row, win_lo, win_hi):
+                continue
+        bursts.append(row)
     return bursts
 
 
@@ -248,6 +313,17 @@ def report(before, after, bursts):
         s = b.get("slowest_step") or "(unnamed)"
         steps[s] = steps.get(s, 0) + 1
     print(f"  spike slowest steps: {dict(sorted(steps.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
+    # #2295: the phase and hook that took the burst's time. Records from
+    # before the attribution fix carry neither and tally as unattributed.
+    phases = {}
+    hooks = {}
+    for b in bursts:
+        p = b.get("slowest_phase") or "(unattributed)"
+        phases[p] = phases.get(p, 0) + 1
+        h = b.get("slowest_hook") or "(unattributed)"
+        hooks[h] = hooks.get(h, 0) + 1
+    print(f"  spike slowest phases: {dict(sorted(phases.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
+    print(f"  spike slowest hooks: {dict(sorted(hooks.items(), key=lambda kv: -kv[1])) or 'no bursts'}")
 
     v = m["verdicts"]
     print()
@@ -270,13 +346,13 @@ def self_test():
     bounds = [10.0, 25.0, 50.0, 100.0]
     before = {
         "tick_count": 1000, "tick_overruns": 10, "live_sessions": 3,
-        "tick_ms_histogram": {"bounds_ms": bounds, "buckets": [900, 80, 15, 4, 1]},
+        "tick_ms_histogram": {"bounds_ms": bounds, "counts": [900, 80, 15, 4, 1]},
         "slow_hooks": {"advanceReturnScrolls": {"count": 5, "max_ms": 300.0}},
         "slow_divisions": {},
     }
     after = {
         "tick_count": 3000, "tick_overruns": 12, "live_sessions": 5,
-        "tick_ms_histogram": {"bounds_ms": bounds, "buckets": [2700, 220, 55, 20, 5]},
+        "tick_ms_histogram": {"bounds_ms": bounds, "counts": [2700, 220, 55, 20, 5]},
         "slow_hooks": {"advanceReturnScrolls": {"count": 5, "max_ms": 300.0},
                        "advancePets": {"count": 2, "max_ms": 150.0}},
         "slow_divisions": {"7": {"count": 1, "max_ms": 120.0}},
@@ -294,11 +370,35 @@ def self_test():
     # (50, 100] must not read as a 30 ms spike max.
     capped = percentile_from_buckets(bounds, [900, 50, 30, 20, 0], 0.99, 30.0)
     assert capped == 100.0, capped
+    # The served shape, from a live snapshot (2026-10-28, the #2033
+    # profile window): "counts" with the open bucket last and the
+    # server's own percentiles printed beside them. The window math
+    # must reproduce those percentiles from the counts alone; on the
+    # pre-fix reader ("buckets" only) this window had no samples and
+    # the report refused it.
+    served_bounds = [2, 5, 10, 12, 14, 16, 18, 20, 25, 30, 40, 50, 60, 70, 80, 90,
+                     100, 110, 120, 140, 160, 180, 200, 250, 300, 400, 500, 750, 1000, 2000]
+    served_counts = [0, 0, 0, 3, 58, 551, 2389, 6031, 41582, 57781, 95971, 66978,
+                     39266, 21472, 10737, 5073, 2338, 1159, 791, 981, 566, 239,
+                     85, 46, 13, 15, 13, 28, 0, 0, 0]
+    served = window_histogram(
+        {"tick_ms_histogram": {"bounds_ms": served_bounds, "counts": [0] * len(served_counts)}},
+        {"tick_ms_histogram": {"bounds_ms": served_bounds, "counts": served_counts}}, 0.0)
+    assert served["samples"] == 354166, served
+    assert (served["p50_ms"], served["p90_ms"], served["p99_ms"], served["p999_ms"]) == (40, 70, 110, 180), served
     hooks, hits, worst = slow_totals(before["slow_hooks"], after["slow_hooks"])
     assert hits == 2 and worst == 300.0, (hits, worst)
     assert hooks["advanceReturnScrolls"]["hits"] == 0
     spikes = [{"tick_count_end": 1500, "max_ms": 700.0, "slowest_step": "x"},
-              {"tick_count_end": 900, "max_ms": 900.0, "slowest_step": "y"}]
+              {"tick_count_end": 900, "max_ms": 900.0, "slowest_step": "y"},
+              # A burst from a previous boot: the journal outlives the
+              # process while tick_count restarts at zero, so its
+              # tick_count_end lands inside this window a boot later.
+              # Its wall-clock span sits the day before the window.
+              {"tick_count_end": 2000, "max_ms": 5000.0, "slowest_step": "z",
+               "ts_start": "2026-10-27T03:21:00Z", "ts_end": "2026-10-27T03:21:02Z"},
+              {"tick_count_end": 2500, "max_ms": 800.0, "slowest_step": "w",
+               "ts_start": "2026-10-28T13:30:00Z", "ts_end": "2026-10-28T13:30:01Z"}]
     # The journal fixture lives in a private temp dir, never in the
     # caller's working directory. A valid-JSON non-object line is skipped.
     with tempfile.TemporaryDirectory() as tmp:
@@ -306,7 +406,14 @@ def self_test():
         lines = [json.dumps(s) for s in spikes] + ["42", "not json"]
         journal.write_text("\n".join(lines), encoding="utf-8")
         got = read_spikes(str(journal), 1000, 3000)
-    assert len(got) == 1 and got[0]["max_ms"] == 700.0, got
+        # Tick-count alone counts the previous boot's burst too.
+        assert len(got) == 3, got
+        # The wall-clock bound drops it and keeps the in-window burst;
+        # the row without timestamps keeps only the tick_count bound.
+        win_lo = parse_ts("2026-10-28T13:05:26Z")
+        win_hi = parse_ts("2026-10-28T15:06:25Z")
+        got = read_spikes(str(journal), 1000, 3000, win_lo, win_hi)
+    assert [b["max_ms"] for b in got] == [700.0, 800.0], got
 
     # The report's own numbers: 2 overruns, 2 slow-hook hits and 1 slow
     # division over 2,000 ticks are 10, 10 and 5 per 10k; the baseline
@@ -318,7 +425,7 @@ def self_test():
     assert round(rows["overruns per 10k ticks"][0], 2) == 40.18, rows
     assert rows["slow hooks per 10k ticks"][1] == 10.0, rows
     assert rows["slow divisions per 10k ticks"][1] == 5.0, rows
-    assert rows["tick max ms (spike journal)"][1] == 700.0, rows
+    assert rows["tick max ms (spike journal)"][1] == 800.0, rows
     assert m["verdicts"] == {"overrun share": False, "return scrolls": True, "tick p99": True}, m["verdicts"]
 
     # A window with no positive tick delta (a restart between snapshots)
@@ -343,6 +450,9 @@ def main(argv):
     parser.add_argument("--before", help="metrics snapshot at window start (JSON)")
     parser.add_argument("--after", help="metrics snapshot at window end (JSON)")
     parser.add_argument("--spikes", help="tick-spikes.jsonl copied at window end")
+    parser.add_argument("--window-start", help="wall-clock window start (ISO 8601); "
+                        "journal bursts must intersect the window, not just its tick counts")
+    parser.add_argument("--window-end", help="wall-clock window end (ISO 8601)")
     parser.add_argument("--self-test", action="store_true", help="run the synthetic self-test")
     args = parser.parse_args(argv)
     if args.self_test:
@@ -350,9 +460,16 @@ def main(argv):
         return 0
     if not args.before or not args.after:
         parser.error("--before and --after are required (or --self-test)")
+    win_lo = parse_ts(args.window_start) if args.window_start else None
+    win_hi = parse_ts(args.window_end) if args.window_end else None
+    if args.window_start and win_lo is None:
+        parser.error(f"--window-start is not an ISO 8601 timestamp: {args.window_start}")
+    if args.window_end and win_hi is None:
+        parser.error(f"--window-end is not an ISO 8601 timestamp: {args.window_end}")
     before = json.loads(Path(args.before).read_text(encoding="utf-8"))
     after = json.loads(Path(args.after).read_text(encoding="utf-8"))
-    bursts = read_spikes(args.spikes, int(before.get("tick_count", 0)), int(after.get("tick_count", 0)))
+    bursts = read_spikes(args.spikes, int(before.get("tick_count", 0)), int(after.get("tick_count", 0)),
+                         win_lo, win_hi)
     try:
         return report(before, after, bursts)
     except WindowError as err:

@@ -3,7 +3,7 @@
 
 viewer-queries.ts - the 3D viewer's read-only window on the presentation
 
-Port-only, not native (docs/VIEWER.md). The viewer drives the character
+Port-only, not native (docs/guides/VIEWER.md). The viewer drives the character
 presentation like the world does, but must also tell a model the catalogue
 lacks from one still loading, type a look's worn items, and wait until a
 dressed actor wears its parts. These answers read characters.ts's state;

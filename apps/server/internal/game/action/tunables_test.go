@@ -89,7 +89,7 @@ func TestMostWantedTestBountyIsReadAtEachPayout(t *testing.T) {
 	rt, _, killer, victim := newPvpPair(t)
 	rt.MostWanted, rt.MostWantedTest = true, true
 	pay := func() uint64 {
-		victim.MostWanted = &domain.MostWanted{Streak: 20}
+		victim.MostWanted = &domain.MostWanted{Streak: 10}
 		before := goldOf(killer)
 		kill := playerKill{kind: pk.DeathJob, mostWantedStrangers: true}.withVictim(killer, victim)
 		rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
@@ -108,20 +108,22 @@ func TestMostWantedTestBountyIsReadAtEachPayout(t *testing.T) {
 ================
 TestMostWantedTestKillsPerLevelIsReadFromTheEnvironment
 
-SRO_MOST_WANTED_TEST_KILLS sets the streak step at boot (10 / kills); a
-value that does not divide 10 is refused.
+SRO_MOST_WANTED_TEST_KILLS sets the streak step at boot (5 / kills); a
+value that does not divide 5 is refused.
 ================
 */
 func TestMostWantedTestKillsPerLevelIsReadFromTheEnvironment(t *testing.T) {
-	for env, want := range map[string]int64{"": 2, "5": 2, "2": 5, "10": 1, "1": 10} {
+	for env, want := range map[string]int64{"": 1, "5": 1, "1": 5} {
 		t.Setenv("SRO_MOST_WANTED_TEST_KILLS", env)
 		if got, err := MostWantedTestStreakStepFromEnv(); err != nil || got != want {
 			t.Fatalf("%q: step %d (%v), want %d", env, got, err, want)
 		}
 	}
-	t.Setenv("SRO_MOST_WANTED_TEST_KILLS", "3")
-	if _, err := MostWantedTestStreakStepFromEnv(); err == nil {
-		t.Fatal("3 kills a level was accepted")
+	for _, env := range []string{"2", "3", "10"} {
+		t.Setenv("SRO_MOST_WANTED_TEST_KILLS", env)
+		if _, err := MostWantedTestStreakStepFromEnv(); err == nil {
+			t.Fatalf("%s kills a level was accepted", env)
+		}
 	}
 	rt, _ := newTestRuntime(testCharacter(), testItems())
 	rt.MostWantedTest, rt.MostWantedTestStreakStep = true, 5

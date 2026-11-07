@@ -514,13 +514,26 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 			// label (alias while suited, real name once bare).
 			rt.reloadJobDress(dress.division, c, now, &result)
 			rt.refreshCompanionOwnerLabels(dress.division, c)
+			// Port-only, not native: the suit tier starts or stops with
+			// the suit, so the stat block and speeds follow the change.
+			if rt.JobSuitTiers {
+				private, public := rt.jobSuitBuffRefresh(dress.division, c, now)
+				result.Frames = append(result.Frames, private...)
+				result.Broadcast = append(result.Broadcast, public...)
+			}
 		}
-		// Port-only, not native: taking the suit off clears the streak.
-		if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
+		// Port-only, not native (#1849): the streak survives the suit
+		// now; only its bonuses shelve while it is off, because the
+		// projection gates on the dressed job (mostWantedWrites). A
+		// dress or undress with a live level re-projects the stats and
+		// re-sends the wanted state, so the holder's buff-board row
+		// follows the suit. Nothing here clears any more.
+		if rt.MostWanted && dressed != rt.jobDressed(c) && c.MostWanted != nil && mostWantedLevel(c) > 0 {
 			var private, public []wire.Frame
-			rt.deps.UpdateDeferred(c, "most-wanted-undress", func() bool {
-				private, public = rt.clearMostWantedInDoor(dress.division, c, "suit removed", now)
-				return true
+			rt.deps.UpdateDeferred(c, "most-wanted-dress", func() bool {
+				private, public = rt.mostWantedRefresh(dress.division, c, now)
+				private = append(private, rt.mostWantedStateFrame(c))
+				return false
 			})
 			result.Frames = append(result.Frames, private...)
 			result.Broadcast = append(result.Broadcast, public...)

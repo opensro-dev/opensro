@@ -119,6 +119,10 @@ export interface FortressState {
 	// Each event zone's structure (fortress-map.ts): the 0x0F roster fills a
 	// record, 0x0B moves its state word and the 0x18 list its minutes.
 	readonly zones?: readonly FortressZoneRecord[];
+	// Each structure reference's upgrade targets, resolved by the server
+	// bootstrap from siegestructupgradedata.txt: 754A40's upgrade arm
+	// resolves the standing structure's variant from the same table.
+	readonly structureUpgrades?: ReadonlyMap<number, readonly number[]>;
 }
 
 /*
@@ -161,6 +165,7 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			officialRefObjId?: number;
 			taxTargets?: number;
 		}[];
+		siegeStructureUpgrades?: { ref: number; targets: number[]; }[];
 	};
 	const worlds = (b.gameWorldData ?? []).map( r => ({ id: r.gameWorldId, code: r.warName }) ),
 		fortresses = (b.siegeFortressData ?? []).map( r => ({
@@ -179,12 +184,31 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			rows.some( r => !Number.isInteger( r.id ) || r.id < 0 || r.id > 0xffffffff || typeof r.code !== "string" )
 		) throw Error( "Invalid fortress reference table" );
 	}
+	const structureUpgrades = new Map<number, readonly number[]>();
+	for ( const row of b.siegeStructureUpgrades ?? [] ) {
+		if (
+			!Number.isInteger( row?.ref ) || row.ref < 0 || row.ref > 0xffffffff ||
+			!Array.isArray( row.targets ) || row.targets.length > 16 ||
+			row.targets.some( target => !Number.isInteger( target ) || target < 0 || target > 0xffffffff )
+		) throw Error( "Invalid fortress structure upgrade table" );
+		structureUpgrades.set( row.ref, [ ...row.targets ] );
+	}
+	if ( structureUpgrades.size > 65536 ) throw Error( "Invalid fortress structure upgrade table" );
 	// 77B220 -> 862B80: preserve the complete packed word, then resolve its low u16.
 	const worldId = b.localPlayerEntry?.fortressWorld ?? 0x10001;
 	if ( !Number.isInteger( worldId ) || worldId < 0 || worldId > 0xffffffff ) {
 		throw Error( "Invalid packed fortress world" );
 	}
-	return { worldId, worlds, fortresses, forge: fortressForgeCatalog( value ), wars: [], registered: [], listId: 0 };
+	return {
+		worldId,
+		worlds,
+		fortresses,
+		forge: fortressForgeCatalog( value ),
+		wars: [],
+		registered: [],
+		listId: 0,
+		structureUpgrades
+	};
 }
 
 const FORTRESS_TIMER_PERIOD_MS = 1000;
@@ -539,6 +563,74 @@ export function fortressDismissNotice( state: FortressState ): SystemNotice | nu
 	const service = state.service;
 	if ( !service || service.result !== 1 || service.action !== FORTRESS_DISMISS ) return null;
 	return { key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE", value: 0, nativeType: 0 };
+}
+
+// 754A40's structure success actions (7551BA, 75529A and 7554F9).
+const STRUCTURE_CONSTRUCTION_COMPLETE = 0x0a;
+const STRUCTURE_UPGRADE_COMPLETE = 0x0b;
+const STRUCTURE_REPAIR_COMPLETE = 0x0c;
+const STRUCTURE_NOTICE_CAPACITY = 0x100;
+
+// The standing structure's TypeID fields (1/2/5) leave the word's last
+// field: 5 the headquarters (4F3A80), 4 a defensive position (74F3A0),
+// 2 a guard tower (74F360). The helpers read all three from the packed
+// word the catalog carries.
+const STRUCTURE_TYPE_HEADQUARTERS = 5;
+const STRUCTURE_TYPE_DEFENSIVE_POSITION = 4;
+
+/*
+================
+fortressStructureNotice
+
+754A40's structure success arms send one line to type-0 chat and the
+banner (755264). Construction (0x0A) and repair (0x0C) name the zone's
+standing structure. The upgrade arm (0x0B, 75529A) judges the standing
+structure by its TypeID word and its level - the zone record's +0x18,
+the level column the 0x3887 roster copied from the reference: a
+headquarters (1/2/5/5) and a level-0 defensive position (1/2/5/4) print
+CONSTRUCTION_COMPLETE, the position naming its resolved upgrade variant
+(state.structureUpgrades, fortressVariantTarget); everything else
+prints UPGRADE_COMPLETE with the standing name. No zone record or no
+catalog name means no line. The caller supplies the standing structure's
+facts and the variant's name.
+================
+*/
+export function fortressStructureNotice(
+	state: FortressState,
+	standing: { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined,
+	variantName: string | undefined
+): SystemNotice | null {
+	const service = state.service;
+	if ( !service || service.result !== 1 || standing === undefined ) return null;
+	let key: string | undefined, name = standing.name;
+	if ( service.action === STRUCTURE_CONSTRUCTION_COMPLETE ) {
+		key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
+	} else if ( service.action === STRUCTURE_REPAIR_COMPLETE ) {
+		key = "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE";
+	} else if ( service.action === STRUCTURE_UPGRADE_COMPLETE ) {
+		const word = standing.tidWord,
+			shape = (word >>> 2 & 7) === 1 && (word >>> 5 & 3) === 2 && (word >>> 7 & 15) === 5 ?
+				word >>> 11 & 31 :
+				0;
+		if ( shape === STRUCTURE_TYPE_HEADQUARTERS ) {
+			key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
+		} else if ( shape === STRUCTURE_TYPE_DEFENSIVE_POSITION && standing.level === 0 ) {
+			key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
+			name = variantName ?? standing.name;
+		} else {
+			key = "UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE";
+		}
+	}
+	if ( key === undefined ) return null;
+	return {
+		key,
+		value: 0,
+		arguments: [ name ],
+		formatKinds: [ "s" ],
+		formatCapacity: STRUCTURE_NOTICE_CAPACITY,
+		nativeType: 0,
+		banner: true
+	};
 }
 
 /*

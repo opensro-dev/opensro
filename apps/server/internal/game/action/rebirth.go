@@ -82,14 +82,80 @@ func missionSpawnFromWorld(spawn *enterworld.WorldSpawn, fallback simulation.Spa
 
 /*
 ================
+europeanModel
+
+Whether the character's model is a European race model. The client's
+model codenames split the two races by the CHAR_EU prefix.
+================
+*/
+func europeanModel(character *enterworld.Character) bool {
+	return character != nil && strings.HasPrefix(character.ModelCodename, "CHAR_EU")
+}
+
+/*
+================
 defaultRebirthPoint
+
+The starter position a character entered the world at. It is only the
+fallback when the catalogue lacks the race town gate; it is never the
+return point of a character that can reach that gate.
 ================
 */
 func defaultRebirthPoint(character *enterworld.Character) simulation.Spawn {
-	if character != nil && strings.HasPrefix(character.ModelCodename, "CHAR_EU") {
+	if europeanModel(character) {
 		return simulation.EuropeStartProfile()
 	}
 	return simulation.ChinaStartProfile()
+}
+
+// The race main-town gates a character returns to before it appoints one.
+// teleportbuilding rows STORE_CH_GATE (RefObj 2094) and STORE_EU_GATE
+// (RefObj 19074) name the teleportdata rows GATE_CH (id 1, Jangan, region
+// 25000) and GATE_EU (id 25, Constantinople, region 26959), both
+// recall-eligible. The spawns themselves come from the loaded catalogue.
+const (
+	janganTownGateRef         uint32 = 2094
+	constantinopleTownGateRef uint32 = 19074
+)
+
+/*
+================
+raceTownGateRef
+
+The gate of the character's race main town: the European Constantinople
+gate for a CHAR_EU model and the Chinese Jangan gate otherwise, the same
+race split defaultRebirthPoint uses.
+================
+*/
+func raceTownGateRef(character *enterworld.Character) uint32 {
+	if europeanModel(character) {
+		return constantinopleTownGateRef
+	}
+	return janganTownGateRef
+}
+
+/*
+================
+recallDestination
+
+The town recall spawn of the teleport whose source object is ref, and the
+world it lies in: the same eligibility appointedRebirth applies to an
+appointed gate (the recall column set, a real field region).
+================
+*/
+func (rt *Runtime) recallDestination(ref uint32) (travelPoint, bool) {
+	if rt.portals == nil || ref == 0 {
+		return travelPoint{}, false
+	}
+	id, ok := rt.portals.sources[ref]
+	if !ok {
+		return travelPoint{}, false
+	}
+	destination := rt.portals.destinations[id]
+	if !destination.recall || destination.spawn.RegionID == 0 || destination.spawn.RegionID&0x8000 != 0 {
+		return travelPoint{}, false
+	}
+	return travelPoint{spawn: destination.spawn, world: portalWorld(destination)}, true
 }
 
 /*
@@ -111,9 +177,11 @@ appointedRebirth
 
 The appointed town and the world it lies in. The native town-recall position
 reads the appointed teleport's spawn coordinates,
-which also yields the teleport's GenWorldID. The stored fallback is a field
-position. During a fortress war a PC inside a fortress world revives where
-that world says instead (siege vtable +0x90, fortress_revival.go).
+which also yields the teleport's GenWorldID. Before the first appointment
+that point is the race main-town gate (Jangan or Constantinople), never the
+starter position; the stored fallback is a field position. During a
+fortress war a PC inside a fortress world revives where that world says
+instead (siege vtable +0x90, fortress_revival.go).
 ================
 */
 func (rt *Runtime) appointedRebirth(division string, character *enterworld.Character) travelPoint {
@@ -126,12 +194,16 @@ func (rt *Runtime) appointedRebirth(division string, character *enterworld.Chara
 		return point
 	}
 	world := character.World
-	if rt.portals != nil && world.RebirthGateRefID != 0 {
-		if id, ok := rt.portals.sources[world.RebirthGateRefID]; ok {
-			d := rt.portals.destinations[id]
-			if d.recall && d.spawn.RegionID != 0 && d.spawn.RegionID&0x8000 == 0 {
-				return travelPoint{spawn: d.spawn, world: portalWorld(d)}
-			}
+	if point, ok := rt.recallDestination(world.RebirthGateRefID); ok {
+		return point
+	}
+	// A character that has never appointed a town is registered at its
+	// race's main-town gate; only a catalogue without that gate falls back
+	// to the starter position. INFERENCE: the server binary is not on this
+	// machine; the owner reports this from the original game.
+	if world.RebirthGateRefID == 0 && world.RebirthPoint == nil {
+		if point, ok := rt.recallDestination(raceTownGateRef(character)); ok {
+			return point
 		}
 	}
 	return travelPoint{spawn: missionSpawnFromWorld(world.RebirthPoint, fallback), world: field}
@@ -289,6 +361,56 @@ func (rt *Runtime) HandleLocalRebirth(
 }
 
 /*
+================
+prepareLocalRebirth
+
+The detached half of HandleLocalRebirth for the hub's prepared path
+(#2143): plan the revival and, for a same-world town revival, build
+its re-entry corpus before the publication gate is taken. The corpus
+build (PrepareReentry: the destination projection and its encode) is
+the expensive half of the operation and reads only snapshots, so the
+gate is left to the commit and the sends.
+
+Only that one shape prepares. A camp revival and a cross-world town
+revival decline: their membership must move before the corpus can be
+built against the destination world's population lease, so the hub
+runs the gated operation whole. A refusal the plan already settled
+(a live or moving corpse, a fresh siege corpse) publishes as-is.
+
+The publish half re-checks the two world-shape facts that can change
+while the gate is taken - a siege that began, a camp that started -
+and runs the gated operation whole if either moved; the commit's own
+stale check refuses any quieter mutation, exactly as it does today.
+================
+*/
+func (rt *Runtime) prepareLocalRebirth(divisionID string, character *enterworld.Character, payload []byte) (func() OpResult, bool) {
+	choice, err := wire.DecodeLocalRebirthRequest(payload)
+	if err != nil || character == nil {
+		return nil, false
+	}
+	unlock := rt.lockDivision(divisionID)
+	plan, result, ready := rt.planRebirth(divisionID, character, choice, false)
+	unlock()
+	if !ready {
+		return func() OpResult { return result }, true
+	}
+	if plan.choice != wire.RebirthAtSpecifiedPoint || plan.preparedDeferred {
+		return nil, false
+	}
+	return func() OpResult {
+		if rt.siegeRebirthRefused(divisionID, plan.before) {
+			return OpResult{}
+		}
+		if rt.flagWarResidentMatch(divisionID, plan.before) != nil {
+			return rt.HandleLocalRebirth(divisionID, character, payload)
+		}
+		unlock := rt.lockDivision(divisionID)
+		defer unlock()
+		return rt.commitRebirth(divisionID, character, plan)
+	}, true
+}
+
+/*
 =================
 handleRebirthInDoor
 
@@ -306,9 +428,61 @@ func (rt *Runtime) handleRebirthInDoor(
 	choice byte,
 	forceTown bool,
 ) OpResult {
+	plan, result, ready := rt.planRebirth(divisionID, character, choice, forceTown)
+	if !ready {
+		return result
+	}
+	return rt.commitRebirth(divisionID, character, plan)
+}
 
-	// Prepare the complete destination projection while still dead. No durable
-	// revival may depend on a later fallible packet build or correction fallback.
+/*
+================
+rebirthPlan
+
+A revival whose detached half is done: the settled corpse and
+character snapshots, the resolved destination and candidate, and -
+for a same-world town revival - the built re-entry corpus.
+commitRebirth owns everything that mutates. The corpus is built here
+only when the destination world is the resident one; a cross-world
+or camp revival defers it (preparedDeferred), because that build
+reads the destination world's population lease and the membership
+must move first.
+================
+*/
+type rebirthPlan struct {
+	before           *enterworld.Character
+	corpse           simulation.WorldState
+	worldKey         string
+	camp             *flagWarMatch
+	arrival          travelPoint
+	choice           byte
+	candidate        *enterworld.Character
+	destination      simulation.Spawn
+	restoredHP       int64
+	restoredMP       int64
+	prepared         enterworld.PreparedReentry
+	preparedDeferred bool
+	currentWorld     instance.ID
+	arrivalWorld     instance.ID
+}
+
+/*
+================
+planRebirth
+
+The detached half of handleRebirthInDoor: settle the corpse, resolve
+the destination, and prepare the complete destination projection
+while still dead. No durable revival may depend on a later fallible
+packet build or correction fallback. Ready is false when the
+returned result is already the operation's refusal.
+================
+*/
+func (rt *Runtime) planRebirth(
+	divisionID string,
+	character *enterworld.Character,
+	choice byte,
+	forceTown bool,
+) (*rebirthPlan, OpResult, bool) {
 	var before *enterworld.Character
 	var corpse simulation.WorldState
 	worldKey := simulation.WorldKey(divisionID, character.Name)
@@ -317,12 +491,12 @@ func (rt *Runtime) handleRebirthInDoor(
 		corpse = rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(character) })
 	})
 	if before.DeletePending || enterworld.CharacterAlive(before) || corpse.MoveSegment != nil {
-		return OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}
+		return nil, OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}, false
 	}
 	// The native rebirth request ahead of the kind check: a fresh siege
 	// corpse in an active siege world is refused outright (below).
 	if rt.siegeRebirthRefused(divisionID, before) {
-		return OpResult{}
+		return nil, OpResult{}, false
 	}
 	// Natively a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point
@@ -349,7 +523,7 @@ func (rt *Runtime) handleRebirthInDoor(
 		choice = wire.RebirthAtPresentPoint
 	}
 	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {
-		return OpResult{}
+		return nil, OpResult{}, false
 	}
 	destination := corpse.Spawn
 	candidate := before.Snapshot()
@@ -360,10 +534,68 @@ func (rt *Runtime) handleRebirthInDoor(
 		restoredHP, restoredMP, _, _ = rt.playerKeeperVitals(divisionID, candidate)
 	}
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
-	var prepared enterworld.PreparedReentry
-	var previousPets map[petOwnerKey]petSession
 	currentWorld := instance.ID(domain.CharacterWorldInstance(before))
-	arrivalWorld := currentWorld
+	plan := &rebirthPlan{
+		before: before, corpse: corpse, worldKey: worldKey, camp: camp,
+		arrival: arrival, choice: choice, candidate: candidate,
+		destination: destination, restoredHP: restoredHP, restoredMP: restoredMP,
+		currentWorld: currentWorld, arrivalWorld: currentWorld,
+	}
+	if choice == wire.RebirthAtSpecifiedPoint {
+		if camp == nil {
+			arrival = rt.appointedRebirth(divisionID, before)
+			plan.arrival = arrival
+		}
+		destination = arrival.spawn
+		preview := corpse
+		preview.Spawn = destination
+		writeBackWorld(candidate, preview)
+		setCharacterWorld(candidate, arrival.world)
+		plan.destination = destination
+		// Re-entry is built against the destination world's membership.
+		// A same-world revival already holds it, so its corpus can be
+		// built detached here; anything else defers the build to the
+		// commit, after the membership move.
+		if camp == nil && arrival.world == currentWorld {
+			prepared, ok := rt.deps.PrepareReentry(divisionID, candidate)
+			if !ok || len(prepared.Packets) == 0 || prepared.Packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+				return nil, OpResult{DiagnosticRefusal: "rebirth-entry-preparation-failed"}, false
+			}
+			plan.prepared = prepared
+			plan.destination = prepared.Spawn
+		} else {
+			plan.preparedDeferred = true
+		}
+	}
+	return plan, OpResult{}, true
+}
+
+/*
+================
+commitRebirth
+
+The mutating half of handleRebirthInDoor, with the caller holding
+the division door: membership and companion relocation, a deferred
+corpus build when the plan could not build it detached, then the
+store commit and the publication assembly. Anything that fails
+before the commit restores the relocation and the membership,
+exactly as the whole operation did when it ran in one piece.
+================
+*/
+func (rt *Runtime) commitRebirth(divisionID string, character *enterworld.Character, plan *rebirthPlan) OpResult {
+	before := plan.before
+	corpse := plan.corpse
+	camp := plan.camp
+	arrival := plan.arrival
+	choice := plan.choice
+	currentWorld := plan.currentWorld
+	arrivalWorld := plan.arrivalWorld
+	destination := plan.destination
+	restoredHP, restoredMP := plan.restoredHP, plan.restoredMP
+	prepared := plan.prepared
+	worldKey := plan.worldKey
+
+	var previousPets map[petOwnerKey]petSession
 	var membership populationAdmission
 	committed := false
 	defer func() {
@@ -375,27 +607,24 @@ func (rt *Runtime) handleRebirthInDoor(
 		}
 	}()
 	if choice == wire.RebirthAtSpecifiedPoint {
-		if camp == nil {
-			arrival = rt.appointedRebirth(divisionID, before)
-		}
-		destination = arrival.spawn
-		preview := corpse
-		preview.Spawn = destination
-		writeBackWorld(candidate, preview)
-		setCharacterWorld(candidate, arrival.world)
 		// Re-entry is built against the destination world's membership.
 		var moved bool
 		if membership, moved = rt.moveWorldMembership(divisionID, before, currentWorld, arrival.world); !moved {
 			return OpResult{DiagnosticRefusal: "rebirth-world-unavailable"}
 		}
 		arrivalWorld = arrival.world
-		previousPets = rt.relocateReturningPet(divisionID, character, destination)
-		var ok bool
-		prepared, ok = rt.deps.PrepareReentry(divisionID, candidate)
-		if !ok || len(prepared.Packets) == 0 || prepared.Packets[0].NativeOpcode != enterworld.OpcodeResetClient {
-			return OpResult{DiagnosticRefusal: "rebirth-entry-preparation-failed"}
+		// The pet travels to the appointed spawn, as it did before the
+		// split: the prepared spawn below is the player's resolved stand
+		// (terrain-lifted or rescued), not the pet's relocation centre.
+		previousPets = rt.relocateReturningPet(divisionID, character, arrival.spawn)
+		if plan.preparedDeferred {
+			var ok bool
+			prepared, ok = rt.deps.PrepareReentry(divisionID, plan.candidate)
+			if !ok || len(prepared.Packets) == 0 || prepared.Packets[0].NativeOpcode != enterworld.OpcodeResetClient {
+				return OpResult{DiagnosticRefusal: "rebirth-entry-preparation-failed"}
+			}
+			destination = prepared.Spawn
 		}
-		destination = prepared.Spawn
 	}
 	var untouchable []wire.Frame
 	accepted := rt.deps.Update(character, "local-rebirth", func() bool {
@@ -458,6 +687,7 @@ func (rt *Runtime) handleRebirthInDoor(
 	corpses, corpseDespawns := rt.retireCompanionCorpses(divisionID, character)
 	frames := missionReentryFrames(prepared.Packets)
 	frames = append(frames, corpses...)
+	frames = append(frames, rt.petArrivalFrames(divisionID, character)...)
 	frames = append(frames, headActor...)
 	frames = append(frames, headPublic...)
 	// Re-entry reconstructs the client actor. A retained runtime body status

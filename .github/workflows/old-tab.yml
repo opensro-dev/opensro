@@ -1,0 +1,64 @@
+# old-tab.yml - a pull request changing what a tab decodes declares it (opensro-ops#116)
+#
+# Its own workflow because editing the body must re-run this check and nothing
+# else. The body reaches the script through the environment, never the shell.
+#
+# The script comes from the BASE when the base has one, never from the tree
+# under test: a pull request must not judge itself with its own copy. The
+# bootstrap exception is a base that predates this gate - this gate's own
+# first pull request included - where the head's copy runs instead, which is
+# also what lets the gate prove itself on the change that introduces it.
+# The base checkout is full-depth so the script's `base...HEAD` diff can
+# resolve the base inside the head repository.
+#
+# The base is resolved live (the branch, then its tip inside the run), not
+# from the event payload's base.sha: that sha is stale on an `edited` event
+# fired after the base moved, so a pull request whose head predates this
+# gate got a pre-gate base checkout, no script copy, and a MODULE_NOT_FOUND
+# instead of a verdict (opensro#2699, runs 42186615553 / 42188233841).
+name: old-tab
+
+on:
+  pull_request:
+    types: [ opened, edited, reopened, synchronize ]
+
+concurrency:
+  group: old-tab-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  old-tab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the pull request head (the sources under test)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check out the base gate script (the script under trust)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          sparse-checkout: scripts/checks
+          path: base-gate
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Changes an old tab could notice are declared
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ -f base-gate/scripts/checks/check_old_tab.mjs ]; then
+            cp base-gate/scripts/checks/check_old_tab.mjs scripts/checks/check_old_tab.mjs
+          fi
+          PR_BASE_SHA=$(git -C base-gate rev-parse HEAD)
+          git fetch --no-tags ./base-gate "$PR_BASE_SHA"
+          PR_BASE_SHA="$PR_BASE_SHA" node scripts/checks/check_old_tab.mjs

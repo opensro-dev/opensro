@@ -12,7 +12,8 @@ combat.FenceShare and combat.QuotaShare own the arithmetic.
 
 The moved shares register on a queued area context the attacker's manager
 drains (the reference server's area-effect queue), so each taker receives its share as
-the attacker's hit, published as a pulse result like returned damage.
+the attacker's hit, published as a deferred damage tick: a victim label
+with no hit reaction, the HP itself riding the vitals refresh.
 INFERENCE: a moved share does not run its taker's own links again; the
 queued context is not a hit outcome, as damagereturn.go reasons for dmgr.
 
@@ -125,15 +126,32 @@ func (rt *Runtime) shareLinkedDamageInDoor(s playerStrike, formula combat.Result
 
 /*
 ================
+struckTicks
+
+The share's committed damage as deferred ticks, one per struck impact.
+================
+*/
+func struckTicks(struck playerStruck) []uint32 {
+	var ticks []uint32
+	for _, impact := range struck.impacts {
+		if impact.Damage != 0 {
+			ticks = append(ticks, impact.Damage)
+		}
+	}
+	return ticks
+}
+
+/*
+================
 strikeLinkedShares
 
 After the victim's door: each moved share lands on its taker as the
 attacker's hit (source, skill), through the shared player strike with the
-taker's own links off, and is published as a pulse result with the
-taker's own struck frames.
+taker's own links off, and is published as a deferred damage tick with
+the taker's own struck frames.
 ================
 */
-func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64) OpResult {
+func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer deathKiller, skill enterworld.SkillRow, moves []linkedMove, now int64, doors characterDoors) OpResult {
 	var result OpResult
 	for _, move := range moves {
 		taker := rt.findCharacterByGid(division, move.gid)
@@ -150,7 +168,7 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 			continue
 		}
 		var struck playerStruck
-		if !rt.deps.Update(taker, "linked-damage-share", func() bool {
+		if !doors.update(taker, "linked-damage-share", func() bool {
 			if taker.DeletePending || !enterworld.CharacterAlive(taker) {
 				return false
 			}
@@ -163,10 +181,21 @@ func (rt *Runtime) strikeLinkedShares(division string, source uint32, killer dea
 			rt.bindResidentRegion(simulation.WorldKey(division, taker.Name), now)
 		}
 		public, private := rt.playerStruckFrames(division, taker, struck, now)
-		pulse := wire.SkillPulseFrame(source, skill.ID, []wire.SkillAreaTarget{
-			{GID: move.gid, Impacts: struck.impacts},
-		})
-		result.Broadcast = append(append(result.Broadcast, pulse), public...)
+		// The reference server publishes the landed share as a deferred
+		// damage tick, not as the attacker's cast result: the taker shows
+		// the tick number without a hit reaction, and its HP reaches
+		// observers on the vitals refresh, never on the tick itself. A
+		// killing share sets the tick's death byte, and the life frames
+		// in public (the zero baseline, then the dead state) ride this
+		// same broadcast after it, so observers commit the number and
+		// the death together.
+		if ticks := struckTicks(struck); len(ticks) != 0 {
+			result.Broadcast = append(result.Broadcast,
+				wire.SkillDamageTickFrame(source, struck.fatal, move.gid, ticks),
+				wire.Frame{Opcode: simulation.OpVitalsUpdate,
+					Payload: simulation.VitalsRefreshWithSourcePayload(move.gid, simulation.VitalsSourceCombatDamage, rt.publishedVitals(division, taker))})
+		}
+		result.Broadcast = append(result.Broadcast, public...)
 		if len(private) != 0 {
 			result.Recipients = append(result.Recipients, RecipientFrames{CharacterID: taker.ID, Frames: private})
 		}

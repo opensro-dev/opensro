@@ -18,7 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 )
 
 /*
@@ -86,7 +86,7 @@ feather branch pays scrolls for 200 feathers.
 ================
 */
 func TestRahidTwoOfferForksIntoFeathersOrWaiting(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidChainFixture(t, "QNO_RM_OLDWOMAN_2")
 	row, offered := npcRow(rt, c, def.Codename, def.StartNpcCodename)
 	if !offered || len(row.Branches) != 2 || row.Branches[1].ReplySymbol != "SN_TALK_QNO_RM_OLDWOMAN_2_06" {
@@ -124,7 +124,7 @@ then completes with _15 for no reward.
 ================
 */
 func TestRahidTwoWaitingBranchCountsOnlineMinutes(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidChainFixture(t, "QNO_RM_OLDWOMAN_2")
 	if _, err := rt.StartQuest(c, branchToken(def.Codename, 1)); err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ are done, which announce _13; then Bukhra's _11 completes.
 ================
 */
 func TestRahidThreeAskAhmokThenReportToBukhra(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidChainFixture(t, "QNO_RM_OLDWOMAN_3")
 	result, err := rt.StartQuest(c, def.Codename)
 	if err != nil || !hasNotice(result.Frames, "SN_TALK_QNO_RM_OLDWOMAN_3_12") {
@@ -220,7 +220,7 @@ Shiphr's _09 completes.
 ================
 */
 func TestRahidFourSlavesAnswerShiphrCompletes(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, def := rahidChainFixture(t, "QNO_RM_OLDWOMAN_4")
 	result, err := rt.StartQuest(c, def.Codename)
 	if err != nil || !hasNotice(result.Frames, "SN_TALK_QNO_RM_OLDWOMAN_4_10") {

@@ -1,6 +1,7 @@
 # Files over 1000 lines once formatted to dprint.json, each as `path # reason`: debt waiting for a split,
 # or an exemption whose reason says why no responsibility boundary exists. This ledger may only shrink:
 # split a file (or let it fall under the limit), then delete its line. See scripts/checks/check_source_file_size.mjs.
+apps/client-next/src/engine/contracts/gameplay.ts # one command and event contract the UI and worker share; a split would divide the union
 apps/client-next/src/engine/foundation/navigation/clipper.ts # one movement-clipper owner: installed region grids, object placements, the event registry and every clip query read the same install-sequence state, and the worker and main-thread instances must answer identically, so the algorithm stays in one file
 apps/client-next/src/engine/foundation/ui/pet-design-data.ts # generated from the server's petdesign.json by pet_design_export.py (check:pet-design); skill, gear and affix IDs form one matched client/server design contract
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts # not yet analysed; split on its responsibility boundaries when formatted
@@ -14,9 +15,13 @@ apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchron
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/runtime.ts # one frame/lifetime orchestrator; extracted diagnostics owner is separate, but splitting the sealed frame order would obscure its lifecycle
 apps/client-next/src/engine/runtime/simulation/worker/session/world/entities/entities.ts # one transactional entity packet dispatcher owns spawn, movement, visibility and retirement state
+apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts # one session combat owner: cast lifecycle, pulse and tick result lanes and the vitals feed share one ordered receive dispatch; the decoders it calls are separate owners
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts # synchronous composition of gameplay owners; command admission, packet commits and snapshot publication share one frame transaction
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts # one owner of the slot map and the single pending item transaction that moves, uses, trades, buybacks and COS transfers share (native replies carry no transaction ID); alchemy and Magic Pop are already child owners
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts # one owner of the local walk: prediction, receipts, corrections and the cast hold read and write the same pose, segment and walk state
+apps/client-next/src/engine/runtime/simulation/worker/network/network.ts # one link owner: WebSocket and WebTransport lifecycles, framing, acks and close facts share one connection state
+apps/client-next/src/engine/runtime/simulation/worker/session/session.ts # one session owner: login and character commands, the native refusal ingest and the world-entry handoff share one state machine; the blocked refusal's strings (#2271) ride the same publish as its status, and no responsibility boundary runs inside the login answer handling
+apps/client-next/src/engine/runtime/simulation/worker/session/world/world.ts # one world-session owner: entry, the retry ladder, reference loading and the bind share each attempt's deadline, epoch and failure state; the #2311 failure evidence is read at the same attempt boundary, so no responsibility boundary runs inside the file
 apps/client-next/src/engine/runtime/ui/ui.ts # one closure holds state, input and rendering for every window; split per window
 apps/client-next/tests/runtime/character-animation-audio.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/character-effects.test.mjs # test file; split by feature
@@ -26,7 +31,9 @@ apps/client-next/tests/runtime/gameplay.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/ui-behavior.test.mjs # test file covering every window; split per window
 apps/client-next/tests/runtime/world-renderer.test.mjs # test file; split by feature
 apps/client-next/tests/runtime/world.test.mjs # test file; split by feature
+apps/client-next/tests/runtime/session.test.mjs # test file; split by feature
 apps/server/internal/game/quest/runtime.go # one quest-runtime owner: definition lookup, acceptance, NPC option projection and the reward transaction share the character door and the active-quest list; the per-programme composition rows (acceptance grants, grant-day stamps, offer and re-grant hooks) join their programmes here, with no responsibility boundary inside the transaction owner
+apps/server/internal/game/world/simulation/monstertick.go # one leg orchestrator: scope visibility, the activity gate, batch dispatch and publication share the leg's ordered phases and its stats record; the batch-release defer (#2030) has no responsibility boundary to split on
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
 
 apps/client-next/src/engine/runtime/renderer/renderer.ts # GPU lifetime and ordered frame closure share one cohesive owner; splitting requires new mutable state plumbing.

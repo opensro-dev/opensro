@@ -98,7 +98,7 @@ func TestAstralRequiresMoreImmortalChargesAndEnforcesCapacity(t *testing.T) {
 	r := c.Items["stone"]
 	r.Descriptions[0] = "MATTR_ASTRAL"
 	c.Items["stone"] = r
-	if _, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t)); !errors.Is(e, Refusal(0x24)) {
+	if _, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(e, Refusal(0x24)) {
 		t.Fatalf("astral without immortal %v", e)
 	}
 	items[0].MagicOptions = []uint64{1<<32 | 2}
@@ -111,7 +111,7 @@ func TestAstralRequiresMoreImmortalChargesAndEnforcesCapacity(t *testing.T) {
 	}
 	items = result.Items
 	items = append(items, inventory.Item{Slot: 14, RefObjID: r.ID, Codename: r.Name, TypeFlags: r.Flags, Quantity: 1})
-	if _, e = c.Stone(items, []uint8{13, 14}, true, 0, sequence(t)); !errors.Is(e, Refusal(0x24)) {
+	if _, e = c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(e, Refusal(0x24)) {
 		t.Fatalf("astral exceeded immortal count: %v", e)
 	}
 }
@@ -146,22 +146,123 @@ func TestStackedStoneSpendsOneAndKeepsItsValue(t *testing.T) {
 ================
 TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode
 
-The native server refuses an attribute stone of another degree with
-0x5421 and a magic stone with 0x540F; both keep the stone.
+The native server refuses an attribute stone of another degree before
+the roll with 0x5421 (its target check) and keeps the stone. A magic
+stone's 0x540F degree gate runs after the roll: a passed roll is
+refused and keeps the stone, a failed roll consumes the stone and
+answers as a plain failure.
 ================
 */
 func TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode(t *testing.T) {
-	for _, want := range []struct {
-		magic bool
-		code  uint8
-	}{{false, 0x21}, {true, 0x0f}} {
-		c, items := stoneFixture(want.magic)
-		r := c.Items["stone"]
-		r.Params[0] = 2
-		c.Items["stone"] = r
-		_, e := c.Stone(items, []uint8{13, 14}, want.magic, 0, sequence(t))
-		if !errors.Is(e, Refusal(want.code)) {
-			t.Fatalf("magic %v: %v, want refusal %#x", want.magic, e, want.code)
+	c, items := stoneFixture(false)
+	r := c.Items["stone"]
+	r.Params[0] = 2
+	c.Items["stone"] = r
+	if _, e := c.Stone(items, []uint8{13, 14}, false, 0, sequence(t)); !errors.Is(e, Refusal(0x21)) {
+		t.Fatalf("attribute degree: %v, want refusal %#x", e, 0x21)
+	}
+
+	c, items = stoneFixture(true)
+	r = c.Items["stone"]
+	r.Params[0] = 2
+	c.Items["stone"] = r
+	// The degree-2 option row exists, so a passed roll reaches the
+	// degree gate rather than the unknown-option answer.
+	c.Magic[14] = Magic{ID: 14, Name: "MATTR_STR", Degree: 2, Tag: 0x737472, Categories: []string{"weapon"}}
+	if _, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(e, Refusal(stoneErrMagicDegree)) {
+		t.Fatalf("magic degree, passed roll: %v, want refusal %#x", e, stoneErrMagicDegree)
+	}
+	result, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 51))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if result.Success || len(result.Items) != 1 {
+		t.Fatalf("magic degree, failed roll: %+v, want the stone consumed as a plain failure", result)
+	}
+}
+
+/*
+================
+TestMagicStoneGatesRunAfterTheRoll
+
+Native order: the roll comes first, so a magic
+stone on an item a gate would refuse is consumed by a failed roll and
+answered as a plain failure; only a passed roll reaches the gates, in
+native order, and keeps the stone. Every gate is exercised both ways,
+under both assimilation settings.
+================
+*/
+func TestMagicStoneGatesRunAfterTheRoll(t *testing.T) {
+	stoneDesc := func(name string) func(*Catalog, []inventory.Item) []inventory.Item {
+		return func(c *Catalog, items []inventory.Item) []inventory.Item {
+			r := c.Items["stone"]
+			r.Descriptions[0] = name
+			c.Items["stone"] = r
+			return items
+		}
+	}
+	options := func(values ...uint64) func(*Catalog, []inventory.Item) []inventory.Item {
+		return func(c *Catalog, items []inventory.Item) []inventory.Item {
+			items[0].MagicOptions = values
+			return items
+		}
+	}
+	gates := []struct {
+		name  string
+		setup func(*Catalog, []inventory.Item) []inventory.Item
+		want  Refusal
+	}{
+		{"option count above the limit", options(
+			1<<32|11, 1<<32|11, 1<<32|11, 1<<32|11, 1<<32|11,
+			1<<32|11, 1<<32|11, 1<<32|11, 1<<32|11, 1<<32|11,
+		), Refusal(2)},
+		{"option not in the ref table", stoneDesc("MATTR_MISSING"), Refusal(2)},
+		{"stone degree differs", func(c *Catalog, items []inventory.Item) []inventory.Item {
+			r := c.Items["stone"]
+			r.Params[0] = 2
+			c.Items["stone"] = r
+			c.Magic[14] = Magic{ID: 14, Name: "MATTR_STR", Degree: 2, Tag: 0x737472, Categories: []string{"weapon"}}
+			return items
+		}, Refusal(stoneErrMagicDegree)},
+		{"option not assigned to the item", func(c *Catalog, items []inventory.Item) []inventory.Item {
+			c.Magic[15] = Magic{ID: 15, Name: "MATTR_SHIELD", Degree: 1, Tag: 0x73686965, Categories: []string{"shield"}}
+			return stoneDesc("MATTR_SHIELD")(c, items)
+		}, Refusal(9)},
+		{"repair option absent", func(c *Catalog, items []inventory.Item) []inventory.Item {
+			c.Magic[16] = Magic{ID: 16, Name: "MATTR_REPAIR", Degree: 1, Tag: 0x726570, Categories: []string{"weapon"}}
+			return stoneDesc("MATTR_REPAIR")(c, items)
+		}, Refusal(0x25)},
+		{"astral without more immortal", stoneDesc("MATTR_ASTRAL"), Refusal(0x24)},
+		{"value at its cap", func(c *Catalog, items []inventory.Item) []inventory.Item {
+			items = options(7<<32|2, 6<<32|12)(c, items)
+			return stoneDesc("MATTR_ASTRAL")(c, items)
+		}, Refusal(0x22)},
+		{"new option on a full item", options(
+			1<<32|2, 1<<32|2, 1<<32|2, 1<<32|2, 1<<32|2,
+			1<<32|2, 1<<32|2, 1<<32|2, 1<<32|2,
+		), Refusal(2)},
+	}
+	for _, noAssimilation := range []bool{false, true} {
+		for _, gate := range gates {
+			c, items := stoneFixture(true)
+			c.NoAssimilation = noAssimilation
+			items = gate.setup(c, items)
+			if _, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 0)); !errors.Is(e, gate.want) {
+				t.Fatalf(
+					"%s (noAssimilation %v): passed roll %v, want refusal %#x",
+					gate.name, noAssimilation, e, uint8(gate.want),
+				)
+			}
+			result, e := c.Stone(items, []uint8{13, 14}, true, 0, sequence(t, 51))
+			if e != nil {
+				t.Fatalf("%s (noAssimilation %v): failed roll error %v", gate.name, noAssimilation, e)
+			}
+			if result.Success || len(result.Items) != 1 {
+				t.Fatalf(
+					"%s (noAssimilation %v): failed roll %+v, want the stone consumed as a plain failure",
+					gate.name, noAssimilation, result,
+				)
+			}
 		}
 	}
 }

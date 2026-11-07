@@ -42,6 +42,9 @@ const NET_JOURNAL_RECORDS = 4096;
 // QUIC path that stalls pre-WELCOME never silently holds a login.
 const WT_CONNECT_DEADLINE_MS = 3000;
 const WT_WELCOME_DEADLINE_MS = 10000;
+// The EnterWorld answer's opcode: the one frame that proves an entry
+// presented on a link was answered on it (#2632).
+const ENTER_WORLD_RESULT_OPCODE = 7;
 // The serverCertificateHashes pinning window: the browser pins only
 // certificates valid for at most 14 days (apps/server certs.go), which
 // is exactly the development certificate; a public one is used plainly.
@@ -67,8 +70,27 @@ interface Link {
 // The stream position is acknowledged at most this often (#1466): the
 // server keeps every unacknowledged ordered frame for a resume.
 const STREAM_ACK_INTERVAL_MS = 1000;
+// A counted frame at least this large is acknowledged at once, without
+// the interval above (port-only transport choice, not native
+// behaviour): a quarter of the server's 4 MiB unacknowledged window
+// (streamRingMaxBytes in the server's stream ring). A frame that big -
+// the EnterWorld result is the one that matters - leaves so little of
+// the window that the burst queued behind it parks the server's writer
+// until the frame is acked, so its ack must not wait out the rest of
+// the interval plus a round trip (#2338). Frames this large do not
+// occur in normal play, so the one-second cadence there is unchanged.
+const STREAM_ACK_LARGE_FRAME_BYTES = 1 << 20;
 // A server close reason is free text; the report keeps a short, plain copy.
 const CLOSE_REASON_LENGTH = 64;
+// The WebSocket normal-closure code: with a clean close it is the one
+// goodbye the browser proves (GH #2148) - the peer closed politely and
+// said so, as opposed to a drop the client only notices by silence.
+const WS_NORMAL_CLOSE_CODE = 1000;
+// The WebTransport application close code the server ends a session
+// with (conn_wt.go CloseWithError(0, ...)): the QUIC link's polite
+// goodbye, the WT counterpart of the socket's clean 1000 above. The
+// session's closed promise resolves with it; an abrupt end rejects.
+const WT_CLEAN_CLOSE_CODE = 0;
 
 /*
 ================
@@ -78,6 +100,7 @@ What the browser knows when a socket goes away (GH #1428).
 ================
 */
 export interface CloseFacts {
+	readonly transport: string;
 	readonly code: number;
 	readonly reason: string;
 	readonly wasClean: boolean;
@@ -91,18 +114,20 @@ export interface CloseFacts {
 ================
 closeDetail
 
-One line for the incident report: the WebSocket close code and reason,
+One line for the incident report: the link's close code and reason,
 whether the close was clean, whether an error event preceded it, how long
-since the last inbound frame and how long the socket was open, and the
+since the last inbound frame and how long the link was open, and the
 browser's online flag. 1006 with a long silence reads as a network drop;
-a clean server code with a reason reads as a server close.
+a clean server code with a reason reads as a server close. A WebTransport
+session that errored arrives as code -1, its "error event" the rejection
+itself (GH #2148).
 ================
 */
 export function closeDetail( facts: CloseFacts ): string {
 	const seconds = ( ms: number ) => (ms / 1000).toFixed( 1 ) + " s";
 	const reason = facts.reason.replace( /[^\x20-\x7e]/g, "?" ).slice( 0, CLOSE_REASON_LENGTH );
 	return [
-		"WebSocket " + facts.code + (reason ? ' "' + reason + '"' : ""),
+		facts.transport + " " + facts.code + (reason ? ' "' + reason + '"' : ""),
 		facts.wasClean ? "clean" : "not clean",
 		...(facts.errored ? [ "after an error event" ] : []),
 		facts.sinceLastFrameMs === null ?
@@ -111,6 +136,45 @@ export function closeDetail( facts: CloseFacts ): string {
 		facts.openForMs === null ? "never opened" : "open " + seconds( facts.openForMs ),
 		facts.online ? "online" : "offline"
 	].join( ", " );
+}
+
+/*
+================
+isOutOfMemoryFailure
+
+Engines refuse an allocation in two shapes: a RangeError naming memory
+("Array buffer allocation failed"), or a bare thrown string. The incident
+in #2299 read "out of memory" with no error-class prefix, so it was the
+string, and the test reads the stringified value to catch both. The
+refusal is not the applying packet's fault: the heap was already at its
+limit when an ordinary packet applied, so it classifies apart from
+packet_application_failed and tells the player the one remedy.
+================
+*/
+export function isOutOfMemoryFailure( error: unknown ): boolean {
+	return /^(RangeError: )?(out of memory|array buffer allocation failed)/i.test( String( error ) );
+}
+
+/*
+================
+outOfMemoryFailure
+
+The failure an out-of-memory refusal reports, or null when the error is
+not one. Every catch that can meet the refusal - packet application, the
+receive path, a world step - asks here, so the code that routes the
+incident to "runtime" and the reload remedy (the only fix a player has)
+live once. The refusal says nothing about the work in flight, so no
+catch may let it wear that work's classification.
+================
+*/
+export function outOfMemoryFailure( error: unknown ): NetworkFailure | null {
+	if ( !isOutOfMemoryFailure( error ) ) return null;
+	return {
+		category: "software",
+		code: "out_of_memory",
+		message: "The game ran out of memory. Please reload the page to keep playing.",
+		stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+	};
 }
 
 /*
@@ -132,6 +196,17 @@ export function createNetwork(
 	// Remembered with wtFailed for the session; each socket takeover
 	// copies it into transportFallback so the report names the attempt.
 	let wtFailReason = 0;
+	// The entry the current link presented (enterWorld) and whether its
+	// answer came back on the same link. A WebTransport link that ends
+	// with an entry still unanswered - the session died on its own, or
+	// the world session's stall deadline tore it down - has indicted
+	// the QUIC path exactly as a pre-WELCOME death does (#2632): the
+	// retry must ride the socket, not present the next admission to
+	// the same stalled path until the character-select fallback.
+	let entryPresented = false, entryAnswered = false;
+	// The current link is the WebTransport one; set where each link is
+	// installed, cleared with the entry state in disconnect.
+	let linkIsWebTransport = false;
 	// The connect in flight: endpoint and hello for the socket fallback,
 	// and whether that fallback already ran. It runs at most once - see
 	// wtClosed - so an admission is never presented a third time.
@@ -142,11 +217,18 @@ export function createNetwork(
 	let measuredPing: number | null = null;
 	// Frames received on any socket (received()); pings and pongs included.
 	let receivedFrames = 0;
+	// Inbound bytes received on any link (receivedBytes()), counted as
+	// they arrive: a frame still being reassembled moves this long
+	// before receivedFrames can.
+	let receivedByteCount = 0;
 	// The stream position (#1466): frames above the session-internal range
 	// the consumer has applied, counted at drain - never at receipt, so a
 	// frame lost with a dying socket's inbox is re-sent on resume. It
 	// survives a resume and restarts on a fresh WELCOME.
 	let streamPosition = 0, ackedPosition = 0, ackSentAt = -Infinity;
+	// A large counted frame (STREAM_ACK_LARGE_FRAME_BYTES) was applied
+	// since the last ack: the next acknowledge() skips the interval.
+	let largeFrameUnacked = false;
 	// Why this connect is not on the fastest transport (#1449), reported
 	// once after each WELCOME (codec.transportReport). 0 = no fallback on
 	// this connect. The WebTransport-first connect path sets it before
@@ -159,7 +241,13 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
-	// The current socket's open and last-inbound times (performance.now());
+	// The server's session id from the latest WELCOME (transportSessionId()).
+	// It survives the link's end on purpose: the failure it ends in is
+	// reported after disconnect() ran, and names this session so the
+	// incident joins the transport's log lines (#2558). The next
+	// WELCOME replaces it; a resume keeps the same server session.
+	let transportSession: string | undefined;
+	// The current link's open and last-inbound times (performance.now());
 	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
 	let openedAt = -Infinity, receivedAt = -Infinity;
 	/*
@@ -200,6 +288,16 @@ export function createNetwork(
 	================
 	*/
 	function disconnect() {
+		// An unanswered entry ends the WebTransport path's credit for
+		// the session (see entryPresented): whatever tore the link
+		// down, the next connect goes straight to the socket.
+		if ( linkIsWebTransport && welcomed && entryPresented && !entryAnswered ) {
+			wtFailed = true;
+			if ( !wtFailReason ) wtFailReason = 4;
+		}
+		entryPresented = false;
+		entryAnswered = false;
+		linkIsWebTransport = false;
 		epoch++;
 		welcomed = false;
 		pendingPing = false;
@@ -213,6 +311,7 @@ export function createNetwork(
 		clearWelcomeDeadline();
 		ackedPosition = 0;
 		ackSentAt = -Infinity;
+		largeFrameUnacked = false;
 		const previous = link;
 		link = null;
 		previous?.close();
@@ -233,15 +332,20 @@ export function createNetwork(
 	acknowledge
 
 	Tells the server how far the stream has been applied, about once a
-	second and only when it moved.
+	second and only when it moved. A large applied frame
+	(STREAM_ACK_LARGE_FRAME_BYTES) is told at once: the server's writer
+	is parked behind it, so waiting out the interval would stall the
+	burst that follows it.
 	================
 	*/
 	function acknowledge() {
 		if ( !welcomed || !link || link.state !== "open" ) return;
 		const now = performance.now();
-		if ( streamPosition === ackedPosition || now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
+		if ( streamPosition === ackedPosition ) return;
+		if ( !largeFrameUnacked && now - ackSentAt < STREAM_ACK_INTERVAL_MS ) return;
 		ackedPosition = streamPosition;
 		ackSentAt = now;
+		largeFrameUnacked = false;
 		send( codec.streamAck( streamPosition ) );
 	}
 	/*
@@ -315,6 +419,7 @@ export function createNetwork(
 			receivedAt = performance.now();
 			const frame = codec.decode( data );
 			receivedFrames++;
+			if ( frame.opcode === ENTER_WORLD_RESULT_OPCODE ) entryAnswered = true;
 			note( NET_JOURNAL_IN, frame.opcode, data.byteLength );
 			if ( frame.opcode === 5 ) {
 				if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );
@@ -348,7 +453,12 @@ export function createNetwork(
 				if ( frame.opcode !== 2 ) {
 					throw new Error( "Expected transport welcome" );
 				}
-				if ( !codec.welcome( frame.payload ).resumed ) streamPosition = 0;
+				const welcome = codec.welcome( frame.payload );
+				if ( !welcome.resumed ) {
+					streamPosition = 0;
+					largeFrameUnacked = false;
+				}
+				transportSession = welcome.sessionId.toString();
 				welcomed = true;
 				clearWelcomeDeadline();
 				send( codec.transportReport( transportFallback ) );
@@ -383,7 +493,10 @@ export function createNetwork(
 			inbox.push( frame );
 			bytes += data.byteLength;
 		} catch ( error ) {
-			fail( String( error ) );
+			// A decode-side failure with no frame to blame keeps the
+			// transport default, unless the engine refused an allocation
+			// on the way in - that is memory, not protocol.
+			fail( String( error ), undefined, outOfMemoryFailure( error ) ?? undefined );
 		}
 	}
 	/*
@@ -416,6 +529,7 @@ export function createNetwork(
 			}
 		};
 		link = mine;
+		linkIsWebTransport = false;
 		const active = () => !disposed && generation === epoch && link === mine;
 		// An error event is always followed by a close event (WebSocket
 		// close steps), which alone carries the code: report at the close.
@@ -439,6 +553,7 @@ export function createNetwork(
 				fail( String( new Error( "Non-binary transport frame" ) ) );
 				return;
 			}
+			receivedByteCount += event.data.byteLength;
 			receiveBytes( new Uint8Array( event.data ) );
 		};
 		current.onerror = () => {
@@ -448,6 +563,7 @@ export function createNetwork(
 			if ( !active() ) return;
 			const now = performance.now();
 			const detail = closeDetail( {
+				transport: "WebSocket",
 				code: event.code,
 				reason: event.reason,
 				wasClean: event.wasClean,
@@ -465,10 +581,17 @@ export function createNetwork(
 				} );
 				return;
 			}
+			// A clean normal close is a goodbye, not a loss: the session
+			// ends as expected (no incident), and the player is told the
+			// session ended rather than that the cause is unknown. Every
+			// other close keeps the one code; the detail line names its
+			// cause (silence, never opened, offline) from the journal
+			// facts above (GH #2148).
+			const goodbye = event.wasClean && event.code === WS_NORMAL_CLOSE_CODE;
 			end( "Transport connection closed", {
-				category: "unknown",
+				category: goodbye ? "expected" : "unknown",
 				code: "connection_closed",
-				message: "Connection lost. The cause is unknown.",
+				message: goodbye ? "Your session ended." : "Connection lost. The cause is unknown.",
 				detail
 			} );
 		};
@@ -588,16 +711,41 @@ export function createNetwork(
 	the socket also dies before the WELCOME (a ticket the server did
 	consume under a WELCOME the client never saw is refused), the
 	socket's own failure paths report it and the session's retry mints a
-	fresh admission; the ticket is never presented a third time.
+	fresh admission; the ticket is never presented a third time. After the
+	WELCOME the end reports with the socket's one fact line (closeDetail):
+	the WT close was the one incident class that named no cause, so a silent
+	drop and a server close filed alike (GH #2148).
 	================
 	*/
-	function wtClosed( generation: number, mine: Link ) {
+	function wtClosed( generation: number, mine: Link, closeCode?: number, closeReason?: string ) {
 		if ( disposed || generation !== epoch || link !== mine ) return;
 		if ( welcomed ) {
+			// Only the session's closed settlement knows how the link
+			// ended; a stream or write trigger that beats it here waits
+			// for that call (the promise always settles, and its handler
+			// calls back in with the code). A resolved code 0 is the
+			// server's polite close - a goodbye, not a loss, exactly as
+			// the socket's clean 1000 (GH #2148). A rejection arrives as
+			// -1 and stays unknown, as does any other code.
+			if ( closeCode === undefined ) return;
+			const goodbye = closeCode === WT_CLEAN_CLOSE_CODE;
+			const now = performance.now();
 			end( "Transport connection closed", {
-				category: "unknown",
+				category: goodbye ? "expected" : "unknown",
 				code: "connection_closed",
-				message: "Connection lost. The cause is unknown."
+				message: goodbye ? "Your session ended." : "Connection lost. The cause is unknown.",
+				detail: closeDetail( {
+					transport: "WebTransport",
+					code: closeCode,
+					reason: closeReason ?? "",
+					// A settled close is the peer's close capsule, clean whatever
+					// its code; only the rejection (-1) is an abrupt end.
+					wasClean: closeCode !== -1,
+					errored: closeCode === -1,
+					sinceLastFrameMs: Number.isFinite( receivedAt ) ? now - receivedAt : null,
+					openForMs: Number.isFinite( openedAt ) ? now - openedAt : null,
+					online: globalThis.navigator?.onLine ?? true
+				} )
 			} );
 			return;
 		}
@@ -644,6 +792,13 @@ export function createNetwork(
 				const { done, value } = await reader.read();
 				if ( done ) break;
 				if ( !value?.byteLength ) continue;
+				// Bytes prove the link is delivering while a record is
+				// still being reassembled: the 0x0007 answer is one
+				// ~1 MB record, invisible to receivedFrames until its
+				// last byte lands (#2311).
+				if ( !disposed && generation === epoch && link === mine ) {
+					receivedByteCount += value.byteLength;
+				}
 				const merged = new Uint8Array( pending.byteLength + value.byteLength );
 				merged.set( pending );
 				merged.set( value, pending.byteLength );
@@ -717,7 +872,9 @@ export function createNetwork(
 						},
 						() => {
 							bufferedBytes -= framed.byteLength;
-							wtClosed( generation, mine );
+							// A write the stream refuses is a broken
+							// link, not an ending still to classify.
+							wtClosed( generation, mine, -1 );
 						}
 					);
 				},
@@ -729,9 +886,23 @@ export function createNetwork(
 				}
 			};
 			link = mine;
+			linkIsWebTransport = true;
+			// The one open stamp (see openedAt): the socket resets it per
+			// attempt, and a WT close guards on this link being current,
+			// so a stale stamp is never read (GH #2148).
+			openedAt = performance.now();
 			session.closed.then(
-				() => wtClosed( generation, mine ),
-				() => wtClosed( generation, mine )
+				// The close reason: the spec and browsers name it
+				// closeReason, the pinned DOM types name it reason -
+				// take either (GH #2148).
+				info =>
+					wtClosed(
+						generation,
+						mine,
+						info.closeCode,
+						(info as { closeReason?: string; }).closeReason ?? info.reason
+					),
+				() => wtClosed( generation, mine, -1 )
 			);
 			void wtPump( reader, generation, mine );
 			send( hello );
@@ -763,6 +934,19 @@ export function createNetwork(
 		},
 		/*
 		================
+		receivedBytes
+
+		Every inbound byte so far, counted as it arrives: a record still
+		being reassembled (the ~1 MB 0x0007 answer) moves this long
+		before received() can, so the stall detector reads a link that
+		is still streaming as alive (#2311).
+		================
+		*/
+		receivedBytes() {
+			return receivedByteCount;
+		},
+		/*
+		================
 		receivedAt
 
 		The last-inbound time on the event clock, stamped in onmessage
@@ -772,6 +956,18 @@ export function createNetwork(
 		*/
 		receivedAt() {
 			return receivedAt;
+		},
+		/*
+		================
+		transportSessionId
+
+		The server's session id from the latest WELCOME (#2558), kept
+		past the link's end so a failure report can name the session
+		the transport's log lines carry.
+		================
+		*/
+		transportSessionId() {
+			return transportSession;
 		},
 		/*
   ================
@@ -797,6 +993,7 @@ export function createNetwork(
 		enterWorld( division, character, token ) {
 			if ( !welcomed ) throw new Error( "Transport handshake incomplete" );
 			send( codec.enterWorld( division, character, token ) );
+			entryPresented = true;
 		},
 		webTransport( enabled: boolean ) {
 			wtEnabled = enabled;
@@ -809,8 +1006,13 @@ export function createNetwork(
 			if ( endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:" ) {
 				throw new Error( "Invalid transport URL" );
 			}
-			// Without a resume token the server starts a fresh stream.
-			if ( !resume?.length ) streamPosition = 0;
+			// Without a resume token the server starts a fresh stream:
+			// the old session's id dies with its stream, so a failure
+			// before this connect's WELCOME cannot name it (#2558).
+			if ( !resume?.length ) {
+				streamPosition = 0;
+				transportSession = undefined;
+			}
 			const hello = codec.hello( admission, resume, streamPosition );
 			disconnect();
 			attempt = { endpoint, hello, fellBack: false };
@@ -877,7 +1079,10 @@ export function createNetwork(
 					current = inbox[index]!;
 					if ( consume( current ) === false ) break;
 					consumed++;
-					if ( current.opcode > MAX_RESERVED_OPCODE ) streamPosition = (streamPosition + 1) >>> 0;
+					if ( current.opcode > MAX_RESERVED_OPCODE ) {
+						streamPosition = (streamPosition + 1) >>> 0;
+						if ( current.payload.byteLength >= STREAM_ACK_LARGE_FRAME_BYTES ) largeFrameUnacked = true;
+					}
 					if ( epoch !== generation ) {
 						return;
 					}
@@ -887,14 +1092,18 @@ export function createNetwork(
 				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
 				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
-				fail( `Packet application failed: ${String( error )}`, current, {
-					category: "software",
-					code: unsupported ? "unsupported_feature" : "packet_application_failed",
-					message: unsupported ?
-						"An unsupported game operation interrupted your session." :
-						"A game error interrupted your session.",
-					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
-				} );
+				fail(
+					`Packet application failed: ${String( error )}`,
+					current,
+					outOfMemoryFailure( error ) ?? {
+						category: "software",
+						code: unsupported ? "unsupported_feature" : "packet_application_failed",
+						message: unsupported ?
+							"An unsupported game operation interrupted your session." :
+							"A game error interrupted your session.",
+						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+					}
+				);
 				return;
 			}
 			// Outside the consume try: a full outbound buffer is a transport

@@ -10,6 +10,10 @@ package action
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"unicode/utf16"
 
@@ -17,6 +21,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
+	"opensro.online/server/internal/game/social/chatlog"
 )
 
 /*
@@ -132,6 +137,136 @@ func TestGlobalChattingSuitedSenderUsesJobAlias(t *testing.T) {
 	rt.PlayerBannedGM(testDivision, c.Name)
 	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 0 {
 		t.Fatalf("feed after ban %+v", lines)
+	}
+}
+
+/*
+================
+moderationLine
+
+One moderation-log line as written on disk (the chatlog package's JSON
+contract), read back by the Global Chatting tests.
+================
+*/
+type moderationLine struct {
+	TS        string `json:"ts"`
+	Account   string `json:"account"`
+	Character string `json:"character"`
+	Channel   string `json:"channel"`
+	Muted     bool   `json:"muted"`
+	Text      string `json:"text"`
+}
+
+/*
+================
+moderationLines
+
+Every line the moderation log under dir holds (no file yet reads as none).
+================
+*/
+func moderationLines(t *testing.T, dir string) []moderationLine {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []moderationLine
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, raw := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			if raw == "" {
+				continue
+			}
+			var line moderationLine
+			if err := json.Unmarshal([]byte(raw), &line); err != nil {
+				t.Fatalf("moderation line %q is not the log's JSON: %v", raw, err)
+			}
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+/*
+================
+TestGlobalChattingRecordsTheLineOnlyOnceTheUseCommits
+
+The moderation record is a publication like the shard push and the
+website line beside it: it belongs to the use's post-commit step, so a
+door that rolls the use back leaves no line for a message nobody saw
+and an item nobody spent. A shadow-muted author's line is still kept,
+marked, once the use commits, and is still pushed nowhere.
+================
+*/
+func TestGlobalChattingRecordsTheLineOnlyOnceTheUseCommits(t *testing.T) {
+	for _, trial := range []struct {
+		muted  bool
+		commit bool
+	}{
+		{muted: false, commit: false},
+		{muted: false, commit: true},
+		{muted: true, commit: false},
+		{muted: true, commit: true},
+	} {
+		rt, c, ref := globalChatFixture(t)
+		rt.PublicChat = chatfeed.New()
+		dir := t.TempDir()
+		rt.ModerationLog = chatlog.Open(dir, 30)
+		pushed := false
+		rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushed = true }
+		if trial.muted {
+			rt.ChatShadowMuted = func(string) bool { return true }
+		}
+		row := -1
+		for i, r := range c.MissionInventory {
+			if r.Slot == 21 {
+				row = i
+			}
+		}
+		if row < 0 {
+			t.Fatal("the fixture lost its Global Chatting row")
+		}
+		units := utf16.Encode([]rune("Hello, Silk Road"))
+		tail := wire.NewWriter(2 + len(units)*2).U16(uint16(len(units)))
+		for _, u := range units {
+			tail.U16(u)
+		}
+		var result OpResult
+		var after func()
+		use := globalChatUse{division: testDivision, character: c, row: row,
+			request: wire.ItemUseRequest{Slot: 21, TypeWord: ref.TypeFlags()}}
+		if !rt.useGlobalChatting(use, tail.Payload(), &result, &after) {
+			t.Fatalf("muted %v: the use was refused", trial.muted)
+		}
+		if trial.commit && after != nil {
+			after()
+		}
+		rt.ModerationLog.Close()
+		lines := moderationLines(t, dir)
+		want := 0
+		if trial.commit {
+			want = 1
+		}
+		if len(lines) != want {
+			t.Fatalf("muted %v commit %v: %d moderation lines, want %d: %+v",
+				trial.muted, trial.commit, len(lines), want, lines)
+		}
+		if want == 1 {
+			line := lines[0]
+			if line.Channel != "global" || line.Character != c.Name || line.Text != "Hello, Silk Road" ||
+				line.Muted != trial.muted {
+				t.Fatalf("muted %v: recorded line %+v", trial.muted, line)
+			}
+		}
+		if pushed != (trial.commit && !trial.muted) {
+			t.Fatalf("muted %v commit %v: shard pushed %v", trial.muted, trial.commit, pushed)
+		}
 	}
 }
 

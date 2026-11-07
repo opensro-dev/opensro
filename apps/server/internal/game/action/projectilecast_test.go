@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -23,9 +24,19 @@ import (
 arrowFixture
 ================
 */
-func arrowFixture(t *testing.T) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+func arrowFixture(t testing.TB) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
 	t.Helper()
-	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	return arrowFixtureHP(t, 100000)
+}
+
+/*
+================
+arrowFixtureHP
+================
+*/
+func arrowFixtureHP(t testing.TB, monsterHP uint32) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+	t.Helper()
+	rt, clock, c, target := newCombatTestRuntime(t, monsterHP)
 	items := rt.deps.ItemReferences().(staticItemSource)
 	weapon := items[c.MissionInventory[0].Codename]
 	weapon.TypeIDs[3] = 6
@@ -54,7 +65,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	before, _ := rt.Monsters.Get(testDivision, target)
-	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+	start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 	if decision != skillCastAccepted || len(start.Frames) != 1 || len(start.Frames[0].Payload) != 19 || start.Frames[0].Payload[18] != 0 {
 		t.Fatalf("start must carry no premature damage: %+v", start)
 	}
@@ -71,7 +82,7 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	if enterworld.CurrentMP(c) != 100 || c.MissionInventory[1].StackCount != 2 || len(rt.criticals.actors) != 0 {
 		t.Fatal("preparation changed cost/history")
 	}
-	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+300); decision != skillCastDeferred {
+	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+300, rt.handlerDoors()); decision != skillCastDeferred {
 		t.Fatal("duplicate preparation accepted")
 	}
 	frames := rt.advanceProjectileCasts(now + 971)
@@ -110,6 +121,41 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 
 /*
 ================
+TestProjectileReleaseServesCasterStatsFromTheMemo
+
+#2139: a due release reads the caster's stats several times (admission
+on the cast copy, cost and vitals on the live record). Production
+catalogues carry source identities, so the first read memoises and the
+rest serve from the memo; a fixture whose catalogues lack an identity
+silently rebuilds the keeper projection on every read instead. After
+one release the plain call shape must hit on both records.
+================
+*/
+func TestProjectileReleaseServesCasterStatsFromTheMemo(t *testing.T) {
+	rt, c, target, skill, now := arrowFixture(t)
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
+	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors()); decision != skillCastAccepted {
+		t.Fatalf("arrow did not prepare: %v", decision)
+	}
+	if frames := rt.advanceProjectileCasts(now + 971); len(frames) != 2 {
+		t.Fatalf("release produced %d division frames, want 2", len(frames))
+	}
+	snapshot := rt.characterSnapshotCast(testDivision, c)
+	if snapshot == nil {
+		t.Fatal("no cast copy after release")
+	}
+	block := rt.playerAbnormal(testDivision, c.Name)
+	writes := rt.statModifierWrites(testDivision, snapshot)
+	if _, _, _, hit := combat.LookupMemoizedPlayerStats(snapshot, rt.statCatalogs(), writes, block); !hit {
+		t.Fatal("stats memo does not serve the cast copy after a release")
+	}
+	if _, _, _, hit := combat.LookupMemoizedPlayerStats(c, rt.statCatalogs(), writes, block); !hit {
+		t.Fatal("stats memo does not serve the live record after a release")
+	}
+}
+
+/*
+================
 TestCriticalArrowRefusalAndCancellationHaveNoCost
 ================
 */
@@ -124,7 +170,7 @@ func TestCriticalArrowRefusalAndCancellationHaveNoCost(t *testing.T) {
 			if branch == "wrong-ammo" {
 				rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[1].Codename].TypeIDs[3] = 2
 			}
-			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+			start, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 			if branch == "missing-ammo" || branch == "wrong-ammo" {
 				if decision != skillCastRefused || len(rt.pendingProjectileCasts) != 0 {
 					t.Fatal("bad ammunition admitted")
@@ -214,7 +260,7 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
 	for shot := int64(0); shot < 2; shot++ {
 		at := now + shot*5000
-		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, at)
+		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, at, rt.handlerDoors())
 		if decision != skillCastAccepted {
 			t.Fatal("repeat refused", shot)
 		}
@@ -236,7 +282,7 @@ func TestCriticalArrowRepeatedCastConsumesLastArrowOnlyOnce(t *testing.T) {
 			t.Fatal("empty ammunition socket retained")
 		}
 	}
-	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+10000)
+	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now+10000, rt.handlerDoors())
 	if decision != skillCastRefused || enterworld.CurrentMP(c) != 58 {
 		t.Fatal("empty quiver became a free cast")
 	}
@@ -251,7 +297,7 @@ func TestPreparedOffenseRejectedCooldownCommitPublishesNothing(t *testing.T) {
 	rt, c, target, skill, now := arrowFixture(t)
 	rt.deps.(*enterworld.Deps).UpdateCharacter = func(*enterworld.Character, string, func() bool) bool { return false }
 	before, _ := rt.Monsters.Get(testDivision, target)
-	r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now)
+	r, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now, rt.handlerDoors())
 	after, _ := rt.Monsters.Get(testDivision, target)
 	if decision != skillCastRefused || len(r.Broadcast) != 0 || rt.castTokenCounter != 0 || len(rt.pendingProjectileCasts) != 0 || len(c.OffensiveSkillCooldowns) != 0 || enterworld.CurrentMP(c) != 100 || c.MissionInventory[1].StackCount != 2 || after.CurrentHP != before.CurrentHP {
 		t.Fatal("failed cooldown commit published or changed combat", r)

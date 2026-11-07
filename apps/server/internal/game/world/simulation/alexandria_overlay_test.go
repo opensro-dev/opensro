@@ -17,7 +17,7 @@ import (
 
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/testsupport/alexandriatest"
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/tier"
 )
 
@@ -31,7 +31,7 @@ build over dir.
 */
 func alexandriaWorld(t *testing.T, dir string) []NpcDef {
 	t.Helper()
-	world, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
+	world, err := AppendTeleportGates(dir, sharedNpcWorldRoster(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,9 +47,9 @@ A variant whose added placement repeats the first native NPC.
 */
 func alexandriaFixture(t *testing.T) (alexandriatest.Fixture, []NpcDef) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	t.Setenv(alexandria.EnvAlexandria, "")
-	native := alexandriaWorld(t, licensed.RetailTextdataDir(t))
+	native := alexandriaWorld(t, clientdata.RetailTextdataDir(t))
 	if len(native) == 0 {
 		t.Skip("shipped NPC world data unavailable")
 	}

@@ -34,9 +34,19 @@ var (
 	errOutboundBurstTooLarge = errors.New("transport: outbound burst exceeds bounded queue capacity")
 	// errIdle detaches a connection that stopped answering keepalives.
 	errIdle = errors.New("transport: idle timeout")
+	// errRingParkBound detaches a session whose writer stayed parked on
+	// a full resume ring with no stream-ack progress past the park
+	// bound: the burst can neither advance nor be re-sent on this
+	// attachment, so the grace window and a resume take over (#2146).
+	errRingParkBound = errors.New("transport: writer parked on a full resume ring past its bound")
 	// errHandlerPanic closes a session whose game handler panicked; a
 	// sentinel so the close-reason metrics can classify it.
 	errHandlerPanic = errors.New("transport: handler panic")
+	// errSceneBootstrapStuck closes a session whose scene admission
+	// never enqueued its bootstrap (or refusal) within the entry bound:
+	// the entry lane is wedged, and retrying on a fresh session is the
+	// only way forward for the player.
+	errSceneBootstrapStuck = errors.New("transport: scene bootstrap not enqueued within the entry bound")
 )
 
 // Session is one logical client, surviving transport reconnects. Game
@@ -62,14 +72,37 @@ type Session struct {
 	// replace the reader while an old handler still owns a committed result.
 	dispatchMu sync.Mutex
 
-	mu              sync.Mutex
-	cond            *sync.Cond
-	conn            Conn // nil while detached
-	gen             int  // bumped on every attach; loops check it before acting
-	attached        bool
-	closed          bool
-	sceneRevision   uint64
-	sceneLoading    bool
+	mu            sync.Mutex
+	cond          *sync.Cond
+	conn          Conn // nil while detached
+	gen           int  // bumped on every attach; loops check it before acting
+	attached      bool
+	closed        bool
+	sceneRevision uint64
+	sceneLoading  bool
+	// sceneLoadingSince stamps the current admission's start; the
+	// keepalive watchdog measures the unenqueued window against it.
+	sceneLoadingSince time.Time
+	// sceneBootstrapEnqueued records that the current scene's bootstrap
+	// (or its refusal answer) reached the outbound queue. Reset by every
+	// BeginSceneAdmission; set by the reset-batch enqueue and by the
+	// enter lane's explicit mark after a published refusal.
+	sceneBootstrapEnqueued bool
+	// sceneSnapshotBuilt marks the narrow window after the enter lane
+	// has built this scene's snapshot and before its bootstrap (or
+	// refusal) queues. Only in that window do later batches park
+	// behind the bootstrap; an ordinary loading scene whose answers a
+	// client is waiting on is not caught by it (#2294).
+	sceneSnapshotBuilt bool
+	// pendingReceipts are batches parked for this scene while its
+	// bootstrap was not yet queued (sendSceneObjectBatch and Send):
+	// they join the queue behind the bootstrap batch, never ahead of
+	// it, and are dropped when the scene is replaced or answered with
+	// a refusal. pendingBytes is their EncodedLen sum, carried in
+	// queueBytes from acceptance until the frames drain (#2294).
+	pendingReceipts []pendingReceipt
+	pendingFrames   int
+	pendingBytes    int
 	observedObjects map[uint32]struct{}
 	// publishedSorted is observedObjects in ascending order, rebuilt into a
 	// fresh array on the first PublishedObjects read after any change marks
@@ -77,10 +110,18 @@ type Session struct {
 	publishedSorted []uint32
 	publishedStale  bool
 
-	queue       []Frame
-	queueBytes  int
-	drainClose  bool         // close the session once the queue flushes
-	closeReason *CloseReason // retained even when teardown is triggered by a drain timeout
+	queue      []Frame
+	queueBytes int
+	// resendFrames and resendBytes are the block resumeFromLocked last
+	// prepended to the queue: retained ring frames being re-sent, not
+	// producer output. Send's bound subtracts them while they drain
+	// (writeLoop decrements per counted ordered dequeue), so a resume
+	// the ring covers is never refused - or closed on - for queue
+	// depth the producer did not create (#2146).
+	resendFrames int
+	resendBytes  int
+	drainClose   bool         // close the session once the queue flushes
+	closeReason  *CloseReason // retained even when teardown is triggered by a drain timeout
 
 	// The lossy lane: loss-tolerant frames coalesced per (opcode, key) so a
 	// WebSocket client under backlog gets the LATEST position instead of a
@@ -98,6 +139,12 @@ type Session struct {
 	ring      []ringFrame
 	ringBytes int
 	ringFloor uint32
+	// lastStreamAck is when the client's applied position last
+	// advanced (ackLocked) on this attachment; attach restamps it.
+	// The keepalive watchdog reads it beside ringGateLocked: a full
+	// ring with no ack progress for RingParkBound is a wedged
+	// applier, not a slow one (#2146).
+	lastStreamAck time.Time
 
 	resumeToken [ResumeTokenLen]byte
 	// admissionCommit consumes the HELLO ticket this attachment was
@@ -107,14 +154,24 @@ type Session struct {
 	// (the legacy HELLO-time verifier) or none is pending.
 	admissionCommit func() error
 	lastRecv        time.Time
-	readCancel      context.CancelFunc
+	// lastSent is when the writer last put a frame on the wire; the
+	// keepalive proves the wire off it when the session goes quiet
+	// outbound (#2148, keepalive.go).
+	lastSent   time.Time
+	readCancel context.CancelFunc
 
 	// Telemetry of the current attachment (#1449): the transport kind of
 	// the latest attach and the fallback reason the client reported for
 	// it ("" until an OpTransportReport arrives). History reads both;
 	// they describe how the session got here, never how it behaves.
-	transport   string
-	fallback    string
+	transport string
+	fallback  string
+	// clientAddr and userAgent are the client facts of the latest
+	// attach (clientaddr.go): the real client address and the accept
+	// request's User-Agent. The connection census (#2716) reads them at
+	// world entry; a resume replaces them with its own attachment's.
+	clientAddr  string
+	userAgent   string
 	expireTimer *time.Timer
 	drainTimer  *time.Timer // CloseWhenDrained's cap; stopped once the session closes
 
@@ -124,6 +181,11 @@ type Session struct {
 	// frames, and the mission bridge skips it — the BYE drain is all that
 	// remains. Atomic so no reader ever needs s.mu or h.mu.
 	evicted atomic.Bool
+	// evictReason is the BYE reason the eviction closes with (Replaced or
+	// Unauthorized), stored before the latch so a reader that sees evicted
+	// also sees why. The hub keeps it past teardown (endedResume) so the
+	// evicted client's resume is told, not handed a fresh session (#2146).
+	evictReason atomic.Uint32
 
 	done chan struct{} // closed exactly once at final teardown
 
@@ -174,6 +236,22 @@ func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 	go s.writeLoop()
 	go s.keepaliveLoop()
 	return s
+}
+
+/*
+================
+now
+
+The session's clock: its hub's (the wall clock unless a test drove
+it manual, #2445). A session a test built without a hub reads the
+wall clock, as every stamp did before the hub had one.
+================
+*/
+func (s *Session) now() time.Time {
+	if s.hub == nil || s.hub.now == nil {
+		return time.Now()
+	}
+	return s.hub.now()
 }
 
 // Kind reports the current transport ("webtransport", "websocket") or
@@ -228,17 +306,20 @@ func (s *Session) RemoteAddr() string {
 	return s.conn.RemoteAddr()
 }
 
-// metricsSnapshot returns the two session-local gauges used by Hub.Metrics.
+// metricsSnapshot returns the session-local gauges used by Hub.Metrics.
 // It deliberately exposes no mutable queue storage.
 /*
 ================
 metricsSnapshot
 ================
 */
-func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int) {
+func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int, datagramSendFailures uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes
+	if reporter, ok := s.conn.(datagramSendFailureReporter); ok {
+		datagramSendFailures = reporter.DatagramSendFailures()
+	}
+	return s.attached, len(s.queue) + len(s.lossyKeys), s.queueBytes + s.lossyBytes, datagramSendFailures
 }
 
 // Done is closed when the session is torn down for good.
@@ -249,14 +330,18 @@ Done
 */
 func (s *Session) Done() <-chan struct{} { return s.done }
 
-// markEvicted flips the session into lame-duck mode. One-way; called by
-// Hub.BindExclusive when another session takes this session's bind key.
+// markEvicted flips the session into lame-duck mode. One-way; called when
+// another session takes this session's bind key or account slot (reason
+// ByeReasonReplaced) or the account is evicted (ByeReasonUnauthorized).
 /*
 ================
 markEvicted
 ================
 */
-func (s *Session) markEvicted() { s.evicted.Store(true) }
+func (s *Session) markEvicted(reason uint8) {
+	s.evictReason.Store(uint32(reason))
+	s.evicted.Store(true)
+}
 
 // Evicted reports whether the session lost its bind key to a replacement
 // (single-session bind, BYE Replaced) and is now a lame duck: inbound game
@@ -272,7 +357,10 @@ func (s *Session) Evicted() bool { return s.evicted.Load() }
 // Send queues a frame on the reliable, ordered channel. It never blocks on
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
-// callers may reuse their buffer immediately.
+// callers may reuse their buffer immediately. A native game frame sent
+// while a built scene snapshot awaits its bootstrap parks behind it
+// (#2294); transport-control frames are the machinery's own and stay
+// immediate.
 /*
 ================
 Send
@@ -296,11 +384,25 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 		return ErrSessionClosed
 	}
 	frameBytes := 2 + len(owned)
-	if len(s.queue) >= s.hub.cfg.OutboundQueue ||
-		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
+	// The bound measures producer output only: a re-sent block the
+	// resume ring is still draining (resendFrames) is retained state
+	// the producer did not create, and closing here would kill the
+	// resumed session the ring just served (#2146).
+	if len(s.queue)+s.pendingFrames-s.resendFrames >= s.hub.cfg.OutboundQueue ||
+		s.queueBytes-s.resendBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
 		s.mu.Unlock()
 		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
+	}
+	// A game frame that finds a built snapshot still waiting for its
+	// bootstrap queues behind it, in issue order with parked receipts.
+	if opcode > maxControlOpcode && s.bootstrapParkOpenLocked() {
+		s.pendingReceipts = append(s.pendingReceipts, pendingReceipt{frames: []Frame{{Opcode: opcode, Payload: owned}}})
+		s.pendingFrames++
+		s.pendingBytes += frameBytes
+		s.queueBytes += frameBytes
+		s.mu.Unlock()
+		return nil
 	}
 	s.queue = append(s.queue, Frame{Opcode: opcode, Payload: owned})
 	s.queueBytes += frameBytes
@@ -342,6 +444,13 @@ func (s *Session) SendUnreliable(opcode uint16, payload []byte) error {
 		if err == nil {
 			s.hub.metrics.datagramsOut.Add(1)
 			s.hub.metrics.datagramBytesOut.Add(uint64(2 + len(payload)))
+			return nil
+		}
+		if errors.Is(err, errDatagramDropped) {
+			// The peer is not draining its datagram queue. The frame is
+			// loss-tolerant, so it drops here; rerouting it onto the
+			// reliable lane would queue it behind the same stall (#2142).
+			s.hub.metrics.datagramsDropped.Add(1)
 			return nil
 		}
 		// Datagram refused (too big for the path MTU, or transient): the
@@ -449,7 +558,17 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	// previous connection reported says nothing about this one (#1449).
 	s.transport = conn.Kind()
 	s.fallback = ""
-	s.lastRecv = time.Now()
+	// The census facts likewise belong to this attachment (conn already
+	// resolved its real client address at accept, clientaddr.go).
+	s.clientAddr = conn.RemoteAddr()
+	s.userAgent = ""
+	if facter, ok := conn.(clientFacter); ok {
+		s.userAgent = facter.ClientUserAgent()
+	}
+	s.lastRecv = s.now()
+	// The new attachment starts with a clean ack clock: it gets the
+	// full park bound to acknowledge what the ring re-sends.
+	s.lastStreamAck = s.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.readCancel = cancel
 	s.pushFront(Frame{Opcode: OpWelcome, Payload: EncodeWelcome(Welcome{
@@ -466,9 +585,17 @@ func (s *Session) attach(conn Conn, resumed bool, lastApplied uint32) error {
 	s.mu.Unlock()
 
 	go s.readLoop(conn, gen, ctx)
-	log.WithFields(log.Fields{
+	fields := log.Fields{
 		"session": s.ID, "kind": conn.Kind(), "remote": conn.RemoteAddr(), "resumed": resumed,
-	}).Info("transport: session attached")
+	}
+	// The admitted account names the player on the server half of the
+	// incident join (#2558): admission is recorded before attach
+	// (hub.go), and a session attached without one (in-process use)
+	// has no account to name.
+	if account := s.account.Load(); account != nil {
+		fields["account"] = *account
+	}
+	log.WithFields(fields).Info("transport: session attached")
 	return nil
 }
 
@@ -508,6 +635,8 @@ func (s *Session) detachGen(gen int, cause error) {
 	s.hub.metrics.detaches.Add(1)
 	if errors.Is(cause, errIdle) {
 		s.hub.metrics.detachesIdle.Add(1)
+	} else if errors.Is(cause, errRingParkBound) {
+		s.hub.metrics.detachesRingPark.Add(1)
 	} else {
 		s.hub.metrics.detachesOther.Add(1)
 	}
@@ -577,6 +706,8 @@ func (s *Session) closeNow(cause error) (bool, error) {
 	}
 	s.queue = nil
 	s.queueBytes = 0
+	s.sceneSnapshotBuilt = false
+	s.pendingReceipts, s.pendingFrames, s.pendingBytes = nil, 0, 0
 	s.lossy = nil
 	s.lossyKeys = nil
 	s.lossyBytes = 0
@@ -638,6 +769,26 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 	s.mu.Unlock()
 }
 
+/*
+================
+writableLocked
+
+Whether the writer has a frame it may dequeue now. The ordered head
+waits while the ring gate holds (ringGateLocked, #2146); a pending
+lossy frame is never ringed and always writable, so movement keeps
+flowing past a gated ordered head. Caller holds s.mu.
+================
+*/
+func (s *Session) writableLocked() bool {
+	if len(s.lossyKeys) > 0 {
+		return true
+	}
+	if len(s.queue) == 0 {
+		return false
+	}
+	return !s.ringGateLocked()
+}
+
 // writeLoop is the session's single writer for its whole life. It drains
 // the ordered queue first, then the lossy coalesce slots, whenever a
 // connection is attached; re-queues an ordered frame at the front when a
@@ -651,7 +802,7 @@ writeLoop
 func (s *Session) writeLoop() {
 	for {
 		s.mu.Lock()
-		for !s.closed && (!s.attached || (len(s.queue) == 0 && len(s.lossyKeys) == 0)) {
+		for !s.closed && (!s.attached || !s.writableLocked()) {
 			s.cond.Wait()
 		}
 		if s.closed {
@@ -659,12 +810,19 @@ func (s *Session) writeLoop() {
 			return
 		}
 		var f Frame
-		ordered := len(s.queue) > 0
+		ordered := len(s.queue) > 0 && (len(s.lossyKeys) == 0 || !s.ringGateLocked())
 		if ordered {
 			f = s.queue[0]
 			s.queue[0] = Frame{} // release payload references in the consumed backing array
 			s.queue = s.queue[1:]
 			s.queueBytes -= f.EncodedLen()
+			if s.resendFrames > 0 && CountsOnStream(f.Opcode) {
+				// The re-sent block leaves first and only it is
+				// counted: transport frames ahead of it (WELCOME)
+				// and the lossy lane never held a ring slot.
+				s.resendFrames--
+				s.resendBytes -= f.EncodedLen()
+			}
 		} else {
 			slot := s.lossyKeys[0]
 			s.lossyKeys = s.lossyKeys[1:]
@@ -698,6 +856,9 @@ func (s *Session) writeLoop() {
 			s.detachGen(gen, err)
 			continue
 		}
+		s.mu.Lock()
+		s.lastSent = s.now()
+		s.mu.Unlock()
 		s.hub.recordFrameOut(f)
 		if f.Opcode == OpWelcome {
 			s.mu.Lock()
@@ -747,7 +908,7 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 		s.mu.Lock()
 		current := !s.closed && gen == s.gen
 		if current {
-			s.lastRecv = time.Now()
+			s.lastRecv = s.now()
 		}
 		s.mu.Unlock()
 		if !current {

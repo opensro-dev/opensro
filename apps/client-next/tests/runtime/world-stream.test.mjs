@@ -76,13 +76,15 @@ function fixture( options = {} ) {
 						id: `${region}:${part}`,
 						originRegion: origin,
 						warnings: [],
-						groups: [ {
-							id: `${part}:${region}`,
+						groups: Array.from( { length: options.sceneGroups ?? 1 }, ( _, groupIndex ) => ({
+							id: `${part}:${region}:${groupIndex}`,
 							...(part === "terrain" ? { terrainSector: region } : {}),
 							center: [ 0, 0, 0 ],
 							radius: 10000,
 							material: {
-								texture: `/assets/${region}${options.blockTextures ? ".texture" : ".png"}`,
+								texture: groupIndex === 0 ?
+									`/assets/${region}${options.blockTextures ? ".texture" : ".png"}` :
+									`/assets/${region}-${groupIndex}.png`,
 								color: [ 1, 1, 1, 1 ],
 								alphaCutoff: 0,
 								blend: false,
@@ -96,7 +98,7 @@ function fixture( options = {} ) {
 								instances: identity(),
 								transform: identity()
 							}
-						} ]
+						}) )
 					}
 				} );
 			} else if ( decode === "png" ) {
@@ -328,6 +330,55 @@ for ( const failedPart of [ "catalog", "objects", "terrain", "texture" ] ) {
 		assert.equal( f.requests.length, completed );
 	});
 }
+
+test("a world failure past its retries is handed out once, with the facts for its incident", () => {
+	const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };
+	f.step( 1 );
+	let now = 100;
+	// Fail the catalog load transiently, then fail every retry the
+	// recovery clock schedules (2 s growing to the 30 s cap): the
+	// ninth failure is the one with nothing left to schedule.
+	for ( let failure = 0; failure <= 8; failure++ ) {
+		const job = f.requests.filter( r => f.ready.has( r.key ) && r.decode === undefined ).at( -1 );
+		assert.ok( job, "a catalog load is pending" );
+		f.ready.set( job.key, { kind: "error", id: job.key, error: "Load failed", transient: true } );
+		f.stream.step( pose, undefined, undefined, undefined, now );
+		assert.match( f.stream.error(), /Load failed/ );
+		if ( failure < 8 ) {
+			assert.equal( f.stream.terminalFailure(), undefined, "still retrying: nothing to file yet" );
+			now += 30000;
+			f.stream.step( pose, undefined, undefined, undefined, now );
+		}
+	}
+	assert.equal( f.stream.reconnecting(), false );
+	const failure = f.stream.terminalFailure();
+	assert.ok( failure, "the exhausted failure is handed out" );
+	assert.match( failure.error, /Load failed/ );
+	assert.equal( failure.transient, true );
+	assert.equal( failure.attempts, 8 );
+	assert.ok(
+		failure.path && failure.error.includes( failure.path ),
+		"the handout names the asset the failure was loading"
+	);
+	assert.equal( f.stream.terminalFailure(), undefined, "and only once per episode" );
+	f.stream.dispose();
+});
+
+test("a permanent world failure is handed out at once, with no retries used", () => {
+	const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };
+	f.step( 1 );
+	const job = f.requests.filter( r => f.ready.has( r.key ) && r.decode === undefined ).at( -1 );
+	assert.ok( job, "a catalog load is pending" );
+	f.ready.set( job.key, { kind: "error", id: job.key, error: "Asset HTTP 404" } );
+	f.stream.step( pose, undefined, undefined, undefined, 100 );
+	const failure = f.stream.terminalFailure();
+	assert.ok( failure, "a permanent failure is terminal at once" );
+	assert.match( failure.error, /Asset HTTP 404/ );
+	assert.equal( failure.transient, false );
+	assert.equal( failure.attempts, 0 );
+	assert.equal( f.stream.terminalFailure(), undefined, "and only once per episode" );
+	f.stream.dispose();
+});
 
 for ( const transient of [ false, true ] ) {
 	test(`one ${transient ? "transient" : "permanent"} terrain failure retires siblings and keeps completed parts`, () => {
@@ -603,4 +654,25 @@ test("a crossing requests terrain only for the regions it adds, in one anchor", 
 	assert.equal( f.world.stats().pendingGroups, 0 );
 	f.stream.dispose();
 	f.world.dispose();
+});
+
+test("leaving for the dock pauses the retained scene's stream (#1975)", () => {
+	const f = fixture( { sceneGroups: 8 } );
+	// Enter region 1 and let its scene admit with textures still streaming.
+	for ( let i = 0; i < 10 && f.world.stats().pendingTextures === 0; i++ ) f.step( 1 );
+	assert.ok( f.world.stats().pendingTextures > 0, "the admitted scene still has textures to stream" );
+	const issued = f.requests.length;
+	// On the dock there is no world pose. The retained scene takes what
+	// already landed but issues nothing new: the incoming scene's stage
+	// may only ask for a slot at its own step, and a stream that refills
+	// every frame leaves it none until the whole queue drains (#1975).
+	for ( let i = 0; i < 4; i++ ) {
+		f.stream.step( null );
+		f.world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
+		assert.equal( f.stream.error(), null );
+	}
+	assert.equal( f.requests.length, issued, "the retained scene issued new work while the player is away" );
+	// Back in the world the same stream resumes and finishes.
+	for ( let i = 0; i < 12; i++ ) f.step( 1 );
+	assert.equal( f.world.stats().pendingTextures, 0 );
 });

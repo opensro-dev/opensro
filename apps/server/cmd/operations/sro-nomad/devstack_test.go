@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/opstree"
 )
 
 /*
@@ -24,6 +26,8 @@ current environment.
 */
 func renderDevStack(t *testing.T) (deployment *deployment, agent map[string]any, args []string, options devAgentOptions) {
 	t.Helper()
+	// The development agent config is in the private ops tree.
+	opstree.Require(t)
 	command, err := parseOptions("deploy", nil)
 	if err != nil {
 		t.Fatal(err)

@@ -122,6 +122,49 @@ func (rt *Runtime) elementalCompanionEligibility(division string, owner *enterwo
 
 /*
 ================
+elementalWalkRefused
+
+The eligibility walk's refusal judged on door-read values (#2030), so
+a pet whose owner record already refuses - dead, deletion-pending,
+no companion passing the record filters, or the expansion facts -
+never pays for the pet-owner copy the walk used to take first. Every
+input weighs the same facts the copy's admission and loop gates weigh:
+hasElementalCandidate is the loop's own record filter, the expansion
+facts are petExpansionAllowed's owner half (its pet half is the kind
+match the filter already enforced), and the town verdict reads the
+world the judged pet tick reads (SnapshotExisting). Judged is false
+when the facts cannot decide - the owner has no world entry yet, so
+the copy path seeds and judges it exactly as before. A walk the facts
+admit still takes the copy: the selected lanes read step.snapshot
+root by root, and only a refusal is provable from values. The
+companionCopy seam abstains the same way petjudged's does.
+================
+*/
+func (rt *Runtime) elementalWalkRefused(division string, owner *enterworld.Character, q elementalQuery, now int64) (refused, judged bool) {
+	if rt.companionCopy != nil {
+		return false, false
+	}
+	admitted := false
+	expansionOK := false
+	rt.deps.Read(division, func() {
+		admitted = !owner.DeletePending && enterworld.CharacterAlive(owner) && hasElementalCandidate(owner, q)
+		if admitted {
+			expansionOK = !rt.inFreeBattle(owner) && !wearsJobSuit(owner, rt.deps.ItemReferences()) &&
+				domain.CharacterWorldInstance(owner) == domain.DefaultWorldInstance
+		}
+	})
+	if !admitted || !expansionOK {
+		return true, true
+	}
+	ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(division, owner.Name))
+	if !ok {
+		return false, false
+	}
+	return !q.allowTown && townRegion(ownerWorld.LiveSpawnAt(now).RegionID), true
+}
+
+/*
+================
 elementalCompanionMatching
 
 The one eligibility walk. The owner copy is the full admitted one,
@@ -135,9 +178,16 @@ func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld
 		return step, false
 	}
 	gid, kind, allowTown := q.gid, q.kind, q.allowTown
+	// A refusal the door-read facts already decide never reaches the
+	// copy below (#2030); an admitted walk judges as before.
+	if refused, judged := rt.elementalWalkRefused(division, owner, q, now); judged && refused {
+		return step, false
+	}
 	// Runs per pet per tick: copy the owner only when a pet could pass the
-	// record filters below (#1943).
-	snapshot := rt.characterSnapshotAdmitted(division, owner, func(c *enterworld.Character) bool {
+	// record filters below (#1943), and then only the pet-owner view
+	// (#2030): the walk and every elemental lane reading step.snapshot
+	// read companions, life, town, world, party and the relation facts.
+	snapshot := rt.characterSnapshotCompanionAdmitted(division, owner, func(c *enterworld.Character) bool {
 		return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
 	})
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {

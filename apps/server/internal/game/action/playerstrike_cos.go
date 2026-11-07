@@ -50,9 +50,13 @@ The native attack-target validation for a COS target, in the attackable check's 
  1. a dead, hidden (modes 6..7) or pickup-pet (+0x43C) COS refuses with 0x3006;
  2. an attacker in body mode 2 refuses with 0x3020;
  3. a target COS in body mode 2..4 refuses with 0x3020;
- 4. an owner in body mode 2..4 or on the caster's
-    free-battle team refuses with 0x3020, then the target becomes the owner
-    and the whole PvP chain runs on it (playerAttackRefusal). Zero admits.
+ 4. an owner in body mode 2..4 refuses with 0x3020, then the target becomes
+    the owner and the whole PvP chain runs on it (playerAttackRefusal).
+    There is no free-battle team refusal here: natively the team refusal
+    gates a companion attacker (the through-owner validation the pet
+    lanes keep) and a player victim, so a direct player strike on a
+    team-mate's companion reaches the PvP chain and books as a player
+    kill. Zero admits.
 
 ================
 */
@@ -83,9 +87,6 @@ func (rt *Runtime) cosTargetRefusalWith(division string, caster *enterworld.Char
 	owner := target.snapshot
 	if owner.NativeBodyStatus >= mercenaryBodyProtectedFirst && owner.NativeBodyStatus <= mercenaryBodyProtectedLast {
 		return 0x3020
-	}
-	if code := rt.companionTeamRefusal(caster, owner); code != 0 {
-		return code
 	}
 	return rt.playerAttackRefusal(division, caster, owner, now, flags)
 }
@@ -133,7 +134,7 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 		}
 	}
 	if skill.ActionCastingTimeMs != 0 && st.release == nil {
-		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now)
+		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now, st.doors)
 	}
 	if skill.HostileDebuff.Pinned {
 		return rt.debuffCOS(debuffCast{division: division, character: character, snapshot: snapshot,
@@ -147,7 +148,7 @@ func (rt *Runtime) acceptCOSTargetStage(st offensiveStage, target combatTarget) 
 			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})
 	}
 	if skill.OffensiveArea.Radius != 0 {
-		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release)
+		return rt.acceptSkillAreaAt(division, character, snapshot, skill, skill.OffensiveArea, false, true, target, st.attacker, st.loadout, st.consumeAmmo, now, st.rootID, st.release, st.doors)
 	}
 	return rt.strikeCOSTarget(st, target, casterAt)
 }
@@ -178,7 +179,9 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 		return cosHit{}, false
 	}
 	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: target.at, block: block, displaceAt: -1,
-		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+		winnerName: snapshot.Name,
+		context:    abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+	_, hit.winnerCape = rt.playerRelationEquipment(snapshot)
 	remainingHP := pet.CurrentHP
 	actor := criticalActor{division: division, character: snapshot.Name}
 	for range skill.Attack.ImpactCount {
@@ -268,7 +271,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	var killAfter jobKillPayout
 	var killWar domain.GuildWarCombat
 	var refusal uint16
-	if !rt.deps.UpdateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
+	if !st.doors.updateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
 		var cost skillCharge
 		if st.advanced {
 			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {
@@ -363,7 +366,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	for _, formula := range hit.formulas {
 		tally.note(formula.Blocked, true)
 	}
-	wear := rt.applyEquipmentWear(division, character, tally)
+	wear := rt.applyEquipmentWear(division, character, tally, st.doors)
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)

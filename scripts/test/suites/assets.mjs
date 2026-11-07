@@ -20,6 +20,8 @@ export default {
 		"scripts/test/assets/meshCloth.test.mjs",
 		"scripts/test/assets/unboundCharacterVertices.test.mjs",
 		"scripts/test/assets/bsrParticleModifiers.test.mjs",
+		"scripts/test/assets/entityCompoundParticles.test.mjs",
+		"scripts/test/assets/monsterPortraitError.test.mjs",
 		"scripts/test/assets/skillEffectBinding.test.mjs",
 		"scripts/test/assets/assetDeliveryOwnership.test.mjs",
 		"scripts/test/assets/nativeUiTexture.test.mjs",
@@ -74,6 +76,7 @@ export default {
 		"scripts/test/assets/memberCompression.test.mjs",
 		"scripts/test/assets/servedSize.test.mjs",
 		"scripts/test/assets/minimapTextureParity.test.mjs",
+		"scripts/test/assets/missionDungeonMinimapCoverage.test.mjs",
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
 		"scripts/test/assets/terrainBlockTextures.test.mjs"
 	]

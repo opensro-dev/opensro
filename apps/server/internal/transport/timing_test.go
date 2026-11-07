@@ -187,3 +187,33 @@ func TestPublicationHoldsRecordMaxByLabel(t *testing.T) {
 		t.Fatalf("requestOp holds = %+v, want count 1, max 200 ms", got)
 	}
 }
+
+/*
+================
+TestUnhandledOpcodesAreNamedAndBounded
+
+A frame no handler takes is counted under its opcode, and a sender walking
+the opcode space cannot grow the map past its bound (#2147).
+================
+*/
+func TestUnhandledOpcodesAreNamedAndBounded(t *testing.T) {
+	hub := newHub(testCfg())
+	hub.metrics.timing.recordUnhandled(0x7001)
+	hub.metrics.timing.recordUnhandled(0x7001)
+	hub.metrics.timing.recordUnhandled(0x7002)
+	m := hub.Metrics()
+	if m.UnhandledOpcodes["0x7001"] != 2 || m.UnhandledOpcodes["0x7002"] != 1 {
+		t.Fatalf("unhandled opcodes = %v, want 0x7001:2 0x7002:1", m.UnhandledOpcodes)
+	}
+
+	for opcode := 0; opcode <= 0xFFFF; opcode++ {
+		hub.metrics.timing.recordUnhandled(uint16(opcode))
+	}
+	m = hub.Metrics()
+	if len(m.UnhandledOpcodes) != maxUnhandledOpcodes {
+		t.Fatalf("distinct opcodes = %d, want the bound %d", len(m.UnhandledOpcodes), maxUnhandledOpcodes)
+	}
+	if m.UnhandledOpcodes["0x7001"] != 3 {
+		t.Fatalf("0x7001 after the walk = %d, want 3: a known opcode keeps counting", m.UnhandledOpcodes["0x7001"])
+	}
+}

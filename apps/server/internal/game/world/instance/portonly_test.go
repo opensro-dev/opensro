@@ -58,3 +58,38 @@ func TestPortOnlyRegistration(t *testing.T) {
 		t.Fatal("id-less world admitted")
 	}
 }
+
+/*
+================
+TestTempleDefinitionsShape
+
+The temple bands register (slice 2 wires the call) as instanced
+worlds: native type 1 so no band opens at boot, fifty layers, and the
+world row's own resident limit (four or eight) per layer - the source
+world table's shape for 63-84 (#1800 step 3). Shape only:
+registration itself is TestPortOnlyRegistration's subject.
+================
+*/
+func TestTempleDefinitionsShape(t *testing.T) {
+	definitions := TempleDefinitions()
+	if len(definitions) != 22 {
+		t.Fatalf("temple definitions = %d, want 22", len(definitions))
+	}
+	for index, row := range definitions {
+		if int(row.ID) != 63+index {
+			t.Fatalf("temple definition %d has id %d, want %d", index, row.ID, 63+index)
+		}
+		if row.NativeType != 1 || row.LayerLimit != 50 || (row.PlayerLimit != 4 && row.PlayerLimit != 8) {
+			t.Fatalf("temple world %d shape = type %d, %d layers, %d players; want type 1, 50, 4 or 8",
+				row.ID, row.NativeType, row.LayerLimit, row.PlayerLimit)
+		}
+		if row.CodeName == "" {
+			t.Fatalf("temple world %d has no codename", row.ID)
+		}
+		for _, shipped := range Shipped() {
+			if shipped.ID == row.ID || shipped.CodeName == row.CodeName {
+				t.Fatalf("temple world %d collides with shipped %+v", row.ID, shipped)
+			}
+		}
+	}
+}

@@ -3,7 +3,7 @@
 
 portrait-readback.ts - a portrait target's pixels copied back to the CPU
 
-Port-only, not native: the 3D viewer's still (docs/VIEWER.md). One copy
+Port-only, not native: the 3D viewer's still (docs/guides/VIEWER.md). One copy
 per call, submitted after the frames already queued so it reads what they
 drew, then unpacked to 8-bit RGBA (texel-readback.ts). The staging buffer
 retires through the device's retirement, never destroyed directly. The
@@ -60,7 +60,19 @@ export async function readPortraitPixels(
 		const encoder = device.createCommandEncoder( { label: source.label + "-readback" } );
 		encoder.copyTextureToBuffer( { texture: source.texture }, { buffer, bytesPerRow: stride }, [ width, height ] );
 		device.queue.submit( [ encoder.finish() ] );
-		await buffer.mapAsync( GPUMapMode.READ );
+		try {
+			await buffer.mapAsync( GPUMapMode.READ );
+		} catch ( error ) {
+			// The staging buffer is private to this call, so a map the
+			// browser aborts (AbortError) is the device being torn down
+			// under it, not a live failure: the still ends as a blank
+			// frame of the right shape instead of an exception in the
+			// viewer's hands (#2560). Any other rejection is reported.
+			if ( (error as { name?: unknown; } | null)?.name === "AbortError" ) {
+				return { width, height, rgba: new Uint8ClampedArray( width * height * 4 ) };
+			}
+			throw error;
+		}
 		const rgba = unpackRgba8( new Uint8Array( buffer.getMappedRange() ), width, height, source.format );
 		buffer.unmap();
 		return { width, height, rgba };

@@ -8,6 +8,9 @@ Decodes the academy frames into AcademyState and composes its requests:
 the matching board (0x7701 / 0x7592), the notice (0x7220) and the opening
 at the storage NPC (0x72EC, answered by 0xB2EC). The 0x3AC5 status
 machine and the 0xB2EC opening carry the same camp record (82AA10).
+The cumulated-buff frames ride along: the saved-buff state (0x3CC1,
+770E70) and the received-buff list (0xB00C, 770970) feed the magic-state
+board's slots 7 and 8, and the slot-7 pass confirm sends 0x700C.
 
 ===========================================================================
 */
@@ -40,6 +43,12 @@ export interface AcademyMember {
 	readonly entryLevel: number;
 	readonly model: number;
 	readonly offline: boolean;
+	// 5C54F0: the announced latch (record +0x4d8, sibling roster
+	// copy +0x4b8), clear in a fresh roster record. A connect byte
+	// prints only while it is clear and sets it; a disconnect byte
+	// clears it. Kept beside the stored offline byte (+0x74), which
+	// is written either way and gates nothing.
+	readonly announced: boolean;
 	readonly honor: number;
 	readonly location: string;
 	readonly war?: number;
@@ -56,6 +65,22 @@ export interface AcademyHonorRow {
 	readonly maxLevel: number;
 	readonly graduates: number;
 	readonly guild: string;
+}
+// 770E70: the saved (cumulated) buff a 0x3CC1 show state lights slot 7
+// with: the window minutes remaining and the accumulated value, held
+// from the receipt instant so the board can count the window down.
+export interface AcademySavedBuff {
+	readonly minutes: number;
+	readonly value: number;
+	readonly receivedAtMs: number;
+}
+// 770970: one received (reserved) buff row of the 0xB00C list - slot 8,
+// keyed by the donor's camp member id.
+export interface AcademyReceivedBuff {
+	readonly memberId: number;
+	readonly minutes: number;
+	readonly value: number;
+	readonly receivedAtMs: number;
 }
 export interface AcademyState {
 	readonly members?: readonly AcademyMember[];
@@ -78,6 +103,10 @@ export interface AcademyState {
 		readonly rows: readonly AcademyHonorRow[];
 		readonly sequence: number;
 	};
+	// The saved buff (0x3CC1) and the received rows (0xB00C) behind the
+	// magic-state board's slots 7 and 8. Absent while nothing is live.
+	readonly savedBuff?: AcademySavedBuff;
+	readonly receivedBuffs?: readonly AcademyReceivedBuff[];
 }
 export type AcademyCommand =
 	| { readonly kind: "academy-page"; readonly page: number; }
@@ -94,7 +123,8 @@ export type AcademyCommand =
 	| { readonly kind: "academy-leave"; }
 	| { readonly kind: "academy-graduate"; readonly satisfaction: number; }
 	| { readonly kind: "academy-kick"; readonly name: string; }
-	| { readonly kind: "academy-compulsory-graduate"; readonly name: string; };
+	| { readonly kind: "academy-compulsory-graduate"; readonly name: string; }
+	| { readonly kind: "academy-pass-buff"; };
 /*
 ================
 academyBootstrap
@@ -116,6 +146,26 @@ Native 671a50 checks current level, independently of the under-40 entry icon.
 export function academyCanJoin( state: AcademyState, id: number, level: number | undefined ): boolean {
 	return !state.member && level !== undefined && Number.isInteger( level ) && level > 0 && level < 60 &&
 		state.rows.some( r => r.id === id );
+}
+/*
+================
+academyJoinLabel
+
+62E540: the matching window's status label (child 5, the surface the
+JOIN_PROGRESS node authors). Mode 1 formats
+UIIT_STT_PARTYMATCH_JOIN_PROGRESS with the applicant and the camp
+names while an application runs - the pair this returns. Mode 2's
+UIIT_MSG_TC_JOIN_ERROR_DUPLE hangs on a window-side duplicate state
+(672280) with no port counterpart yet; it is held, not painted over
+the normal pending window.
+================
+*/
+export function academyJoinLabel(
+	state: AcademyState
+): { readonly key: string; readonly campName: string; } | null {
+	if ( state.request?.kind !== "join" ) return null;
+	const row = state.rows.find( r => r.id === state.request?.id );
+	return { key: "UIIT_STT_PARTYMATCH_JOIN_PROGRESS", campName: row?.name ?? "" };
 }
 /*
 ================
@@ -163,7 +213,7 @@ const ACADEMY_OPEN_WAIT_CODE = 0x1c;
 academyPacket
 ================
 */
-export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyState | null {
+export function academyPacket( state: AcademyState, frame: WireFrame, nowMs = 0 ): AcademyState | null {
 	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 	let at = 0;
 	const u = ( size: number ) => {
@@ -200,7 +250,23 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 			z = signed(),
 			location = str( false );
 		if ( !id || kind > 2 ) throw Error( "Invalid academy member" );
-		return { id, name, kind, entryLevel, level, model, offline, honor, location, war, regionId, x, y, z };
+		return {
+			id,
+			name,
+			kind,
+			entryLevel,
+			level,
+			model,
+			offline,
+			announced: false,
+			honor,
+			location,
+			war,
+			regionId,
+			x,
+			y,
+			z
+		};
 	};
 	// 774B5F (case 6 => wire subtype 7) updates only the two notice fields.
 	if ( frame.opcode === 0x3ac5 && p[0] === 7 ) {
@@ -263,8 +329,12 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 		u( 1 );
 		const id = u( 4 ), flag = u( 1 );
 		let patch: Partial<AcademyMember> = {};
-		if ( flag === 1 ) patch = { offline: u( 1 ) === 1 };
-		else if ( flag === 2 ) patch = { level: u( 1 ) };
+		if ( flag === 1 ) {
+			// 5C54F0: the offline byte is stored (+0x74) either way;
+			// the announced latch follows the leg - set by a connect
+			// byte, cleared by a disconnect byte.
+			patch = u( 1 ) === 1 ? { offline: true, announced: false } : { offline: false, announced: true };
+		} else if ( flag === 2 ) patch = { level: u( 1 ) };
 		else if ( flag === 3 ) patch = { honor: u( 4 ) };
 		else if ( flag === 6 ) patch = { entryLevel: u( 1 ) };
 		if ( at !== p.length ) throw Error( "Trailing academy status bytes" );
@@ -398,6 +468,57 @@ export function academyPacket( state: AcademyState, frame: WireFrame ): AcademyS
 			...state,
 			honorRanks: { rows, sequence: (state.honorRanks?.sequence ?? 0) + 1 }
 		};
+	}
+	// 770E70: the saved-buff state frame. The show states (0/1/7) carry
+	// [u32 minutes][u32 value] and light slot 7 for minutes*60000+1 ms;
+	// the clears (5/8/9) are the state byte alone and empty the slot;
+	// states 2/3/4/6 are read and ignored.
+	if ( frame.opcode === 0x3cc1 ) {
+		const buffState = u( 1 );
+		if ( buffState === 0 || buffState === 1 || buffState === 7 ) {
+			const minutes = u( 4 ), value = u( 4 );
+			if ( at !== p.length ) throw Error( "Trailing academy buff state bytes" );
+			return { ...state, savedBuff: { minutes, value, receivedAtMs: nowMs } };
+		}
+		if ( at !== p.length ) throw Error( "Trailing academy buff state bytes" );
+		if ( buffState === 5 || buffState === 8 || buffState === 9 ) {
+			return { ...state, savedBuff: undefined };
+		}
+		return state;
+	}
+	// 770970: the received-buff list. Modes 0/1 upsert the rows they
+	// carry ([u32 minutes][u32 member id][u32 value] under a signed
+	// count), modes 5/8/9 remove the rows they carry, and mode 2 is
+	// the byte-only pass refusal (its print is academyBuffNotices').
+	if ( frame.opcode === 0xb00c ) {
+		const mode = u( 1 );
+		if ( mode === 2 ) {
+			if ( at !== p.length ) throw Error( "Trailing academy buff list bytes" );
+			return state;
+		}
+		if ( mode !== 0 && mode !== 1 && mode !== 5 && mode !== 8 && mode !== 9 ) {
+			throw Error( "Invalid academy buff list mode" );
+		}
+		const count = u( 1 ) << 24 >> 24, rows: AcademyReceivedBuff[] = [];
+		for ( let i = 0; i < count; i++ ) {
+			const minutes = u( 4 ), memberId = u( 4 ), value = u( 4 );
+			rows.push( { memberId, minutes, value, receivedAtMs: nowMs } );
+		}
+		if ( at !== p.length ) throw Error( "Trailing academy buff list bytes" );
+		if ( mode === 5 || mode === 8 || mode === 9 ) {
+			const gone = new Set( rows.map( r => r.memberId ) );
+			return {
+				...state,
+				receivedBuffs: (state.receivedBuffs ?? []).filter( r => !gone.has( r.memberId ) )
+			};
+		}
+		const receivedBuffs = [ ...(state.receivedBuffs ?? []) ];
+		for ( const row of rows ) {
+			const held = receivedBuffs.findIndex( r => r.memberId === row.memberId );
+			if ( held >= 0 ) receivedBuffs[held] = row;
+			else receivedBuffs.push( row );
+		}
+		return { ...state, receivedBuffs };
 	}
 	return null;
 }
@@ -551,4 +672,17 @@ academyCompulsoryGraduateRequest
 */
 export function academyCompulsoryGraduateRequest( name: string ): WireFrame {
 	return { opcode: 0x736d, payload: encodeAcademyMemberName( name ) };
+}
+
+/*
+================
+academyPassBuffRequest
+
+The slot-7 pass confirm's Yes (simple-box type 9's result dispatch):
+C->S 0x700C with an empty payload, moving the saved buff to the
+Guardian as a received row.
+================
+*/
+export function academyPassBuffRequest(): WireFrame {
+	return { opcode: 0x700c, payload: new Uint8Array( 0 ) };
 }

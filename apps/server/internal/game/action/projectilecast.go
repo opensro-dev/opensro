@@ -13,6 +13,8 @@ import (
 	"math"
 	"sync/atomic"
 
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -33,12 +35,20 @@ resolution and projectile flight. Its gameplay mutation is release-owned too.
 ==================
 */
 type pendingProjectileCast struct {
-	executionCost             skillCharge // immutable prepared snapshot; never recomputed at release
-	supportCast               bool        // shares prepare/cancel ownership; has no monster target or flight
-	selfEffect                bool        // category-three recipient installation at release
-	trap                      bool        // untargeted; the release plants a combat trap (skillcombattrap.go)
-	statusArea                bool        // untargeted; the release rolls a caster-centred status area
-	threatDecrease            bool        // untargeted; the release lowers hostility around the caster (mirage.go)
+	executionCost skillCharge // immutable prepared snapshot; never recomputed at release
+	// verdictCost and verdictGroup snapshot the cast skill's admission
+	// price shape at prepare time, beside executionCost: the waiting
+	// verdict prices resources against them instead of resolving the
+	// skill row again every tick (#2139). An unpriced cast (Pinned
+	// false) was prepared without the snapshot and resolves its row
+	// in the verdict, exactly as every cast did before.
+	verdictCost               enterworld.SkillConsumption
+	verdictGroup              uint32
+	supportCast               bool // shares prepare/cancel ownership; has no monster target or flight
+	selfEffect                bool // category-three recipient installation at release
+	trap                      bool // untargeted; the release plants a combat trap (skillcombattrap.go)
+	statusArea                bool // untargeted; the release rolls a caster-centred status area
+	threatDecrease            bool // untargeted; the release lowers hostility around the caster (mirage.go)
 	divisionID, characterName string
 	// ownerKey is simulation.WorldKey(divisionID, characterName), computed
 	// once at prepare time; see pendingSkillFinalize.ownerKey (#1820 D).
@@ -103,6 +113,7 @@ func (rt *Runtime) prepareSelfCast(division string, c *enterworld.Character, cas
 	charge := skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(division, c, skill)}
 	p := newPendingProjectileCast(division, c.Name)
 	p.executionCost = charge
+	p.verdictCost, p.verdictGroup = skill.Consumption, skill.Group
 	p.supportCast = !effect
 	p.selfEffect = effect
 	p.characterID = c.ID
@@ -130,6 +141,7 @@ func (rt *Runtime) prepareProjectileCast(division string, c *enterworld.Characte
 	charge := skillCharge{mp: cost, hp: rt.preparedExecutionHPCost(division, c, skill)}
 	pending := newPendingProjectileCast(division, c.Name)
 	pending.executionCost = charge
+	pending.verdictCost, pending.verdictGroup = skill.Consumption, skill.Group
 	pending.characterID = c.ID
 	pending.cast = cast
 	pending.rootID = rootID
@@ -226,36 +238,51 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	unlock := rt.lockDivision(p.divisionID)
 	defer unlock()
 	c := rt.findCharacter(p.divisionID, p.characterName)
-	var snapshot *enterworld.Character
-	if c != nil && c.ID == p.characterID {
-		snapshot = rt.characterSnapshotCombat(p.divisionID, c)
-	}
-	valid := snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
-	if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea && !p.threatDecrease {
-		_, exists := rt.resolveCombatTarget(p.divisionID, snapshot, p.cast.TargetGid, now)
-		valid = valid && exists
-	}
-	// The native instant handler runs mask 0x1C before reading the
-	// timer; the projectile handler likewise.
-	// Its resource bit must also
-	// invalidate a waiting cast; checking only at release lets a
-	// temporary shortage disappear and resurrect an invalid command.
-	// Do not recheck the cooldown this preparation already installed,
-	// or recompute its immutable execution cost. Linked stages own fresh
-	// execution contexts and must retain the same resource check.
-	if valid && !p.selfEffect {
-		source := rt.deps.SkillData()
-		if source == nil {
-			valid = false
-		} else if skill, exists := source.SkillByID(p.cast.ActionId); !exists {
-			valid = false
-		} else {
-			_, refusal := rt.offensiveResourceCost(p.divisionID, snapshot, skill)
-			valid = refusal == 0
+	// A cast that is not due first faces the copy-free wait verdict
+	// (projectileWaitingValid). Judged there, a valid cast waits on
+	// and an invalid one refuses below: the tail reads its snapshot
+	// only when the cast is valid, and a valid cast here is never
+	// due, so no release can consume the missing copy. Unjudged (a
+	// cold stats memo), the cast copy judges exactly as before and
+	// its build memoises for the next tick.
+	valid, judged := false, false
+	if now < p.releaseAtMs && c != nil && c.ID == p.characterID {
+		valid, judged = rt.projectileWaitingValid(p, c)
+		if judged && valid {
+			return nil
 		}
 	}
-	if valid && now < p.releaseAtMs {
-		return nil
+	var snapshot *enterworld.Character
+	if !judged {
+		if c != nil && c.ID == p.characterID {
+			snapshot = rt.characterSnapshotCast(p.divisionID, c)
+		}
+		valid = snapshot != nil && !snapshot.DeletePending && enterworld.CharacterAlive(snapshot)
+		if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea && !p.threatDecrease {
+			valid = valid && rt.combatTargetExists(p.divisionID, snapshot, p.cast.TargetGid)
+		}
+		// The native instant handler runs mask 0x1C before reading the
+		// timer; the projectile handler likewise.
+		// Its resource bit must also
+		// invalidate a waiting cast; checking only at release lets a
+		// temporary shortage disappear and resurrect an invalid command.
+		// Do not recheck the cooldown this preparation already installed,
+		// or recompute its immutable execution cost. Linked stages own fresh
+		// execution contexts and must retain the same resource check.
+		if valid && !p.selfEffect {
+			source := rt.deps.SkillData()
+			if source == nil {
+				valid = false
+			} else if skill, exists := source.SkillByID(p.cast.ActionId); !exists {
+				valid = false
+			} else {
+				_, refusal := rt.offensiveResourceCost(p.divisionID, snapshot, skill)
+				valid = refusal == 0
+			}
+		}
+		if valid && now < p.releaseAtMs {
+			return nil
+		}
 	}
 	// Cancellation/forget may have won after the snapshot. Re-check the
 	// identity under the operation lock before publishing or touching HP.
@@ -270,7 +297,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 			}
 		} else if p.statusArea {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
-				result, decision = rt.acceptUntargetedStatusCast(p.divisionID, c, snapshot, p.cast, skill, now, &p)
+				result, decision = rt.acceptUntargetedStatusCast(p.divisionID, c, snapshot, p.cast, skill, now, &p, rt.tickDoors())
 			}
 		} else if p.threatDecrease {
 			if skill, ok := rt.deps.SkillData().SkillByID(p.cast.ActionId); ok {
@@ -285,7 +312,7 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 				result, decision = rt.acceptSupportSkillPhase(p.divisionID, c, snapshot, p.cast, skill, now, &p)
 			}
 		} else {
-			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p)
+			result, decision = rt.acceptSkillStagePhaseAt(p.divisionID, c, snapshot, p.cast, now, p.rootID, &p, rt.tickDoors())
 		}
 	}
 	if decision != skillCastAccepted {
@@ -318,4 +345,84 @@ func (rt *Runtime) advanceProjectileCastInDivision(p pendingProjectileCast, now 
 	}
 	out = append(out, recipientDivisionFrames(p.divisionID, result.Recipients)...)
 	return out
+}
+
+/*
+================
+projectileWaitingValid
+
+The wait verdict of a prepared cast that is not due, judged without
+detaching the caster (#2139 item 2, castwait item 5): the release
+verdict's life, target and resource gates in the same order, on
+values read under one store read door. The resource leg's keeper
+stats come from the stats memo looked up on the live record - the
+memo compares its key bands in place and allocates nothing - so a
+steady waiting cast pays no record copy. judged is false only when
+the memo cannot serve (a cold or moved caster): the caller then
+judges on the cast copy exactly as before, and that build memoises
+for the next tick. The verdict stays the release verdict's twin: a
+cast is refused the moment its target dies or its resources run
+out, not when its timer ends.
+================
+*/
+func (rt *Runtime) projectileWaitingValid(p pendingProjectileCast, c *enterworld.Character) (valid, judged bool) {
+	// The resource leg's installed contributions come from their
+	// lifecycle owners, never under the store door (#568), in the
+	// same order playerCombatStats reads them.
+	block := rt.playerAbnormal(p.divisionID, c.Name)
+	writes := rt.statModifierWrites(p.divisionID, c)
+	catalogs := rt.statCatalogs()
+
+	var alive bool
+	var world uint32
+	var stats combat.Stats
+	var statsErr error
+	var statsHit bool
+	var maxHP, maxMP, currentHP, currentMP int64
+	rt.deps.Read(p.divisionID, func() {
+		alive = !c.DeletePending && enterworld.CharacterAlive(c)
+		world = domain.CharacterWorldInstance(c)
+		stats, _, statsErr, statsHit = combat.LookupMemoizedPlayerStats(c, catalogs, writes, block)
+		if statsHit {
+			if statsErr == nil && block != nil {
+				stats.AbnormalMask = block.Mask
+			}
+			maxHP, maxMP, currentHP, currentMP = keeperVitalsFrom(c, stats, statsErr)
+		}
+	})
+	if !alive {
+		return false, true
+	}
+	if !p.supportCast && !p.selfEffect && !p.trap && !p.statusArea && !p.threatDecrease {
+		if !rt.combatTargetExistsFor(p.divisionID, c.ID, c.Name, world, p.cast.TargetGid) {
+			return false, true
+		}
+	}
+	if p.selfEffect {
+		return true, true
+	}
+	source := rt.deps.SkillData()
+	if source == nil {
+		return false, true
+	}
+	// A priced cast judges against its prepared snapshot; resolving
+	// the skill row again every waiting tick bought nothing, as the
+	// row is static data the preparation already read (#2139). An
+	// unpriced cast resolves its row exactly as before.
+	if p.verdictCost.Pinned {
+		if !statsHit {
+			return false, false
+		}
+		_, refusal := resourceCostVerdictFor(maxHP, maxMP, currentHP, currentMP, stats, statsErr, p.verdictCost, p.verdictGroup)
+		return refusal == 0, true
+	}
+	skill, exists := source.SkillByID(p.cast.ActionId)
+	if !exists {
+		return false, true
+	}
+	if !statsHit {
+		return false, false
+	}
+	_, refusal := resourceCostVerdict(maxHP, maxMP, currentHP, currentMP, stats, statsErr, skill)
+	return refusal == 0, true
 }

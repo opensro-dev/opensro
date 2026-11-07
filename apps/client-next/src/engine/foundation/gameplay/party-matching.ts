@@ -10,6 +10,7 @@ responses cannot disagree about which request is still answerable.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./party-member";
+import type { SystemNotice } from "./system-notices";
 import { NO_JOB_CLASS } from "./job-guild";
 import { NATIVE_LEVEL_CAP } from "./level-cap";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
@@ -82,6 +83,15 @@ export type PartyMatchCommand =
 	| { readonly kind: "party-match-auto-stop"; }
 	| { readonly kind: "party-match-page"; readonly page: number; }
 	| { readonly kind: "party-match-join"; readonly id: number; }
+	| {
+		readonly kind: "party-match-search";
+		readonly filter: {
+			readonly name: string;
+			readonly purpose: number;
+			readonly min: number;
+			readonly max: number;
+		};
+	}
 	| {
 		readonly kind: "party-match-register" | "party-match-modify";
 		readonly registration: Omit<PartyRegistration, "id">;
@@ -159,6 +169,10 @@ export function partyMatchRequest(
 		u( state.own.id, 4 );
 		opcode = 0x7535;
 		pending = "delete";
+	} else if ( command.kind === "party-match-search" ) {
+		// A search commits in the worker (one answer over the rows);
+		// it composes no frame, so reaching the composer is a bug.
+		throw Error( "Party matching search sends no request" );
 	} else {
 		const r = command.registration, modify = command.kind === "party-match-modify";
 		if ( modify ? !state.own : !!state.own ) throw Error( "Party registration ownership mismatch" );
@@ -340,6 +354,180 @@ export function partyMatchPacket(
 	if ( at !== p.length ) throw Error( "Trailing matching bytes" );
 	return next;
 }
+
+/*
+================
+partyMatchAckNotice
+
+The join-answer line a 0xB5BF answer raises (handler 75EBD0):
+detail 1 the completed-match centre banner (67D030), detail 0 the
+refusal and detail 2 the no-reply guide lines (67A600, type 4). An outer-2
+answer raises the category-2 table in gameplay instead, and other
+opcodes raise nothing here.
+================
+*/
+export function partyMatchAckNotice( opcode: number, detail: number | undefined ): SystemNotice | null {
+	if ( opcode !== 0xb5bf ) return null;
+	if ( detail === 1 ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_COMPLETE_MASTER", value: 0, banner: true, bannerOnly: true };
+	}
+	if ( detail === 0 ) return { key: "UIIT_MSG_PARTYERR_CREATE_PARTY_REFUSED", value: 0, nativeType: 4 };
+	if ( detail === 2 ) return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0, nativeType: 4 };
+	return { key: "UIIT_MSG_PARTYMATCH_JOIN_NOREPLY", value: 0 };
+}
+
+/*
+================
+partyIsFull
+
+CCharacterDependentData_IsPartyFull (818820), the fact the 6356A0
+register guard's last arm and the 634DC9 latch watcher both read.
+The query compares the whole option word [data+0x20], not a bit:
+word 0 fills at 4 members, word 1 (EXP share) at 8, and any other
+word (4 and 5 carry the join-anyone bit) is never full. The port
+compares with >= because the server caps the roster at the same
+bound, so the two readings agree everywhere the roster can sit.
+================
+*/
+export function partyIsFull( members: number, options: number ): boolean {
+	return options === 0 && members >= 4 || options === 1 && members >= 8;
+}
+
+/*
+================
+partyMatchRegisterNotice
+
+The party-match window's own register validator (6356A0): it prints a
+type-4 line and sends nothing, or falls through and composes the
+request. First match prints, in the native order - already listed,
+partyless below level 5, in a party but not its master, master of a
+full party. Two of its keys also exist as server bytes (0x1B, 0x08)
+for the races this pre-send check cannot see; the port keeps both
+lanes, never aligned, and JOIN_ERROR_PARTY has no server byte at all.
+================
+*/
+export function partyMatchRegisterNotice( facts: {
+	readonly listed: boolean;
+	readonly inParty: boolean;
+	readonly master: boolean;
+	readonly partyFull: boolean;
+	readonly level: number;
+} ): SystemNotice | null {
+	if ( facts.listed ) return { key: "UIIT_MSG_PARTYMATCH_RECORD_ERROR_AGAIN", value: 0, nativeType: 4 };
+	if ( !facts.inParty && facts.level < 5 ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_LEVEL", value: 0, nativeType: 4 };
+	}
+	if ( facts.inParty && !facts.master ) {
+		return { key: "UIIT_MSG_PARTYMATCH_JOIN_ERROR_PARTY", value: 0, nativeType: 4 };
+	}
+	if ( facts.inParty && facts.partyFull ) {
+		return { key: "UIIT_MSG_PARTYERR_ALREADY_FULL", value: 0, nativeType: 4 };
+	}
+	return null;
+}
+
+/*
+================
+partyMatchCompletionNotice
+
+The completion the register (75E3A0 @75E455) and modify (75E4D0
+@75E566) success bytes raise: a centre banner alone (67D030), no
+guide line. The delete answer's banner runs through
+partyMatchDeleteNotice - its wording depends on the party's past.
+================
+*/
+export function partyMatchCompletionNotice( opcode: number ): SystemNotice | null {
+	if ( opcode === 0xb6ff ) {
+		return {
+			key: "UIIT_MSG_PARTYMATCH_RECORD_COMPLETE",
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true
+		};
+	}
+	if ( opcode === 0xb3dc ) {
+		return {
+			key: "UIIT_MSG_PARTYMATCH_MODIFY_COMPLETE",
+			value: 0,
+			notificationBanner: true,
+			bannerOnly: true
+		};
+	}
+	return null;
+}
+
+/*
+================
+partyMatchDeleteNotice
+
+The delete success banner (75B220 @75B32B): a party that filled at
+any moment while the listing stood (flag data_cea6e0, set by the
+634DC9 watcher) names the complete2 wording; the print consumes it.
+================
+*/
+export function partyMatchDeleteNotice( partyWasFull: boolean ): SystemNotice {
+	return {
+		key: partyWasFull ? "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE2" : "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE",
+		value: 0,
+		notificationBanner: true,
+		bannerOnly: true
+	};
+}
+
+/*
+================
+partyMatchAutoNotice
+
+While the auto-match session lives (75EBD0), every join answer that
+is not an acceptance reports the chain at type 4: candidates remain
+-> AUTO_PROGRESS; the chain spent -> AUTO_FAILURE, and the session
+closes. On a refused answer the mapped category-2 error prints
+first; this line follows it, never replaces it. An acceptance
+prints neither (the completion banner stands).
+================
+*/
+export function partyMatchAutoNotice( facts: {
+	readonly sessionOpen: boolean;
+	readonly accepted: boolean;
+	readonly candidatesRemain: boolean;
+} ): SystemNotice | null {
+	if ( !facts.sessionOpen || facts.accepted ) return null;
+	return {
+		key: facts.candidatesRemain ? "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS" : "UIIT_MSG_PARTYMATCH_AUTO_FAILURE",
+		value: 0,
+		nativeType: 4
+	};
+}
+
+/*
+================
+partyMatchAutoStartNotice
+
+The line a round opens with: the candidate collector
+(CIFPartyMatchAuto_CollectCandidates 63B130) sends its first
+candidate and then prints AUTO_PROGRESS at type 4 (63B383 ->
+63B3A0), before any join answer exists - a sent round announces
+itself, where an empty one prints PSEARCH_NORESULT instead. The
+port's answer path could only report the chain from the first
+answer on, so a round started silently (#2628).
+================
+*/
+export function partyMatchAutoStartNotice(): SystemNotice {
+	return { key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS", value: 0, nativeType: 4 };
+}
+
+/*
+================
+partyMatchNoResultNotice
+
+The empty-collection line (63B130 @63B327, 637CF0 @637FC3): an auto
+round with nobody to ask, and a committed search whose filtered
+list is empty, both print it once at type 4.
+================
+*/
+export function partyMatchNoResultNotice(): SystemNotice {
+	return { key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT", value: 0, nativeType: 4 };
+}
 // 637CF0 uses exact name equality and inclusive overlapping level intervals.
 /*
 ================
@@ -441,6 +629,53 @@ export function partyDefaultPurpose( job: number ): number {
 	return job === 2 ? 3 : job === 1 || job === 3 ? 2 : 0;
 }
 
+// The record form's title box and the register/modify frame both hold 50
+// characters (the form setup gives edit 0x31 a 0x32 limit at 63C2F9, right
+// after 63BE00 fills the default), so a longer localised default is cut to fit.
+export const PARTY_TITLE_MAX_LENGTH = 50;
+// 63BE00 indexes its default table with the purpose radio (this+0x7C4):
+// Hunting, Quest, Trader, Thief. The catalogue numbers do not follow that
+// order: DEFAULT2 is the trader's, DEFAULT3 the quest's.
+const PARTY_DEFAULT_TITLE_KEYS = [
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT1",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT3",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT2",
+	"UIIT_MSG_PARTYMATCH_RECORD_DEFAULT4"
+] as const;
+/*
+================
+partyDefaultTitleKey
+
+The default title of each purpose, in the radio's order. Purpose 0 (the
+jobless default) stands in for an out-of-range byte, which the radio and
+partyPurposeAllowed never produce.
+================
+*/
+export function partyDefaultTitleKey( purpose: number ): string {
+	return PARTY_DEFAULT_TITLE_KEYS[purpose] ?? PARTY_DEFAULT_TITLE_KEYS[0]!;
+}
+/*
+================
+partyFormTitle
+
+What 63BE00 leaves in the title box for `current` and `purpose`: an empty box,
+or one still holding any of the four defaults, becomes the selected purpose's
+default; a title the player typed is never replaced. The comparison uses the
+same 50-character cut the box applies, so a cut default still counts as one.
+================
+*/
+export function partyFormTitle(
+	current: string,
+	purpose: number,
+	strings: Readonly<Record<string, string>>
+): string {
+	const title = ( key: string ) => (strings[key] ?? "").slice( 0, PARTY_TITLE_MAX_LENGTH );
+	if ( !current.length || PARTY_DEFAULT_TITLE_KEYS.some( key => title( key ) === current ) ) {
+		return title( partyDefaultTitleKey( purpose ) );
+	}
+	return current;
+}
+
 /*
 ================
 PartyMatchLocal
@@ -478,7 +713,7 @@ export function partyMatchButtons( input: {
 	readonly level: number;
 	readonly rows: number;
 } ): Readonly<Record<15 | 16 | 17 | 18 | 19 | 20, boolean>> {
-	const full = input.members >= ((input.options & 1) ? 8 : 4),
+	const full = partyIsFull( input.members, input.options ),
 		open = !input.own && !input.inParty && input.level >= 1 && input.rows > 0,
 		form = !input.own &&
 			(!input.inParty && input.level >= 5 || input.inParty && input.leader && !full),

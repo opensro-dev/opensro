@@ -8,7 +8,7 @@ skillrepair_test.go - complete fortress repair program admission
 package enterworld
 
 import (
-	"opensro.online/server/internal/testsupport/licensed"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -57,8 +57,8 @@ TestShippedStructureRepairDescriptor
 ================
 */
 func TestShippedStructureRepairDescriptor(t *testing.T) {
-	licensed.RequireGameData(t)
-	dir := licensed.RetailTextdataDir(t)
+	clientdata.RequireGameData(t)
+	dir := clientdata.RetailTextdataDir(t)
 	skills := NewTextdataSkills(dir)
 	for _, fields := range readTextdataFile(filepath.Join(dir, "skilldata_25000.txt")) {
 		if len(fields) < 4 || fields[3] != "SKILL_FORT_REPAIR_KIT_01" {

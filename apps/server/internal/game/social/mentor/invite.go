@@ -83,6 +83,20 @@ type InviteRuntime struct {
 	mu              sync.Mutex
 	pendingByTarget map[string]PendingInvite
 
+	// buffMu guards the cumulated-buff ledger (buff.go): the live
+	// per-member buff state the kill path mutates inside the fatal-hit
+	// door, where the authority door cannot be taken. The camp door
+	// stays the durable owner; the ledger is its hot copy, flushed
+	// through WriteMemberBuffs at every lifecycle point and minute.
+	buffMu sync.Mutex
+	// buffFlushMu serialises flushBuffCamp's door writes so two flushes
+	// never land an older snapshot after a newer one. It is taken before
+	// buffMu and is never held by the kill path (see flushBuffCamp).
+	buffFlushMu     sync.Mutex
+	buffLedger      map[buffLedgerKey]*buffLedgerEntry
+	buffCampOf      map[buffCharKey]int64
+	buffPulseMinute int64
+
 	// PeerPending reports another lane's unanswered proposal for a
 	// player. A player holds one at a time (the native transaction
 	// manager), so this lane then refuses. The type-9 prompt is a plain
@@ -172,6 +186,7 @@ func (r *InviteRuntime) Register(hub *transport.Hub) {
 	hub.Handle(OpTCGraduateRequest, r.handleGraduate)
 	hub.Handle(OpTCCompulsoryGraduateRequest, r.handleCompulsoryGraduate)
 	hub.Handle(OpTCHonorRankRequest, r.handleHonorRank)
+	hub.Handle(OpTCPassBuffRequest, r.handlePassBuff)
 }
 
 /*
@@ -608,6 +623,7 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 	}
 	campID := admission.Camp.ID
 	joined := admission.Members
+	r.hydrateBuffCamp(divisionID, campID, joined)
 	rows := r.campWireRows(divisionID, joined)
 	joinerWireRow := r.memberWireRow(divisionID, joinerRow)
 	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(joinerWireRow.MemberID, admission.Camp.EvaluationRank, admission.Camp.Subject, admission.Camp.Contents, rows))
@@ -630,6 +646,26 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 }
 
 /*
+================
+otherCampMembers
+
+otherCampMembers returns the camp's member records without the
+subject's own: the connect/disconnect delta is FOR the sitting
+members - the subject's client seeds its own row present at world
+entry, and a closing subject is already gone.
+================
+*/
+func otherCampMembers(members []enterworld.TrainingCampMemberRecord, charID int64) []enterworld.TrainingCampMemberRecord {
+	others := make([]enterworld.TrainingCampMemberRecord, 0, len(members))
+	for _, member := range members {
+		if member.CharID != charID {
+			others = append(others, member)
+		}
+	}
+	return others
+}
+
+/*
 ==================
 WorldBound
 
@@ -639,7 +675,9 @@ received died with it (the party/guild session-boundary rule), and a
 character who is a persisted camp MEMBER gets their 0x3AC5 status-10
 sub-1 camp seed - the fresh client holds no camp state, and the seed
 is what arms the Academy pane's in-camp/master-is-me gates (the
-siege lane's post-bootstrap seed precedent).
+siege lane's post-bootstrap seed precedent). The sitting camp also
+learns the member is back (status 5 flag 1, byte 0; SessionClosed
+carries the byte-1 half).
 ==================
 */
 func (r *InviteRuntime) WorldBound(s *transport.Session, divisionID string, character *enterworld.Character) {
@@ -665,6 +703,8 @@ func (r *InviteRuntime) WorldBound(s *transport.Session, divisionID string, char
 	}
 	rows := r.campWireRows(divisionID, members)
 	_ = s.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(enterworld.ObjectIDForCharacter(character), camp.EvaluationRank, camp.Subject, camp.Contents, rows))
+	r.broadcastCampStatus(divisionID, otherCampMembers(members, character.ID), EncodeCampMemberOnlineUpdate3AC5(enterworld.ObjectIDForCharacter(character), false))
+	r.buffEntrySends(s, divisionID, character, campID, members)
 	if r.SyncMasterHonorBuffs != nil {
 		evalRank := uint8(0)
 		if camp.MasterCharID == character.ID {
@@ -685,7 +725,11 @@ live - the party lane's loser-close guard), then drop any invitation
 targeting them - the prompt died with the target's transport. An
 inviter's disconnect deliberately drops nothing here: the
 consent-time re-validation refuses a commit whose inviter is gone.
-Camp MEMBERSHIP survives the disconnect - it is persisted state.
+Camp MEMBERSHIP survives the disconnect - it is persisted state;
+the sitting camp learns the member left (status 5 flag 1, byte 1;
+WorldBound carries the byte-0 half). The winner guard above is
+what keeps a session REPLACEMENT from announcing a disconnect
+that never happened.
 ==================
 */
 func (r *InviteRuntime) SessionClosed(s *transport.Session) {
@@ -696,6 +740,14 @@ func (r *InviteRuntime) SessionClosed(s *transport.Session) {
 	if winner, live := r.presence.SessionByName(divisionID, character.Name); live && winner != s {
 		return
 	}
+	if authority := r.deps.TrainingCampAuthority(); authority != nil {
+		if campID, joined := authority.CampOfCharacter(divisionID, character.ID); joined {
+			if _, members, ok := authority.Camp(divisionID, campID); ok {
+				r.broadcastCampStatus(divisionID, otherCampMembers(members, character.ID), EncodeCampMemberOnlineUpdate3AC5(enterworld.ObjectIDForCharacter(character), true))
+			}
+		}
+	}
+	r.buffExitFlush(divisionID, character)
 	if r.DropPendingInvite(divisionID, character.Name) {
 		log.Debugf("mentor: %s disconnected; pending TC invitation dropped", character.Name)
 	}

@@ -22,8 +22,8 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -32,7 +32,7 @@ TestSunPickDropsNothingWithTheFlag
 ================
 */
 func TestSunPickDropsNothingWithTheFlag(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	for _, on := range []bool{false, true} {
 		t.Setenv(progression.EnvSunEventOnly, map[bool]string{false: "off", true: "on"}[on])
 		rt, _, _, _ := newCombatTestRuntime(t, 1)
@@ -93,7 +93,7 @@ degree-9 Moon and degree-8 Sun stay on the shelf.
 ================
 */
 func TestSunLeavesTheShopsWithTheFlag(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	extra := []commerce.ExtraGood{
 		{Tab: "STORE_CH_SMITH_TAB3", Codename: "ITEM_CH_SWORD_09_C_RARE", Price: 1000},
 		{Tab: "STORE_CH_SMITH_TAB3", Codename: "ITEM_CH_SWORD_09_B_RARE", Price: 1000},

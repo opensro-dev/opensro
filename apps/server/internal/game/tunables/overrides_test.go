@@ -80,7 +80,7 @@ func TestApplySwapsLiveKeysOnly(t *testing.T) {
 	if Current().Int(JobKillNoticesPerMinute) != 3 || before.Int(JobKillNoticesPerMinute) != 6 {
 		t.Fatal("the live change did not take, or changed an action's snapshot")
 	}
-	if applied, err := Apply(MostWantedTestKills, "2"); err != nil || applied || Current().Int(MostWantedTestKills) != 5 {
+	if applied, err := Apply(MostWantedTestKills, "1"); err != nil || applied || Current().Int(MostWantedTestKills) != 5 {
 		t.Fatalf("restart key: applied %v err %v value %d", applied, err, Current().Int(MostWantedTestKills))
 	}
 	snapshot := Current()
@@ -128,12 +128,12 @@ its key boots on the environment; the boot does not fail.
 func TestBootOverridesReachRestartValues(t *testing.T) {
 	t.Cleanup(func() { _, _ = InstallBoot(nil) })
 	t.Setenv("SRO_MOST_WANTED_TEST_KILLS", "5")
-	if rejected, err := InstallBoot(map[string]string{MostWantedTestKills: "2", JobKillNoticesPerMinute: "4"}); err != nil ||
+	if rejected, err := InstallBoot(map[string]string{MostWantedTestKills: "1", JobKillNoticesPerMinute: "4"}); err != nil ||
 		len(rejected) != 0 {
 		t.Fatal(rejected, err)
 	}
-	if v, err := FromEnv(MostWantedTestKills); err != nil || v.Number != 2 || v.Source != "store" {
-		t.Fatalf("boot read %+v %v, want the stored 2", v, err)
+	if v, err := FromEnv(MostWantedTestKills); err != nil || v.Number != 1 || v.Source != "store" {
+		t.Fatalf("boot read %+v %v, want the stored 1", v, err)
 	}
 	if Current().Int(JobKillNoticesPerMinute) != 4 {
 		t.Fatal("the boot snapshot does not hold the stored live value")

@@ -138,6 +138,21 @@ test("NPC resuscitation receipts open once and reject malformed payloads", () =>
 	assert.equal( owner.restorationRevision(), 0 );
 });
 
+test("the withdrawal row asks the bound NPC for the service with mask 0x200", () => {
+	const sent = [];
+	const owner = createNpcConversation( frame => sent.push( frame ) );
+	owner.select( 123 );
+	owner.withdraw( 0 );
+	assert.equal( sent.length, 1 );
+	assert.equal( sent[0].opcode, 0x7338 );
+	const view = new DataView( sent[0].payload.buffer, sent[0].payload.byteOffset );
+	assert.equal( view.getUint32( 0, true ), 123 );
+	assert.equal( view.getUint32( 4, true ), 0x200 );
+	owner.receive( { opcode: 0x3230, payload: new Uint8Array() } );
+	assert.equal( owner.restorationRevision(), 1 );
+	assert.equal( owner.state().phase, "closed" );
+});
+
 test("restoration receipts repair every hotbar and reject upward ranks", () => {
 	const state = game();
 	const lower = withdrawalSkillBindings( state, state.skillCatalog, 11 );

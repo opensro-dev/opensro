@@ -174,7 +174,7 @@ func TestMonsterLootPublicationSurvivesOwnershipAndExpiry(t *testing.T) {
 					})
 				}
 				ticker := simulation.NewTicker(source, bridge)
-				ticker.Hooks = []simulation.TickHook{rt.ReleaseExpiredOwnership, rt.SweepExpired}
+				ticker.Hooks = []simulation.NamedTickHook{{Hook: rt.ReleaseExpiredOwnership}, {Hook: rt.SweepExpired}}
 				ticker.RunTick(drops[0].DroppedAt.Add(age).UnixMilli())
 				opcode := wire.OpGroundOwnershipExpired
 				if age == grounditem.FixtureLifetime {
@@ -347,7 +347,7 @@ func TestGroundPickupDespawnReachesBootstrapViewerWithoutObservedPicker(t *testi
 			}},
 		}
 		ticker := simulation.NewTicker(source, worldsession.New(server.Hub))
-		ticker.Hooks = []simulation.TickHook{rt.advancePets}
+		ticker.Hooks = []simulation.NamedTickHook{{Hook: rt.advancePets}}
 		nowMs = 1100
 		ticker.RunTick(nowMs)
 		if _, stillOnGround := rt.Ground.Get(testDivision, drop.Gid); !stillOnGround {

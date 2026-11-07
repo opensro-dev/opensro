@@ -170,7 +170,7 @@ func (rt *Runtime) pulseArea(division string, c *enterworld.Character, row enter
 	for _, victim := range plan.victims {
 		var result OpResult
 		if victim.player >= 0 {
-			hit, credited, ok := rt.commitCreditedPlayerHit(division, c, plan.players[victim.player], now)
+			hit, credited, ok := rt.commitCreditedPlayerHit(division, c, plan.players[victim.player], now, rt.tickDoors())
 			if !ok {
 				continue
 			}

@@ -227,3 +227,64 @@ test("point light admission tests own pose values only, as Object.values did", (
 		/Invalid character point light/
 	);
 });
+
+test("an invalid published clock holds the last valid value and reports once per gid", () => {
+	const owner = createActorSnapshots(), base = actor( 7, 20 );
+	assert.equal( owner.update( [ base ] )[0].time, 2 );
+	for ( const bad of [ NaN, -5, Infinity ] ) {
+		assert.equal( owner.update( [ { ...base, time: bad } ] )[0].time, 2, `time ${bad} is held` );
+	}
+	assert.equal( owner.stats().heldTimes, 3 );
+	const reports = owner.takeDegradations();
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].code, "character-time-held" );
+	assert.match( reports[0].message, /gid=7 model=m2 clip=run time=NaN held=2/ );
+	assert.deepEqual( owner.takeDegradations(), [], "the queue drains" );
+	assert.equal( owner.update( [ { ...base, time: 3 } ] )[0].time, 3, "a valid clock takes over again" );
+});
+
+test("a first invalid clock holds at rest and layer clocks hold per slot", () => {
+	const owner = createActorSnapshots();
+	const layer = { clip: "walk", time: -1, loop: true, weight: 2, lane: "timed" };
+	const row = owner.update( [ { ...actor( 9, 0 ), time: NaN, layers: [ layer ] } ] )[0];
+	assert.equal( row.time, 0 );
+	assert.equal( row.layers[0].time, 0 );
+	assert.equal( row.layers[0].weight, 1 );
+	const moved = { clip: "walk", time: 5, loop: true, weight: .5, lane: "timed" };
+	owner.update( [ { ...actor( 9, 0 ), time: 1, layers: [ moved ] } ] );
+	assert.equal( row.layers[0].time, 5 );
+	assert.equal( row.layers[0].weight, .5 );
+	owner.update( [ { ...actor( 9, 0 ), time: 1, layers: [ { ...moved, time: NaN, weight: NaN } ] } ] );
+	assert.equal( row.layers[0].time, 5, "the layer clock holds its last valid value" );
+	assert.equal( row.layers[0].weight, .5, "the layer weight holds its last valid value" );
+	assert.equal( owner.stats().heldTimes, 5, "every substitution counts, reported or not" );
+	const messages = owner.takeDegradations().map( report => report.message );
+	assert.equal( messages.filter( message => message.includes( "clip=run time=NaN" ) ).length, 1 );
+	assert.ok( messages.some( message => message.includes( "layers[0].time=-1" ) ) );
+	assert.ok( messages.some( message => message.includes( "layers[0].weight=2" ) ) );
+	assert.equal(
+		messages.filter( message => message.includes( "layers[0].time" ) ).length,
+		1,
+		"a layer slot reports its first hold only, not the later NaN"
+	);
+});
+
+test("valid clocks are admitted verbatim and a held clock reports again after the gid returns", () => {
+	const owner = createActorSnapshots();
+	const source = {
+		...actor( 3, 1 ),
+		layers: [ { clip: "walk", time: 1.5, loop: true, weight: .25, lane: "timed" } ]
+	};
+	const row = owner.update( [ source ] )[0];
+	assert.equal( row.time, source.time );
+	assert.equal( row.layers[0].time, 1.5 );
+	assert.equal( row.layers[0].weight, .25 );
+	assert.equal( owner.stats().heldTimes, 0 );
+	assert.deepEqual( owner.takeDegradations(), [] );
+	const stale = actor( 11, 10 );
+	owner.update( [ { ...stale, time: NaN } ] );
+	assert.equal( owner.takeDegradations().length, 1 );
+	owner.update( [] );
+	owner.update( [ { ...stale, time: NaN } ] );
+	assert.equal( owner.takeDegradations().length, 1, "a returned gid reports its first hold again" );
+});

@@ -59,10 +59,22 @@ const (
 // 2,099 allocs; with crows lacking Tailwind or Guiding Feathers refused
 // before the owner copy on those ticks, measured 208,183 B / 1,862 allocs;
 // with the commit's ground read taking only the changed rows instead of
-// a whole-plane snapshot (#2040), measured 142,251 B / 1,457 allocs.
+// a whole-plane snapshot (#2040), measured 142,251 B / 1,457 allocs;
+// with the pet tick (#2046) and then the brood tick taking the companion
+// copy instead of the whole owner record (#2030), measured 98,010 B /
+// 1,380 allocs; with that copy narrowed to the pet-owner view (#2030),
+// measured 83,925 B / 1,324 allocs; with the pet tick's idle satiety
+// and crow-recharge update doors judged under the read door and the
+// waiting cast verdict pricing from its prepared snapshot (#2139),
+// measured 68,183 B / 1,056 allocs; with the elemental eligibility
+// walk's refusal judged on door-read facts instead of the pet-owner
+// copy (#2030), measured 66,296 B / 997 allocs; with the judged pet
+// tick's facts slimmed to the lane's eight scalar reads instead of
+// a copied companion record (#2030), measured 56,978 B / 974 allocs
+// (bytes only: the facts container was one allocation either way).
 const (
-	tickBudgetBytesPerTick  = 156500
-	tickBudgetAllocsPerTick = 1603
+	tickBudgetBytesPerTick  = 63000
+	tickBudgetAllocsPerTick = 1100
 )
 
 /*

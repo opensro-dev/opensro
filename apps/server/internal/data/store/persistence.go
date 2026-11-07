@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -91,8 +92,10 @@ skipped because their bytes still matched the last committed digest.
 ================
 */
 type commitRowCounts struct {
-	written int64
-	skipped int64
+	written     int64
+	skipped     int64
+	metaWritten int64
+	metaSkipped int64
 }
 
 /*
@@ -118,18 +121,41 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := writeTradeRewards(tx, s.meta.TradeRewards); err != nil {
+	// The trade and job planes marshal whole on every commit, changed
+	// or not; like the character rows below, a plane whose bytes still
+	// match its last committed digest is not rewritten (#1943 W2).
+	// Digests stage here and are retained only once the transaction
+	// commits (below). The updated-at stamp is the commit's own time
+	// and is written every time; the schema and layout stamps are
+	// build constants and take the same skip.
+	stagedMeta := map[string][32]byte{}
+	if record, err := tradeRewardsRecord(s.meta.TradeRewards); err != nil {
 		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyTradeRewards, record); err != nil {
+			return err
+		}
 	}
-	if err := writeJobRankings(tx, s.meta.JobRankings); err != nil {
+	if record, err := jobRankingsRecord(s.meta.JobRankings); err != nil {
 		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyJobRankings, record); err != nil {
+			return err
+		}
+	}
+	if record, err := halloweenBoxesRecord(s.meta.HalloweenBoxes); err != nil {
+		return err
+	} else if record != "" {
+		if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyHalloweenBoxes, record); err != nil {
+			return err
+		}
 	}
 
-	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err
 	}
 	// The layout stamp rides every commit like the schema stamp above.
-	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
+	if err := s.upsertMetaRowTx(tx, stagedMeta, rows, metaKeyLayoutVersion, fmt.Sprintf("%d", CurrentLayoutVersion)); err != nil {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", s.now().UnixMilli())); err != nil {
@@ -139,8 +165,13 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	// Digests of the character rows this attempt writes, staged here
 	// and retained only once the transaction commits (below).
 	stagedDigests := map[committedCharacterKey][32]byte{}
+	stagedRows := map[committedCharacterKey]*domain.Character{}
 	rowCommit := characterRowCommit{tx: tx, scratch: &s.encodeScratch, committed: s.committedDigests,
-		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode]}
+		staged: stagedDigests, rows: rows, now: s.mu.now, encode: &phases[commitPhaseEncode],
+		committedRows: s.committedRows, stagedRows: stagedRows}
+	// The attempt's prepared character upsert (#1943 W3) goes back
+	// with the attempt, committed or rolled back.
+	defer rowCommit.close()
 	if s.changes.all {
 		for divisionID, records := range s.characters {
 			for _, c := range records {
@@ -291,6 +322,37 @@ func (s *Store) commitTxLocked(phases *commitPhaseDurations, rows *commitRowCoun
 	for key, digest := range stagedDigests {
 		s.committedDigests[key] = digest
 	}
+	for key, row := range stagedRows {
+		s.committedRows[key] = row
+	}
+	for key, digest := range stagedMeta {
+		s.committedMetaDigests[key] = digest
+	}
+	return nil
+}
+
+/*
+================
+upsertMetaRowTx
+
+One meta row of a plane the commit rewrites whole: written only when
+its bytes differ from the key's last committed digest, and then staged
+so the digest is retained only if the transaction commits - the
+character rows' discipline (commitRowCommit), so a rolled-back commit
+leaves no digest describing bytes the disk does not hold.
+================
+*/
+func (s *Store) upsertMetaRowTx(tx *sql.Tx, staged map[string][32]byte, rows *commitRowCounts, key, value string) error {
+	digest := sha256.Sum256([]byte(value))
+	if committed, ok := s.committedMetaDigests[key]; ok && committed == digest {
+		rows.metaSkipped++
+		return nil
+	}
+	if err := upsertMetaTx(tx, key, value); err != nil {
+		return err
+	}
+	rows.metaWritten++
+	staged[key] = digest
 	return nil
 }
 
@@ -383,6 +445,14 @@ Close
 func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The background checkpointer stops first (#2142 slice 0): its
+	// last cycle must not race the TRUNCATE below, and it closes its
+	// own handle between cycles, so this wait is the only join. It
+	// takes no store door, so holding mu here cannot deadlock it.
+	if s.checkpoints != nil {
+		s.checkpoints.stop()
+		s.checkpoints = nil
+	}
 	if s.db != nil {
 		// A graceful stop never drops a tick: rows a deferred door left
 		// (tickbatch.go) are written before the final checkpoint.
@@ -424,17 +494,66 @@ characterRowCommit
 
 The character-row half of one commit attempt: the transaction, the
 encoder scratch, the committed and staged digests, the row counts and
-the encode clock every upsertTimedTx call of the attempt shares.
+the encode clock every upsertTimedTx call of the attempt shares. It
+also owns the attempt's one prepared character upsert (#1943 W3),
+written through writeRow and released by close.
 ================
 */
 type characterRowCommit struct {
 	tx        *sql.Tx
+	upsert    *sql.Stmt
 	scratch   *jsonscratch.Scratch
 	committed map[committedCharacterKey][32]byte
 	staged    map[committedCharacterKey][32]byte
 	rows      *commitRowCounts
 	now       func() time.Time
 	encode    *time.Duration
+	// committedRows and stagedRows are the staged digests' twin for
+	// the section comparison (character_sections.go): the committed
+	// copies a skip reads, and the fresh copies this attempt stages.
+	committedRows map[committedCharacterKey]*domain.Character
+	stagedRows    map[committedCharacterKey]*domain.Character
+}
+
+/*
+================
+characterRowCommit::writeRow
+
+One character row through the attempt's prepared upsert, prepared on
+the first row written: a commit that writes no character row prepares
+nothing (a skipped row never reaches here). Before W3 every row paid
+tx.Exec's prepare again; on the real driver prepare-once took a
+16-row write from 625us to 235us (opensro3's probe, #1943).
+================
+*/
+func (w *characterRowCommit) writeRow(division string, c *domain.Character, record []byte) error {
+	if w.upsert == nil {
+		stmt, err := w.tx.Prepare(upsertCharacterSQL)
+		if err != nil {
+			return err
+		}
+		w.upsert = stmt
+	}
+	// string(record) is load-bearing: a []byte argument binds as a
+	// blob and the row reads back wrong (the same binding
+	// writeCharacterTx makes for the one-row doors).
+	_, err := w.upsert.Exec(division, c.ID, strings.ToLower(c.Name), string(record))
+	return err
+}
+
+/*
+================
+characterRowCommit::close
+
+Releases the prepared upsert; commitTxLocked defers it for every
+attempt, written rows or none.
+================
+*/
+func (w *characterRowCommit) close() {
+	if w.upsert != nil {
+		_ = w.upsert.Close()
+		w.upsert = nil
+	}
 }
 
 /*
@@ -455,22 +574,36 @@ commit skip a row the disk does not hold.
 ================
 */
 func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) error {
+	key := committedCharacterKey{division: division, id: c.ID}
+	// The section skip (#2141): a dirty character whose sections all
+	// still equal its committed copy would encode to the row the disk
+	// already holds, so it costs no encode and no hash. The digest
+	// below remains the write gate for characters that did move - and
+	// the debug check that the comparison told the truth.
+	if committed, known := w.committedRows[key]; known && len(characterSectionsChanged(c, committed)) == 0 {
+		w.rows.skipped++
+		return nil
+	}
 	start := w.now()
 	record, err := encodeCharacterBorrowed(w.scratch, division, c)
 	*w.encode += w.now().Sub(start)
 	if err != nil {
 		return err
 	}
-	key := committedCharacterKey{division: division, id: c.ID}
 	digest := sha256.Sum256(record)
 	if last, known := w.committed[key]; known && last == digest {
+		// Sections moved but the bytes did not (a nil slice became an
+		// empty one): refresh the staged copy so the next commit's
+		// comparison starts clean instead of re-encoding forever.
+		w.stagedRows[key] = domain.CloneCharacter(c)
 		w.rows.skipped++
 		return nil
 	}
-	if err := writeCharacterTx(w.tx, division, c, record); err != nil {
+	if err := w.writeRow(division, c, record); err != nil {
 		return err
 	}
 	w.staged[key] = digest
+	w.stagedRows[key] = domain.CloneCharacter(c)
 	w.rows.written++
 	return nil
 }

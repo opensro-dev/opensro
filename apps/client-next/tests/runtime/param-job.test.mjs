@@ -9,7 +9,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
 
-const { createParamJobs, paramJobFraction } = await import( "../../src/engine/foundation/gameplay/param-job.ts" );
+const { createParamJobs, paramJobFraction, paramJobHelpText, paramJobRemainingMs } = await import(
+	"../../src/engine/foundation/gameplay/param-job.ts"
+);
 
 // TID 3/3/3/10 with the low class bits set the way itemdata words carry them.
 const PARAM_ITEM = 0x51ec | 1;
@@ -64,6 +66,74 @@ test("Gold Time (TID 3/3/13/4) and Skill Time (TID 3/3/13/5) tickets join the bo
 	assert.equal( rows[0].reference.durationSec, 2419200 );
 	assert.equal( rows[1].itemRefObjId, 23268 );
 	assert.equal( paramJobFraction( rows[1], rows[1].reference, 1000 ), 0.5 );
+});
+
+/*
+================
+helpCopy
+
+The board help's words, resolved as the client's text lookup resolves
+them.
+================
+*/
+const helpCopy = symbol =>
+	({
+		PARAM_DURA: "Continuous hours",
+		PARAM_REMAINED_PERIOD: "Left service period",
+		PARAM_DAY: "Day",
+		PARAM_HOUR: "Hour",
+		PARAM_MINUTE: "Minute",
+		PARAM_SECOND: "Second"
+	})[symbol] ?? symbol;
+
+test("the kind-4 help reads name, total duration and the remained period", () => {
+	// A four-week premium service row, one minute in.
+	assert.equal(
+		paramJobHelpText(
+			"Premium PLUS",
+			2419200,
+			paramJobRemainingMs( { itemRefObjId: 24306, remainingSec: 2419200, receivedAtMs: 0 }, 60000 ),
+			helpCopy
+		),
+		"Premium PLUS\n \nContinuous hours: 672Hour\n \nLeft service period: 27Day 23Hour 59Minute"
+	);
+	// An hour-long scroll with half an hour left counts its duration in minutes.
+	assert.equal(
+		paramJobHelpText( "Exp scroll", 3600, 1800000, helpCopy ),
+		"Exp scroll\n \nContinuous hours: 60Minute\n \nLeft service period: 0Day 0Hour 30Minute"
+	);
+	// Under a minute the period counts seconds; the duration stays whole minutes.
+	assert.equal(
+		paramJobHelpText( "Exp scroll", 3600, 45000, helpCopy ).split( "\n" )[4],
+		"Left service period: 45Second"
+	);
+});
+
+test("the board slot's hover help is the composed kind-4 text", async () => {
+	const { buffBoard } = await import( "../../src/engine/foundation/ui/buff-board.ts" );
+	const jobs = createParamJobs();
+	jobs.reference( {
+		refObjId: 24306,
+		typeFlags: GOLD_TIME_TICKET,
+		nativeFields: { itemParam1_29c: 2419200 },
+		icon: "item/etc/mall_gold_time_service_ticket.ddj",
+		name: "Premium PLUS"
+	} );
+	jobs.receive( frame( 0x3602, 9, 2419200, 24306 ), 0 );
+	const board = buffBoard(
+		/** @type {any} */ ({ localGid: 1, paramJobs: jobs.state() }),
+		60000,
+		new Set(),
+		undefined,
+		true,
+		helpCopy
+	);
+	const slot = board.find( row => row.id === "param-job:24306" );
+	assert.ok( slot );
+	assert.equal(
+		slot.helpText,
+		"Premium PLUS\n \nContinuous hours: 672Hour\n \nLeft service period: 27Day 23Hour 59Minute"
+	);
 });
 
 test("resume replaces, end removes, and other items are not param jobs", () => {

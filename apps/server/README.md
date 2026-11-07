@@ -4,8 +4,8 @@ Go implementation of the Silkroad Online v1.150 (Legend III) server contracts
 for the browser client. WebTransport is the primary game channel, with a
 WebSocket fallback on the same port.
 
-Local setup: [docs/GETTING_STARTED.md](../../docs/GETTING_STARTED.md).
-How the pieces fit: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).
+Local setup: [docs/guides/GETTING_STARTED.md](../../docs/guides/GETTING_STARTED.md).
+How the pieces fit: [docs/architecture/ARCHITECTURE.md](../../docs/architecture/ARCHITECTURE.md).
 
 ## Processes
 
@@ -28,8 +28,7 @@ not start `agent.exe`, `gameworld.exe` or `nomad agent -dev` by hand. Use
 | `cmd/operations/` | `sro-nomad`, `sro-bootstrap-development` and other operator commands ([catalog](cmd/README.md)) |
 | `cmd/tools/` | Offline tools (game-data export, item catalog, reference export) |
 | `internal/` | Implementation: `agent`, `cluster`, `config`, `data`, `domain`, `game`, `gamedata`, `gates`, `platform`, `security`, `testsupport`, `transport` |
-| `config/` | Shipped data-only configuration and the development account |
-| `ops/` | Nomad jobs ([guide](ops/nomad/README.md)), [deployment contracts](ops/docs/DEPLOYMENT.md), [accepted advisories](ops/docs/ACCEPTED_ADVISORIES.md) |
+| `config/` | Shipped data-only configuration, the development account, the release declaration (`compatibility.json`) and the live shard's settings (`shard-settings.json`) |
 
 Ignored: `temp/` (build output, logs, profiles) and `.state/` (runtime state,
 development certificates, Nomad data).

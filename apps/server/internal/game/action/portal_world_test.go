@@ -11,8 +11,8 @@ import (
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const (
@@ -56,7 +56,7 @@ The fortress fixture over a given monster template.
 */
 func fortressFixtureWithPopulation(t *testing.T, gateRef uint32, template monster.Template) (*Runtime, *enterworld.Character, *fakeClock) {
 	t.Helper()
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	rt, c, clock, _ := returnFixture(t, 30000)
 	rt.Monsters = simulation.NewMonsterState(template)
 	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
@@ -200,7 +200,7 @@ func TestReturnScrollLeavesTheFortressForTheAppointedTown(t *testing.T) {
 		t.Fatalf("recall point inside the fortress: %+v", c.World.LastRecallPoint)
 	}
 	clock.Advance(30 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
+	advanceAndDrainReturns(rt, clock.NowMs())
 	inField(t, rt, c, "the return scroll")
 }
 

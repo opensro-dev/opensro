@@ -9,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/gorilla/websocket"
+	"github.com/quic-go/webtransport-go"
 )
 
 /*
@@ -26,6 +29,20 @@ func TestCloseClassificationRequiresEvidence(t *testing.T) {
 		{CloseReason{ByeReasonReplaced}, "expected", "session_replaced"},
 		{fmt.Errorf("wrapped: %w", errHandlerPanic), "software", "handler_panic"},
 		{errGraceExpired, "connection", "resume_grace_expired"},
+		// A plain remote WebTransport close carries an empty message;
+		// it is the client's goodbye, not a loss (#2148).
+		{&webtransport.SessionError{Remote: true}, "expected", "client_closed"},
+		{fmt.Errorf("read: %w", &webtransport.SessionError{Remote: true, ErrorCode: 0x100, Message: "done"}),
+			"expected", "client_closed"},
+		{&webtransport.StreamError{Remote: true}, "expected", "client_closed"},
+		// Our own session close is not the client's goodbye.
+		{&webtransport.SessionError{Remote: false}, "unknown", "connection_closed"},
+		{&webtransport.StreamError{Remote: false}, "unknown", "connection_closed"},
+		// The fallback lane's clean codes are the same goodbye; an
+		// abnormal closure stays a loss.
+		{&websocket.CloseError{Code: websocket.CloseNormalClosure}, "expected", "client_closed"},
+		{&websocket.CloseError{Code: websocket.CloseGoingAway}, "expected", "client_closed"},
+		{&websocket.CloseError{Code: websocket.CloseAbnormalClosure}, "unknown", "connection_closed"},
 	} {
 		category, code := classifyClose(row.cause)
 		if category != row.category || code != row.code {

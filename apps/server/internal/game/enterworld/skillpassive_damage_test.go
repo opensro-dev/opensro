@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -68,8 +68,8 @@ TestAuthoredTwoHandPowerRanksAndConsumers
 ================
 */
 func TestAuthoredTwoHandPowerRanksAndConsumers(t *testing.T) {
-	licensed.RequireGameData(t)
-	s := NewTextdataSkills(licensed.RetailTextdataDir(t))
+	clientdata.RequireGameData(t)
+	s := NewTextdataSkills(clientdata.RetailTextdataDir(t))
 	if err := s.Load(); err != nil {
 		t.Fatal(err)
 	}

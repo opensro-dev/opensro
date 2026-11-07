@@ -12,6 +12,7 @@ readable, and a naming answer stays dismissed across asynchronous snapshots.
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { defined } from "../helpers/defined.mjs";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 const { emptyStall, stallRequest, stallFrame } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { stallTradingPresentation } = await import( "../../src/engine/runtime/ui/hud/stall-hud.ts" );
@@ -150,11 +151,11 @@ for ( const owner of [ true, false ] ) {
 			assert.ok( drag );
 			assertStallBackgrounds( quads, [ drag.rect[0] - 10, drag.rect[1] ] );
 			const origin = [ drag.rect[0] - 10, drag.rect[1] ];
-			assert.deepEqual( control( "stall-slot:0" )?.rect, [ origin[0] + 31, origin[1] + 117, 32, 32 ] );
+			assert.deepEqual( control( "stall-slot:0" )?.rect, [ origin[0] + 28, origin[1] + 114, 208, 44 ] );
 			// 5A2D60's one runtime tab: "Sell goods", selected, owner and visitor alike.
 			assert.deepEqual( control( "stall-tab-sell" )?.rect, [ origin[0] + 28, origin[1] + 86, 80, 24 ] );
 			assert.equal( control( "stall-tab-sell" )?.selected, true );
-			assert.deepEqual( control( "stall-slot:9" )?.rect, [ origin[0] + 237, origin[1] + 281, 32, 32 ] );
+			assert.deepEqual( control( "stall-slot:9" )?.rect, [ origin[0] + 234, origin[1] + 278, 208, 44 ] );
 			assert.deepEqual( control( "stall-chat-text" )?.rect, [ origin[0] + 31, origin[1] + 443, 270, 20 ] );
 			const messageClip = [ origin[0] + 31, origin[1] + 365, 270, 75 ];
 			assert.ok(
@@ -401,6 +402,22 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 	assert.deepEqual( control( "stall-prompt-quantity" )?.rect, [ x + 20, y + 102, 42, 20 ] );
 	assert.deepEqual( control( "stall-prompt-ok" )?.rect, [ x + 123, y + 101, 76, 24 ] );
 	assert.deepEqual( control( "stall-prompt-cancel" )?.rect, [ x + 203, y + 101, 76, 24 ] );
+	// 528920 captions the primary button per mode: the modify modal
+	// (mode 0xB, entry 529212) pushes UIIT_STT_BUY at 529240 before the
+	// shared tail, so this prompt's button reads Buy, not Register.
+	const okRect = control( "stall-prompt-ok" )?.rect ?? [ 0, 0, 0, 0 ];
+	const captionRun = f.products.at( -1 )?.quads.find( quad =>
+		quad.run && quad.run.glyphs.length === "Buy".length &&
+		quad.rect[0] >= okRect[0] && quad.rect[1] >= okRect[1] &&
+		quad.rect[0] + quad.rect[2] <= okRect[0] + okRect[2] &&
+		quad.rect[1] + quad.rect[3] <= okRect[1] + okRect[3]
+	);
+	assert.ok( captionRun, "the modify prompt's primary button carries a 3-glyph caption" );
+	assert.deepEqual(
+		captionRun.run.glyphs.map( glyph => glyph.uv ),
+		glyphWindows( "Buy" ),
+		"the modify prompt's primary button reads Buy"
+	);
 	assert.ok(
 		f.scenes.at( -1 )?.quads.some( quad =>
 			quad.texture === ITEM_ICON && quad.rect.every( ( value, i ) => value === [ x + 25, y + 51, 32, 32 ][i] )
@@ -575,4 +592,97 @@ test("a naming answer stays dismissed across queued commands and coalesced serve
 			}
 		}
 	}
+});
+
+test("a bag item dropped anywhere on an empty owner stall cell opens its focused price edit", t => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	t.after( () => f.dispose() );
+	const item = {
+		slot: 13,
+		refObjId: 1,
+		typeFlags: 0x6c,
+		quantity: 20,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		name: "Potion",
+		icon: "item/etc/hp_potion_01.ddj"
+	};
+	Object.assign( f.state.gameplay, {
+		inventory: [ item ],
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		stall: { ...emptyStall(), phase: "owner", owner: 1 }
+	} );
+	let now = 0, frame;
+	const draw = () => {
+		for ( let i = 0; i < 10; i++ ) frame = f.ui.step( f.state, now += 100 ) ?? frame;
+		assert.ok( frame );
+		return frame;
+	};
+	const control = id => frame.controls.find( row => row.id === id );
+	const drop = ( x, y ) => {
+		f.ui.event( { kind: "drag", id: "slot:13", dx: 0, dy: 0 } );
+		f.ui.event( { kind: "drag-end", id: "slot:13", x, y } );
+		return draw();
+	};
+	draw();
+	const cell = defined( control( "stall-slot:5" ) );
+	assert.deepEqual( cell.rect.slice( 2 ), [ 208, 44 ], "CIFStallSlot owns its whole backplate" );
+	// The name/price rows, not the 32x32 icon.
+	const promptFrame = drop( cell.rect[0] + 120, cell.rect[1] + 34 );
+	// A drop on the cell's price area opens the price prompt.
+	const price = defined( control( "stall-prompt-price" ), "the price prompt" );
+	assert.equal( price.value, "" );
+	assert.equal( control( "stall-prompt-quantity" )?.value, "20" );
+	assert.equal( promptFrame?.focusRequest?.id, "stall-prompt-price", "5A1D9B focuses the price edit" );
+	// 528920 mode 0xA (entry 52915C) falls into the tail at 52918F, which
+	// captions the +0x800 button UIIT_CTL_STALL_REGISTER: a fresh
+	// registration's price prompt confirms with Register, where the
+	// modify prompt above reads Buy.
+	const okButton = defined( control( "stall-prompt-ok" ), "the register prompt's primary button" );
+	assert.equal( okButton.label, "Register", "the register prompt's primary button reads Register" );
+	const caret = (f.scenes.at( -1 )?.quads ?? []).find( quad =>
+		quad.texture === "" && quad.rect[2] === 1 && quad.color.every( c => c === 1 ) &&
+		quad.clip.every( ( value, i ) => value === price.rect[i] )
+	);
+	assert.ok( caret, "the focused empty price edit paints its caret" );
+	assert.ok(
+		caret.rect[0] >= price.rect[0] && caret.rect[0] + caret.rect[2] <= price.rect[0] + price.rect[2],
+		"the caret stays inside the right-aligned price field"
+	);
+	f.ui.event( { kind: "edit", id: "stall-prompt-price", value: "123", start: 3, end: 3, composing: false } );
+	draw();
+	assert.equal( control( "stall-prompt-price" )?.value, "123", "typed digits land in the price" );
+	f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
+	draw();
+	// An occupied cell is never a drop target.
+	Object.assign( f.state.gameplay, {
+		stall: {
+			...emptyStall(),
+			phase: "owner",
+			owner: 1,
+			offers: [ { slot: 0, bagSlot: 13, quantity: 2, price: 12345, item: { ...item, quantity: 2 } } ]
+		}
+	} );
+	draw();
+	const occupied = defined( control( "stall-slot:0" ) );
+	drop( occupied.rect[0] + 120, occupied.rect[1] + 34 );
+	assert.equal( control( "stall-prompt-price" ), undefined, "an occupied cell refuses the drop" );
+	// A visitor's stall refuses it too.
+	Object.assign( f.state.gameplay, {
+		stall: {
+			...emptyStall(),
+			phase: "visitor",
+			owner: 2,
+			open: true,
+			offers: [ { slot: 0, bagSlot: 13, quantity: 2, price: 12345, item: { ...item, quantity: 2 } } ]
+		}
+	} );
+	draw();
+	const visiting = defined( control( "stall-slot:0" ) );
+	drop( visiting.rect[0] + 120, visiting.rect[1] + 34 );
+	assert.equal( control( "stall-prompt-price" ), undefined, "a visitor's stall refuses the drop" );
+	assert.deepEqual( sent, [] );
 });

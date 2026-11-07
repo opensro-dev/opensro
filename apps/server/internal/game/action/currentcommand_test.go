@@ -46,7 +46,7 @@ func TestCurrentCommandSurvivesReleaseDequeueButNotFlightOrFinalize(t *testing.T
 					start = rt.acceptSupportSkill(testDivision, c, rt.characterSnapshot(testDivision, c), cast, skill)
 				} else {
 					var decision skillCastDecision
-					start, decision = rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now)
+					start, decision = rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors())
 					if decision != skillCastAccepted {
 						t.Fatal("preparation refused", decision)
 					}
@@ -103,7 +103,7 @@ func TestCurrentCommandSurvivesReleaseDequeueButNotFlightOrFinalize(t *testing.T
 func TestCurrentCommandCancelAndDisconnectRetireOwnership(t *testing.T) {
 	for _, disconnect := range []bool{false, true} {
 		rt, c, target, skill, now := arrowFixture(t)
-		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now)
+		_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}, now, rt.handlerDoors())
 		if decision != skillCastAccepted {
 			t.Fatal("preparation refused")
 		}

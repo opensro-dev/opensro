@@ -125,17 +125,27 @@ Adapt a pet's working block without reading the authority store from callbacks.
 ================
 */
 type cosAbnormalOwner struct {
-	pet                                *enterworld.CharacterCOS
-	rt                                 *Runtime
-	division                           string
-	c                                  *enterworld.Character
-	block                              *abnormal.Block
-	now                                int64
-	sources                            map[uint32]abnormalSourceState
-	changed                            bool
-	fatal                              bool
-	aliveBefore                        bool
-	died                               bool
+	pet         *enterworld.CharacterCOS
+	rt          *Runtime
+	division    string
+	c           *enterworld.Character
+	block       *abnormal.Block
+	now         int64
+	sources     map[uint32]abnormalSourceState
+	changed     bool
+	fatal       bool
+	aliveBefore bool
+	died        bool
+	// winnerName is the player who killed the pet ("" for a monster
+	// or companion killer), stamped by applyCOSHitInDoor for a fatal
+	// hit and by Hit for a fatal periodic hit, so the death
+	// settlement can name the dealer on its cargo log line (cosdeath.go).
+	winnerName string
+	// winnerCape is the fatal dealer's free-battle group (0 for a
+	// monster dealer): the kill credit's relation gate on a transport's
+	// cargo reads it at settlement (cosdeath.go). A companion dealer
+	// answers with its owner's group.
+	winnerCape                         uint8
 	ref                                *enterworld.CharacterRef
 	hpChanged, mpChanged, speedChanged bool
 	private                            []wire.Frame
@@ -442,6 +452,17 @@ func (o *cosAbnormalOwner) Hit(source uint32, credited bool, damage uint32, reas
 	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	o.hpChanged = true
 	o.fatal = pet.CurrentHP == 0
+	if o.fatal && credited {
+		// The periodic kill credits its source like any hit: stamp the
+		// fatal dealer from the facts captured before the write (a
+		// companion source already answers with its owner there), so
+		// the death settlement gates a transport's cargo on the burn
+		// dealer's relation too, not only a strike's (cosdeath.go).
+		if dealer := o.sources[source].killer.player; dealer != nil {
+			o.winnerName = dealer.Name
+			_, o.winnerCape = o.rt.playerRelationEquipment(dealer)
+		}
+	}
 }
 
 /*
@@ -529,14 +550,30 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 characterByCosGID
 
 Resolve a currently summoned pet to its owning character before mutation.
+
+The gid to owner index (cosownerindex.go) answers first, and its hit
+is verified against the owner's own records before it is trusted: a
+gid the index cannot vouch for falls back to the division walk,
+which then notes what it found. The walk was the whole cost of this
+question (#2138) and stays only as the authority behind the index,
+so a missed maintenance door costs one walk, never a wrong owner.
 ================
 */
 func (rt *Runtime) characterByCosGID(division string, gid uint32) *enterworld.Character {
 	if gid == 0 || rt.deps == nil {
 		return nil
 	}
+	if owner := rt.cosOwners.owner(division, gid); owner != nil {
+		if owner.CompanionByGID(gid) != nil {
+			return owner
+		}
+		// The index vouched for a pet the owner no longer holds:
+		// forget the stale entry and let the walk answer.
+		rt.cosOwners.forget(division, gid)
+	}
 	for _, character := range rt.deps.CharactersForDivision(division) {
 		if character != nil && character.CompanionByGID(gid) != nil {
+			rt.cosOwners.note(division, gid, character)
 			return character
 		}
 	}
@@ -586,7 +623,10 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 		return nil
 	}
 	owner := rt.newCosAbnormalOwnerForPet(entry.division, c, c.CompanionByGID(entry.gid), now)
-	owner.sources = rt.captureAbnormalSourcesLife(entry.division, owner.block, nil)
+	// The full capture, not the life facts: a fatal periodic hit stamps
+	// its dealer from sources[].killer (cosabnormal.go Hit), as a player
+	// victim's fatal status hit does.
+	owner.sources = rt.captureAbnormalSources(entry.division, owner.block, nil)
 	var retired []uint32
 	committed := rt.deps.UpdateDeferred(c, "cos-abnormal", func() bool {
 		if owner.pet.CurrentHP == 0 {
@@ -691,6 +731,10 @@ func (rt *Runtime) monsterHitSummonedCOS(divisionID string, instance monster.Ins
 	}
 	if release == nil && !spacing.Contains(simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}, petPose) {
 		result.Refusal = simulation.MonsterAttackApproachRequired
+		return result
+	}
+	if release == nil && rt.monsterLineBlocked(mover, petPose, nowMs) {
+		result.Refusal = simulation.MonsterAttackCommandRejected
 		return result
 	}
 	attacker, err := combat.MonsterInstanceStats(instance)

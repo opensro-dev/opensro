@@ -98,7 +98,7 @@ func (rt *Runtime) dropRiddenCargoInDoor(division string, c *enterworld.Characte
 	if !rt.TraderCargoDrop || !rt.loadedTransport(c.ActiveCOS) {
 		return nil
 	}
-	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now)
+	return rt.scatterTransportCargo(division, c, c.ActiveCOS, now, "rider-death", "")
 }
 
 /*
@@ -157,7 +157,7 @@ func (rt *Runtime) dropDisconnectedCargoInDoor(division string, c *enterworld.Ch
 	if allowed, known := world.RegionPlayerCombat(at.RegionID); known && !allowed {
 		return nil
 	}
-	public := rt.scatterTransportCargo(division, c, pet, now)
+	public := rt.scatterTransportCargo(division, c, pet, now, "disconnect", "")
 	gid := pet.GID
 	if pet.Mounted {
 		public = append(public, wire.Frame{Opcode: wire.OpCosRideState,

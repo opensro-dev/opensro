@@ -39,6 +39,8 @@ import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { dataAssetPath } from "../shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../char/formats.mjs";
+import { parseCompound } from "../world/objects/compound.mjs";
+import { qinshiTombBranchFallback } from "../shared/qinshiTomb.mjs";
 import { parseJmxBmsStaticMesh, parseJmxResourceBsr } from "../world/objects/formats.mjs";
 import {
 	extractedRoot,
@@ -245,7 +247,7 @@ BSR is read even when a stale model manifest omitted its modifier payload.
 */
 export function collectEntityParticleReferences(
 	readManifest = domain => JSON.parse( readPublishedAssetBytesSync( `/assets/${domain}/manifest.json`, publicRoot ) ),
-	readModel = resourcePath => parseCharacterBsr( fs.readFileSync( dataAssetPath( resourcePath ) ), resourcePath )
+	readModel = readEntityModel
 ) {
 	const references = [];
 	for ( const domain of [ "itemdrop", "npc", "skillfx" ] ) {
@@ -287,6 +289,41 @@ export function collectEntityParticleReferences(
 		}
 	}
 	return references;
+}
+
+/*
+================
+readEntityModel
+
+An entity model's particle modifiers. A .bsr is read whole; a .cpd
+compound (the tomb flamemaster's shinmu.cpd) is no BSR itself, so its
+branch BSRs are read in order and their modifiers joined: the compound
+loader (0x00a9b280) loads every branch as its own resource. A branch
+v1.150 lacks takes the bake's degree-9 stand-in (qinshiTombBranchFallback),
+and an absent branch with no stand-in refuses as the bake does.
+================
+*/
+export function readEntityModel(
+	resourcePath,
+	readFile = gamePath => fs.readFileSync( dataAssetPath( gamePath ) ),
+	exists = gamePath => fs.existsSync( dataAssetPath( gamePath ) )
+) {
+	if ( !/\.cpd$/i.test( resourcePath ) ) {
+		return parseCharacterBsr( readFile( resourcePath ), resourcePath );
+	}
+	const particleModifiers = [];
+	for ( const branch of parseCompound( readFile( resourcePath ), resourcePath ).branches ) {
+		let branchPath = normalizeAssetPath( branch );
+		if ( !exists( branchPath ) ) {
+			const fallbackPath = qinshiTombBranchFallback( branchPath );
+			if ( fallbackPath === null || !exists( fallbackPath ) ) {
+				throw new Error( `${resourcePath}: compound branch absent: ${branchPath}` );
+			}
+			branchPath = fallbackPath;
+		}
+		particleModifiers.push( ...parseCharacterBsr( readFile( branchPath ), branchPath ).particleModifiers );
+	}
+	return { particleModifiers };
 }
 
 /*

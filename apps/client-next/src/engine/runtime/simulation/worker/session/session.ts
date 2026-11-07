@@ -92,11 +92,23 @@ mintWorldToken
 		return http.mint( identity.apiBase, identity.token, kind, character, identity.divisionId, signal ).then(
 			result => {
 				if ( result.status === 401 ) throw new Error( "Authentication required" );
-				const value = result.body as { ok?: boolean; token?: string; };
+				const value = result.body as { ok?: boolean; token?: string; code?: string; };
 				if (
 					!result.httpOk || value?.ok !== true || typeof value.token !== "string" || !value.token ||
 					value.token.length > 512
-				) throw new Error( "Admission rejected" );
+				) {
+					// Port-only, not native (the original has no self-explaining
+					// maintenance refusal): a structured refusal - the Agent
+					// answered with a code - rides out as the error message, so
+					// the world hop can tell an answered refusal from a failure
+					// that never got an answer. It shows the maintenance text
+					// for MAINTENANCE, and the retry rule ends on the codes in
+					// DEFINITIVE_REFUSALS (world.ts); a refusal with no code
+					// keeps the generic error and its old path.
+					throw new Error(
+						typeof value?.code === "string" && value.code ? value.code : "Admission rejected"
+					);
+				}
 				return value.token;
 			}
 		);
@@ -138,20 +150,35 @@ reportClient
 
 A main-thread fault (client-report) as an incident: degraded reports file
 apart from failures; a refused entry files as a software failure with the
-stage it happened in. Each code reports once.
+stage it happened in. Each code reports once - except asset failures,
+which file once per terminal episode: the stream owners hand each out
+exactly once (#2337), so a code dedupe would eat a later episode whole.
 ================
 	*/
 	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
-		if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
-		clientReports.add( command.code );
+		if ( command.incidentKind !== "asset" ) {
+			if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+			clientReports.add( command.code );
+		}
 		reportIncident( {
 			id: crypto.randomUUID().replaceAll( "-", "" ),
 			category: command.incidentKind === "degraded" ? "degraded" : "software",
 			code: command.code,
 			kind: command.incidentKind,
 			message: command.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			...(command.stack ? { stack: command.stack.slice( 0, 8192 ) } : {}),
 			phase: state.phase,
-			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {})
+			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {}),
+			// A refused entry joins itself to the transport's session
+			// lines by id, says why the transport ended and whether the
+			// tab was hidden during the attempt (#2558).
+			...(command.code === "world_entry_rejected" ?
+				{
+					...(state.transportSessionId ? { transportSession: state.transportSessionId } : {}),
+					...(state.entryFailure?.closeReason ? { closeReason: state.entryFailure.closeReason } : {}),
+					...(command.tabHiddenMs !== undefined ? { tabHiddenMs: command.tabHiddenMs } : {})
+				} :
+				{})
 		} );
 	}
 	/*
@@ -252,6 +279,8 @@ publishWorld
 				restoringWorld: false,
 				character: undefined,
 				error: value.error,
+				entryFailure: value.entryFailure,
+				transportSessionId: value.transportSessionId,
 				disconnectMessage: value.disconnectMessage,
 				incidentID: value.incidentID,
 				incidentDelivery: incidentDelivery.get( value.incidentID )
@@ -269,6 +298,8 @@ publishWorld
 			entityCount: value.entities,
 			pingMs: value.pingMs,
 			error: value.error,
+			entryFailure: value.entryFailure,
+			transportSessionId: value.transportSessionId,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),
@@ -414,14 +445,23 @@ baseUrl
 						world.enter( command.character, identity.divisionId, identity.transportUrl );
 						cancelTitleRequest();
 						scope = "world";
-					} else {
-						if ( scope !== "world" ) throw new Error( "No active world session" );
-						if ( command.kind === "disconnect" ) world.disconnect();
-						else if ( command.kind === "restart" || command.kind === "exit" ) {
+					} else if ( command.kind === "disconnect" ) {
+						// Legal at any scope: it also cancels a half-open
+						// entry attempt, and it cannot fail.
+						world.disconnect();
+					} else if ( scope === "world" ) {
+						if ( command.kind === "restart" || command.kind === "exit" ) {
 							world.depart( command.kind === "restart" ? 2 : 1 );
 						} else if ( command.kind === "reconnect" ) world.reconnect();
 						else world.ready( command.travelRevision );
 					}
+					// A restart, exit, reconnect or world-ready that finds no
+					// world session (queued ahead of enter-world, or right
+					// after a failed entry) is dropped, not answered: the
+					// "No active world session" it used to publish replaced
+					// the real entry error (7 entry incidents). A successful
+					// entry is followed by a fresh world-ready on the next
+					// travel revision, so nothing waits on the dropped one.
 					publishWorld();
 				} catch ( error ) {
 					publish( { ...state, error: String( error ) } );
@@ -852,6 +892,10 @@ baseUrl
 									!Number.isInteger( value.nativeTitleArgument ) || value.nativeTitleArgument < 0 ||
 									value.nativeTitleArgument > 0xffffffff)
 							) throw Error( "Invalid native title argument" );
+							if (
+								(value.blockReason !== undefined && typeof value.blockReason !== "string") ||
+								(value.blockEnd !== undefined && typeof value.blockEnd !== "string")
+							) throw Error( "Invalid block detail" );
 							publish( {
 								phase: "failed",
 								code: value.code,
@@ -862,7 +906,11 @@ baseUrl
 										nativeTitleStatus: value.nativeTitleStatus,
 										nativeTitleArgument: value.nativeTitleArgument as number | undefined
 									} :
-									{})
+									{}),
+								...(typeof value.blockReason === "string" ?
+									{ nativeTitleBlockReason: value.blockReason } :
+									{}),
+								...(typeof value.blockEnd === "string" ? { nativeTitleBlockEnd: value.blockEnd } : {})
 							} );
 							if ( !dirty ) {
 								return null;

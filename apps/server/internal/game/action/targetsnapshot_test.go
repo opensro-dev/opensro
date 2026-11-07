@@ -87,6 +87,10 @@ func TestResolveCombatTargetSnapshotEqualsCharacterSnapshot(t *testing.T) {
 /*
 ================
 TestResolveCOSTargetSnapshotEqualsCharacterSnapshot
+
+The admitted COS owner carries the pet-owner view (SnapshotCompanion,
+#2030; costargetview_test.go pins that its readers agree with the
+whole copy); a dead COS resolves to nothing.
 ================
 */
 func TestResolveCOSTargetSnapshotEqualsCharacterSnapshot(t *testing.T) {
@@ -99,9 +103,9 @@ func TestResolveCOSTargetSnapshotEqualsCharacterSnapshot(t *testing.T) {
 	if !ok {
 		t.Fatal("the summoned COS does not resolve")
 	}
-	want := rt.characterSnapshot(testDivision, owner)
+	want := owner.SnapshotCompanion()
 	if !reflect.DeepEqual(target.snapshot, want) {
-		t.Fatal("the admitted COS owner's snapshot differs from the plain snapshot")
+		t.Fatal("the admitted COS owner's copy differs from the pet-owner view")
 	}
 
 	cos.CurrentHP = 0

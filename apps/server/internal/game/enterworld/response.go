@@ -251,6 +251,7 @@ type BootstrapResult struct {
 	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
+	SiegeStructUpgrades  []SiegeStructUpgradeRow
 	GameWorldData        []GameWorldDataRow
 	AvatarItems          []EquipItemRow
 	EquipItems           []EquipItemRow
@@ -283,6 +284,10 @@ type BootstrapResult struct {
 	// MoonlitThiefSuit tells the client to draw the level-20 thief suits as
 	// Moonlit Ash (port-only, not native; false is native).
 	MoonlitThiefSuit bool
+	// RaisedGoldCaps tells the client's stall price editor and warehouse
+	// deposit dialog to raise their native caps (port-only, not native;
+	// false is native).
+	RaisedGoldCaps bool
 	// UiTuning is the shard's client tuning (port-only, uituning.go); nil
 	// while every value is its default, so the blob stays as before.
 	UiTuning *UiTuning
@@ -326,6 +331,7 @@ type bootstrapSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -342,6 +348,7 @@ type bootstrapSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -411,6 +418,7 @@ type bootstrapBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -426,6 +434,7 @@ type bootstrapBlobSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -453,6 +462,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -468,6 +478,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
+	RaisedGoldCaps            bool                     `json:"raisedGoldCaps,omitempty"`
 	UiTuning                  *UiTuning                `json:"uiTuning,omitempty"`
 }
 
@@ -527,6 +538,7 @@ func (r *BootstrapResult) blobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -542,6 +554,7 @@ func (r *BootstrapResult) blobView() any {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -583,6 +596,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -598,6 +612,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	}
 }
@@ -652,6 +667,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -668,6 +684,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 		MoonlitThiefSuit:          r.MoonlitThiefSuit,
+		RaisedGoldCaps:            r.RaisedGoldCaps,
 		UiTuning:                  r.UiTuning,
 	})
 }

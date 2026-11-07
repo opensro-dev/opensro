@@ -135,6 +135,11 @@ function welcome() {
 	bytes[12] = 16;
 	return bytes;
 }
+function streamAckPositions( socket ) {
+	return socket.sent
+		.filter( bytes => bytes[0] === 11 && bytes[1] === 0 )
+		.map( bytes => new DataView( bytes.buffer, bytes.byteOffset + 2 ).getUint32( 0, true ) );
+}
 test("network handshake, ordered tick ingress, ping and disposal have one owner", t => {
 	const sockets = socketHarness( t ), failures = [], frames = [];
 	const network = createNetwork( e => failures.push( e ) );
@@ -156,6 +161,32 @@ test("network handshake, ordered tick ingress, ping and disposal have one owner"
 	stale( { data: Uint8Array.of( 0, 1 ).buffer } );
 	network.drain( () => assert.fail( "late packet" ) );
 	assert.ok( socket.closed );
+	assert.deepEqual( failures, [] );
+});
+test("a large applied frame is acknowledged on the same drain, inside the ack interval", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	network.drain( () => {} );
+	// A small counted frame: a connect's first ack is never throttled.
+	socket.receive( Uint8Array.of( 0, 1, 11 ) );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1 ] );
+	// A large counted frame inside the interval is acked on this same
+	// drain (#2338): the server's writer is parked behind it, so the
+	// ack must not wait out the rest of the second.
+	const large = new Uint8Array( 2 + (1 << 20) );
+	large[1] = 1;
+	socket.receive( large );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1, 2 ] );
+	// A small frame after it keeps the one-second cadence.
+	socket.receive( Uint8Array.of( 0, 1, 12 ) );
+	network.drain( () => {} );
+	assert.deepEqual( streamAckPositions( socket ), [ 1, 2 ] );
 	assert.deepEqual( failures, [] );
 });
 test("network rejects oversized ingress and send backpressure instead of silently dropping commands", t => {
@@ -378,6 +409,80 @@ test("a frame the consumer cannot apply ends the session and names that frame fo
 
 /*
 ================
+an engine out-of-memory refusal is not the packet's fault
+
+#2299: after a long session the heap sits at its limit and the engine
+refuses an allocation while an ordinary packet applies. That classifies
+as out_of_memory with the reload remedy, not packet_application_failed.
+The live incident was the bare string; the RangeError is the other shape.
+================
+*/
+for ( const refusal of [ "out of memory", RangeError( "Array buffer allocation failed" ) ] ) {
+	test(`an out-of-memory refusal (${String( refusal )}) names memory, not the packet`, t => {
+		const sockets = socketHarness( t ), failures = [];
+		const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+		network.connect( "ws://localhost/transport", "abc" );
+		const socket = sockets[0];
+		socket.onopen();
+		socket.receive( welcome() );
+		socket.receive( Uint8Array.of( 0, 1, 11 ) );
+		socket.receive( Uint8Array.of( 0x6f, 0x37, 1, 2, 3 ) );
+		network.drain( frame => {
+			if ( frame.opcode === 0x376f ) throw refusal;
+		} );
+		assert.equal( failures.length, 1 );
+		assert.equal( failures[0].frame.opcode, 0x376f );
+		assert.equal( failures[0].reason.code, "out_of_memory" );
+		assert.match( failures[0].reason.message, /ran out of memory/ );
+		assert.ok( socket.closed );
+	});
+}
+
+/*
+================
+an engine out-of-memory refusal on the way in is memory, not protocol
+
+#2299 follow-up: the receive path can meet the refusal before any frame
+exists to blame - the welcome's own report send is the first allocation
+after decode. The stub socket's send plays the engine: with the row set
+to throw the refusal, the failure must name memory with the reload
+remedy; any other throw keeps the transport default untouched.
+================
+*/
+test("an out-of-memory refusal while receiving names memory, not the protocol", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.send = () => {
+		throw "out of memory";
+	};
+	socket.receive( welcome() );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].frame, undefined );
+	assert.equal( failures[0].reason.code, "out_of_memory" );
+	assert.match( failures[0].reason.message, /ran out of memory/ );
+	assert.ok( socket.closed );
+});
+test("a receive failure that is not a refusal keeps the transport classification", t => {
+	const sockets = socketHarness( t ), failures = [];
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.send = () => {
+		throw new Error( "socket write broke" );
+	};
+	socket.receive( welcome() );
+	assert.equal( failures.length, 1 );
+	assert.equal( failures[0].reason.code, "transport_protocol_failed" );
+	assert.match( failures[0].reason.message, /A game error interrupted your session/ );
+	assert.ok( socket.closed );
+});
+
+/*
+================
 third-person rear hemisphere
 ================
 */
@@ -561,8 +666,9 @@ function wtHarness( t, fetchDoc = null ) {
 				this.readyResolve = resolve;
 				this.readyReject = reject;
 			} );
-			this.closed = new Promise( resolve => {
+			this.closed = new Promise( ( resolve, reject ) => {
 				this.closedResolve = resolve;
+				this.closedReject = reject;
 			} );
 			transports.push( this );
 		}
@@ -601,7 +707,19 @@ function wtHarness( t, fetchDoc = null ) {
 		*/
 		close() {
 			this.closedFlag = true;
-			this.closedResolve();
+			// A browser settles closed with the close info, here
+			// the clean application code 0; an abrupt end rejects
+			// instead (abort below). It never resolves with nothing.
+			this.closedResolve( { closeCode: 0, reason: "" } );
+		}
+		/*
+		================
+		abort
+		================
+		*/
+		abort( error ) {
+			this.closedFlag = true;
+			this.closedReject( error );
 		}
 		/*
 		================
@@ -761,6 +879,29 @@ test("a webtransport session that closes before the welcome hands the connect to
 	network.dispose();
 });
 
+test("a webtransport session that drops before the welcome hands the connect to the socket", async t => {
+	// The other real settlement shape: closed rejects instead of
+	// resolving with close info. Same handover, no failure reported.
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
+	const network = createNetwork( e => failures.push( e ) );
+	network.webTransport( true );
+	network.connect( "ws://localhost/transport/ws", "abc" );
+	await flush();
+	transports[0].readyResolve();
+	await flush();
+	assert.equal( transports[0].written.length, 1, "the hello went out on the stream" );
+	transports[0].abort( new Error( "connection dropped" ) );
+	await flush();
+	assert.equal( sockets.length, 1, "the socket takes the same admission over" );
+	assert.deepEqual( failures, [] );
+	sockets[0].onopen();
+	assert.deepEqual( [ ...sockets[0].sent[0] ], [ 1, 0, 2, 0, 3, 0, 97, 98, 99 ] );
+	sockets[0].receive( welcome() );
+	assert.deepEqual( failures, [] );
+	network.dispose();
+});
+
 test("when the socket fallback also dies before the welcome, the failure is reported once", async t => {
 	const sockets = socketHarness( t ), transports = wtHarness( t ), failures = [];
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
@@ -787,6 +928,14 @@ test("when the socket fallback also dies before the welcome, the failure is repo
 });
 
 test("webtransport pins only a short-lived certificate's hash", async t => {
+	// The connect and welcome deadlines are real timers: freeze them so
+	// a loaded machine cannot fire one mid-test and report a failure the
+	// quiet stop below never raises (the handshake test above freezes
+	// for the same reason). The socket harness keeps the stopped
+	// attempt's fallback off the real network, whose loopback error
+	// would race dispose() to the same report.
+	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+	const sockets = socketHarness( t );
 	const pinned = {
 		sha256Base64: Buffer.from( Array.from( { length: 32 }, ( _v, i ) => i ) ).toString( "base64" ),
 		notBefore: "2026-10-20T00:00:00.000Z",
@@ -806,6 +955,7 @@ test("webtransport pins only a short-lived certificate's hash", async t => {
 	} );
 	transports[0].readyReject( new Error( "stop here" ) );
 	await flush();
+	assert.equal( sockets.length, 1, "the stopped attempt fell back to the fake socket" );
 	network.dispose();
 	assert.deepEqual( failures, [] );
 });

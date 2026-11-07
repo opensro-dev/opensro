@@ -16,7 +16,7 @@ export const BUILD_TASKS = [
 		description: "Build resources, then every workspace package",
 		kind: "build",
 		ci: true,
-		requires: [ "licensed-client-extraction" ],
+		requires: [ "client-extraction" ],
 		timeoutClass: "long",
 		tasks: [ "assets:build", "workspace:build" ]
 	} ),
@@ -32,12 +32,12 @@ export const BUILD_TASKS = [
 	} ),
 	seriesTask( {
 		name: "build:server-game-data",
-		description: "Build the server game-data bundle, then the dashboard item catalog read from it",
+		description: "Build the server game-data projection and bundle",
 		kind: "build",
 		ci: false,
 		requires: [ "server-data" ],
 		timeoutClass: "long",
-		tasks: [ "build:server-game-data:bundle", "build:observatory-items" ]
+		tasks: [ "build:server-game-data:bundle" ]
 	} ),
 	commandTask( {
 		name: "build:server-game-data:bundle",
@@ -48,16 +48,6 @@ export const BUILD_TASKS = [
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/build/server/buildServerGameDataBundle.mjs" ]
-	} ),
-	commandTask( {
-		name: "build:observatory-items",
-		description: "Export the server item references for the operations dashboard",
-		kind: "internal",
-		ci: false,
-		requires: [ "server-data" ],
-		timeoutClass: "medium",
-		command: "node",
-		args: [ "apps/server-observatory/tools/item-catalog.mjs" ]
 	} ),
 	commandTask( {
 		name: "build:catalogue",

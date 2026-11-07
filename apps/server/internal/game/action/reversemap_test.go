@@ -24,8 +24,8 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/optionalteleport"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 const (
@@ -108,6 +108,7 @@ func TestReverseMapOnTravelsToAPublishedPoint(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("missing native reentry: %+v", sent)
 	}
@@ -155,7 +156,7 @@ nests, every point named and inside its field region.
 ================
 */
 func TestReverseMapTableFromShippedData(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	rt, _ := newTestRuntime(rebirthTestCharacter(20, 100), testItems())
 	if err := rt.ConfigurePortals(dir); err != nil {
@@ -225,6 +226,7 @@ func TestReverseMapImportedTableIsPublishedDense(t *testing.T) {
 	rt.PushCharacterFrames = func(string, string, []wire.Frame) {}
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got.X != 100 || got.Z != 200 {
 		t.Fatalf("arrived at %+v, not the imported point", got)
 	}

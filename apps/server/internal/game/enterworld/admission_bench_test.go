@@ -15,9 +15,9 @@ package enterworld
 import (
 	"testing"
 
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/entryauth"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"opensro.online/server/internal/transport"
 )
 
@@ -29,7 +29,7 @@ One complete admission against the shipped skill data.
 ================
 */
 func BenchmarkHandleEnterWorld(b *testing.B) {
-	licensed.RequireGameData(b)
+	clientdata.RequireGameData(b)
 	source := NewTextdataSkills(gamedatatest.TextdataDir(b))
 	refs, err := NewBrowserReferences(BrowserReferenceSources{Skills: source})
 	if err != nil {

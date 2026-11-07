@@ -220,11 +220,63 @@ type areaCommit struct {
 
 /*
 ==================
+areaSequenceCanKill
+
+One monster victim's planned sequence can kill when its total planned
+damage covers the HP sampled into its first plan's ExpectedHP. The
+sequences refuse outright when the live HP moved off that value and
+applied damage never exceeds planned damage, so a fatal impact
+implies a lethal plan (#2030 strike gate, area site).
+==================
+*/
+func areaSequenceCanKill(plans []simulation.MonsterDamagePlan) bool {
+	if len(plans) == 0 {
+		return false
+	}
+	var plannedDamage uint64
+	for _, plan := range plans {
+		plannedDamage += uint64(plan.Damage)
+	}
+	return plannedDamage >= uint64(plans[0].ExpectedHP)
+}
+
+/*
+==================
+areaDoorCharacters
+
+The characters an area strike's door must hold when no monster
+victim's plan can kill: the caster, every player victim, and every
+struck COS's owner, once each. Player victims and COS owners are
+mutated by any hit, lethal or not (commitAreaInDoor), so they belong
+to the door on both plans; the reward roster's only reader in the
+door is the fatal settlement, which a non-lethal plan never reaches.
+==================
+*/
+func areaDoorCharacters(caster *enterworld.Character, plan *areaStrikePlan) []*enterworld.Character {
+	seen := map[*enterworld.Character]bool{caster: true}
+	out := []*enterworld.Character{caster}
+	for i := range plan.players {
+		if victim := plan.players[i].target.player; victim != nil && !seen[victim] {
+			seen[victim] = true
+			out = append(out, victim)
+		}
+	}
+	for i := range plan.cosHits {
+		if owner := plan.cosHits[i].owner; owner != nil && !seen[owner] {
+			seen[owner] = true
+			out = append(out, owner)
+		}
+	}
+	return out
+}
+
+/*
+==================
 commitAreaInDoor
 
-Inside the roster's door (every character of the division): the monster
-sequences, each player victim, then the monsters' fatal settlements.
-False when nothing landed.
+Inside the strike's door (caster, victims and COS owners, or the whole
+roster when a plan can kill): the monster sequences, each player victim,
+then the monsters' fatal settlements. False when nothing landed.
 ==================
 */
 func (rt *Runtime) commitAreaInDoor(division string, caster *enterworld.Character, roster rewardRoster, plan *areaStrikePlan, now int64) (areaCommit, bool) {
@@ -314,7 +366,7 @@ func areaDrains(plan areaStrikePlan, commit areaCommit) [][]simulation.MonsterDa
 ==================
 settleAreaFatalities
 
-Inside the roster's door: every monster whose last committed impact was
+Inside the strike's door: every monster whose last committed impact was
 fatal settles through the shared reward door at the pose its plan kept.
 ==================
 */
@@ -329,6 +381,13 @@ func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character
 		impact := impacts[len(impacts)-1]
 		if !impact.Fatal {
 			continue
+		}
+		if !areaSequenceCanKill(plan.sequences[index]) {
+			// A fatal victim its plan could not kill breaks the
+			// invariant the area roster gate rests on (#2030): the
+			// settlement still runs on the roster it was given,
+			// and the break is audible, never silent.
+			rt.noteSurpriseFatal(division, impact.Instance.Gid)
 		}
 		s := rt.settleMonsterInsideDoor(division, c, roster, impact, poses[index], now)
 		progression = append(progression, s.actorFrames...)
@@ -370,7 +429,7 @@ The striker's skill row owns the hostility of its monster victims; player
 victims recorded their aggression in the door.
 ==================
 */
-func (rt *Runtime) publishArea(division string, caster *enterworld.Character, skill enterworld.SkillRow, impactCount int, plan areaStrikePlan, commit areaCommit, now int64) areaPublication {
+func (rt *Runtime) publishArea(division string, caster *enterworld.Character, skill enterworld.SkillRow, impactCount int, plan areaStrikePlan, commit areaCommit, now int64, doors characterDoors) areaPublication {
 	var out areaPublication
 	source := enterworld.ObjectIDForCharacter(caster)
 	var deaths []wire.Frame
@@ -395,9 +454,9 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			public, private := rt.publishPlayerHit(division, hit, now)
 			out.after = append(out.after, public...)
 			out.recipients = append(out.recipients, private)
-			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
+			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now, doors)
 			out.returned = mergeOpResults(out.returned, returned)
-			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now))
+			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now, doors))
 			out.returned = mergeOpResults(out.returned, rt.screamMaskPlayer(division, victim.target.player, caster, now))
 			continue
 		}
@@ -483,7 +542,7 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 	if area.MaxTargets == 0 || !validShape {
 		return nil
 	}
-	if _, ok := rt.resolveCombatTarget(division, c, primary.gid, nowMs); !ok {
+	if !rt.combatTargetExists(division, c, primary.gid) {
 		return nil
 	}
 	lease, exists := rt.areaPopulation(division, c, primary)
@@ -561,7 +620,7 @@ Each victim takes every authored impact; once one is fatal its remaining
 records are bare type 8.
 ==================
 */
-func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enterworld.Character, skill enterworld.SkillRow, area enterworld.SkillOffensiveArea, chained, charged bool, primary combatTarget, attacker combat.Stats, loadout combat.Loadout, consumeAmmo bool, nowMs int64, rootID uint32, release *pendingProjectileCast) (OpResult, skillCastDecision) {
+func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enterworld.Character, skill enterworld.SkillRow, area enterworld.SkillOffensiveArea, chained, charged bool, primary combatTarget, attacker combat.Stats, loadout combat.Loadout, consumeAmmo bool, nowMs int64, rootID uint32, release *pendingProjectileCast, doors characterDoors) (OpResult, skillCastDecision) {
 	if skill.Attack.ImpactCount == 0 {
 		return OpResult{}, skillCastRefused
 	}
@@ -587,10 +646,22 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	var commit areaCommit
 	var battleFrames []wire.Frame
 	var refusal uint16
-	roster := rt.monsterRewardRoster(division, character, nowMs)
+	// The reward roster serves the fatal settlements alone, and an
+	// area whose monster victims all survive their plans reaches
+	// none (#2030): door the caster, the player victims and the COS
+	// owners - each mutated by any hit, as areaDoorCharacters keeps
+	// - and build no roster. A monster victim whose plan can kill
+	// keeps the roster-wide door exactly as before.
+	roster := rewardRoster{division: division, characters: areaDoorCharacters(character, &plan)}
+	for _, sequence := range plan.sequences {
+		if areaSequenceCanKill(sequence) {
+			roster = rt.monsterRewardRoster(division, character, nowMs)
+			break
+		}
+	}
 	var ammo ammunitionResult
 	var stolen wire.Frame
-	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
+	if !doors.updateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
 		if charged {
 			cost, refusal = rt.stagePhaseCost(division, character, skill, nowMs, release, rootID)
@@ -632,7 +703,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		}
 		return OpResult{}, skillCastRefused
 	}
-	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, nowMs)
+	published := rt.publishArea(division, snapshot, skill, int(skill.Attack.ImpactCount), plan, commit, nowMs, doors)
 	if len(published.targets) == 0 || published.targets[0].GID != primary.gid {
 		// The primary's record always leads (SkillCastAreaFrame): a primary
 		// that left the door unstruck still steers with bare records.
@@ -687,7 +758,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 			tally.note(formula.Blocked, true)
 		}
 	}
-	wear := rt.applyEquipmentWear(division, character, tally)
+	wear := rt.applyEquipmentWear(division, character, tally, doors)
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)

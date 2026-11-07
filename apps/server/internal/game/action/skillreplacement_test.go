@@ -33,7 +33,7 @@ func TestSelfEffectAdmissionUsesCurrentCommandConflicts(t *testing.T) {
 	rt.deps.SkillData().(staticSkillSource)[row.ID] = row
 	c.Skills = append(c.Skills, row.ID)
 	c.CurrentMP = testInt64(1000)
-	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: arrow.ID, HasTarget: true, TargetGid: target}, now)
+	_, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), wire.SkillAction{ActionId: arrow.ID, HasTarget: true, TargetGid: target}, now, rt.handlerDoors())
 	if decision != skillCastAccepted {
 		t.Fatal("attack not preparing")
 	}

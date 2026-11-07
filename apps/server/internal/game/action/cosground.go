@@ -16,7 +16,11 @@ package action
 import (
 	"math"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
@@ -37,6 +41,9 @@ type cosGroundAttempt struct {
 	now           time.Time
 	allowApproach bool
 	command       bool
+	// doors picks the caller's lane: the item-move and COS-command
+	// handlers answer at once, the pet tick joins the batch.
+	doors characterDoors
 }
 
 /*
@@ -56,7 +63,7 @@ func (rt *Runtime) applyCosGround(division string, c *enterworld.Character, q wi
 		result := finishPendingCosPickup(session, failureResult(wire.ErrCodeInvalidRequest))
 		retired = result.Frames
 	}
-	result := rt.applyCosGroundAt(division, c, q, cosGroundAttempt{now: rt.Now(), allowApproach: true})
+	result := rt.applyCosGroundAt(division, c, q, cosGroundAttempt{now: rt.Now(), allowApproach: true, doors: rt.handlerDoors()})
 	result.Frames = append(retired, result.Frames...)
 	return result
 }
@@ -87,14 +94,19 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
 	}
-	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now, command: attempt.command}); handled {
+	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now, command: attempt.command, doors: attempt.doors}); handled {
 		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	var picked grounditem.Item
-	rt.deps.Update(c, "cos-ground-item", func() bool {
+	// The refusal gates below answer one generic byte; which gate fired
+	// is logged once per refusal (the B-11 rule the player bag already
+	// follows), so a repeat report names the cause instead of the byte.
+	refusalCause := ""
+	attempt.doors.update(c, "cos-ground-item", func() bool {
 		bag, inv, valid := rt.ownedCOSContainer(c, q.CosGID)
 		if !valid || c.CompanionByGID(q.CosGID).Mounted || enterworld.CurrentHP(c) == 0 {
+			refusalCause = "container-unavailable"
 			return false
 		}
 		if q.MovementType == wire.MoveTypeCosDrop {
@@ -112,13 +124,19 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			return true
 		}
 		item, found := rt.characterGround(division, c, q.GroundGID)
-		if !found || item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
+		if !found {
+			refusalCause = "not-found"
+			return false
+		}
+		if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != sharedOwner {
+			refusalCause = "reserved"
 			return false
 		}
 		item.Summon.RefreshRentalTimes(now.Unix())
 		from := grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}
 		distance := grounditem.Distance2D(from, item.Position)
 		if !grounditem.SameWorld(from, item.Position) || math.IsNaN(distance) {
+			refusalCause = "off-plane"
 			return false
 		}
 		if distance > grounditem.ExecuteRange {
@@ -154,7 +172,17 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			}
 			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon)}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
-				result = failureResult(fault.Code)
+				code := fault.Code
+				if code == wire.ErrCodeStorageFull {
+					// The full bag here is the COS container: the
+					// reference server's 0xB4 class (cospickup.go) is
+					// what retires the client's auto-pickup target.
+					// The player-bag byte (0x07) leaves it retrying
+					// the drop until the ownership window lapses.
+					code = cosPickupBagFull
+				}
+				rt.logCosRefusal(c, q, code, "grant-fault/"+fault.Reason)
+				result = failureResult(code)
 				return false
 			}
 			candidate := *c.CompanionByGID(q.CosGID)
@@ -162,13 +190,16 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			refs := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 			ref, ok := refs.CharacterRefByCodename(candidate.Codename)
 			if !ok {
+				refusalCause = "grant-build"
 				return false
 			}
 			if _, err := enterworld.BuildCOSRecord(&candidate, ref, rt.deps.ItemReferences()); err != nil {
+				refusalCause = "grant-build"
 				return false
 			}
 			granted, ok := inv.At(grant.DestSlot)
 			if !ok {
+				refusalCause = "grant-build"
 				return false
 			}
 			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
@@ -191,8 +222,11 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		result = OpResult{Frames: append(frames, public...), Broadcast: public}
 		return true
 	})
+	if refusalCause != "" {
+		rt.logCosRefusal(c, q, wire.ErrCodeInvalidRequest, refusalCause)
+	}
 	if q.MovementType == wire.MoveTypeCosPickup && len(result.Broadcast) > 0 && picked.RefObjID != 0 && !picked.IsGold() {
-		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked, now.UnixMilli())...)
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, c, c, picked)...)
 	}
 	return result
 }
@@ -210,6 +244,7 @@ type petPickupAt struct {
 	sharedOwner uint32
 	now         time.Time
 	command     bool
+	doors       characterDoors
 }
 
 /*
@@ -283,7 +318,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		}
 	}
 	result := rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
-		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor})
+		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor}, p.doors)
 	result.Frames = withoutActionState(result.Frames)
 	if isPickupFault(result, wire.ErrCodeStorageFull) {
 		if !p.command {
@@ -304,7 +339,7 @@ func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wi
 		// Natively, when the owner's player bag is full on a personal
 		// quest drop, an item-share party emits 0x189C (3 s retry
 		// backoff); solo or non-item-share emits 0x18B5 (owner bag full).
-		if rt.inSharedLootParty(division, c, now.UnixMilli()) {
+		if rt.inSharedLootParty(division, c) {
 			return failureResult(cosPickupRetryBackoff), true
 		}
 		return failureResult(cosPickupOwnerBagFull), true
@@ -364,10 +399,15 @@ grantPeerCosPickup
 
 The reference server's pet pickup recipient selection and pet ground pickup:
 when the rotated party member's player bag is full,
-redirect the pickup to that member's summoned pickup pet. If the
-member has no pickup pet, answer the picker's owner with 0x9C; if the member's
-pickup pet bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
-to the member and 0x9C for the picker pet to the picker's owner.
+redirect the pickup to that member's summoned pickup pet. The v1.188
+recipient selection probes the recipient's first free bag slot; when
+there is none it looks the recipient's pickup pet up on their COS list
+and returns 0x1807 when there is no pet, which the executor's answer
+tail remaps to 0x18B4 - the bag-full class - for the picker's owner
+(addresses in the #2378 evidence note). If the member's pickup pet
+bag is also full (0x1807 -> 0x18B4), send 0xB4 for the member's pet
+to the member and 0x9C for the picker pet to the picker's owner: that
+spill can still land later, so it keeps the 3 s retry.
 ================
 */
 func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterworld.Character, item grounditem.Item, anim wire.PickupAnim, p petPickupAt) OpResult {
@@ -376,13 +416,16 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 	var picked grounditem.Item
 	var peerPetGID uint32
 	var peerBagFull bool
-	rt.deps.Update(recipient, "cos-ground-item", func() bool {
+	var peerPetMissing bool
+	p.doors.update(recipient, "cos-ground-item", func() bool {
 		peerPetGID = rt.findPickupPetGID(recipient)
 		if peerPetGID == 0 {
+			peerPetMissing = true
 			return false
 		}
 		bag, inv, valid := rt.ownedCOSContainer(recipient, peerPetGID)
 		if !valid {
+			peerPetMissing = true
 			return false
 		}
 		current, found := rt.characterGround(division, picker, item.Gid)
@@ -452,8 +495,16 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		return true
 	})
 	if len(result.Broadcast) > 0 {
-		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked, now.UnixMilli())...)
+		result.Recipients = append(result.Recipients, rt.partyLootNotice(division, picker, recipient, picked)...)
 		return result
+	}
+	if peerPetMissing {
+		// The spill has nowhere to land: with no live pickup pet (or no
+		// container behind it) this drop can never be granted, so the
+		// retry byte would re-propose it every 3 s for its whole ground
+		// life. The native selection returns 0x1807 here and the answer
+		// tail remaps it to 0x18B4, the bag-full class.
+		result = failureResult(cosPickupBagFull)
 	}
 	if peerBagFull && peerPetGID != 0 {
 		result.Recipients = append(result.Recipients, RecipientFrames{
@@ -462,4 +513,133 @@ func (rt *Runtime) grantPeerCosPickup(division string, picker, recipient *enterw
 		})
 	}
 	return result
+}
+
+// cosRefusalLogInterval paces the refusal warning per character and cause.
+const cosRefusalLogInterval = time.Minute
+
+/*
+================
+cosRefusalKey
+
+One rollup row. It names the character and the cause, never the ground
+item: item gids never stop arriving, so a per-item key would grow without
+bound, and these two are bounded by the roster.
+================
+*/
+type cosRefusalKey struct {
+	character string
+	cause     string
+}
+
+/*
+================
+cosRefusalWindow
+================
+*/
+type cosRefusalWindow struct {
+	mu       sync.Mutex
+	lastLog  time.Time
+	sinceLog uint64
+}
+
+/*
+================
+cosRefusalExpected
+
+Whether a refusal cause is ordinary play rather than a fault. A drop
+another client took first (not-found) and one still reserved for its
+owner (reserved) are the steady state of any busy spot (#2298: 1,318
+of 1,335 refusals in the live read); the rest name a broken grant or
+container.
+================
+*/
+func cosRefusalExpected(cause string) bool {
+	return cause == "not-found" || cause == "reserved"
+}
+
+/*
+================
+countCosRefusal
+
+The metric half of the refusal split: a running total per cause, so
+the expected refusals stay countable after they stop warning. The
+cause set is the closed literal set at the refusal gates (grant
+faults append their one fault reason), so the map stays bounded.
+================
+*/
+func (rt *Runtime) countCosRefusal(cause string) {
+	entry, _ := rt.cosRefusalTotals.LoadOrStore(cause, &atomic.Uint64{})
+	entry.(*atomic.Uint64).Add(1)
+}
+
+/*
+================
+logCosRefusal
+
+Every refusal counts into the per-cause totals (countCosRefusal).
+Expected causes (cosRefusalExpected) log at debug and the rest keep
+the warning, both at most once a minute per character and cause with
+the rolled-up count, the frameLimiter clamp-log shape
+(transport/ratelimit.go). The reported ground is the refusal that
+opened the window. Returns whether a line was written.
+================
+*/
+func (rt *Runtime) logCosRefusal(c *enterworld.Character, q wire.ItemMoveRequest, code byte, cause string) bool {
+	rt.countCosRefusal(cause)
+	key := cosRefusalKey{character: strings.ToLower(c.Name), cause: cause}
+	entry, _ := rt.cosRefusalLog.LoadOrStore(key, &cosRefusalWindow{})
+	window := entry.(*cosRefusalWindow)
+	now := rt.Now()
+	window.mu.Lock()
+	window.sinceLog++
+	count := window.sinceLog
+	due := window.lastLog.IsZero() || now.Sub(window.lastLog) >= cosRefusalLogInterval
+	if due {
+		window.lastLog = now
+		window.sinceLog = 0
+	}
+	window.mu.Unlock()
+	if !due {
+		return false
+	}
+	line := log.WithField("character", c.Name).
+		WithField("cos", q.CosGID).
+		WithField("ground", q.GroundGID).
+		WithField("move", q.MovementType).
+		WithField("code", code).
+		WithField("cause", cause).
+		WithField("refusals", count)
+	if cosRefusalExpected(cause) {
+		line.Debug("cos ground refused")
+	} else {
+		line.Warn("cos ground refused")
+	}
+	return true
+}
+
+/*
+================
+cosPickupTargetRetired
+
+Whether an approached drop can never be granted at arrival: reserved
+for a character the party does not share with, or lying on another
+plane. The approach retires it silently, exactly like a drop that
+vanished mid-approach: the same refusal answer, without the walk to
+the drop and without a log line. A party dissolving mid-approach is
+the ordinary way here.
+
+Inferred, BN owed (#2298): the native staged pickup revalidates at
+arrival (the arrival gates in applyCosGroundAt mirror it); that the
+native pet also re-evaluates mid-approach is not yet proven in the
+v1.188 server ASM (post-cut/2298-cos-asm.md).
+================
+*/
+func (rt *Runtime) cosPickupTargetRetired(division string, owner *enterworld.Character, pose simulation.Spawn, item grounditem.Item) bool {
+	if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(owner) &&
+		(rt.CanPickupOwnedDrop == nil || !rt.CanPickupOwnedDrop(division, owner.Name, item.OwnerJID)) {
+		return true
+	}
+	from := grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
+	return !grounditem.SameWorld(from, item.Position)
 }

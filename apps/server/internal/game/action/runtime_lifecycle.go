@@ -35,8 +35,16 @@ func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		// Monster casts and skill finalizes commit deaths and EXP; their
 		// private tails are captured under the gate (sealTickPrivate).
-		unlock := rt.lockTickPublication()
-		defer unlock()
+		// The wait is the tick gate's bounded wait (#2294): a cut hook
+		// settles nothing this tick — summons release on an absolute
+		// ReleaseAtMs, self-effects retire on expiry, casts release on
+		// releaseAtMs and finalizes on dueAtMs, so the next served pass
+		// settles the same work before that tick's division AI. Only
+		// completion shifts by a tick while the gate is held.
+		if !rt.acquireTickGate() {
+			return nil
+		}
+		defer rt.releaseTickGate()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 		}
@@ -77,12 +85,25 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// behind an entry bootstrap or a request op used to read as slow
 		// itself, naming the waiter instead of the holder (#1820 E). The
 		// holder's side of the same stall is the publication_holds report.
+		//
+		// The wait is bounded (acquireTickGate). A step that loses it cuts
+		// the rest of this hook, so the steps after it run next tick in
+		// their usual order instead of out of order now. Each is due-based
+		// and already survives a tick the ticker dropped under an overrun.
+		cut := false
 		step := func(name string, run func()) {
-			var unlock func()
+			if cut {
+				return
+			}
+			acquired := false
 			timed("tickPublicationGate", func() {
-				unlock = rt.lockTickPublication()
+				acquired = rt.acquireTickGate()
 			})
-			defer unlock()
+			if !acquired {
+				cut = true
+				return
+			}
+			defer rt.releaseTickGate()
 			timed(name, func() {
 				run()
 				out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
@@ -109,6 +130,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressRosters", func() { rt.advanceFortressRosters(nowMs) })
 		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
+		step("advanceHalloweenWaves", rt.advanceHalloweenWaves)
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through
 		// the authored death-animation completion.
@@ -165,6 +187,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
 		step("advancePetSkillWindows", func() { rt.advancePetSkillWindows(nowMs) })
+		// Port-only (#1849): entry wanted states and the seven-day lapse
+		// for tracked holders; a no-op while SRO_MOST_WANTED is off.
+		step("advanceMostWanted", func() { rt.advanceMostWanted(nowMs) })
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		// Port-only (killstats.go): online-time accrual and the rollup
 		// flush; a no-op while SRO_KILL_STATS is off.
@@ -172,11 +197,13 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advancePKRecords", rt.advancePKRecords)
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
 		// Pending pickups take the gate themselves (publishPendingPickup).
-		timed("advancePendingPickups", func() {
-			out = append(out, rt.advancePendingPickups(nowMs)...)
-			out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
-			sealed = len(out)
-		})
+		if !cut {
+			timed("advancePendingPickups", func() {
+				out = append(out, rt.advancePendingPickups(nowMs)...)
+				out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+				sealed = len(out)
+			})
+		}
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
 		frames("ReleaseExpiredOwnership", rt.ReleaseExpiredOwnership)
@@ -188,6 +215,35 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames("drainAnnouncements", rt.drainAnnouncements)
 		return out
 	}
+}
+
+/*
+================
+acquireTickGate
+
+Takes the publication gate for one TickHook step into rt.tickGate, or
+returns false when the bound ran out and the hook should cut. A cut hook's last wait counts once per tick, and
+past maxTickGateCuts cut ticks the wait is unbounded again. Only the tick
+goroutine touches tickGateCuts.
+================
+*/
+func (rt *Runtime) acquireTickGate() bool {
+	if rt.tickGateCuts >= maxTickGateCuts {
+		rt.tickGateCuts = 0
+		rt.waitTickPublication()
+		return true
+	}
+	if !rt.tryLockTickPublication(tickGateBound) {
+		rt.tickGateCuts++
+		// The wait is under the slow threshold, so name each cut here or
+		// the live re-measure could not see this path run.
+		if rt.Steps.Slow != nil {
+			rt.Steps.Slow("tickGateCut", tickGateBound)
+		}
+		return false
+	}
+	rt.tickGateCuts = 0
+	return true
 }
 
 /*
@@ -376,9 +432,10 @@ func (rt *Runtime) completePendingPickup(pending grounditem.Pending, now time.Ti
 			groundItem,
 			approach,
 			now,
+			rt.tickDoors(),
 		), character
 	}
-	return rt.grantPickup(pending.DivisionID, worldKey, character, snapshot, groundItem), character
+	return rt.grantPickup(pending.DivisionID, worldKey, character, snapshot, groundItem, rt.tickDoors()), character
 }
 
 /*
@@ -625,16 +682,9 @@ from other characters' rosters must resolve records on a fresh client too.
 ==================
 */
 func (rt *Runtime) GroundRefItemCodenames(divisionID string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, item := range rt.Ground.All(divisionID) {
-		if item.Codename == "" || seen[item.Codename] {
-			continue
-		}
-		seen[item.Codename] = true
-		out = append(out, item.Codename)
-	}
-	return out
+	// The seam names codenames only; the registry reads them under its
+	// lock without the deep copy of every drop All would pay (#2030).
+	return rt.Ground.Codenames(divisionID)
 }
 
 /*

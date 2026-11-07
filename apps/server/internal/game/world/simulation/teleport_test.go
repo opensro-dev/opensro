@@ -2,15 +2,15 @@ package simulation
 
 import (
 	"encoding/binary"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 )
 
 func TestTeleportGateRosterAndWire(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
-	rows, err := AppendTeleportGates(dir, LoadNpcWorldRoster(dir))
+	rows, err := AppendTeleportGates(dir, sharedNpcWorldRoster(dir))
 	if err != nil {
 		t.Fatal(err)
 	}

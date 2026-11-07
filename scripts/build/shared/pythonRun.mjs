@@ -57,6 +57,9 @@ const PYTHON_TRACEBACK_PATTERN = /^Traceback \(most recent call last\)/m;
 const PYTHON_STRING_FRAME_PATTERN = /^\s*File "<(?:string|stdin)>"/m;
 const PYTHON_EXCEPTION_LINE_PATTERN = /^[A-Za-z_][\w.]*(?:Error|Exception|Interrupt|Warning)\b\s*(?::|$)/;
 const MODULE_MISSING_PATTERN = /^(?:ModuleNotFoundError|ImportError)\b/;
+// An exception line that is not an import failure: the payload got past its
+// imports and the operation itself failed (see classifyPythonFailure).
+const OTHER_EXCEPTION_PATTERN = /^[A-Za-z_][\w.]*?(?:Error|Exception|Interrupt)\b\s*:/;
 const PERMISSION_LINE_PATTERN = /PermissionError|\[WinError 5\]|\[Errno 1[36]\]|EACCES|EPERM|EBUSY/;
 // Ways Windows says "that command exists but there is no Python behind it":
 // the Store alias stub, the py launcher's version miss, and cmd's not-found.
@@ -108,10 +111,24 @@ export function classifyPythonFailure( attempt ) {
 	const lastLine = lines.length > 0 ? lines[lines.length - 1] : "";
 	const firstLine = lines.length > 0 ? lines[0] : "";
 
-	if ( MODULE_MISSING_PATTERN.test( lastLine ) ) {
+	// Missing-module is a property of the whole run, not its last line: a
+	// suite that fails to import (unittest discovery, #2711) prints one
+	// import traceback per module and ends with its own summary ("FAILED
+	// (errors=23)"), so the missing module is never the last line. The run
+	// is environmental only when every exception line it printed is an
+	// import failure; any other exception means the payload ran and its
+	// failure is authoritative (the precedence pin in the tests).
+	// The summary names the ModuleNotFoundError when there is one (it names
+	// the missing module); a bare loader ImportError is the fallback.
+	const importLine = lines.find( ( line ) => line.startsWith( "ModuleNotFoundError" ) ) ??
+		lines.find( ( line ) => MODULE_MISSING_PATTERN.test( line ) );
+	if (
+		importLine !== undefined &&
+		!lines.some( ( line ) => OTHER_EXCEPTION_PATTERN.test( line ) && !MODULE_MISSING_PATTERN.test( line ) )
+	) {
 		return {
 			kind: "missing-module",
-			summary: `interpreter ran but a required module is missing (${lastLine})`,
+			summary: `interpreter ran but a required module is missing (${importLine})`,
 			permission: null
 		};
 	}
@@ -332,7 +349,7 @@ function formatEnvironmentFailure( task, context, failures ) {
 		lines.push(
 			"A Python 3 interpreter is present but a required module is not importable from it - " +
 				"do NOT reinstall Python; install the build dependencies instead:",
-			"  py -3 -m pip install -r rebuild/requirements.txt"
+			"  py -3 -m pip install -r scripts/requirements.txt"
 		);
 	} else {
 		lines.push(

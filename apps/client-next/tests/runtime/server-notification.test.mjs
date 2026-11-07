@@ -17,12 +17,12 @@ import { defined } from "../helpers/defined.mjs";
 const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
-const { serverNotification } = await import( "../../src/engine/foundation/gameplay/system-notices.ts" );
+const { serverNotification, EVENT_NOTICE_COLOR_ARGB } = await import(
+	"../../src/engine/foundation/gameplay/system-notices.ts"
+);
 const {
 	createNoticeBanner,
-	notificationBannerPaths,
-	SUN_DROP_BANNER_COLOR,
-	SUN_DROP_BANNER_TEXT_RGB
+	notificationBannerPaths
 } = await import( "../../src/engine/runtime/ui/hud/unique-banner.ts" );
 const { chatLineText, chatLineColor } = await import( "../../src/engine/foundation/ui/chat-presentation.ts" );
 test("server refusal reaches the independent native red notice and pink chat log", () => {
@@ -314,9 +314,115 @@ test("a Seal of Sun drop notice (channel 0x81) flags sunDrop on the banner while
 	const banner = createNoticeBanner( "notificationBanner" );
 	banner.step( [ { ...sunNotice, sequence: 1 } ], 100, true );
 	assert.equal( banner.sunDrop(), true );
-	assert.deepEqual( SUN_DROP_BANNER_COLOR, [ 180, 120, 16 ] );
-	assert.deepEqual( SUN_DROP_BANNER_TEXT_RGB, [ 1, 215 / 255, 80 / 255 ] );
-	const starNotice = defined( serverNotification( 0x3667, frame( 0x81, starText ) ) );
-	banner.step( [ { ...starNotice, sequence: 2 } ], 200, true );
+	assert.equal( banner.sealTier(), 2 );
+	const moonNotice = defined( serverNotification( 0x3667, frame( 0x81, moonText ) ) );
+	banner.step( [], 8000, true );
+	banner.step( [ { ...moonNotice, sequence: 2 } ], 8100, true );
 	assert.equal( banner.sunDrop(), false );
+	assert.equal( banner.sealTier(), 1 );
+});
+
+test("a Seal of Star drop notice keeps its chat line but never takes the top-centre banner (owner decision 2026-11-01)", () => {
+	const frame = text => Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const starText = "Looter has dropped Heaven's Cloud Spear (Seal Of Star) from Tiger Girl",
+		moonText = "Looter has dropped Heaven's Cloud Spear (Seal Of Moon) from Tiger Girl",
+		sunText = "Looter has dropped Heaven's Cloud Spear (Seal Of Sun) from Tiger Girl",
+		starPlusText = "Looter advanced Heaven's Cloud Spear (Seal Of Star) to +8";
+	// Only the Star drop loses the banner; Moon, Sun and a plus line
+	// naming a Star all keep it.
+	assert.equal( defined( serverNotification( 0x3667, frame( starText ) ) ).notificationBanner, undefined );
+	assert.equal( defined( serverNotification( 0x3667, frame( moonText ) ) ).notificationBanner, true );
+	assert.equal( defined( serverNotification( 0x3667, frame( sunText ) ) ).notificationBanner, true );
+	assert.equal( defined( serverNotification( 0x3667, frame( starPlusText ) ) ).notificationBanner, true );
+	// The banner queue steps over the Star and still takes the Moon.
+	const banner = createNoticeBanner( "notificationBanner" );
+	const star = defined( serverNotification( 0x3667, frame( starText ) ) ),
+		moon = defined( serverNotification( 0x3667, frame( moonText ) ) );
+	banner.step( [ { ...star, sequence: 1 } ], 100, true );
+	assert.equal( banner.alpha(), 0 );
+	assert.equal( banner.value( () => "" ), "" );
+	banner.step( [ { ...moon, sequence: 2 } ], 200, true );
+	assert.equal( banner.sealTier(), 1 );
+	// In play the Star line still reaches the chat log.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload: frame( starText ) }, 100 );
+	const state = defined( shown.take() );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, starText );
+	assert.equal( defined( defined( state.chat ).lines.at( -1 ) ).text, starText );
+});
+
+test("a shard event notice (Halloween wave) prints in the bottom-right message log as well as the banner", async () => {
+	const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
+	// A drop/plus frame with an empty link section: no player, no item.
+	const frame = ( text, link ) =>
+		Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ), link ] );
+	const waveText = "Halloween: Gourds land near Jangan in 10 minutes",
+		dropText = "Looter has dropped Heaven's Cloud Spear (Seal Of Moon) from Tiger Girl";
+	const wave = defined( serverNotification( 0x3667, frame( waveText, Buffer.from( [ 0, 0, 0, 0 ] ) ) ) );
+	assert.equal( wave.notificationBanner, true );
+	assert.equal( wave.bannerOnly, undefined );
+	assert.equal( wave.shardEvent, true );
+	// A seal drop names its dropper, so it stays banner and chat only.
+	const name = Buffer.from( "Looter", "ascii" ),
+		dropLink = Buffer.concat( [ Buffer.from( [ name.length, 0 ] ), name, Buffer.from( [ 0, 0 ] ) ] );
+	const drop = defined( serverNotification( 0x3667, frame( dropText, dropLink ) ) );
+	assert.equal( drop.bannerOnly, true );
+	assert.equal( drop.shardEvent, undefined );
+	// Through the gameplay owner and the HUD log: the wave lands under the
+	// game tab, the drop does not appear.
+	const game = createGameplay( () => {} );
+	game.receive( { opcode: 0x3667, payload: frame( waveText, Buffer.from( [ 0, 0, 0, 0 ] ) ) }, 100 );
+	game.receive( { opcode: 0x3667, payload: frame( dropText, dropLink ) }, 110 );
+	const notices = defined( defined( game.take() ).notices );
+	const rows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, notices, key => key, false );
+	assert.deepEqual( rows.map( r => [ r.value, r.category ] ), [ [ waveText, "game" ] ] );
+});
+
+test("a shard event notice prints in the event colour while the Highlight row is on, beige while off (#2727)", async () => {
+	const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
+	const frame = text =>
+		Buffer.concat( [
+			Buffer.from( [ 0x81, text.length, 0 ] ),
+			Buffer.from( text, "utf16le" ),
+			Buffer.from( [
+				0,
+				0,
+				0,
+				0
+			] )
+		] );
+	const waveText = "Halloween: Gourds land near Jangan in 10 minutes";
+	// On by default (owner ask 2026-11-06): the event line carries the
+	// event colour into the message log; a plain log line (a fortress
+	// announcement) keeps the native beige (0x67A600: every category but
+	// 6 is 0xFFDBC99B).
+	const game = createGameplay( () => {} );
+	game.receive( { opcode: 0x3667, payload: frame( waveText ) }, 100 );
+	game.receive( { opcode: 0x3887, payload: Buffer.from( [ 1 ] ) }, 110 );
+	const notices = defined( defined( game.take() ).notices ),
+		wave = defined( notices.find( n => n.text === waveText ) );
+	assert.equal( wave.colorArgb, EVENT_NOTICE_COLOR_ARGB );
+	const rows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, notices, key => key, false ),
+		waveRow = defined( rows.find( r => r.value === waveText ) ),
+		plainRow = defined( rows.find( r => r.value !== waveText ) );
+	assert.equal( waveRow.colorArgb, EVENT_NOTICE_COLOR_ARGB );
+	assert.equal( plainRow.colorArgb, 0xffdbc99b );
+	// Row off: the line still prints (the Drop & plus row owns hiding),
+	// in the native beige, and the banner is untouched either way.
+	const quiet = createGameplay( () => {} );
+	quiet.experimental( {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true,
+		plusSevenNotices: true,
+		breakNotices: true,
+		highlightEventNotices: false
+	} );
+	quiet.receive( { opcode: 0x3667, payload: frame( waveText ) }, 100 );
+	const quietNotices = defined( defined( quiet.take() ).notices ),
+		quietWave = defined( quietNotices.find( n => n.text === waveText ) );
+	assert.equal( quietWave.colorArgb, undefined );
+	assert.equal( quietWave.notificationBanner, true );
+	const quietRows = createHudMessages( () => 0 ).step( 200, [], 1, undefined, quietNotices, key => key, false );
+	assert.equal( defined( quietRows.find( r => r.value === waveText ) ).colorArgb, 0xffdbc99b );
 });

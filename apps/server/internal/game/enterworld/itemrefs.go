@@ -597,8 +597,7 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		cash, _ := textdataInt(fields[7])
 		ref.CashItem = cash != 0
 		ref.Rarity, _ = textdataInt(fields[15])
-		drop, _ := textdataInt(fields[20])
-		ref.CanDropOnDeath = drop&2 != 0
+		ref.CanDrop, ref.CanDropOnDeath = itemDropPermissions(fields)
 	}
 	// The four typed requirement pairs: types at 32/34/36/38, values at
 	// 33/35/37/39 (interleaved; verified against the shipped rows - CH

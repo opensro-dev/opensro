@@ -18,8 +18,8 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -28,7 +28,7 @@ TestAlchemyMaterialDropsOffPicksNothing
 ================
 */
 func TestAlchemyMaterialDropsOffPicksNothing(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
 	materials := []string{"ITEM_ETC_ARCHEMY_MATERIAL_CH_MANGNYANG1"}
 	others := []string{"ITEM_ETC_HP_POTION_01", "ITEM_ETC_ARCHEMY_MAGICTABLET_STR_01", "ITEM_ETC_ARCHEMY_ELEMENT_EARTH_01"}

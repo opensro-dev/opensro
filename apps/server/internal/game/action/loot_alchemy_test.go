@@ -9,8 +9,8 @@ loot_alchemy_test.go - loot behavior and lifecycle verification
 package action
 
 import (
+	"opensro.online/server/internal/testsupport/clientdata"
 	"opensro.online/server/internal/testsupport/gamedatatest"
-	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"sort"
 	"testing"
@@ -27,7 +27,7 @@ TestPublishedLootAlchemyActivationForAvailableEquipment
 ================
 */
 func TestPublishedLootAlchemyActivationForAvailableEquipment(t *testing.T) {
-	licensed.RequireGameData(t)
+	clientdata.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items := enterworld.NewTextdataItems(dir)
 	catalog, err := alchemy.LoadCatalog(dir, items)

@@ -135,6 +135,9 @@ func (rt *Runtime) applyInventoryMove(
 	// reads session characters through the store, whose door is not
 	// reentrant, so publishing inside the callback deadlocks the shard.
 	var endedPublic, endedActor []wire.Frame
+	// Companions a committed cape equip retired; published with the
+	// ended effects, after the same door.
+	var dismissed []*enterworld.CharacterCOS
 
 	rt.deps.Update(character, "inv-move", func() bool {
 		if character.DeletePending {
@@ -224,6 +227,32 @@ func (rt *Runtime) applyInventoryMove(
 			}
 		}
 
+		// INFERENCE: the v1.150 client warns that free-battle equipment
+		// unsummons growth pets automatically (its drop handler prints
+		// UIIT_MSG_COSPETERR_UNSUMMON_FREEBATTLE ahead of the equip) and
+		// composes nothing but this ordinary move, and the v1.188 equip
+		// path traced for #2290 shows no client-composed dismissal, so
+		// the unsummon is the server's part of a committed cape equip:
+		// every summoned growth (attack-band) companion retires, the
+		// mirror of the summon gate that refuses one to a caped owner.
+		// The record only loses its summoned bit, like a cancellation;
+		// a dead record retires too, as the warning counts it as out.
+		if request.DestSlot == jobSuitSlot {
+			if _, cape := rt.playerRelationEquipment(character); cape != 0 {
+				for _, pet := range character.Companions() {
+					if !pet.Summoned {
+						continue
+					}
+					if ref, valid := rt.cosReference(pet); !valid || ref.TidWord>>11 != attackPetBand {
+						continue
+					}
+					pet.Summoned = false
+					pet.StateFlags &^= cosStateSummoned
+					dismissed = append(dismissed, pet)
+				}
+			}
+		}
+
 		// THE M1 CONTRACT: every transfer that touched a socket < 13 appends
 		// its visual pushes behind the 0xB06D row.
 		changes := inv.EquipVisualChanges(request.SourceSlot, request.DestSlot)
@@ -269,7 +298,38 @@ func (rt *Runtime) applyInventoryMove(
 	if len(endedActor) != 0 && rt.PushCharacterFrames != nil {
 		rt.PushCharacterFrames(divisionID, character.Name, endedActor)
 	}
+	// The cape dismissal publishes after the move's own commit, like the
+	// ended effects above: the owner hears the retirement behind the
+	// move answer, the neighbourhood only the despawn.
+	for _, pet := range dismissed {
+		despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()}
+		result.Frames = append(result.Frames, rt.retireCosRuntime(divisionID, character, pet.GID)...)
+		result.Frames = append(result.Frames, cosRemovalNotice(pet.GID), despawn)
+		result.Frames = append(result.Frames, companionItemStateFrames(character, pet)...)
+		result.Broadcast = append(result.Broadcast, despawn)
+	}
 	return result
+}
+
+/*
+================
+groundDropBarred
+
+The two native ground-drop bars, read off the item's reference row:
+the COS-summoner family (TID 3/2) may never leave for the ground -
+monster capsules (TID3 2) are the one exemption, a capsule exists to
+be set down - and a row whose authored CanDrop bit is clear is kept;
+the quest items are the visible mass of the second bar. Either bar
+answers the indisposable refusal (01:38); the native routine checks
+the family first, then the bit.
+================
+*/
+func groundDropBarred(ref *enterworld.ItemRef) bool {
+	t := ref.TypeIDs
+	if t[0] == 3 && t[1] == 2 && t[2] != 2 {
+		return true
+	}
+	return !ref.CanDrop
 }
 
 /*
@@ -293,6 +353,26 @@ func (rt *Runtime) applyGroundDrop(
 		}
 
 		inv := bagOf(character)
+
+		// Port-only, not native (halloween.go): a sealed event helmet
+		// never leaves for the ground.
+		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
+			result = failureResult(wire.ErrCodeCannotBeDropped)
+			return false
+		}
+
+		// The native drop routine bars barred bag rows before anything
+		// moves, with the indisposable refusal (01:38). A worn row
+		// never reaches these gates: Drop answers it 01:6D below, in
+		// the native order (the equipment fault precedes the drop).
+		if refs := rt.deps.ItemReferences(); refs != nil && !inventory.IsEquipmentSlot(sourceSlot) {
+			if row, present := inv.At(sourceSlot); present {
+				if ref, ok := refs.ItemRefByCodename(row.Codename); ok && ref != nil && groundDropBarred(ref) {
+					result = failureResult(wire.ErrCodeCannotBeDropped)
+					return false
+				}
+			}
+		}
 
 		// The native type-7 wire has no quantity field: the whole row goes.
 		dropped, fault := inv.Drop(sourceSlot)

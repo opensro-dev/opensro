@@ -12,6 +12,7 @@ import "opensro.online/server/internal/game/abnormal"
 
 const (
 	skillPulseTag = 0x70756c73 // puls, tagRefSkill+384
+	skillStoneTag = 0x73746e73 // snts, tagRefSkill+0x448
 )
 
 /*
@@ -20,13 +21,16 @@ encodedAbnormalParams
 
 encodedAbnormalParams projects the tagRefSkill abnormal pointers
 (the server's parameter index): one block per status tag, the
-puls period and the caster getv requests at +500/+504/+53C. Repeated
-blocks overwrite their pointer; the walk stops at ssou like every other
-primary-block reader.
+puls period and the caster getv requests at +500/+504/+53C. The snts
+stone curse at +0x448 is projected beside the roll sources, never
+into them. Repeated blocks overwrite their pointer; the walk stops
+at ssou like every other primary-block reader.
 ==================
 */
 func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 	var out abnormal.SkillParams
+	var stoneDuration uint32
+	stoneDurationPinned := false
 	for i := skilldataColEncodedTail; i < len(fields); {
 		n, ok := textdataInt(fields[i])
 		if !ok || n == 0x73736f75 {
@@ -48,6 +52,16 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 		switch uint32(n) {
 		case skillPulseTag:
 			out.Pulse, out.PulsePresent = args[0], true
+		case skillStoneTag:
+			// snts -> +0x448: first-pulse delay, maximum-HP percent, period.
+			// Not a roll Source (the native roll never reads +0x448).
+			if len(args) >= 3 {
+				out.Stone = abnormal.StoneCurse{Present: true, DelayMs: args[0], Percent: args[1], PeriodMs: args[2]}
+			}
+		case 0x64757261: // dura: the stone curse's lifetime (encodedEffectDuration reads it too)
+			if len(args) >= 1 && !stoneDurationPinned {
+				stoneDuration, stoneDurationPinned = args[0], true
+			}
 		case tagGetv:
 			switch args[0] {
 			case abnormal.KeyPoisonDamage:
@@ -92,6 +106,9 @@ func encodedAbnormalParams(fields []string) abnormal.SkillParams {
 			}
 		}
 		i += 1 + arity
+	}
+	if out.Stone.Present {
+		out.Stone.DurationMs = stoneDuration
 	}
 	return out
 }
