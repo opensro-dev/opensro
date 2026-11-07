@@ -334,8 +334,8 @@ export const EXPERIMENTAL_TABS: readonly {
 		rows: [ {
 			key: "transportAutoPotion",
 			id: "experimental-transport-auto-potion",
-			label: "Transport auto-potion",
-			description: "Heal your transport at your auto-potion HP %."
+			label: "Companion auto-potion",
+			description: "Pet and transport HP and cure settings in the T dialog."
 		}, {
 			key: "petClickOpensWindow",
 			id: "experimental-pet-click-opens-window",

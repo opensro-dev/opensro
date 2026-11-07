@@ -104,8 +104,9 @@ const OFF = Object.freeze( {
 	confirmGuildBan: true,
 	// Off by default: straight projectiles keep their launch-captured endpoint (8D8580).
 	homingProjectiles: false,
-	// Off by default: the automatic potion watches only the player (70C550).
-	transportAutoPotion: false,
+	// On by default (owner 2026-11-07, #2741): companion and vigor auto-potions;
+	// off, the automatic potion watches only the player (70C550).
+	transportAutoPotion: true,
 	// On by default (owner 2026-10-18, BUG-086): clicking CIFPetMiniInfo opens CIFCos;
 	// off restores the native no-op click (6B3760).
 	petClickOpensWindow: true,
@@ -151,6 +152,20 @@ test("touch inspection defaults on and only an explicit false turns it off", () 
 		assert.equal( experimentalOptions( value ).touchInspect, true, JSON.stringify( value ) );
 	}
 	assert.equal( experimentalOptions( { touchInspect: false } ).touchInspect, false );
+});
+
+test("companion auto-potion defaults on; a saved record without the key keeps its other choices", () => {
+	for (
+		const value of [ undefined, null, {}, { transportAutoPotion: true }, { transportAutoPotion: "false" } ]
+	) {
+		assert.equal( experimentalOptions( value ).transportAutoPotion, true, JSON.stringify( value ) );
+	}
+	assert.equal( experimentalOptions( { transportAutoPotion: false } ).transportAutoPotion, false );
+	const saved = experimentalOptions( { chatTimestamps: true, skyDetail: true, confirmGuildBan: false } );
+	assert.equal( saved.transportAutoPotion, true );
+	assert.equal( saved.chatTimestamps, true );
+	assert.equal( saved.skyDetail, true );
+	assert.equal( saved.confirmGuildBan, false );
 });
 
 test("only an explicit boolean enables chat timestamps", () => {
