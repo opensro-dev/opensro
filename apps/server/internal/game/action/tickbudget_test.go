@@ -74,10 +74,12 @@ const (
 // (bytes only: the facts container was one allocation either way);
 // with the four elemental lanes judging one armed facts capture and
 // sharing one owner snapshot per owner tick (#2030), measured
-// 54,405 B / 902 allocs.
+// 54,405 B / 902 allocs; with the crow-brood tick judging on
+// door-read facts and taking the owner copy only on a tick that
+// fires a brood event (#2030), measured 48,993 B / 858 allocs.
 const (
-	tickBudgetBytesPerTick  = 60000
-	tickBudgetAllocsPerTick = 1020
+	tickBudgetBytesPerTick  = 54000
+	tickBudgetAllocsPerTick = 970
 )
 
 /*

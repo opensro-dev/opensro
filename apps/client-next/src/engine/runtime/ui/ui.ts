@@ -312,6 +312,12 @@ import {
 	NAME_CHANGE_MAX_LENGTH
 } from "@/engine/foundation/gameplay/name-change";
 import { crestDeleteKeys, crestDeleteKind, type CrestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
+import {
+	CREST_IMAGE_MAX_BYTES,
+	crestRegisterKeys,
+	crestRegisterKind,
+	type CrestRegisterKind
+} from "@/engine/foundation/gameplay/crest-register";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -1067,6 +1073,11 @@ export interface UiExtensions {
 	// The /id byte for the character owner's hit damage numbers (8D5856).
 	setDamageNumbers?: ( shown: boolean ) => void;
 	saveCameraWaypoints?: ( text: string ) => void;
+	// The crest register's image picker (owner's 2026-11-07 contract,
+	// #2282): resolves the picked file's bytes, or null on cancel. The
+	// page leaves it out where no picker exists; the register then
+	// prints its fail line, as a native read failure does.
+	pickCrestImage?: () => Promise<Uint8Array | null>;
 	playSoundByName?: ( name: string ) => void;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
 	saveWindowPositions?: ( value: WindowPositions ) => void;
@@ -1822,6 +1833,13 @@ export function createUi( ports: UiPorts ) {
 	// the bag row it asks about, revalidated when Yes answers.
 	let crestDeleteAsk: { readonly slot: number; readonly refObjId: number; readonly kind: CrestDeleteKind; } | null =
 		null;
+	// The crest register's confirm box (52F460 types 0x15/0x18, #2282):
+	// the bag row it asks about, revalidated when Yes answers.
+	let crestRegisterAsk: {
+		readonly slot: number;
+		readonly refObjId: number;
+		readonly kind: CrestRegisterKind;
+	} | null = null;
 	let goldAmount = "",
 		confirmDrop = "",
 		goldDialog: false | "drop" | "deposit" | "withdraw" | "exchange" = false;
@@ -2634,6 +2652,14 @@ export function createUi( ports: UiPorts ) {
 			const crestKind = item ? crestDeleteKind( item.refObjId ) : undefined;
 			if ( item && crestKind && command.crestDelete === undefined ) {
 				crestDeleteAsk = { slot: command.slot, refObjId: item.refObjId, kind: crestKind };
+				dirty = true;
+				return;
+			}
+			// 562402/56247C (#2282): a crest register item asks first
+			// (box 0x15/0x18); the box's Yes picks the image and uploads.
+			const registerKind = item ? crestRegisterKind( item.refObjId ) : undefined;
+			if ( item && registerKind ) {
+				crestRegisterAsk = { slot: command.slot, refObjId: item.refObjId, kind: registerKind };
 				dirty = true;
 				return;
 			}
@@ -4788,6 +4814,46 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "crest-delete-no" ) {
 			crestDeleteAsk = null;
+		} else if ( id === "crest-register-yes" ) {
+			// 6971B0's OK arm (#2282): with a crest already standing it
+			// prints the OVERLAP line and composes nothing; with none it
+			// reads and validates the image. The port's image is the
+			// browser pick (the owner's contract supplies the source
+			// the native local bitmap read was): no picker or a failed
+			// or empty read is the native FAIL, an image over the cap
+			// the native ERROR. The server judges everything again.
+			const ask = crestRegisterAsk;
+			crestRegisterAsk = null;
+			const item = ask && view?.gameplay?.inventory.find( row => row.slot === ask.slot );
+			if ( ask && item && item.refObjId === ask.refObjId && item.quantity > 0 ) {
+				const social = view?.gameplay?.social,
+					crest = ask.kind === "guild" ? social?.guild?.crest : social?.allianceCrests?.[1];
+				if ( crest !== undefined && crest !== 0 && crest !== 0xffffffff ) {
+					hudMessages.append( hudCopy( crestRegisterKeys( ask.kind ).refused ) );
+				} else if ( !extensions.pickCrestImage ) {
+					hudMessages.append( hudCopy( crestRegisterKeys( ask.kind ).fail ) );
+				} else {
+					void extensions.pickCrestImage().then( image => {
+						if ( !image ) return;
+						if ( image.length === 0 ) {
+							hudMessages.append( hudCopy( crestRegisterKeys( ask.kind ).fail ) );
+						} else if ( image.length > CREST_IMAGE_MAX_BYTES ) {
+							hudMessages.append( hudCopy( crestRegisterKeys( ask.kind ).error ) );
+						} else {
+							sendGameplay( {
+								kind: "crest-register",
+								slot: ask.slot,
+								crestKind: ask.kind,
+								image
+							} );
+						}
+					}, () => {
+						hudMessages.append( hudCopy( crestRegisterKeys( ask.kind ).fail ) );
+					} );
+				}
+			}
+		} else if ( id === "crest-register-no" ) {
+			crestRegisterAsk = null;
 		} else if ( id === "guild-create" ) {
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" ) {
@@ -9459,6 +9525,18 @@ export function createUi( ports: UiPorts ) {
 					))
 			) {
 				crestDeleteAsk = null;
+				dirty = true;
+			}
+			// The crest register box dies the same way.
+			const registerAsk = crestRegisterAsk;
+			if (
+				registerAsk &&
+				(next.session?.phase !== "world" || next.travel ||
+					!next.gameplay?.inventory.some(
+						row => row.slot === registerAsk.slot && row.refObjId === registerAsk.refObjId
+					))
+			) {
+				crestRegisterAsk = null;
 				dirty = true;
 			}
 			quickslotTime = next.simulationTimeMs ?? now;
@@ -24089,6 +24167,19 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
 					yes: "crest-delete-yes",
 					no: "crest-delete-no"
+				} );
+			}
+			if ( worldVisible && crestRegisterAsk ) {
+				// 52F460 types 0x15/0x18 (#2282): the register box's own
+				// title and its USER_CREST/FILE/FOLDER instruction lines.
+				controls = [];
+				blocks = [ full ];
+				const registerKeys = crestRegisterKeys( crestRegisterAsk.kind );
+				simpleMessageBox( {
+					title: hudCopy( registerKeys.title ),
+					lines: registerKeys.lines.map( key => hudCopy( key ) ),
+					yes: "crest-register-yes",
+					no: "crest-register-no"
 				} );
 			}
 			if ( worldVisible && recallConfirm !== null ) {

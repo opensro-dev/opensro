@@ -35,6 +35,7 @@ import (
 	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
+	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -760,6 +761,14 @@ type Runtime struct {
 	// RecordSilkGrant journals each committed grant.
 	SilkWallet      SilkWallet
 	RecordSilkGrant func(SilkGrant)
+	// Crests is the uploaded-crest store (crestregister.go,
+	// internal/game/social/crest): the register lane's image sink and
+	// the /marks/ resolver's index. Nil refuses every crest upload
+	// and every staff crest removal - register items have no source.
+	Crests *crest.Store
+	// RecordCrestChange journals each committed crest change or
+	// staff removal (crestregister.go), beside RecordSilkGrant.
+	RecordCrestChange func(CrestChange)
 	// RecordUniqueKill queues each announced unique kill for the community
 	// site's record (port-only). It runs inside the character door, so it
 	// must only enqueue: the store write happens on its own goroutine.

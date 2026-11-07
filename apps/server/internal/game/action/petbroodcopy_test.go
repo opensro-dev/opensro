@@ -145,6 +145,50 @@ func TestBroodTickTakesTheCompanionCopy(t *testing.T) {
 
 /*
 ================
+TestBroodQuietTickTakesNoCopy
+
+The allocation guard for the brood facts door (#2030): with an egg
+out and nothing firing - the egg waits on its hatch timer, the
+source validates, no clone needs orders - the brood tick judges on
+door-read facts and takes no owner copy, so a quiet tick costs at
+most half of the same tick with the copy forced through the seam.
+An event judged quiet (the mutation this guards) leaves its egg
+unhatched or its dead clone standing on the narrow lane, which
+TestBroodPassReadsNothingOutsideTheCompanionCopy's narrow leg -
+this door - refuses.
+================
+*/
+func TestBroodQuietTickTakesNoCopy(t *testing.T) {
+	rt, clock, c, _, key := tailwindFixture(t, 1)
+	petPeriodicFatten(c)
+	skill := learnPetBook(t, c, 49)
+	rt.castCrowBrood(testDivision, c, key.gid, skill, clock.NowMs())
+	if len(c.Brood) != 1 {
+		t.Fatal("the crow laid no egg")
+	}
+	// The egg is out and waiting on its timer: nothing fires.
+	now := clock.NowMs() + 1000
+	bytesPerRun := func(run func()) int64 {
+		return testing.Benchmark(func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				run()
+			}
+		}).AllocedBytesPerOp()
+	}
+	judged := bytesPerRun(func() { rt.advanceCrowBrood(key, now) })
+	rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+		return character.SnapshotCompanion()
+	}
+	forced := bytesPerRun(func() { rt.advanceCrowBrood(key, now) })
+	t.Logf("brood quiet tick %d B/run judged, %d B/run with the copy forced", judged, forced)
+	if judged > forced/2 {
+		t.Fatalf("the quiet brood tick allocates %d B/run judged, want at most half of the forced copy's %d (the copy is back)", judged, forced)
+	}
+}
+
+/*
+================
 TestSpiritTickTakesThePetOwnerView
 
 advancePetSpirit copies the owner only while a pet holds Resolve
