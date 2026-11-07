@@ -15,6 +15,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
+import { defined } from "../helpers/defined.mjs";
 
 const { CHAT_LINK_MARKER } = await import( "../../src/engine/foundation/gameplay/chat-item-links.ts" );
 
@@ -75,7 +76,7 @@ test("Alt+click a bag item with the input focused links it and the send carries 
 		const shown = event( { kind: "activate", id: "slot:13", alt: true } );
 		assert.equal( chatValue( shown ), "wts " + CHAT_LINK_MARKER );
 		event( { kind: "activate", id: "chat-send" } );
-		const line = sent.findLast( c => c.kind === "chat" );
+		const line = defined( sent.filter( c => c.kind === "chat" ).at( -1 ) );
 		assert.equal( line.text, "wts " + CHAT_LINK_MARKER );
 		assert.deepEqual( line.links, [ { source: 0, slot: 13 } ] );
 	} finally {
@@ -102,7 +103,7 @@ test("Shift+click still opens the split with the input focused", () => {
 		event( { kind: "activate", id: "open-window:Inventory" } );
 		event( { kind: "focus", id: "chat-text" } );
 		const shown = event( { kind: "activate", id: "slot:13", shift: true } );
-		assert.ok( shown.controls.some( c => c.id === "split-amount" ) );
+		assert.ok( defined( shown ).controls.some( c => c.id === "split-amount" ) );
 		assert.equal( chatValue( shown ) ?? "", "" );
 	} finally {
 		f.dispose();

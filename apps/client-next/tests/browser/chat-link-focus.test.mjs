@@ -29,14 +29,15 @@ test( "an Alt+click on an item keeps the chat editor focused", { timeout: 60000 
 	);
 	await page.goto( CLIENT_NEXT_BASE_URL, { timeout: 20000 } );
 	await page.evaluate( async () => {
+		const page = /** @type {any} */ (window);
 		const { createUiBridge } = await import( "/src/engine/runtime/platform/ui/ui.ts" );
-		window.events = [];
-		window.bridge = createUiBridge(
+		page.events = [];
+		page.bridge = createUiBridge(
 			document.querySelector( "canvas" ),
-			event => window.events.push( event ),
+			event => page.events.push( event ),
 			() => {}
 		);
-		window.bridge.present( {
+		page.bridge.present( {
 			title: "test",
 			message: "",
 			controls: [
@@ -55,11 +56,19 @@ test( "an Alt+click on an item keeps the chat editor focused", { timeout: 60000 
 	const editor = page.locator( '[data-ui-id="chat-text"]' ), item = page.locator( '[data-ui-id="slot:13"]' );
 	await editor.click();
 	await item.click( { modifiers: [ "Alt" ] } );
-	assert.equal( await page.evaluate( () => document.activeElement?.dataset?.uiId ), "chat-text" );
+	assert.equal(
+		await page.evaluate( () => /** @type {HTMLElement | null} */ (document.activeElement)?.dataset?.uiId ),
+		"chat-text"
+	);
 	assert.ok(
-		await page.evaluate( () => window.events.some( e => e.kind === "activate" && e.id === "slot:13" && e.alt ) ),
+		await page.evaluate( () =>
+			/** @type {any} */ (window).events.some( e => e.kind === "activate" && e.id === "slot:13" && e.alt )
+		),
 		"the Alt+click still activates the item"
 	);
 	await item.click();
-	assert.notEqual( await page.evaluate( () => document.activeElement?.dataset?.uiId ), "chat-text" );
+	assert.notEqual(
+		await page.evaluate( () => /** @type {HTMLElement | null} */ (document.activeElement)?.dataset?.uiId ),
+		"chat-text"
+	);
 } );

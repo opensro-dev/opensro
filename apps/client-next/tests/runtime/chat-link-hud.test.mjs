@@ -13,6 +13,7 @@ the label where the marker sits.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 
 const { createChatLinkHud, chatLinkFromActivate } = await import( "../../src/engine/runtime/ui/hud/chat-link-hud.ts" );
 const { CHAT_LINK_MARKER } = await import( "../../src/engine/foundation/gameplay/chat-item-links.ts" );
@@ -80,8 +81,8 @@ test("slot ids resolve to the item and the link the server reads", () => {
 		label: "<Blade +7>"
 	} );
 	assert.deepEqual( chatLinkFromActivate( "avatar:2", sources ), { ref: { source: 3, slot: 1 }, label: "<Cape>" } );
-	assert.deepEqual( chatLinkFromActivate( "storage-slot:2", sources ).ref, { source: 1, slot: 2 } );
-	assert.deepEqual( chatLinkFromActivate( "cos-slot:0", sources ).ref, { source: 2, slot: 0 } );
+	assert.deepEqual( defined( chatLinkFromActivate( "storage-slot:2", sources ) ).ref, { source: 1, slot: 2 } );
+	assert.deepEqual( defined( chatLinkFromActivate( "cos-slot:0", sources ) ).ref, { source: 2, slot: 0 } );
 	assert.equal( chatLinkFromActivate( "slot:15", sources ), null );
 	assert.equal( chatLinkFromActivate( "skill:3", sources ), null );
 });

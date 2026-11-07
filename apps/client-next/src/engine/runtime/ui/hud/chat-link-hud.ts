@@ -105,15 +105,36 @@ export function chatLinkFromActivate( id: string, sources: ChatLinkSources ): Ch
 createChatLinkHud
 ================
 */
+// An editor without links: one shared empty list, read every frame.
+const NO_LINKS: readonly ChatLink[] = [];
+const NO_LABELS: readonly string[] = [];
+
 export function createChatLinkHud() {
-	const editors = new Map<string, ChatLink[]>();
+	const editors = new Map<string, readonly ChatLink[]>();
+	// The labels each editor draws, kept beside its links so the per-frame
+	// read allocates nothing.
+	const labelsOf = new Map<string, readonly string[]>();
 	/*
 	================
 	linksOf
 	================
 	*/
 	function linksOf( editor: string ) {
-		return editors.get( editor ) ?? [];
+		return editors.get( editor ) ?? NO_LINKS;
+	}
+	/*
+	================
+	setLinks
+	================
+	*/
+	function setLinks( editor: string, links: readonly ChatLink[] ) {
+		if ( !links.length ) {
+			editors.delete( editor );
+			labelsOf.delete( editor );
+			return;
+		}
+		editors.set( editor, links );
+		labelsOf.set( editor, links.map( link => link.label ) );
 	}
 	return {
 		/*
@@ -138,7 +159,7 @@ export function createChatLinkHud() {
 			if ( text.length + 1 > CHAT_LINE_LIMIT ) return { text, caret };
 			const index = markerCount( text.slice( 0, caret ) );
 			links.splice( index, 0, link );
-			editors.set( editor, links );
+			setLinks( editor, links );
 			return { text: text.slice( 0, caret ) + CHAT_LINK_MARKER + text.slice( caret ), caret: caret + 1 };
 		},
 		/*
@@ -164,7 +185,7 @@ export function createChatLinkHud() {
 			const at = markerCount( before.slice( 0, head ) ), gone = markerCount( removed );
 			if ( gone ) {
 				links.splice( at, gone );
-				editors.set( editor, links );
+				setLinks( editor, links );
 			}
 			if ( !inserted.includes( CHAT_LINK_MARKER ) ) return after;
 			return after.slice( 0, head ) + stripChatMarkers( inserted ) + after.slice( after.length - tail );
@@ -183,7 +204,7 @@ export function createChatLinkHud() {
 		================
 		*/
 		labels( editor: string ): readonly string[] {
-			return linksOf( editor ).map( link => link.label );
+			return labelsOf.get( editor ) ?? NO_LABELS;
 		},
 		/*
 		================
@@ -194,7 +215,7 @@ export function createChatLinkHud() {
 		*/
 		display( editor: string, text: string ) {
 			return text.includes( CHAT_LINK_MARKER ) ?
-				replaceChatMarkers( text, linksOf( editor ).map( link => link.label ) ) :
+				replaceChatMarkers( text, labelsOf.get( editor ) ?? NO_LABELS ) :
 				text;
 		},
 		/*
@@ -205,7 +226,7 @@ export function createChatLinkHud() {
 		================
 		*/
 		clear( editor: string ) {
-			editors.delete( editor );
+			setLinks( editor, NO_LINKS );
 		}
 	};
 }

@@ -17,7 +17,7 @@ import { chatScrollbar } from "./chat-scrollbar";
 import { textLines } from "./text-lines";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
 import { type NoticeRowLink, noticeWrappedLinks, projectSpans } from "@/engine/foundation/gameplay/notice-links";
-import { chatLinkSpans, replaceChatMarkers } from "@/engine/foundation/gameplay/chat-item-links";
+import { CHAT_LINK_MARKER, chatLinkSpans, replaceChatMarkers } from "@/engine/foundation/gameplay/chat-item-links";
 import {
 	isSunDropNoticeText,
 	SEAL_NOTICE_COLOR_MOON,
@@ -168,6 +168,9 @@ author across filtering, wrapping and scrolling instead of parsing captions.
 ================
 */
 export function chatLayout( state: ChatLayoutInput ) {
+	// The rows of a line without item links share one empty list (port-only
+	// item links; one list per pass, not per row).
+	const noItemLinks: readonly ChatRowItemLink[] = [];
 	const {
 		layout,
 		width,
@@ -305,7 +308,7 @@ button
 					sentAt: undefined as number | undefined,
 					notice: undefined as ChatLine["notice"],
 					links: [] as readonly NoticeRowLink[],
-					itemLinks: [] as readonly ChatRowItemLink[],
+					itemLinks: noItemLinks,
 					sequence: undefined as number | undefined
 				}) ) :
 				[]),
@@ -323,12 +326,16 @@ button
 					const sun = isSunDropChatLine( l ),
 						color = sealNoticeChatColor( l ) ?? chatLineColor( l.channel ),
 						style: GlyphStyle | undefined = sun ? { fontStyle: 2 } : undefined,
-						// Port-only item links: each marker shows its item's label.
-						labelled = chatLinkSpans( chatLineText( l, copy ), l.links, state.chatItemLinks === true ),
-						full = labelled.text,
+						// Port-only item links: each marker shows its item's label. A line
+						// without a marker takes none of this path (the per-frame budget).
+						raw = chatLineText( l, copy ),
+						labelled = raw.includes( CHAT_LINK_MARKER ) ?
+							chatLinkSpans( raw, l.links, state.chatItemLinks === true ) :
+							null,
+						full = labelled?.text ?? raw,
 						wrapped = textLines( full, textWidth, value => measure( value, style ), true ),
 						links = noticeWrappedLinks( full, wrapped, state.noticeLinks ? l.notice : undefined ),
-						itemLinks = projectSpans( full, wrapped, labelled.spans );
+						itemLinks = labelled?.spans.length ? projectSpans( full, wrapped, labelled.spans ) : null;
 					return wrapped.map( ( value, index ) => ({
 						value,
 						color,
@@ -337,7 +344,7 @@ button
 						sentAt: l.sentAt,
 						notice: state.noticeLinks ? l.notice : undefined,
 						links: links[index] ?? ([] as readonly NoticeRowLink[]),
-						itemLinks: itemLinks[index] ?? ([] as readonly ChatRowItemLink[]),
+						itemLinks: itemLinks?.[index] ?? noItemLinks,
 						sequence: l.sequence
 					}) );
 				}

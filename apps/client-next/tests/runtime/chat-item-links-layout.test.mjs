@@ -14,6 +14,7 @@ keeps its focus on Alt presses.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 
@@ -23,7 +24,9 @@ const { decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/a
 const { CHAT_LINK_MARKER } = await import( "../../src/engine/foundation/gameplay/chat-item-links.ts" );
 
 const M = CHAT_LINK_MARKER;
-const BLADE = { slot: 6, refObjId: 11459, typeFlags: 0, quantity: 1, plus: 7, name: "Blade", magic: [] };
+// A presented bag row: only the fields the chat log reads.
+const BLADE =
+	/** @type {any} */ ({ slot: 6, refObjId: 11459, typeFlags: 0, quantity: 1, plus: 7, name: "Blade", magic: [] });
 const layout = decodeAuthoredLayout(
 	JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifchatviewer.json", "utf8" ) )
 );
@@ -106,7 +109,7 @@ test("a missing item shows <?> and no region", () => {
 
 test("the input draws the label and keeps its focus on Alt presses", () => {
 	const { controls, drawn } = layoutWith( { input: "a" + M, inputLabels: [ "<A>" ] } );
-	const input = controls.find( c => c.id === "chat-text" );
+	const input = defined( controls.find( c => c.id === "chat-text" ) );
 	assert.equal( input.value, "a" + M );
 	assert.equal( input.keepFocusOnAltPress, true );
 	assert.ok( drawn.includes( "a<A>" ) );

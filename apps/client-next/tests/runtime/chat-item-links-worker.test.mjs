@@ -14,6 +14,7 @@ Chatting use carries the same block.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 
 const { createChat } = await import( "../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts" );
 const { createGameplay } = await import(
@@ -23,7 +24,9 @@ const { CHAT_LINK_MARKER } = await import( "../../src/engine/foundation/gameplay
 
 const bytes = hex => Uint8Array.from( hex.split( " " ).map( b => parseInt( b, 16 ) ) );
 const M = CHAT_LINK_MARKER;
-const POTION = { slot: 13, refObjId: 0x01020304, typeFlags: 0, quantity: 3, plus: 0, name: "Potion" };
+// Only the fields the chat owner passes through; typed loosely for the stubs.
+const POTION =
+	/** @type {any} */ ({ slot: 13, refObjId: 0x01020304, typeFlags: 0, quantity: 3, plus: 0, name: "Potion" });
 // One linked body: the notice tests' ETC potion.
 const TAIL = bytes( "01 06 00 04 03 02 01 03 00" );
 
@@ -60,6 +63,10 @@ owner
 A chat owner whose resolvers answer the potion.
 ================
 */
+/**
+ * @param {any[]} [sent]
+ * @param {(ref: any) => any} [linked]
+ */
 function owner( sent = [], linked = () => POTION ) {
 	const chat = createChat( frame => sent.push( frame ), () => POTION, linked );
 	chat.bootstrap( { character: { name: "Local" }, chatItemLinks: 1 } );
@@ -70,15 +77,15 @@ test("a player line decodes its item link", () => {
 	const chat = owner();
 	const all = Uint8Array.from( [ 1, 2, 0, 0, 0, ...wide( "look " + M ), ...TAIL ] );
 	assert.equal( chat.receive( { opcode: 0x3667, payload: all }, 1 ), true );
-	assert.deepEqual( chat.state().lines.at( -1 ).links, [ POTION ] );
+	assert.deepEqual( defined( chat.state().lines.at( -1 ) ).links, [ POTION ] );
 	chat.receive( { opcode: 0x3667, payload: named( 4, "Berk", M, TAIL ) }, 1 );
-	assert.deepEqual( chat.state().lines.at( -1 ).links, [ POTION ] );
+	assert.deepEqual( defined( chat.state().lines.at( -1 ) ).links, [ POTION ] );
 });
 
 test("a malformed player tail is a plain line", () => {
 	const chat = owner();
 	chat.receive( { opcode: 0x3667, payload: named( 4, "Berk", "x", bytes( "01 06 00 04" ) ) }, 1 );
-	const line = chat.state().lines.at( -1 );
+	const line = defined( chat.state().lines.at( -1 ) );
 	assert.equal( line.text, "x" );
 	assert.equal( line.links, undefined );
 });
@@ -98,7 +105,7 @@ test("history keeps the links", () => {
 	v.setUint16( 10, line.length, true );
 	p.set( line, 12 );
 	chat.receive( { opcode: 16, payload: p }, 1 );
-	const got = chat.state().lines.at( -1 );
+	const got = defined( chat.state().lines.at( -1 ) );
 	assert.equal( got.history, true );
 	assert.deepEqual( got.links, [ POTION ] );
 });
@@ -109,7 +116,7 @@ test("a sent line carries its refs and echoes its items", () => {
 	chat.request( 1, "x" + M, "", 0, [ { source: 0, slot: 13 } ] );
 	assert.deepEqual( sent[0].payload, Uint8Array.from( [ 1, 255, ...wide( "x" + M ), ...bytes( "01 00 0D 00" ) ] ) );
 	chat.receive( { opcode: 0xb367, payload: Uint8Array.of( 1, 1, 255 ) }, 1 );
-	const own = chat.state().lines.at( -1 );
+	const own = defined( chat.state().lines.at( -1 ) );
 	assert.equal( own.outgoing, true );
 	assert.deepEqual( own.links, [ POTION ] );
 });

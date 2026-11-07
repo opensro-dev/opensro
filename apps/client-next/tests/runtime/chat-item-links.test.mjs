@@ -13,6 +13,7 @@ decode that never fails the session, and the labels a link shows.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 
 const {
 	CHAT_LINK_MARKER,
@@ -32,7 +33,7 @@ test("the link refs encode as the server decodes them", () => {
 });
 
 test("the broadcast tail decodes the server's vector", () => {
-	const bodies = decodeChatLinkTail( bytes( "AA 01 03 00 01 02 03" ), 1 );
+	const bodies = defined( decodeChatLinkTail( bytes( "AA 01 03 00 01 02 03" ), 1 ) );
 	assert.equal( bodies.length, 1 );
 	assert.deepEqual( bodies[0], bytes( "01 02 03" ) );
 	assert.deepEqual( decodeChatLinkTail( bytes( "AA" ), 1 ), [] );
