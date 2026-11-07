@@ -3,7 +3,7 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 38 to schema 39, layout 12. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 39 to schema 40, layout 12. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
@@ -65,6 +65,7 @@ const preHalloweenAccountVersion = 35
 const preOnlineRecordVersion = 36
 const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
+const preForgeBoundVersion = 39
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -257,6 +258,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		// wallet movements were never recorded and its records read
 		// unchanged (#2269).
 		if layout < preSilkHistoryLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preForgeBoundVersion:
+		// Schema 39 ran at layout 12 and has no forge-bound mark on its
+		// item rows; its items read unbound (#1980). Records read unchanged.
+		if layout < CurrentLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout

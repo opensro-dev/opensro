@@ -127,7 +127,11 @@ func isVersionMismatch(err error) bool {
 // Version 39 changes no record: layout 12 adds the silk_history table
 // (port-only, silkhistory.go), the movement record the Item Mall's silk
 // history window lists (#2269). The upgrade rewrites no record.
-const CurrentVersion = 39
+// Version 40 adds the optional forge-bound mark on item rows (forgeBound,
+// port-only, #1980): an item a GM forged with /FORGE can never be traded,
+// sold or handed to another character. Rows saved earlier carry no mark
+// and are unbound; the offline upgrade rewrites no record.
+const CurrentVersion = 40
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
