@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -21,6 +23,7 @@ A schema 31 authority at layout 10 upgrades to 32 with its records untouched
 ================
 */
 func TestBreakNoticeUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-31 layout-10 authority upgrades to 32 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

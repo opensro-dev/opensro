@@ -9,6 +9,8 @@ import (
 )
 
 func TestCharacterLookupInvalidatesAfterIdentityLifecycle(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	s := openTest(t, t.TempDir(), clock)
 	lookup := s.Characters().(domain.CharacterLookup)
@@ -48,6 +50,8 @@ func TestCharacterLookupInvalidatesAfterIdentityLifecycle(t *testing.T) {
 }
 
 func TestCharacterLookupSimpleFoldMatchesLegacy(t *testing.T) {
+	t.Parallel()
+
 	names := []string{"Kelvin", "Kelvin", "Σigma", "ςigma", "σIGMA", "Silkroad", "SILKROAD", "丝路", "other"}
 	for _, a := range names {
 		for _, b := range names {
