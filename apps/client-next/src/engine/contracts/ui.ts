@@ -259,6 +259,8 @@ export interface UiBridge {
 	present( state: UiSemantics ): void;
 	/** /cwsave's browser form: download the waypoint store's text as cw.txt (#1716). */
 	saveCameraWaypoints( text: string ): void;
+	/** The crest register's image pick (#2282): the chosen file's bytes, or null on cancel. */
+	pickCrestImage(): Promise<Uint8Array | null>;
 	dispose(): void;
 }
 /*

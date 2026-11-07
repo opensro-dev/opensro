@@ -181,6 +181,10 @@ type Config struct {
 	// MarksDir is the guild-crest art directory /marks/ serves from;
 	// empty = no art hosted, every crest answers 404 (see EnvMarksDir).
 	MarksDir string
+	// Crests resolves uploaded crests by their native name for
+	// /marks/ (the game world's crest store, #2282); nil keeps
+	// /marks/ a host-art passthrough only.
+	Crests CrestResolver
 	// BenchmarkFixtureControl registers the development-only deterministic
 	// fixture reset authority. Production deployments must leave it false.
 	BenchmarkFixtureControl bool
@@ -249,6 +253,7 @@ type API struct {
 	characterNameAllowed    CharacterNameValidator
 	authoredAreas           *worldarea.Catalog
 	marksDir                string // "" = no crest art hosted
+	crests                  CrestResolver
 	benchmarkFixtureControl bool
 	skillGroup              SkillGroupResolver
 	levelCap                int64
@@ -320,6 +325,7 @@ func New(config Config) (*API, error) {
 		characterNameAllowed:    config.CharacterNameAllowed,
 		authoredAreas:           config.AuthoredAreas,
 		marksDir:                config.MarksDir,
+		crests:                  config.Crests,
 		benchmarkFixtureControl: config.BenchmarkFixtureControl,
 		skillGroup:              config.SkillGroup,
 		levelCap:                config.LevelCap,
@@ -545,13 +551,58 @@ var guildMarkNamePattern = regexp.MustCompile(`^[GA][0-9]{1,10}_[0-9]{1,10}_[0-9
 // allocation or transfer.
 const maxGuildMarkBytes int64 = 1 << 20
 
-// handleGuildMark serves one guild-crest .crb blob by its native filename
-// from the configured marks directory - a raw passthrough, no
-// transformation (the client's CGuildCrestManager_BuildCrestUrl loader consumes the bytes and
-// caches them locally as .rd under the client's 0xcbc340 cache root). The server
-// stores only crest REVISION params (the v1.188 _Guild.CurCrestRev
-// lineage), never images, so art is host-supplied: no directory or no
-// file is an honest 404 and the client draws nothing for that crest.
+/*
+================
+CrestResolver
+
+One uploaded crest's payload by its native name's parts: the game
+world's crest store (#2282). Only the standing revision resolves,
+and the bytes are the store's canonical re-encode - never bytes the
+request could name. hash is the payload's content address, served
+as the cache validator.
+================
+*/
+type CrestResolver interface {
+	ServeCrest(kind string, id int64, revision uint32) (payload []byte, hash string, ok bool)
+}
+
+/*
+================
+uploadedCrest
+
+The uploaded crest behind one native name, or nothing. The name's
+shape is already pinned by guildMarkNamePattern; the ids still
+parse defensively, and the leading segment (the client's session
+crest prefix) is a shard breadcrumb the per-shard store does not
+key on.
+================
+*/
+func uploadedCrest(resolver CrestResolver, name string) ([]byte, string, bool) {
+	kind := "guild"
+	if name[0] == 'A' {
+		kind = "union"
+	}
+	parts := strings.Split(strings.TrimSuffix(name, ".crb"), "_")
+	if len(parts) != 3 {
+		return nil, "", false
+	}
+	id, errID := strconv.ParseUint(parts[1], 10, 32)
+	revision, errRevision := strconv.ParseUint(parts[2], 10, 32)
+	if errID != nil || errRevision != nil {
+		return nil, "", false
+	}
+	return resolver.ServeCrest(kind, int64(id), uint32(revision))
+}
+
+// handleGuildMark serves one guild-crest .crb blob by its native
+// filename (the client's CGuildCrestManager_BuildCrestUrl loader consumes the bytes and
+// caches them locally as .rd under the client's 0xcbc340 cache root). An
+// uploaded crest (#2282) resolves through the game world's crest
+// index first: only the standing revision is hosted, as canonical
+// re-encoded bytes under the owner's rules. Anything else falls to
+// the marks directory as a raw passthrough of host-supplied art, no
+// transformation: no directory or no file is an honest 404 and the
+// client draws nothing for that crest.
 /*
 ================
 handleGuildMark
@@ -563,7 +614,31 @@ func (api *API) handleGuildMark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/marks/")
-	if api.marksDir == "" || !guildMarkNamePattern.MatchString(name) {
+	if !guildMarkNamePattern.MatchString(name) {
+		http.NotFound(w, r)
+		return
+	}
+	// The name's revision must be the standing one; the bytes then
+	// come from the store, built from server-side state alone.
+	if api.crests != nil {
+		if payload, hash, ok := uploadedCrest(api.crests, name); ok {
+			etag := `"` + hash + `"`
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			// The native filename includes the revision. Replacing
+			// art requires a new revision, so warm browser sessions
+			// can reuse it without another transfer.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Header().Set("ETag", etag)
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			_, _ = w.Write(payload)
+			return
+		}
+	}
+	if api.marksDir == "" {
 		http.NotFound(w, r)
 		return
 	}

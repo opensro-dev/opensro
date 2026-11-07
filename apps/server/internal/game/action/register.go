@@ -52,6 +52,7 @@ Register
 func (rt *Runtime) Register(hub *transport.Hub) {
 	rt.registerDeparture(hub)
 	rt.registerMall(hub)
+	rt.registerCrest(hub)
 	hub.Handle(0x7341, rt.hubHandler(hub, rt.HandleBerserk))
 	hub.Handle(0x7495, rt.hubHandler(hub, rt.HandlePortal))
 	hub.Handle(opFortressInteraction, rt.hubHandler(hub, rt.HandleFortressInteraction))
@@ -295,6 +296,13 @@ func sceneLoadingRefusal(opcode uint16) []wire.Frame {
 		// the way a failed native purchase retires its own pending lane.
 		if payload, err := json.Marshal(mallProjection{Version: 1, Error: "mall is unavailable while entering"}); err == nil {
 			return []wire.Frame{{Opcode: opMallCatalog, Payload: payload}}
+		}
+	case opCrestRegister:
+		// The crest upload waits on its own answer lane (extension
+		// opcode 19); a refused answer retires its pending the way a
+		// failed catalogue read retires its request (crestregister.go).
+		if payload, err := json.Marshal(crestRegisterAnswer{Reason: crestRefusedGeneric}); err == nil {
+			return []wire.Frame{{Opcode: opCrestRegister, Payload: payload}}
 		}
 	}
 	return nil
