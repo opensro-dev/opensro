@@ -56,8 +56,9 @@ type petSession struct {
 	character           *enterworld.Character
 	refObjID            uint32
 	follower            *simulation.PetFollower
-	// Transport COS do not run follower AI. Their admission anchor belongs to
-	// this same presentation owner; mounted motion comes from the rider owner.
+	// judgedPet is the judged tick's scratch pet view (petjudged.go).
+	judgedPet enterworld.CharacterCOS
+	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
 	// tether is the parked trade transport's hold on its owner this tick
@@ -66,7 +67,12 @@ type petSession struct {
 	generation uint64
 	// summonedAtMs marks a pet just called out of its item (not restored at
 	// entry): its first publication carries spawn sub-state 1.
-	summonedAtMs   int64
+	summonedAtMs int64
+	// arrivedAtMs marks a pet that just travelled with its owner
+	// (relocateReturningPet). At the destination the pet appears, it does
+	// not merely become visible, so its first publication there carries
+	// sub-state 1 like a summon. A login restore never stamps it.
+	arrivedAtMs    int64
 	pickup         *wire.ItemMoveRequest
 	pickupDeadline int64
 	pickupCommand  bool
@@ -717,7 +723,8 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 	block := rt.cosAbnormal(division, c.Name, cos.GID)
 	walk, run := rt.cosMovementSpeeds(ref, cos, block)
 	result = &simulation.PeerCOS{Mounted: cos.Mounted, NativeBodyStatus: cos.NativeBodyStatus, World: world, Revision: revision, Session: state.session, Generation: state.generation,
-		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
+		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs ||
+			state.arrivedAtMs != 0 && now-state.arrivedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: walk, Run: run,
 			Scale: cosParameter(ref, cos, block, actionSpeedParameter) / float32(rt.petAttackSpeed(petCombatStep{snapshot: c, pet: cos, state: state, nowMs: now})), Name: name, OwnerName: enterworld.PartyMemberName(c), OwnerModelRef: enterworld.CharacterModelRef(c, nil), OwnerGid: enterworld.ObjectIDForCharacter(c)}}
@@ -865,6 +872,7 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		state.public = nil
 		state.crow = crowKit{views: state.crow.views}
 		state.generation++
+		state.arrivedAtMs = rt.Now().UnixMilli()
 		state.follower = nil
 		if cos := c.CompanionByGID(key.gid); cos != nil {
 			pose := rt.companionAdmissionSpawn(cos, destination)
@@ -893,6 +901,38 @@ func (rt *Runtime) restoreCompanionRelocation(previous map[petOwnerKey]petSessio
 			*current = state
 		}
 	}
+}
+
+/*
+================
+petArrivalFrames
+
+The owner's own presentation of the pets that just travelled with them.
+The bootstrap list placed each pet silently (grouped records carry no
+sub-state byte, so no client shows an appear for them), so after the
+list the owner is shown the arrival itself: one single spawn per living
+attack or pickup pet, its sub-state byte 1, which the client answers
+with the appear effect and the summon sound (client 854CD0) exactly as at a
+summon, replacing the listed entity in place. Fresh is the gate: only
+the summon and arrival stamps set it, and a summon cannot race a
+teleport, so at a re-entry seam Fresh means arrived.
+================
+*/
+func (rt *Runtime) petArrivalFrames(division string, c *enterworld.Character) []wire.Frame {
+	nowMs := rt.Now().UnixMilli()
+	var frames []wire.Frame
+	for _, view := range rt.companionPresentations(division, c.Name) {
+		if view == nil || !view.Fresh || view.LifeState == wire.LifeStateDead {
+			continue
+		}
+		if view.Row.Band != 3 && view.Row.Band != 4 {
+			continue
+		}
+		for _, frame := range view.SpawnFrames(nowMs) {
+			frames = append(frames, wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload})
+		}
+	}
+	return frames
 }
 
 /*

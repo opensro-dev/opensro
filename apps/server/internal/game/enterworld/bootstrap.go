@@ -296,6 +296,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		AvatarMagicOptions:   buildAvatarMagicOptions(deps),
 		SiegeItemForgeGroups: DefaultSiegeItemForgeGroups(),
 		SiegeFortressData:    siegeFortressRows(deps),
+		SiegeStructUpgrades:  deps.SiegeStructUpgrades,
 		GameWorldData:        DefaultGameWorldDataRows(),
 		AvatarItems:          avatarItems,
 		EquipItems:           equipItems,

@@ -84,6 +84,12 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			return game.items.AdvanceHuntingPoints(nowMs, sessionViews(ticker.Source))
 		}},
 		{Name: "quest-markers", Hook: game.questMarkerTick()},
+		// The Academy cumulated-buff windows count down on the minute
+		// pulse (#2270); the runtime gates itself to the native cadence.
+		{Name: "academy-buff-pulse", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.mentorInvites.BuffPulse(nowMs)
+			return nil
+		}},
 		{Name: "parties", Hook: func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)
 			return game.parties.MemberUpdates(sessionViews(ticker.Source), nowMs)
@@ -96,6 +102,12 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.items.JobWeekTick(game.divisionID, nowMs)
 			return nil
 		}},
+		// Port-only (#2675): the periodic time-online credit; the
+		// session-close credit in sessionClosed covers the tail.
+		{Name: "online-credit", Hook: func(nowMs int64) []simulation.DivisionFrames {
+			game.creditOnlineSessions(sessionViews(ticker.Source), nowMs)
+			return nil
+		}},
 	}
 	// Native/off installs no hook and takes no extra session snapshots.
 	if game.betaSilk != nil {
@@ -104,6 +116,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		}})
 	}
 	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
+	// Port-only (killstats.go): online time accrues to the entered
+	// characters only - the session views at each accrual instant,
+	// never the division roster of everyone who exists (#2479).
+	if game.items.KillStats {
+		game.items.OnlineSessions = func() []simulation.SessionView {
+			return sessionViews(ticker.Source)
+		}
+	}
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	// A quest instance's exit gate joins its world's NPC scope pass.
 	ticker.WorldNpcs = game.items.QuestGateNpcs

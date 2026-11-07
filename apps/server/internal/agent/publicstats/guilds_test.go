@@ -78,6 +78,53 @@ func TestGuildListRanksAndKeepsMastersPrivate(t *testing.T) {
 
 /*
 ================
+TestGuildPowerSortsByVisibleMembersGear
+
+sort=power ranks guilds by the summed gear points of members who are
+not hidden (the gear board's own score), then level, members and name;
+the default list carries the same sum on every row (#2675).
+================
+*/
+func TestGuildPowerSortsByVisibleMembersGear(t *testing.T) {
+	f := newFixture()
+	s := f.service()
+	s.src.Guilds = func() []GuildEntry {
+		return []GuildEntry{
+			{ID: 10, Name: "Silk", Level: 3, Members: []GuildEntryMember{{CharID: 1, Grade: 0}, {CharID: 2, Grade: 2}}},
+			{ID: 11, Name: "Tea", Level: 3, Members: []GuildEntryMember{{CharID: 3, Grade: 0}, {CharID: 7, Grade: 2}, {CharID: 8, Grade: 2}}},
+			{ID: 12, Name: "Ash", Level: 5, Members: []GuildEntryMember{{CharID: 9, Grade: 0}}},
+		}
+	}
+	// Kekw's worn +7 piece scores 7 without item grades; Lune has no
+	// gear; Shy is hidden, so Tea's power is 0 despite three members.
+	var byLevel GuildsResponse
+	if code := get(t, s, "/public/v1/guilds", &byLevel); code != http.StatusOK {
+		t.Fatalf("guilds answered %d", code)
+	}
+	if byLevel.Sort != "level" || byLevel.Rows[2].Name != "Silk" || byLevel.Rows[2].GearPoints != 7 {
+		t.Fatalf("level list %+v", byLevel.Rows)
+	}
+	var byPower GuildsResponse
+	if code := get(t, s, "/public/v1/guilds?sort=power", &byPower); code != http.StatusOK {
+		t.Fatalf("guilds?sort=power answered %d", code)
+	}
+	silk, ash, tea := byPower.Rows[0], byPower.Rows[1], byPower.Rows[2]
+	if byPower.Sort != "power" || silk.Name != "Silk" || silk.Rank != 1 || silk.GearPoints != 7 ||
+		ash.Name != "Ash" || ash.Rank != 2 || tea.Name != "Tea" || tea.Rank != 3 || tea.GearPoints != 0 {
+		t.Fatalf("power order %+v", byPower.Rows)
+	}
+	var found GuildsResponse
+	get(t, s, "/public/v1/guilds?sort=power&q=te", &found)
+	if found.Total != 1 || found.Rows[0].Name != "Tea" || found.Rows[0].Rank != 3 {
+		t.Fatalf("power search %+v", found)
+	}
+	if code := get(t, s, "/public/v1/guilds?sort=size", nil); code != http.StatusBadRequest {
+		t.Fatalf("sort=size answered %d, want 400", code)
+	}
+}
+
+/*
+================
 TestGuildBurstCopiesGuildsOnce
 
 Every distinct search and page misses the answer cache, but the guild

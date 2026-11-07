@@ -83,14 +83,18 @@ type ItemRef struct {
 	// Country is media column 14 (native ref[0x27]): 0 China, 1 Europe,
 	// 3 = every character (the client 789C60 bit 0x200 wildcard). Default 3.
 	Country int64
-	// CashItem (column 7), Rarity (column 15) and CanDropOnDeath feed the
-	// server's death-penalty drop gate.
-	// CanDropOnDeath is RefObj m_dwAvailableOPs bit 14, which the
-	// native loader takes from bit 1 of CanDrop (column
-	// 20); a row with CanTrade 0 and CanDrop 1 is cleared first, which
-	// leaves bit 1 clear either way.
+	// CashItem (column 7), Rarity (column 15) and the CanDrop bits feed
+	// the server's drop gates.
+	// CanDrop is RefObj m_dwAvailableOPs bit 4 and CanDropOnDeath is
+	// bit 14, which the native loader takes from bits 0 and 1 of
+	// CanDrop (column 20) after one clamp: a row with CanTrade
+	// (column 16) 0 and CanDrop exactly 1 is cleared first, which
+	// leaves bit 1 clear either way. CanDrop gates the player's
+	// ground drop (action/itemmove.go); CanDropOnDeath gates the
+	// death-penalty drop.
 	CashItem       bool
 	Rarity         int64
+	CanDrop        bool
 	CanDropOnDeath bool
 	// ReqQuadTypes/ReqQuadValues are the four typed requirement pairs
 	// (media columns 32/34/36/38 types + 33/35/37/39 values; native
@@ -167,6 +171,27 @@ TypeFlags
 */
 func (r *ItemRef) TypeFlags() uint16 {
 	return uint16(((r.TypeIDs[0] << 2) | (r.TypeIDs[1] << 5) | (r.TypeIDs[2] << 7) | (r.TypeIDs[3] << 11)) & 0xffff)
+}
+
+/*
+================
+itemDropPermissions
+
+The two drop permissions read off one itemdata row: bits 0 and 1 of
+CanDrop (column 20) after the native loader's clamp - the byte is
+cleared first when CanTrade (column 16) is 0 and CanDrop is exactly
+1, so a non-tradable row authored droppable-only is neither player-
+nor death-droppable. No shipped v1.150 row hits the clamp; it is
+kept so the two bits can never disagree with the loader.
+================
+*/
+func itemDropPermissions(fields []string) (canDrop, canDropOnDeath bool) {
+	trade, _ := textdataInt(fields[16])
+	drop, _ := textdataInt(fields[20])
+	if trade == 0 && drop == 1 {
+		drop = 0
+	}
+	return drop&1 != 0, drop&2 != 0
 }
 
 /*

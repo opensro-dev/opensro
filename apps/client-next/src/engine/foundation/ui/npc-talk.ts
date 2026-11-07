@@ -19,6 +19,18 @@ import type { MerchantBranch } from "@/engine/foundation/gameplay/merchant-branc
 
 /*
 ================
+EVENT_EXCHANGE_FUNCTION
+
+The NPC capability bit the event exchange hangs on: 5D9100 tests
+capabilities & 0x40000 at 5D9409 (the prompt becomes the SO-OK line)
+and at 5D96BD (row 0x15 joins the menu). Named once here because the
+runtime UI and the gameplay guard both test it.
+================
+*/
+export const EVENT_EXCHANGE_FUNCTION = 0x40000;
+
+/*
+================
 npcChoiceColor
 
 5D31D0: signed difference of two level bytes. Only SN_ choices consult
@@ -133,6 +145,10 @@ export interface NpcTalkInput {
 	readonly canGacha?: boolean;
 	// canGachaOperator is row 0x28 (5D9750, mask 0x20000): Gori's voucher exchange.
 	readonly canGachaOperator?: boolean;
+	// canEventExchange is row 0x15 (5D9100 tests capability 0x40000 at
+	// 5D96BD and appends it at 5D96CF, right before row 0x16): the
+	// Christmas socks-for-a-gift exchange row (5D6A50 case 0x15).
+	readonly canEventExchange?: boolean;
 	// canWithdrawSkill is row 0x16 (5D9100, capability 0x200): the
 	// herbalist's skill-withdrawal row; the click sends mask 0x200.
 	readonly canWithdrawSkill?: boolean;
@@ -294,6 +310,11 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						[]),
 					...(input.canFortressTrainer ?
 						[ { id: "npc-fortress-production:trainer", label: copy( "UIIT_STT_FORT_ETC_TRAINING" ) } ] :
+						[]),
+					// 5D96BD appends row 0x15 under capability 0x40000,
+					// immediately before the 0x200 test at 5D96D6.
+					...(input.canEventExchange ?
+						[ { id: "npc-event-exchange", label: copy( "UIIT_MSG_XMAS_EVENT_CHANGE" ) } ] :
 						[]),
 					// 5D9100 appends row 0x16 after the job rows, before 0x27.
 					...(input.canWithdrawSkill ?

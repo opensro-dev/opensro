@@ -96,8 +96,9 @@ function present( poses ) {
 test("the world map keeps its town page inside a dungeon", () => {
 	const { caption, textures } = present( [ JANGAN_POSE, CAVE_POSE ] );
 	// 57FE60 with a page-less point loads nothing: the Jangan page, its
-	// caption and its picture stay exactly as they were.
-	assert.equal( caption, "UIIT_STT_JANGAN" );
+	// caption and its picture stay exactly as they were. The caption is
+	// 576949's local-map prefix plus the town string (#2276).
+	assert.equal( caption, "UIIT_PAG_LOCALMAP - UIIT_STT_JANGAN" );
 	assert.ok( textures.some( texture => texture.endsWith( "map_jangan.png" ) ) );
 	assert.ok( !textures.some( texture => texture.includes( "map_world_" ) ) );
 });
@@ -113,34 +114,3 @@ test("a world map first opened inside a dungeon derives no town page", () => {
 });
 
 /*
-================
-overviewTiles
-
-The overview tiles a pose's map shows, without the sign drawn over them.
-================
-*/
-/**
- * @param {object} pose
- * @returns {string[]}
- */
-function overviewTiles( pose ) {
-	return present( [ pose ] ).textures.filter( texture => texture.includes( "map_world_" ) ).sort();
-}
-
-test("each dungeon has the map point 575660 gives it", () => {
-	// 7200, 2102 and 2465, 2693 from sectors 0x87 and 0x5C, 192 units each.
-	assert.deepEqual( worldMapDungeonPose( 0x8007 ), { regionId: (102 << 8) | 172, x: 960, y: 0, z: 1820, angle: 0 } );
-	assert.deepEqual( worldMapDungeonPose( 0x8002 ), worldMapDungeonPose( 0x8007 ) );
-	assert.deepEqual( worldMapDungeonPose( 0x8001 ), { regionId: (106 << 8) | 147, x: 1610, y: 0, z: 50, angle: 0 } );
-	assert.equal( worldMapDungeonPose( 0x8008 ), null );
-	assert.equal( worldMapDungeonPose( JANGAN_POSE.regionId ), null );
-});
-
-test("the overview centres on the dungeon's map point", () => {
-	for ( const regionId of [ 0x8001, 0x8007 ] ) {
-		const tiles = overviewTiles( { ...CAVE_POSE, regionId } );
-		assert.ok( tiles.length > 0 );
-		assert.deepEqual( tiles, overviewTiles( worldMapDungeonPose( regionId ) ) );
-	}
-	assert.notDeepEqual( overviewTiles( CAVE_POSE ), overviewTiles( { ...CAVE_POSE, regionId: 0x8001 } ) );
-});

@@ -689,6 +689,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
 	corpses, corpseDespawns := rt.retireCompanionCorpsesDeferred(job.division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
+	frames = append(frames, rt.petArrivalFrames(job.division, c)...)
 	frames = append(frames, headActor...)
 	frames = append(frames, headPublic...)
 	// Only the body status is replayed here; read it under the door

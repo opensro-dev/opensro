@@ -30,9 +30,11 @@ mallTestAuthority
 ================
 */
 type mallTestAuthority struct {
-	balance domain.MallBalance
-	calls   int
-	fail    bool
+	balance      domain.MallBalance
+	calls        int
+	fail         bool
+	history      []domain.SilkHistoryRow
+	historyTotal uint32
 }
 
 /*
@@ -66,6 +68,15 @@ func (a *mallTestAuthority) PurchaseMall(c *domain.Character, cost domain.MallBa
 	a.balance.Points -= cost.Points
 	c.MissionInventory = rows
 	return a.balance, nil
+}
+
+/*
+================
+SilkHistory
+================
+*/
+func (a *mallTestAuthority) SilkHistory(*domain.Character, int, int) ([]domain.SilkHistoryRow, uint32, error) {
+	return a.history, a.historyTotal, nil
 }
 
 /*

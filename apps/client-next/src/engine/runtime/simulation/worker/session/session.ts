@@ -166,8 +166,19 @@ exactly once (#2337), so a code dedupe would eat a later episode whole.
 			code: command.code,
 			kind: command.incidentKind,
 			message: command.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			...(command.stack ? { stack: command.stack.slice( 0, 8192 ) } : {}),
 			phase: state.phase,
-			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {})
+			...(state.character ? { character: state.character } : entryCharacter ? { character: entryCharacter } : {}),
+			// A refused entry joins itself to the transport's session
+			// lines by id, says why the transport ended and whether the
+			// tab was hidden during the attempt (#2558).
+			...(command.code === "world_entry_rejected" ?
+				{
+					...(state.transportSessionId ? { transportSession: state.transportSessionId } : {}),
+					...(state.entryFailure?.closeReason ? { closeReason: state.entryFailure.closeReason } : {}),
+					...(command.tabHiddenMs !== undefined ? { tabHiddenMs: command.tabHiddenMs } : {})
+				} :
+				{})
 		} );
 	}
 	/*
@@ -269,6 +280,7 @@ publishWorld
 				character: undefined,
 				error: value.error,
 				entryFailure: value.entryFailure,
+				transportSessionId: value.transportSessionId,
 				disconnectMessage: value.disconnectMessage,
 				incidentID: value.incidentID,
 				incidentDelivery: incidentDelivery.get( value.incidentID )
@@ -287,6 +299,7 @@ publishWorld
 			pingMs: value.pingMs,
 			error: value.error,
 			entryFailure: value.entryFailure,
+			transportSessionId: value.transportSessionId,
 			disconnectMessage: value.disconnectMessage,
 			incidentID: value.incidentID,
 			incidentDelivery: incidentDelivery.get( value.incidentID ),

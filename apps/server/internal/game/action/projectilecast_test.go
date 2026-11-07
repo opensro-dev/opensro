@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -23,9 +24,19 @@ import (
 arrowFixture
 ================
 */
-func arrowFixture(t *testing.T) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+func arrowFixture(t testing.TB) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
 	t.Helper()
-	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	return arrowFixtureHP(t, 100000)
+}
+
+/*
+================
+arrowFixtureHP
+================
+*/
+func arrowFixtureHP(t testing.TB, monsterHP uint32) (*Runtime, *enterworld.Character, uint32, enterworld.SkillRow, int64) {
+	t.Helper()
+	rt, clock, c, target := newCombatTestRuntime(t, monsterHP)
 	items := rt.deps.ItemReferences().(staticItemSource)
 	weapon := items[c.MissionInventory[0].Codename]
 	weapon.TypeIDs[3] = 6
@@ -105,6 +116,41 @@ func TestCriticalArrowReleaseChargesOnceAndCarriesRealCritical(t *testing.T) {
 	closes := rt.drainSkillFinalizes(now + 2000)
 	if len(closes) != 1 || len(closes[0].Frames) != 1 || binary.LittleEndian.Uint32(closes[0].Frames[0].Payload[2:]) != token {
 		t.Fatalf("one close required: %+v", closes)
+	}
+}
+
+/*
+================
+TestProjectileReleaseServesCasterStatsFromTheMemo
+
+#2139: a due release reads the caster's stats several times (admission
+on the cast copy, cost and vitals on the live record). Production
+catalogues carry source identities, so the first read memoises and the
+rest serve from the memo; a fixture whose catalogues lack an identity
+silently rebuilds the keeper projection on every read instead. After
+one release the plain call shape must hit on both records.
+================
+*/
+func TestProjectileReleaseServesCasterStatsFromTheMemo(t *testing.T) {
+	rt, c, target, skill, now := arrowFixture(t)
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: target}
+	if _, decision := rt.acceptSkillCastAt(testDivision, c, rt.characterSnapshot(testDivision, c), cast, now, rt.handlerDoors()); decision != skillCastAccepted {
+		t.Fatalf("arrow did not prepare: %v", decision)
+	}
+	if frames := rt.advanceProjectileCasts(now + 971); len(frames) != 2 {
+		t.Fatalf("release produced %d division frames, want 2", len(frames))
+	}
+	snapshot := rt.characterSnapshotCast(testDivision, c)
+	if snapshot == nil {
+		t.Fatal("no cast copy after release")
+	}
+	block := rt.playerAbnormal(testDivision, c.Name)
+	writes := rt.statModifierWrites(testDivision, snapshot)
+	if _, _, _, hit := combat.LookupMemoizedPlayerStats(snapshot, rt.statCatalogs(), writes, block); !hit {
+		t.Fatal("stats memo does not serve the cast copy after a release")
+	}
+	if _, _, _, hit := combat.LookupMemoizedPlayerStats(c, rt.statCatalogs(), writes, block); !hit {
+		t.Fatal("stats memo does not serve the live record after a release")
 	}
 }
 

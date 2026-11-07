@@ -322,6 +322,17 @@ func (b *BetaSilk) PurchaseMall(character *domain.Character, cost domain.MallBal
 
 /*
 ================
+SilkHistory
+
+The wallet owns the recorded rows; the beta layer adds nothing.
+================
+*/
+func (b *BetaSilk) SilkHistory(character *domain.Character, periodDays int, limit int) ([]domain.SilkHistoryRow, uint32, error) {
+	return b.wallet.SilkHistory(character, periodDays, limit)
+}
+
+/*
+================
 Tick
 
 Advance every in-world account's clock and credit each full hour. lookup

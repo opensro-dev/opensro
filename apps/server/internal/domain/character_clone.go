@@ -171,6 +171,10 @@ func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
 	}
 	clone := *source
 	clone.PK = clonePointer(source.PK)
+	clone.Online = clonePointer(source.Online)
+	if source.Online != nil {
+		clone.Online.Days = cloneSlice(source.Online.Days)
+	}
 	clone.EventMembership = clonePointer(source.EventMembership)
 	if source.Aggressions != nil {
 		clone.Aggressions = make(map[uint32]uint32, len(source.Aggressions))

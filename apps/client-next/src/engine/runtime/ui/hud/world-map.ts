@@ -193,8 +193,8 @@ export function createWorldMapHud( options: MapHudOptions ) {
 	let mapSmall = false, mapFollow = true, mapPage = 0, mapX = 100, mapY = 100;
 	let mapPan: [number, number] = [ 0, 0 ], mapCenter: Pose | null = null;
 	// The last pose the world map could place. 5758D0 finds no page for a
-	// dungeon point, so 57FE60 keeps the loaded page; a dungeon without a map
-	// point (worldMapDungeonPose) holds the view here instead.
+	// dungeon point and 57FE60 then keeps the loaded page and its scroll,
+	// so while the player is off the map this pose holds the view.
 	let mapPose: Pose | null = null;
 	// The window drew a cave floor last frame, so a manual view holds cave
 	// coordinates rather than the dungeon's point on the world map.
@@ -771,8 +771,14 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter = null;
 				}
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
+					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
+					// wide chars at 0xBD959C (space dash space), then the town's
+					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC). A cave
+					// floor captions with its own label instead.
 					caption = (cavePage && caveMap && hudData.zones?.[cavePage.floorLabel]) ||
-						hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
+						(page ?
+							hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+							hudCopy( "UIIT_PAG_WORLDMAP" )) || "World Map";
 				windowBox( caption, mx, my, mw, mh );
 				const inner = mapClip;
 				// The map surface is CIFWorldMap itself, not a CIFButton: pressing or

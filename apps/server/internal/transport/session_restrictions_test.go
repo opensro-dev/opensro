@@ -109,3 +109,57 @@ func TestCharacterRestrictionNeedsABoundInstall(t *testing.T) {
 		t.Fatal("unbound install was recorded against a character")
 	}
 }
+
+/*
+================
+TestCharacterRestrictionFollowsARelog
+
+#2671: a mute installed by character reaches every live session of the
+character, and a session bound to the character later picks it up at
+bind, so a relog no longer walks out of it. Clearing reaches both.
+================
+*/
+func TestCharacterRestrictionFollowsARelog(t *testing.T) {
+	hub := newHub(testCfg())
+	until := [8]uint16{2026, 11, 4, 6, 12, 0, 0, 0}
+
+	live, _ := newAttachedSession(t, hub, false)
+	live.BindCharacter("DIV_A", "Loud", 0)
+	if !hub.SetCharacterRestriction("DIV_A", "loud", CommandRestrictionChat, until) {
+		t.Fatal("install refused")
+	}
+	if got, ok := live.CommandRestriction(CommandRestrictionChat); !ok || got != until {
+		t.Fatalf("live session not muted: %v %v", got, ok)
+	}
+
+	relog, _ := newAttachedSession(t, hub, false)
+	relog.BindCharacter("DIV_A", "Loud", 0)
+	if got, ok := relog.CommandRestriction(CommandRestrictionChat); !ok || got != until {
+		t.Fatalf("relog escaped the mute: %v %v", got, ok)
+	}
+	if _, ok := relog.CommandRestriction(CommandRestrictionTrade); ok {
+		t.Fatal("chat mute leaked into trade")
+	}
+
+	other, _ := newAttachedSession(t, hub, false)
+	other.BindCharacter("DIV_A", "Quiet", 0)
+	if _, ok := other.CommandRestriction(CommandRestrictionChat); ok {
+		t.Fatal("mute reached another character")
+	}
+
+	hub.ClearCharacterRestriction("DIV_A", "Loud", CommandRestrictionChat)
+	if _, ok := relog.CommandRestriction(CommandRestrictionChat); ok {
+		t.Fatal("clear missed the live session")
+	}
+	if hub.CharacterRestricted("DIV_A", "Loud", CommandRestrictionChat) {
+		t.Fatal("clear left the hub record")
+	}
+	late, _ := newAttachedSession(t, hub, false)
+	late.BindCharacter("DIV_A", "Loud", 0)
+	if _, ok := late.CommandRestriction(CommandRestrictionChat); ok {
+		t.Fatal("a cleared mute came back at bind")
+	}
+	if hub.SetCharacterRestriction("DIV_A", "Loud", 2, until) || hub.SetCharacterRestriction("DIV_A", "", CommandRestrictionChat, until) {
+		t.Fatal("bad selector or empty name accepted")
+	}
+}

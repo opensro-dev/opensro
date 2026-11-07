@@ -75,10 +75,10 @@ const OFF = Object.freeze( {
 	plusSevenNotices: true,
 	// On by default: the shard's item break notices show (#1738).
 	breakNotices: true,
+	// On by default (owner ask 2026-11-06, #2727): shard event notices print red in the message log.
+	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
-	// Off by default: each player opts in to the Most Wanted buff row (#1849).
-	mostWantedBuff: false,
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (port-only, not native): hides characters in dungeon blocks the active block does not draw.
@@ -93,7 +93,6 @@ const OFF = Object.freeze( {
 	noticeLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
-	attackPetTraining: false,
 	autoSelect: false,
 	// On by default (owner 2026-10-15): Withdraw asks before a guild ban.
 	confirmGuildBan: true,
@@ -133,7 +132,10 @@ const OFF = Object.freeze( {
 	warpArrivalSound: false,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
-	sealUnderHeading: false
+	sealUnderHeading: false,
+	// Off by default (#2269): the Item Mall's Buying list; the native
+	// window is inert and its mall button is born disabled.
+	silkHistory: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -323,14 +325,22 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Jobs" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages, the moving sun among them;
-	// render scale joins Image without changing the indices used to reopen
-	// the existing tabs.
+	// Lighting keeps the direct-light stages, the moving sun among them,
+	// and holds the silk history row for room (#2269); render scale joins
+	// Image without changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "sealUnderHeading", "dungeonCharacterPvs" ]
+		[
+			"sunShadow",
+			"dynamicSun",
+			"perPixelLighting",
+			"enchantSparks",
+			"sealUnderHeading",
+			"dungeonCharacterPvs",
+			"silkHistory"
+		]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
@@ -550,6 +560,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -568,6 +579,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -884,4 +896,17 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+});
+
+test("attack-pet training has no experimental toggle or saved opt-out", () => {
+	for ( const enabled of [ false, true ] ) {
+		assert.equal(
+			Object.hasOwn( experimentalOptions( { attackPetTraining: enabled } ), "attackPetTraining" ),
+			false
+		);
+	}
+	assert.equal(
+		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		false
+	);
 });
