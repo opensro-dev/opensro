@@ -531,3 +531,30 @@ func TestNewTickerArmsTickTraceOnlyWhenEnabled(t *testing.T) {
 		t.Fatal("SRO_TICK_TRACE=on did not arm the tick trace")
 	}
 }
+
+/*
+================
+TestNewTickerPublishesExactTickZones
+
+The composed ticker always carries the zone ledger (#2824), and the
+hub's metrics publish it as tick_zones keyed "<kind>:<name>" in
+milliseconds - the read sro-tickbudget diffs.
+================
+*/
+func TestNewTickerPublishesExactTickZones(t *testing.T) {
+	srv := startServer(t)
+	ticker := NewTicker(srv.Hub, simulation.DefaultNpcRoster())
+	if ticker.Zones == nil {
+		t.Fatal("the composed ticker carries no zone ledger")
+	}
+	ticker.Zones.AddStep("probe", 1500*time.Microsecond)
+	ticker.Zones.AddStep("probe", 500*time.Microsecond)
+	ticker.RunTick(100)
+	zones := srv.Hub.Metrics().TickZones
+	if got := zones["step:probe"]; got.Count != 2 || got.TotalMs != 2 {
+		t.Fatalf("tick_zones step:probe = %+v, want 2 runs, 2 ms", got)
+	}
+	if got := zones["phase:total"]; got.Count != 1 {
+		t.Fatalf("tick_zones phase:total = %+v, want the one tick", got)
+	}
+}

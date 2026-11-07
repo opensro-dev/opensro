@@ -70,21 +70,26 @@ type StepTimer struct {
 	// timeline (ticktrace.go, #2301); nil - the default - records
 	// none and costs one nil check per step.
 	Zone func(name string) func()
+	// Total, when set, receives every step's elapsed time, slow or
+	// not: the always-on zone ledger's step rows (zone_ledger.go,
+	// #2824). Nil - the default - reports none.
+	Total func(name string, elapsed time.Duration)
 }
 
 /*
 ================
 StepTimer.Time
 
-Runs one step and reports it at or above SlowHookThreshold, including when
-it panics (the hook's recover boundary is the ticker's).
+Runs one step, totals it when Total is set and reports it at or above
+SlowHookThreshold, including when it panics (the hook's recover boundary
+is the ticker's).
 ================
 */
 func (s *StepTimer) Time(name string, run func()) {
 	if s.Zone != nil {
 		defer s.Zone(name)()
 	}
-	if s.Slow == nil {
+	if s.Slow == nil && s.Total == nil {
 		run()
 		return
 	}
@@ -94,7 +99,11 @@ func (s *StepTimer) Time(name string, run func()) {
 	}
 	started := now()
 	defer func() {
-		if elapsed := now().Sub(started); elapsed >= SlowHookThreshold {
+		elapsed := now().Sub(started)
+		if s.Total != nil {
+			s.Total(name, elapsed)
+		}
+		if s.Slow != nil && elapsed >= SlowHookThreshold {
 			s.Slow(name, elapsed)
 		}
 	}()
