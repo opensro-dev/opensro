@@ -75,6 +75,12 @@ func TestPublishedShopsAreTheShardsShops(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// shardShops appends the X-Large potions the same way (SRO_JANGAN_XL_POTIONS).
+		xl, err := commerce.JanganXLPotionGoodsFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		extra = append(extra, xl...)
 		shard, err := commerce.LoadWithExtraGoods(dir, items, extra)
 		if err != nil {
 			t.Fatal(err)

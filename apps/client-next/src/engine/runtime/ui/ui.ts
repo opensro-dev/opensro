@@ -47,6 +47,16 @@ const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
 // pk.DeathTeam, the 0x37CE mode that labels the death box "standing" (52FF33).
 const TEAM_DEATH_MODE = 2;
+// Port-only, not native (#2406): the widest band the small-viewport party
+// board may occupy, on the left of the screen.
+const PARTY_BAND_MAX_WIDTH = 480;
+// The chat strip a visible chat occupies above the underbar, in the terms
+// chat-layout.ts totals it by: a 62px frame of tabs and input, 56px per
+// log row, or the 20px input line alone - plus the party board's 4px gap.
+const CHAT_STRIP_FRAME = 62;
+const CHAT_STRIP_ROW = 56;
+const CHAT_STRIP_INPUT = 20;
+const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -204,10 +214,20 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
-import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import {
+	createCompactHud,
+	compactHudLayout,
+	compactWindowDrag,
+	compactCloseControl,
+	DESKTOP_HEIGHT,
+	DESKTOP_WIDTH,
+	UNDERBAR_HEIGHT,
+	UNDERBAR_WIDTH
+} from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import {
+	browserDisplayClass,
 	renderScales,
 	UI_SCALE_MAX,
 	UI_SCALE_MIN,
@@ -491,7 +511,7 @@ import {
 	isMainPopupPage,
 	type MainPopupPage
 } from "@/engine/foundation/ui/main-popup";
-import { closedPanel, isUiPanel, panelCloseId, type PanelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
+import { closedPanel, isUiPanel, panelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
@@ -539,6 +559,7 @@ import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
+	partyColumns,
 	partyDistanceShade,
 	partyMembers,
 	partyLocalPose,
@@ -658,7 +679,6 @@ import {
 } from "@/engine/foundation/ui/loading-presentation";
 import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
-import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
@@ -716,6 +736,8 @@ import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
+import * as frameDraw from "./frame/frame";
+import type { CloseControlId, UiFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
@@ -838,12 +860,6 @@ import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/con
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
 import type { EntityState } from "@/engine/contracts/world";
 import type { UiTexture } from "@/engine/contracts/texture";
-
-// A window frame's close control is named after its window: a panel's own
-// panelCloseId, or a service window's "<window>-close" (a stall visitor
-// leaves). A bare "close" is not one: shared by every frame, it was unique
-// only while a single window showed.
-type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -1085,29 +1101,90 @@ function pageStorage(): Storage | null {
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
 /*
 ================
+UiPorts
+
+The one record createUi reads (#2516): the asset owner, the session
+command sink, the scene and texture publication, the two base URLs, the
+sound and persistence callbacks and the browser-only extensions. The
+first six fields are required; the rest fall back per field through
+defaultUiPorts.
+================
+*/
+export interface UiPorts {
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
+	commands: ( command: SessionCommand ) => void;
+	publish: ( scene: UiScene | null ) => void;
+	texture: ( id: string, image: UiTexture | null ) => void;
+	base: string;
+	apiBase: string;
+	clickSound?: () => void;
+	sound?: ( kind: "open" | "close" | "message" | "quest" ) => void;
+	loadingVariant?: () => number;
+	chooseTip?: ( count: number ) => number;
+	saveOptions?: ( value: GameOptions ) => void;
+	audioPreference?: ( value: AudioOptions, commit: boolean ) => void;
+	saveSight?: ( value: SightMode ) => void;
+	saveBindings?: ( value: InputOptions ) => void;
+	saveVideo?: ( value: VideoOptions ) => void;
+	saveBlocks?: ( value: readonly string[] ) => void;
+	saveQuickslots?: ( value: ExtendedQuickslotOptions ) => void;
+	extensions?: UiExtensions;
+}
+
+/*
+================
+defaultUiPorts
+
+The defaults for every optional UiPorts field: silent sounds, the first
+loading variant and tip, persistence sinks that drop their value and no
+extensions. createUi falls back to these per field, exactly as its
+defaulted parameters did before the record.
+================
+*/
+export function defaultUiPorts(): Required<
+	Omit<UiPorts, "assets" | "commands" | "publish" | "texture" | "base" | "apiBase">
+> {
+	return {
+		clickSound: () => {},
+		sound: () => {},
+		loadingVariant: () => 1,
+		chooseTip: () => 0,
+		saveOptions: () => {},
+		audioPreference: () => {},
+		saveSight: () => {},
+		saveBindings: () => {},
+		saveVideo: () => {},
+		saveBlocks: () => {},
+		saveQuickslots: () => {},
+		extensions: {}
+	};
+}
+
+/*
+================
 createUi
 ================
 */
-export function createUi(
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	commands: ( command: SessionCommand ) => void,
-	publish: ( scene: UiScene | null ) => void,
-	texture: ( id: string, image: UiTexture | null ) => void,
-	base: string,
-	apiBase: string,
-	clickSound: () => void = () => {},
-	sound: ( kind: "open" | "close" | "message" | "quest" ) => void = () => {},
-	loadingVariant: () => number = () => 1,
-	chooseTip: ( count: number ) => number = () => 0,
-	saveOptions: ( value: GameOptions ) => void = () => {},
-	audioPreference: ( value: AudioOptions, commit: boolean ) => void = () => {},
-	saveSight: ( value: SightMode ) => void = () => {},
-	saveBindings: ( value: InputOptions ) => void = () => {},
-	saveVideo: ( value: VideoOptions ) => void = () => {},
-	saveBlocks: ( value: readonly string[] ) => void = () => {},
-	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {},
-	extensions: UiExtensions = {}
-) {
+export function createUi( ports: UiPorts ) {
+	const defaults = defaultUiPorts();
+	const assets = ports.assets,
+		commands = ports.commands,
+		publish = ports.publish,
+		texture = ports.texture,
+		base = ports.base,
+		apiBase = ports.apiBase,
+		clickSound = ports.clickSound ?? defaults.clickSound,
+		sound = ports.sound ?? defaults.sound,
+		loadingVariant = ports.loadingVariant ?? defaults.loadingVariant,
+		chooseTip = ports.chooseTip ?? defaults.chooseTip,
+		saveOptions = ports.saveOptions ?? defaults.saveOptions,
+		audioPreference = ports.audioPreference ?? defaults.audioPreference,
+		saveSight = ports.saveSight ?? defaults.saveSight,
+		saveBindings = ports.saveBindings ?? defaults.saveBindings,
+		saveVideo = ports.saveVideo ?? defaults.saveVideo,
+		saveBlocks = ports.saveBlocks ?? defaults.saveBlocks,
+		saveQuickslots = ports.saveQuickslots ?? defaults.saveQuickslots,
+		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
@@ -1257,6 +1334,18 @@ export function createUi(
 		CLOSE_FOCUS,
 		...PARTS.map( p => FRAME + p + ".png" )
 	];
+	const frameChrome = {
+		frame: FRAME,
+		parts: PARTS,
+		button: BUTTON,
+		buttonFocus: BUTTON_FOCUS,
+		buttonPress: BUTTON_PRESS,
+		buttonDisable: BUTTON_DISABLE,
+		close: CLOSE,
+		closePress: CLOSE_PRESS,
+		closeFocus: CLOSE_FOCUS
+	};
+	const frameCompactPolicy = { windowDrag: compactWindowDrag, closeControl: compactCloseControl };
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
@@ -1493,6 +1582,11 @@ export function createUi(
 	let guideOrigin: { regionId: number; x: number; z: number; } | null = null;
 	let rememberedMainPopup: MainPopupPage = "Character";
 	const compactHud = createCompactHud();
+	// Read once, as the renderer does for the phone display class: the primary
+	// pointer's coarseness does not change while the interface lives. The
+	// compact HUD is the touch layout; a fine pointer keeps the native HUD at
+	// any window size (the underbar is scaled to fit instead).
+	const displayClass = browserDisplayClass();
 	const chatScroll = createMessageScroll( "chat-scroll" ), statusScroll = createMessageScroll( "status-scroll" );
 	const stallChatScroll = createMessageScroll( "stall-chat-scroll" ),
 		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
@@ -5273,6 +5367,20 @@ export function createUi(
 				} );
 			}
 			dirty = true;
+		} else if ( id === "academy-buff-saved" && view.gameplay ) {
+			const boardRow = buffBoard(
+				view.gameplay,
+				view.simulationTimeMs ?? 0,
+				undefined,
+				undefined,
+				undefined,
+				hudCopy
+			).find( row => row.id === id );
+			// The saved buff is published as a normal button. Route its
+			// existing 6E2840 pass question through the same activation path.
+			if ( !boardRow?.passBuff ) return;
+			academyBuffPass = true;
+			dirty = true;
 		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
 			compositeItemHud.open( Number( id.slice( "count-job:".length ) ) );
@@ -7766,7 +7874,7 @@ export function createUi(
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
 					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
-					compactLayout = compactHudLayout( view.width, view.height ),
+					compactLayout = compactHudLayout( view.width, view.height, displayClass.coarsePointer ),
 					origin = compactLayout && header ?
 						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
 						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
@@ -8901,7 +9009,7 @@ export function createUi(
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const boardRow = buffBoard(
+				const cancel = buffBoard(
 					view.gameplay,
 					view.simulationTimeMs ?? 0,
 					undefined,
@@ -8909,15 +9017,8 @@ export function createUi(
 					undefined,
 					hudCopy
 				)
-					.find( row => row.id === event.id );
-				// 6E2840: the saved Academy buff's slot asks the pass
-				// question; its Yes is the academy-buff-pass-confirm box.
-				if ( boardRow?.passBuff ) {
-					academyBuffPass = true;
-					dirty = true;
-					return;
-				}
-				const cancel = boardRow?.cancel;
+					.find( row => row.id === event.id )
+					?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
 					buffDismiss = { skillId: cancel.skillId, instance: cancel.instance };
@@ -10208,8 +10309,53 @@ export function createUi(
 			const fontPath = text.path();
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
-			const compact = compactHud.layout( w, h );
+			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
+			const drawFrame: UiFrame = {
+				quads,
+				controls,
+				blocks,
+				paths,
+				w,
+				h,
+				full,
+				hud: hud.data(),
+				text,
+				resources,
+				windowPlacement,
+				compact,
+				chrome: frameChrome,
+				compactPolicy: frameCompactPolicy,
+				white,
+				commonWindowPaths,
+				admittedWindows,
+				windowMissing,
+				contentImages,
+				phase,
+				fontPath,
+				pressed,
+				hover,
+				focus
+			};
 			let targetBottom = 0, compactTelemetryTop = 4;
+			// The chat strip the party board must stay clear of, counting only
+			// a chat that is actually drawn: the native bottom zone (underbar
+			// plus tabs and rows) on a fine pointer, and on touch the compact
+			// stack plus the chat lines only while the "chat" overlay is open
+			// (the touch layout keeps its chat behind that overlay, as it
+			// always has). The underbar's scale is the width's (its art is
+			// exactly UNDERBAR_WIDTH wide), so the chat and the party reserve
+			// follow the scaled bar without waiting for its measurement.
+			const visibleChatRows = compact ? (compact.overlay === "chat" ? chatRows : 0) : chatRows,
+				chatStrip = compact && compact.overlay !== "chat" ?
+					0 :
+					visibleChatRows > 0 ?
+					CHAT_STRIP_FRAME + visibleChatRows * CHAT_STRIP_ROW :
+					CHAT_STRIP_INPUT;
+			const underbarScale = !compact && w < UNDERBAR_WIDTH ? w / UNDERBAR_WIDTH : 1,
+				underbarHeight = compact ? compact.bottom : UNDERBAR_HEIGHT * underbarScale;
+			const partyFloor = compact ?
+				h - compact.bottom - chatStrip - PARTY_CHAT_GAP :
+				h - underbarHeight - chatStrip - PARTY_CHAT_GAP;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -10233,18 +10379,7 @@ export function createUi(
 				id = "window-drag:" + name,
 				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
 			) {
-				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
-				const drag = options.drag;
-				controls.push( {
-					id,
-					label: name,
-					kind: "region",
-					draggable: true,
-					rect: drag ?
-						[ r[0] + drag[0], r[1] + drag[1], drag[2], drag[3] ] :
-						[ r[0] + 10, r[1], r[2] - 21, 34 ]
-				} );
-				return r;
+				return frameDraw.windowOrigin( drawFrame, { name, initial, id, options } );
 			}
 			/*
 			================
@@ -10258,7 +10393,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
+				return frameDraw.rect( drawFrame, { r, color, textureId, uv, clip } );
 			}
 			// CIFStateSlot children render after the icon: the admittance overlay
 			// (6E8410), then the gauge at {0, cell, cell, 4} (6E7FA0).
@@ -10268,28 +10403,7 @@ export function createUi(
 			================
 			*/
 			function buffViewer( prefix: string, icons: readonly BuffViewerIcon[], ox: number, oy: number ) {
-				for ( const icon of icons ) {
-					const r: UiRect = [ ox + icon.x, oy + icon.y, icon.size, icon.size ],
-						gauge: UiRect = [ r[0], r[1] + icon.size, icon.size, 4 ];
-					for ( const layer of [ icon.path, ...icon.overlay ] ) {
-						if ( layer ) {
-							paths.push( layer );
-							if ( resources.has( layer ) ) rect( r, white, layer );
-						}
-					}
-					for ( const layer of icon.gauge ) {
-						paths.push( layer );
-						if ( resources.has( layer ) ) rect( gauge, white, layer );
-					}
-					controls.push( {
-						id: prefix + icon.id,
-						label: icon.label,
-						helpSource: icon.helpSource,
-						kind: "region",
-						rect: r
-					} );
-					blocks.push( r );
-				}
+				return frameDraw.buffViewer( drawFrame, { prefix, icons, ox, oy } );
 			}
 			/*
 			================
@@ -10303,8 +10417,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				paths.push( path );
-				if ( resources.has( path ) ) rect( r, color, path, uv, clip );
+				return frameDraw.image( drawFrame, { r, path, color, uv, clip } );
 			}
 			/*
 			================
@@ -10316,10 +10429,7 @@ export function createUi(
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
-				paths.push( path );
-				if ( resources.has( path ) ) {
-					quads.push( { rect: r, color: white, texture: path, uv, clip: full, additive: true } );
-				}
+				return frameDraw.additiveImage( drawFrame, r, path, uv );
 			}
 			/*
 			================
@@ -10333,11 +10443,7 @@ export function createUi(
 				color: readonly [number, number, number, number] = white,
 				clip: UiRect = full
 			) {
-				quads.push(
-					...text.quads( value, [ x, y, Math.max( 0, clip[0] + clip[2] - x ), 22 ], clip, color, {
-						vAlign: 0
-					} )
-				);
+				return frameDraw.label( drawFrame, { value, x, y, color, clip } );
 			}
 			// A window is one resource admission. Keep demand while withholding BOTH
 			// pixels and hit areas, so a cold open cannot expose an empty clickable shell.
@@ -10347,9 +10453,7 @@ export function createUi(
 			================
 			*/
 			function beginWindow() {
-				const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-				paths.push( ...commonWindowPaths );
-				return mark;
+				return frameDraw.beginWindow( drawFrame );
 			}
 			/*
 			================
@@ -10364,60 +10468,7 @@ export function createUi(
 				// instead of every quad's raw extent.
 				source?: UiRect
 			) {
-				const admittedWindow = admittedWindows.get( owner );
-				// Everything still loading is reported (tests wait on it before a raster);
-				// only the window's own art holds its admission.
-				const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
-				windowMissing.push( ...unloaded );
-				const gaps = unloaded.filter( path => !contentImages.has( path ) );
-				const key = phase + ":" + w + ":" + h;
-				if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-					quads.length = mark[0];
-					controls.length = mark[1];
-					blocks.length = mark[2];
-					// Keep a fully admitted popup until its replacement is ready. Old image
-					// demand stays alive; stale content controls cannot dispatch new-tab actions.
-					if ( admittedWindow?.key === key ) {
-						quads.push( ...admittedWindow.quads );
-						blocks.push( ...admittedWindow.blocks );
-						paths.push( ...admittedWindow.paths );
-						controls.push(
-							...admittedWindow.controls.map( c => ({
-								...c,
-								disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-									c.disabled :
-									true
-							}) )
-						);
-					}
-				} else {
-					// Fit within this window before caching/publication; text behind a modal
-					// must not become a neighboring column of that modal.
-					if ( compact ) {
-						const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-							full :
-							compact.bounds;
-						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-							blocks,
-							firstBlock: mark[2],
-							disableDrag: compactWindowDrag,
-							...(source ? { sourceBounds: source } : {})
-						} );
-						for ( let i = mark[1]; i < controls.length; i++ ) {
-							controls[i] = compactCloseControl( controls[i]!, windowBounds );
-						}
-					}
-					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-					quads.length = mark[0];
-					quads.push( ...painted );
-					admittedWindows.set( owner, {
-						key,
-						quads: painted,
-						controls: controls.slice( mark[1] ),
-						blocks: blocks.slice( mark[2] ),
-						paths: paths.slice( mark[3] )
-					} );
-				}
+				return frameDraw.endWindow( drawFrame, mark, owner, source );
 			}
 			/*
 			================
@@ -10425,15 +10476,7 @@ export function createUi(
 			================
 			*/
 			function windowBox( title: string, x: number, y: number, width: number, height: number ) {
-				const r: UiRect = [ x, y, width, height ];
-				blocks.push( r );
-				rect( r, [ .06, .075, .065, .96 ] );
-				quads.push(
-					...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
-				);
-				quads.push(
-					...text.quads( title, [ x + 10, y + 12, width - 21, 12 ], full, white, { hAlign: 1, vAlign: 1 } )
-				);
+				return frameDraw.windowBox( drawFrame, { title, x, y, width, height } );
 			}
 			/*
 			================
@@ -10450,29 +10493,7 @@ export function createUi(
 				selected = false,
 				clientTop?: number
 			) {
-				const r: UiRect = [ x, y, width, 24 ];
-				blocks.push( r );
-				controls.push( { id, label: value, rect: r, kind: "button", disabled, selected } );
-				const down = !disabled && ((pressed === id && hover === id) || selected),
-					path = disabled ?
-						BUTTON_DISABLE :
-						down ?
-						BUTTON_PRESS :
-						((pressed === null && hover === id) || focus === id) ?
-						BUTTON_FOCUS :
-						BUTTON;
-				if ( [ BUTTON, BUTTON_FOCUS, BUTTON_PRESS, BUTTON_DISABLE ].every( resources.has ) ) {
-					rect( r, white, path );
-				}
-				quads.push(
-					...text.quads(
-						value,
-						[ x + (down ? 1 : 0), y + (down ? 1 : 0) + (clientTop ?? 0), width, 24 - (clientTop ?? 0) ],
-						r,
-						buttonTextColor( [ 254 / 255, 251 / 255, 216 / 255, 1 ], buttonAccess( false, disabled ) ),
-						{ hAlign: 1, vAlign: clientTop === undefined ? 1 : 0 }
-					)
-				);
+				return frameDraw.button( drawFrame, { id, value, x, y, width, disabled, selected, clientTop } );
 			}
 			/*
 			================
@@ -10480,12 +10501,7 @@ export function createUi(
 			================
 			*/
 			function closeButton( x: number, y: number, id: CloseControlId ) {
-				const r: UiRect = [ x, y, 16, 16 ];
-				blocks.push( r );
-				controls.push( { id, label: "Close", rect: r, kind: "button" } );
-				if ( resources.has( CLOSE ) && resources.has( CLOSE_PRESS ) && resources.has( CLOSE_FOCUS ) ) {
-					rect( r, white, pressed === id ? CLOSE_PRESS : hover === id ? CLOSE_FOCUS : CLOSE );
-				}
+				return frameDraw.closeButton( drawFrame, x, y, id );
 			}
 			/*
 			================
@@ -10915,16 +10931,7 @@ export function createUi(
 			================
 			*/
 			function comboBox( r: UiRect, id: string, label: string, value: string, disabled = false ) {
-				const chrome = comboBoxChrome(
-					r,
-					resources.size,
-					full,
-					!disabled && pressed === id ? 2 : !disabled && hover === id ? 1 : 0
-				);
-				paths.push( ...chrome.paths );
-				quads.push( ...chrome.quads );
-				quads.push( ...text.quads( value, chrome.textRect, r, white, { hAlign: 1, vAlign: 1 } ) );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
+				return frameDraw.comboBox( drawFrame, { r, id, label, value, disabled } );
 			}
 			/*
 			================
@@ -11779,7 +11786,7 @@ export function createUi(
 				);
 				quads.push( ...output.quads );
 				controls.push( ...output.controls );
-				paths = output.paths;
+				paths = drawFrame.paths = output.paths;
 				if ( (next.frontend.phase === "dock" || next.frontend.phase === "create") && !next.frontend.dialog ) {
 					blocks.push( ...output.controls.map( control => control.rect ) );
 				} else blocks.push( full );
@@ -12394,9 +12401,36 @@ export function createUi(
 						slot = hudData.windows.ifquickpartyslot!,
 						localPose = partyLocalPose( game, next.entities );
 					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
-					for (
-						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
-					) {
+					// Port-only, not native: at the original's smallest screen mode and
+					// above, the board wraps exactly as authored. Below it the fixed
+					// 230px bottom reserve would wrap every row into its own column
+					// marching across the screen, so the board is placed without its
+					// buff rows in a bounded left band and scaled into it.
+					const nativeBoard = !compact && h >= DESKTOP_HEIGHT;
+					let partyMark: readonly [number, number, number] | null = null,
+						partyTop = origin[1],
+						partyHeight = 0,
+						partyWidth = 0;
+					let rows: ReturnType<typeof partyOverlay>;
+					if ( nativeBoard ) {
+						rows = partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs );
+					} else {
+						const bandWidth = Math.min( w, PARTY_BAND_MAX_WIDTH ) - origin[0];
+						partyTop = compact ? Math.max( origin[1], targetBottom ) : origin[1];
+						partyHeight = Math.max( 1, partyFloor - partyTop );
+						partyWidth = Math.max( 1, bandWidth );
+						partyMark = [ quads.length, controls.length, blocks.length ];
+						rows = partyOverlay(
+							game,
+							next.entities,
+							h,
+							origin[0],
+							partyTop,
+							false,
+							partyColumns( partyMembers( game ).length, bandWidth, partyHeight )
+						);
+					}
+					for ( const row of rows ) {
 						const [x, y] = row.position;
 						authoredImage(
 							{ ...hudData.windows.ifquickpartywnd!.GDR_QPB_SLOT_0!, rect: [ 0, 0, 122, 40 ] },
@@ -12490,7 +12524,7 @@ export function createUi(
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
 							state = partyBuffStates.get( row.member.id );
-						if ( options.partyBuffs && row.entity && state ) {
+						if ( options.partyBuffs && nativeBoard && row.entity && state ) {
 							buffViewer(
 								"party-buff:" + row.member.id + ":",
 								buffViewerIcons(
@@ -12505,7 +12539,32 @@ export function createUi(
 							);
 						}
 					}
+					if ( partyMark ) {
+						fitUiGroup(
+							quads,
+							controls,
+							partyMark[0],
+							partyMark[1],
+							[ origin[0], partyTop, partyWidth, partyHeight ],
+							full,
+							{ blocks, firstBlock: partyMark[2], leaveWhenFits: true }
+						);
+						if ( compact ) {
+							// The touch layout's left stack (pets overlay, telemetry,
+							// banners) continues below the fitted board.
+							let boardBottom = partyTop;
+							for ( let i = partyMark[0]; i < quads.length; i++ ) {
+								boardBottom = Math.max( boardBottom, quads[i]!.rect[1] + quads[i]!.rect[3] );
+							}
+							targetBottom = Math.max( targetBottom, boardBottom );
+						}
+					}
 				}
+				// The chat is part of the native HUD a fine pointer keeps, so it
+				// stays drawn under the scaled underbar. In the touch layout it
+				// stays behind the "chat" overlay, exactly as before #2406:
+				// showing it without the overlay would be a product change,
+				// not a degradation of the native layout.
 				if ( hudData && panel !== "Chat" && (!compact || compact.overlay === "chat") ) {
 					const lines = game?.chat?.lines ?? [],
 						key: unknown[] = [
@@ -12552,6 +12611,11 @@ export function createUi(
 										bottom: compact.bottom,
 										maxRows: Math.max( 1, Math.floor( (h - compact.bottom - 100) / 56 ) )
 									} :
+									underbarScale < 1 ?
+									// The chat bottom rides the scaled underbar; this compact
+									// branch only re-anchors it, the width stays the native
+									// 399 whenever the window holds it.
+									{ bottom: underbarHeight, maxRows: 6 } :
 									undefined,
 								layout: hudData.chat,
 								width: w,
@@ -12796,7 +12860,16 @@ export function createUi(
 					compactTelemetryTop = Math.max( targetBottom, compactTelemetryTop );
 					targetBottom = drawTransientBanners( compactTelemetryTop + HUD_TOOLS_HEIGHT + 12 );
 				}
-				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
+				const barX = compact ? 0 : Math.trunc( (w - UNDERBAR_WIDTH) / 2 ),
+					barY = compact ? compact.top : h - UNDERBAR_HEIGHT;
+				// Port-only, not native: a fine pointer on a window narrower than the
+				// underbar keeps the native bottom HUD; the whole strip
+				// (bar, slots, pets, whisper list, system filter, queue chip) scales
+				// to the window together instead of being swapped for bigger
+				// controls. The fit below anchors the group to the bottom center.
+				const barStrip = compact || w >= UNDERBAR_WIDTH ?
+					null :
+					[ quads.length, controls.length, blocks.length ] as const;
 				if ( hudData && !compact ) {
 					retainedHud( barLayoutCache, [
 						hudData,
@@ -12967,7 +13040,7 @@ export function createUi(
 					const wx = 0,
 						wy = compact ?
 							Math.max( 80, compact.top - 200 ) :
-							h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
+							h - underbarHeight - chatStrip,
 						node = hudData.chat.GDR_WHISPERLIST!;
 					authoredImage( node, wx, wy );
 					const r = authoredRect( node, wx, wy );
@@ -13235,6 +13308,35 @@ export function createUi(
 						quads.push( ...chip.over );
 					}
 				}
+				if ( barStrip ) {
+					// The bounds are the strip's own extent at the width's scale, so
+					// fitUiGroup lands the group bottom-center anchored exactly where
+					// the transform means it: same call, same text-run scaling, no
+					// separate transform to keep in step with the windows'.
+					const strip = quads.slice( barStrip[0] );
+					if ( strip.length ) {
+						const left = Math.min( ...strip.map( q => q.rect[0] ) ),
+							top = Math.min( ...strip.map( q => q.rect[1] ) ),
+							right = Math.max( ...strip.map( q => q.rect[0] + q.rect[2] ) ),
+							scale = Math.min( 1, w / Math.max( 1, right - left ) ),
+							width = Math.max( 1, (right - left) * scale ),
+							height = Math.max( 1, (h - top) * scale );
+						fitUiGroup(
+							quads,
+							controls,
+							barStrip[0],
+							barStrip[1],
+							[
+								Math.floor( (w - width) / 2 ),
+								h - height,
+								width,
+								height
+							],
+							full,
+							{ blocks, firstBlock: barStrip[2] }
+						);
+					}
+				}
 				if ( hudData && (!compact || compact.overlay === "extra") ) {
 					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
@@ -13360,14 +13462,14 @@ export function createUi(
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						compact ? w - 84 : barX + 652,
+						compact || w < UNDERBAR_WIDTH ? w - 84 : barX + 652,
 						barY - 40,
 						80,
 						false,
 						clearHotbar
 					);
 				}
-				hover = mapHud.present( {
+				hover = drawFrame.hover = mapHud.present( {
 					next,
 					game,
 					pose,
@@ -15010,7 +15112,7 @@ export function createUi(
 					}
 					endWindow( admission );
 					if ( partySettings ) {
-						controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
+						controls = drawFrame.controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
 						blocks.push( full );
 					}
 				}
@@ -15861,7 +15963,7 @@ export function createUi(
 						px = Math.floor( (w - 320) / 2 ),
 						py = Math.floor( (h - 334) / 2 ),
 						prefix = ROOT + "interface/messagebox/msgbox2_window_";
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow();
 					blocks.push( full );
 					blocks.push( [ px, py, 320, 334 ] );
@@ -15990,7 +16092,7 @@ export function createUi(
 					endWindow( admission, "skill-confirm" );
 				}
 				if ( confirmAbandon && questDetails ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow(),
 						meta = guideResources.data()?.questPresentation.records[selectedQuest];
 					blocks.push( full );
@@ -16137,7 +16239,7 @@ export function createUi(
 					{ prefix: "reverse-scroll:", cancel: "reverse-scroll-cancel" } :
 					null;
 				if ( reverseBox ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
 					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
@@ -16350,7 +16452,7 @@ export function createUi(
 						// 61B6C0 / 61E340 ask through a 6888C0 simple message box, type 1:
 						// white text and Yes/No, unlike the entry window below.
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						simpleMessageBox( {
 							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -16364,7 +16466,7 @@ export function createUi(
 						const mark = beginWindow(),
 							dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
 							dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -18823,7 +18925,7 @@ export function createUi(
 					*/
 					function petNameDialogBox( dialog: { readonly phase: "input" | "confirm"; } ) {
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						if ( dialog.phase === "confirm" ) {
 							simpleMessageBox( {
@@ -19091,13 +19193,13 @@ export function createUi(
 						exchangeHud.reset();
 						if ( goldDialog === "exchange" ) {
 							goldDialog = false;
-							focus = null;
+							focus = drawFrame.focus = null;
 						}
 						return;
 					}
 					if ( state.ownLocked && goldDialog === "exchange" ) {
 						goldDialog = false;
-						focus = null;
+						focus = drawFrame.focus = null;
 					}
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Exchange", [
@@ -19734,7 +19836,7 @@ export function createUi(
 				*/
 				function friendDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					if ( friendDialog === "remove" ) {
 						simpleMessageBox( {
@@ -20036,7 +20138,7 @@ export function createUi(
 				*/
 				function letterDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					simpleMessageBox( {
 						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -21997,6 +22099,7 @@ export function createUi(
 						guideEvent = state.event;
 						guideScroll = 0;
 						setPanel( "Game Guide" );
+						drawFrame.focus = focus;
 						dirty = true;
 					} else {
 						if ( !guidePending ) sound( "quest" );
@@ -22393,10 +22496,10 @@ export function createUi(
 				(game.social.invitation.type !== 5 && game.social.invitation.type !== 6 ||
 					next.entities.some( e => e.gid === game.social!.invitation!.gid && e.guildName ))
 			) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "invite-accept" && focus !== "invite-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22506,10 +22609,10 @@ export function createUi(
 			if ( friendPrompt && worldVisible && !game?.social?.invitation ) {
 				// 760C90 opens confirm box 0x23 (52F460): "'name' proposed to make
 				// friends with you." over "Will you accept it?", answered Yes / No.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "friend-accept" && focus !== "friend-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22558,8 +22661,8 @@ export function createUi(
 			if ( friendConclusion && worldVisible && !game?.social?.invitation ) {
 				// 760FB0 case 2 opens confirm box 0x22 (52F460): "[friend] and
 				// [local]'s" over the acceptance line, with one Confirm.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [
@@ -22581,7 +22684,7 @@ export function createUi(
 					py = Math.floor( (h - 149) / 2 ),
 					prefix = ROOT + "interface/messagebox/msgbox2_window_",
 					layout = hud.data()!.windows.ifpartyjoinprogress!;
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				paths.push( ...PARTS.map( p => prefix + p + ".png" ) );
 				quads.push(
@@ -22636,7 +22739,7 @@ export function createUi(
 					height = request ? 315 : automatic ? 337 : 373,
 					px = Math.floor( (w - width) / 2 ),
 					py = Math.floor( (h - height) / 2 );
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				if ( remove ) {
 					// 635300 asks through a 6888C0 simple message box, type 1 (Yes/No).
@@ -22860,8 +22963,8 @@ export function createUi(
 						hud.data()!.windows.ifitemmallconfirmbuy!,
 					locked = !!game.inventoryPending,
 					quantityMode = quote?.quantityMode ?? "readonly";
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -23057,8 +23160,8 @@ export function createUi(
 					height = notice ? 310 : donate ? 240 : guildDialog === "role" ? 310 : 148,
 					mx = Math.max( 0, (w - width) / 2 ),
 					my = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -23265,8 +23368,8 @@ export function createUi(
 						unlimited :
 						String( id === 26 ? value * 10 : value ) + " " +
 						hudCopy( id === 24 ? "PARAM_DAY" : id === 25 ? "UIIT_STT_HOUR" : "UIIT_STT_MINUTE" );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( surrender ) {
 					const box = guildProposalLayout( w, h ),
 						enemy = game?.social?.wars?.find( row => row.id === warDialog.selected )?.name ?? "";
@@ -23418,8 +23521,8 @@ export function createUi(
 					value = noticeText( hudCopy, { key: result.key, value: 0, arguments: result.names } ) +
 						(result.additionalKey ? "\n" + hudCopy( result.additionalKey ) : "");
 				const box = noticeDialog( w, h, value, value => text.run( value ).width );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23454,8 +23557,8 @@ export function createUi(
 					question = unionAsk.kind === "exit" ?
 						hudCopy( "UIIT_MSG_GUILD_QUESTION_ALLY_EXIT" ) :
 						hudCopy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_EXPEL" ).replace( "%s", () => unionAsk.name );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( title ),
 					lines: [ question ],
@@ -23468,8 +23571,8 @@ export function createUi(
 				// The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION, a ban of
 				// the selected member), Secede and Disband, and the party ban,
 				// each ask their native question before anything is sent.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( socialAsk.title ),
 					lines: socialAsk.lines.map( line => {
@@ -23483,8 +23586,8 @@ export function createUi(
 			if ( worldVisible && crestDeleteAsk ) {
 				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
 				// the one-line question whether to delete the emblem.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
@@ -23495,8 +23598,8 @@ export function createUi(
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23543,8 +23646,8 @@ export function createUi(
 				const item = making ?
 					productionAsk.item :
 					fortressProductionItems().find( row => row.refObjId === productionAsk.order.refObjId );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23615,8 +23718,8 @@ export function createUi(
 					Object.entries( taxBox ).filter( ( [name] ) => name.startsWith( prefix ) )
 				);
 				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23710,8 +23813,8 @@ export function createUi(
 						] :
 						[ name, row?.requestFee ?? 0 ]
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: message.split( "\n" ),
@@ -23815,8 +23918,8 @@ export function createUi(
 					byId = ( id: number ) => nodes.find( n => n.id === id ),
 					jx = Math.max( 0, (w - root.rect[2]) / 2 ),
 					jy = Math.max( 0, (h - root.rect[3]) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame( root, jx, jy, hudCopy( root.text ), "academy-judge-close" );
 				nativePage( page, jx, jy, [ 20, 30, 31 ] );
 				const radio = byId( 20 );
@@ -23911,8 +24014,8 @@ export function createUi(
 						12,
 					false
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23965,8 +24068,8 @@ export function createUi(
 					const x = Math.max( 0, (w - electionRoot.rect[2]) / 2 ),
 						y = Math.max( 0, (h - electionRoot.rect[3]) / 2 );
 					const at = ( id: number ) => Object.values( electionPage ).find( n => n.id === id )!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...electionRoot,
@@ -24056,8 +24159,8 @@ export function createUi(
 						m.grade !== 0
 					).sort( ( a, b ) => a.id - b.id ) ?? [];
 					const offset = guildManagerHud.transferPosition( members.length );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...transferRoot,
@@ -24126,8 +24229,8 @@ export function createUi(
 					const price = guildLevelUpPrice( level );
 					const say = ( key: string, ...args: string[] ) =>
 						noticeText( hudCopy, { key, value: 0, arguments: args } );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{ ...levelRoot, type: "CIFFrame", rect: [ 0, 0, levelRoot.rect[2], levelRoot.rect[3] ] },
 						x,
@@ -24232,8 +24335,8 @@ export function createUi(
 						]
 					};
 					const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					paths.push( ...partyProposalAssets() );
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24308,8 +24411,8 @@ export function createUi(
 			if ( worldVisible && repairCost !== null ) {
 				// 5B2B10 raises box 0x0C: Repair All's question and its total.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24362,8 +24465,8 @@ export function createUi(
 				const at = ( id: number ) => Object.values( typePage ).find( row => row.id === id );
 				const height = typeRoot.rect[3] + grow;
 				const px = Math.max( 0, (w - typeRoot.rect[2]) / 2 ), py = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame(
 					{ ...typeRoot, rect: [ typeRoot.rect[0], typeRoot.rect[1], typeRoot.rect[2], height ] },
 					px,
@@ -24453,8 +24556,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24484,8 +24587,8 @@ export function createUi(
 			if ( worldVisible && structureRemoval ) {
 				// 517750 raises UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW naming the target.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24556,8 +24659,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24595,8 +24698,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24627,8 +24730,8 @@ export function createUi(
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24683,8 +24786,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24714,8 +24817,8 @@ export function createUi(
 			if ( worldVisible && academyBuffPass ) {
 				// 6E2840: the pass question is a plain simple message box
 				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
@@ -24725,8 +24828,8 @@ export function createUi(
 			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_EVENTGUIDE" ),
 					lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) ],
@@ -24736,8 +24839,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && sellAllPhase !== null ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox(
 					sellAllPhase === "confirm" ?
 						{
@@ -24757,8 +24860,8 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && shopWarning ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( "UIIT_MSG_CANNOT_BUYBACK_ITEM_SELL" ).replace( "%s", shopWarning.name ) ],
@@ -24768,8 +24871,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && groundDrop ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
@@ -24839,8 +24942,8 @@ export function createUi(
 					layout = messageBox( w, h, 300, 183 ),
 					[x, y] = layout.frame,
 					item = game?.inventory.find( i => i.slot === promptStack.slot );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24947,8 +25050,8 @@ export function createUi(
 				const amount = warDialog.money ?? goldAmount,
 					inputId = warDialog.money !== null ? "war-money" : "gold-amount";
 				const layout = messageBox( w, h, 308, 148 ), [x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -25042,8 +25145,8 @@ export function createUi(
 						stallBox.kind === "network-buy" ?
 						stall.network.rows[stallBox.row] :
 						undefined;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				// 5A2795 / 5ADA0F use 6888C0's text-sized MsgBoxSimple. The personal
 				// purchase question uses that same native construction by inference.
 				simpleMessageBox( {
@@ -25070,8 +25173,8 @@ export function createUi(
 				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
 					layout = messageBox( w, h, boxWidth, boxHeight ),
 					[x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -25311,10 +25414,10 @@ export function createUi(
 				const kept = ( id: string | null ) =>
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25374,10 +25477,10 @@ export function createUi(
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
 						id.startsWith( "instance-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25425,8 +25528,8 @@ export function createUi(
 				paths.push( ...art );
 				nativeLoadError = art.every( path => resources.has( path ) ) && !!text.path() &&
 					resources.has( text.path()! ) && !text.error();
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( nativeLoadError ) {
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full )
@@ -25491,8 +25594,8 @@ export function createUi(
 					noticeDialogPosition
 				);
 				noticeDialogFrame = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				controls.push( {
 					id: "notice-dialog-drag",
@@ -25546,10 +25649,10 @@ export function createUi(
 				*/
 				const layout = disconnectDialog( w, h, disconnectPosition ),
 					copy = ( key: string, fallback: string ) => hudCopy( key ) || title.catalog( key ) || fallback;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "disconnect-confirm" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				controls.push( {
@@ -25607,11 +25710,11 @@ export function createUi(
 				// Underlying windows retain state while the mall is open; CGWndBase
 				// input dispatch (9FEC50 -> CGInterface_OnWorldMessage 67CCA0) still
 				// forwards world pointer events outside CIFItemMall's bounds.
-				controls = [];
+				controls = drawFrame.controls = [];
 				const mallAdmission = beginWindow();
 				paths.push( ...mallMenuArtwork() );
 				if ( compact ) {
-					blocks = [ full ];
+					blocks = drawFrame.blocks = [ full ];
 					// Port-only, owner-approved reflow. Never scale the Mall's text or
 					// combine its background with a purchase dialog's fitting bounds.
 					const margin = 8, touch = 40, gap = 4, cardHeight = 112, tabPitch = 28;
@@ -26013,7 +26116,7 @@ export function createUi(
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mallAdmission[0];
-						controls = [];
+						controls = drawFrame.controls = [];
 					} else {
 						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
 						quads.length = mallAdmission[0];
@@ -26490,7 +26593,7 @@ export function createUi(
 						const currencies = currencyLayout.rows;
 						const dialogWidth = 327, height = currencyLayout.height;
 						const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, dialogWidth, height ] );
 						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
 						paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -26595,7 +26698,7 @@ export function createUi(
 							Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
 						);
 						const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, layout.width, layout.height ] );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -26731,7 +26834,7 @@ export function createUi(
 						const pointPage = data.windows.ifitemmallusepoint!;
 						const pointWidth = 233, pointHeight = 177;
 						const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ px, py, pointWidth, pointHeight ] );
 						quads.push(
 							...frameRing(
@@ -26775,7 +26878,7 @@ export function createUi(
 				const buttonY = state.resuscitation ? RESUSCITATION_CONFIRM_BUTTON_Y : WITHDRAWAL_CONFIRM_BUTTON_Y;
 				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
 				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-				controls = [];
+				controls = drawFrame.controls = [];
 				const admission = beginWindow();
 				blocks.push( full );
 				paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -27386,7 +27489,7 @@ export function createUi(
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&

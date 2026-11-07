@@ -45,8 +45,10 @@ atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
 filter's kinds (#841); it is appended last so the existing tabs keep the
 indices a reopening window relies on. Jobs (#1849) is appended after it for
-the same reason, and HD (#2061) after that: every earlier tab already holds
-the window's seven rows, so the HD set's row gets a tab of its own.
+the same reason. Effects holds the port-only image effects the 2005 scene
+never had (sky detail first), and HD (#2061), last, holds the HD set's row:
+every earlier tab already holds the window's seven rows, so each appended
+tab keeps every existing tab's index.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -410,6 +412,16 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-pet-filter-other",
 			label: "Other items",
 			description: "Scrolls, arrows and the rest; only with the filter."
+		} ]
+	},
+	{
+		title: "Effects",
+		section: "Image effects",
+		rows: [ {
+			key: "skyDetail",
+			id: "experimental-sky-detail",
+			label: "Sky detail",
+			description: "Drifting clouds, sun glow and rim light."
 		} ]
 	},
 	{

@@ -39,8 +39,8 @@ never delivers, so loading art stays pending.
 function fixture( loadingVariant = () => 1 ) {
 	let scene;
 	const requested = new Set();
-	const ui = createUi(
-		{
+	const ui = createUi( {
+		assets: {
 			available: () => 1000,
 			take: () => null,
 			request: url => {
@@ -49,17 +49,17 @@ function fixture( loadingVariant = () => 1 ) {
 			},
 			cancel: () => {}
 		},
-		() => {},
-		value => {
+		commands: () => {},
+		publish: value => {
 			scene = value;
 		},
-		() => {},
-		"https://fixture.invalid",
-		"https://fixture.invalid",
-		() => {},
-		() => {},
+		texture: () => {},
+		base: "https://fixture.invalid",
+		apiBase: "https://fixture.invalid",
+		clickSound: () => {},
+		sound: () => {},
 		loadingVariant
-	);
+	} );
 	const loadingRequested = () =>
 		[ ...requested ].filter( path => path.startsWith( ROOT ) ).map( path =>
 			path.slice( ROOT.length, -".png".length )
