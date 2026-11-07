@@ -18,7 +18,7 @@ import { multiplyQuaternion } from "@/engine/foundation/math/pose-math";
 withPitchClip
 
 Adds clip `name` keyed at `times`; `pitch` returns a bone's model-space pitch
-in degrees for a key frame, or [pitch, yaw] to also turn it about the up axis. Returns the model unchanged when the clip already
+in degrees for a key frame, or [pitch, yaw, roll?] to also turn and spread a limb. Returns the model unchanged when the clip already
 exists or a required bone or the stand clip is missing.
 ================
 */
@@ -27,7 +27,7 @@ function withPitchClip(
 	name: string,
 	times: readonly number[],
 	required: readonly string[],
-	pitch: ( bone: string, frame: number ) => number | readonly [number, number]
+	pitch: ( bone: string, frame: number ) => number | readonly [number, number, number?]
 ): CharacterModel {
 	const DEGREES = Math.PI / 180;
 	const stand = model.clips.find( clip => clip.name === "stand" );
@@ -63,11 +63,16 @@ function withPitchClip(
 			const global = new Float32Array( 4 );
 			multiplyQuaternion( parent, rotations[index]!, global );
 			const angles = pitch( node.name, frame );
-			const [x, y] = typeof angles === "number" ? [ angles, 0 ] : angles;
+			const [x, y, z = 0] = typeof angles === "number" ? [ angles, 0 ] : angles;
 			const half = x * DEGREES / 2, turn = y * DEGREES / 2;
 			const tilted = new Float32Array( 4 ), pitched = new Float32Array( 4 );
 			multiplyQuaternion( [ Math.sin( half ), 0, 0, Math.cos( half ) ], global, tilted );
 			multiplyQuaternion( [ 0, Math.sin( turn ), 0, Math.cos( turn ) ], tilted, pitched );
+			if ( z ) {
+				const rolled = new Float32Array( 4 ), halfRoll = z * DEGREES / 2;
+				multiplyQuaternion( [ 0, 0, Math.sin( halfRoll ), Math.cos( halfRoll ) ], pitched, rolled );
+				pitched.set( rolled );
+			}
 			const local = keys[index]!.subarray( frame * 4, frame * 4 + 4 );
 			multiplyQuaternion( [ -parent[0]!, -parent[1]!, -parent[2]!, parent[3]! ], pitched, local );
 			globals.set( index, pitched );
@@ -183,4 +188,30 @@ export function withWolfRend( model: CharacterModel ): CharacterModel {
 			return bone === "Bip01 Ponytail1" ? JAW[frame]! : 0;
 		}
 	);
+}
+
+/*
+================
+withPenguinBlizzard
+
+A planted dip, raised flippers and open beak on the existing retail rig.
+The cast pose is cosmetic; it never extends the attack's gameplay windup.
+================
+*/
+export function withPenguinBlizzard( model: CharacterModel ): CharacterModel {
+	const lift = [ 0, -.18, .45, 1, 1, .8, .25, 0 ], jaw = [ 0, 0, 0, 24, 32, 20, 0, 0 ];
+	return withPitchClip( model, "pet-blizzard", [ 0, .1, .2, .35, .55, .8, 1.05, 1.25 ], [
+		"Bip01 Pelvis",
+		"Bip01 L UpperArm",
+		"Bip01 R UpperArm",
+		"Bip01 Head",
+		"Bone01"
+	], ( bone, frame ) => {
+		const v = lift[frame]!;
+		if ( bone === "Bip01 Pelvis" ) return -5 * v;
+		if ( /Bip01 [LR] Thigh/.test( bone ) ) return 5 * v;
+		if ( /Bip01 [LR] UpperArm/.test( bone ) ) return [ 0, 0, (bone.includes( " L " ) ? 50 : -50) * v ];
+		if ( bone === "Bip01 Head" ) return -12 * v;
+		return bone === "Bone01" ? jaw[frame]! : 0;
+	} );
 }

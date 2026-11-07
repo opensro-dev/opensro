@@ -16,14 +16,18 @@ import { projectileSpace, sampleProjectile } from "./projectile-time";
 export const PENGUIN_ICE_SHARD = "/assets/effects/penguin-ice-shard";
 export const PENGUIN_ICE_LANCE = "/assets/effects/penguin-ice-lance";
 export const PENGUIN_FROST_SIGIL = "/assets/effects/penguin-frost-sigil";
+export const PENGUIN_BLIZZARD_SECONDS = 5;
+export const PENGUIN_BLIZZARD_WIND = "/assets/effects/penguin-blizzard-wind";
+export const PENGUIN_BLIZZARD_SNOW = "/assets/effects/penguin-blizzard-snow";
+export const PENGUIN_BLIZZARD_ICE = "/assets/effects/penguin-blizzard-ice";
 type Position = CharacterActor["pose"];
 
 /*
 ================
 penguinEffectActors
 
-Thirteen actors at most: a thin frost ring and twelve spiralling crystals.
-The field pulses at the server's four one-second beats.
+Four storm actors combine frost, mist ribbons, snow and crystal clusters.
+The field holds for the server's five one-second damage beats.
 ================
 */
 export function penguinEffectActors(
@@ -32,25 +36,65 @@ export function penguinEffectActors(
 	origin: Position,
 	gids: readonly number[]
 ): CharacterActor[] {
-	const storm = action >= 0xd3 && action <= 0xd5;
-	if ( action < 0xd0 || action > 0xd6 || age < 0 || age >= (storm ? 4 : .55) ) return [];
+	const casting = action >= 34 && action <= 36, storm = action >= 0xd3 && action <= 0xd5;
+	const life = storm ? PENGUIN_BLIZZARD_SECONDS : casting ? 1.25 : .55;
+	if ( (!casting && (action < 0xd0 || action > 0xd6)) || age < 0 || age >= life ) return [];
 	const radius = storm ? (action === 0xd3 ? 50 : 70) : action === 0xd6 ? 50 : 12;
-	const fade = storm ? Math.min( 1, age * 6 ) * Math.min( 1, (4 - age) * 2 ) : 1 - age / .55;
-	const actors: CharacterActor[] = storm ?
-		[ {
-			gid: gids[0]!,
-			model: PENGUIN_FROST_SIGIL,
+	const fade = storm || casting ? Math.min( 1, age * 8 ) * Math.min( 1, (life - age) * 2 ) : 1 - age / .55;
+	if ( storm || casting ) {
+		const reach = casting ? 18 : radius;
+		const base = {
 			clip: "effect",
 			time: age,
-			loop: false,
-			scale: radius * (storm ? .96 + .04 * Math.cos( age * Math.PI * 2 ) : Math.min( 1, age * 5 )),
 			absoluteEffectScale: true,
 			effectEntity: true,
 			pickable: false,
-			opacity: fade * (storm ? .38 : .6),
-			pose: { ...origin, y: origin.y + .6, yaw: radians( age * .15 ) }
-		} ] :
-		[];
+			pose: { ...origin, y: origin.y + .5 }
+		};
+		const bloom = Math.min( 1, age * 2.5 );
+		return [
+			{
+				...base,
+				gid: gids[0]!,
+				model: PENGUIN_FROST_SIGIL,
+				loop: false,
+				scale: reach * (.15 + .85 * bloom),
+				opacity: fade * .52,
+				materialTint: [ .65, .9, 1 ]
+			},
+			{
+				...base,
+				gid: gids[1]!,
+				model: PENGUIN_BLIZZARD_WIND,
+				loop: true,
+				scale: reach,
+				opacity: fade * .48,
+				materialTint: [ .6, .85, 1 ],
+				effectRotation: { axis: "y", angle: radians( age * .8 ) }
+			},
+			{
+				...base,
+				gid: gids[2]!,
+				model: PENGUIN_BLIZZARD_SNOW,
+				loop: true,
+				scale: reach,
+				opacity: fade * .85,
+				effectRotation: { axis: "y", angle: radians( -age * .35 ) }
+			},
+			...(!casting ?
+				[ {
+					...base,
+					gid: gids[3]!,
+					model: PENGUIN_BLIZZARD_ICE,
+					loop: false,
+					scale: reach,
+					opacity: fade * .85
+				} ] :
+				[])
+		];
+	}
+	const actors: CharacterActor[] = [];
+
 	for ( let i = 0; i < (storm ? 12 : 8); i++ ) {
 		const phase = (age + i / 12) % 1;
 		const angle = i * Math.PI * 2 / (storm ? 12 : 8) + (storm ? age * 1.7 : age * .8);
