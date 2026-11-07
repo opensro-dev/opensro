@@ -42,6 +42,7 @@ import (
 var unlistedSettings = map[string]string{
 	progression.EnvHalloweenEventWindow: "the dates of the Halloween event rule, not a rule of its own",
 	action.EnvGMSetSpeed:                "a GM command, not a rule players meet",
+	action.EnvGMItemForge:               "a GM command, not a rule players meet",
 	monster.EnvTrainingDummy:            "GM-only training targets",
 	simulation.EnvBetaUniqueRespawn:     "unique monster spawn timing is not published",
 	"SRO_MAINTENANCE_MESSAGE":           "the refusal code during a release window, not a rule players meet",

@@ -361,6 +361,14 @@ func (rt *Runtime) applyGroundDrop(
 			return false
 		}
 
+		// Port-only (forge.go, issue #1980): a bound forged item never
+		// leaves for the ground by a player's hand - the forge's own
+		// creation drop is the only bound drop there is.
+		if row, present := inv.At(sourceSlot); present && row.ForgeBound {
+			result = failureResult(wire.ErrCodeCannotBeDropped)
+			return false
+		}
+
 		// The native drop routine bars barred bag rows before anything
 		// moves, with the indisposable refusal (01:38). A worn row
 		// never reaches these gates: Drop answers it 01:6D below, in

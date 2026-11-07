@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -22,6 +24,7 @@ no buff); a second upgrade has nothing to do.
 ================
 */
 func TestAcademyBuffUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-37 authority upgrades to 38 with its camp records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	master := seededCharacter()

@@ -52,6 +52,8 @@ TestCommitSkipsUnchangedCharacterRows
 ================
 */
 func TestCommitSkipsUnchangedCharacterRows(t *testing.T) {
+	t.Parallel()
+
 	s, c := commitSkipFixture(t)
 
 	before := s.LockTiming()
@@ -101,6 +103,8 @@ the row even though its bytes match the failed attempt's.
 ================
 */
 func TestFailedCommitRetainsNoDigest(t *testing.T) {
+	t.Parallel()
+
 	s, c := commitSkipFixture(t)
 
 	// Fail inside the transaction, after the character row was staged:
@@ -133,6 +137,8 @@ to exactly those bytes would then be skipped, and lost on reopen.
 ================
 */
 func TestFailedDoorRetainsNoDigest(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s, err := Open(dir, Options{Now: newTestClock().Now, DefaultSkills: testSkillSeeder})
 	if err != nil {
@@ -263,7 +269,11 @@ no retained digest can be stale; db_write.go says so at the call.)
 ================
 */
 func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
+	t.Parallel()
+
 	t.Run("storage", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s := openTest(t, dir, newTestClock())
 		c := seededCharacter()
@@ -284,6 +294,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("item mall", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s := openTest(t, dir, newTestClock())
 		c := seededCharacter()
@@ -307,6 +319,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("offline item swap", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s := openTest(t, dir, newTestClock())
 		c := &domain.Character{Name: "Swapper", MissionInventory: []domain.InventoryRow{
@@ -328,6 +342,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("guild war stakes", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s := openTest(t, dir, newTestClock())
 		var masters [2]*domain.Character
@@ -362,6 +378,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("fortress tax", func(t *testing.T) {
+		t.Parallel()
+
 		f := newFortressTaxFixture(t, 100, 10)
 		runOfflineDoorRevert(t, offlineDoorFixture{dir: f.dir, s: f.s, c: f.master,
 			door: func(t *testing.T) {
@@ -374,6 +392,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("fortress staff", func(t *testing.T) {
+		t.Parallel()
+
 		f := newFortressTaxFixture(t, 100, 40000)
 		if !updateTestGuild(f.s, f.master.ID, "staff-fixture-gp", func(g domain.GuildRecord, m []domain.GuildMemberRecord) (domain.GuildRecord, []domain.GuildMemberRecord) {
 			g.GP = 10000
@@ -392,6 +412,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("fortress forge start", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s, a, leader, _, _ := forgeFixture(t, dir)
 		setForgeRole(t, s, leader, leader, 0x08, 1500)
@@ -414,6 +436,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("fortress forge collect", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s, a, leader, _, _ := forgeFixture(t, dir)
 		setForgeRole(t, s, leader, leader, 0, 0)
@@ -454,6 +478,8 @@ func TestOfflineDoorsRetainTheirWrittenDigests(t *testing.T) {
 	})
 
 	t.Run("rename", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		s := openTest(t, dir, newTestClock())
 		c := &domain.Character{Name: "Test2", MissionInventory: []domain.InventoryRow{{Slot: 13, RefObjID: 24198, StackCount: 2}}}

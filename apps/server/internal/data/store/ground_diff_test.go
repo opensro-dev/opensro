@@ -119,6 +119,8 @@ diffed by gid.
 ================
 */
 func TestGroundDiffWritesOnlyChangedRows(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	base := groundPlane(livePlaneRows)
 	if written, deleted := applyGroundDiff(t, s, nil, base); written != livePlaneRows || deleted != 0 {
@@ -164,6 +166,8 @@ table is exactly the registry's snapshot.
 ================
 */
 func TestGroundDiffPersistsTheLiveRegistry(t *testing.T) {
+	t.Parallel()
+
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	r := grounditem.NewRegistry()

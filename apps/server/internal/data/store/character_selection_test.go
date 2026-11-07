@@ -8,6 +8,8 @@ import (
 )
 
 func TestCharacterSelectionDeletionBlockers(t *testing.T) {
+	t.Parallel()
+
 	s := &Store{
 		characters:   map[string][]*domain.Character{"test": {{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}, {ID: 5}}},
 		guildMembers: map[string]map[int64][]domain.GuildMemberRecord{"test": {10: {{CharID: 1, Grade: 0}, {CharID: 2, Grade: 1}}}},

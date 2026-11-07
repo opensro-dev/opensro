@@ -335,7 +335,22 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 		}
 	}
 	captured.skin = enterworld.CharacterTransformSkin(character)
-	captured.worn = make([]wornEquipRow, 0, len(character.MissionInventory))
+	// Size the worn copy by the rows that pass the filter, counted first:
+	// the old make sized it by the whole mission inventory (up to the bag
+	// capacity), so every session paid a full-bag allocation per tick for
+	// the handful of equipment rows the appearance actually carries (#2030).
+	wornCount := 0
+	for _, row := range character.MissionInventory {
+		if row.RefObjID == 0 || row.Slot < 0 || row.Slot > 0xff {
+			continue
+		}
+		if inventory.IsEquipmentSlot(uint8(row.Slot)) {
+			wornCount++
+		}
+	}
+	if wornCount > 0 {
+		captured.worn = make([]wornEquipRow, 0, wornCount)
+	}
 	for _, row := range character.MissionInventory {
 		if row.RefObjID == 0 || row.Slot < 0 || row.Slot > 0xff {
 			continue
@@ -355,6 +370,15 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	// that loop from the avatar inventory, the only place a worn dress is
 	// kept; this server sent it empty, so other players never saw a dress.
 	if character.AvatarInventory != nil {
+		avatarCount := 0
+		for _, row := range character.AvatarInventory.Rows {
+			if row.RefObjID != 0 {
+				avatarCount++
+			}
+		}
+		if avatarCount > 0 {
+			captured.avatars = make([]wornEquipRow, 0, avatarCount)
+		}
 		for _, row := range character.AvatarInventory.Rows {
 			if row.RefObjID == 0 {
 				continue

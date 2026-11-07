@@ -13,6 +13,8 @@ hands it to the lane that owns it.
 package action
 
 import (
+	"strings"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
@@ -242,6 +244,13 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 		(rt.CanPickupOwnedDrop == nil || !rt.CanPickupOwnedDrop(divisionID, snapshot.Name, groundItem.OwnerJID)) {
 		rt.Pending.Clear(pendingKey)
 		// The native pickup owner gate (0x1812): the drop is another's for now.
+		return pickupRefusal(wire.ErrCodeLockedByOther)
+	}
+
+	// Port-only (forge.go, issue #1980): a bound forged drop is its
+	// forger's for good, not just for the reservation window.
+	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, snapshot.Name) {
+		rt.Pending.Clear(pendingKey)
 		return pickupRefusal(wire.ErrCodeLockedByOther)
 	}
 

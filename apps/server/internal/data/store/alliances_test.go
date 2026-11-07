@@ -22,6 +22,8 @@ a dissolved union is gone, and a record that is not a union is refused.
 ================
 */
 func TestAlliancesSurviveReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Alliances()

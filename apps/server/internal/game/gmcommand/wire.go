@@ -119,6 +119,16 @@ const (
 	// SubSetSpeed is the port's /SETSPEED percent (GM tooling, not native,
 	// action/gmspeed.go): subcmd, u16 percent of the effective speed.
 	SubSetSpeed uint8 = 0xF1
+	// SubForge is the port's /FORGE item forge (GM tooling, not native,
+	// action/forge.go, issue #1980): subcmd, u16 len + ANSI command text
+	// ("CODENAME key=value ..." or "help CODENAME"). The forged item is
+	// bound and the lane refuses unless SRO_GM_ITEM_FORGE is enabled.
+	SubForge uint8 = 0xF2
+
+	// ForgeTextMaxBytes bounds one /FORGE command text (the typed tail the
+	// client composer rejoins): generous for key=value lists, small
+	// enough that a runaway frame is still a refusal.
+	ForgeTextMaxBytes = 1024
 )
 
 // Siege structure sub-actions for SubSiegeStructure (0x20) and period codes for
@@ -177,6 +187,8 @@ type Request struct {
 	Silk uint32
 	// SpeedPercent is /SETSPEED's percent of the effective speed.
 	SpeedPercent uint16
+	// Forge is /FORGE's command text (the rejoined typed tail).
+	Forge string
 	// WorldID and LayerID are /INSTANCE's (SubOpenWorld 0x13) u16 arguments.
 	WorldID uint16
 	LayerID uint16
@@ -238,6 +250,33 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 		}
 		request.SpeedPercent, err = reader.U16()
 		return request, err
+	}
+	if subcmd == SubForge {
+		// subcmd, u16 len + ASCII text. The text is the rejoined typed
+		// tail ("CODENAME key=value ..." or "help CODENAME"); every byte
+		// must be printable ASCII - a control byte or a NUL is not a
+		// command this lane honors, and trailing bytes are an error.
+		textLen, err := reader.U16()
+		if err != nil {
+			return Request{}, err
+		}
+		if textLen == 0 || int(textLen) > ForgeTextMaxBytes {
+			return Request{}, fmt.Errorf("gmcommand: FORGE text length %d outside 1..%d", textLen, ForgeTextMaxBytes)
+		}
+		if len(payload) != 3+int(textLen) {
+			return Request{}, fmt.Errorf("gmcommand: FORGE frame length %d does not match text length %d", len(payload), textLen)
+		}
+		textBytes, err := reader.Bytes(int(textLen))
+		if err != nil {
+			return Request{}, err
+		}
+		for _, b := range textBytes {
+			if b < 0x20 || b > 0x7e {
+				return Request{}, fmt.Errorf("gmcommand: FORGE text carries non-printable byte 0x%02X", b)
+			}
+		}
+		request.Forge = string(textBytes)
+		return request, nil
 	}
 	if subcmd == SubMakeItem {
 		if len(payload) != 6 {

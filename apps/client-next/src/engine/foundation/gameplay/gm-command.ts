@@ -28,6 +28,14 @@ const MAX_SILK_GRANT = 1_000_000;
 // speed. A bare /SETSPEED asks for normal speed. The server enforces the
 // same range (action/gmspeed.go).
 const GM_SET_SPEED = 0xf1;
+// The port's /FORGE <CODENAME> [key=value ...] and /FORGE help <CODENAME>
+// (GM tooling, not native; the server's SRO_GM_ITEM_FORGE, off unless a
+// shard enables it): subcommand 0xF2 and a u16-sized ANSI string carrying
+// the rejoined typed tail. The server derives the legal keys per item
+// and validates every one; the composer only bounds the text the way
+// the server's decoder does (printable ASCII, at most 1024 bytes).
+const GM_FORGE = 0xf2;
+const MAX_FORGE_TEXT_BYTES = 1024;
 const GM_SPEED_NORMAL_PERCENT = 100;
 const GM_SPEED_MIN_PERCENT = 10;
 const GM_SPEED_MAX_PERCENT = 1000;
@@ -351,6 +359,15 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const percent = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
 		return { console: true, text: "-> speed set to " + percent + "%" };
 	}
+	if ( code === GM_FORGE ) {
+		// The port's /FORGE answer: one guide line per ack (the forged
+		// item's line, or one line per key for /forge help), or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM forge refusal bytes" );
+			return { console: true, text: "Failed. -> forge refused" };
+		}
+		return { console: true, text: "-> " + string() };
+	}
 	if ( result === 1 && code === 4 ) {
 		if ( p.length !== 14 ) throw Error( "Invalid GM world status" );
 		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -504,6 +521,21 @@ export function gmRequest(
 		if ( percent < GM_SPEED_MIN_PERCENT || percent > GM_SPEED_MAX_PERCENT ) return null;
 		const payload = Uint8Array.of( GM_SET_SPEED, 0, 0 );
 		new DataView( payload.buffer ).setUint16( 1, percent, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only, and players type it as /forge.
+	// The tail is rejoined exactly as typed; the server re-derives and
+	// validates every key, so a malformed tail is its refusal, while a
+	// text outside the decoder's bounds never leaves the client.
+	if ( name?.toUpperCase() === "/FORGE" ) {
+		if ( tokens.length < 2 ) return null;
+		const text = tokens.slice( 1 ).join( " " );
+		const bytes = new TextEncoder().encode( text );
+		if ( !bytes.length || bytes.length > MAX_FORGE_TEXT_BYTES || !/^[\x20-\x7e]+$/.test( text ) ) return null;
+		const payload = new Uint8Array( 3 + bytes.length );
+		payload[0] = GM_FORGE;
+		new DataView( payload.buffer ).setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	if ( name === "/SILK" ) {
