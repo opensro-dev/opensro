@@ -103,13 +103,19 @@ func remoteScript(pprofAddr, metricsAddr string) string {
 ================
 extractTarGz
 
-Unpack the returned stream into the output directory. Members must
-be plain file names - the remote script writes nothing else, and a
-member that tries to leave the directory is refused.
+Unpack the returned stream into the output directory. Every member
+must land inside it: the member's joined, cleaned path has to keep
+the output directory as a prefix, and anything else (a ".." climb,
+an absolute name) refuses the whole capture - the remote script
+writes plain "./name" members and nothing else is legitimate.
 ================
 */
 func extractTarGz(r io.Reader, outDir string) error {
 	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	absOut, err := filepath.Abs(outDir)
 	if err != nil {
 		return err
 	}
@@ -122,11 +128,14 @@ func extractTarGz(r io.Reader, outDir string) error {
 		if err != nil {
 			return err
 		}
-		name := filepath.Base(header.Name)
-		if name == "." || name == ".." || header.Typeflag != tar.TypeReg {
+		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		out, err := os.Create(filepath.Join(outDir, name))
+		dest := filepath.Join(absOut, header.Name)
+		if dest != absOut && !strings.HasPrefix(dest, absOut+string(os.PathSeparator)) {
+			return fmt.Errorf("capture member %q would land outside %s - refusing the capture", header.Name, absOut)
+		}
+		out, err := os.Create(dest)
 		if err != nil {
 			return err
 		}
