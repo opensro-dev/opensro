@@ -367,7 +367,7 @@ that reached the worker.
 		owners.input.blindHeld = () => false;
 		owners.input.altHeld = () => false;
 		owners.assets.progress = () => 0;
-	owners.assets.hdTextures = () => {};
+		owners.assets.hdTextures = () => {};
 		owners["bug-report"].movement = () => {};
 		globalThis.__runtimeOwners = owners;
 		globalThis.__runtimeCalls = [];
