@@ -105,6 +105,18 @@ with generated_assets_lock('test reader or publisher', mode=os.environ.get('MODE
         raise RuntimeError('intentional callback failure')
 `;
 
+// The #2787 regression opener: holds the writer's owner record open the
+// way a polling Python contender's read does - a plain open(), which on
+// Windows grants no delete sharing - for a few seconds, then lets go.
+const PYTHON_OPENER = `
+import os, time
+handle = open(os.environ['OPEN_RECORD'], 'r')
+print('HOLDING', flush=True)
+time.sleep(3)
+handle.close()
+print('RELEASED', flush=True)
+`;
+
 /*
 ================
 fixture
@@ -440,6 +452,43 @@ for ( const holderLanguage of [ "node", "python" ] ) {
 		});
 	}
 }
+
+test("a node release waits out a python contender holding its owner record open", async ( t ) => {
+	const f = await fixture( t );
+	const writer = start( f, { cwd: f.owner, language: "node", env: { HOLD: "1", MODE: "write" } } );
+	await entered( writer );
+	// While the opener holds the record, the release's removal of it
+	// cannot land (#2787): the release must wait the three seconds out
+	// and still finish clean, where it used to die with EBUSY.
+	const attempt = pythonAttempts( [ "-B", "-c", PYTHON_OPENER ] )[0];
+	const opener = spawn( attempt.command, attempt.args, {
+		cwd: f.owner,
+		env: { ...process.env, OPEN_RECORD: path.join( f.lockDir, "owner.json" ) },
+		windowsHide: true,
+		stdio: [ "pipe", "pipe", "pipe" ]
+	} );
+	opener.output = "";
+	opener.stdout.on( "data", ( chunk ) => opener.output += chunk );
+	opener.stderr.on( "data", ( chunk ) => opener.output += chunk );
+	opener.finished = new Promise( ( resolve, reject ) => {
+		opener.once( "error", reject );
+		opener.once( "close", resolve );
+	} );
+	f.children.push( opener );
+	const deadline = Date.now() + CHILD_PROGRESS_TIMEOUT_MS;
+	while ( !opener.output.includes( "HOLDING" ) ) {
+		assert.equal( opener.exitCode, null, opener.output );
+		assert.ok( Date.now() < deadline, opener.output );
+		await new Promise( ( resolve ) => setTimeout( resolve, PARENT_POLL_MS ) );
+	}
+	const releasedAt = Date.now();
+	writer.stdin.end( "\n" );
+	assert.equal( await writer.finished, 0, writer.output );
+	assert.doesNotMatch( writer.output, /EBUSY|EPERM/ );
+	// The release could only finish once the opener let go.
+	assert.ok( Date.now() - releasedAt >= 2500, writer.output );
+	assert.equal( await opener.finished, 0, opener.output );
+});
 
 for ( const [holderLanguage, contenderLanguage] of [ [ "node", "python" ], [ "python", "node" ] ] ) {
 	test(`a killed ${holderLanguage} reader's claim is reaped for a ${contenderLanguage} writer`, async ( t ) => {
