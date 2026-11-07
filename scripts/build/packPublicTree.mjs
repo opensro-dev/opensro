@@ -98,11 +98,12 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 	requireRuntimeTextAssets( groups.flatMap( group => group.files ) );
 	const assetPacks = await timed(
 		"assetPacks",
-		() => steps.buildPacks( {
-			targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES,
-			groups,
-			hdPublished: request.hdPublished
-		} )
+		() =>
+			steps.buildPacks( {
+				targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES,
+				groups,
+				hdPublished: request.hdPublished
+			} )
 	);
 	const missing = missingPackFiles( assetPacks, publicRoot, steps.packFileExists );
 	if ( missing.length > 0 ) {
