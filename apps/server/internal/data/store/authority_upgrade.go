@@ -3,7 +3,7 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 38 to schema 39, layout 12. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 39 to schema 40, layout 12. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
@@ -265,7 +265,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		// Schema 39 ran at layout 12 and stamped the wanted level's
 		// seven-day lapse; under the decay that stamp is unread and a
 		// streak is stamped fresh at its first judging door, so no
-		// saved streak decays early (#2721). Records read unchanged.
+		// saved streak decays early (#2721). It also has no forge-bound
+		// mark on its item rows; its items read unbound (#1980).
+		// Records read unchanged.
 		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

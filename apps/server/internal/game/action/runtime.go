@@ -75,6 +75,11 @@ type Runtime struct {
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
 	GMSetSpeed bool
+	// GMItemForge admits /FORGE (port-only, SRO_GM_ITEM_FORGE, issue #1980;
+	// off is native: a retired client command the server does not honor).
+	GMItemForge bool
+	// forgeStamps holds each GM's /FORGE rate-limit window (forge.go).
+	forgeStamps sync.Map
 	// FlagWar is the Capture the Flag schedule (native; flagwar.go):
 	// SRO_FLAGWAR_START_UTC and SRO_FLAGWAR_MIN_PLAYERS, wired from env.
 	FlagWar FlagWarSettings

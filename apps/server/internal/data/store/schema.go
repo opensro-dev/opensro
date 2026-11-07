@@ -133,7 +133,11 @@ func isVersionMismatch(err error) bool {
 // schema 35 expiresAtMs stays in the record as an unread seed, like the
 // schema 36 Halloween counts. Streaks saved earlier carry no decay stamp
 // and are stamped fresh at their first judging door, so no saved streak
-// decays early. The offline upgrade rewrites no record.
+// decays early. It also adds the optional forge-bound mark on item rows
+// (forgeBound, port-only, #1980): an item a GM forged with /FORGE can
+// never be traded, sold or handed to another character; rows saved
+// earlier carry no mark and are unbound. The offline upgrade rewrites
+// no record.
 const CurrentVersion = 40
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
