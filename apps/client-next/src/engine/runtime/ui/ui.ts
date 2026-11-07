@@ -10200,6 +10200,8 @@ export function createUi(
 				fontPath,
 				phase,
 				compact,
+				compactCloseControl,
+				compactWindowDrag,
 				chrome: {
 					frame: FRAME,
 					frameParts: PARTS,

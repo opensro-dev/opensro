@@ -132,6 +132,7 @@
     "src/engine/runtime/assets/worker/effects/effects.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/assets/worker/effects/program/program.ts": "src/engine/runtime/assets/worker/effects/effects.ts",
     "src/engine/runtime/ui/ui.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/ui/frame/frame.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/text/text.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/resources/resources.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/platform/ui/ui.ts": "src/engine/runtime/platform/platform.ts",

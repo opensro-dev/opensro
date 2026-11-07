@@ -2700,6 +2700,13 @@
 			"reason": "Port-only 3D viewer query: the characters owner lends its synchronous catalogue lookup to tell whether the entity's model rides a linked ride the viewer must wait for."
 		},
 		{
+			"file": "src/engine/runtime/ui/frame/frame.ts",
+			"expression": "frame.compactCloseControl",
+			"function": "uiEndWindow",
+			"kind": "callback",
+			"reason": "The compact fit rewrites a window's close controls with the compact owner's rule, which ui.ts lends the frame through the UiFrame record."
+		},
+		{
 			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",
 			"expression": "entry.fail",
 			"function": "drain",

@@ -18,17 +18,12 @@ arrays step() currently holds.
 */
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { BuffViewerIcon } from "@/engine/foundation/ui/buff-viewer";
-import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
+import { resolveTextOverlaps, type GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { frameRing } from "@/engine/foundation/ui/frame-ring";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { closedPanel } from "@/engine/foundation/ui/panels";
-import { compactCloseControl, compactWindowDrag } from "../hud/compact-hud";
-import type { createCompactHud } from "../hud/compact-hud";
-import type { createWindowPlacement } from "../hud/window-placement";
-import type { createUiAssets } from "../resources/resources";
-import type { createUiText } from "../text/text";
 
 const white = [ 1, 1, 1, 1 ] as const;
 
@@ -71,6 +66,68 @@ export interface UiFrameChrome {
 
 /*
 ================
+UiFrameText
+
+The text owner's surface the primitives use. Declared here, not
+imported from the owner: only ui.ts imports its own modules, and the
+builder receives their surfaces through the record (as every HUD
+presenter already does).
+================
+*/
+export interface UiFrameText {
+	quads(
+		value: string,
+		rect: UiRect,
+		clip: UiRect,
+		color: UiQuad["color"],
+		style?: GlyphStyle
+	): readonly UiQuad[];
+}
+
+/*
+================
+UiFrameResources
+
+The resource owner's surface the primitives use: what is loaded, and
+the natural size of what is.
+================
+*/
+export interface UiFrameResources {
+	has( path: string ): boolean;
+	size( path: string ): readonly [number, number] | undefined;
+}
+
+/*
+================
+UiFramePlacement
+
+The placement owner's surface the primitives use: a window's frame
+inside the viewport.
+================
+*/
+export interface UiFramePlacement {
+	frame(
+		id: string,
+		initial: UiRect,
+		viewport: readonly [number, number],
+		restoreExtent?: readonly [number, number]
+	): UiRect;
+}
+
+/*
+================
+UiFrameCompact
+
+The compact layout's surface uiEndWindow's fit uses.
+================
+*/
+export interface UiFrameCompact {
+	readonly top: number;
+	readonly bounds: UiRect;
+}
+
+/*
+================
 UiFrame
 
 Everything one frame's primitives draw with: the quad, control, block
@@ -87,16 +144,18 @@ export interface UiFrame {
 	readonly full: UiRect;
 	readonly width: number;
 	readonly height: number;
-	readonly text: ReturnType<typeof createUiText>;
-	readonly resources: ReturnType<typeof createUiAssets>;
-	readonly placement: ReturnType<typeof createWindowPlacement>;
+	readonly text: UiFrameText;
+	readonly resources: UiFrameResources;
+	readonly placement: UiFramePlacement;
 	readonly contentImages: ReadonlySet<string>;
 	readonly windowMissing: string[];
 	readonly admittedWindows: Map<string, UiAdmittedWindow>;
 	readonly windowPaths: readonly string[];
 	readonly fontPath: string | null;
 	readonly phase: string;
-	readonly compact: ReturnType<ReturnType<typeof createCompactHud>["layout"]>;
+	readonly compact: UiFrameCompact | null;
+	readonly compactCloseControl: ( control: UiControl, screen: UiRect ) => UiControl;
+	readonly compactWindowDrag: ( control: UiControl ) => boolean;
 	readonly chrome: UiFrameChrome;
 	pressed: string | null;
 	hover: string | null;
@@ -319,11 +378,11 @@ export function uiEndWindow(
 			fitUiGroup( frame.quads, frame.controls, mark[0], mark[1], windowBounds, frame.full, {
 				blocks: frame.blocks,
 				firstBlock: mark[2],
-				disableDrag: compactWindowDrag,
+				disableDrag: frame.compactWindowDrag,
 				...(source ? { sourceBounds: source } : {})
 			} );
 			for ( let i = mark[1]; i < frame.controls.length; i++ ) {
-				frame.controls[i] = compactCloseControl( frame.controls[i]!, windowBounds );
+				frame.controls[i] = frame.compactCloseControl( frame.controls[i]!, windowBounds );
 			}
 		}
 		const painted = resolveTextOverlaps( frame.quads.slice( mark[0] ) );
