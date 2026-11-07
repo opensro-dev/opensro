@@ -80,6 +80,7 @@ var catalogueExempt = map[string]string{
 	"SRO_PET_PACING":                          "pet movement speed at runtime; the catalogue publishes no movement speeds",
 	"SRO_PET_INVENTORY_PAGES":                 "a pet's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_STORAGE_AUTO_STACK":                  "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
+	"SRO_INVENTORY_PAGES":                     "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                     "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                  "a post-kill damage notice; the catalogue publishes no notices",
 	"SRO_CLOSED_OBJECT_RESCUE":                "a login placement rescue; monsters.json publishes nests, not login placement",

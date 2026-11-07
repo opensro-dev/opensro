@@ -112,6 +112,10 @@ type Deps struct {
 	// after releasing the publication gate, and a test proves the
 	// gate is free while the encoder runs.
 	EncodeEntryPayload func(result *BootstrapResult) ([]byte, error)
+	// InventoryPages publishes the port-only SRO_INVENTORY_PAGES rule
+	// (inventory_pages.go): world entry presents and adopts the 2.5-page
+	// base; false is native.
+	InventoryPages bool
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
@@ -699,6 +703,9 @@ type PreparedReentry struct {
 	// InventorySize is the capacity the packets present; the committing
 	// owner adopts it on the live record (domain.AdoptInventorySize).
 	InventorySize uint8
+	// InventoryBase is the inventory-pages floor the packets present
+	// (zero native); the committing owner raises the live record to it.
+	InventoryBase uint8
 }
 
 /*
@@ -721,6 +728,11 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	// after preparation succeeds. Login adoption would re-enter that lock.
 	projection.AdoptEntrySpawn = nil
 	snapshot.PresentInventoryExpansion()
+	var inventoryBase uint8
+	if d.InventoryPages {
+		snapshot.RaiseInventoryFloor(domain.InventoryPagesBase)
+		inventoryBase = domain.InventoryPagesBase
+	}
 	result := buildCharacterProjection(&projection, divisionID, snapshot)
 	packets, ok := d.encodeReentry(result)
 	if !ok {
@@ -729,7 +741,7 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	spawn := result.LocalPlayerEntry.StartProfile
 	return PreparedReentry{Packets: packets, Spawn: simulation.Spawn{
 		RegionID: uint16(spawn.RegionID), X: spawn.X, Y: spawn.Y, Z: spawn.Z, Angle: uint16(spawn.Angle),
-	}, InventorySize: snapshot.InventoryCapacity()}, true
+	}, InventorySize: snapshot.InventoryCapacity(), InventoryBase: inventoryBase}, true
 }
 
 /*
@@ -790,6 +802,9 @@ func (d *Deps) adoptEncodedInventory(result *BootstrapResult) {
 	presented := result.Character.InventoryCapacity()
 	d.Mutate(owner, "inventory-expansion", func() {
 		owner.AdoptInventorySize(presented)
+		if d.InventoryPages {
+			owner.RaiseInventoryFloor(domain.InventoryPagesBase)
+		}
 	})
 	result.inventoryOwner = nil
 }
