@@ -202,7 +202,7 @@ export const EXPERIMENTAL_TABS: readonly {
 				key: "silkHistory",
 				id: "experimental-silk-history",
 				label: "Silk charge history",
-				description: "Enable the Item Mall's Buying list: your silk spending by period."
+				description: "The Item Mall's Buying list: silk spending by period."
 			}
 		]
 	},
