@@ -10,7 +10,7 @@ OpenSRO is a complete game stack, not just an emulator:
 - 🎮 **A full browser client:** TypeScript and WebGPU, no install and no plugin. The original interface, world, characters, effects and sound, drawn natively in the browser.
 - ⚔️ **A full game server:** Go, with an Agent (login, accounts, characters) and GameWorld shards (combat, skills, monsters, quests, guilds, fortresses, PK, trade).
 - 🧰 **An asset pipeline:** turns your own v1.150 client installation into compact browser- and server-ready game data.
-- 🛰️ **Operations tooling:** Nomad jobs, a release pipeline, and an observatory dashboard for running your own server.
+- 🛰️ **Operations tooling:** Nomad jobs and a release pipeline for running your own server.
 
 Behaviour is ported from the original game, not guessed: the v1.150 client defines what exists, and server rules follow the original server's instructions. Reverse-engineering evidence (function addresses) sits right next to the code that ports it.
 
@@ -47,7 +47,6 @@ Only changing code, not game data? `corepack pnpm check source` runs the CI gate
 | --- | --- |
 | 🎮 `apps/client-next/` | The browser client: TypeScript, WebGPU, Vite |
 | ⚔️ `apps/server/` | The Go Agent and GameWorld, Nomad jobs, operator docs |
-| 🛰️ `apps/server-observatory/` | Operations dashboard, with optional authenticated player recovery |
 | 🧰 `scripts/` | Asset pipeline, repository checks and the `pnpm task` runner |
 | 📚 `docs/` | Setup, architecture, asset pipeline and design notes |
 | 🩹 `patches/` | Dependency patches applied by pnpm |
@@ -88,4 +87,4 @@ New here? Start with **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**: setup, the 
 - 🚢 [RELEASE.md](docs/operations/RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](.github/SECURITY.md): how to report a vulnerability
 - 💬 [SUPPORT.md](.github/SUPPORT.md): getting help
-- ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
+- ⚖️ [AGPL-3.0-or-later](LICENSE) with one section 7(b) attribution term (keep the "Powered by OpenSRO" credit); the term, origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)

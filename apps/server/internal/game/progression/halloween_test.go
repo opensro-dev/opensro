@@ -118,16 +118,34 @@ func TestHalloweenGiftTableIsTheOwnersTable(t *testing.T) {
 	if total != 100 {
 		t.Fatalf("gift weights sum to %v, want 100", total)
 	}
-	helmets := HalloweenHelmets()
-	if len(helmets) != 8 {
-		t.Fatalf("helmet rows = %d, want 8", len(helmets))
+	prizes := HalloweenPrizes()
+	if len(prizes) != 12 {
+		t.Fatalf("prize rows = %d, want 12 (8 helmets, 4 Elixirs)", len(prizes))
 	}
-	for _, helmet := range helmets {
-		if _, ok := HalloweenHelmetByCodename(helmet.Codename); !ok {
-			t.Fatalf("helmet %s does not resolve", helmet.Codename)
+	helmets, elixirs := 0, 0
+	for _, prize := range prizes {
+		if _, ok := HalloweenPrizeByCodename(prize.Codename); !ok {
+			t.Fatalf("prize %s does not resolve", prize.Codename)
+		}
+		if prize.Helmet {
+			helmets++
+			if prize.Price != HalloweenHelmetPrice {
+				t.Fatalf("helmet %s costs %d boxes, want %d", prize.Codename, prize.Price, HalloweenHelmetPrice)
+			}
+			continue
+		}
+		elixirs++
+		if prize.Price != HalloweenElixirPrice {
+			t.Fatalf("Elixir %s costs %d boxes, want %d", prize.Codename, prize.Price, HalloweenElixirPrice)
 		}
 	}
-	if _, ok := HalloweenHelmetByCodename("ITEM_MALL_AVATAR_M_HALLOWEEN"); ok {
-		t.Fatal("a mall avatar resolved as an event helmet")
+	if helmets != 8 || elixirs != 4 {
+		t.Fatalf("prize rows split %d helmets / %d Elixirs, want 8 / 4", helmets, elixirs)
+	}
+	if _, ok := HalloweenPrizeByCodename("ITEM_MALL_AVATAR_M_HALLOWEEN"); ok {
+		t.Fatal("a mall avatar resolved as an event prize")
+	}
+	if _, ok := HalloweenPrizeByCodename("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_B"); ok {
+		t.Fatal("a B elixir resolved as an event prize (those sell for gold)")
 	}
 }

@@ -178,6 +178,9 @@ onNetworkFailure
 			stack: reason?.stack,
 			category: reason?.category,
 			session: diagnosticSession || undefined,
+			// The session the failure happened on, so this report joins
+			// the transport's own session lines (#2558).
+			transportSession: network.transportSessionId(),
 			code: reason?.code ?? (frame ? "packet_application_failed" : "connection_closed"),
 			kind: reason?.code === "unsupported_feature" ?
 				"unsupported" :
@@ -247,7 +250,14 @@ onNetworkFailure
 		stage: string;
 		bytesReceived: number;
 		framesReceived: number;
+		closeReason?: string;
+		// The typed refusal the mint answered with ("MAINTENANCE"),
+		// when the failure was an answered refusal at all (#2557).
+		refusal?: string;
 	} | undefined;
+	// The refusal code of the mint failure being consumed, carried from
+	// the completion into the failure branch that files the evidence.
+	let failureRefusal: string | undefined;
 	let attemptBytesBase = 0, attemptFramesBase = 0;
 	// The stall watch: the oldest outstanding request's send time (step
 	// clock), the event-clock moment that request was first seen
@@ -329,11 +339,14 @@ stepStall
 
 A request has waited TRANSPORT_STALL_MS with nothing at all arriving since
 it left, and still so TRANSPORT_STALL_CONFIRM_MS later: the link stalled.
-Resume now (the lost-answer path), naming the link instead of the request.
+Resume now (the lost-answer path), naming the link and the lane that
+waited: one lane stuck while the world streams is not a silent link,
+and the incident must say which lane it was (#2148).
 ================
 	*/
 	function stepStall() {
 		const since = core.outstandingSince();
+		const lane = core.outstandingLane() ?? "request";
 		if ( since === undefined ) {
 			stallSince = undefined;
 			stallSeenAtMs = undefined;
@@ -357,7 +370,7 @@ Resume now (the lost-answer path), naming the link instead of the request.
 		if ( now - stallSeenAtMs < TRANSPORT_STALL_CONFIRM_MS ) return;
 		stallSeenAtMs = undefined;
 		onNetworkFailure(
-			`Transport stalled: a request waited ${
+			`Transport stalled: the ${lane} lane waited ${
 				Math.round( now - since )
 			} ms with no frame arriving; ${inboundAge()}`,
 			undefined,
@@ -438,6 +451,7 @@ connect
 		incidentID = "";
 		lastError = undefined;
 		lastFailureEvidence = undefined;
+		failureRefusal = undefined;
 		// Every attempt - fresh entry, resume, retry - passes through
 		// here, so this baseline is the attempt's alone (#2311 item 4).
 		attemptBytesBase = network.receivedBytes();
@@ -763,6 +777,7 @@ step
 					if ( result.error ) {
 						failure = result.error;
 						failureDefinitive = DEFINITIVE_REFUSALS.includes( result.code ?? "" );
+						failureRefusal = result.code;
 					} else {
 						try {
 							if ( result.kind === "transport" ) {
@@ -901,8 +916,13 @@ step
 				lastFailureEvidence = {
 					stage: phase,
 					bytesReceived: network.receivedBytes() - attemptBytesBase,
-					framesReceived: network.received() - attemptFramesBase
+					framesReceived: network.received() - attemptFramesBase,
+					// Why the transport ended (server_bye_N when the
+					// server's BYE named it), when the failure named one.
+					...(failureCode ? { closeReason: failureCode } : {}),
+					...(failureRefusal ? { refusal: failureRefusal } : {})
 				};
+				failureRefusal = undefined;
 				cancel();
 				deadline = 0;
 				// A bound session retries as a resume; an entry that never
@@ -971,6 +991,7 @@ status
 				revision,
 				error: lastError,
 				entryFailure: lastFailureEvidence,
+				transportSessionId: network.transportSessionId(),
 				disconnectMessage,
 				incidentID,
 				character,

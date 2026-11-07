@@ -190,6 +190,115 @@ func TestCommitActivityAtMatchesGidDoor(t *testing.T) {
 
 /*
 ================
+TestCarriedStorageReadsMatchGidReads
+
+The batch build's carried reads answer as the gid reads do: the
+monster row read through its noted hot slot is the gid door's row,
+and the mover schedule read through its noted slot is the gid
+door's schedule from the same slot. A slot naming another actor,
+the no-slot sentinel and a missing actor all miss or delegate to
+the gid resolve - never the slot owner's row (#2133).
+================
+*/
+func TestCarriedStorageReadsMatchGidReads(t *testing.T) {
+	_, d := queueBenchmarkState(3)
+	for gid := uint32(1); gid <= 3; gid++ {
+		_, monsterSlot, hot := d.instances.hotRowSlot(gid)
+		if !hot {
+			t.Fatalf("gid %d has no hot row", gid)
+		}
+		row, ok := d.instances.hotRowAt(monsterSlot, gid)
+		if !ok || row.value(gid) != d.instances.get(gid) {
+			t.Fatalf("hotRowAt(%d, %d) = %v, %v; gid read %v", monsterSlot, gid, row.value(gid), ok, d.instances.get(gid))
+		}
+		if _, ok := d.instances.hotRowAt(monsterSlot, gid+1); ok {
+			t.Fatalf("hotRowAt(%d, %d) read the slot owner's row", monsterSlot, gid+1)
+		}
+		if _, ok := d.instances.hotRowAt(behaviorNoMonsterSlot, gid); ok {
+			t.Fatalf("hotRowAt with the sentinel read gid %d", gid)
+		}
+		want, wantSlot, wantOK := d.movers.scheduleSlot(gid)
+		got, gotSlot, gotOK := d.movers.scheduleSlotAt(wantSlot, gid)
+		if gotOK != wantOK || gotSlot != wantSlot || got != want {
+			t.Fatalf("scheduleSlotAt(%d, %d) = %+v, %d, %v; gid read %+v, %d, %v",
+				wantSlot, gid, got, gotSlot, gotOK, want, wantSlot, wantOK)
+		}
+		// Another actor's slot delegates: the answer is gid's own.
+		other := gid%3 + 1
+		_, otherSlot, _ := d.movers.scheduleSlot(other)
+		got, gotSlot, gotOK = d.movers.scheduleSlotAt(otherSlot, gid)
+		if gotOK != wantOK || gotSlot != wantSlot || got != want {
+			t.Fatalf("scheduleSlotAt(%d, %d) = %+v, %d, %v; want gid delegation %+v, %d, %v",
+				otherSlot, gid, got, gotSlot, gotOK, want, wantSlot, wantOK)
+		}
+		got, gotSlot, gotOK = d.movers.scheduleSlotAt(behaviorNoMoverSlot, gid)
+		if gotOK != wantOK || gotSlot != wantSlot || got != want {
+			t.Fatalf("scheduleSlotAt(sentinel, %d) = %+v, %d, %v; want %+v, %d, %v",
+				gid, got, gotSlot, gotOK, want, wantSlot, wantOK)
+		}
+	}
+	if _, _, ok := d.movers.scheduleSlotAt(0, 999); ok {
+		t.Fatal("scheduleSlotAt read a missing actor")
+	}
+}
+
+/*
+================
+TestBehaviorBuildAfterRowSwap
+
+Two batch builds with a despawn between them: removing gid 2 swaps
+the last monster row into its hot slot and the last mover row into
+its mover slot, so the survivors' carried slots from the first
+build name moved rows. The second build must still batch exactly
+the survivors, each snapshot equal to the gid doors' reads for its
+own actor - a carried slot is verified, never trusted (#2133).
+================
+*/
+func TestBehaviorBuildAfterRowSwap(t *testing.T) {
+	s, d := queueBenchmarkState(5)
+	for gid := uint32(1); gid <= 5; gid++ {
+		row := d.instances.get(gid)
+		row.CurrentHP = gid * 10
+		d.instances.set(gid, row)
+	}
+	first := s.behaviorBatches(0)
+	if len(first) != 1 || len(first[0].actors) != 5 {
+		t.Fatalf("first build batched %v, want 5 actors", first)
+	}
+	s.releaseBehaviorBatches(first)
+	d.instances.remove(2)
+	d.movers.remove(2)
+	second := s.behaviorBatches(1)
+	if len(second) != 1 || len(second[0].actors) != 4 {
+		t.Fatalf("second build batched %v, want the 4 survivors", second)
+	}
+	key := second[0].key
+	seen := make(map[uint32]bool)
+	for _, ref := range second[0].actors {
+		if ref.gid == 2 || seen[ref.gid] {
+			t.Fatalf("second build batched gid %d (seen %v)", ref.gid, seen)
+		}
+		seen[ref.gid] = true
+		snapshot := s.behaviorActorMover(key, ref)
+		want, wantOK := s.behaviorActor(key, ref.gid)
+		if !snapshot.ok || !wantOK || snapshot.instance != want || snapshot.instance.CurrentHP != ref.gid*10 {
+			t.Fatalf("gid %d snapshot %+v, want the gid read %+v", ref.gid, snapshot.instance, want)
+		}
+		moverSlot, _ := d.movers.slotOf(ref.gid)
+		_, monsterSlot, _ := d.instances.hotRowSlot(ref.gid)
+		if snapshot.slot != moverSlot || snapshot.monsterSlot != monsterSlot {
+			t.Fatalf("gid %d snapshot carries slots (%d, %d), storages report (%d, %d)",
+				ref.gid, snapshot.slot, snapshot.monsterSlot, moverSlot, monsterSlot)
+		}
+	}
+	s.releaseBehaviorBatches(second)
+	if third := s.behaviorBatches(2); len(third) != 1 || len(third[0].actors) != 4 {
+		t.Fatalf("third build batched %v, want the 4 survivors again", third)
+	}
+}
+
+/*
+================
 TestBehaviorActorSnapshotCarriesSlots
 
 The snapshot the leg dispatches on carries the mover and monster
@@ -219,4 +328,53 @@ func TestBehaviorActorSnapshotCarriesSlots(t *testing.T) {
 		}
 	}
 	t.Fatal("fixture actor never came due in a behaviour batch")
+}
+
+/*
+================
+TestBehaviorActorLiveAtAnswersAsGidProbe
+
+The dispatch's existence probe through the monster slot the batch
+carried answers exactly what the gid probe answers: live for the
+actor its own ref names, live for a live actor behind a crossed
+hint (the slot names another actor, so the gid resolve decides),
+and dead for an absent gid behind a live actor's slot or no hint.
+================
+*/
+func TestBehaviorActorLiveAtAnswersAsGidProbe(t *testing.T) {
+	ops, actor := monsterLegFixture(t, passiveTactics())
+	mate := monsterInstanceByRefIn(t, ops.Monsters, 2000, monsterTestRegion)
+	_, mateSlot := carriedSlots(t, ops, mate.Gid)
+	var key populationKey
+	var own behaviorActorRef
+	found := false
+	for _, batch := range ops.Monsters.behaviorBatches(10000) {
+		for _, ref := range batch.actors {
+			if ref.gid == actor.Gid {
+				key, own, found = batch.key, ref, true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("fixture actor never came due in a behaviour batch")
+	}
+	if !ops.Monsters.behaviorActorLiveAt(key, own) {
+		t.Fatal("carried probe lost its actor")
+	}
+	if !ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: actor.Gid, monsterSlot: behaviorNoMonsterSlot}) {
+		t.Fatal("slotless probe lost its actor")
+	}
+	// A crossed hint names the mate's row: the gid resolve decides.
+	if !ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: actor.Gid, monsterSlot: mateSlot}) {
+		t.Fatal("crossed probe lost its actor")
+	}
+	if ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: 999999, monsterSlot: own.monsterSlot}) {
+		t.Fatal("probe invented an absent actor behind a live slot")
+	}
+	if ops.Monsters.behaviorActorLiveAt(key, behaviorActorRef{gid: 999999, monsterSlot: behaviorNoMonsterSlot}) {
+		t.Fatal("slotless probe invented an absent actor")
+	}
+	if !ops.Monsters.behaviorActorLive(key, actor.Gid) || ops.Monsters.behaviorActorLive(key, 999999) {
+		t.Fatal("gid probe disagrees with the carried probe")
+	}
 }

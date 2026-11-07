@@ -24,11 +24,9 @@
 
 | Document | For |
 | --- | --- |
-| [Deployment](../apps/server/ops/docs/DEPLOYMENT.md) | Production topology, security, state and backups |
-| [Nomad operations](../apps/server/ops/nomad/README.md) | Running the cluster |
 | [Hosting the client](../apps/client-next/docs/HOSTING.md) | Serving the browser client behind an edge |
 | [Release checklist](operations/RELEASE.md) | Cutting a release |
-| [Accepted advisories](../apps/server/ops/docs/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability exceptions |
+| [Accepted advisories](security/ACCEPTED_ADVISORIES.md) | Reviewed vulnerability exceptions |
 | [Live item grants](operations/OPERATOR_ITEM_GRANTS.md) | Granting items on a running shard |
 | [GM item picker](operations/GM_ITEM_PICKER.md) | The GM console's F3 picker |
 

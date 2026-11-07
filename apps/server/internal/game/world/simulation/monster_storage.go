@@ -302,6 +302,23 @@ func (s *monsterStorage) hotRow(gid uint32) (residentMonster, bool) {
 
 /*
 ================
+hotRowAt
+
+hotRow through a slot carried from the last batch build, verified
+against the gid before use (#2133): a miss is the signal, exactly
+lookupAt's contract - the caller resolves by gid, so the read is
+the storage's either way.
+================
+*/
+func (s *monsterStorage) hotRowAt(slot uint32, gid uint32) (residentMonster, bool) {
+	if slot >= uint32(len(s.hot)) || s.hot[slot].gid != gid {
+		return residentMonster{}, false
+	}
+	return s.hot[slot].row, true
+}
+
+/*
+================
 hotRowSlot
 
 hotRow with the dense slot the row sits in: the behaviour batch
@@ -557,6 +574,44 @@ func (s *monsterStorage) currentHP(gid uint32) (uint32, bool) {
 		return r.hp, true
 	}
 	return 0, false
+}
+
+/*
+================
+timerFacts
+
+The AI timer check's facts — current HP and the nest tactics flags
+the first-bank setup reads — without reconstructing the full
+Instance snapshot: the check runs per due actor per leg, and
+expanding the shared catalogue rows dominates its cost (#2029).
+================
+*/
+func (s *monsterStorage) timerFacts(gid uint32) (uint32, uint32, bool) {
+	if r, ok := s.hotRow(gid); ok {
+		return r.currentHP, r.nest.Value().NativeTacticsFlags, true
+	}
+	if r, ok := s.cold[gid]; ok {
+		return r.hp, r.nest.Value().NativeTacticsFlags, true
+	}
+	return 0, 0, false
+}
+
+/*
+================
+timerFactsAt
+
+timerFacts through a slot carried from the behaviour batch build,
+verified against the gid before use: a hit reads the hot row in its
+slot; a miss delegates to timerFacts, cold rows included, so the
+answer is the storage's either way (#2029).
+================
+*/
+func (s *monsterStorage) timerFactsAt(slot uint32, gid uint32) (uint32, uint32, bool) {
+	if slot < uint32(len(s.hot)) && s.hot[slot].gid == gid {
+		row := s.hot[slot].row
+		return row.currentHP, row.nest.Value().NativeTacticsFlags, true
+	}
+	return s.timerFacts(gid)
 }
 
 /*

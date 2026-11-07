@@ -348,3 +348,70 @@ func TestClientDegradedReportsNeverStarveAFatalOne(t *testing.T) {
 		t.Fatalf("a fatal report after the degraded allowance ran out = %d, want accepted", code)
 	}
 }
+
+/*
+================
+TestClientIncidentCarriesItsTransportJoinFields
+
+An entry rejection names its transport session, why the transport
+ended and how long the tab was hidden (#2558): the log line is what
+joins the incident to the transport's own session lines, which name
+the same session and its account.
+================
+*/
+func TestClientIncidentCarriesItsTransportJoinFields(t *testing.T) {
+	fixture, token := incidentSession(t)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	body := `{"kind":"runtime","code":"world_entry_rejected",` +
+		`"message":"Entry rejected (S2) at dock/entering: Server ended transport session: idle timeout (3)",` +
+		`"phase":"character-select","character":"asd3",` +
+		`"transportSession":"123456789","closeReason":"server_bye_3","tabHiddenMs":61000}`
+	response := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("incident = %d %s", response.Code, response.Body.String())
+	}
+	entry := hook.LastEntry()
+	if entry == nil || entry.Message != "agent: client incident" {
+		t.Fatalf("no incident log line: %+v", entry)
+	}
+	want := map[string]any{
+		"transportSession": "123456789", "closeReason": "server_bye_3", "tabHiddenMs": int64(61000),
+	}
+	for key, value := range want {
+		if entry.Data[key] != value {
+			t.Errorf("%s = %v, want %v", key, entry.Data[key], value)
+		}
+	}
+}
+
+/*
+================
+TestClientIncidentDropsMalformedJoinFields
+
+The join fields are evidence seasoning, never the report itself: a
+value the line cannot carry faithfully is dropped and the incident
+is still recorded (the journal rule, #788).
+================
+*/
+func TestClientIncidentDropsMalformedJoinFields(t *testing.T) {
+	fixture, token := incidentSession(t)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	body := `{"kind":"runtime","code":"world_entry_rejected","message":"x",` +
+		`"transportSession":"not-a-session","closeReason":"bad!reason","tabHiddenMs":-5}`
+	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusOK {
+		t.Fatalf("incident with malformed join fields = %d, want kept", code)
+	}
+	entry := hook.LastEntry()
+	if entry == nil || entry.Message != "agent: client incident" {
+		t.Fatalf("no incident log line: %+v", entry)
+	}
+	for _, key := range []string{"transportSession", "closeReason", "tabHiddenMs"} {
+		if _, present := entry.Data[key]; present {
+			t.Errorf("%s = %v, want dropped", key, entry.Data[key])
+		}
+	}
+}

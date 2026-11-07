@@ -102,6 +102,7 @@ func (rt *Runtime) publishPetRelocation(key petOwnerKey, state *petSession, pet 
 	state.generation++
 	state.relocatedAtMs = nowMs
 	state.summonedAtMs = 0
+	state.arrivedAtMs = 0
 	view := rt.companionPresentation(key.division, state, pet)
 	if view == nil {
 		return nil

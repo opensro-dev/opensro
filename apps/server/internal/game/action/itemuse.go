@@ -168,6 +168,17 @@ func (rt *Runtime) HandleItemUse(
 	unlock := rt.lockDivision(divisionID)
 	defer unlock()
 
+	// The native use door refuses while the character interacts with a
+	// stall, as its keeper or as a visitor, before the item is read
+	// (ErrCodeCantUseItemWhileInteract). An open exchange is a
+	// different interaction state and keeps its uses.
+	if rt.Stalls.Keeping(divisionID, character.Name) {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+	if _, visiting := rt.Stalls.Visiting(divisionID, character.Name); visiting {
+		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
+	}
+
 	result := itemUseFailure(wire.ErrCodeInvalidRequest)
 	// A use that revives the player publishes after its commit (revivalFrames
 	// rebinds the resident region, which reads the committed character).
@@ -177,6 +188,9 @@ func (rt *Runtime) HandleItemUse(
 	// this door closes, then the scroll is spent (namechange.go).
 	var queuedName string
 	var queuedNowMs int64
+	// A crest delete the closure admitted: the crest clears after this
+	// door closes, then the item is spent (crestdelete.go).
+	var crestDelete string
 	// The object the 0x3449 sparkle plays on: the user, unless the item
 	// names a pet (petItemVisualTarget).
 	var visualGID uint32
@@ -357,6 +371,13 @@ func (rt *Runtime) HandleItemUse(
 			// spend after the door closes (finishNameChangeUse).
 			queuedName = rt.admitNameChangeUse(divisionID, character, tail, nowMs, &result)
 			queuedNowMs = nowMs
+			return false
+		}
+		if family == itemUseCrestDelete {
+			// The guild and union doors take their own locks, so they
+			// cannot run inside this character door: admit here, clear
+			// and spend after the door closes (finishCrestDeleteUse).
+			crestDelete = rt.admitCrestDeleteUse(character, ref, tail, &result)
 			return false
 		}
 		if family == itemUseGenderTool {
@@ -768,6 +789,9 @@ func (rt *Runtime) HandleItemUse(
 	}
 	if queuedName != "" {
 		rt.finishNameChangeUse(divisionID, character, request, used, queuedName, queuedNowMs, &result)
+	}
+	if crestDelete != "" {
+		rt.finishCrestDeleteUse(divisionID, character, request, used, crestDelete, &result)
 	}
 	return result
 }

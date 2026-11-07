@@ -11,6 +11,7 @@ contents are server-owned; the store commits currency and inventory together.
 package action
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"opensro.online/server/internal/domain"
@@ -24,6 +25,49 @@ import (
 
 // Browser reference projection; retail purchases still use 706D type 18.
 const opMallCatalog uint16 = 15
+
+// Browser silk-history inquiry (port-only, #2269). The native window
+// ships in v1.150 with its Inquire button wired to an empty stub and no
+// packet ever answers it, so the inquiry rides the replacement
+// transport's control range like the catalogue does. The period is the
+// native combo's index: 1 day, 7 days, 1 month, 3 months.
+const opMallSilkHistory uint16 = 18
+
+var mallSilkPeriodDays = [...]int{1, 7, 30, 90}
+
+// The most uses one answer lists; the period total is never capped.
+const mallSilkHistoryLimit = 100
+
+/*
+================
+mallSilkHistoryRequest
+================
+*/
+type mallSilkHistoryRequest struct {
+	Period int `json:"period"`
+}
+
+/*
+================
+mallSilkHistoryEntry
+================
+*/
+type mallSilkHistoryEntry struct {
+	At      int64  `json:"at"`
+	Charged uint32 `json:"charged"`
+}
+
+/*
+================
+mallSilkHistoryProjection
+================
+*/
+type mallSilkHistoryProjection struct {
+	Version int                    `json:"version"`
+	Period  int                    `json:"period"`
+	Total   uint32                 `json:"total"`
+	Rows    []mallSilkHistoryEntry `json:"rows"`
+}
 
 /*
 ================
@@ -66,6 +110,7 @@ registerMall
 */
 func (rt *Runtime) registerMall(hub *transport.Hub) {
 	hub.Handle(opMallCatalog, rt.hubHandler(hub, rt.HandleMallCatalog))
+	hub.Handle(opMallSilkHistory, rt.hubHandler(hub, rt.HandleMallSilkHistory))
 }
 
 /*
@@ -105,6 +150,46 @@ func (rt *Runtime) HandleMallCatalog(division string, character *enterworld.Char
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
 	return OpResult{Frames: []wire.Frame{frame}}
+}
+
+/*
+================
+HandleMallSilkHistory
+
+The window's period is the request's only input; the account is the
+session character's own, exactly as the catalogue's. Uses are listed
+newest first with the period's total charge beside them.
+================
+*/
+func (rt *Runtime) HandleMallSilkHistory(division string, character *enterworld.Character, payload []byte) OpResult {
+	if character == nil || rt.mallAuthority == nil || len(payload) == 0 || len(payload) > 64 {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	var request mallSilkHistoryRequest
+	if err := decoder.Decode(&request); err != nil || request.Period < 0 || request.Period >= len(mallSilkPeriodDays) {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	snapshot := rt.characterSnapshot(division, character)
+	if snapshot == nil || snapshot.DeletePending {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	rows, total, err := rt.mallAuthority.SilkHistory(character, mallSilkPeriodDays[request.Period], mallSilkHistoryLimit)
+	if err != nil {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	projection := mallSilkHistoryProjection{Version: 1, Period: request.Period, Total: total, Rows: []mallSilkHistoryEntry{}}
+	for _, row := range rows {
+		projection.Rows = append(projection.Rows, mallSilkHistoryEntry{At: row.AtMs / 1000, Charged: row.Charged})
+	}
+	answer, err := json.Marshal(projection)
+	if err != nil {
+		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	return OpResult{Frames: []wire.Frame{{Opcode: opMallSilkHistory, Payload: answer}}}
 }
 
 /*

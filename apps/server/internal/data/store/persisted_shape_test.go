@@ -104,6 +104,7 @@ var strictRecords = []struct {
 	{"job-rankings", reflect.TypeOf(domain.JobRankings{})},
 	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
 	{"unique-kill", reflect.TypeOf(domain.UniqueKill{})},
+	{"halloween-box-account", reflect.TypeOf(domain.HalloweenBoxAccount{})},
 }
 
 /*
@@ -148,6 +149,7 @@ func TestRecordFieldsBelongToTheCurrentSchema(t *testing.T) {
 // previous version's, each with the table its layout adds.
 var tableOnlySchemaSteps = map[int]string{
 	25: "layout 10 adds economy_ledger (economy_ledger.go)",
+	39: "layout 12 adds silk_history (silkhistory.go)",
 }
 
 /*

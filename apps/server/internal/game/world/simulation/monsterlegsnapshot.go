@@ -17,21 +17,27 @@ transactions (commitNavigation, commitActivity) stay exactly as they
 were; slices 2-4 widen the view to the actors in sight/help range and
 move planning itself onto it.
 
-The view is a pooled slice, not a map (#2030): storing the batch's
+The view is a retained slice, not a map (#2030): storing the batch's
 fat value copies in a hash map cost 3.6 GB a minute of bucket copies
 on the live shard (two heap pulls 60 s apart, 2026-11-03). Every
 reader walks the batch in its own order, so the positional read
 serves them all, and the view is dead when its batch finishes -
 RunAction runs the dispatch closure before returning, and the pooled
 leg's workers plan from copied values - so the batch's backing array
-returns to the pool for the next batch.
+returns to the state for the next batch.
+
+The state retains the backings itself instead of a sync.Pool: the
+collector empties a pool under exactly the allocation pressure the
+leg runs at, and the seeded-leg profile (2026-11-04) still charged
+the make below 38% of the leg's allocated bytes - a handful of
+multi-megabyte zeroed arrays per hundred legs. A bounded stack on
+MonsterState survives every collection; the bound keeps a freak
+batch's backing from being pinned forever.
 
 ===========================================================================
 */
 
 package simulation
-
-import "sync"
 
 /*
 ================
@@ -49,17 +55,36 @@ type legSnapshot struct {
 	actors []behaviorActorSnapshot
 }
 
+// maxRetainedLegSnapshots bounds the views MonsterState keeps for
+// reuse (one per in-flight batch, plus slack for the pooled leg's
+// workers); past it a released view goes to the collector.
+const maxRetainedLegSnapshots = 4
+
+// maxRetainedLegSnapshotActors bounds a retained view's backing in
+// actors: a freak batch's multi-megabyte array is dropped on release
+// instead of pinned for the process's life.
+const maxRetainedLegSnapshotActors = 16384
+
 /*
 ================
-legSnapshotPool
+MonsterState.takeLegView
 
-Built views, ready for the next batch. A view is checked out by
-MonsterState.legSnapshot and returned by release once its batch has
-been dispatched; no reader may touch it afterwards.
+The next view to build into: a retained one when the state holds
+any, a fresh one otherwise. The retained stack rides its own mutex
+so a checkout never queues behind the population lock the build
+itself takes.
 ================
 */
-var legSnapshotPool = sync.Pool{
-	New: func() any { return &legSnapshot{} },
+func (s *MonsterState) takeLegView() *legSnapshot {
+	s.legViewMu.Lock()
+	defer s.legViewMu.Unlock()
+	if n := len(s.legViews); n > 0 {
+		view := s.legViews[n-1]
+		s.legViews[n-1] = nil
+		s.legViews = s.legViews[:n-1]
+		return view
+	}
+	return &legSnapshot{}
 }
 
 /*
@@ -74,7 +99,7 @@ generation covers that difference.
 ================
 */
 func (s *MonsterState) legSnapshot(key populationKey, refs []behaviorActorRef) *legSnapshot {
-	view := legSnapshotPool.Get().(*legSnapshot)
+	view := s.takeLegView()
 	view.key = key
 	if cap(view.actors) < len(refs) {
 		view.actors = make([]behaviorActorSnapshot, len(refs))
@@ -118,19 +143,24 @@ func (view *legSnapshot) actorAt(i int) (behaviorActorSnapshot, bool) {
 
 /*
 ================
-legSnapshot.release
+MonsterState.releaseLegSnapshot
 
-Hands the view back to the pool once its batch has been dispatched.
-The stored copies are cleared, so a pooled view holds no actor (or
-anything its pointers reach) alive between batches.
+Takes the view back once its batch has been dispatched. The stored
+copies are cleared, so a retained view holds no actor (or anything
+its pointers reach) alive between batches; a view past the retained
+bounds is left to the collector instead.
 ================
 */
-func (view *legSnapshot) release() {
-	if view == nil {
+func (s *MonsterState) releaseLegSnapshot(view *legSnapshot) {
+	if view == nil || cap(view.actors) > maxRetainedLegSnapshotActors {
 		return
 	}
 	clear(view.actors)
 	view.actors = view.actors[:0]
 	view.key = populationKey{}
-	legSnapshotPool.Put(view)
+	s.legViewMu.Lock()
+	defer s.legViewMu.Unlock()
+	if len(s.legViews) < maxRetainedLegSnapshots {
+		s.legViews = append(s.legViews, view)
+	}
 }

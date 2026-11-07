@@ -73,6 +73,14 @@ export type SessionCommand =
 		readonly incidentKind: "degraded" | "runtime" | "asset";
 		readonly code: string;
 		readonly message: string;
+		// How long the page was hidden during the entry a report names
+		// (entry-visibility.ts), for the world_entry_rejected incident.
+		readonly tabHiddenMs?: number;
+		// A thrown error's stack, when the reporter caught one (#2559):
+		// the message is capped far below a useful stack, so the stack
+		// rides its own field (ClientIncident.stack) and is bounded by
+		// the session when it files.
+		readonly stack?: string;
 	}
 	| LoginCommand
 	| {
@@ -119,16 +127,31 @@ export type SessionState = Readonly<{
 	error?: string;
 	// The last world failure's evidence, for the
 	// world_entry_rejected incident (#2311 item 4): the world phase
-	// that failed (a mid-world drop reports "world") and how much wire
-	// arrived on the attempt that failed.
+	// that failed (a mid-world drop reports "world"), how much wire
+	// arrived on the attempt that failed, the typed refusal the
+	// mint answered with when it answered one (#2557: "MAINTENANCE"
+	// files apart from real rejections), and closeReason, the failure's
+	// code (server_bye_3 when the server's BYE named the end), absent
+	// when the failure named none (#2558).
 	entryFailure?: {
 		readonly stage: string;
 		readonly bytesReceived: number;
 		readonly framesReceived: number;
+		readonly refusal?: string;
+		readonly closeReason?: string;
 	};
+	// The transport session the world is on (NetworkOwner
+	// .transportSessionId): the world_entry_rejected incident joins
+	// itself to the transport's session log lines by it (#2558).
+	transportSessionId?: string;
 	code?: string;
 	nativeTitleStatus?: number;
 	nativeTitleArgument?: number;
+	// The blocked login's two appended strings (#2271): the Agent sends
+	// them only with the status 3 argument 1 refusal, after the password
+	// verified.
+	nativeTitleBlockReason?: string;
+	nativeTitleBlockEnd?: string;
 	servers?: readonly ServerRecord[];
 	characters?: readonly CharacterRecord[];
 }>;

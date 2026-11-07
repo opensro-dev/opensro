@@ -80,9 +80,11 @@ Also:
 - **Describe what a player or operator will notice,** the native evidence you used, and the checks you ran. Paste failing output rather than "all green" when something failed.
 - **List every native claim the change relies on** in a table, one row per
   fact about the original: a function's behaviour, a field offset, a constant,
-  a message layout, a data rule. Write "none" when the change makes no native
-  claim. Each row names how it was checked, and an unchecked row is marked
-  open, never left out:
+  a message layout, a data rule. When the change makes no native claim, say
+  so in one line ("Native claims: none") and no table is needed; a
+  native-trace review seat is cut only when the table has rows. Each row
+  names how it was checked, and an unchecked row is marked open, never
+  left out:
 
   | Claim | Native evidence | Checked by | Status |
   | --- | --- | --- | --- |
@@ -112,9 +114,8 @@ Also:
   it". When an old tab cannot cope, bump the protocol instead: old tabs then
   get the 426 and load the new release. Tests, comments and client code
   outside the decoders need no trailer. The release-mistakes rules behind
-  this are collected in the ops release README's
-  [Coordinated releases](../apps/server/ops/release/README.md#coordinated-releases)
-  section (F6's COS bag cap broke a strict decoder).
+  this are kept with the operator's release tooling (F6's COS bag cap
+  broke a strict decoder).
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.

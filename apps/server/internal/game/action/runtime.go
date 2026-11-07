@@ -125,8 +125,11 @@ type Runtime struct {
 	returnGeneration atomic.Uint64
 	// surpriseFatalCount counts strikes that killed under a plan that
 	// could not kill: the roster gate's invariant made audible (#2030).
-	surpriseFatalCount  atomic.Uint64
-	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	surpriseFatalCount atomic.Uint64
+	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// arrivalLane holds the due return arrivals the tick handed off
+	// for the return lane to complete (returnscroll.go).
+	arrivalLane         returnArrivalLane
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
@@ -391,8 +394,9 @@ type Runtime struct {
 
 	// DropCap bounds the ordinary items one kill leaves once DropPassRate has
 	// grown its capacity: a uniform random subset survives. Gold heaps and a
-	// unique's prepass are never cut. 0 leaves every planned item (port-only,
-	// not native; the closed-beta growth switch sets it).
+	// unique's own first round (prepass plus its native assigned round) are
+	// never cut. 0 leaves every planned item (port-only, not native; the
+	// closed-beta growth switch sets it).
 	DropCap int
 
 	// DropMix gives named item families their own beta drop rate in place
@@ -455,6 +459,12 @@ type Runtime struct {
 	// composition root installs the counter only when EnvSealBoard is on.
 	SealDrops SealDropSink
 
+	// SunDrops counts Sun drops for the #2538 measurement cycle
+	// (sundrops.go; port-only, not native, count-only). Nil, the
+	// default, counts nothing; the composition root installs the
+	// counter only when EnvSunDropCount is on.
+	SunDrops SunDropSink
+
 	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
 	// in it (thiefparty.go; port-only, not native). False is native.
 	ThiefPartyBonus bool
@@ -475,6 +485,9 @@ type Runtime struct {
 	// pacing (MostWantedTestStreakStepFromEnv); set with MostWantedTest.
 	MostWantedTestStreakStep int64
 	mostWantedPairs          mostWantedPairs
+	// mostWantedHolders tracks the live streak holders the tick sweep
+	// owes an entry state frame or a lapse (mostwantedstate.go).
+	mostWantedHolders mostWantedHolderIndex
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.
 	MostWantedBountyTransfer bool
@@ -486,6 +499,9 @@ type Runtime struct {
 	// Most Wanted like a player kill (mostwanted.go; port-only, not
 	// native). False is native.
 	MostWantedCOSKills bool
+	// JobSuitTiers grants a worn job suit a bonus tiered by the wearer's
+	// job level (jobsuitbuff.go; port-only, not native). False is native.
+	JobSuitTiers bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field
@@ -511,6 +527,11 @@ type Runtime struct {
 	// KillStatsFlush receives the drained rollup (the economy history
 	// in the cmd wiring); nil keeps the rows in memory.
 	KillStatsFlush func(rows []KillStatRow) error
+	// OnlineSessions reads the session views of the characters entered
+	// in the world at the accrual instant (killstats.go, #2479): online
+	// time counts them, never the division roster of everyone who
+	// exists. Installed by the cmd wiring; nil accrues nobody.
+	OnlineSessions func() []simulation.SessionView
 	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
@@ -661,6 +682,19 @@ type Runtime struct {
 		expDelta, skillExpDelta int64,
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
+
+	// TrainingCampKill is the Academy cumulated-buff kill hook (#2270). The
+	// group reward loop calls it for each member's share before the grant:
+	// it accumulates the member's saved buff (or drains a received row for
+	// the bonus it returns, folded into the grant) and returns the private
+	// academy frames for that member's own session. Nil leaves
+	// cumulated-buff earning off (a unit runtime carries no camp door).
+	TrainingCampKill func(
+		divisionID string,
+		character *enterworld.Character,
+		exp, skillExp, monsterBaseExp int64,
+		nowMs int64,
+	) (bonusExp, bonusSkillExp int64, frames []wire.Frame)
 
 	// RefundExperience is the stat authority's door-free refund of EXP lost
 	// at death (a resurrection's share). Unlike UpdateExperience it is not a

@@ -170,9 +170,9 @@ func NewServerFromViper() (*Server, error) {
 func NewServer(cfg Config) (*Server, error) {
 	cfg.applyDefaults()
 	if cfg.HelloTimeout <= 0 || cfg.GracePeriod <= 0 ||
-		cfg.KeepaliveInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 ||
+		cfg.KeepaliveInterval <= 0 || cfg.WireProofInterval <= 0 || cfg.IdleTimeout <= 0 || cfg.EntryBootstrapBound <= 0 ||
 		cfg.RingParkBound <= 0 {
-		return nil, fmt.Errorf("transport: handshake, grace, keepalive, idle, entry bootstrap and ring park durations must be positive")
+		return nil, fmt.Errorf("transport: handshake, grace, keepalive, wire proof, idle, entry bootstrap and ring park durations must be positive")
 	}
 	if cfg.OutboundQueue <= 0 || cfg.OutboundQueueBytes <= 0 {
 		return nil, fmt.Errorf("transport: outbound queue frame and byte limits must be positive")
@@ -185,6 +185,9 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	if cfg.MaxSessionsPerAccount <= 0 {
 		return nil, fmt.Errorf("transport: max_sessions_per_account must be positive")
+	}
+	if cfg.MaxSessionsPerClient < 0 {
+		return nil, fmt.Errorf("transport: max_sessions_per_client cannot be negative")
 	}
 	if cfg.MaxPendingHandshakes <= 0 {
 		return nil, fmt.Errorf("transport: max_pending_handshakes must be positive")
@@ -287,7 +290,13 @@ func NewServer(cfg Config) (*Server, error) {
 		if err != nil {
 			return // Upgrade already replied with an error status
 		}
-		go s.Hub.AcceptConn(newWSConn(c))
+		// The edge recorded who really connected (clientaddr.go); the
+		// socket's own peer is the edge, so the fact is taken here,
+		// before the request is gone.
+		conn := newWSConn(c)
+		conn.clientAddr = clientAddr(r.RemoteAddr, r.Header)
+		conn.userAgent = r.Header.Get("User-Agent")
+		go s.Hub.AcceptConn(conn)
 	})
 	tcpMux.HandleFunc(PathCertHash, s.handleCertHash)
 	tcpMux.HandleFunc(PathHealth, func(w http.ResponseWriter, r *http.Request) {
@@ -373,7 +382,12 @@ func NewServer(cfg Config) (*Server, error) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		go s.Hub.AcceptConn(newWTConn(sess))
+		// The session keeps neither the request nor its headers once
+		// Upgrade returns: take the client facts here (clientaddr.go).
+		conn := newWTConn(sess)
+		conn.clientAddr = clientAddr(sess.RemoteAddr().String(), r.Header)
+		conn.userAgent = r.Header.Get("User-Agent")
+		go s.Hub.AcceptConn(conn)
 	})
 	wtMux.HandleFunc(PathCertHash, s.handleCertHash)
 

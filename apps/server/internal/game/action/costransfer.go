@@ -40,6 +40,7 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		// Port-only, not native (halloween.go): a sealed event helmet
 		// never leaves for a companion's bag; bringing one back is fine.
 		if q.MovementType == wire.MoveTypePlayerToCos && rt.HalloweenHelmetSeal.Sealed(item.Codename) {
+			refusalCode = wire.ErrCodeCannotEnterCosBag
 			return false
 		}
 		// A quest item never enters a companion's bag: the native

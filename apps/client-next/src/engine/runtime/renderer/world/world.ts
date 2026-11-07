@@ -12,6 +12,7 @@ world. Diagnostics observe it only through the frame probe (profile).
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
 import { waterReflectionMatrix } from "@/engine/foundation/rendering/water-reflection";
 import { blendAdds } from "@/engine/foundation/rendering/blend-state";
+import { sceneCameraFar } from "@/engine/foundation/rendering/dungeon-camera";
 import { planeKindOf } from "@/engine/foundation/world/plane";
 import { regionOffsetXZ, regionRelativeXZ, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
 import {
@@ -1789,9 +1790,12 @@ export function createWorldRenderer(
 				regionOffsetXZ( current.originRegion, camera.originRegion ) :
 				[ 0, 0 ];
 			if ( prune ) collectUnused( textures );
+			const dungeonScene = !!current &&
+				(current.dungeonVisibility !== undefined || planeKindOf( current.originRegion ) === "cave");
+			const sceneFar = sceneCameraFar( dungeonScene, backgroundDistance );
 			let localCamera: WorldCamera = {
 				...camera,
-				...(backgroundDistance !== undefined ? { far: backgroundDistance } : {}),
+				...(sceneFar !== undefined ? { far: sceneFar } : {}),
 				eye: [ camera.eye[0] + dx, camera.eye[1], camera.eye[2] + dz ] as const,
 				target: [ camera.target[0] + dx, camera.target[1], camera.target[2] + dz ] as const
 			};

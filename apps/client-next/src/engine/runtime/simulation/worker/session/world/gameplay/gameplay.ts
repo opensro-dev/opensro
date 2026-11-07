@@ -13,6 +13,7 @@ commands and cannot bypass actor eligibility.
 // player to trade.
 const ACTION_EXCHANGE = 1006;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
+import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
@@ -101,13 +102,22 @@ import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
+import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
 	partyMatchAckNotice,
+	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
+	partyMatchCompletionNotice,
+	partyMatchDeleteNotice,
+	partyMatchNoResultNotice,
 	partyMatchPacket,
+	partyMatchRegisterNotice,
 	partyMatchRequest,
+	partyMatchRows,
 	partyActiveJob,
+	partyIsFull,
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { NATIVE_LEVEL_CAP, publishedLevelCap } from "@/engine/foundation/gameplay/level-cap";
@@ -149,6 +159,7 @@ import {
 	FORTRESS_WAR_WITHDRAW,
 	fortressTaxNotice,
 	fortressDismissNotice,
+	fortressStructureNotice,
 	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
@@ -156,7 +167,8 @@ import {
 	FORTRESS_AIDE_CAPABILITY,
 	FORTRESS_STRUCTURE_LIST,
 	FORTRESS_STRUCTURE_REPAIR,
-	FORTRESS_STRUCTURE_UPGRADE
+	FORTRESS_STRUCTURE_UPGRADE,
+	fortressVariantTarget
 } from "@/engine/foundation/gameplay/fortress-map";
 import {
 	type FortressForgeItem,
@@ -188,6 +200,7 @@ import {
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
 import { petNameRefusal, petNameRequest, petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import {
+	EVENT_NOTICE_COLOR_ARGB,
 	fortressNotice,
 	isServerNoticeChannel,
 	serverNotification,
@@ -212,9 +225,14 @@ import {
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
-	academyOpenRequest
+	academyOpenRequest,
+	academyPassBuffRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
+import {
+	academyAcknowledgment,
+	academyBuffNotices,
+	academyStatusNotice
+} from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -314,6 +332,7 @@ import { createTargeting } from "./targeting/targeting";
 import { createMoveReservation, type GroundCommand } from "./reservation/reservation";
 import { createBetaPlayerMap } from "./beta-map/beta-map";
 import { createUniqueDamageRank } from "./unique-rank/unique-rank";
+import { createMostWanted } from "./most-wanted/most-wanted";
 import { createPetTraining } from "./pet-training/pet-training";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
@@ -358,7 +377,13 @@ player models, an item reference and the NPCs a ground click must clear.
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
-	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly item: (
+		refObjId: number
+	) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structureFacts?: (
+		refObjId: number
+	) => { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -467,6 +492,15 @@ export function createGameplay(
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
 	> = {};
 	let partyMatching = emptyPartyMatching();
+	// The native window's two facts the foundation state does not
+	// carry. The auto-match chain still living is a session fact
+	// (75EBD0's caller decides its prints by it). The filled-party
+	// latch is not: the native byte (data_cea6e0) is a process global
+	// the roster watcher sets (634DC9) and only the delete answer
+	// clears, so it survives world entry and exit until that answer
+	// spends it.
+	let partyMatchAutoSession = false;
+	let partyMatchFullLatch = false;
 	// The shard's configured level cap, published at world entry (#1749);
 	// the native cap until a bootstrap says otherwise.
 	let levelCap = NATIVE_LEVEL_CAP;
@@ -542,6 +576,7 @@ export function createGameplay(
 		moveReservation = createMoveReservation(),
 		betaMap = createBetaPlayerMap(),
 		uniqueRank = createUniqueDamageRank(),
+		mostWanted = createMostWanted(),
 		// The wolf tree's worn gear resolves through the bag's references.
 		petTraining = createPetTraining( ( ref, slot, magic ) => inventory.petGearItem( ref, slot, magic ) );
 	/*
@@ -1221,6 +1256,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// The Experimental "Highlight event notices" row (#2727): while on, a
+	// shard event notice queues with the event colour; off is the native
+	// beige line.
+	let highlightEventNotices = true;
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
@@ -1501,8 +1540,10 @@ selected entities, cooldowns or world-entry state.
 		moveReservation.clear();
 		betaMap.clear();
 		uniqueRank.clear();
+		mostWanted.clear();
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
+		partyMatchAutoSession = false;
 		levelCap = NATIVE_LEVEL_CAP;
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -1581,6 +1622,29 @@ selected entities, cooldowns or world-entry state.
 		cosResult = undefined;
 		cosError = null;
 	}
+	/*
+================
+oldestOutstanding
+
+The oldest request still waiting for its answer, and the lane it
+belongs to. Every lane whose lost answer resumes the session (world.ts
+lostAnswer): moves, the inventory transaction (mall purchases
+included, inventory busy()), and a pending target select or release
+(#1472).
+================
+	*/
+	function oldestOutstanding(): { at: number; lane: string; } | undefined {
+		const lanes: [number | undefined, string][] = [
+			[ movement.oldestPendingSentAt(), "movement" ],
+			[ inventorySince, "inventory" ],
+			[ targeting.waitingSince(), "targeting" ]
+		];
+		let oldest: { at: number; lane: string; } | undefined;
+		for ( const [at, lane] of lanes ) {
+			if ( at !== undefined && (!oldest || at < oldest.at) ) oldest = { at, lane };
+		}
+		return oldest;
+	}
 	const api = {
 		/*
 ================
@@ -1643,6 +1707,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
@@ -1676,6 +1741,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			returnScroll = undefined;
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
+			partyMatchAutoSession = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
@@ -2396,6 +2462,31 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 
+			if ( command.kind === "npc-event-exchange" ) {
+				const target = targeting.state(), conversation = npcConversation.state();
+				// Row 0x15's click: 7026B0 sends whether or not the
+				// bag holds the red socks - its scan (702728) is never
+				// tested, the empty bag, a match and the exhausted
+				// scan all reach the send block gated only by the
+				// opcode's sendability; whether socks are held is the
+				// server's business, answered 2/3 (ERROR_SOCKS). So
+				// the port's only terms are the row's own existence:
+				// the capability, the conversation standing on the
+				// target, and the phase test - while an exchange is
+				// waiting (or its answer window lapsed into uncertain)
+				// the row click stays silent, since the native send
+				// has no waiting state to re-enter and exchange()
+				// would throw. Every failed term just does nothing.
+				if (
+					!localGid || target.targetPending ||
+					(conversation.phase !== "menu" && conversation.phase !== "ready") ||
+					conversation.gid !== target.target ||
+					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION)
+				) return null;
+				npcConversation.exchange( now );
+				return null;
+			}
+
 			if ( command.kind === "gm-command" ) {
 				if ( !eligibility.gm || !localGid ) return null;
 				const frame = gmRequest(
@@ -2496,6 +2587,20 @@ state here before a command can claim a native wire conversation.
 				// The server serializes revival and rejects already-living actors.
 				const frame = { opcode: 0x32dc, payload: Uint8Array.of( command.choice ) };
 				send( frame );
+				// 5260DE: accepting the kind-3 box while the local
+				// flag-war team byte is set (a live match, in port
+				// terms) also opens the CIFTimedNotice line
+				// UIIT_MSG_FLAGWAR_GO_TO_ZONE (window 0x7530, kind
+				// 0x11): the warp to camp is server-driven, so the
+				// line is the whole client side of the accept. The
+				// port presents it on the notice lane.
+				if ( flagWarTeam !== null && flagWarTimerEndsAt > now ) {
+					notices = [
+						...notices.slice( -99 ),
+						{ key: "UIIT_MSG_FLAGWAR_GO_TO_ZONE", value: 0, sequence: ++noticeSequence }
+					];
+					dirty = true;
+				}
 				return frame;
 			}
 			if (
@@ -2528,6 +2633,22 @@ state here before a command can claim a native wire conversation.
 				return sendFrame( { opcode: 0x7017, payload: Uint8Array.of( 4 ) } );
 			}
 
+			// A committed search (637CF0 @637FC3) answers once: the
+			// same filter the render path runs, asked over the rows;
+			// an empty collection prints PSEARCH_NORESULT. Nothing is
+			// stored - the active search is already the window's.
+			if ( command.kind === "party-match-search" ) {
+				const leaderName = social.leader ?
+					social.members.find( member => member.id === social.leader )?.name ?? "" :
+					"";
+				if ( !partyMatchRows( partyMatching.rows, command.filter, "id", false, leaderName ).length ) {
+					const notice = partyMatchNoResultNotice();
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+				}
+				return null;
+			}
+
 			if (
 				command.kind === "party-match-page" || command.kind === "party-match-join" ||
 				command.kind === "party-match-register" || command.kind === "party-match-modify" ||
@@ -2544,7 +2665,42 @@ state here before a command can claim a native wire conversation.
 					(!partyMatching.request || partyMatching.request.a !== command.a ||
 						partyMatching.request.b !== command.b)
 				) return null;
+				// The register validator (6356A0): first match prints
+				// a type-4 line and nothing is sent. Modify skips it -
+				// a listing exists by construction there.
+				if ( command.kind === "party-match-register" ) {
+					const refusal = partyMatchRegisterNotice( {
+						listed: !!partyMatching.own,
+						inParty: social.members.length > 0,
+						master: !!social.leader && social.leader === social.self,
+						partyFull: partyIsFull( social.members.length, social.options ),
+						level: progression.level ?? 1
+					} );
+					if ( refusal ) {
+						notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
+						dirty = true;
+						return null;
+					}
+				}
 				const next = partyMatchRequest( partyMatching, command, now, levelCap );
+				if ( command.kind === "party-match-auto" ) {
+					if ( next.frame ) {
+						// A sent round announces itself at once
+						// (63B383); the answer path reports the
+						// chain from the first answer on.
+						const notice = partyMatchAutoStartNotice();
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+						partyMatchAutoSession = true;
+					} else if ( next.state.result === 2 ) {
+						// An auto round with nobody to ask (63B130
+						// @63B327) prints once and sends nothing.
+						const notice = partyMatchNoResultNotice();
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
+					}
+				}
+				if ( command.kind === "party-match-auto-stop" ) partyMatchAutoSession = false;
 				if ( next.frame ) send( next.frame );
 				partyMatching = next.state;
 				return next.frame;
@@ -2606,6 +2762,10 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "academy-compulsory-graduate" ) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
+			}
+			if ( command.kind === "academy-pass-buff" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyPassBuffRequest() );
 			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
@@ -3399,6 +3559,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
+			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
@@ -3859,6 +4020,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( mostWanted.receive( frame ) ) {
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === DEATH_NOTICE ) {
 					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
 					rebirthMode = frame.payload[0]!;
@@ -3973,6 +4138,37 @@ Packet handling must not depend on which HUD panel is currently open.
 					} else {
 						const answer = partyMatchAckNotice( frame.opcode, detail );
 						if ( answer ) notices = [ ...notices.slice( -99 ), { ...answer, sequence: ++noticeSequence } ];
+						// Success closes the window step: register and
+						// modify raise a centre banner alone (75E46B,
+						// 75E57C); the delete banner's wording reads
+						// the latch the roster watcher set (75B32B).
+						if ( flag === 1 ) {
+							const completion = partyMatchCompletionNotice( frame.opcode );
+							if ( completion ) {
+								notices = [ ...notices.slice( -99 ), { ...completion, sequence: ++noticeSequence } ];
+							}
+							if ( frame.opcode === 0xb535 ) {
+								const closed = partyMatchDeleteNotice( partyMatchFullLatch );
+								partyMatchFullLatch = false;
+								notices = [ ...notices.slice( -99 ), { ...closed, sequence: ++noticeSequence } ];
+							}
+						}
+					}
+					// While its session lives, the auto chain reports
+					// every non-acceptance join answer after the mapped
+					// line (75ED27 then the AUTO line); the exhausted
+					// chain closes the session (634E00).
+					if ( frame.opcode === 0xb5bf ) {
+						const accepted = flag === 1 && detail === 1;
+						const autoLine = partyMatchAutoNotice( {
+							sessionOpen: partyMatchAutoSession,
+							accepted,
+							candidatesRemain: matched.auto.length > 0
+						} );
+						if ( autoLine ) {
+							notices = [ ...notices.slice( -99 ), { ...autoLine, sequence: ++noticeSequence } ];
+							if ( !matched.auto.length ) partyMatchAutoSession = false;
+						} else if ( accepted ) partyMatchAutoSession = false;
 					}
 					if ( frame.opcode === 0xb5bf && !matched.pending && matched.auto.length ) {
 						const [id, ...auto] = matched.auto;
@@ -4000,11 +4196,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame );
+					const next = academyPacket( academy, frame, now );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
 							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
+						}
+						for ( const buffNotice of academyBuffNotices( academy, frame ) ) {
+							notices = [ ...notices.slice( -99 ), { ...buffNotice, sequence: ++noticeSequence } ];
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (
@@ -4109,7 +4308,24 @@ Packet handling must not depend on which HUD panel is currently open.
 					} else if ( frame.opcode === 0xb1e1 ) {
 						const taxed = fortressTaxNotice( fortressNext, taxFortress );
 						taxFortress = taxed.fortress;
-						const done = taxed.notice ?? fortressDismissNotice( fortressNext );
+						const structure = fortressNext.zones?.find( row =>
+							row.zone === fortressNext.service?.reference
+						);
+						const standing = structure?.ref ?
+							worldReferences.structureFacts?.( structure.ref ) :
+							undefined;
+						let variantName: string | undefined;
+						if ( structure?.ref ) {
+							const variant = fortressVariantTarget(
+								fortressNext.structureUpgrades?.get( structure.ref ),
+								structure.ref
+							);
+							if ( variant !== structure.ref ) {
+								variantName = worldReferences.structureName?.( variant );
+							}
+						}
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
+							fortressStructureNotice( fortressNext, standing, variantName );
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {
@@ -4122,6 +4338,26 @@ Packet handling must not depend on which HUD panel is currently open.
 						}
 					}
 					dirty = true;
+				}
+				if ( frame.opcode === 0x30c0 ) {
+					// 768530: the Magic Pang win banner. It reads {u32 prize
+					// reference, u16 quantity}, names the prize through the
+					// catalogue and banners UIIT_MSG_GACHA_ANNOUNCE (67D030)
+					// for every client that receives the frame - the %s is the
+					// prize's name, never a player's.
+					if ( frame.payload.length !== 6 ) throw Error( "Invalid gacha announcement" );
+					const reader = new DataView( frame.payload.buffer, frame.payload.byteOffset, 6 );
+					notices = [ ...notices.slice( -99 ), {
+						key: "UIIT_MSG_GACHA_ANNOUNCE",
+						value: reader.getUint16( 4, true ),
+						arguments: [ inventory.reference( reader.getUint32( 0, true ) ).name ?? "" ],
+						formatKinds: [ "s", "d" ],
+						notificationBanner: true,
+						bannerOnly: true,
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+					return false;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
@@ -4138,7 +4374,17 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( notice?.plusSeven && !plusSevenNotices ) return false;
 				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
-					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// Port-only, not native (#2727): while the "Highlight
+					// event notices" row is on, a shard event notice carries
+					// the event colour into the message log; the banner and
+					// the chat line keep their own presentation.
+					notices = [ ...notices.slice( -99 ), {
+						...notice,
+						sequence: ++noticeSequence,
+						...(notice.shardEvent && highlightEventNotices ?
+							{ colorArgb: EVENT_NOTICE_COLOR_ARGB } :
+							{})
+					} ];
 					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {
 						chat.receive( frame, localGid );
 					}
@@ -4381,6 +4627,12 @@ Packet handling must not depend on which HUD panel is currently open.
 							{ ...nextSocial, notice: undefined, notices: undefined } :
 							nextSocial
 					);
+					// 634DC9: a party that fills while the player's
+					// listing stands arms the delete banner's
+					// COMPLETE2 form (the delete answer consumes it).
+					if ( partyMatching.own && partyIsFull( social.members.length, social.options ) ) {
+						partyMatchFullLatch = true;
+					}
 					if (
 						social.invitation &&
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
@@ -4889,6 +5141,24 @@ Packet handling must not depend on which HUD panel is currently open.
 					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
+				// 755E40's codename chain: a crest delete's success raises
+				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
+				// title, the DELETE_COMPLETE body), where the register
+				// items would open their 0x1A/0x1B boxes (#2272's half).
+				const crestKind = used ? crestDeleteKind( used.refObjId ) : undefined;
+				if ( used && crestKind ) {
+					notices = [ ...notices.slice( -99 ), {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: {
+							title: "UIIT_STT_CONFIRM_BOX",
+							lines: [ crestDeleteKeys( crestKind ).complete ]
+						},
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
 				// 755E40: a subtype-4 item's success names the change it made,
 				// on the notice window (67D030), not in chat.
 				if ( used && isStallChangeItem( used.typeFlags ) ) {
@@ -5270,13 +5540,19 @@ session reads it to tell a stalled connection from a lost answer.
 		*/
 		noteInput: movement.noteInput,
 		outstandingSince(): number | undefined {
-			// Every lane whose lost answer resumes the session (world.ts
-			// lostAnswer): moves, the inventory transaction (mall purchases
-			// included, inventory busy()), and a pending target select or
-			// release (#1472).
-			const since = [ movement.oldestPendingSentAt(), inventorySince, targeting.waitingSince() ]
-				.filter( ( at ): at is number => at !== undefined );
-			return since.length ? Math.min( ...since ) : undefined;
+			return oldestOutstanding()?.at;
+		},
+		/*
+================
+outstandingLane
+
+Which lane the oldest outstanding request belongs to, or undefined.
+The stall incident names it: one lane stuck while the world streams
+is not a silent link (#2148).
+================
+		*/
+		outstandingLane(): string | undefined {
+			return oldestOutstanding()?.lane;
 		},
 		/*
 ================
@@ -5618,7 +5894,8 @@ The published plane when something changed since the last take, else null.
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
-				restorationRevision: npcConversation.restorationRevision()
+				restorationRevision: npcConversation.restorationRevision(),
+				npcEventGreeting: npcConversation.eventGreeting()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
 			const cos = activeCos ?
@@ -5714,6 +5991,7 @@ The published plane when something changed since the last take, else null.
 				...skillPress.state(),
 				betaPlayers: betaMap.players(),
 				uniqueDamageRank: uniqueRank.current(),
+				mostWanted: mostWanted.current(),
 				petTraining: petTraining.state(),
 				petTailwind: petTraining.tailwind(),
 				petGuidance: petTraining.guidance(),

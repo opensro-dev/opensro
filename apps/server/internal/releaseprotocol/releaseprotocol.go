@@ -47,12 +47,20 @@ type Contracts struct {
 	Friends    int // the friend request's prompt and consent
 	Notices    int // the port-only 0x3667 notice channels
 	Movement   int // the 0xB738 movement acknowledgement's source block
+	Wanted     int // the port-only 0x3FBA most-wanted state frame
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 11
+	Current = 12
+	// The wanted contract: 1 sends the port-only 0x3FBA most-wanted
+	// state (level, kills into the level, dressed job, kills per level,
+	// lapse) to a streak holder for the buff-board row (#1849). A
+	// protocol-11 client decodes nothing wrong but never shows the row;
+	// the bump sends every open tab the 426 that reloads it onto a
+	// client that can.
+	WantedContract = 1
 	// The movement contract: 1 carries the 0xB738 acknowledgement's
 	// source block as [f32 x][f32 y][f32 z] on every floor (#1744). The
 	// retail i16 x10 source words cap at +-3276.7 units, which the
@@ -112,8 +120,9 @@ var history = map[int]Contracts{
 	8:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
 	9:  {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1},
 	10: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1},
+	11: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1, Notices: 1, Movement: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract},
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract, Movement: MovementContract, Wanted: WantedContract},
 }
 
 /*

@@ -75,9 +75,14 @@ func (rt *Runtime) advanceOwnerFormation(step petCombatStep) []simulation.Frame 
 	if owner == nil {
 		return nil
 	}
-	world := rt.Worlds.Snapshot(simulation.WorldKey(step.key.division, step.snapshot.Name), func() simulation.WorldState {
-		return simulation.SeedWorldState(step.snapshot)
-	})
+	var world simulation.WorldState
+	if step.ownerWorld != nil {
+		world = *step.ownerWorld
+	} else {
+		world = rt.Worlds.Snapshot(simulation.WorldKey(step.key.division, step.snapshot.Name), func() simulation.WorldState {
+			return simulation.SeedWorldState(step.snapshot)
+		})
+	}
 	from, target := state.follower.Position(step.nowMs), world.LiveSpawnAt(step.nowMs)
 	distance := monster.NativeOwnerFollowDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Z: from.Z}, monster.Pose{RegionID: target.RegionID, X: target.X, Z: target.Z})
 	var frames []simulation.Frame

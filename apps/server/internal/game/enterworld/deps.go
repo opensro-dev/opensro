@@ -66,6 +66,11 @@ type refObjSnapshotCache struct {
 
 type Deps struct {
 	BrowserReferences *BrowserReferences
+	// SiegeStructUpgrades is the resolved siege structure upgrade
+	// table the bootstrap publishes (fortress_upgrades.go); the
+	// composition root resolves it once from the boot textdata, and
+	// fixtures leave it empty.
+	SiegeStructUpgrades []SiegeStructUpgradeRow
 	// refObjCache memoizes the filtered RefObj snapshot; installed by
 	// NewDevDepsWithRoster, nil in fixtures (see refObjSnapshotCache).
 	refObjCache *refObjSnapshotCache
@@ -174,6 +179,12 @@ type Deps struct {
 	// zero on the client: CIFMagicStateBoard_OnUpdate (6E6AA0) does not retire
 	// a kind-3 pet-skill window solely because its timer reached zero.
 	TrackTimedWindows func(divisionID, characterName string)
+	// TrackMostWanted hands a character holding a Most Wanted streak to
+	// the action runtime's tick sweep (port-only, #1849), which sends
+	// the entry wanted state and enforces the level's seven-day lapse.
+	// Without it a relogged holder's buff-board row would never appear
+	// and a lapsed level would outlive its seven days.
+	TrackMostWanted func(divisionID, characterName string)
 	// ExtraMagicOptionIDs names options live item producers can create after
 	// bootstrap. Their definitions must precede the first result body.
 	ExtraMagicOptionIDs func() []uint32
@@ -221,7 +232,15 @@ type Deps struct {
 	QueueRename func(divisionID string, character *Character, name string, nowMs int64) (RenameQueueOutcome, error)
 	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
 	fixtureJobRankings map[string]domain.JobRankings
-	ReadCharacter      func(divisionID string, read func())
+	// HalloweenAccountRecord is the account's daily Halloween box count
+	// (store halloweenboxes.go, port-only #2547): the live record, read
+	// or mutated only inside a write door. Nil keeps the records in
+	// fixtureHalloweenBoxes below.
+	HalloweenAccountRecord func(accountID string) *domain.HalloweenBoxAccount
+	// fixtureHalloweenBoxes is HalloweenAccount's store when no authority
+	// is wired.
+	fixtureHalloweenBoxes map[string]*domain.HalloweenBoxAccount
+	ReadCharacter         func(divisionID string, read func())
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
@@ -261,6 +280,10 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	) []Packet
+	// EntryEventFrames are a running event's notices for a login (not a
+	// re-entry): port-only, action/halloween_waves.go; nil or empty sends
+	// nothing.
+	EntryEventFrames func(divisionID string, character *Character) []Packet
 
 	Letters       LetterStore
 	Guilds        GuildStore
@@ -583,6 +606,30 @@ func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
 
 /*
 ================
+HalloweenAccount
+
+Production supplies the authority's account record. The in-memory
+fallback is for isolated gameplay fixtures, which do not run a durable
+authority; it keeps one record per account id for the fixture's life.
+================
+*/
+func (d *Deps) HalloweenAccount(accountID string) *domain.HalloweenBoxAccount {
+	if d.HalloweenAccountRecord != nil {
+		return d.HalloweenAccountRecord(accountID)
+	}
+	if d.fixtureHalloweenBoxes == nil {
+		d.fixtureHalloweenBoxes = map[string]*domain.HalloweenBoxAccount{}
+	}
+	record := d.fixtureHalloweenBoxes[accountID]
+	if record == nil {
+		record = &domain.HalloweenBoxAccount{}
+		d.fixtureHalloweenBoxes[accountID] = record
+	}
+	return record
+}
+
+/*
+================
 WeekRankings
 ================
 */
@@ -780,6 +827,7 @@ func (d *Deps) Validate() error {
 	require("ExtraRefItemCodenames", d.ExtraRefItemCodenames == nil)
 	require("StaticRefItemCodenames", d.StaticRefItemCodenames == nil)
 	require("TrackTimedWindows", d.TrackTimedWindows == nil)
+	require("TrackMostWanted", d.TrackMostWanted == nil)
 	require("SpawnTerrainHeight", d.SpawnTerrainHeight == nil)
 	require("SpawnSurfaceHeight", d.SpawnSurfaceHeight == nil)
 	require("RelocateStrandedSpawn", d.RelocateStrandedSpawn == nil)

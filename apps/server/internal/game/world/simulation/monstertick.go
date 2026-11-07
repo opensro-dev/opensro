@@ -379,6 +379,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 	phaseStarted = time.Now()
 	queueStarted := time.Now()
 	batches := ops.Monsters.behaviorBatchesForDivision(nowMs, ops.divisionID)
+	// The batches die with this leg: their refs backings return to
+	// the scratch pool once every batch below is dispatched (#2030).
+	defer ops.Monsters.releaseBehaviorBatches(batches)
 	stats.queue = time.Since(queueStarted)
 	for _, batch := range batches {
 		divisionID := batch.key.division
@@ -399,7 +402,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 		view := ops.Monsters.legSnapshot(batch.key, batch.actors)
 		if ops.pooledLeg() && len(batch.actors) > 1 {
 			stepped = ops.runPooledBatch(batch, view, players, sessions, push, nowMs, stats, stepped)
-			view.release()
+			ops.Monsters.releaseLegSnapshot(view)
 			continue
 		}
 		for index, ref := range batch.actors {
@@ -413,7 +416,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			// (#2047 review, carried by the generation since #2137
 			// slice 1). The direct path below reads the same view at
 			// the same adjacency it always had.
-			if !ops.Monsters.behaviorActorLive(batch.key, ref.gid) {
+			if !ops.Monsters.behaviorActorLiveAt(batch.key, ref) {
 				continue
 			}
 			if ops.noteResumed(batch.key, ref.gid) {
@@ -441,7 +444,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			}
 			ops.advanceAndPublish(divisionID, actor, players, nowMs, sessions, push)
 		}
-		view.release()
+		ops.Monsters.releaseLegSnapshot(view)
 	}
 	stats.batch = time.Since(phaseStarted)
 	stats.actors = stepped

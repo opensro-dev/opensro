@@ -143,6 +143,7 @@ func (r *InviteRuntime) CommitMatchJoin(joinerSession *transport.Session, divisi
 	}
 	campID = admission.Camp.ID
 	campMembers := admission.Members
+	r.hydrateBuffCamp(divisionID, campID, campMembers)
 	rows := r.campWireRows(divisionID, campMembers)
 	joinerWireRow := r.memberWireRow(divisionID, joinerRow)
 	_ = joinerSession.Send(OpTCStatus, EncodeCampSeed3AC5WithEvaluation(joinerWireRow.MemberID, admission.Camp.EvaluationRank, admission.Camp.Subject, admission.Camp.Contents, rows))

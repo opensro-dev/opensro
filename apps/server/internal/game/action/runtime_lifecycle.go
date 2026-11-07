@@ -187,6 +187,9 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		// cargo and live position as this tick left them.
 		step("advanceCaravans", func() { rt.advanceCaravans(nowMs) })
 		step("advancePetSkillWindows", func() { rt.advancePetSkillWindows(nowMs) })
+		// Port-only (#1849): entry wanted states and the seven-day lapse
+		// for tracked holders; a no-op while SRO_MOST_WANTED is off.
+		step("advanceMostWanted", func() { rt.advanceMostWanted(nowMs) })
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		// Port-only (killstats.go): online-time accrual and the rollup
 		// flush; a no-op while SRO_KILL_STATS is off.
@@ -679,16 +682,9 @@ from other characters' rosters must resolve records on a fresh client too.
 ==================
 */
 func (rt *Runtime) GroundRefItemCodenames(divisionID string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, item := range rt.Ground.All(divisionID) {
-		if item.Codename == "" || seen[item.Codename] {
-			continue
-		}
-		seen[item.Codename] = true
-		out = append(out, item.Codename)
-	}
-	return out
+	// The seam names codenames only; the registry reads them under its
+	// lock without the deep copy of every drop All would pay (#2030).
+	return rt.Ground.Codenames(divisionID)
 }
 
 /*

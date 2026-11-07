@@ -5,11 +5,13 @@ combatcopy_test.go - the combat roots read nothing from the bag (#1943)
 
 The basic attack (engage and every continuation tick), the projectile
 release, the periodic pulse, the pulse area, the skill-object owner
-pass, the attacking hawk's strike tick, the heal-over-time pulse's
+pass, the attacking hawk's strike tick, the timed target's view of
+its ally, the heal-over-time pulse's
 retained caster view, the targeted recovery cast's recipient view,
 the lowest-party-heal candidate copies, the party-resurrection
-member copies and the Scream Mask's member snapshot and attacker
-view take the narrow combat copy:
+member copies, the recovery effect's recipient copies, the Scream Mask's member snapshot and attacker view,
+and the support-cast walker's tick and completion copies take the
+narrow combat copy:
 equipment rows and the avatar inventory, no bag rows. The skill press
 takes the cast copy: the combat rows plus the companion-carrying bag
 rows, because its flow resolves companions through the copy. Each scenario here runs twice on a bag loaded
@@ -581,6 +583,40 @@ func targetedHealTrace(t *testing.T, full bool) string {
 
 /*
 ================
+recoveryEffectTrace
+
+One targeted Healing cast on a bag-loaded party mate, through the
+recovery effect's recipient pick. The pick detaches one copy per
+vector entry and reads only its aliveness; the token-0 effect add
+for the mate is the pick's visible output, so the trace holds the
+result, the batches and that add's presence. A pick that read the
+mate's bag rows or resolved the mate's companions through its copy
+would diverge or drop the add.
+================
+*/
+func recoveryEffectTrace(t *testing.T, full bool) string {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_TARGET_A_01")
+	affordable(&skill)
+	p := newSupportPair(t, skill)
+	loadCombatBag(p.m)
+	if full {
+		forceFullCombatCopy(p.rt)
+	}
+	r, batches := p.castReleased(t, skill, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(p.m)})
+	trace := fmt.Sprintf("%+v %+v\n", r, batches)
+	mateGID := enterworld.ObjectIDForCharacter(p.m)
+	adds := effectAdds(t, skill, r, batches)
+	if len(adds) != 1 || adds[0] != mateGID {
+		t.Fatalf("recovery effect adds = %v, want the mate %d once; the trace would agree vacuously", adds, mateGID)
+	}
+	if *p.m.CurrentHP <= 1 {
+		t.Fatal("the targeted heal never landed; the trace would agree vacuously")
+	}
+	return trace + fmt.Sprintf("matehp=%d adds=%v rows=%s", *p.m.CurrentHP, adds, combatRowsView(p.m))
+}
+
+/*
+================
 lowestHealTrace
 
 One Healing Division cast over a party whose lowest-ratio member is
@@ -759,6 +795,73 @@ func TestTargetedResurrectionOfferReadsTheEquipmentBand(t *testing.T) {
 
 /*
 ================
+timedTargetTrace
+
+A Force Blessing linked onto an ally whose bag is loaded, and its end
+state: the recipient half on the ally, the ally's strength and its
+rows. The timed-target root takes the combat copy of the ALLY; the
+load-bearing read is the ally's current Strength through that copy:
+the caster's charity (HLFS 40) makes the raw write 4 + 40, so the
+recipient half's bonus is set by the 50 % cap on the ally's Strength,
+and the ally carries that Strength on an equipment row's magic
+option. A copy that lost the equipment band would cap the bonus
+lower and the end state would diverge; the bag's summon row would
+diverge it too if the root resolved the ally's companions through
+its copy.
+================
+*/
+func timedTargetTrace(t *testing.T, full bool) string {
+	rt, _, c := concealmentFixture(t, forceBlessingA1)
+	rt.deps.(*enterworld.Deps).MagicOptions = gaugeOptions{11: {ParamID: 11, OptionName: "MATTR_STR", Tag: 0x737472}}
+	var charity enterworld.SkillRow
+	charity.ID, charity.Group, charity.Level = 90003, 90003, 1
+	charity.PassiveParameters.Pinned = true
+	charity.PassiveParameters.Mask = enterworld.SkillParameterMask(1) << enterworld.ParameterBlessStrength
+	charity.PassiveParameters.Values[enterworld.ParameterBlessStrength] = 40
+	rt.deps.SkillData().(staticSkillSource)[charity.ID] = charity
+	c.Skills = append(c.Skills, charity.ID)
+	ally := nearbyCharacter(rt, c, 21, "ally", 1)
+	bare, _, err := rt.playerCombatStats(testDivision, ally)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range ally.MissionInventory {
+		if ally.MissionInventory[i].Slot <= 12 {
+			ally.MissionInventory[i].MagicOptions = append(ally.MissionInventory[i].MagicOptions, uint64(20)<<32|11)
+		}
+	}
+	dressed, _, err := rt.playerCombatStats(testDivision, ally)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dressed.Strength <= bare.Strength {
+		t.Fatalf("the strength option never landed: bare %v dressed %v; the cap would bind on nothing", bare.Strength, dressed.Strength)
+	}
+	loadCombatBag(ally)
+	if full {
+		forceFullCombatCopy(rt)
+	}
+	cast := wire.SkillAction{ActionId: forceBlessingA1, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(ally)}.Encode()
+	r := rt.HandleTargetInteract(testDivision, c, cast)
+	if r.DiagnosticRefusal != "" {
+		t.Fatalf("timed target refused: %+v", r)
+	}
+	halves := linkedHalves(rt, ally.Name, forceBlessingA1)
+	if len(halves) != 1 || halves[0] != 2 {
+		t.Fatalf("the blessing never landed on the ally; the trace would agree vacuously: %v", halves)
+	}
+	blessed, _, err := rt.playerCombatStats(testDivision, ally)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := float32(int32(dressed.Strength)) * 0.5; float32(blessed.Strength-dressed.Strength) != want {
+		t.Fatalf("recipient bonus %v, want the 50%% cap %v of the ally's dressed strength %v; the cap never bound", blessed.Strength-dressed.Strength, want, dressed.Strength)
+	}
+	return fmt.Sprintf("%+v\n", r) + fmt.Sprintf("halves=%v strength=%v rows=%s", halves, blessed.Strength, combatRowsView(ally))
+}
+
+/*
+================
 TestCombatRootsReadNoBagRowsFromTheirCopy
 ================
 */
@@ -766,7 +869,7 @@ func TestCombatRootsReadNoBagRowsFromTheirCopy(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		trace func(*testing.T, bool) string
-	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}, {"scream mask (monster attacker)", screamMaskMonsterTrace}, {"scream mask (player attacker)", screamMaskPlayerTrace}} {
+	}{{"basic attack", basicAttackTrace}, {"projectile release", projectileTrace}, {"periodic pulse", periodicTrace}, {"pulse area", pulseAreaTrace}, {"skill object explosion", skillObjectTrace}, {"hawk strike", hawkTrace}, {"heal-over-time pulse", healOverTimeTrace}, {"targeted heal", targetedHealTrace}, {"lowest-party heal", lowestHealTrace}, {"party resurrection", partyResurrectionTrace}, {"targeted resurrection", targetedResurrectionTrace}, {"recovery effect", recoveryEffectTrace}, {"scream mask (monster attacker)", screamMaskMonsterTrace}, {"scream mask (player attacker)", screamMaskPlayerTrace}, {"support-cast walker (heal)", supportHealWalkTrace}, {"support-cast walker (guard)", supportGuardWalkTrace}, {"support-cast walker (duplicate)", supportDuplicateWalkTrace}, {"support-cast walker (discord)", supportDiscordWalkTrace}, {"timed target", timedTargetTrace}} {
 		narrow, full := c.trace(t, false), c.trace(t, true)
 		a, b := strings.Split(narrow, "\n"), strings.Split(full, "\n")
 		for i := range a {

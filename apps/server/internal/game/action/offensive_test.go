@@ -33,7 +33,7 @@ shippedOffense
 Resolve authored rows; asset-free environments skip these catalog cases.
 ================
 */
-func shippedOffense(t *testing.T, code string) enterworld.SkillRow {
+func shippedOffense(t testing.TB, code string) enterworld.SkillRow {
 	t.Helper()
 	dir := clientdata.RetailTextdataDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "skilldata.txt")); err != nil {

@@ -106,7 +106,28 @@ func isVersionMismatch(err error) bool {
 // Version 34 adds the optional Halloween daily box count (halloweenBoxDay,
 // halloweenBoxCount; port-only, SRO_HALLOWEEN_EVENT). The offline upgrade
 // rewrites no record.
-const CurrentVersion = 34
+// Version 35 adds the optional wanted-level lapse (mostWanted.expiresAtMs,
+// port-only, #1849): the time a suited player's wanted level lapses.
+// Streaks saved earlier carry none and lapse at their next level. The
+// offline upgrade rewrites no record.
+// Version 36 moves the Halloween daily box count to the account (the
+// halloweenBoxes metadata plane, port-only, #2547): the cap counts per
+// account, not per character. The character halloweenBoxDay/Count fields
+// stay as the seed the account record is derived from at first load; the
+// offline upgrade rewrites no record.
+// Version 37 adds the optional time-online record (character online,
+// port-only, #2675): the credited total and rolling UTC week the public
+// boards rank by. Characters saved earlier carry none and start
+// counting at their next login; the offline upgrade rewrites no record.
+// Version 38 adds the Academy cumulated-buff state to camp members
+// (buffValue, buffWindowStartMs, buffLive, reservedBuffs; #2270): the
+// saved buff a student accumulates and the received rows it passes to
+// the Guardian. Members saved earlier carry none of it and hold no
+// buff; the offline upgrade rewrites no record.
+// Version 39 changes no record: layout 12 adds the silk_history table
+// (port-only, silkhistory.go), the movement record the Item Mall's silk
+// history window lists (#2269). The upgrade rewrites no record.
+const CurrentVersion = 39
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -130,6 +151,11 @@ type Meta struct {
 	NextGuildID  map[string]int64                  `json:"nextGuildId,omitempty"`
 	TradeRewards map[string]domain.TradeRewardPool `json:"tradeRewards,omitempty"`
 	JobRankings  map[string]domain.JobRankings     `json:"jobRankings,omitempty"`
+	// HalloweenBoxes is the per-account daily box count (#2547), keyed
+	// by account id. Records are pointers: a settlement mutates the one
+	// record inside its door and the commit stages it, exactly like a
+	// character record.
+	HalloweenBoxes map[string]*domain.HalloweenBoxAccount `json:"halloweenBoxes,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

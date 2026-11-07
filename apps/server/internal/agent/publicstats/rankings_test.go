@@ -99,6 +99,123 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 
 /*
 ================
+TestRankingsOnlineBoardOrdersByTotalThenWeek
+
+The time-online board (#2675): the credited totals order the rows, the
+rolling week breaks a tie, and hidden players stay off the board even
+with the largest total on the shard.
+================
+*/
+func TestRankingsOnlineBoardOrdersByTotalThenWeek(t *testing.T) {
+	f := newFixture()
+	f.chars[0].Online = &domain.OnlineRecord{TotalSeconds: 7200, Days: []domain.OnlineDay{{Day: 20260101, Seconds: 3600}}}
+	f.chars[1].Online = &domain.OnlineRecord{TotalSeconds: 7200, Days: []domain.OnlineDay{{Day: 20260101, Seconds: 7200}}}
+	f.chars[2].Online = &domain.OnlineRecord{TotalSeconds: 999999}
+	s := f.service()
+	byOnline := rankingNames(t, s, "/public/v1/rankings?by=online")
+	if len(byOnline.Rows) != 2 {
+		t.Fatalf("by online rows = %d, want 2 (Shy hidden)", len(byOnline.Rows))
+	}
+	if byOnline.Rows[0].Name != "Lune" || byOnline.Rows[0].OnlineSeconds != 7200 || byOnline.Rows[0].OnlineWeekSeconds != 7200 {
+		t.Fatalf("by online first row %+v, want Lune (week breaks the tie)", byOnline.Rows[0])
+	}
+	if byOnline.Rows[1].Name != "Kekw" || byOnline.Rows[1].OnlineWeekSeconds != 3600 || byOnline.Rows[1].Rank != 2 {
+		t.Fatalf("by online second row %+v", byOnline.Rows[1])
+	}
+}
+
+/*
+================
+TestRankingsJobBoardsListOneJobEach
+
+Each job board lists only its own job, ordered by job level, then job
+experience, then character level; the row carries the same job level
+and experience the profile publishes. Hidden and jobless characters
+never appear (#2675).
+================
+*/
+func TestRankingsJobBoardsListOneJobEach(t *testing.T) {
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	f.chars = append(f.chars,
+		&domain.Character{ID: 10, Name: "TraderTop", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(40),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 7, Exp: 0}},
+		&domain.Character{ID: 11, Name: "TraderRich", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 5, Exp: 250}},
+		&domain.Character{ID: 12, Name: "TraderPoor", ModelCodename: "CHAR_EU_WOMAN_WARRIOR", Level: lvl(50),
+			Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 5, Exp: 100}},
+		&domain.Character{ID: 13, Name: "HunterOne", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(20),
+			Job: domain.CharacterJob{Type: domain.JobHunter, Grade: 2, Exp: 999}},
+		&domain.Character{ID: 14, Name: "TraderGhost", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			PublicHidden: true, Job: domain.CharacterJob{Type: domain.JobTrader, Grade: 9, Exp: 9999}},
+	)
+	s := f.service()
+
+	traders := rankingNames(t, s, "/public/v1/rankings?by=trader")
+	names := []string{}
+	for _, row := range traders.Rows {
+		names = append(names, row.Name)
+	}
+	if want := "TraderTop,TraderRich,TraderPoor"; join(names) != want {
+		t.Fatalf("by trader %s, want %s (hidden and other jobs left out)", join(names), want)
+	}
+	if traders.Total != 3 || traders.Rows[0].Rank != 1 ||
+		traders.Rows[0].JobLevel != 7 || traders.Rows[1].JobExp != 250 || traders.Rows[2].Job != "trader" {
+		t.Fatalf("trader rows %+v", traders.Rows)
+	}
+	hunters := rankingNames(t, s, "/public/v1/rankings?by=hunter")
+	if len(hunters.Rows) != 1 || hunters.Rows[0].Name != "HunterOne" || hunters.Rows[0].JobLevel != 2 {
+		t.Fatalf("by hunter %+v", hunters.Rows)
+	}
+	if thieves := rankingNames(t, s, "/public/v1/rankings?by=thief"); thieves.Total != 0 || len(thieves.Rows) != 0 {
+		t.Fatalf("by thief %+v, want an empty board", thieves)
+	}
+	european := rankingNames(t, s, "/public/v1/rankings?by=trader&race=european")
+	if len(european.Rows) != 1 || european.Rows[0].Name != "TraderPoor" || european.Rows[0].Rank != 1 {
+		t.Fatalf("european traders %+v", european.Rows)
+	}
+	if code := get(t, s, "/public/v1/rankings?by=guildmaster", nil); code != http.StatusBadRequest {
+		t.Errorf("by=guildmaster answered %d, want 400", code)
+	}
+}
+
+/*
+================
+TestRankingsPKBoardCountsMurdersNotPenalty
+
+The PK board's value is the PK state's total murder count, never the
+penalty level it feeds; a character with no record counts zero (#2675).
+================
+*/
+func TestRankingsPKBoardCountsMurdersNotPenalty(t *testing.T) {
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	f.chars = append(f.chars,
+		&domain.Character{ID: 20, Name: "Murderer", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(60),
+			PK: &domain.PKRecord{DailyCount: 2, TotalCount: 41, Penalty: 9000}},
+		&domain.Character{ID: 21, Name: "Brawler", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(80),
+			PK: &domain.PKRecord{TotalCount: 41, Penalty: 10}},
+		&domain.Character{ID: 22, Name: "Hidden", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			PublicHidden: true, PK: &domain.PKRecord{TotalCount: 99}},
+	)
+	s := f.service()
+	byPK := rankingNames(t, s, "/public/v1/rankings?by=pk")
+	if byPK.Rows[0].Name != "Brawler" || byPK.Rows[0].PKKills != 41 ||
+		byPK.Rows[1].Name != "Murderer" || byPK.Rows[1].PKKills != 41 {
+		t.Fatalf("by pk %+v (equal counts: higher level first; penalty never orders)", byPK.Rows[:2])
+	}
+	for _, row := range byPK.Rows {
+		if row.Name == "Hidden" {
+			t.Fatal("a hidden character reached the PK board")
+		}
+	}
+	if byPK.Rows[2].PKKills != 0 {
+		t.Fatalf("a character with no murders counts %d, want 0", byPK.Rows[2].PKKills)
+	}
+}
+
+/*
+================
 join
 ================
 */

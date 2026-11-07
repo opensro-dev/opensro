@@ -12,6 +12,11 @@
 # The base checkout is full-depth so the script's `base...HEAD` diff can
 # resolve the base inside the head repository, where a stale branch's own
 # history does not reach it.
+#
+# The base is resolved live (the branch, then its tip inside the run), not
+# from the event payload's base.sha: that sha is stale on an `edited` event
+# fired after the base moved (opensro#2699's old-tab runs 42186615553 /
+# 42188233841 got a pre-gate base checkout that way).
 name: native-claims
 
 on:
@@ -39,7 +44,7 @@ jobs:
       - name: Check out the base gate script (the script under trust)
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
           sparse-checkout: scripts/checks
           path: base-gate
@@ -50,9 +55,9 @@ jobs:
 
       - name: New client citations have a claims row
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           cp base-gate/scripts/checks/check_native_claims.mjs scripts/checks/check_native_claims.mjs
+          PR_BASE_SHA=$(git -C base-gate rev-parse HEAD)
           git fetch --no-tags ./base-gate "$PR_BASE_SHA"
-          node scripts/checks/check_native_claims.mjs
+          PR_BASE_SHA="$PR_BASE_SHA" node scripts/checks/check_native_claims.mjs

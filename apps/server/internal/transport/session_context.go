@@ -90,6 +90,7 @@ func (s *Session) BindCharacter(divisionID, characterName string, objectID uint3
 	}
 	s.mu.Unlock()
 	s.hub.reindexDivision(s)
+	s.hub.applyCharacterRestrictions(s)
 }
 
 // CharacterBinding returns a coherent copy of the bound identity.

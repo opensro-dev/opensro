@@ -284,6 +284,34 @@ test("native login argument is validated, published and cleared on retry and suc
 	assert.equal( session.step().nativeTitleArgument, undefined );
 	session.dispose();
 });
+
+test("blocked login strings are published with the refusal and validated", async t => {
+	let body = {
+		ok: false,
+		nativeTitleStatus: 3,
+		nativeTitleArgument: 1,
+		code: "ACCOUNT_BLOCKED",
+		message: "The account is blocked.",
+		blockReason: "chargeback review",
+		blockEnd: "2030-01-01 00:00:00"
+	};
+	t.mock.method( globalThis, "fetch", async () => Response.json( body ) );
+	const session = createSession();
+	session.command( command );
+	session.step();
+	await settle();
+	const state = session.step();
+	assert.equal( state.phase, "failed" );
+	assert.equal( state.nativeTitleStatus, 3 );
+	assert.equal( state.nativeTitleBlockReason, "chargeback review" );
+	assert.equal( state.nativeTitleBlockEnd, "2030-01-01 00:00:00" );
+	body = { ...body, blockReason: 42 };
+	session.command( command );
+	session.step();
+	await settle();
+	assert.match( session.step().error, /Invalid block detail/ );
+	session.dispose();
+});
 test("authentication commits on a tick and never publishes the bearer", async t => {
 	const requests = [];
 	t.mock.method( globalThis, "fetch", async ( url, options ) => {

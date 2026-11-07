@@ -11,6 +11,7 @@ import (
 
 	nomad "github.com/hashicorp/nomad/api"
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/testsupport/opstree"
 	"opensro.online/server/internal/transport"
 )
 
@@ -293,24 +294,13 @@ func TestNomadGameWorldVariablesCarryGMAllowlist(t *testing.T) {
 }
 
 func TestRawExecBoundariesDenyInheritedControlPlaneCredentials(t *testing.T) {
-	moduleRoot := filepath.Clean("../../..")
+	// The job templates are in the private ops tree (opstree).
+	ops := opstree.Require(t)
 	paths := []string{
-		filepath.Join(moduleRoot, "ops", "nomad", "jobs", agentTemplateName),
-		filepath.Join(moduleRoot, "ops", "nomad", "jobs", gameTemplateName),
-		filepath.Join(
-			moduleRoot,
-			"ops",
-			"nomad",
-			"config",
-			"client-windows-agent-production.hcl.example",
-		),
-		filepath.Join(
-			moduleRoot,
-			"ops",
-			"nomad",
-			"config",
-			"client-windows-production.hcl.example",
-		),
+		filepath.Join(ops, "nomad", "jobs", agentTemplateName),
+		filepath.Join(ops, "nomad", "jobs", gameTemplateName),
+		filepath.Join(ops, "nomad", "config", "client-windows-agent-production.hcl.example"),
+		filepath.Join(ops, "nomad", "config", "client-windows-production.hcl.example"),
 	}
 	for _, path := range paths {
 		payload, err := os.ReadFile(path)

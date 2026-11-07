@@ -211,8 +211,11 @@ if the target has moved away again.
 */
 func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, intent basicAttackIntent, nowMs int64, doors characterDoors) OpResult {
 	division := intent.DivisionID
-	snapshot := rt.characterSnapshot(division, character)
-	recipient := rt.characterSnapshot(division, rt.findCharacterByGid(division, intent.TargetGid))
+	// The tick weighs record facts off both copies - the caster's
+	// standing, the pair's body radii and both seats - and nothing
+	// from either bag (#2209).
+	snapshot := rt.characterSnapshotCombat(division, character)
+	recipient := rt.characterSnapshotCombat(division, rt.findCharacterByGid(division, intent.TargetGid))
 	skills := rt.deps.SkillData()
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) ||
 		recipient == nil || skills == nil || rt.skillCastPostureBlocked(division, snapshot, nowMs) {
@@ -246,15 +249,18 @@ func (rt *Runtime) advanceSupportCastIntent(character *enterworld.Character, int
 		return OpResult{}
 	}
 	cast := wire.SkillAction{ActionId: intent.SkillID, HasTarget: true, TargetGid: intent.TargetGid}
+	// The completion re-detaches the caster for the accept it lands
+	// in; each accept family reads that copy's record facts, worn
+	// band and avatar, never its bag (#2209).
 	if skill.TimedEffect.Targeted {
-		return prependOpResult(transition, rt.acceptTimedTargetEffect(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs))
+		return prependOpResult(transition, rt.acceptTimedTargetEffect(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs))
 	}
 	if skill.Duplicate.Pinned {
-		return prependOpResult(transition, rt.acceptDuplicate(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs))
+		return prependOpResult(transition, rt.acceptDuplicate(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs))
 	}
 	if skill.Threat.Decrease {
-		return prependOpResult(transition, rt.acceptDiscordWave(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs))
+		return prependOpResult(transition, rt.acceptDiscordWave(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs))
 	}
-	result, _ := rt.acceptSupportSkillPhase(division, character, rt.characterSnapshot(division, character), cast, skill, nowMs, nil)
+	result, _ := rt.acceptSupportSkillPhase(division, character, rt.characterSnapshotCombat(division, character), cast, skill, nowMs, nil)
 	return prependOpResult(transition, result)
 }

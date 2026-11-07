@@ -376,6 +376,15 @@ test("a member append prints the join line only when online (5F3340)", () => {
 		memberRow( writer().u8( 2 ), 5, "Newbie", 1 ).frame( 0x3b29 )
 	);
 	assert.equal( offline.notice, undefined );
+	// The local player's own row never prints: native reaches the join
+	// line only for the member the join event just cached (76239A ->
+	// 5F3340 name compare), and the self row arrives with the roster.
+	const self = socialPacketOf(
+		guildState,
+		memberRow( writer().u8( 2 ), 6, "Echo", 0 ).frame( 0x3b29 )
+	);
+	assert.equal( self.notice, undefined );
+	assert.equal( self.guild?.members.length, 2 );
 });
 
 test("sub-op 5 &0x10 banners the notice update; &4 still levels (5E4710)", () => {

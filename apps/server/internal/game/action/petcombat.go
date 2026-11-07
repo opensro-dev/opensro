@@ -176,9 +176,14 @@ owner instead.
 ================
 */
 type petCombatStep struct {
-	key        petOwnerKey
-	state      *petSession
-	snapshot   *enterworld.Character
+	key      petOwnerKey
+	state    *petSession
+	snapshot *enterworld.Character
+	// ownerWorld is the owner world a judged tick already read without
+	// seeding (WorldStore.SnapshotExisting, #2139); the formation lane
+	// uses it instead of seeding from snapshot. Nil on the copy path,
+	// which seeds exactly as before.
+	ownerWorld *simulation.WorldState
 	pet        *enterworld.CharacterCOS
 	ref        *enterworld.CharacterRef
 	run        float32

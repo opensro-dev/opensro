@@ -77,12 +77,18 @@ var unlistedSettings = map[string]string{
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	// Cosmetic item rows the variant build imports; the GameWorld reads no
+	// such switch, the items simply exist in the built data.
+	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
 	// Staff telemetry (#1691): name-free seal counts by degree and tier
 	// for the staff console; players never meet it.
 	economy.EnvSealCensus: "staff seal census telemetry, not a rule players meet",
+	// Staff telemetry (#2538): the Sun counting cycle measures supply
+	// before any Sun knob; players never meet it.
+	action.EnvSunDropCount: "staff Sun drop counting for one measurement cycle, not a rule players meet",
 }
 
 /*
@@ -240,8 +246,8 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
-				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
-				Why:    "A helmet the event paid was never meant to reach a market."},
+				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
+				Why:    "A helmet the event paid was never meant to reach another player."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",
@@ -325,8 +331,16 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Requested for the beta so a bigger cargo draws a clearly bigger ambush; the original returns with one setting."},
 			{Flag: monster.EnvJobMonsterSpeed, On: monster.JobMonsterSpeedFromEnv(),
 				Native: "Thief and hunter monsters move at their original speed.",
-				Now:    "Thief and hunter monsters walk and run 20% faster.",
+				Now:    "Thief and hunter monsters walk and run 30% faster.",
 				Why:    "Requested for the beta so job ambushes keep up with a transport; the original returns with one setting."},
+			{Flag: monster.EnvJobMonsterAggression, On: monster.JobMonsterAggressionFromEnv(),
+				Native: "Thief and hunter monsters wait out the ordinary spawn hold before they can attack, and hit for their authored damage.",
+				Now:    "Thief and hunter monsters attack as soon as they spawn, and their damage is doubled.",
+				Why:    "Owner request (#2474) so a trade-run ambush is a threat from the first second; the original returns with one setting."},
+			{Flag: enterworld.EnvJobTransportSpeed, On: enterworld.JobTransportSpeedFromEnv(),
+				Native: "Job trade transports move at their original speed.",
+				Now:    "Job trade transports walk and run 30% faster.",
+				Why:    "Owner request (#2474) so a loaded transport is not run down as easily; the original returns with one setting."},
 			{Flag: action.EnvTransportFollow, On: action.TransportFollowFromEnv(),
 				Native: "A trade transport you step off stays where it stands, and you cannot walk more than 100 m away from it.",
 				Now:    "A trade transport you step off follows you on foot, like a pet.",
@@ -382,6 +396,12 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
 				Now:    "Trader and hunter suits hide worn armour too.",
 				Why:    "Requested for the beta, so every job suit reads clearly; the original look returns with one setting."},
+			{Flag: action.EnvJobSuitTiers, On: action.JobSuitTiersFromEnv(),
+				Native: "A job suit shows your job and gates job play; it grants no stats.",
+				Now: "While you wear a job suit, your job level grants a tier: tier 1 at job level 1, then at 2, 3, 5 and 7. " +
+					"A tier adds STR and INT (1, 5, 10, 15 and 20 by tier) and 1% move speed per tier, shown as a buff with your job's icon for 7 days from each wear. " +
+					"Taking the suit off ends it; which suit you wear only picks the look, and every suit still asks its own job level to wear.",
+				Why: "Requested for the beta, to make job levels worth climbing in China and Europe alike; the original returns with one setting."},
 			{Flag: action.EnvMoonlitThiefSuit, On: action.MoonlitThiefSuitFromEnv(),
 				Native: "The level-20 thief suits look as they always have: a black hood with red trim, or the European suit's own look.",
 				Now:    "They wear the Moonlit Ash look: the higher thief suit's outfit in ash-silver silk with pale-gold trim. Only the look changes.",

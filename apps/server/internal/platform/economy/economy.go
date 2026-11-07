@@ -91,6 +91,10 @@ type Service struct {
 	snapshotAt   time.Time
 	distribution map[string]Distribution
 	divisions    []string
+	// rollup is the snapshot's ledger folded by hour (rollup.go),
+	// published with snapshotAt; series, flows and flags read it and
+	// never the ledger itself (#2477).
+	rollup []rollupEntry
 	// killStats serves /economy/v1/killstats (killstats.go); false
 	// answers 404 (SRO_KILL_STATS off, the default).
 	killStats bool
@@ -187,7 +191,8 @@ func (s *Service) Run(ctx context.Context) {
 Service.Snapshot
 
 One snapshot now: the store copies itself, the distribution is computed
-from the copy once, and the gold totals join the history.
+from the copy once, the ledger is folded into the hourly rollup
+(rollup.go), and the gold totals join the history.
 ================
 */
 func (s *Service) Snapshot() error {
@@ -205,6 +210,10 @@ func (s *Service) Snapshot() error {
 	if err != nil {
 		return err
 	}
+	entries, err := readRollup(db)
+	if err != nil {
+		return err
+	}
 	divisions := make([]string, 0, len(blocks))
 	for division, block := range blocks {
 		if division != "" {
@@ -217,7 +226,7 @@ func (s *Service) Snapshot() error {
 	}
 	sortStrings(divisions)
 	s.mu.Lock()
-	s.snapshotAt, s.distribution, s.divisions = at, blocks, divisions
+	s.snapshotAt, s.distribution, s.divisions, s.rollup = at, blocks, divisions, entries
 	s.mu.Unlock()
 	return nil
 }

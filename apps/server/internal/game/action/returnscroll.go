@@ -8,9 +8,14 @@ returnscroll.go - authoritative travel and scene re-entry
 package action
 
 import (
+	"context"
 	"math"
+	"runtime/debug"
 	"sort"
+	"sync"
+	"time"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -354,24 +359,43 @@ func (rt *Runtime) cancelReturnOnDeathInDoor(division string, c *enterworld.Char
 	return []wire.Frame{teleportState(c, 0)}
 }
 
-// maxReturnScrollCompletionsPerTick bounds the arrivals one tick pays
-// for (#2143): a completion is a full world transfer (store door,
-// membership move, pet relocation, entry-packet rebuild), and a wave
-// of casts landing together used to run every one of them inline -
-// the hook's measured worst is 556 ms over 492 slow calls. Leftovers
-// stay due in returnCasts and drain at this rate on later ticks; a
-// cast waited seconds already, so the added ticks are invisible, and
-// one completion always runs so the queue can never stall.
-const maxReturnScrollCompletionsPerTick = 2
+// A return arrival is entry-class work - a full world transfer
+// (store door, membership move, pet relocation, entry-packet
+// rebuild) - and the tick no longer runs it inline (#2143). The
+// tick's earlier bounds (two completions per tick, a bounded wait
+// for the division lane) still left the completion itself and its
+// remaining waits on the hook, which kept naming past 100 ms on the
+// live shard. So advanceReturnScrolls only scans, sorts and queues
+// the due casts, and the return lane (RunReturnArrivals) completes
+// them oldest first under the same gate and lane a request-path
+// teleport takes; a slow arrival names itself on the lane
+// (returnScrollArrival) instead of charging the tick.
+
+/*
+================
+returnArrivalLane
+
+The due arrivals the tick has handed off and the lane has not yet
+completed. queued holds every job sitting in queue plus the one
+being run, so a cast that stays due across ticks is handed off
+once; runReturnArrival drops its job when it finishes.
+================
+*/
+type returnArrivalLane struct {
+	mu     sync.Mutex
+	queue  []pendingReturn
+	queued map[pendingReturn]struct{}
+	wake   chan struct{}
+}
 
 /*
 ================
 advanceReturnScrolls
 
-Complete the due return casts, oldest first, at most
-maxReturnScrollCompletionsPerTick of them; the rest wait for later
-ticks (#2143). The map's own order is random, so the due sort is also
-what makes a waiting wave fair.
+Queue the due return casts for the return lane, oldest first
+(#2143). The map's own order is random, so the due sort is also what
+makes a waiting wave fair. Nothing of the arrival itself runs here:
+the scan, the sort and the queue append are all that is left.
 ================
 */
 func (rt *Runtime) advanceReturnScrolls(now int64) {
@@ -392,34 +416,168 @@ func (rt *Runtime) advanceReturnScrolls(now int64) {
 		}
 		return jobs[i].name < jobs[j].name
 	})
-	if len(jobs) > maxReturnScrollCompletionsPerTick {
-		jobs = jobs[:maxReturnScrollCompletionsPerTick]
+	rt.enqueueReturnArrivals(jobs)
+}
+
+/*
+================
+enqueueReturnArrivals
+
+Hand due arrivals to the return lane. Never blocks the tick: the
+hand-off is a slice append behind the lane's short mutex, and the
+wake signal is buffered, so a lane already awake misses nothing.
+A job already handed off (queued, or being run) is not queued
+twice; it stays in returnCasts until its completion settles it.
+================
+*/
+func (rt *Runtime) enqueueReturnArrivals(jobs []pendingReturn) {
+	if len(jobs) == 0 {
+		return
 	}
+	lane := &rt.arrivalLane
+	lane.mu.Lock()
+	if lane.wake == nil {
+		lane.wake = make(chan struct{}, 1)
+	}
+	if lane.queued == nil {
+		lane.queued = make(map[pendingReturn]struct{})
+	}
+	queued := false
 	for _, job := range jobs {
-		frames, peers := rt.completeReturnScrollInDivision(job, now)
-		if len(frames) > 0 && rt.PushCharacterFrames != nil {
-			rt.PushCharacterFrames(job.division, job.name, frames)
+		if _, ok := lane.queued[job]; ok {
+			continue
 		}
-		if len(peers) > 0 && rt.PushDivisionPeerFrames != nil {
-			rt.PushDivisionPeerFrames(job.division, job.name, peers)
+		lane.queued[job] = struct{}{}
+		lane.queue = append(lane.queue, job)
+		queued = true
+	}
+	wake := lane.wake
+	lane.mu.Unlock()
+	if queued {
+		select {
+		case wake <- struct{}{}:
+		default:
 		}
 	}
 }
 
 /*
 ================
+RunReturnArrivals
+
+The return lane's loop: complete the arrivals the tick queued,
+oldest first, until ctx ends. Wired beside the ticker in
+cmd/services/sro-gameworld. A runtime nobody runs this on keeps its
+arrivals queued (tests drain them through processReturnArrivals).
+================
+*/
+func (rt *Runtime) RunReturnArrivals(ctx context.Context) {
+	for {
+		rt.arrivalLane.mu.Lock()
+		if rt.arrivalLane.wake == nil {
+			rt.arrivalLane.wake = make(chan struct{}, 1)
+		}
+		wake := rt.arrivalLane.wake
+		rt.arrivalLane.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-wake:
+		}
+		rt.processReturnArrivals()
+	}
+}
+
+/*
+================
+processReturnArrivals
+
+Run every queued arrival, oldest first, until the queue empties;
+arrivals queued while a batch runs are picked up by the next pass.
+The lane's loop calls this per wake, and tests call it to drain
+deterministically.
+================
+*/
+func (rt *Runtime) processReturnArrivals() {
+	for {
+		rt.arrivalLane.mu.Lock()
+		jobs := rt.arrivalLane.queue
+		rt.arrivalLane.queue = nil
+		rt.arrivalLane.mu.Unlock()
+		if len(jobs) == 0 {
+			return
+		}
+		for _, job := range jobs {
+			rt.runReturnArrival(job)
+		}
+	}
+}
+
+/*
+================
+runReturnArrival
+
+Complete one handed-off arrival: the division's publication gate
+held across the completion and the frame pushes, under the
+arrival's own label, exactly as a request-path teleport holds it -
+so a long hold names the arrival instead of the tick that used to
+run it. A panic costs this arrival only; the lane continues with
+the next, as the ticker recovers a hook.
+================
+*/
+func (rt *Runtime) runReturnArrival(job pendingReturn) {
+	defer rt.untrackReturnArrival(job)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("action: return arrival %s/%s panicked (recovered, lane continues): %v\n%s", job.division, job.name, r, debug.Stack())
+		}
+	}()
+	started := time.Now()
+	release := rt.LockPublication(job.division, "returnArrival")
+	defer release()
+	frames, peers := rt.completeReturnScrollInDivision(job, rt.Now().UnixMilli())
+	if len(frames) > 0 && rt.PushCharacterFrames != nil {
+		rt.PushCharacterFrames(job.division, job.name, frames)
+	}
+	if len(peers) > 0 && rt.PushDivisionPeerFrames != nil {
+		rt.PushDivisionPeerFrames(job.division, job.name, peers)
+	}
+	if elapsed := time.Since(started); elapsed >= simulation.SlowHookThreshold && rt.Steps.Slow != nil {
+		rt.Steps.Slow("returnScrollArrival", elapsed)
+	}
+}
+
+/*
+================
+untrackReturnArrival
+
+Drop a finished arrival from the lane's handed-off set, so a cast
+re-armed under a new generation can be handed off again.
+================
+*/
+func (rt *Runtime) untrackReturnArrival(job pendingReturn) {
+	rt.arrivalLane.mu.Lock()
+	delete(rt.arrivalLane.queued, job)
+	rt.arrivalLane.mu.Unlock()
+}
+
+/*
+================
 completeReturnScrollInDivision
+
+Runs one completion under its division lane, from the return lane.
+The wait for the lane is the lane's own time now, never the tick's;
+a wait past the slow threshold still names itself
+(returnScrollDivisionWait) instead of charging whatever called it
+(#1820 E).
 ================
 */
 func (rt *Runtime) completeReturnScrollInDivision(job pendingReturn, now int64) ([]wire.Frame, []wire.Frame) {
-	// The wait for the division lane is timed as its own step
-	// (returnScrollDivisionWait), outside the completion's work: a job
-	// queued behind a long lane holder used to charge that wait to
-	// whatever named it (#1820 E, the tickPublicationGate rule).
-	var unlock func()
-	rt.Steps.Time("returnScrollDivisionWait", func() {
-		unlock = rt.lockDivision(job.division)
-	})
+	started := time.Now()
+	unlock := rt.lockDivision(job.division)
+	if elapsed := time.Since(started); elapsed >= simulation.SlowHookThreshold && rt.Steps.Slow != nil {
+		rt.Steps.Slow("returnScrollDivisionWait", elapsed)
+	}
 	defer unlock()
 	return rt.completeReturnScroll(job, now)
 }
@@ -531,6 +689,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	rt.clearCompoundJob(compoundKey{job.division, job.name})
 	corpses, corpseDespawns := rt.retireCompanionCorpsesDeferred(job.division, c)
 	frames := append(missionReentryFrames(packets), corpses...)
+	frames = append(frames, rt.petArrivalFrames(job.division, c)...)
 	frames = append(frames, headActor...)
 	frames = append(frames, headPublic...)
 	// Only the body status is replayed here; read it under the door

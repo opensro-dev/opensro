@@ -37,6 +37,13 @@ type wsConn struct {
 	frames chan Frame
 	closed chan struct{}
 
+	// clientAddr and userAgent are the accept request's client facts,
+	// set by the listener before AcceptConn (server.go): the real
+	// client behind the local edge (clientaddr.go) and its User-Agent.
+	// Empty for in-process connections, which keep the raw peer.
+	clientAddr string
+	userAgent  string
+
 	// writeMu serializes WriteFrame with Close's graceful close-frame
 	// write: gorilla panics on concurrent writers. Close takes it only
 	// when free (TryLock); a parked write means the socket is closed
@@ -181,16 +188,26 @@ func (w *wsConn) WriteUnreliable(Frame) error {
 // either. A write aborted this way errors and the write loop detaches;
 // the frame keeps its stream position, and a resume re-sends it only
 // if the client's position says it never arrived (stream_ring.go).
+//
+// The close frame itself is written from its own goroutine (#2142): a
+// game goroutine closes a session while it holds a division lane (an
+// outbound overflow, an eviction), and a peer that stopped reading made
+// this write wait out its whole deadline with the lane held, stalling
+// every player in the division. Close returns at once; the goroutine owns
+// writeMu until the frame is written or its deadline passes, then closes
+// the socket.
 func (w *wsConn) Close(reason string) error {
 	var err error
 	w.closeOnce.Do(func() {
 		close(w.closed)
 		if w.writeMu.TryLock() {
 			msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason)
-			_ = w.c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-			_ = w.c.WriteMessage(websocket.CloseMessage, msg)
-			err = w.c.Close()
-			w.writeMu.Unlock()
+			go func() {
+				defer w.writeMu.Unlock()
+				_ = w.c.SetWriteDeadline(time.Now().Add(wsCloseFrameDeadline))
+				_ = w.c.WriteMessage(websocket.CloseMessage, msg)
+				_ = w.c.Close()
+			}()
 			return
 		}
 		err = w.c.Close()
@@ -198,6 +215,32 @@ func (w *wsConn) Close(reason string) error {
 	return err
 }
 
+// wsCloseFrameDeadline bounds the close frame's write; the socket closes
+// when it passes even if the peer never read the frame.
+const wsCloseFrameDeadline = 2 * time.Second
+
 func (w *wsConn) Kind() string { return "websocket" }
 
-func (w *wsConn) RemoteAddr() string { return w.c.RemoteAddr().String() }
+/*
+================
+RemoteAddr
+
+The client this connection serves: the accept request's forwarded
+client when the listener recorded one, else the socket's peer.
+================
+*/
+func (w *wsConn) RemoteAddr() string {
+	if w.clientAddr != "" {
+		return w.clientAddr
+	}
+	return w.c.RemoteAddr().String()
+}
+
+/*
+================
+ClientUserAgent
+
+The accept request's User-Agent, "" when none was recorded.
+================
+*/
+func (w *wsConn) ClientUserAgent() string { return w.userAgent }

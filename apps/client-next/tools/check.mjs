@@ -28,12 +28,23 @@ const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) 
 const node = process.execPath;
 const SOURCE_FLAG = "--source";
 const ASSET_ARCHITECTURE_TESTS = new Set( [ "audio-parity-audit.test.mjs" ] );
-const SOURCE_GATE_NAMES = new Set( [ "verify:test-types", "typecheck", "typecheck:gallery", "verify:layout" ] );
+const SOURCE_GATE_NAMES = new Set( [
+	"verify:test-types",
+	"typecheck",
+	"typecheck:gallery",
+	"verify:layout",
+	"verify:dependencies",
+	"verify:ui-census"
+] );
 
 // Longest first, so the critical path starts immediately.
 const GATES = [
 	// Reuses each file's pass while every input it read is unchanged.
 	[ "test", [ "tools/run-tests.mjs", "tests/architecture", "tests/runtime" ] ],
+	// The joint-longest gate: keys its own inputs (ui.ts's import closure,
+	// the tool, the committed census, the built assets) and reuses the
+	// last pass while they are unchanged (ui-action-census-gate.mjs).
+	[ "verify:ui-action-census", [ "tools/ui-action-census-gate.mjs" ] ],
 	[ "verify:test-types", [ "tools/verify-test-types.mjs" ] ],
 	[ "typecheck", [
 		path.join( clientRoot, "node_modules", "typescript", "bin", "tsc" ),
@@ -49,6 +60,9 @@ const GATES = [
 	] ],
 	[ "verify:execution", [ "tools/generate-execution-map.mjs" ] ],
 	[ "verify:ownership", [ "tools/verify-ownership.mjs" ] ],
+	[ "verify:dependencies", [ "tools/verify-dependencies.mjs" ] ],
+	[ "verify:allocations", [ "--expose-gc", "tools/perf/bench/ui-allocation-gauge.mjs" ] ],
+	[ "verify:ui-census", [ "tools/ui-census.mjs" ] ],
 	[ "verify:capabilities", [ "tools/verify-capabilities.mjs" ] ],
 	[ "verify:layout", [ "tools/verify-layout.mjs" ] ],
 	[ "verify:retail-panels", [ "tools/audit-retail-panels.mjs" ] ],

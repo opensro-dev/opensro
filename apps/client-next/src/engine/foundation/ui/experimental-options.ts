@@ -76,8 +76,6 @@ export interface ExperimentalOptions {
 	// (equipmentGlowCatalog, equipmentEnchantSparks). On by default (owner
 	// 2026-10-17, 2026-10-24); an explicit false restores the native v1.150 look.
 	readonly enchantSparks: boolean;
-	// Port-only wolf skill tree controls; requires the server's matching opt-in.
-	readonly attackPetTraining: boolean;
 	// Port-only, not native: the Actions window gains Auto Select (action 1005,
 	// select-nearest.ts). Native holds the code but no row or key reaches it.
 	readonly autoSelect: boolean;
@@ -126,6 +124,13 @@ export interface ExperimentalOptions {
 	// #1738). On unless turned off; off hides them from the banner and
 	// the chat log.
 	readonly breakNotices: boolean;
+	// Port-only, not native (#2727): shard event announcements (the
+	// shardEvent notices) print in red in the bottom-right message log.
+	// The native box colours only category 6 light blue and every other
+	// category the default beige (0x67A600), so the highlight is the
+	// client's own. On unless turned off (the owner's ask, 2026-11-06);
+	// off is the native beige line.
+	readonly highlightEventNotices: boolean;
 	// Port-only, not native: when a unique the player damaged dies, the
 	// shard's damage ranking (0x3FBC, server SRO_UNIQUE_DAMAGE_RANK) opens
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
@@ -247,6 +252,17 @@ export interface ExperimentalOptions {
 	// 0x68eafd in 0x68e530 never reaches it on the traced path - so the
 	// native arrival is silent. Off unless turned on.
 	readonly warpArrivalSound: boolean;
+	// Port-only, not native (#2496): a rare item's seal line sits under the
+	// item name. 558FF0 appends it after the requirement rows (the 56B099
+	// call in FormatWeapon, after 568500). Off unless turned on; off is the
+	// native place.
+	readonly sealUnderHeading: boolean;
+	// Port-only, not native (#2269): the Item Mall's Buying list (native
+	// CIFSilkBuyList), listing recorded silk uses by period. The native
+	// window is never instantiated, its Inquire handler is an empty stub
+	// (0x6CE6F0) and its mall button is born disabled (0x6BC17E). Off
+	// unless turned on; off is the original.
+	readonly silkHistory: boolean;
 }
 
 /*
@@ -382,7 +398,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -427,6 +443,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropPlusNotices: record.dropPlusNotices !== false,
 		plusSevenNotices: record.plusSevenNotices !== false,
 		breakNotices: record.breakNotices !== false,
+		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
@@ -435,7 +452,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		exchangeClickShortcuts: record.exchangeClickShortcuts !== false,
 		noticeLinks: record.noticeLinks !== false,
 		shortNotices: record.shortNotices !== false,
-		attackPetTraining: enabled( "attackPetTraining" ),
 		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
@@ -453,7 +469,9 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		expandedWorldMap: enabled( "expandedWorldMap" ),
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
-		warpArrivalSound: enabled( "warpArrivalSound" )
+		warpArrivalSound: enabled( "warpArrivalSound" ),
+		sealUnderHeading: enabled( "sealUnderHeading" ),
+		silkHistory: enabled( "silkHistory" )
 	};
 }
 
@@ -568,6 +586,7 @@ export interface ExperimentalGameplay {
 	readonly dropPlusNotices: boolean;
 	readonly plusSevenNotices: boolean;
 	readonly breakNotices: boolean;
+	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
@@ -591,6 +610,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,
 		breakNotices: options.breakNotices,
+		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,
