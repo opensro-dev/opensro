@@ -292,6 +292,11 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2769): port-only, not native - a character's
+	// inventory base is 2.5 pages from creation instead of the native one
+	// page the expansion quests then grow. On by the owner's call; "off"
+	// is native. Existing records keep whatever capacity they hold.
+	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json. The catalogue prices quest rewards

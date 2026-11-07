@@ -561,6 +561,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
+	// a character to the 2.5-page inventory base, never lowers one.
+	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
+	if game.deps.InventoryPages {
+		log.Infof("inventory: 2.5-page base ON (%s); off is the native one page", enterworld.EnvInventoryPages)
+	}
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
 	// Port-only, not native: the Bandit Den scroll counts down half as long,

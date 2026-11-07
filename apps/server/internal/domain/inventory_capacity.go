@@ -11,12 +11,20 @@ Native pays the slots from the quest reward row through the player's quest
 inventory expansion: it refuses silently past the server's limit, and on
 completion the running character's storage grows at once and the server
 announces the new size with 0x3092 (research/investigations/items/
-native-audit-rows-20261031.md, row 26). The v1.150 client defines the
-shipped maximum: its inventory holds at most two 32-slot tabs behind the 13
-sockets, so the port stops at 77 where the server's own limit is higher.
-Slots granted before this rule was ported may still wait in
-InventoryExpansion on a saved record; a world entry presents those
+native-audit-rows-20261031.md, row 26). The shipped maximum is the v1.188
+client's: MAX_INVENTORY_TAB_NUM is 3 there (three 32-slot tabs behind the
+13 sockets, 109), where the v1.150 client allows only two (77). Slots
+granted before this rule was ported may still wait in InventoryExpansion
+on a saved record; a world entry presents those
 (PresentInventoryExpansion). New grants never wait.
+
+Port-only, not native (SRO_INVENTORY_PAGES, on by default; owner,
+2026-11-07, #2769): a character's base is 2.5 pages (93) from creation and
+is raised to it at world entry, never lowered; the quests still add their
+16 and reach the 109 maximum. The persisted InventorySize is the whole
+record of the rule: switching the flag off changes only what new
+characters start with - a record above the native base keeps its slots,
+because nothing here ever shrinks a capacity.
 
 ===========================================================================
 */
@@ -26,8 +34,12 @@ package domain
 const (
 	// DefaultInventorySize is the creation capacity: 13 sockets, 32 bag slots.
 	DefaultInventorySize uint8 = 45
-	// MaxInventorySize is two CIFInventory tabs of 32 behind the 13 sockets.
-	MaxInventorySize uint8 = 77
+	// MaxInventorySize is the v1.188 client's three CIFInventory tabs of 32
+	// behind the 13 sockets.
+	MaxInventorySize uint8 = 109
+	// InventoryPagesBase is the port-only 2.5-page base SRO_INVENTORY_PAGES
+	// creates and raises to (13 sockets, 80 bag slots).
+	InventoryPagesBase uint8 = 93
 	// EquipmentSlotEnd is one past the last equipment socket: slots
 	// 0..12 of MissionInventory are worn equipment, the rest is the bag.
 	// It mirrors the item/inventory package's constant of the same name;
@@ -58,8 +70,10 @@ func (character *Character) InventoryCapacity() uint8 {
 ================
 InventoryCapacityValid
 
-The persisted pair is in range: a capacity of 45..77 (zero reads as 45)
-and waiting slots that still fit under 77.
+The persisted pair is in range: a capacity of 45..109 (zero reads as 45)
+and waiting slots that still fit under 109. A record the inventory-pages
+rule raised stays in range with the flag off, which is how it keeps its
+slots.
 ================
 */
 func (character *Character) InventoryCapacityValid() bool {
@@ -90,6 +104,24 @@ func (character *Character) GrantInventoryExpansion(slots uint8) bool {
 		return false
 	}
 	character.InventorySize = size + slots
+	return true
+}
+
+/*
+================
+RaiseInventoryFloor
+
+The inventory-pages base, applied as a floor: a record below it takes it,
+a record at or past it is untouched, so the raise can never lower a
+capacity a quest (or the flag's own earlier run) already grew. Waiting
+slots are not the floor's business; a world entry presents those first.
+================
+*/
+func (character *Character) RaiseInventoryFloor(floor uint8) bool {
+	if character == nil || floor == 0 || character.InventoryCapacity() >= floor {
+		return false
+	}
+	character.InventorySize = floor
 	return true
 }
 

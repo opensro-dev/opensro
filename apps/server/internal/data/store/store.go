@@ -80,6 +80,9 @@ type Options struct {
 	// list shows a new character dressed before its first world entry. It is
 	// optional: without it the first enter-world bootstrap grants them.
 	DefaultInventory InventorySeedFunc
+	// InventoryPages stamps the port-only 2.5-page base on a new record
+	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
+	InventoryPages bool
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -266,6 +269,8 @@ type Store struct {
 	defaultQuests QuestSeedFunc
 	// defaultInventory is Options.DefaultInventory, used only at creation.
 	defaultInventory InventorySeedFunc
+	// inventoryPages is Options.InventoryPages, used only at creation.
+	inventoryPages bool
 
 	// requireStore is Options.RequireStore (the production posture);
 	// CreateCharacter's unseeded-creation refusal keys off it.
@@ -332,6 +337,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultSkills:    opts.DefaultSkills,
 		defaultQuests:    opts.DefaultQuests,
 		defaultInventory: opts.DefaultInventory,
+		inventoryPages:   opts.InventoryPages,
 		requireStore:     opts.RequireStore,
 		now:              now,
 		writeFile:        writeFileAtomic,
