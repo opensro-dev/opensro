@@ -13,6 +13,7 @@ commands and cannot bypass actor eligibility.
 // player to trade.
 const ACTION_EXCHANGE = 1006;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
+import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
@@ -376,7 +377,9 @@ player models, an item reference and the NPCs a ground click must clear.
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
-	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly item: (
+		refObjId: number
+	) => { readonly typeFlags: number; readonly name: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
 	readonly structureFacts?: (
 		refObjId: number
@@ -489,11 +492,13 @@ export function createGameplay(
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
 	> = {};
 	let partyMatching = emptyPartyMatching();
-	// The native window's two session facts the foundation state does
-	// not carry: whether the auto-match chain still lives (75EBD0's
-	// caller decides its prints by it), and whether the party filled
-	// at any moment while the player's listing stood (data_cea6e0,
-	// set by the 634DC9 watcher, consumed by the delete answer).
+	// The native window's two facts the foundation state does not
+	// carry. The auto-match chain still living is a session fact
+	// (75EBD0's caller decides its prints by it). The filled-party
+	// latch is not: the native byte (data_cea6e0) is a process global
+	// the roster watcher sets (634DC9) and only the delete answer
+	// clears, so it survives world entry and exit until that answer
+	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
 	// The shard's configured level cap, published at world entry (#1749);
@@ -1539,7 +1544,6 @@ selected entities, cooldowns or world-entry state.
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
-		partyMatchFullLatch = false;
 		levelCap = NATIVE_LEVEL_CAP;
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -1738,7 +1742,6 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
 			partyMatchAutoSession = false;
-			partyMatchFullLatch = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
@@ -2456,6 +2459,31 @@ state here before a command can claim a native wire conversation.
 					console.warn( `[SRO npc] ${command.kind} refused before sending: ${String( error )}` );
 					throw error;
 				}
+				return null;
+			}
+
+			if ( command.kind === "npc-event-exchange" ) {
+				const target = targeting.state(), conversation = npcConversation.state();
+				// Row 0x15's click: 7026B0 sends whether or not the
+				// bag holds the red socks - its scan (702728) is never
+				// tested, the empty bag, a match and the exhausted
+				// scan all reach the send block gated only by the
+				// opcode's sendability; whether socks are held is the
+				// server's business, answered 2/3 (ERROR_SOCKS). So
+				// the port's only terms are the row's own existence:
+				// the capability, the conversation standing on the
+				// target, and the phase test - while an exchange is
+				// waiting (or its answer window lapsed into uncertain)
+				// the row click stays silent, since the native send
+				// has no waiting state to re-enter and exchange()
+				// would throw. Every failed term just does nothing.
+				if (
+					!localGid || target.targetPending ||
+					(conversation.phase !== "menu" && conversation.phase !== "ready") ||
+					conversation.gid !== target.target ||
+					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION)
+				) return null;
+				npcConversation.exchange( now );
 				return null;
 			}
 
@@ -5865,7 +5893,8 @@ The published plane when something changed since the last take, else null.
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
-				restorationRevision: npcConversation.restorationRevision()
+				restorationRevision: npcConversation.restorationRevision(),
+				npcEventGreeting: npcConversation.eventGreeting()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
 			const cos = activeCos ?
