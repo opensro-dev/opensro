@@ -34,7 +34,7 @@ holding the first one's x2 variant (#2061), with distinct bytes. The
 download names every request so a test can count what was fetched.
 ================
 */
-function hdFixture() {
+function hdFixture( onAvailability = () => {}, stampHd = false ) {
 	const member = ( path, data ) => {
 		const entry = { path, offset: 0, length: data.length, mime: "application/octet-stream", sha256: sha( data ) };
 		const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: [ entry ] } ) );
@@ -63,21 +63,26 @@ function hdFixture() {
 		assets: entries.map( ( entry, i ) => ({ ...entry, packPath: packs[i].path }) )
 	});
 	const assetIndex = indexOf( "test", [ assetPack, plainPack ], [ original.entry, plain.entry ] );
+	if ( stampHd ) assetIndex.hd = true;
 	const hdIndex = indexOf( "texture-variants-hd-bc7", [ hdPack ], [ hd.entry ] );
 	const requests = [];
-	const packs = createPacks( async url => {
-		requests.push( url );
-		if ( url.endsWith( "/assets/packs/manifest.json" ) ) {
-			return new TextEncoder().encode( JSON.stringify( assetIndex ) );
-		}
-		if ( url.endsWith( "/hd/packs/manifest.json" ) ) {
-			return new TextEncoder().encode( JSON.stringify( hdIndex ) );
-		}
-		if ( url.endsWith( assetPack.path ) ) return original.bytes;
-		if ( url.endsWith( plainPack.path ) ) return plain.bytes;
-		if ( url.endsWith( hdPack.path ) ) return hd.bytes;
-		throw Object.assign( new Error( "unexpected " + url ), { status: 404 } );
-	} );
+	const packs = createPacks(
+		async url => {
+			requests.push( url );
+			if ( url.endsWith( "/assets/packs/manifest.json" ) ) {
+				return new TextEncoder().encode( JSON.stringify( assetIndex ) );
+			}
+			if ( url.endsWith( "/hd/packs/manifest.json" ) ) {
+				return new TextEncoder().encode( JSON.stringify( hdIndex ) );
+			}
+			if ( url.endsWith( assetPack.path ) ) return original.bytes;
+			if ( url.endsWith( plainPack.path ) ) return plain.bytes;
+			if ( url.endsWith( hdPack.path ) ) return hd.bytes;
+			throw Object.assign( new Error( "unexpected " + url ), { status: 404 } );
+		},
+		() => {},
+		onAvailability
+	);
 	return { packs, requests };
 }
 
@@ -102,6 +107,23 @@ test("the pack index admits the HD set only under its own root", () => {
 	assert.deepEqual( [ ...admitted.assets.keys() ], [ "/hd/texture-variants/bc7/world/t.texture" ] );
 	// The default root never admits an /hd path, and /hd admits no /assets one.
 	assert.throws( () => createPackIndex().manifest( hdIndex ), /Invalid asset path/ );
+});
+
+test("the main index's stamp is the build's word on the HD set (#2800)", async () => {
+	for ( const [stamp, want] of [ [ false, false ], [ true, true ] ] ) {
+		const seen = [], f = hdFixture( available => seen.push( available ), stamp );
+		await f.packs.read(
+			new URL( "http://localhost/assets/world/t.texture" ),
+			100,
+			new AbortController().signal
+		);
+		assert.deepEqual( seen, [ want ], "the stamp, read once with the main index" );
+		assert.equal(
+			f.requests.filter( url => url.includes( "/hd/" ) ).length,
+			0,
+			"learning the set exists costs no /hd fetch"
+		);
+	}
 });
 
 test("with the HD row off, texture reads fetch nothing from the HD index", async () => {

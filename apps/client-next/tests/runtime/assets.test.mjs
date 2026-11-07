@@ -58,7 +58,9 @@ test("asset worker transfers exact bytes without retaining the output buffer", a
 	const loader = createLoader( ( result, transfer ) => {
 		// Progress is time-based telemetry (sent after 150 ms), so a loaded
 		// machine can emit one mid-test; only deliveries are under test.
-		if ( [ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) return;
+		if (
+			[ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( result.kind )
+		) return;
 		transferred = result.buffer;
 		results.push( structuredClone( result, { transfer } ) );
 	} );
@@ -77,7 +79,11 @@ test("asset cancellation rejects late completion even if fetch ignores abort", a
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -97,7 +103,11 @@ test("asset loader bounds concurrency and aborts every pending request on dispos
 	} );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -143,7 +153,11 @@ close
 	};
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -189,7 +203,11 @@ test("cancelled downloads retain capacity even when fetch ignores abort, then re
 	t.mock.method( globalThis, "fetch", () => new Promise( resolve => downloads.push( resolve ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );
@@ -240,7 +258,11 @@ test("a cancellation is acknowledged on receipt while its decode still drains", 
 		new Promise( resolve => decodes.push( () => resolve( { width: 4096, height: 4096, close() {} } ) ) );
 	const results = [],
 		loader = createLoader( result => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( result.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					result.kind
+				)
+			) {
 				results.push( result );
 			}
 		} );

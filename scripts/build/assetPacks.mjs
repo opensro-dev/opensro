@@ -143,7 +143,7 @@ export async function buildAssetPacks( options = {} ) {
 	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
 	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
 
-	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
+	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, hd?: boolean, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
 		format: "sro-asset-pack-index",
 		version: ASSET_PACK_VERSION,
@@ -183,6 +183,16 @@ export async function buildAssetPacks( options = {} ) {
 
 	index.groups.sort( ( left, right ) => left.name.localeCompare( right.name ) );
 	index.assets.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	// The build/server contract for the HD channel (#2800): the main index
+	// certifies that this published tree carries the HD set's own index, so
+	// the client can list the Experimental row without ever fetching /hd.
+	// The stamp names no HD byte and is absent whenever no HD index is
+	// published (an ordinary build, or an HD build that produced no set).
+	if (
+		packRoot === "/assets" && await stat( path.join( root, "hd", "packs", "manifest.json" ) ).catch( () => null )
+	) {
+		index.hd = true;
+	}
 	validateAssetPackIndex( index, packRoot );
 	await prepareAssetDelivery( index, root );
 	// Sparse builders publish partial indexes; the final merged publication
