@@ -367,6 +367,7 @@ that reached the worker.
 		owners.input.blindHeld = () => false;
 		owners.input.altHeld = () => false;
 		owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 		owners["bug-report"].movement = () => {};
 		globalThis.__runtimeOwners = owners;
 		globalThis.__runtimeCalls = [];
@@ -547,6 +548,7 @@ test("a move command starts a mover prediction while the row is on, and only the
 	owners.input.blindHeld = () => false;
 	owners.input.altHeld = () => false;
 	owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 	owners["bug-report"].movement = () => {};
 	globalThis.__runtimeOwners = owners;
 	globalThis.__runtimeCalls = [];
