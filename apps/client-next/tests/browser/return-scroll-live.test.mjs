@@ -14,7 +14,7 @@ test('return scroll uses real double-click, server cancellation and timed world 
  page.on('pageerror',e=>errors.push(e.message));
  try{
   await resetMissionMovementFixture({session:authority,characterName:'asd3',timeoutMs:30000,fixture:{id:'return-scroll-accessory-v1',movementMode:3,start:{regionId:25000,x:1600,y:0,z:1078},startYawRadians:0}});
-  await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('export function createUi(','function createObservedReturnUi(')+'\nexport function createUi(...args){const owner=createObservedReturnUi(...args);return {...owner,step(view,now){globalThis.__returnView=view;const result=owner.step(view,now);if(result)globalThis.__returnSemantics=result;return result;}};}'});});
+  await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('export function createUi(','function createObservedReturnUi(')+'\nexport function createUi(ports){const owner=createObservedReturnUi(ports);return {...owner,step(view,now){globalThis.__returnView=view;const result=owner.step(view,now);if(result)globalThis.__returnSemantics=result;return result;}};}'});});
   await bootPlayableSession(page,'asd3');
   let bag=await page.evaluate(()=>__playableRuntime.gameplay().inventory);
   if(!bag.some(i=>i.typeFlags===0x9ec&&i.quantity>=2)){

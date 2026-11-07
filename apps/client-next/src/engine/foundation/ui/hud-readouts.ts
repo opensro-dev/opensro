@@ -67,13 +67,16 @@ export function skillPointReadouts( points: number ): readonly string[] {
 ================
 minimapCoordinates
 
-CIFMinimap's outdoor coordinate conversion truncates toward zero.
+CIFMinimap's outdoor coordinate conversion truncates toward zero. Native
+54B5FF blanks both fields in a dungeon. Port-only, not native: a cave shows
+its own position in the same tenth-of-a-unit scale, measured from the
+dungeon's origin, so the numbers are not world coordinates.
 ================
 */
 export function minimapCoordinates( pose: Pick<Pose, "regionId" | "x" | "z"> ): readonly [string, string] {
-	if ( !featuresAt( pose.regionId ).minimapCoordinates ) return [ "", "" ];
-	const x = ((sectorX( pose.regionId ) * 3 - 0x195) << 6) - Math.trunc( pose.x / -10 ),
-		y = ((sectorY( pose.regionId ) * 3 - 0x114) << 6) - Math.trunc( pose.z / -10 );
+	const sectors = featuresAt( pose.regionId ).minimapCoordinates;
+	const x = (sectors ? (sectorX( pose.regionId ) * 3 - 0x195) << 6 : 0) - Math.trunc( pose.x / -10 ),
+		y = (sectors ? (sectorY( pose.regionId ) * 3 - 0x114) << 6 : 0) - Math.trunc( pose.z / -10 );
 	return [ "X:" + String( x ).padStart( 3, " " ), "Y:" + String( y ).padStart( 3, " " ) ];
 }
 

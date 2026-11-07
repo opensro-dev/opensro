@@ -10,7 +10,7 @@ test('loading UI retains entry art through travel metadata and publishes full be
   await holdProbeRuntime(page);await page.goto(CLIENT_NEXT_BASE_URL);
   const result=await page.evaluate(async()=>{
    const {createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createUi}=await import('/src/engine/runtime/ui/ui.ts');const assets=createAssets();let scene,draws=0,variants=0;
-   const ui=createUi(assets,()=>{},s=>{scene=s;draws++;},()=>{},location.origin,'http://fixture.invalid',()=>{},()=>{},()=>++variants%2+1);
+   const ui=createUi({assets,commands:()=>{},publish:s=>{scene=s;draws++;},texture:()=>{},base:location.origin,apiBase:'http://fixture.invalid',clickSound:()=>{},sound:()=>{},loadingVariant:()=>++variants%2+1});
    let state={frontend:{phase:'loading-world',generation:1,elapsed:0,alpha:0,logoAlpha:0,error:null},session:{phase:'entering-world',revision:1},gameplay:null,entities:[],width:1024,height:768,worldReady:false,loadingProgress:.66};const frames=[];let semantics;
    function frame(now){semantics=ui.step(state,now)??semantics;frames.push({now,progress:semantics?.loadingProgress,background:scene.quads[1]?.texture,gauge:scene.quads.find(q=>q.texture.endsWith('gauge_loading.png'))?.uv[2],variants,draws});}
    try{frame(0);state.loadingProgress=.4;frame(10);state.travel={mode:2,region:0x694f,revision:1};state.loadingProgress=.1;frame(20);state.loadingProgress=.7;frame(30);state.session={phase:'world',revision:2};state.worldReady=true;frame(40);state.frontend={...state.frontend,phase:'world'};state.travel=null;frame(50);frame(141);state.travel={mode:2,region:0x694f,revision:2};state.worldReady=false;frame(200);state.loadingProgress=.5;frame(210);state.travel={mode:1,region:0x694f,revision:3};frame(220);return frames;}finally{ui.dispose();assets.dispose();}
@@ -35,7 +35,7 @@ test('world resource admission uses native loading artwork after frontend handof
   const rows=await page.evaluate(async()=>{
    const {createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createUi}=await import('/src/engine/runtime/ui/ui.ts');const rows=[];
    for(const frontend of [undefined,{phase:'world',generation:1,elapsed:0,alpha:0,logoAlpha:0,error:null}]){
-    const assets=createAssets();let scene;const ui=createUi(assets,()=>{},s=>scene=s,()=>{},location.origin,'http://fixture.invalid',()=>{},()=>{},()=>1);
+    const assets=createAssets();let scene;const ui=createUi({assets,commands:()=>{},publish:s=>scene=s,texture:()=>{},base:location.origin,apiBase:'http://fixture.invalid',clickSound:()=>{},sound:()=>{},loadingVariant:()=>1});
     const state={frontend,session:{phase:'world',revision:1,character:'Fixture'},gameplay:null,entities:[],width:1024,height:768,worldReady:false,loadingProgress:.4};
     try{
      ui.step(state,0);const pending=ui.step(state,10);
