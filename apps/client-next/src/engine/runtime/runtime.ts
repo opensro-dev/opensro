@@ -1647,6 +1647,10 @@ export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanv
 	const random = createPresentationRandom( 1 );
 	const assets = createAssets();
 	const renderer = createRenderer( canvas, random );
+	// Port-only: as startRuntime, the asset owner learns the device's
+	// texture features once, so a native texture read never waits on an
+	// answer this page would never give (texture-variants.ts, #2772).
+	void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 	const characters = createCharacterPresentation(
 		assets,
 		renderer,
