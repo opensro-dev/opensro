@@ -263,7 +263,7 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "highlightEventNotices",
 			id: "experimental-highlight-event-notices",
 			label: "Highlight event notices",
-			description: "Show shard event announcements in red in the message log."
+			description: "Show the shard's event announcements in red."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
