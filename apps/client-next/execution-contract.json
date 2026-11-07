@@ -1744,6 +1744,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/buff-board.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

@@ -390,6 +390,12 @@ async function produceOverlays() {
 		{ folder: "/assets/images/Media_extracted/icon/", keep: file => file === "buf_effect.png" },
 		{ folder: "/assets/images/Media_extracted/icon/stateodd/", keep: () => true },
 		{
+			// The Academy cumulated buff's board icons (6E1470 kinds 7 and 8),
+			// named in code and owned by no item or skill record.
+			folder: "/assets/images/Media_extracted/icon/skill/etc/",
+			keep: file => file === "tc_amends_buff.png" || file === "tc_reserve_buff.png"
+		},
+		{
 			folder: "/assets/images/Media_extracted/icon/etc/",
 			keep: file => file.startsWith( "mark_" ) || file === "fort_jangan.png"
 		},
