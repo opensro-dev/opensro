@@ -113,7 +113,10 @@ cloneCharacterCompanion
 The pet-owner view (#2030): the per-tick pet and brood passes copy
 only what their readers read, detached exactly as cloneCharacter
 detaches it - identity, world and model, the companions (every record
-VisitCompanions walks, in its order), life, body and teleport state,
+VisitCompanions walks, in its order, each without its rentals and -
+the active one excepted - its container: the caravan verdict weighs
+the active companion's cargo rows, so those ride as values), life,
+body and teleport state,
 the PvP and relation facts (PK, aggressions, guild, job, event
 membership, visibility, transform), and of the mission inventory only
 the companion rows and the relation slot (the job suit and cape row the
@@ -154,15 +157,15 @@ func cloneCharacterCompanion(source *Character) *Character {
 	clone.GuildID = clonePointer(source.GuildID)
 	clone.MissionInventory = cloneCompanionRows(source.MissionInventory)
 	clone.World = cloneCharacterWorld(source.World)
-	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
+	clone.ActiveCOS = cloneCOSCompanionActive(source.ActiveCOS)
 	clone.Mercenaries = cloneSlice(source.Mercenaries)
 	for i, soldier := range clone.Mercenaries {
-		clone.Mercenaries[i] = CloneCOS(soldier)
+		clone.Mercenaries[i] = cloneCOSCompanion(soldier)
 	}
-	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
+	clone.CapturedCOS = cloneCOSCompanion(source.CapturedCOS)
 	clone.Brood = cloneSlice(source.Brood)
 	for i, pet := range source.Brood {
-		clone.Brood[i] = CloneCOS(pet)
+		clone.Brood[i] = cloneCOSCompanion(pet)
 	}
 	return clone
 }
@@ -490,9 +493,10 @@ func cloneCastRows(source []InventoryRow) []InventoryRow {
 cloneCompanionRows
 
 The pet-owner view's rows: the relation slot plus every row carrying
-a companion, each deep-copied in order exactly as cloneInventoryRows
-copies it; the remaining rows are dropped, and a nil inventory stays
-nil so absence keeps its meaning. VisitCompanions over the kept rows
+a companion, each copied in order, its companion riding as the view's
+COS copy (cloneCOSCompanion); the remaining rows are dropped, and a
+nil inventory stays nil so absence keeps its meaning.
+VisitCompanions over the kept rows
 visits the same companions in the same order as over the full
 inventory, because the dropped rows carry no Summon.
 ================
@@ -512,7 +516,7 @@ func cloneCompanionRows(source []InventoryRow) []InventoryRow {
 		if row.Summon == nil && row.Slot != JobSuitSlot {
 			continue
 		}
-		row.Summon = CloneCOS(row.Summon)
+		row.Summon = cloneCOSCompanion(row.Summon)
 		row.MagicOptions = cloneSlice(row.MagicOptions)
 		clone = append(clone, row)
 	}

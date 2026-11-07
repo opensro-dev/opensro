@@ -238,6 +238,55 @@ test("the main index certifies a published HD set, and only then", async () => {
 	}
 });
 
+/*
+================
+the main index stamps what this build published
+
+#2812: the stamp follows this build's HD step, not whatever hd/ tree
+the disk happens to hold. A first HD build from a clean tree certifies
+its set at once; a build that skipped the set certifies nothing, even
+while an earlier build's hd/ tree stays on disk.
+================
+*/
+test("the main index stamps what this build published, not what the disk holds", async () => {
+	const root = mkdtempSync( path.join( tmpdir(), "sro-hd-stamp-build-" ) );
+	try {
+		const publicRoot = path.join( root, "public" );
+		mkdirSync( path.join( publicRoot, "assets", "models" ), { recursive: true } );
+		writeFileSync( path.join( publicRoot, "assets", "models", "a.glb" ), "a".repeat( 64 ) );
+		// A clean tree's loose HD variants, as buildHdTextureVariants leaves them.
+		mkdirSync( path.join( publicRoot, "hd", "texture-variants", "bc7" ), { recursive: true } );
+		writeFileSync( path.join( publicRoot, "hd", "texture-variants", "bc7", "a.texture" ), "b".repeat( 64 ) );
+		const buildMain = ( hdPublished ) =>
+			buildAssetPacks( {
+				publicRoot,
+				outputRoot: path.join( publicRoot, "assets", "packs" ),
+				hashCachePath: path.join( root, "hash-cache.json" ),
+				memberCacheRoot: path.join( root, "member-cache" ),
+				groups: [ { name: "game-models", load: "lazy", files: [ "/assets/models/a.glb" ] } ],
+				hdPublished
+			} );
+		const readIndex = () =>
+			JSON.parse( readFileSync( path.join( publicRoot, "assets", "packs", "manifest.json" ), "utf8" ) );
+		// The full build's order (#2812): the HD step packs its set first,
+		// then the main index certifies this build's outcome.
+		const hd = await buildHdTexturePacks( {
+			publicRoot,
+			hashCachePath: path.join( root, "hash-cache.json" ),
+			memberCacheRoot: path.join( root, "member-cache" )
+		} );
+		assert.notEqual( hd.skipped, true, "the fixture's variants pack into a set" );
+		await buildMain( !hd.skipped );
+		assert.equal( readIndex().hd, true, "the first HD build certifies its set" );
+		// HD off: the stale hd/ tree stays on disk, but this build published
+		// no set, so the stamp goes.
+		await buildMain( false );
+		assert.equal( "hd" in readIndex(), false, "a stale hd tree certifies nothing" );
+	} finally {
+		rmSync( root, { recursive: true, force: true } );
+	}
+});
+
 test("an HD build with no variants writes no pack index", async () => {
 	const root = mkdtempSync( path.join( tmpdir(), "sro-hd-empty-" ) );
 	try {

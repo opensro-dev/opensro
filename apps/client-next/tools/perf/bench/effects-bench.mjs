@@ -188,7 +188,7 @@ async function measureEffects( { seconds, warmup } ) {
 			last = now;
 			renderer.setCharacterActors( actors( time ) );
 			await renderer.frame( { width, height }, time, undefined, probe );
-			const elapsed = performance.now() - now, waiting = renderer.readbackWaitMs();
+			const elapsed = performance.now() - now, waiting = renderer.readbackWaitMs?.() ?? 0;
 			main.push( elapsed );
 			readback.push( waiting );
 			cpu.push( Math.max( 0, elapsed - waiting ) );

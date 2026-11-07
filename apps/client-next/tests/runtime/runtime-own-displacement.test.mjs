@@ -122,6 +122,7 @@ test("a published own cast displacement is adopted only while the row is on and 
 	owners.input.blindHeld = () => false;
 	owners.input.altHeld = () => false;
 	owners.assets.progress = () => 0;
+	owners.assets.hdTextures = () => {};
 	owners["bug-report"].movement = () => {};
 	owners["bug-report"].movementClock = () => {};
 	owners.characters.simulationOrigin = () => {};

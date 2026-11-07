@@ -250,9 +250,13 @@ export function endWindow(
 			// smallest screen mode keeps the desktop windows; one that
 			// cannot hold the viewport is scaled into it, and a window
 			// that already fits keeps the place the player dragged it to.
+			// A scaled window drops its window drags like the compact
+			// fit does: a drag would write fitted coordinates back as
+			// the remembered native position.
 			fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
 				blocks,
 				firstBlock: mark[2],
+				disableDrag: compactWindowDrag,
 				leaveWhenFits: true,
 				...(source ? { sourceBounds: source } : {})
 			} );

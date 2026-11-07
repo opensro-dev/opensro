@@ -6,8 +6,8 @@
 # and reproduce the original mip bytes exactly. Elsewhere this generator writes
 # the same NTX1 container (NativeLensResources.cs SerializeTexture): authored
 # levels are copied verbatim and only the missing suffix of the mip chain is
-# generated (box filter, Pillow BCn encoders). Generated levels are visually
-# equivalent, not byte-identical.
+# generated (box filter per channel, Pillow BCn encoders). Generated levels
+# are visually equivalent, not byte-identical.
 #
 # Same arguments as the PowerShell helper:
 #   -SourceRoot <dir> -OutputRoot <dir>   the eight lens*.ddj -> lens*.texture
@@ -152,6 +152,18 @@ def encode(fmt, image):
 
 
 # ================
+# box_filter
+# One mip level down. Each channel is averaged on its own, as D3DX does:
+# Pillow's RGBA resize premultiplies colour by alpha, which turns every
+# texel the artist left at alpha 0 black in the small levels. The native
+# armour textures keep valid colour under alpha 0 (their materials ignore
+# it), so a premultiplied chain made them go dark at a distance.
+# ================
+def box_filter(image, size):
+	return Image.merge("RGBA", [band.resize(size, Image.BOX) for band in image.split()])
+
+
+# ================
 # build_file
 # Full chain down to 1x1: authored levels verbatim, then each missing level
 # box-filtered from the one above it.
@@ -174,7 +186,7 @@ def build_file(source, target):
 			if level == authored - 1:
 				previous = decode(fmt, raw, level_width, level_height)
 		else:
-			previous = previous.resize((level_width, level_height), Image.BOX)
+			previous = box_filter(previous, (level_width, level_height))
 			raw = encode(fmt, previous)
 			if len(raw) != size:
 				raise ValueError(f"Encoder wrote {len(raw)} bytes for {level_width}x{level_height}, expected {size}")
