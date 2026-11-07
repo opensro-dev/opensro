@@ -3,8 +3,8 @@
 
 frame-work.ts - CPU overload hysteresis and the shared optional-work budget
 
-The runtime supplies measured CPU time, excluding its readback wait. This
-owner never changes saved graphics preferences or admits gameplay events.
+The runtime supplies measured CPU time. This owner never changes saved
+graphics preferences or admits gameplay events.
 
 ===========================================================================
 */
