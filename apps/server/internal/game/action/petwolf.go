@@ -189,7 +189,10 @@ read it - after the brood, penguin and gear lanes have had their
 writes - and folds the same record filter hasElementalCandidate folds
 per query, for every companion at once. The returned key clears the
 arm; the zero key means nothing armed (the expansion off, the seam
-up, or no session yet), and every lane then walks as before.
+up, or no session yet), and every lane then walks as before. The
+capture itself is recycled across ticks (takeElementalFacts):
+arming and clearing stay the only doors, so a capture never outlives
+the tick that armed it.
 ================
 */
 func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
@@ -202,7 +205,7 @@ func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
 		return none
 	}
 	owner := state.character
-	facts := &elementalWalkFacts{owner: owner, nowMs: now, pets: make([]elementalPetFacts, 0, 4)}
+	facts := rt.takeElementalFacts(owner, now)
 	rt.deps.Read(key.division, func() {
 		facts.ownerViable = !owner.DeletePending && enterworld.CharacterAlive(owner)
 		if !facts.ownerViable {
@@ -234,9 +237,45 @@ func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
 	if rt.elementalFacts == nil {
 		rt.elementalFacts = make(map[petOwnerKey]*elementalWalkFacts)
 	}
+	// An entry still armed for this owner was never cleared (a cut
+	// tick's arm): it answers nothing any more, so it recycles too.
+	if stale := rt.elementalFacts[ownerKey]; stale != nil && stale != facts {
+		rt.elementalFactsFree = append(rt.elementalFactsFree, stale)
+	}
 	rt.elementalFacts[ownerKey] = facts
 	rt.elementalFactsMu.Unlock()
 	return ownerKey
+}
+
+/*
+================
+takeElementalFacts
+
+One owner's walk-facts capture for this tick: the last recycled
+capture when one waits, a fresh one otherwise. A recycled capture
+comes back reset - last tick's pet rows, town verdict and shared
+snapshot gone, only the pet rows' backing kept - because a capture
+that outlives its tick would answer for a record that has moved on.
+armedElementalFacts' owner and clock guards still refuse a stale
+arm; recycling only decides where the struct comes from (#2030: a
+fresh capture per owner per tick was the elemental lanes' largest
+remaining flat allocation).
+================
+*/
+func (rt *Runtime) takeElementalFacts(owner *enterworld.Character, now int64) *elementalWalkFacts {
+	rt.elementalFactsMu.Lock()
+	var facts *elementalWalkFacts
+	if free := rt.elementalFactsFree; len(free) > 0 {
+		facts = free[len(free)-1]
+		rt.elementalFactsFree = free[:len(free)-1]
+	}
+	rt.elementalFactsMu.Unlock()
+	if facts == nil {
+		return &elementalWalkFacts{owner: owner, nowMs: now, pets: make([]elementalPetFacts, 0, 4)}
+	}
+	pets := facts.pets
+	*facts = elementalWalkFacts{owner: owner, nowMs: now, pets: pets[:0]}
+	return facts
 }
 
 /*
@@ -267,9 +306,10 @@ func (rt *Runtime) armedElementalFacts(division string, owner *enterworld.Charac
 ================
 clearElementalFacts
 
-Drop one owner's armed facts. advancePetInDivision clears after the
-wolf lane: the spirit, bond and hunt lanes that follow must judge
-fresh records, as they always have.
+Drop one owner's armed facts into the recycle list
+(takeElementalFacts resets it for its next arm). advancePetInDivision
+clears after the wolf lane: the spirit, bond and hunt lanes that
+follow must judge fresh records, as they always have.
 ================
 */
 func (rt *Runtime) clearElementalFacts(ownerKey petOwnerKey) {
@@ -277,7 +317,10 @@ func (rt *Runtime) clearElementalFacts(ownerKey petOwnerKey) {
 		return
 	}
 	rt.elementalFactsMu.Lock()
-	delete(rt.elementalFacts, ownerKey)
+	if facts := rt.elementalFacts[ownerKey]; facts != nil {
+		delete(rt.elementalFacts, ownerKey)
+		rt.elementalFactsFree = append(rt.elementalFactsFree, facts)
+	}
 	rt.elementalFactsMu.Unlock()
 }
 
