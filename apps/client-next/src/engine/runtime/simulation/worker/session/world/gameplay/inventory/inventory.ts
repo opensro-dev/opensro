@@ -1723,7 +1723,6 @@ receive
 			}
 			if ( op === MALL_SILK_HISTORY_CONTROL ) {
 				mall.silkHistoryAnswer( p );
-				published = null;
 				return true;
 			}
 			if ( op === 15 ) {
