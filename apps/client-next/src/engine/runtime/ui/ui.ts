@@ -55,7 +55,9 @@ const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
 // CIFChatModule sets both text boxes' row pitch through 523C20(15).
 const STALL_CHAT_ROW = 15;
-// CIFEdit_OnRender (522B50) draws the caret 2 px wide and one line tall.
+// A single-line edit's caret: 2 px wide, one line tall. The native
+// CIFEdit geometry is not yet located, so the width and the line box
+// below are inference from the authored-layout model (#2615).
 const EDIT_CARET_WIDTH = 2;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
@@ -11121,9 +11123,9 @@ export function createUi( ports: UiPorts ) {
 				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
 				const scroll = focus === id && width > ink[2] ? Math.max( 0, caret - ink[2] + EDIT_CARET_WIDTH ) : 0,
 					box: UiRect = [ ink[0] - scroll, ink[1], Math.max( ink[2], width ), ink[3] ];
-				// CIFEdit (522B50) lays its single line out in the client rect
-				// by VAlign and draws the caret over that line box alone,
-				// never over the whole control height.
+				// The one line sits in the client rect by authored VAlign
+				// and the caret covers that line box alone, never the
+				// whole control height (inference, see EDIT_CARET_WIDTH).
 				const lineHeight = Math.min( text.boardHeight() || ink[3], ink[3] ),
 					lineTop = Math.round( ink[1] ) +
 						(vAlign === 1 ?

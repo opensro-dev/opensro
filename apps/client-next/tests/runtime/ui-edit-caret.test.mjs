@@ -4,10 +4,12 @@
 ui-edit-caret.test.mjs - a tall single-line edit draws a one-line caret
 
 #2615: in the Chat to all window the caret spanned the whole 36 px edit
-box and the typed line sat vertically centred. Native CIFEdit (522B50)
-lays its one line out in the client rect by the authored VAlign and
-draws the caret 2 px wide over that line box alone. The name-change
-window reuses the same frame and edit, so both are exercised here.
+box and the typed line sat vertically centred. A single-line edit is
+modelled as laying its one line out in the client rect by the authored
+VAlign, with the caret 2 px wide over that line box alone (inference
+from the authored-layout model; the native CIFEdit geometry functions
+are not yet located). The name-change window reuses the same frame
+and edit, so both are exercised here.
 
 ===========================================================================
 */
