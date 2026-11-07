@@ -56,7 +56,7 @@ test( "MP potion acknowledgement owns quickslot cooldown and repeat-use suppress
 			await route.fulfill( {
 				response,
 				body: body.replace( "export function createUi(", "function observedUi(" ) +
-					`\nexport function createUi(...args){globalThis.__potionUi={textures:[]};const texture=args[3];args[3]=(id,image)=>{if(image)globalThis.__potionUi.textures.push(id);texture(id,image)};const publish=args[2];args[2]=scene=>{globalThis.__potionUi.scene=scene;publish(scene)};const owner=observedUi(...args);return {...owner,step(view,now){globalThis.__potionUi.view=view;return owner.step(view,now)}};}`
+					`\nexport function createUi(ports){globalThis.__potionUi={textures:[]};const texture=ports.texture;ports.texture=(id,image)=>{if(image)globalThis.__potionUi.textures.push(id);texture(id,image)};const publish=ports.publish;ports.publish=scene=>{globalThis.__potionUi.scene=scene;publish(scene)};const owner=observedUi(ports);return {...owner,step(view,now){globalThis.__potionUi.view=view;return owner.step(view,now)}};}`
 			} );
 		} );
 		console.log( "[potion] authenticated boot" );

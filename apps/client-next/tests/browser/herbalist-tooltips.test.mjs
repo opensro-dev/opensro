@@ -55,7 +55,7 @@ test( "herbalist shop publishes readable titles for every offer", { timeout: 180
 		await page.route( "**/src/engine/runtime/ui/ui.ts", async route => {
 			const response = await route.fetch(), source = await response.text();
 			const body = source.replace( "export function createUi(", "function createObservedCommerceUi(" ) +
-				`\nexport function createUi(...args){const publish=args[2];args[2]=scene=>{globalThis.__commerceHelpScene=scene;publish(scene)};const owner=createObservedCommerceUi(...args);return {...owner,event(event){if(event.kind==='hover')globalThis.__commerceHelpHover=event.id;return owner.event(event)}};}`;
+				`\nexport function createUi(ports){const publish=ports.publish;ports.publish=scene=>{globalThis.__commerceHelpScene=scene;publish(scene)};const owner=createObservedCommerceUi(ports);return {...owner,event(event){if(event.kind==='hover')globalThis.__commerceHelpHover=event.id;return owner.event(event)}};}`;
 			await route.fulfill( { response, body, contentType: "application/javascript" } );
 		} );
 		const help = async ( id, name ) => {

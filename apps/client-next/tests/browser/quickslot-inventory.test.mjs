@@ -18,7 +18,7 @@ test('F1 potion labels and keyboard activation follow authoritative inventory re
     {refObjId:3,typeFlags:0x10ec,name:'Large MP potion',icon:'item/etc/mp_potion_02.ddj',nativeFields:{itemParam3_2a4:500}},
     {refObjId:4,typeFlags:0x6c,name:'Return scroll'}],equipItems:[[13,1,50],[14,2,1],[15,2,50],[16,3,50],[17,4,1]].map(([slot,id,n])=>({slot,refObjId:id,body:[id,0,0,0,n,0]}))});
    const local={gid:1,countryByte9c:0,regionId:257,x:0,y:0,z:0,heading:0,appearanceState:[1,0,0]};g.seed(local);g.step(0,local);
-   let semantics;const ui=createUi(assets,c=>commands.push(c),s=>renderer.setUi(s),(id,image)=>renderer.setUiTexture(id,image),location.origin,'http://fixture.invalid');
+   let semantics;const ui=createUi({assets,commands:c=>commands.push(c),publish:s=>renderer.setUi(s),texture:(id,image)=>renderer.setUiTexture(id,image),base:location.origin,apiBase:'http://fixture.invalid'});
    const platform=createPlatform(document.querySelector('canvas'),document.querySelector('output'),()=>{},()=>{},()=>{},ui.event,ui.blocks);
    const state={session:{phase:'world',revision:1,character:'Fixture'},gameplay:g.take(),entities:[],width:1200,height:900,worldReady:true};
    globalThis.quickslotFixture={commands,frames,get semantics(){return semantics;},draw(){const next=ui.step(state,performance.now());if(next){semantics=next;platform.presentUi(next);}renderer.frame({width:1200,height:900});},receive(opcode,payload){g.receive({opcode,payload:Uint8Array.from(payload)},performance.now());state.gameplay=g.take();this.draw();},dispose(){g.dispose();ui.dispose();platform.dispose();assets.dispose();renderer.dispose();}};
