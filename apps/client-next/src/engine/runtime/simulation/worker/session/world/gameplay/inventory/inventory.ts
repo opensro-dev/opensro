@@ -47,7 +47,7 @@ import {
 	type StorageRoom,
 	storageWireType
 } from "@/engine/foundation/gameplay/storage-room";
-import { createAlchemy } from "./alchemy/alchemy";
+import { createAlchemy, stoneDesignatedAttribute } from "./alchemy/alchemy";
 import { REPAIR_ONE_SLOT, REPAIR_RESPONSE_OPCODE, repairRequest } from "@/engine/foundation/gameplay/repair";
 import { createGacha } from "./gacha/gacha";
 import { gachaPrizes } from "@/engine/foundation/gameplay/gacha-catalog";
@@ -86,7 +86,7 @@ import {
 } from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
@@ -224,6 +224,7 @@ presentShop
 	const useCooldowns = new Map<number, number>();
 	const refs = new Map<number, number>(), names = new Map<number, string>();
 	const icons = new Map<number, string>();
+	const codenames = new Map<number, string>();
 	const tooltipRefs = new Map<number, ItemTooltipReference>();
 	// The Magic Pang window's twelve prizes with the reference icons, rebuilt when references change.
 	let gachaRows: {
@@ -591,6 +592,17 @@ purchaseMall
 		},
 		/*
 ================
+inquireMallSilkHistory
+================
+		*/
+		inquireMallSilkHistory( period: number, now: number ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const frame = mall.inquireSilkHistory( period, now );
+			send( frame );
+			return frame;
+		},
+		/*
+================
 takeBindingMoves
 ================
 		*/
@@ -774,6 +786,7 @@ bootstrap
 			equipmentSlotCount = b.equipmentSlotCount;
 			names.clear();
 			icons.clear();
+			codenames.clear();
 			objRefs.clear();
 			for (
 				const row of (value as { refObjSnapshot?: { refObjId: number; tidWord: number; }[]; }).refObjSnapshot ??
@@ -803,6 +816,7 @@ bootstrap
 				useCooldowns.set( r.refObjId, cooldown );
 				refs.set( r.refObjId, r.typeFlags );
 				if ( typeof r.name === "string" ) names.set( r.refObjId, r.name );
+				if ( typeof r.codename === "string" ) codenames.set( r.refObjId, r.codename );
 			}
 			const next = new Map<number, InventoryItem>(), seenSlots = new Set<number>();
 			for ( const row of b.equipItems ?? [] ) {
@@ -971,9 +985,22 @@ exchangeCommand
 				send( exchange );
 				return exchange;
 			}
+			// 625980 names the designated attribute's change apart from
+			// an assimilated one, so the start remembers which attribute
+			// the used stone designates (its codename names it).
+			let designated: string | undefined;
+			if ( command.kind === "alchemy-start" ) {
+				for ( const slot of command.slots.slice( 1 ) ) {
+					designated = stoneDesignatedAttribute(
+						command.mode,
+						codenames.get( slots.get( slot )?.refObjId ?? -1 )
+					);
+					if ( designated ) break;
+				}
+			}
 			const frame = command.kind === "gacha-open" ?
 				gacha.open( command.gid ) :
-				alchemy.start( command.mode, command.slots, slots, now, command.quantity );
+				alchemy.start( command.mode, command.slots, slots, now, command.quantity, designated );
 			send( frame );
 			return frame;
 		},
@@ -1694,6 +1721,10 @@ receive
 				mall.balance( p );
 				return true;
 			}
+			if ( op === MALL_SILK_HISTORY_CONTROL ) {
+				mall.silkHistoryAnswer( p );
+				return true;
+			}
 			if ( op === 15 ) {
 				const items = mall.projection( p );
 				if ( items !== undefined ) {
@@ -1845,7 +1876,15 @@ receive
 					previousDurability: old.durability,
 					// 0xB651 is a magic or attribute stone's answer.
 					...(op === 0xb651 && flags & 0x10 && next ?
-						{ stone: { before: present( old ), after: present( { ...next, slot: n } ) } } :
+						{
+							stone: {
+								before: present( old ),
+								after: present( { ...next, slot: n } ),
+								...(alchemy.state().designated ?
+									{ designated: alchemy.state().designated } :
+									{})
+							}
+						} :
 						{})
 				};
 				for ( const cue of alchemy.result( n, flags, null, detail ) ) play( cue );
@@ -2340,6 +2379,7 @@ state
 		state() {
 			return {
 				itemMall: mall.state(),
+				itemMallSilkHistory: mall.silkHistory(),
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),

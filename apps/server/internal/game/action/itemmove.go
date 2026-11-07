@@ -312,6 +312,27 @@ func (rt *Runtime) applyInventoryMove(
 }
 
 /*
+================
+groundDropBarred
+
+The two native ground-drop bars, read off the item's reference row:
+the COS-summoner family (TID 3/2) may never leave for the ground -
+monster capsules (TID3 2) are the one exemption, a capsule exists to
+be set down - and a row whose authored CanDrop bit is clear is kept;
+the quest items are the visible mass of the second bar. Either bar
+answers the indisposable refusal (01:38); the native routine checks
+the family first, then the bit.
+================
+*/
+func groundDropBarred(ref *enterworld.ItemRef) bool {
+	t := ref.TypeIDs
+	if t[0] == 3 && t[1] == 2 && t[2] != 2 {
+		return true
+	}
+	return !ref.CanDrop
+}
+
+/*
 ==================
 applyGroundDrop
 ==================
@@ -338,6 +359,19 @@ func (rt *Runtime) applyGroundDrop(
 		if row, present := inv.At(sourceSlot); present && rt.HalloweenHelmetSeal.Sealed(row.Codename) {
 			result = failureResult(wire.ErrCodeCannotBeDropped)
 			return false
+		}
+
+		// The native drop routine bars barred bag rows before anything
+		// moves, with the indisposable refusal (01:38). A worn row
+		// never reaches these gates: Drop answers it 01:6D below, in
+		// the native order (the equipment fault precedes the drop).
+		if refs := rt.deps.ItemReferences(); refs != nil && !inventory.IsEquipmentSlot(sourceSlot) {
+			if row, present := inv.At(sourceSlot); present {
+				if ref, ok := refs.ItemRefByCodename(row.Codename); ok && ref != nil && groundDropBarred(ref) {
+					result = failureResult(wire.ErrCodeCannotBeDropped)
+					return false
+				}
+			}
 		}
 
 		// The native type-7 wire has no quantity field: the whole row goes.

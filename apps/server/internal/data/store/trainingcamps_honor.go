@@ -170,8 +170,8 @@ func (door storeCampDoor) completeGraduationLocked(
 
 	camp := s.camps[divisionID][campID]
 	members := s.campMembers[divisionID][campID]
-	membersBefore := append([]domain.TrainingCampMemberRecord(nil), members...)
-	graduate := members[memberIdx]
+	membersBefore := cloneCampMembers(members)
+	graduate := cloneCampMember(members[memberIdx])
 
 	joinLevel := int(graduate.JoinLevel)
 	if joinLevel < 1 {
@@ -231,7 +231,7 @@ func (door storeCampDoor) completeGraduationLocked(
 		Camp:          camp,
 		Graduate:      graduate,
 		MembersBefore: membersBefore,
-		MembersAfter:  append([]domain.TrainingCampMemberRecord(nil), next...),
+		MembersAfter:  cloneCampMembers(next),
 		HonorDeltas:   honorDeltas,
 		RankChanges:   rankChanges,
 		AwardedExp:    voluntary && graduate.Kind == 2,
@@ -344,7 +344,7 @@ func (door storeCampDoor) recomputeEvaluationRanksLocked(divisionID string) []do
 			CampID:       campID,
 			MasterCharID: camp.MasterCharID,
 			Evaluation:   nextRank,
-			Members:      append([]domain.TrainingCampMemberRecord(nil), s.campMembers[divisionID][campID]...),
+			Members:      cloneCampMembers(s.campMembers[divisionID][campID]),
 		})
 	}
 	return changes
@@ -464,7 +464,7 @@ func (door storeCampDoor) SpendHonorPoints(divisionID string, charID int64, cost
 		return 0, nil, false
 	}
 	if cost == 0 {
-		return members[memberIdx].HonorPoints, append([]domain.TrainingCampMemberRecord(nil), members...), true
+		return members[memberIdx].HonorPoints, cloneCampMembers(members), true
 	}
 
 	next := make([]domain.TrainingCampMemberRecord, len(members))
@@ -474,5 +474,5 @@ func (door storeCampDoor) SpendHonorPoints(divisionID string, charID int64, cost
 	s.changes.camps[campKey{division: divisionID, campID: campID}] = true
 	s.commitLocked(fmt.Sprintf("training-camp-spend-honor %s/%d char=%d cost=%d", divisionID, campID, charID, cost))
 
-	return next[memberIdx].HonorPoints, append([]domain.TrainingCampMemberRecord(nil), next...), true
+	return next[memberIdx].HonorPoints, cloneCampMembers(next), true
 }

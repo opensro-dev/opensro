@@ -45,7 +45,8 @@ atmosphere stages that deviate from the 2005 look, Lighting the direct-light
 stages, Chat and Developer the earlier additions. Pickup holds the item
 filter's kinds (#841); it is appended last so the existing tabs keep the
 indices a reopening window relies on. Jobs (#1849) is appended after it for
-the same reason.
+the same reason. Effects, last, holds the port-only image effects the 2005
+scene never had (sky detail first); every other tab is at its seven rows.
 ================
 */
 export const EXPERIMENTAL_TABS: readonly {
@@ -193,6 +194,15 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-dungeon-character-pvs",
 				label: "Dungeon character PVS",
 				description: "Hide characters in unseen dungeon rooms."
+			},
+			{
+				// Here for room (#2269): the window fits seven rows a tab
+				// and every other tab holds seven already; the option,
+				// its key and its default are unaffected.
+				key: "silkHistory",
+				id: "experimental-silk-history",
+				label: "Silk charge history",
+				description: "The Item Mall's Buying list: silk spending by period."
 			}
 		]
 	},
@@ -260,10 +270,10 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Item break notices",
 			description: "Show the shard's item break announcements."
 		}, {
-			key: "uniqueDamageRank",
-			id: "experimental-unique-damage-rank",
-			label: "Unique damage ranking",
-			description: "When a unique you hit dies, show who did the most."
+			key: "highlightEventNotices",
+			id: "experimental-highlight-event-notices",
+			label: "Highlight event notices",
+			description: "Show the shard's event announcements in red."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
@@ -352,6 +362,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-quest-tracker-markers",
 			label: "Quest target markers",
 			description: "Show every active quest's target on M and the minimap."
+		}, {
+			// Moved from Notices (#2727): the window fits seven rows a
+			// tab and the event highlight row joins Shard notices; the
+			// option, its key and its default are unchanged.
+			key: "uniqueDamageRank",
+			id: "experimental-unique-damage-rank",
+			label: "Unique damage ranking",
+			description: "When a unique you hit dies, show who did the most."
 		} ]
 	},
 	{
@@ -395,13 +413,13 @@ export const EXPERIMENTAL_TABS: readonly {
 		} ]
 	},
 	{
-		title: "Jobs",
-		section: "Job buffs",
+		title: "Effects",
+		section: "Image effects",
 		rows: [ {
-			key: "mostWantedBuff",
-			id: "experimental-most-wanted-buff",
-			label: "Most Wanted buff",
-			description: "Show your wanted level on the buff board."
+			key: "skyDetail",
+			id: "experimental-sky-detail",
+			label: "Sky detail",
+			description: "Drifting clouds, sun glow and rim light."
 		} ]
 	}
 ];

@@ -40,6 +40,10 @@ export interface AlchemyState {
 	// The last finished reinforcement, for the window's effect and chat
 	// lines (alchemy-result.ts); sequence tells a new one from a republish.
 	readonly outcome?: AlchemyOutcome;
+	// The attribute the staged stone designates (625980 names its change
+	// apart from an assimilated one): "NATTR_*" for an attribute stone,
+	// "MATTR_*" for a magic stone, absent for anything else.
+	readonly designated?: string;
 	readonly locked?: boolean;
 	readonly remaining?: number;
 	readonly total?: number;
@@ -70,7 +74,13 @@ export interface AlchemyOutcome {
 	readonly previousPlus: number;
 	readonly durability: number;
 	readonly previousDurability: number;
-	readonly stone?: { readonly before: InventoryItem; readonly after: InventoryItem; };
+	readonly stone?: {
+		readonly before: InventoryItem;
+		readonly after: InventoryItem;
+		// The used stone's designated attribute ("NATTR_*"/"MATTR_*"), so
+		// the presenter can tell its change from an assimilated one.
+		readonly designated?: string;
+	};
 }
 
 /*

@@ -2,6 +2,36 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/window-placement.ts",
+			"functions": [
+				"frame"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": [
+				"compactWindowDrag",
+				"compactCloseControl"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/input/input.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
@@ -1062,14 +1092,14 @@
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"sessionCommand",
-				"callback:createUi:8",
-				"callback:createUi:10",
-				"callback:createUi:11",
-				"callback:createUi:12",
-				"callback:createUi:13",
-				"callback:createUi:14",
-				"callback:createUi:15",
-				"callback:createUi:16",
+				"audioPreference",
+				"loadingVariant",
+				"saveBindings",
+				"saveBlocks",
+				"saveOptions",
+				"saveQuickslots",
+				"saveSight",
+				"saveVideo",
 				"playSoundByName",
 				"saveCameraWaypoints",
 				"saveExperimental",
@@ -1298,7 +1328,7 @@
 			"functions": [
 				"callback:createGameplay:1",
 				"callback:createGameplay:4",
-				"structureName"
+				"structure"
 			]
 		},
 		{
@@ -1632,14 +1662,15 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy",
-				"callback"
+				"callback",
+				"chooseTip"
 			]
 		},
 		{
 			"consumer": "src/engine/runtime/ui/hud/messages.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
-				"callback:createUi:9"
+				"chooseTip"
 			]
 		},
 		{
@@ -1744,6 +1775,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/buff-board.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
@@ -1819,6 +1857,13 @@
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/count-job.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/param-job.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy"
@@ -4207,8 +4252,8 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "11733969dba842c85675b69915de4cb5c443e819492f486971f68209fcc1ac41",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the GPU readback from the frame, but the answer is delivered between frames and folded into the next frame's advance: AEC0D0 ramps alpha at 1.5 per ms, so consuming it a frame late changes nothing visible, and no frame waits for the queue to drain (#2573). Ordinary frames issue no readback at all. A hidden frame renders only while a world entry awaits game-ready, under the same delivery: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the delivery ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the delivery ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the delivery ordering above is unchanged by it. The same report block now files its runtime-error incidents under cause-named codes (#2559: asset_failed with the retry owner's facts, runtime_exception with a bounded stack, asset_offline for fetch bursts and offline, fatal_asset_failed only for the asset worker's death); these are likewise synchronous sends at the existing call site and do not change the delivery ordering above. The frame also suppresses the target selection ring while the followed target is blind-hidden (#2570): a pure read of the published entity and the held V key at the existing setSelectionDecal call site, so the delivery ordering above is unchanged by it.",
+			"sourceSha256": "f58172ffeb7588073d4d2746a6895e10e6af1b006c06fa6651b0e1cbd40e71b6",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser issues the GPU readback from the frame, but the answer is delivered between frames and folded into the next frame's advance: AEC0D0 ramps alpha at 1.5 per ms, so consuming it a frame late changes nothing visible, and no frame waits for the queue to drain (#2573). Ordinary frames issue no readback at all. A hidden frame renders only while a world entry awaits game-ready, under the same delivery: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the delivery ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the delivery ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the delivery ordering above is unchanged by it. The same report block now files its runtime-error incidents under cause-named codes (#2559: asset_failed with the retry owner's facts, runtime_exception with a bounded stack, asset_offline for fetch bursts and offline, fatal_asset_failed only for the asset worker's death); these are likewise synchronous sends at the existing call site and do not change the delivery ordering above. The frame also suppresses the target selection ring while the followed target is blind-hidden (#2570): a pure read of the published entity and the held V key at the existing setSelectionDecal call site, so the delivery ordering above is unchanged by it. Startup now hands createUi one ports record instead of seventeen positional arguments (#2516); the frame body and its ordering are unchanged by that.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [

@@ -139,6 +139,77 @@ func upgradeAnswer(t *testing.T, out OpResult) []byte {
 
 /*
 ================
+TestFortressUpgradeReferences
+
+The client default (-1) prefers the second target even though a server
+request with index 0 chooses the first. Missing rows and unresolved named
+targets remain distinct on the public reference boundary.
+================
+*/
+func TestFortressUpgradeReferences(t *testing.T) {
+	rt, _, _, _, _, _ := upgradeFixture(t)
+	refs := rt.FortressUpgradeReferences()
+	if refs[testPositionRef0] != testPositionRef1 || refs[testPositionRef1] != testPositionRef2 {
+		t.Fatalf("first target fallback = %v", refs)
+	}
+	if _, present := refs[testPositionRef2]; present {
+		t.Fatal("a structure with no upgrade row acquired a target")
+	}
+	const code = "STRUCTURE_SMALL_DEFENSIVE_POSITION_00"
+	rt.structureUpgrades[code] = [structureUpgradeTargets]string{
+		"STRUCTURE_SMALL_DEFENSIVE_POSITION_01", "STRUCTURE_SMALL_DEFENSIVE_POSITION_02",
+	}
+	if got := rt.FortressUpgradeReferences()[testPositionRef0]; got != testPositionRef2 {
+		t.Fatalf("default target = %d, want second target %d", got, testPositionRef2)
+	}
+	rt.structureUpgrades[code] = [structureUpgradeTargets]string{"STRUCTURE_SMALL_DEFENSIVE_POSITION_01", "UNRESOLVED_TARGET"}
+	if got, present := rt.FortressUpgradeReferences()[testPositionRef0]; !present || got != 0 {
+		t.Fatalf("unresolved target = %d, present %t; want explicit zero", got, present)
+	}
+	rt.structureUpgrades[code] = [structureUpgradeTargets]string{}
+	if _, present := rt.FortressUpgradeReferences()[testPositionRef0]; present {
+		t.Fatal("an empty target list must resolve to the original structure")
+	}
+}
+
+/*
+================
+TestStructureUpgradeGMOrdersReplyBeforeRoster
+
+The GM command shares the same reply and roster burst as a battle-aide request.
+================
+*/
+func TestStructureUpgradeGMOrdersReplyBeforeRoster(t *testing.T) {
+	rt, c, _, jangan, _, _ := upgradeFixture(t)
+	c.GMPrivilege = true
+	var frames []wire.Frame
+	rt.PushCharacterFrames = func(_, name string, sent []wire.Frame) {
+		if name == c.Name {
+			frames = append(frames, sent...)
+		}
+	}
+	if !rt.SiegeStructureGM(testDivision, c.Name, siege.ActionUpgrade, jangan, testPositionZone, 0) {
+		t.Fatal("GM upgrade refused")
+	}
+	replied, rosters := false, 0
+	for _, frame := range frames {
+		if frame.Opcode == opFortressInteractionResult {
+			replied = true
+		}
+		if frame.Opcode == opFortressWarState {
+			if !replied {
+				t.Fatal("GM saw the replacement before the upgrade result")
+			}
+			rosters++
+		}
+	}
+	if !replied || rosters != 1 {
+		t.Fatalf("reply %t, rosters %d; want reply then one roster", replied, rosters)
+	}
+}
+
+/*
+================
 TestStructureUpgradeBuildsADefensivePosition
 
 The map window's construction: type 0 on a level-0 defensive position.

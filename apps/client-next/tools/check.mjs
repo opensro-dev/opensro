@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { withHeavyLock } from "../../../scripts/checks/heavyLock.mjs";
 import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
 
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
@@ -176,5 +177,12 @@ async function main() {
 if ( process.argv.includes( SOURCE_FLAG ) ) {
 	await main();
 } else {
-	await withGeneratedAssetsLock( "client verification", main, { mode: "read" } );
+	// The full check is a machine-heavy job: it takes the heavy lock itself
+	// (#2766) so two checks on one PC queue instead of running together,
+	// whether or not the caller remembered workflow/heavy.py. The --source
+	// lane stays unlocked, as it does under heavy.py.
+	await withHeavyLock(
+		{ owner: "client-check", cmd: "full client check (apps/client-next/tools/check.mjs)" },
+		() => withGeneratedAssetsLock( "client verification", main, { mode: "read" } )
+	);
 }

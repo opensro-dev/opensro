@@ -47,6 +47,16 @@ const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
 // pk.DeathTeam, the 0x37CE mode that labels the death box "standing" (52FF33).
 const TEAM_DEATH_MODE = 2;
+// Port-only, not native (#2406): the widest band the small-viewport party
+// board may occupy, on the left of the screen.
+const PARTY_BAND_MAX_WIDTH = 480;
+// The chat strip a visible chat occupies above the underbar, in the terms
+// chat-layout.ts totals it by: a 62px frame of tabs and input, 56px per
+// log row, or the 20px input line alone - plus the party board's 4px gap.
+const CHAT_STRIP_FRAME = 62;
+const CHAT_STRIP_ROW = 56;
+const CHAT_STRIP_INPUT = 20;
+const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -156,6 +166,8 @@ import {
 	mallPageNumberPresentation,
 	mallCurrencyRows,
 	mallQuestionLayout,
+	mallSilkPeriodTexts,
+	mallSilkHistoryDate,
 	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
 import {
@@ -177,7 +189,7 @@ import {
 	skillTrainingReason
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
-import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
+import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
@@ -202,10 +214,20 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
-import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import {
+	createCompactHud,
+	compactHudLayout,
+	compactWindowDrag,
+	compactCloseControl,
+	DESKTOP_HEIGHT,
+	DESKTOP_WIDTH,
+	UNDERBAR_HEIGHT,
+	UNDERBAR_WIDTH
+} from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import {
+	browserDisplayClass,
 	renderScales,
 	UI_SCALE_MAX,
 	UI_SCALE_MIN,
@@ -489,7 +511,7 @@ import {
 	isMainPopupPage,
 	type MainPopupPage
 } from "@/engine/foundation/ui/main-popup";
-import { closedPanel, isUiPanel, panelCloseId, type PanelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
+import { closedPanel, isUiPanel, panelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
@@ -537,6 +559,7 @@ import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
+	partyColumns,
 	partyDistanceShade,
 	partyMembers,
 	partyLocalPose,
@@ -656,7 +679,6 @@ import {
 } from "@/engine/foundation/ui/loading-presentation";
 import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
-import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
@@ -714,6 +736,8 @@ import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
+import * as frameDraw from "./frame/frame";
+import type { CloseControlId, UiFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
@@ -836,12 +860,6 @@ import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/con
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
 import type { EntityState } from "@/engine/contracts/world";
 import type { UiTexture } from "@/engine/contracts/texture";
-
-// A window frame's close control is named after its window: a panel's own
-// panelCloseId, or a service window's "<window>-close" (a stall visitor
-// leaves). A bare "close" is not one: shared by every frame, it was unique
-// only while a single window showed.
-type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -1083,29 +1101,90 @@ function pageStorage(): Storage | null {
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
 /*
 ================
+UiPorts
+
+The one record createUi reads (#2516): the asset owner, the session
+command sink, the scene and texture publication, the two base URLs, the
+sound and persistence callbacks and the browser-only extensions. The
+first six fields are required; the rest fall back per field through
+defaultUiPorts.
+================
+*/
+export interface UiPorts {
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
+	commands: ( command: SessionCommand ) => void;
+	publish: ( scene: UiScene | null ) => void;
+	texture: ( id: string, image: UiTexture | null ) => void;
+	base: string;
+	apiBase: string;
+	clickSound?: () => void;
+	sound?: ( kind: "open" | "close" | "message" | "quest" ) => void;
+	loadingVariant?: () => number;
+	chooseTip?: ( count: number ) => number;
+	saveOptions?: ( value: GameOptions ) => void;
+	audioPreference?: ( value: AudioOptions, commit: boolean ) => void;
+	saveSight?: ( value: SightMode ) => void;
+	saveBindings?: ( value: InputOptions ) => void;
+	saveVideo?: ( value: VideoOptions ) => void;
+	saveBlocks?: ( value: readonly string[] ) => void;
+	saveQuickslots?: ( value: ExtendedQuickslotOptions ) => void;
+	extensions?: UiExtensions;
+}
+
+/*
+================
+defaultUiPorts
+
+The defaults for every optional UiPorts field: silent sounds, the first
+loading variant and tip, persistence sinks that drop their value and no
+extensions. createUi falls back to these per field, exactly as its
+defaulted parameters did before the record.
+================
+*/
+export function defaultUiPorts(): Required<
+	Omit<UiPorts, "assets" | "commands" | "publish" | "texture" | "base" | "apiBase">
+> {
+	return {
+		clickSound: () => {},
+		sound: () => {},
+		loadingVariant: () => 1,
+		chooseTip: () => 0,
+		saveOptions: () => {},
+		audioPreference: () => {},
+		saveSight: () => {},
+		saveBindings: () => {},
+		saveVideo: () => {},
+		saveBlocks: () => {},
+		saveQuickslots: () => {},
+		extensions: {}
+	};
+}
+
+/*
+================
 createUi
 ================
 */
-export function createUi(
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	commands: ( command: SessionCommand ) => void,
-	publish: ( scene: UiScene | null ) => void,
-	texture: ( id: string, image: UiTexture | null ) => void,
-	base: string,
-	apiBase: string,
-	clickSound: () => void = () => {},
-	sound: ( kind: "open" | "close" | "message" | "quest" ) => void = () => {},
-	loadingVariant: () => number = () => 1,
-	chooseTip: ( count: number ) => number = () => 0,
-	saveOptions: ( value: GameOptions ) => void = () => {},
-	audioPreference: ( value: AudioOptions, commit: boolean ) => void = () => {},
-	saveSight: ( value: SightMode ) => void = () => {},
-	saveBindings: ( value: InputOptions ) => void = () => {},
-	saveVideo: ( value: VideoOptions ) => void = () => {},
-	saveBlocks: ( value: readonly string[] ) => void = () => {},
-	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {},
-	extensions: UiExtensions = {}
-) {
+export function createUi( ports: UiPorts ) {
+	const defaults = defaultUiPorts();
+	const assets = ports.assets,
+		commands = ports.commands,
+		publish = ports.publish,
+		texture = ports.texture,
+		base = ports.base,
+		apiBase = ports.apiBase,
+		clickSound = ports.clickSound ?? defaults.clickSound,
+		sound = ports.sound ?? defaults.sound,
+		loadingVariant = ports.loadingVariant ?? defaults.loadingVariant,
+		chooseTip = ports.chooseTip ?? defaults.chooseTip,
+		saveOptions = ports.saveOptions ?? defaults.saveOptions,
+		audioPreference = ports.audioPreference ?? defaults.audioPreference,
+		saveSight = ports.saveSight ?? defaults.saveSight,
+		saveBindings = ports.saveBindings ?? defaults.saveBindings,
+		saveVideo = ports.saveVideo ?? defaults.saveVideo,
+		saveBlocks = ports.saveBlocks ?? defaults.saveBlocks,
+		saveQuickslots = ports.saveQuickslots ?? defaults.saveQuickslots,
+		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
@@ -1255,6 +1334,18 @@ export function createUi(
 		CLOSE_FOCUS,
 		...PARTS.map( p => FRAME + p + ".png" )
 	];
+	const frameChrome = {
+		frame: FRAME,
+		parts: PARTS,
+		button: BUTTON,
+		buttonFocus: BUTTON_FOCUS,
+		buttonPress: BUTTON_PRESS,
+		buttonDisable: BUTTON_DISABLE,
+		close: CLOSE,
+		closePress: CLOSE_PRESS,
+		closeFocus: CLOSE_FOCUS
+	};
+	const frameCompactPolicy = { windowDrag: compactWindowDrag, closeControl: compactCloseControl };
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
@@ -1375,6 +1466,8 @@ export function createUi(
 	}
 	let recallConfirm: number | null = null;
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
+	// The saved Academy buff's pass question (6E2840's simple-box type 9).
+	let academyBuffPass = false;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
 	// The europe variant the next plain load draws, chosen a load ahead so
@@ -1489,6 +1582,11 @@ export function createUi(
 	let guideOrigin: { regionId: number; x: number; z: number; } | null = null;
 	let rememberedMainPopup: MainPopupPage = "Character";
 	const compactHud = createCompactHud();
+	// Read once, as the renderer does for the phone display class: the primary
+	// pointer's coarseness does not change while the interface lives. The
+	// compact HUD is the touch layout; a fine pointer keeps the native HUD at
+	// any window size (the underbar is scaled to fit instead).
+	const displayClass = browserDisplayClass();
 	const chatScroll = createMessageScroll( "chat-scroll" ), statusScroll = createMessageScroll( "status-scroll" );
 	const stallChatScroll = createMessageScroll( "stall-chat-scroll" ),
 		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
@@ -1619,7 +1717,7 @@ export function createUi(
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
 	// The structure target window's delete question (517750 -> 517CA0).
-	let structureRemoval: { gid: number; action: number; fortress: number; name: string; } | null = null;
+	let structureRemoval: { gid: number; action: number; fortress: number; name: string; kind: number; } | null = null;
 	/*
 	================
 	followStorageMove
@@ -3668,6 +3766,29 @@ export function createUi(
 			dirty = true;
 			return;
 		}
+		if ( id === "item-mall-silk-open" ) {
+			itemMall.openSilk();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-combo" ) {
+			itemMall.toggleSilkCombo();
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-silk-period:" ) ) {
+			itemMall.selectSilkPeriod( Number( id.slice( "item-mall-silk-period:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-inquire" && view?.gameplay ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			if ( !view.gameplay.inventoryPending ) {
+				sendGameplay( { kind: "mall-silk-inquire", period: state.silk.period } );
+			}
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "item-mall-category:" ) ) {
 			itemMall.browse( Number( id.slice( "item-mall-category:".length ) ) );
 			dirty = true;
@@ -3967,14 +4088,16 @@ export function createUi(
 			return;
 		}
 		if (
-			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
-			id.startsWith( "npc-choice:" )
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-event-exchange" || id === "npc-close" ||
+			id === "npc-talkend" || id.startsWith( "npc-choice:" )
 		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
 					id === "npc-withdraw" ?
 					{ kind: "npc-withdraw" } :
+					id === "npc-event-exchange" ?
+					{ kind: "npc-event-exchange" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -5244,6 +5367,20 @@ export function createUi(
 				} );
 			}
 			dirty = true;
+		} else if ( id === "academy-buff-saved" && view.gameplay ) {
+			const boardRow = buffBoard(
+				view.gameplay,
+				view.simulationTimeMs ?? 0,
+				undefined,
+				undefined,
+				undefined,
+				hudCopy
+			).find( row => row.id === id );
+			// The saved buff is published as a normal button. Route its
+			// existing 6E2840 pass question through the same activation path.
+			if ( !boardRow?.passBuff ) return;
+			academyBuffPass = true;
+			dirty = true;
 		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
 			compositeItemHud.open( Number( id.slice( "count-job:".length ) ) );
@@ -5998,7 +6135,13 @@ export function createUi(
 			const game = view.gameplay, target = view.entities.find( row => row.gid === game?.target );
 			const action = target ? structureRemoveAction( target ) : 0, fortress = fortressStaffView().fortress;
 			if ( target && action && fortress !== undefined ) {
-				structureRemoval = { gid: target.gid, action, fortress, name: target.name };
+				structureRemoval = {
+					gid: target.gid,
+					action,
+					fortress,
+					name: target.name,
+					kind: fortressTargetKind( target )
+				};
 			}
 		} else if ( id === "inventory-next" ) {
 			// 59DF10 pages the bag alone: the 13 sockets hold no page.
@@ -7127,6 +7270,32 @@ export function createUi(
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
 			}
+			if ( academyBuffPass ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-buff-pass-cancel"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-buff-pass-confirm"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.academy?.savedBuff ) {
+						sendGameplay( { kind: "academy-pass-buff" } );
+					}
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
 
 			if ( groundDrop ) {
 				if ( event.kind === "key" ) {
@@ -7705,7 +7874,7 @@ export function createUi(
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
 					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
-					compactLayout = compactHudLayout( view.width, view.height ),
+					compactLayout = compactHudLayout( view.width, view.height, displayClass.coarsePointer ),
 					origin = compactLayout && header ?
 						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
 						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
@@ -9920,6 +10089,10 @@ export function createUi(
 					dirty = true;
 				}
 			}
+			if ( (phase !== "world" || !next.gameplay?.academy?.savedBuff) && academyBuffPass ) {
+				academyBuffPass = false;
+				dirty = true;
+			}
 			if ( phase !== "world" ) autoPotionInput.reset();
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
@@ -10136,8 +10309,53 @@ export function createUi(
 			const fontPath = text.path();
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
-			const compact = compactHud.layout( w, h );
+			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
+			const drawFrame: UiFrame = {
+				quads,
+				controls,
+				blocks,
+				paths,
+				w,
+				h,
+				full,
+				hud: hud.data(),
+				text,
+				resources,
+				windowPlacement,
+				compact,
+				chrome: frameChrome,
+				compactPolicy: frameCompactPolicy,
+				white,
+				commonWindowPaths,
+				admittedWindows,
+				windowMissing,
+				contentImages,
+				phase,
+				fontPath,
+				pressed,
+				hover,
+				focus
+			};
 			let targetBottom = 0, compactTelemetryTop = 4;
+			// The chat strip the party board must stay clear of, counting only
+			// a chat that is actually drawn: the native bottom zone (underbar
+			// plus tabs and rows) on a fine pointer, and on touch the compact
+			// stack plus the chat lines only while the "chat" overlay is open
+			// (the touch layout keeps its chat behind that overlay, as it
+			// always has). The underbar's scale is the width's (its art is
+			// exactly UNDERBAR_WIDTH wide), so the chat and the party reserve
+			// follow the scaled bar without waiting for its measurement.
+			const visibleChatRows = compact ? (compact.overlay === "chat" ? chatRows : 0) : chatRows,
+				chatStrip = compact && compact.overlay !== "chat" ?
+					0 :
+					visibleChatRows > 0 ?
+					CHAT_STRIP_FRAME + visibleChatRows * CHAT_STRIP_ROW :
+					CHAT_STRIP_INPUT;
+			const underbarScale = !compact && w < UNDERBAR_WIDTH ? w / UNDERBAR_WIDTH : 1,
+				underbarHeight = compact ? compact.bottom : UNDERBAR_HEIGHT * underbarScale;
+			const partyFloor = compact ?
+				h - compact.bottom - chatStrip - PARTY_CHAT_GAP :
+				h - underbarHeight - chatStrip - PARTY_CHAT_GAP;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -10161,18 +10379,7 @@ export function createUi(
 				id = "window-drag:" + name,
 				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
 			) {
-				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
-				const drag = options.drag;
-				controls.push( {
-					id,
-					label: name,
-					kind: "region",
-					draggable: true,
-					rect: drag ?
-						[ r[0] + drag[0], r[1] + drag[1], drag[2], drag[3] ] :
-						[ r[0] + 10, r[1], r[2] - 21, 34 ]
-				} );
-				return r;
+				return frameDraw.windowOrigin( drawFrame, { name, initial, id, options } );
 			}
 			/*
 			================
@@ -10186,7 +10393,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
+				return frameDraw.rect( drawFrame, { r, color, textureId, uv, clip } );
 			}
 			// CIFStateSlot children render after the icon: the admittance overlay
 			// (6E8410), then the gauge at {0, cell, cell, 4} (6E7FA0).
@@ -10196,28 +10403,7 @@ export function createUi(
 			================
 			*/
 			function buffViewer( prefix: string, icons: readonly BuffViewerIcon[], ox: number, oy: number ) {
-				for ( const icon of icons ) {
-					const r: UiRect = [ ox + icon.x, oy + icon.y, icon.size, icon.size ],
-						gauge: UiRect = [ r[0], r[1] + icon.size, icon.size, 4 ];
-					for ( const layer of [ icon.path, ...icon.overlay ] ) {
-						if ( layer ) {
-							paths.push( layer );
-							if ( resources.has( layer ) ) rect( r, white, layer );
-						}
-					}
-					for ( const layer of icon.gauge ) {
-						paths.push( layer );
-						if ( resources.has( layer ) ) rect( gauge, white, layer );
-					}
-					controls.push( {
-						id: prefix + icon.id,
-						label: icon.label,
-						helpSource: icon.helpSource,
-						kind: "region",
-						rect: r
-					} );
-					blocks.push( r );
-				}
+				return frameDraw.buffViewer( drawFrame, { prefix, icons, ox, oy } );
 			}
 			/*
 			================
@@ -10231,8 +10417,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				paths.push( path );
-				if ( resources.has( path ) ) rect( r, color, path, uv, clip );
+				return frameDraw.image( drawFrame, { r, path, color, uv, clip } );
 			}
 			/*
 			================
@@ -10244,10 +10429,7 @@ export function createUi(
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
-				paths.push( path );
-				if ( resources.has( path ) ) {
-					quads.push( { rect: r, color: white, texture: path, uv, clip: full, additive: true } );
-				}
+				return frameDraw.additiveImage( drawFrame, r, path, uv );
 			}
 			/*
 			================
@@ -10261,11 +10443,7 @@ export function createUi(
 				color: readonly [number, number, number, number] = white,
 				clip: UiRect = full
 			) {
-				quads.push(
-					...text.quads( value, [ x, y, Math.max( 0, clip[0] + clip[2] - x ), 22 ], clip, color, {
-						vAlign: 0
-					} )
-				);
+				return frameDraw.label( drawFrame, { value, x, y, color, clip } );
 			}
 			// A window is one resource admission. Keep demand while withholding BOTH
 			// pixels and hit areas, so a cold open cannot expose an empty clickable shell.
@@ -10275,9 +10453,7 @@ export function createUi(
 			================
 			*/
 			function beginWindow() {
-				const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-				paths.push( ...commonWindowPaths );
-				return mark;
+				return frameDraw.beginWindow( drawFrame );
 			}
 			/*
 			================
@@ -10292,60 +10468,7 @@ export function createUi(
 				// instead of every quad's raw extent.
 				source?: UiRect
 			) {
-				const admittedWindow = admittedWindows.get( owner );
-				// Everything still loading is reported (tests wait on it before a raster);
-				// only the window's own art holds its admission.
-				const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
-				windowMissing.push( ...unloaded );
-				const gaps = unloaded.filter( path => !contentImages.has( path ) );
-				const key = phase + ":" + w + ":" + h;
-				if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-					quads.length = mark[0];
-					controls.length = mark[1];
-					blocks.length = mark[2];
-					// Keep a fully admitted popup until its replacement is ready. Old image
-					// demand stays alive; stale content controls cannot dispatch new-tab actions.
-					if ( admittedWindow?.key === key ) {
-						quads.push( ...admittedWindow.quads );
-						blocks.push( ...admittedWindow.blocks );
-						paths.push( ...admittedWindow.paths );
-						controls.push(
-							...admittedWindow.controls.map( c => ({
-								...c,
-								disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-									c.disabled :
-									true
-							}) )
-						);
-					}
-				} else {
-					// Fit within this window before caching/publication; text behind a modal
-					// must not become a neighboring column of that modal.
-					if ( compact ) {
-						const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-							full :
-							compact.bounds;
-						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-							blocks,
-							firstBlock: mark[2],
-							disableDrag: compactWindowDrag,
-							...(source ? { sourceBounds: source } : {})
-						} );
-						for ( let i = mark[1]; i < controls.length; i++ ) {
-							controls[i] = compactCloseControl( controls[i]!, windowBounds );
-						}
-					}
-					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-					quads.length = mark[0];
-					quads.push( ...painted );
-					admittedWindows.set( owner, {
-						key,
-						quads: painted,
-						controls: controls.slice( mark[1] ),
-						blocks: blocks.slice( mark[2] ),
-						paths: paths.slice( mark[3] )
-					} );
-				}
+				return frameDraw.endWindow( drawFrame, mark, owner, source );
 			}
 			/*
 			================
@@ -10353,15 +10476,7 @@ export function createUi(
 			================
 			*/
 			function windowBox( title: string, x: number, y: number, width: number, height: number ) {
-				const r: UiRect = [ x, y, width, height ];
-				blocks.push( r );
-				rect( r, [ .06, .075, .065, .96 ] );
-				quads.push(
-					...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
-				);
-				quads.push(
-					...text.quads( title, [ x + 10, y + 12, width - 21, 12 ], full, white, { hAlign: 1, vAlign: 1 } )
-				);
+				return frameDraw.windowBox( drawFrame, { title, x, y, width, height } );
 			}
 			/*
 			================
@@ -10378,29 +10493,7 @@ export function createUi(
 				selected = false,
 				clientTop?: number
 			) {
-				const r: UiRect = [ x, y, width, 24 ];
-				blocks.push( r );
-				controls.push( { id, label: value, rect: r, kind: "button", disabled, selected } );
-				const down = !disabled && ((pressed === id && hover === id) || selected),
-					path = disabled ?
-						BUTTON_DISABLE :
-						down ?
-						BUTTON_PRESS :
-						((pressed === null && hover === id) || focus === id) ?
-						BUTTON_FOCUS :
-						BUTTON;
-				if ( [ BUTTON, BUTTON_FOCUS, BUTTON_PRESS, BUTTON_DISABLE ].every( resources.has ) ) {
-					rect( r, white, path );
-				}
-				quads.push(
-					...text.quads(
-						value,
-						[ x + (down ? 1 : 0), y + (down ? 1 : 0) + (clientTop ?? 0), width, 24 - (clientTop ?? 0) ],
-						r,
-						buttonTextColor( [ 254 / 255, 251 / 255, 216 / 255, 1 ], buttonAccess( false, disabled ) ),
-						{ hAlign: 1, vAlign: clientTop === undefined ? 1 : 0 }
-					)
-				);
+				return frameDraw.button( drawFrame, { id, value, x, y, width, disabled, selected, clientTop } );
 			}
 			/*
 			================
@@ -10408,12 +10501,7 @@ export function createUi(
 			================
 			*/
 			function closeButton( x: number, y: number, id: CloseControlId ) {
-				const r: UiRect = [ x, y, 16, 16 ];
-				blocks.push( r );
-				controls.push( { id, label: "Close", rect: r, kind: "button" } );
-				if ( resources.has( CLOSE ) && resources.has( CLOSE_PRESS ) && resources.has( CLOSE_FOCUS ) ) {
-					rect( r, white, pressed === id ? CLOSE_PRESS : hover === id ? CLOSE_FOCUS : CLOSE );
-				}
+				return frameDraw.closeButton( drawFrame, x, y, id );
 			}
 			/*
 			================
@@ -10843,16 +10931,7 @@ export function createUi(
 			================
 			*/
 			function comboBox( r: UiRect, id: string, label: string, value: string, disabled = false ) {
-				const chrome = comboBoxChrome(
-					r,
-					resources.size,
-					full,
-					!disabled && pressed === id ? 2 : !disabled && hover === id ? 1 : 0
-				);
-				paths.push( ...chrome.paths );
-				quads.push( ...chrome.quads );
-				quads.push( ...text.quads( value, chrome.textRect, r, white, { hAlign: 1, vAlign: 1 } ) );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
+				return frameDraw.comboBox( drawFrame, { r, id, label, value, disabled } );
 			}
 			/*
 			================
@@ -11707,7 +11786,7 @@ export function createUi(
 				);
 				quads.push( ...output.quads );
 				controls.push( ...output.controls );
-				paths = output.paths;
+				paths = drawFrame.paths = output.paths;
 				if ( (next.frontend.phase === "dock" || next.frontend.phase === "create") && !next.frontend.dialog ) {
 					blocks.push( ...output.controls.map( control => control.rect ) );
 				} else blocks.push( full );
@@ -12178,8 +12257,7 @@ export function createUi(
 							boardSuppressed,
 							ownerPet,
 							true,
-							hudCopy,
-							experimental.state().saved.mostWantedBuff
+							hudCopy
 						)
 					) {
 						if ( !icon.path ) continue;
@@ -12232,8 +12310,9 @@ export function createUi(
 							helpText: icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
-							// vtable +0x70 left-button handler); the rest only hover.
-							kind: icon.id.startsWith( "count-job:" ) ? "button" : "region",
+							// vtable +0x70 left-button handler), as is the saved
+							// Academy buff's pass slot; the rest only hover.
+							kind: icon.id.startsWith( "count-job:" ) || icon.passBuff ? "button" : "region",
 							rightActivate: !!icon.cancel,
 							rect: r
 						} );
@@ -12322,9 +12401,36 @@ export function createUi(
 						slot = hudData.windows.ifquickpartyslot!,
 						localPose = partyLocalPose( game, next.entities );
 					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
-					for (
-						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
-					) {
+					// Port-only, not native: at the original's smallest screen mode and
+					// above, the board wraps exactly as authored. Below it the fixed
+					// 230px bottom reserve would wrap every row into its own column
+					// marching across the screen, so the board is placed without its
+					// buff rows in a bounded left band and scaled into it.
+					const nativeBoard = !compact && h >= DESKTOP_HEIGHT;
+					let partyMark: readonly [number, number, number] | null = null,
+						partyTop = origin[1],
+						partyHeight = 0,
+						partyWidth = 0;
+					let rows: ReturnType<typeof partyOverlay>;
+					if ( nativeBoard ) {
+						rows = partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs );
+					} else {
+						const bandWidth = Math.min( w, PARTY_BAND_MAX_WIDTH ) - origin[0];
+						partyTop = compact ? Math.max( origin[1], targetBottom ) : origin[1];
+						partyHeight = Math.max( 1, partyFloor - partyTop );
+						partyWidth = Math.max( 1, bandWidth );
+						partyMark = [ quads.length, controls.length, blocks.length ];
+						rows = partyOverlay(
+							game,
+							next.entities,
+							h,
+							origin[0],
+							partyTop,
+							false,
+							partyColumns( partyMembers( game ).length, bandWidth, partyHeight )
+						);
+					}
+					for ( const row of rows ) {
 						const [x, y] = row.position;
 						authoredImage(
 							{ ...hudData.windows.ifquickpartywnd!.GDR_QPB_SLOT_0!, rect: [ 0, 0, 122, 40 ] },
@@ -12418,7 +12524,7 @@ export function createUi(
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
 							state = partyBuffStates.get( row.member.id );
-						if ( options.partyBuffs && row.entity && state ) {
+						if ( options.partyBuffs && nativeBoard && row.entity && state ) {
 							buffViewer(
 								"party-buff:" + row.member.id + ":",
 								buffViewerIcons(
@@ -12433,7 +12539,32 @@ export function createUi(
 							);
 						}
 					}
+					if ( partyMark ) {
+						fitUiGroup(
+							quads,
+							controls,
+							partyMark[0],
+							partyMark[1],
+							[ origin[0], partyTop, partyWidth, partyHeight ],
+							full,
+							{ blocks, firstBlock: partyMark[2], leaveWhenFits: true }
+						);
+						if ( compact ) {
+							// The touch layout's left stack (pets overlay, telemetry,
+							// banners) continues below the fitted board.
+							let boardBottom = partyTop;
+							for ( let i = partyMark[0]; i < quads.length; i++ ) {
+								boardBottom = Math.max( boardBottom, quads[i]!.rect[1] + quads[i]!.rect[3] );
+							}
+							targetBottom = Math.max( targetBottom, boardBottom );
+						}
+					}
 				}
+				// The chat is part of the native HUD a fine pointer keeps, so it
+				// stays drawn under the scaled underbar. In the touch layout it
+				// stays behind the "chat" overlay, exactly as before #2406:
+				// showing it without the overlay would be a product change,
+				// not a degradation of the native layout.
 				if ( hudData && panel !== "Chat" && (!compact || compact.overlay === "chat") ) {
 					const lines = game?.chat?.lines ?? [],
 						key: unknown[] = [
@@ -12480,6 +12611,11 @@ export function createUi(
 										bottom: compact.bottom,
 										maxRows: Math.max( 1, Math.floor( (h - compact.bottom - 100) / 56 ) )
 									} :
+									underbarScale < 1 ?
+									// The chat bottom rides the scaled underbar; this compact
+									// branch only re-anchors it, the width stays the native
+									// 399 whenever the window holds it.
+									{ bottom: underbarHeight, maxRows: 6 } :
 									undefined,
 								layout: hudData.chat,
 								width: w,
@@ -12724,7 +12860,16 @@ export function createUi(
 					compactTelemetryTop = Math.max( targetBottom, compactTelemetryTop );
 					targetBottom = drawTransientBanners( compactTelemetryTop + HUD_TOOLS_HEIGHT + 12 );
 				}
-				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
+				const barX = compact ? 0 : Math.trunc( (w - UNDERBAR_WIDTH) / 2 ),
+					barY = compact ? compact.top : h - UNDERBAR_HEIGHT;
+				// Port-only, not native: a fine pointer on a window narrower than the
+				// underbar keeps the native bottom HUD; the whole strip
+				// (bar, slots, pets, whisper list, system filter, queue chip) scales
+				// to the window together instead of being swapped for bigger
+				// controls. The fit below anchors the group to the bottom center.
+				const barStrip = compact || w >= UNDERBAR_WIDTH ?
+					null :
+					[ quads.length, controls.length, blocks.length ] as const;
 				if ( hudData && !compact ) {
 					retainedHud( barLayoutCache, [
 						hudData,
@@ -12895,7 +13040,7 @@ export function createUi(
 					const wx = 0,
 						wy = compact ?
 							Math.max( 80, compact.top - 200 ) :
-							h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
+							h - underbarHeight - chatStrip,
 						node = hudData.chat.GDR_WHISPERLIST!;
 					authoredImage( node, wx, wy );
 					const r = authoredRect( node, wx, wy );
@@ -13163,6 +13308,35 @@ export function createUi(
 						quads.push( ...chip.over );
 					}
 				}
+				if ( barStrip ) {
+					// The bounds are the strip's own extent at the width's scale, so
+					// fitUiGroup lands the group bottom-center anchored exactly where
+					// the transform means it: same call, same text-run scaling, no
+					// separate transform to keep in step with the windows'.
+					const strip = quads.slice( barStrip[0] );
+					if ( strip.length ) {
+						const left = Math.min( ...strip.map( q => q.rect[0] ) ),
+							top = Math.min( ...strip.map( q => q.rect[1] ) ),
+							right = Math.max( ...strip.map( q => q.rect[0] + q.rect[2] ) ),
+							scale = Math.min( 1, w / Math.max( 1, right - left ) ),
+							width = Math.max( 1, (right - left) * scale ),
+							height = Math.max( 1, (h - top) * scale );
+						fitUiGroup(
+							quads,
+							controls,
+							barStrip[0],
+							barStrip[1],
+							[
+								Math.floor( (w - width) / 2 ),
+								h - height,
+								width,
+								height
+							],
+							full,
+							{ blocks, firstBlock: barStrip[2] }
+						);
+					}
+				}
 				if ( hudData && (!compact || compact.overlay === "extra") ) {
 					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
@@ -13288,14 +13462,14 @@ export function createUi(
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						compact ? w - 84 : barX + 652,
+						compact || w < UNDERBAR_WIDTH ? w - 84 : barX + 652,
 						barY - 40,
 						80,
 						false,
 						clearHotbar
 					);
 				}
-				hover = mapHud.present( {
+				hover = drawFrame.hover = mapHud.present( {
 					next,
 					game,
 					pose,
@@ -14938,7 +15112,7 @@ export function createUi(
 					}
 					endWindow( admission );
 					if ( partySettings ) {
-						controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
+						controls = drawFrame.controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
 						blocks.push( full );
 					}
 				}
@@ -15789,7 +15963,7 @@ export function createUi(
 						px = Math.floor( (w - 320) / 2 ),
 						py = Math.floor( (h - 334) / 2 ),
 						prefix = ROOT + "interface/messagebox/msgbox2_window_";
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow();
 					blocks.push( full );
 					blocks.push( [ px, py, 320, 334 ] );
@@ -15918,7 +16092,7 @@ export function createUi(
 					endWindow( admission, "skill-confirm" );
 				}
 				if ( confirmAbandon && questDetails ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow(),
 						meta = guideResources.data()?.questPresentation.records[selectedQuest];
 					blocks.push( full );
@@ -16065,7 +16239,7 @@ export function createUi(
 					{ prefix: "reverse-scroll:", cancel: "reverse-scroll-cancel" } :
 					null;
 				if ( reverseBox ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
 					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
@@ -16278,7 +16452,7 @@ export function createUi(
 						// 61B6C0 / 61E340 ask through a 6888C0 simple message box, type 1:
 						// white text and Yes/No, unlike the entry window below.
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						simpleMessageBox( {
 							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -16292,7 +16466,7 @@ export function createUi(
 						const mark = beginWindow(),
 							dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
 							dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -16583,7 +16757,10 @@ export function createUi(
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const capabilities = game.targetCapabilities ?? 0;
+					// 75D030 clears the talk capabilities on a firing
+					// exchange answer: while its greeting stands, the
+					// menu reads as if the capability word were zero.
+					const capabilities = game.npcEventGreeting ? 0 : (game.targetCapabilities ?? 0);
 					// 5D7870's outcome page replaces the menu of the NPC that told it.
 					const outcomePage = game.npcConversation.phase === "menu" &&
 							jobHud.outcome() === game.npcConversation.gid,
@@ -16620,7 +16797,13 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: gachaHud.noVoucherFor() === game.npcConversation.gid ?
+						prompt: game.npcEventGreeting ?
+							copy( game.npcEventGreeting ) :
+							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+							// greeting with the event's own line.
+							(capabilities & EVENT_EXCHANGE_FUNCTION) ?
+							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
+							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
 							outcomePage ?
 							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
@@ -16679,6 +16862,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canEventExchange: !!(capabilities & EVENT_EXCHANGE_FUNCTION),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -17540,6 +17724,28 @@ export function createUi(
 								hudCopy( head.text ),
 								true
 							);
+						}
+					}
+					// 660930 (OnCreate) also sets the four style-0x80 help texts:
+					// the info area (502) and the three column heads (511..513)
+					// carry TP explanations, as the tax window's 19..21 do.
+					for (
+						const [id, key] of [
+							[ 502, "UIIT_MSG_TP_FORT_WARAPPLY_INFO" ],
+							[ 511, "UIIT_MSG_TP_FORT_WARAPPLY_FORTRESS" ],
+							[ 512, "UIIT_MSG_TP_FORT_WARAPPLY_GUILD" ],
+							[ 513, "UIIT_MSG_TP_FORT_WARAPPLY_APPLICATION" ]
+						] as const
+					) {
+						const help = byId( id );
+						if ( help ) {
+							controls.push( {
+								id: "fortress-war-help:" + id,
+								label: hudCopy( help.text ),
+								kind: "region",
+								rect: authoredRect( help, px, py ),
+								helpText: hudCopy( key )
+							} );
 						}
 					}
 					const list = byId( 515 );
@@ -18719,7 +18925,7 @@ export function createUi(
 					*/
 					function petNameDialogBox( dialog: { readonly phase: "input" | "confirm"; } ) {
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						if ( dialog.phase === "confirm" ) {
 							simpleMessageBox( {
@@ -18987,13 +19193,13 @@ export function createUi(
 						exchangeHud.reset();
 						if ( goldDialog === "exchange" ) {
 							goldDialog = false;
-							focus = null;
+							focus = drawFrame.focus = null;
 						}
 						return;
 					}
 					if ( state.ownLocked && goldDialog === "exchange" ) {
 						goldDialog = false;
-						focus = null;
+						focus = drawFrame.focus = null;
 					}
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Exchange", [
@@ -19045,12 +19251,19 @@ export function createUi(
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						hudCopy( at( 11 ).text ),
+						// 6B21F6: once this side has confirmed, the button reads
+						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
+						// Confirm caption stays until then.
+						state.approved ?
+							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
+							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
@@ -19623,7 +19836,7 @@ export function createUi(
 				*/
 				function friendDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					if ( friendDialog === "remove" ) {
 						simpleMessageBox( {
@@ -19925,7 +20138,7 @@ export function createUi(
 				*/
 				function letterDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					simpleMessageBox( {
 						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -21886,6 +22099,7 @@ export function createUi(
 						guideEvent = state.event;
 						guideScroll = 0;
 						setPanel( "Game Guide" );
+						drawFrame.focus = focus;
 						dirty = true;
 					} else {
 						if ( !guidePending ) sound( "quest" );
@@ -22282,10 +22496,10 @@ export function createUi(
 				(game.social.invitation.type !== 5 && game.social.invitation.type !== 6 ||
 					next.entities.some( e => e.gid === game.social!.invitation!.gid && e.guildName ))
 			) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "invite-accept" && focus !== "invite-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22395,10 +22609,10 @@ export function createUi(
 			if ( friendPrompt && worldVisible && !game?.social?.invitation ) {
 				// 760C90 opens confirm box 0x23 (52F460): "'name' proposed to make
 				// friends with you." over "Will you accept it?", answered Yes / No.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "friend-accept" && focus !== "friend-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22447,8 +22661,8 @@ export function createUi(
 			if ( friendConclusion && worldVisible && !game?.social?.invitation ) {
 				// 760FB0 case 2 opens confirm box 0x22 (52F460): "[friend] and
 				// [local]'s" over the acceptance line, with one Confirm.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [
@@ -22470,7 +22684,7 @@ export function createUi(
 					py = Math.floor( (h - 149) / 2 ),
 					prefix = ROOT + "interface/messagebox/msgbox2_window_",
 					layout = hud.data()!.windows.ifpartyjoinprogress!;
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				paths.push( ...PARTS.map( p => prefix + p + ".png" ) );
 				quads.push(
@@ -22525,7 +22739,7 @@ export function createUi(
 					height = request ? 315 : automatic ? 337 : 373,
 					px = Math.floor( (w - width) / 2 ),
 					py = Math.floor( (h - height) / 2 );
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				if ( remove ) {
 					// 635300 asks through a 6888C0 simple message box, type 1 (Yes/No).
@@ -22749,8 +22963,8 @@ export function createUi(
 						hud.data()!.windows.ifitemmallconfirmbuy!,
 					locked = !!game.inventoryPending,
 					quantityMode = quote?.quantityMode ?? "readonly";
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -22946,8 +23160,8 @@ export function createUi(
 					height = notice ? 310 : donate ? 240 : guildDialog === "role" ? 310 : 148,
 					mx = Math.max( 0, (w - width) / 2 ),
 					my = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -23154,8 +23368,8 @@ export function createUi(
 						unlimited :
 						String( id === 26 ? value * 10 : value ) + " " +
 						hudCopy( id === 24 ? "PARAM_DAY" : id === 25 ? "UIIT_STT_HOUR" : "UIIT_STT_MINUTE" );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( surrender ) {
 					const box = guildProposalLayout( w, h ),
 						enemy = game?.social?.wars?.find( row => row.id === warDialog.selected )?.name ?? "";
@@ -23307,8 +23521,8 @@ export function createUi(
 					value = noticeText( hudCopy, { key: result.key, value: 0, arguments: result.names } ) +
 						(result.additionalKey ? "\n" + hudCopy( result.additionalKey ) : "");
 				const box = noticeDialog( w, h, value, value => text.run( value ).width );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23343,8 +23557,8 @@ export function createUi(
 					question = unionAsk.kind === "exit" ?
 						hudCopy( "UIIT_MSG_GUILD_QUESTION_ALLY_EXIT" ) :
 						hudCopy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_EXPEL" ).replace( "%s", () => unionAsk.name );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( title ),
 					lines: [ question ],
@@ -23357,8 +23571,8 @@ export function createUi(
 				// The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION, a ban of
 				// the selected member), Secede and Disband, and the party ban,
 				// each ask their native question before anything is sent.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( socialAsk.title ),
 					lines: socialAsk.lines.map( line => {
@@ -23372,8 +23586,8 @@ export function createUi(
 			if ( worldVisible && crestDeleteAsk ) {
 				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
 				// the one-line question whether to delete the emblem.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
@@ -23384,8 +23598,8 @@ export function createUi(
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23432,8 +23646,8 @@ export function createUi(
 				const item = making ?
 					productionAsk.item :
 					fortressProductionItems().find( row => row.refObjId === productionAsk.order.refObjId );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23504,8 +23718,8 @@ export function createUi(
 					Object.entries( taxBox ).filter( ( [name] ) => name.startsWith( prefix ) )
 				);
 				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23599,8 +23813,8 @@ export function createUi(
 						] :
 						[ name, row?.requestFee ?? 0 ]
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: message.split( "\n" ),
@@ -23704,8 +23918,8 @@ export function createUi(
 					byId = ( id: number ) => nodes.find( n => n.id === id ),
 					jx = Math.max( 0, (w - root.rect[2]) / 2 ),
 					jy = Math.max( 0, (h - root.rect[3]) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame( root, jx, jy, hudCopy( root.text ), "academy-judge-close" );
 				nativePage( page, jx, jy, [ 20, 30, 31 ] );
 				const radio = byId( 20 );
@@ -23800,8 +24014,8 @@ export function createUi(
 						12,
 					false
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23854,8 +24068,8 @@ export function createUi(
 					const x = Math.max( 0, (w - electionRoot.rect[2]) / 2 ),
 						y = Math.max( 0, (h - electionRoot.rect[3]) / 2 );
 					const at = ( id: number ) => Object.values( electionPage ).find( n => n.id === id )!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...electionRoot,
@@ -23945,8 +24159,8 @@ export function createUi(
 						m.grade !== 0
 					).sort( ( a, b ) => a.id - b.id ) ?? [];
 					const offset = guildManagerHud.transferPosition( members.length );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...transferRoot,
@@ -24015,8 +24229,8 @@ export function createUi(
 					const price = guildLevelUpPrice( level );
 					const say = ( key: string, ...args: string[] ) =>
 						noticeText( hudCopy, { key, value: 0, arguments: args } );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{ ...levelRoot, type: "CIFFrame", rect: [ 0, 0, levelRoot.rect[2], levelRoot.rect[3] ] },
 						x,
@@ -24121,8 +24335,8 @@ export function createUi(
 						]
 					};
 					const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					paths.push( ...partyProposalAssets() );
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24197,8 +24411,8 @@ export function createUi(
 			if ( worldVisible && repairCost !== null ) {
 				// 5B2B10 raises box 0x0C: Repair All's question and its total.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24208,7 +24422,9 @@ export function createUi(
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+					// 530D51: the type-0xC repair box (52F460) titles itself
+					// UIIT_STT_AGREEMENT_BOX, not the generic confirm title.
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
 					} ),
@@ -24221,9 +24437,15 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
+				// 52F460: the store's repair-all button (5B2B10) raises
+				// confirmation type 0x0C, which ShowByType passes on as
+				// the configure kind; the kind-0x0C arm (530D51)
+				// captions the action button UIIT_CTL_REPAIR_ALL
+				// ("Repair all"), not a generic Yes (xref 530E91).
 				button(
 					"repair-all-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
+					// 530E91: the box's action button reads UIIT_CTL_REPAIR_ALL.
+					hudCopy( "UIIT_CTL_REPAIR_ALL" ) || hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
@@ -24243,8 +24465,8 @@ export function createUi(
 				const at = ( id: number ) => Object.values( typePage ).find( row => row.id === id );
 				const height = typeRoot.rect[3] + grow;
 				const px = Math.max( 0, (w - typeRoot.rect[2]) / 2 ), py = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame(
 					{ ...typeRoot, rect: [ typeRoot.rect[0], typeRoot.rect[1], typeRoot.rect[2], height ] },
 					px,
@@ -24334,8 +24556,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24365,8 +24587,8 @@ export function createUi(
 			if ( worldVisible && structureRemoval ) {
 				// 517750 raises UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW naming the target.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24381,7 +24603,14 @@ export function createUi(
 						vAlign: 0
 					} ),
 					...text.quads(
-						hudCopy( "UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW" ).replace( "%s", structureRemoval.name ),
+						// 517750 picks the question by the window kind (+0x384):
+						// kinds 1/2 delete a structure, kind 3 dismisses the
+						// summoned monster (517360's 0x64..0x66 boxes).
+						hudCopy(
+							structureRemoval.kind === 3 ?
+								"UIIT_MSG_FORT_SUMMONMON_DISMISS_WINDOW" :
+								"UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW"
+						).replace( "%s", structureRemoval.name ),
 						layout.name,
 						full,
 						white,
@@ -24430,8 +24659,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24469,8 +24698,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24501,8 +24730,8 @@ export function createUi(
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24557,8 +24786,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24585,10 +24814,22 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( worldVisible && academyBuffPass ) {
+				// 6E2840: the pass question is a plain simple message box
+				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
+					yes: "academy-buff-pass-confirm",
+					no: "academy-buff-pass-cancel"
+				} );
+			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_EVENTGUIDE" ),
 					lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) ],
@@ -24598,8 +24839,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && sellAllPhase !== null ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox(
 					sellAllPhase === "confirm" ?
 						{
@@ -24619,8 +24860,8 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && shopWarning ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( "UIIT_MSG_CANNOT_BUYBACK_ITEM_SELL" ).replace( "%s", shopWarning.name ) ],
@@ -24630,8 +24871,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && groundDrop ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
@@ -24701,8 +24942,8 @@ export function createUi(
 					layout = messageBox( w, h, 300, 183 ),
 					[x, y] = layout.frame,
 					item = game?.inventory.find( i => i.slot === promptStack.slot );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24809,8 +25050,8 @@ export function createUi(
 				const amount = warDialog.money ?? goldAmount,
 					inputId = warDialog.money !== null ? "war-money" : "gold-amount";
 				const layout = messageBox( w, h, 308, 148 ), [x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24904,8 +25145,8 @@ export function createUi(
 						stallBox.kind === "network-buy" ?
 						stall.network.rows[stallBox.row] :
 						undefined;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				// 5A2795 / 5ADA0F use 6888C0's text-sized MsgBoxSimple. The personal
 				// purchase question uses that same native construction by inference.
 				simpleMessageBox( {
@@ -24932,8 +25173,8 @@ export function createUi(
 				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
 					layout = messageBox( w, h, boxWidth, boxHeight ),
 					[x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -25034,7 +25275,20 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
@@ -25160,10 +25414,10 @@ export function createUi(
 				const kept = ( id: string | null ) =>
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25223,10 +25477,10 @@ export function createUi(
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
 						id.startsWith( "instance-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25274,8 +25528,8 @@ export function createUi(
 				paths.push( ...art );
 				nativeLoadError = art.every( path => resources.has( path ) ) && !!text.path() &&
 					resources.has( text.path()! ) && !text.error();
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( nativeLoadError ) {
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full )
@@ -25340,8 +25594,8 @@ export function createUi(
 					noticeDialogPosition
 				);
 				noticeDialogFrame = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				controls.push( {
 					id: "notice-dialog-drag",
@@ -25395,10 +25649,10 @@ export function createUi(
 				*/
 				const layout = disconnectDialog( w, h, disconnectPosition ),
 					copy = ( key: string, fallback: string ) => hudCopy( key ) || title.catalog( key ) || fallback;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "disconnect-confirm" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				controls.push( {
@@ -25456,11 +25710,11 @@ export function createUi(
 				// Underlying windows retain state while the mall is open; CGWndBase
 				// input dispatch (9FEC50 -> CGInterface_OnWorldMessage 67CCA0) still
 				// forwards world pointer events outside CIFItemMall's bounds.
-				controls = [];
+				controls = drawFrame.controls = [];
 				const mallAdmission = beginWindow();
 				paths.push( ...mallMenuArtwork() );
 				if ( compact ) {
-					blocks = [ full ];
+					blocks = drawFrame.blocks = [ full ];
 					// Port-only, owner-approved reflow. Never scale the Mall's text or
 					// combine its background with a purchase dialog's fitting bounds.
 					const margin = 8, touch = 40, gap = 4, cardHeight = 112, tabPitch = 28;
@@ -25862,7 +26116,7 @@ export function createUi(
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mallAdmission[0];
-						controls = [];
+						controls = drawFrame.controls = [];
 					} else {
 						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
 						quads.length = mallAdmission[0];
@@ -25876,11 +26130,16 @@ export function createUi(
 					nativePage( root, ox, oy );
 					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
 					// through CIFButton_SetEnabled(false), even in the retail client.
+					// Port-only (#2269): the Experimental silk history option enables
+					// Buying List (6); Obtained List (7) stays native-disabled.
+					const silkHistoryEnabled = experimental.state().saved.silkHistory;
 					for ( const node of Object.values( root ) ) {
 						if ( node.type !== "CIFButton" ) continue;
 						// Control ids are unique: the frame X already owns "item-mall-close".
 						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
 							"item-mall-home" :
+							node.id === 6 && silkHistoryEnabled ?
+							"item-mall-silk-open" :
 							"item-mall-root:" + node.id;
 						authoredLabeledButton(
 							node,
@@ -25890,6 +26149,8 @@ export function createUi(
 							hudCopy( node.text ),
 							node.id === 4 || node.id === 5 ?
 								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+								node.id === 6 ?
+								!silkHistoryEnabled :
 								node.id !== 8 && node.id !== 3
 						);
 					}
@@ -26052,164 +26313,276 @@ export function createUi(
 					const shopOrigin = mallControl( root, 50 ).rect;
 					const shop = data.windows.ifitemmallshop!;
 					for ( const node of authoredPaintOrder( shop ) ) {
-						if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
+						if (
+							state.silk.open ?
+								node.creationSection === 3 || node.creationSection === 4 ||
+								node.creationSection === 5 || node.creationSection === 9 :
+								node.creationSection === 0 || state.category === -1 && node.creationSection === 2
+						) {
 							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
 						}
 					}
 
 					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-					const currentTab = state.tabs[state.tab];
-					const description = state.category === -1 ?
-						"UIIT_STT_SILKMALL_MAIN_INTRO" :
-						state.category === 7 ?
-						"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-						currentTab ?
-						mallDescription( currentTab.category, currentTab.tab ) :
-						"";
-					authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
-					if ( state.category === -1 ) {
+					if ( state.silk.open ) {
+						// Port-only (#2269): the Buying list page. CIFSilkBuyList's
+						// OnCreate (0x6CED10) builds these same sections but never
+						// fills a row; the rows are the worker's recorded-history
+						// publication for the selected period.
+						const history = game.itemMallSilkHistory;
+						const shown = history?.period === state.silk.period ? history : undefined;
 						authoredChrome(
-							{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+							{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
 							sx,
 							sy
 						);
-					}
-					if ( state.category === 7 ) {
-						const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-						authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-						const buyAll = mallControl( shop, 42 );
-						authoredLabeledButton(
-							buyAll,
+						authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
+						authoredText( mallControl( shop, 31 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" ) );
+						authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
+						authoredText(
+							mallControl( shop, 36 ),
 							sx,
 							sy,
-							"item-mall-buy-all",
-							hudCopy( buyAll.text ),
-							state.count === 0 || state.batchPending || !!game.inventoryPending
+							shown?.pending ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
+								shown && shown.rows.length === 0 ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
+								""
 						);
-					}
-					if ( state.category >= 0 ) {
-						for ( let index = 0; index < state.tabs.length; index++ ) {
-							const tab = state.tabs[index]!;
-							const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-							authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+						authoredText(
+							mallControl( shop, 26 ),
+							sx,
+							sy,
+							shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
+						);
+						if ( shown ) {
+							// The layout authors fourteen row bars (80..93 at y=189,
+							// step 23); the newest recorded uses fill them in order.
+							for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
+								const row = shown.rows[index]!, y = sy + 189 + index * 23;
+								quads.push(
+									...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads(
+										mallSilkHistoryDate( row.at ),
+										[ sx + 220, y, 154, 24 ],
+										full,
+										white,
+										{ hAlign: 1, vAlign: 1 }
+									)
+								);
+							}
 						}
-						const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-						if ( manager.count > 0 ) {
-							const template = {
-								...mallControl( data.windows.ifpagemanager!, 10 ),
-								client: [ 0, 0, 0, 0 ] as UiRect,
-								hAlign: 1,
-								vAlign: 1
-							};
-							authoredText(
-								{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-								sx,
-								sy,
-								"["
-							);
-							authoredText(
-								{
-									...template,
-									rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
-								},
-								sx,
-								sy,
-								"]"
-							);
-							for ( let index = 0; index < manager.count; index++ ) {
-								const page = manager.first + index;
-								const control = {
-									...template,
-									rect: [
-										manager.x + index * manager.width,
-										manager.y,
-										manager.width,
-										manager.height
-									] as UiRect
-								};
-								// The current page draws in the manager's highlight
-								// colour and styled face (mallPageNumberPresentation).
-								const presentation = mallPageNumberPresentation( page, state.page );
-								authoredText(
-									presentation.color ? { ...control, color: presentation.color } : control,
-									sx,
-									sy,
-									String( page + 1 ),
-									false,
-									presentation.fontStyle
+						authoredLabeledButton(
+							mallControl( shop, 28 ),
+							sx,
+							sy,
+							"item-mall-silk-inquire",
+							hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
+							!!shown?.pending || !!game.inventoryPending
+						);
+						const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
+						comboBox(
+							combo,
+							"item-mall-silk-combo",
+							hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
+							hudCopy( mallSilkPeriodTexts[state.silk.period]! )
+						);
+						if ( state.silk.comboOpen ) {
+							const list: UiRect = [
+								combo[0],
+								combo[1] + combo[3],
+								combo[2],
+								mallSilkPeriodTexts.length * 18
+							];
+							rect( list, [ 0, 0, 0, 1 ] );
+							blocks.push( list );
+							for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
+								const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
+								if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
+								quads.push(
+									...text.quads(
+										hudCopy( mallSilkPeriodTexts[index]! ),
+										[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
+										cell,
+										white
+									)
 								);
 								controls.push( {
-									id: "item-mall-page:" + page,
-									label: String( page + 1 ),
-									rect: authoredRect( control, sx, sy ),
-									kind: "button"
+									id: "item-mall-silk-period:" + index,
+									label: hudCopy( mallSilkPeriodTexts[index]! ),
+									rect: cell,
+									kind: "button",
+									selected: index === state.silk.period
 								} );
 							}
-							if ( manager.previous >= 0 ) {
-								const node = mallControl( data.windows.ifpagemanager!, 1 );
-								authoredButton(
-									{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.previous,
-									""
-								);
-							}
-							if ( manager.next < manager.pages ) {
-								const node = mallControl( data.windows.ifpagemanager!, 2 );
-								authoredButton(
-									{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.next,
-									""
-								);
-							}
 						}
-
-						const row = data.windows.ifitemmallshopslot!;
-						for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
-							const offer = state.offers[index];
-							const origin = mallControl( shop, 61 + index ).rect;
-							const rx = sx + origin[0], ry = sy + origin[1];
-							if ( !offer ) {
-								// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
-								// an empty slot hides its bar, name, price, silk mark, icon and
-								// buttons, but the slot and its background (50) stay.
-								authoredChrome( mallControl( row, 50 ), rx, ry );
-								continue;
+					} else {
+						const currentTab = state.tabs[state.tab];
+						const description = state.category === -1 ?
+							"UIIT_STT_SILKMALL_MAIN_INTRO" :
+							state.category === 7 ?
+							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+							currentTab ?
+							mallDescription( currentTab.category, currentTab.tab ) :
+							"";
+						authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						if ( state.category === -1 ) {
+							authoredChrome(
+								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+								sx,
+								sy
+							);
+						}
+						if ( state.category === 7 ) {
+							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+							const buyAll = mallControl( shop, 42 );
+							authoredLabeledButton(
+								buyAll,
+								sx,
+								sy,
+								"item-mall-buy-all",
+								hudCopy( buyAll.text ),
+								state.count === 0 || state.batchPending || !!game.inventoryPending
+							);
+						}
+						if ( state.category >= 0 ) {
+							for ( let index = 0; index < state.tabs.length; index++ ) {
+								const tab = state.tabs[index]!;
+								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+								authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
 							}
-							nativePage( row, rx, ry, [ 8, 10, 11 ] );
-							authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-							authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-							authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-							const icon = iconPath( offer.icon );
-							if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-							controls.push( {
-								id: "item-mall-offer:" + offer.packageId,
-								label: hudCopy( offer.name ),
-								rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-								kind: "button"
-							} );
-							for ( const node of Object.values( row ) ) {
-								if ( node.type !== "CIFButton" ) continue;
-								const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-									"item-mall-buy:" + index :
-									node.id === 6 ?
-									"item-mall-reserve:" + index :
-									"item-mall-row:" + index + ":" + node.id;
-								authoredLabeledButton(
-									node,
-									rx,
-									ry,
-									action,
-									hudCopy(
-										node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
-									),
-									(node.id === 3 ?
-										!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-										node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
+							if ( manager.count > 0 ) {
+								const template = {
+									...mallControl( data.windows.ifpagemanager!, 10 ),
+									client: [ 0, 0, 0, 0 ] as UiRect,
+									hAlign: 1,
+									vAlign: 1
+								};
+								authoredText(
+									{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
+									sx,
+									sy,
+									"["
 								);
+								authoredText(
+									{
+										...template,
+										rect: [
+											manager.x + manager.count * manager.width,
+											manager.y,
+											4,
+											manager.height
+										]
+									},
+									sx,
+									sy,
+									"]"
+								);
+								for ( let index = 0; index < manager.count; index++ ) {
+									const page = manager.first + index;
+									const control = {
+										...template,
+										rect: [
+											manager.x + index * manager.width,
+											manager.y,
+											manager.width,
+											manager.height
+										] as UiRect
+									};
+									// The current page draws in the manager's highlight
+									// colour and styled face (mallPageNumberPresentation).
+									const presentation = mallPageNumberPresentation( page, state.page );
+									authoredText(
+										presentation.color ? { ...control, color: presentation.color } : control,
+										sx,
+										sy,
+										String( page + 1 ),
+										false,
+										presentation.fontStyle
+									);
+									controls.push( {
+										id: "item-mall-page:" + page,
+										label: String( page + 1 ),
+										rect: authoredRect( control, sx, sy ),
+										kind: "button"
+									} );
+								}
+								if ( manager.previous >= 0 ) {
+									const node = mallControl( data.windows.ifpagemanager!, 1 );
+									authoredButton(
+										{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.previous,
+										""
+									);
+								}
+								if ( manager.next < manager.pages ) {
+									const node = mallControl( data.windows.ifpagemanager!, 2 );
+									authoredButton(
+										{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.next,
+										""
+									);
+								}
+							}
+
+							const row = data.windows.ifitemmallshopslot!;
+							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+								const offer = state.offers[index];
+								const origin = mallControl( shop, 61 + index ).rect;
+								const rx = sx + origin[0], ry = sy + origin[1];
+								if ( !offer ) {
+									// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+									// an empty slot hides its bar, name, price, silk mark, icon and
+									// buttons, but the slot and its background (50) stay.
+									authoredChrome( mallControl( row, 50 ), rx, ry );
+									continue;
+								}
+								nativePage( row, rx, ry, [ 8, 10, 11 ] );
+								authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+								authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+								const icon = iconPath( offer.icon );
+								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+								controls.push( {
+									id: "item-mall-offer:" + offer.packageId,
+									label: hudCopy( offer.name ),
+									rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+									kind: "button"
+								} );
+								for ( const node of Object.values( row ) ) {
+									if ( node.type !== "CIFButton" ) continue;
+									const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+										"item-mall-buy:" + index :
+										node.id === 6 ?
+										"item-mall-reserve:" + index :
+										"item-mall-row:" + index + ":" + node.id;
+									authoredLabeledButton(
+										node,
+										rx,
+										ry,
+										action,
+										hudCopy(
+											node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
+										),
+										(node.id === 3 ?
+											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+											node.id !== 4 && node.id !== 6) ||
+											!!game.inventoryPending || state.batchPending
+									);
+								}
 							}
 						}
 					}
@@ -26220,7 +26593,7 @@ export function createUi(
 						const currencies = currencyLayout.rows;
 						const dialogWidth = 327, height = currencyLayout.height;
 						const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, dialogWidth, height ] );
 						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
 						paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -26325,7 +26698,7 @@ export function createUi(
 							Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
 						);
 						const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, layout.width, layout.height ] );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -26461,7 +26834,7 @@ export function createUi(
 						const pointPage = data.windows.ifitemmallusepoint!;
 						const pointWidth = 233, pointHeight = 177;
 						const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ px, py, pointWidth, pointHeight ] );
 						quads.push(
 							...frameRing(
@@ -26505,7 +26878,7 @@ export function createUi(
 				const buttonY = state.resuscitation ? RESUSCITATION_CONFIRM_BUTTON_Y : WITHDRAWAL_CONFIRM_BUTTON_Y;
 				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
 				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-				controls = [];
+				controls = drawFrame.controls = [];
 				const admission = beginWindow();
 				blocks.push( full );
 				paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -27116,7 +27489,7 @@ export function createUi(
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&

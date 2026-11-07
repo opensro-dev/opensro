@@ -9,7 +9,7 @@ test('retail main-popup navigation, tooltips and independent academy entry',{tim
  try{
   await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
    const response=await route.fetch(),source=await response.text();
-   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(...args){const publish=args[2];args[2]=scene=>{globalThis.__uiRetailScene=scene;publish(scene)};const owner=createObservedUi(...args);globalThis.__uiRetail=owner;return {...owner,step(...input){const result=owner.step(...input);if(result)globalThis.__uiRetailSemantics=result;return result;}};}`;
+   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(ports){const publish=ports.publish;ports.publish=scene=>{globalThis.__uiRetailScene=scene;publish(scene)};const owner=createObservedUi(ports);globalThis.__uiRetail=owner;return {...owner,step(...input){const result=owner.step(...input);if(result)globalThis.__uiRetailSemantics=result;return result;}};}`;
    await route.fulfill({response,body,contentType:'application/javascript'});
   });
   await bootPlayableSession(page,'asd2');

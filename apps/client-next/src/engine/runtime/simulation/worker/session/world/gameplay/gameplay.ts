@@ -13,6 +13,7 @@ commands and cannot bypass actor eligibility.
 // player to trade.
 const ACTION_EXCHANGE = 1006;
 import { defaultUiTuning, type UiTuning, uiTuningFrom } from "@/engine/foundation/ui/ui-tuning";
+import { EVENT_EXCHANGE_FUNCTION } from "@/engine/foundation/ui/npc-talk";
 import { guildBanRefused, guildSoldierRefusal } from "@/engine/foundation/gameplay/guild-manager";
 import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import { planarDistance, sameCoordinateSpace } from "@/engine/foundation/world/world-space";
@@ -107,6 +108,7 @@ import {
 	emptyPartyMatching,
 	partyMatchAckNotice,
 	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
 	partyMatchCompletionNotice,
 	partyMatchDeleteNotice,
 	partyMatchNoResultNotice,
@@ -158,7 +160,8 @@ import {
 	fortressTaxNotice,
 	fortressDismissNotice,
 	fortressStructureNotice,
-	type FortressApplication
+	type FortressApplication,
+	type FortressStructureNoticeReference
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
@@ -197,6 +200,7 @@ import {
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
 import { petNameRefusal, petNameRequest, petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import {
+	EVENT_NOTICE_COLOR_ARGB,
 	fortressNotice,
 	isServerNoticeChannel,
 	serverNotification,
@@ -221,9 +225,14 @@ import {
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
-	academyOpenRequest
+	academyOpenRequest,
+	academyPassBuffRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
+import {
+	academyAcknowledgment,
+	academyBuffNotices,
+	academyStatusNotice
+} from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -369,7 +378,7 @@ interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
-	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structure?: ( refObjId: number ) => FortressStructureNoticeReference | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -478,11 +487,13 @@ export function createGameplay(
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
 	> = {};
 	let partyMatching = emptyPartyMatching();
-	// The native window's two session facts the foundation state does
-	// not carry: whether the auto-match chain still lives (75EBD0's
-	// caller decides its prints by it), and whether the party filled
-	// at any moment while the player's listing stood (data_cea6e0,
-	// set by the 634DC9 watcher, consumed by the delete answer).
+	// The native window's two facts the foundation state does not
+	// carry. The auto-match chain still living is a session fact
+	// (75EBD0's caller decides its prints by it). The filled-party
+	// latch is not: the native byte (data_cea6e0) is a process global
+	// the roster watcher sets (634DC9) and only the delete answer
+	// clears, so it survives world entry and exit until that answer
+	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
 	// The shard's configured level cap, published at world entry (#1749);
@@ -1240,6 +1251,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// The Experimental "Highlight event notices" row (#2727): while on, a
+	// shard event notice queues with the event colour; off is the native
+	// beige line.
+	let highlightEventNotices = true;
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
@@ -1524,7 +1539,6 @@ selected entities, cooldowns or world-entry state.
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
-		partyMatchFullLatch = false;
 		levelCap = NATIVE_LEVEL_CAP;
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -1688,6 +1702,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
@@ -1722,7 +1737,6 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
 			partyMatchAutoSession = false;
-			partyMatchFullLatch = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
@@ -2443,6 +2457,31 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 
+			if ( command.kind === "npc-event-exchange" ) {
+				const target = targeting.state(), conversation = npcConversation.state();
+				// Row 0x15's click: 7026B0 sends whether or not the
+				// bag holds the red socks - its scan (702728) is never
+				// tested, the empty bag, a match and the exhausted
+				// scan all reach the send block gated only by the
+				// opcode's sendability; whether socks are held is the
+				// server's business, answered 2/3 (ERROR_SOCKS). So
+				// the port's only terms are the row's own existence:
+				// the capability, the conversation standing on the
+				// target, and the phase test - while an exchange is
+				// waiting (or its answer window lapsed into uncertain)
+				// the row click stays silent, since the native send
+				// has no waiting state to re-enter and exchange()
+				// would throw. Every failed term just does nothing.
+				if (
+					!localGid || target.targetPending ||
+					(conversation.phase !== "menu" && conversation.phase !== "ready") ||
+					conversation.gid !== target.target ||
+					!((target.targetCapabilities ?? 0) & EVENT_EXCHANGE_FUNCTION)
+				) return null;
+				npcConversation.exchange( now );
+				return null;
+			}
+
 			if ( command.kind === "gm-command" ) {
 				if ( !eligibility.gm || !localGid ) return null;
 				const frame = gmRequest(
@@ -2641,6 +2680,12 @@ state here before a command can claim a native wire conversation.
 				const next = partyMatchRequest( partyMatching, command, now, levelCap );
 				if ( command.kind === "party-match-auto" ) {
 					if ( next.frame ) {
+						// A sent round announces itself at once
+						// (63B383); the answer path reports the
+						// chain from the first answer on.
+						const notice = partyMatchAutoStartNotice();
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						dirty = true;
 						partyMatchAutoSession = true;
 					} else if ( next.state.result === 2 ) {
 						// An auto round with nobody to ask (63B130
@@ -2712,6 +2757,10 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "academy-compulsory-graduate" ) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
+			}
+			if ( command.kind === "academy-pass-buff" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyPassBuffRequest() );
 			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
@@ -3505,6 +3554,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
+			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
@@ -3965,7 +4015,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( mostWanted.receive( frame ) ) {
+				if ( mostWanted.receive( frame, now ) ) {
 					dirty = true;
 					return true;
 				}
@@ -4141,11 +4191,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame );
+					const next = academyPacket( academy, frame, now );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
 							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
+						}
+						for ( const buffNotice of academyBuffNotices( academy, frame ) ) {
+							notices = [ ...notices.slice( -99 ), { ...buffNotice, sequence: ++noticeSequence } ];
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (
@@ -4256,7 +4309,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
 							fortressStructureNotice(
 								fortressNext,
-								structure?.ref ? worldReferences.structureName?.( structure.ref ) : undefined
+								structure?.ref ? worldReferences.structure?.( structure.ref ) : undefined
 							);
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
@@ -4306,7 +4359,17 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( notice?.plusSeven && !plusSevenNotices ) return false;
 				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
-					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// Port-only, not native (#2727): while the "Highlight
+					// event notices" row is on, a shard event notice carries
+					// the event colour into the message log; the banner and
+					// the chat line keep their own presentation.
+					notices = [ ...notices.slice( -99 ), {
+						...notice,
+						sequence: ++noticeSequence,
+						...(notice.shardEvent && highlightEventNotices ?
+							{ colorArgb: EVENT_NOTICE_COLOR_ARGB } :
+							{})
+					} ];
 					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {
 						chat.receive( frame, localGid );
 					}
@@ -5816,7 +5879,8 @@ The published plane when something changed since the last take, else null.
 			const npcState = {
 				npcConversation: npcConversation.state(),
 				npcWindow: npcConversation.window(),
-				restorationRevision: npcConversation.restorationRevision()
+				restorationRevision: npcConversation.restorationRevision(),
+				npcEventGreeting: npcConversation.eventGreeting()
 			};
 			const cosVital = activeCos ? c.vitals.find( v => v.gid === activeCos!.gid ) : undefined;
 			const cos = activeCos ?

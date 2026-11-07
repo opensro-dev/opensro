@@ -332,23 +332,30 @@ export function countJobHelpText(
 	remainingMs: number,
 	copy: ( key: string ) => string
 ): string {
-	const lines = [ name, " " ];
+	const lines = [ name, " ", remainedPeriodLine( remainingMs, copy ) ];
+	for ( const row of rows ) lines.push( `${row.itemName ?? ""}: ${row.uses}${copy( "UIIT_STT_UNIT" )}` );
+	return lines.join( "\n" );
+}
+
+/*
+================
+remainedPeriodLine
+
+The remained-period line every timed board arm ends with (kind 5 at
+0x6E43E2, kind 4 at 0x6E3B7F): whole days, hours and minutes of what is
+left at a minute or more; below that, seconds (PARAM_SECOND).
+================
+*/
+export function remainedPeriodLine( remainingMs: number, copy: ( key: string ) => string ): string {
 	if ( remainingMs >= MS_PER_MINUTE ) {
 		const days = Math.trunc( remainingMs / MS_PER_DAY ), afterDays = remainingMs - days * MS_PER_DAY;
 		const hours = Math.trunc( afterDays / MS_PER_HOUR );
 		const minutes = Math.trunc( (afterDays - hours * MS_PER_HOUR) / MS_PER_MINUTE );
-		lines.push(
-			`${copy( "PARAM_REMAINED_PERIOD" )}: ${days}${copy( "PARAM_DAY" )} ${hours}${
-				copy( "PARAM_HOUR" )
-			} ${minutes}${copy( "PARAM_MINUTE" )}`
-		);
-	} else {
-		lines.push(
-			`${copy( "PARAM_REMAINED_PERIOD" )}: ${Math.trunc( remainingMs / MS_PER_SECOND )}${copy( "PARAM_SECOND" )}`
-		);
+		return `${copy( "PARAM_REMAINED_PERIOD" )}: ${days}${copy( "PARAM_DAY" )} ${hours}${
+			copy( "PARAM_HOUR" )
+		} ${minutes}${copy( "PARAM_MINUTE" )}`;
 	}
-	for ( const row of rows ) lines.push( `${row.itemName ?? ""}: ${row.uses}${copy( "UIIT_STT_UNIT" )}` );
-	return lines.join( "\n" );
+	return `${copy( "PARAM_REMAINED_PERIOD" )}: ${Math.trunc( remainingMs / MS_PER_SECOND )}${copy( "PARAM_SECOND" )}`;
 }
 
 /*

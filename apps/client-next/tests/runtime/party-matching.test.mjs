@@ -22,6 +22,7 @@ const {
 	partyMatchCompletionNotice,
 	partyMatchDeleteNotice,
 	partyMatchAutoNotice,
+	partyMatchAutoStartNotice,
 	partyMatchNoResultNotice,
 	partyMatchRequest,
 	partyMatchPacket,
@@ -206,6 +207,9 @@ test("native local search uses exact names, overlapping ranges; auto-match limit
 
 const { createGameplay } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" ).href
+);
+const { createWorldCore } = await import(
+	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/core.ts" ).href
 );
 test("gameplay owns the ten-second no-reply deadline and reset retires it", () => {
 	const frames = [], g = createGameplay( f => frames.push( f ) );
@@ -475,6 +479,68 @@ test("register, modify and delete successes close as centre banners", () => {
 	} );
 });
 
+/*
+================
+partyJoinFrame
+
+One 0x3E58 type-2 JOIN frame carrying one full member row (mask 0x37),
+the bytes party-membership.test.mjs pins for the roster lane.
+================
+*/
+function partyJoinFrame( id, name ) {
+	const u32 = n => [ n & 255, (n >>> 8) & 255, (n >>> 16) & 255, n >>> 24 ];
+	return {
+		opcode: 0x3e58,
+		payload: Uint8Array.from( [
+			2,
+			0x37,
+			...u32( id ),
+			Buffer.byteLength( name ),
+			0,
+			...Buffer.from( name ),
+			...u32( 1907 ),
+			20,
+			0x9a,
+			1,
+			1,
+			10,
+			0,
+			0,
+			0,
+			20,
+			0,
+			...u32( 0 )
+		] )
+	};
+}
+
+test("the delete banner keeps the COMPLETE2 latch across a relog until a delete answer spends it", () => {
+	// Native: the latch is a process-global byte. The roster watcher
+	// sets it when the party fills under a standing listing, and only
+	// the delete answer reads and clears it - world entry and exit
+	// never touch it, so a filled-then-relogged listing still closes
+	// with the COMPLETE2 wording.
+	const g = createGameplay( () => {} );
+	const lastNoticeKey = () => (g.take()?.notices ?? []).at( -1 )?.key;
+	const enter = () => {
+		g.bootstrap( { academyMember: false } );
+		g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0 } );
+	};
+	enter();
+	g.receive( ack( 0xb6ff ), 0 );
+	for ( let i = 0; i < 4; i++ ) g.receive( partyJoinFrame( 100 + i, `Peer${i}` ), 0 );
+	g.reset();
+	enter();
+	g.receive( ack( 0xb6ff ), 0 );
+	g.receive( { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) }, 0 );
+	assert.equal( lastNoticeKey(), "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE2" );
+	// The answer spent the latch: the next delete closes plainly.
+	g.receive( ack( 0xb6ff ), 0 );
+	g.receive( { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) }, 0 );
+	assert.equal( lastNoticeKey(), "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE" );
+	g.dispose();
+});
+
 test("party fullness follows the native cap for the share option (818820)", () => {
 	// Without EXP share the roster caps at four: the register guard's
 	// last arm and the delete latch both read this, not a constant 8.
@@ -503,9 +569,89 @@ test("auto chain reports progress or failure only while its session lives", () =
 	);
 	assert.equal( partyMatchAutoNotice( { sessionOpen: true, accepted: true, candidatesRemain: false } ), null );
 	assert.equal( partyMatchAutoNotice( { sessionOpen: false, accepted: false, candidatesRemain: true } ), null );
+	// A sent round opens with the progress line before any answer
+	// (63B383); only an empty round stays on the no-result line.
+	assert.deepEqual( partyMatchAutoStartNotice(), {
+		key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS",
+		value: 0,
+		nativeType: 4
+	} );
 	assert.deepEqual( partyMatchNoResultNotice(), {
 		key: "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT",
 		value: 0,
 		nativeType: 4
 	} );
+});
+
+/*
+================
+autoMatchWorld
+
+A world whose party board the 0xB588 answer fills with the given
+listing ids (page 1 of 1), ready for an auto-match command.
+================
+*/
+function autoMatchWorld( t, ids ) {
+	const sent = [], core = createWorldCore( frame => sent.push( frame ) );
+	t.after( () => core.dispose() );
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		refItemSnapshot: [],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 0x6b4f, x: 1, y: 2, z: 3, angle: 0 } }
+	} );
+	const flush = () => {
+		core.step( 0, false );
+		const batch = core.take();
+		if ( batch ) core.ack( batch.sequence );
+		return batch?.events ?? [];
+	};
+	flush();
+	core.command( { kind: "party-match-page", page: 1 }, 0 );
+	const rows = [];
+	for ( const id of ids ) {
+		const header = Buffer.alloc( 10 );
+		header.writeUInt32LE( id );
+		header.writeUInt32LE( 99, 4 );
+		header.writeUInt16LE( 4, 8 );
+		const size = Buffer.alloc( 2 );
+		size.writeUInt16LE( 5 );
+		rows.push( Buffer.concat( [
+			header,
+			Buffer.from( "Peer" ),
+			Buffer.from( [ 0, 3, 2, 0, 1, 20 ] ),
+			size,
+			Buffer.from( "Title", "utf16le" )
+		] ) );
+	}
+	core.receive(
+		{ opcode: 0xb588, payload: Buffer.concat( [ Buffer.from( [ 1, 1, 1, ids.length ] ), ...rows ] ) },
+		0
+	);
+	flush();
+	const gameplay = events => {
+		const event = events.find( row => row.kind === "gameplay" );
+		assert.ok( event?.kind === "gameplay", "the world publishes gameplay" );
+		return event.state;
+	};
+	return { core, sent, flush, gameplay };
+}
+
+test("a sent auto round prints progress at once; an empty one prints no-result", t => {
+	const world = autoMatchWorld( t, [ 7 ] );
+	world.core.command( { kind: "party-match-auto", ids: [ 7 ] }, 0 );
+	assert.ok( world.sent.some( frame => frame.opcode === 0x75bf ), "the first candidate was not sent" );
+	// No join answer has arrived: the line is already printed (63B383).
+	const notices = world.gameplay( world.flush() ).notices ?? [];
+	assert.deepEqual(
+		{ key: notices.at( -1 )?.key, nativeType: notices.at( -1 )?.nativeType },
+		{ key: "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS", nativeType: 4 }
+	);
+	const empty = autoMatchWorld( t, [] );
+	empty.core.command( { kind: "party-match-auto", ids: [] }, 0 );
+	assert.ok( !empty.sent.some( frame => frame.opcode === 0x75bf ), "an empty round sent a candidate" );
+	const emptyNotices = empty.gameplay( empty.flush() ).notices ?? [];
+	assert.equal( emptyNotices.at( -1 )?.key, "UIIT_MSG_PARTYMATCH_PSEARCH_NORESULT" );
+	assert.ok( !emptyNotices.some( notice => notice.key === "UIIT_MSG_PARTYMATCH_AUTO_PROGRESS" ) );
 });

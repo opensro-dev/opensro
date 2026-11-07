@@ -255,6 +255,12 @@ func newCombatTestRuntimeMonsterTuned(t testing.TB, monsterHP uint32, level uint
 		},
 		Items:  staticItemSource{sword.Codename: sword},
 		Levels: testCombatRewardLevels(),
+		// Production deps carry a magic-option catalogue with a source
+		// identity, so the stats memo engages; a source without an
+		// identity is computed fresh on every read (statscache.go).
+		// The fixture caster's rows carry no options for the empty
+		// catalogue to resolve.
+		MagicOptions: &emptyMagicOptionSource{},
 		Skills: staticSkillSource{2: {
 			ID:                      2,
 			Codename:                "SKILL_CH_SWORD_BASE_01",

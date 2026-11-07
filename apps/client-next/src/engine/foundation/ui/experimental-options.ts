@@ -61,6 +61,10 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Port-only, not native: drifting procedural clouds, the sun's
+	// atmospheric glow and a rim light against the sky (pipelines.ts's
+	// stages.w). Off by default; off is the native gradient and disc.
+	readonly skyDetail: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
@@ -120,16 +124,18 @@ export interface ExperimentalOptions {
 	// #1738). On unless turned off; off hides them from the banner and
 	// the chat log.
 	readonly breakNotices: boolean;
+	// Port-only, not native (#2727): shard event announcements (the
+	// shardEvent notices) print in red in the bottom-right message log.
+	// The native box colours only category 6 light blue and every other
+	// category the default beige (0x67A600), so the highlight is the
+	// client's own. On unless turned off (the owner's ask, 2026-11-06);
+	// off is the native beige line.
+	readonly highlightEventNotices: boolean;
 	// Port-only, not native: when a unique the player damaged dies, the
 	// shard's damage ranking (0x3FBC, server SRO_UNIQUE_DAMAGE_RANK) opens
 	// in a window (unique-rank-hud.ts). Off unless turned on, so each
 	// player opts in.
 	readonly uniqueDamageRank: boolean;
-	// Port-only, not native (#1849): the buff board shows the Most Wanted
-	// row (the shard's 0x3FBA state, server SRO_MOST_WANTED) while the
-	// player's job suit is worn. Off unless turned on, so each player
-	// opts in; off is the native board.
-	readonly mostWantedBuff: boolean;
 	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
 	// hides other players' pets and transports. The original hides only
 	// monsters and players (8602C0, 85E550): a COS draws through its owner
@@ -251,6 +257,12 @@ export interface ExperimentalOptions {
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
 	// native place.
 	readonly sealUnderHeading: boolean;
+	// Port-only, not native (#2269): the Item Mall's Buying list (native
+	// CIFSilkBuyList), listing recorded silk uses by period. The native
+	// window is never instantiated, its Inquire handler is an empty stub
+	// (0x6CE6F0) and its mall button is born disabled (0x6BC17E). Off
+	// unless turned on; off is the original.
+	readonly silkHistory: boolean;
 }
 
 /*
@@ -315,6 +327,26 @@ desktop rule.
 */
 export function phoneDisplay( display: DisplayClass ): boolean {
 	return display.coarsePointer && display.shortSide > 0 && display.shortSide <= PHONE_SHORT_SIDE_MAX;
+}
+
+/*
+================
+browserDisplayClass
+
+What this window reports about its display, read once per call: the primary
+pointer's coarseness and the screen's short side in CSS pixels. This is the
+one reader of the pointer class - the renderer and the UI runtime both call
+it. A host without matchMedia reads as a fine pointer, so layout keeps the
+desktop rule; a test that wants the touch layout stubs a coarse matchMedia
+before the UI is created, instead of relying on a production default.
+================
+*/
+export function browserDisplayClass(): DisplayClass {
+	const query = globalThis.matchMedia?.( "(pointer: coarse)" ),
+		screen = globalThis.screen,
+		width = screen?.width ?? 0,
+		height = screen?.height ?? 0;
+	return { coarsePointer: query ? query.matches : false, shortSide: Math.min( width, height ) };
 }
 
 /*
@@ -386,7 +418,7 @@ experimentalOptions
 
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
-plusSevenNotices, breakNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
+plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
 petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
@@ -419,6 +451,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
+		skyDetail: enabled( "skyDetail" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
@@ -430,8 +463,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		dropPlusNotices: record.dropPlusNotices !== false,
 		plusSevenNotices: record.plusSevenNotices !== false,
 		breakNotices: record.breakNotices !== false,
+		highlightEventNotices: record.highlightEventNotices !== false,
 		uniqueDamageRank: enabled( "uniqueDamageRank" ),
-		mostWantedBuff: enabled( "mostWantedBuff" ),
 		vHidesCompanions: enabled( "vHidesCompanions" ),
 		dungeonCharacterPvs: record.dungeonCharacterPvs !== false,
 		fitWindowLabels: record.fitWindowLabels !== false,
@@ -457,7 +490,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
-		sealUnderHeading: enabled( "sealUnderHeading" )
+		sealUnderHeading: enabled( "sealUnderHeading" ),
+		silkHistory: enabled( "silkHistory" )
 	};
 }
 
@@ -524,6 +558,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly skyDetail: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
@@ -548,6 +583,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
+		skyDetail: options.skyDetail,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,
@@ -570,6 +606,7 @@ export interface ExperimentalGameplay {
 	readonly dropPlusNotices: boolean;
 	readonly plusSevenNotices: boolean;
 	readonly breakNotices: boolean;
+	readonly highlightEventNotices?: boolean;
 	readonly webTransport: boolean;
 	readonly homingProjectiles?: boolean;
 	readonly smartPetPickup?: boolean;
@@ -593,6 +630,7 @@ export function experimentalGameplay( options: ExperimentalOptions ): Experiment
 		dropPlusNotices: options.dropPlusNotices,
 		plusSevenNotices: options.plusSevenNotices,
 		breakNotices: options.breakNotices,
+		highlightEventNotices: options.highlightEventNotices,
 		homingProjectiles: options.homingProjectiles,
 		smartPetPickup: options.smartPetPickup,
 		sunDropMarker: options.sunDropMarker,

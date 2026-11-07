@@ -302,29 +302,21 @@ async function initializeUi( page ) {
 			}
 		};
 		let platform;
-		const ui = createUi(
+		const ui = createUi( {
 			assets,
-			() => {},
-			scene => scenes.push( scene ),
-			( _id, image ) => image?.close(),
-			location.origin,
-			"http://fixture.invalid",
-			() => {},
-			() => {},
-			undefined,
-			undefined,
-			undefined,
-			( value, commit ) => {
+			commands: () => {},
+			publish: scene => scenes.push( scene ),
+			texture: ( _id, image ) => image?.close(),
+			base: location.origin,
+			apiBase: "http://fixture.invalid",
+			clickSound: () => {},
+			sound: () => {},
+			audioPreference: ( value, commit ) => {
 				changes.push( { value, commit } );
 				if ( commit ) platform.saveAudioOptions( value );
 			},
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-			{ saveExperimental: value => platform.saveExperimentalOptions( value ) }
-		);
+			extensions: { saveExperimental: value => platform.saveExperimentalOptions( value ) }
+		} );
 		platform = createPlatform(
 			document.querySelector( "canvas" ),
 			document.querySelector( "output" ),

@@ -116,7 +116,9 @@ func publicRules() publicstats.RulesResponse {
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
+	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -164,6 +166,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
+				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
+				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
+				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
@@ -268,6 +274,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A quick move into or out of storage takes the first empty slot.",
 				Now:    "A quick move lands on a matching stack with room first.",
 				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
+				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
+				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
+				Why:    "Owner decision 2026-11-07 (#2769): players found the expansion quests not worth half a page."},
 			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
 				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",
 				Now: fmt.Sprintf("A stall offer asks at most %s gold, and one warehouse gold deposit moves at most %s.",
@@ -289,6 +299,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
 				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
+			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
+				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",
+				Now:    "Jangan's potion merchant also sells X-Large HP and MP potions at Hotan's price of 900 gold.",
+				Why:    "The owner's convenience set: the endgame potions in the starting town."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",

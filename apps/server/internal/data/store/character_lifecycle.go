@@ -168,6 +168,12 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	if c.MissionInventory == nil && s.defaultInventory != nil {
 		s.defaultInventory(c)
 	}
+	// The port-only inventory-pages base (SRO_INVENTORY_PAGES, #2769) is
+	// part of the record from birth, not a first-login patch-up: the floor
+	// raise leaves a caller-stamped larger capacity alone.
+	if s.inventoryPages {
+		c.RaiseInventoryFloor(domain.InventoryPagesBase)
+	}
 	id := s.meta.NextCharID[divisionID]
 	if id < 1 {
 		id = s.maxCharIDLocked(divisionID) + 1

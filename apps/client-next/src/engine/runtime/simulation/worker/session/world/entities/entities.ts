@@ -107,6 +107,7 @@ export function createEntities(
 			tidWord: number;
 			name?: string;
 			level?: number;
+			fortressUpgradeRef?: number;
 			maxHp?: number;
 			countryByte9c?: number;
 			sexSelector1ac?: number;
@@ -665,15 +666,22 @@ export function createEntities(
 		},
 		/*
 		================
-		structureName
+		structureReference
 
 		Fortress service replies name a zone, not a visible actor. Resolve
 		its structure through the catalog even when it is outside view.
 		================
 		*/
-		structureName( refObjId: number ): string | undefined {
+		structureReference( refObjId: number ) {
 			const reference = refs.get( refObjId );
-			return reference?.kind === "structure" ? reference.name : undefined;
+			if ( reference?.kind !== "structure" ) return undefined;
+			const upgraded = refs.get( reference.fortressUpgradeRef ?? refObjId );
+			return {
+				name: reference.name,
+				tidWord: reference.tidWord,
+				level: reference.level ?? 0,
+				upgradeName: upgraded?.kind === "structure" ? upgraded.name : undefined
+			};
 		},
 		/*
 		================
@@ -819,10 +827,16 @@ export function createEntities(
 					row.kind === "cos" && (!Number.isInteger( row.tidWord ) || row.tidWord < 0 || row.tidWord > 65535)
 				) throw new Error( "Missing COS type authority" );
 				for (
-					const [field, max] of [ [ "level", 255 ], [ "maxHp", 0xffffffff ], [
-						"countryByte9c",
-						255
-					], [ "sexSelector1ac", 255 ] ] as const
+					const [field, max] of [
+						[ "level", 255 ],
+						[ "maxHp", 0xffffffff ],
+						[
+							"countryByte9c",
+							255
+						],
+						[ "sexSelector1ac", 255 ],
+						[ "fortressUpgradeRef", 0xffffffff ]
+					] as const
 				) {
 					if (
 						row[field] !== undefined &&
@@ -862,6 +876,7 @@ export function createEntities(
 					tidWord: row.tidWord ?? 0,
 					name: row.name,
 					level: row.level,
+					fortressUpgradeRef: row.fortressUpgradeRef,
 					maxHp: row.maxHp,
 					countryByte9c: row.countryByte9c,
 					sexSelector1ac: row.sexSelector1ac,

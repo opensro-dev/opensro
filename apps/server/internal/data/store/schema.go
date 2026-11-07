@@ -119,7 +119,22 @@ func isVersionMismatch(err error) bool {
 // port-only, #2675): the credited total and rolling UTC week the public
 // boards rank by. Characters saved earlier carry none and start
 // counting at their next login; the offline upgrade rewrites no record.
-const CurrentVersion = 37
+// Version 38 adds the Academy cumulated-buff state to camp members
+// (buffValue, buffWindowStartMs, buffLive, reservedBuffs; #2270): the
+// saved buff a student accumulates and the received rows it passes to
+// the Guardian. Members saved earlier carry none of it and hold no
+// buff; the offline upgrade rewrites no record.
+// Version 39 changes no record: layout 12 adds the silk_history table
+// (port-only, silkhistory.go), the movement record the Item Mall's silk
+// history window lists (#2269). The upgrade rewrites no record.
+// Version 40 replaces the wanted level's seven-day lapse with a per-day
+// decay (mostWanted.nextDecayAtMs, port-only, #2721): every counted kill
+// restamps it, and each day without one drops the level by one. The
+// schema 35 expiresAtMs stays in the record as an unread seed, like the
+// schema 36 Halloween counts. Streaks saved earlier carry no decay stamp
+// and are stamped fresh at their first judging door, so no saved streak
+// decays early. The offline upgrade rewrites no record.
+const CurrentVersion = 40
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

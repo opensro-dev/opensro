@@ -188,6 +188,15 @@ test("viewer help never inherits the local board's suppression warning", () => {
 	assert.equal( rows.some( row => row.value.includes( "Remaining time" ) ), false );
 });
 
+test("the basic premium buff's title is its name alone (6E2F61)", () => {
+	const f = fixture();
+	const row = { ...defined( f.catalog.get( SKILL_ID ) ), nameSymbol: "SN_SKILL_MALL_PRE_APRU_4W" };
+	const catalog = Object.assign( new Map( [ [ SKILL_ID, row ] ] ), { groups: new Map() } );
+	const named = key => key === "SN_SKILL_MALL_PRE_APRU_4W" ? "Premium" : text( key );
+	const rows = buffTooltip( defined( buffBoard( f.game, 0 )[0].helpSource ), f.game, 0, catalog, named );
+	assert.equal( rows[0].value, "Premium\n " );
+});
+
 test("the warning uses the text catalogue and a removed effect produces no help", () => {
 	const f = fixture();
 	const source = defined( buffBoard( f.game, 0, new Set( [ SLOT_SERIAL ] ) )[0].helpSource );
