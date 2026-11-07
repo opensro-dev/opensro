@@ -26,7 +26,7 @@ export const UNION_CREST_REGISTER_REF_OBJ_ID = 9270;
 
 // The owner's hard cap on a picked image, checked before the body is
 // read (server crest.MaxCrestImageBytes).
-export const CREST_IMAGE_MAX_BYTES = 256 << 10;
+export const CREST_IMAGE_MAX_BYTES = 262144; // 256 KiB
 
 export type CrestRegisterKind = "guild" | "union";
 
