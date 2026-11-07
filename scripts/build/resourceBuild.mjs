@@ -18,6 +18,8 @@ summary it prints from formatResourceBuildSummary.
 
 import { produceAllFamilies } from "./families/looseFamilies.mjs";
 import { buildTextureVariants } from "./textures/buildTextureVariants.mjs";
+import { buildHdTextureVariants } from "./textures/buildHdTextureVariants.mjs";
+import { buildHdTexturePacks, hdTexturesEnabled } from "./textures/buildHdTexturePacks.mjs";
 import { buildAudioResources } from "./audio.mjs";
 import { buildCifResources } from "./cif.mjs";
 import { buildConfigResources } from "./config.mjs";
@@ -105,6 +107,39 @@ async function extractRetailCursors() {
 	return { count: RETAIL_CURSOR_IDS.length };
 }
 
+/*
+================
+buildHdTextureVariantsStep
+
+The HD set's encode (#2061), behind its opt-in flag
+(buildHdTexturePacks.mjs): ordinary builds skip it, so the first
+multi-hour GPU encode is never a surprise inside a full build.
+================
+*/
+async function buildHdTextureVariantsStep() {
+	if ( !hdTexturesEnabled() ) {
+		console.log( "HD texture variants: skipped (SRO_HD_TEXTURES is not 1)" );
+		return { skipped: true };
+	}
+	return buildHdTextureVariants();
+}
+
+/*
+================
+buildHdTexturePacksStep
+
+The HD set's packs, under the same flag: with it off the build ships no
+HD tree, so an earlier flagged build's output is left exactly as it was.
+================
+*/
+async function buildHdTexturePacksStep() {
+	if ( !hdTexturesEnabled() ) {
+		console.log( "HD texture packs: skipped (SRO_HD_TEXTURES is not 1)" );
+		return { skipped: true };
+	}
+	return buildHdTexturePacks();
+}
+
 // The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
 // by their code closures. The world lane is not memoized; it reads the
 // outdoor build's public output, which no lane key covers.
@@ -184,6 +219,8 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	extractRetailCursors,
 	produceAllFamilies,
 	buildTextureVariants,
+	buildHdTextureVariants: buildHdTextureVariantsStep,
+	buildHdTexturePacks: buildHdTexturePacksStep,
 	packTree: packPublicTree
 } );
 
@@ -543,6 +580,10 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// devices without BC is encoded now, before the packs are listed
 	// (textures/buildTextureVariants.mjs; cached by source digest).
 	const textureVariants = await timed( "textureVariants", () => steps.buildTextureVariants() );
+	// Port-only (#2061): the HD set's x2 variants of the world object
+	// textures, published outside /assets under hd/ before its own pack
+	// step runs below; skipped unless the build opted in (SRO_HD_TEXTURES).
+	const hdTextureVariants = await timed( "hdTextureVariants", () => steps.buildHdTextureVariants() );
 	// Refresh the native-interface preload sweep over assets/images/** after
 	// every producer, the families included, has published (their code-selected UI
 	// art belongs in the startup set).
@@ -566,6 +607,9 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	} );
 	const { jsonOptimization, packGroups, claimAudit, assetPacks, sidecarRetirement, manifest, finalJsonOptimization } =
 		packed;
+	// The HD set packs behind its own index (hd/packs/manifest.json), so
+	// the pack tail above never names an HD byte (#2061).
+	const hdTexturePacks = await timed( "hdTexturePacks", () => steps.buildHdTexturePacks() );
 	return {
 		laneMemo: memo,
 		stepTimings,
@@ -618,6 +662,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		backgroundInstall,
 		families,
 		textureVariants,
+		hdTextureVariants,
+		hdTexturePacks,
 		packGroups,
 		claimAudit,
 		jsonOptimization,
