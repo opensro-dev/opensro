@@ -96,7 +96,8 @@ pack member or a loose file.
 */
 export function createPacks(
 	download: PackDownload,
-	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {}
+	activity: ( path: string, event: "start" | "ready" | "end" ) => void = () => {},
+	hdAvailability: ( available: boolean ) => void = () => {}
 ) {
 	const persistent = createPersistentAssets(), parser = createPackIndex(), lifetime = new AbortController();
 	const blocks = createPackBlocks( download, lifetime.signal );
@@ -223,6 +224,9 @@ export function createPacks(
 					const admitted = parser.manifest(
 						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) )
 					);
+					// The published build's HD certification (#2800), told
+					// once with the index that carries it.
+					hdAvailability( admitted.hd );
 					// The startup packs and their members are what eviction keeps.
 					persistent.setStartup(
 						base,
