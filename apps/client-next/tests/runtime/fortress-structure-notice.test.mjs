@@ -293,19 +293,30 @@ else prints the upgrade line with the standing name.
 */
 test("the upgrade arm judges the standing structure's type word and level", () => {
 	const state = fortressBootstrap( {} );
-	const service = { action: UPGRADE, result: 1 };
 	const cases = [
-		[ HEADQUARTERS_WORD, 0, "Headquarters", CONSTRUCTION_KEY, STRUCTURE_NAME ],
-		[ POSITION_WORD, 0, "Built position", CONSTRUCTION_KEY, "Built position" ],
-		[ POSITION_WORD, 0, undefined, CONSTRUCTION_KEY, STRUCTURE_NAME ],
-		[ POSITION_WORD, 1, "Built position", UPGRADE_KEY, STRUCTURE_NAME ],
-		[ TOWER_WORD, 1, undefined, UPGRADE_KEY, STRUCTURE_NAME ],
-		[ 0x32c4, 0, undefined, UPGRADE_KEY, STRUCTURE_NAME ],
-		[ 0x0000, 0, undefined, UPGRADE_KEY, STRUCTURE_NAME ]
+		{
+			tidWord: HEADQUARTERS_WORD,
+			level: 0,
+			variantName: "Headquarters",
+			key: CONSTRUCTION_KEY,
+			name: STRUCTURE_NAME
+		},
+		{
+			tidWord: POSITION_WORD,
+			level: 0,
+			variantName: "Built position",
+			key: CONSTRUCTION_KEY,
+			name: "Built position"
+		},
+		{ tidWord: POSITION_WORD, level: 0, variantName: undefined, key: CONSTRUCTION_KEY, name: STRUCTURE_NAME },
+		{ tidWord: POSITION_WORD, level: 1, variantName: "Built position", key: UPGRADE_KEY, name: STRUCTURE_NAME },
+		{ tidWord: TOWER_WORD, level: 1, variantName: undefined, key: UPGRADE_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x32c4, level: 0, variantName: undefined, key: UPGRADE_KEY, name: STRUCTURE_NAME },
+		{ tidWord: 0x0000, level: 0, variantName: undefined, key: UPGRADE_KEY, name: STRUCTURE_NAME }
 	];
-	for ( const [tidWord, level, variantName, key, name] of cases ) {
+	for ( const { tidWord, level, variantName, key, name } of cases ) {
 		const notice = fortressStructureNotice(
-			{ ...state, service },
+			{ ...state, service: { action: UPGRADE, result: 1 } },
 			{ name: STRUCTURE_NAME, tidWord, level },
 			variantName
 		);
