@@ -28,14 +28,14 @@ function step( ui, phase ) {
 }
 
 test("the credit shows on the login screen and nowhere else", () => {
-	const ui = createUi(
-		{ available: () => 0, take: () => null, request: () => 0, cancel: () => {} },
-		() => {},
-		() => {},
-		() => {},
-		"https://fixture.invalid",
-		"https://fixture.invalid"
-	);
+	const ui = createUi( {
+		assets: { available: () => 0, take: () => null, request: () => 0, cancel: () => {} },
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid",
+		apiBase: "https://fixture.invalid"
+	} );
 	try {
 		for ( const phase of [ "intro", "login-reveal", "login-accepted", "dock", "world" ] ) {
 			assert.notEqual( step( ui, phase )?.titleCredit, true, phase );

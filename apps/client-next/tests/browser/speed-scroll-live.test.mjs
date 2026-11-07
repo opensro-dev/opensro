@@ -24,7 +24,7 @@ test('live authored speed item consumes once, publishes speed and buff, and show
   });
   await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
    const response=await route.fetch(),source=await response.text();
-   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(...args){const owner=createObservedUi(...args);globalThis.__speedScrollProbe={};return {...owner,step(view,now){globalThis.__speedScrollProbe.view=view;const result=owner.step(view,now);if(result)globalThis.__speedScrollProbe.controls=result.controls;return result;}};}`;
+   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(ports){const owner=createObservedUi(ports);globalThis.__speedScrollProbe={};return {...owner,step(view,now){globalThis.__speedScrollProbe.view=view;const result=owner.step(view,now);if(result)globalThis.__speedScrollProbe.controls=result.controls;return result;}};}`;
    await route.fulfill({response,body,contentType:'application/javascript'});
   });
   await bootPlayableSession(page,character);

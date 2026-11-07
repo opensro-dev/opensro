@@ -1080,29 +1080,90 @@ function pageStorage(): Storage | null {
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
 /*
 ================
+UiPorts
+
+The one record createUi reads (#2516): the asset owner, the session
+command sink, the scene and texture publication, the two base URLs, the
+sound and persistence callbacks and the browser-only extensions. The
+first six fields are required; the rest fall back per field through
+defaultUiPorts.
+================
+*/
+export interface UiPorts {
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
+	commands: ( command: SessionCommand ) => void;
+	publish: ( scene: UiScene | null ) => void;
+	texture: ( id: string, image: UiTexture | null ) => void;
+	base: string;
+	apiBase: string;
+	clickSound?: () => void;
+	sound?: ( kind: "open" | "close" | "message" | "quest" ) => void;
+	loadingVariant?: () => number;
+	chooseTip?: ( count: number ) => number;
+	saveOptions?: ( value: GameOptions ) => void;
+	audioPreference?: ( value: AudioOptions, commit: boolean ) => void;
+	saveSight?: ( value: SightMode ) => void;
+	saveBindings?: ( value: InputOptions ) => void;
+	saveVideo?: ( value: VideoOptions ) => void;
+	saveBlocks?: ( value: readonly string[] ) => void;
+	saveQuickslots?: ( value: ExtendedQuickslotOptions ) => void;
+	extensions?: UiExtensions;
+}
+
+/*
+================
+defaultUiPorts
+
+The defaults for every optional UiPorts field: silent sounds, the first
+loading variant and tip, persistence sinks that drop their value and no
+extensions. createUi falls back to these per field, exactly as its
+defaulted parameters did before the record.
+================
+*/
+export function defaultUiPorts(): Required<
+	Omit<UiPorts, "assets" | "commands" | "publish" | "texture" | "base" | "apiBase">
+> {
+	return {
+		clickSound: () => {},
+		sound: () => {},
+		loadingVariant: () => 1,
+		chooseTip: () => 0,
+		saveOptions: () => {},
+		audioPreference: () => {},
+		saveSight: () => {},
+		saveBindings: () => {},
+		saveVideo: () => {},
+		saveBlocks: () => {},
+		saveQuickslots: () => {},
+		extensions: {}
+	};
+}
+
+/*
+================
 createUi
 ================
 */
-export function createUi(
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	commands: ( command: SessionCommand ) => void,
-	publish: ( scene: UiScene | null ) => void,
-	texture: ( id: string, image: UiTexture | null ) => void,
-	base: string,
-	apiBase: string,
-	clickSound: () => void = () => {},
-	sound: ( kind: "open" | "close" | "message" | "quest" ) => void = () => {},
-	loadingVariant: () => number = () => 1,
-	chooseTip: ( count: number ) => number = () => 0,
-	saveOptions: ( value: GameOptions ) => void = () => {},
-	audioPreference: ( value: AudioOptions, commit: boolean ) => void = () => {},
-	saveSight: ( value: SightMode ) => void = () => {},
-	saveBindings: ( value: InputOptions ) => void = () => {},
-	saveVideo: ( value: VideoOptions ) => void = () => {},
-	saveBlocks: ( value: readonly string[] ) => void = () => {},
-	saveQuickslots: ( value: ExtendedQuickslotOptions ) => void = () => {},
-	extensions: UiExtensions = {}
-) {
+export function createUi( ports: UiPorts ) {
+	const defaults = defaultUiPorts();
+	const assets = ports.assets,
+		commands = ports.commands,
+		publish = ports.publish,
+		texture = ports.texture,
+		base = ports.base,
+		apiBase = ports.apiBase,
+		clickSound = ports.clickSound ?? defaults.clickSound,
+		sound = ports.sound ?? defaults.sound,
+		loadingVariant = ports.loadingVariant ?? defaults.loadingVariant,
+		chooseTip = ports.chooseTip ?? defaults.chooseTip,
+		saveOptions = ports.saveOptions ?? defaults.saveOptions,
+		audioPreference = ports.audioPreference ?? defaults.audioPreference,
+		saveSight = ports.saveSight ?? defaults.saveSight,
+		saveBindings = ports.saveBindings ?? defaults.saveBindings,
+		saveVideo = ports.saveVideo ?? defaults.saveVideo,
+		saveBlocks = ports.saveBlocks ?? defaults.saveBlocks,
+		saveQuickslots = ports.saveQuickslots ?? defaults.saveQuickslots,
+		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
