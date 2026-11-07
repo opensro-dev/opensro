@@ -47,6 +47,16 @@ const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
 // pk.DeathTeam, the 0x37CE mode that labels the death box "standing" (52FF33).
 const TEAM_DEATH_MODE = 2;
+// Port-only, not native (#2406): the widest band the small-viewport party
+// board may occupy, on the left of the screen.
+const PARTY_BAND_MAX_WIDTH = 480;
+// The chat strip a visible chat occupies above the underbar, in the terms
+// chat-layout.ts totals it by: a 62px frame of tabs and input, 56px per
+// log row, or the 20px input line alone - plus the party board's 4px gap.
+const CHAT_STRIP_FRAME = 62;
+const CHAT_STRIP_ROW = 56;
+const CHAT_STRIP_INPUT = 20;
+const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -207,10 +217,20 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
-import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import {
+	createCompactHud,
+	compactHudLayout,
+	compactWindowDrag,
+	compactCloseControl,
+	DESKTOP_HEIGHT,
+	DESKTOP_WIDTH,
+	UNDERBAR_HEIGHT,
+	UNDERBAR_WIDTH
+} from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import {
+	browserDisplayClass,
 	renderScales,
 	UI_SCALE_MAX,
 	UI_SCALE_MIN,
@@ -542,6 +562,7 @@ import { entityCrestFiles } from "@/engine/foundation/ui/guild-crest";
 import { checkedNameError } from "@/engine/foundation/ui/character-create";
 import { barChrome } from "@/engine/foundation/ui/bar";
 import {
+	partyColumns,
 	partyDistanceShade,
 	partyMembers,
 	partyLocalPose,
@@ -1564,6 +1585,11 @@ export function createUi( ports: UiPorts ) {
 	let guideOrigin: { regionId: number; x: number; z: number; } | null = null;
 	let rememberedMainPopup: MainPopupPage = "Character";
 	const compactHud = createCompactHud();
+	// Read once, as the renderer does for the phone display class: the primary
+	// pointer's coarseness does not change while the interface lives. The
+	// compact HUD is the touch layout; a fine pointer keeps the native HUD at
+	// any window size (the underbar is scaled to fit instead).
+	const displayClass = browserDisplayClass();
 	const chatScroll = createMessageScroll( "chat-scroll" ), statusScroll = createMessageScroll( "status-scroll" );
 	const stallChatScroll = createMessageScroll( "stall-chat-scroll" ),
 		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
@@ -7851,7 +7877,7 @@ export function createUi( ports: UiPorts ) {
 			if ( event.kind === "drag" && event.id === "ext-drag" && view && !extPositionLock ) {
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )],
 					header = extended ? Object.values( extended ).find( node => node.id === 10 ) : undefined,
-					compactLayout = compactHudLayout( view.width, view.height ),
+					compactLayout = compactHudLayout( view.width, view.height, displayClass.coarsePointer ),
 					origin = compactLayout && header ?
 						extendedCompactOrigin( view.width, view.height, header.rect[2], header.rect[3] ) :
 						extPosition ?? [ Math.max( 0, view.width - 106 ), 181 ],
@@ -10286,7 +10312,7 @@ export function createUi( ports: UiPorts ) {
 			const fontPath = text.path();
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
-			const compact = compactHud.layout( w, h );
+			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
 			const drawFrame: UiFrame = {
 				quads,
 				controls,
@@ -10314,6 +10340,25 @@ export function createUi( ports: UiPorts ) {
 				focus
 			};
 			let targetBottom = 0, compactTelemetryTop = 4;
+			// The chat strip the party board must stay clear of, counting only
+			// a chat that is actually drawn: the native bottom zone (underbar
+			// plus tabs and rows) on a fine pointer, and on touch the compact
+			// stack plus the chat lines only while the "chat" overlay is open
+			// (the touch layout keeps its chat behind that overlay, as it
+			// always has). The underbar's scale is the width's (its art is
+			// exactly UNDERBAR_WIDTH wide), so the chat and the party reserve
+			// follow the scaled bar without waiting for its measurement.
+			const visibleChatRows = compact ? (compact.overlay === "chat" ? chatRows : 0) : chatRows,
+				chatStrip = compact && compact.overlay !== "chat" ?
+					0 :
+					visibleChatRows > 0 ?
+					CHAT_STRIP_FRAME + visibleChatRows * CHAT_STRIP_ROW :
+					CHAT_STRIP_INPUT;
+			const underbarScale = !compact && w < UNDERBAR_WIDTH ? w / UNDERBAR_WIDTH : 1,
+				underbarHeight = compact ? compact.bottom : UNDERBAR_HEIGHT * underbarScale;
+			const partyFloor = compact ?
+				h - compact.bottom - chatStrip - PARTY_CHAT_GAP :
+				h - underbarHeight - chatStrip - PARTY_CHAT_GAP;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -12370,9 +12415,36 @@ export function createUi( ports: UiPorts ) {
 						slot = hudData.windows.ifquickpartyslot!,
 						localPose = partyLocalPose( game, next.entities );
 					for ( const shadeImage of partyShadeImages() ) paths.push( ROOT + shadeImage );
-					for (
-						const row of partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs )
-					) {
+					// Port-only, not native: at the original's smallest screen mode and
+					// above, the board wraps exactly as authored. Below it the fixed
+					// 230px bottom reserve would wrap every row into its own column
+					// marching across the screen, so the board is placed without its
+					// buff rows in a bounded left band and scaled into it.
+					const nativeBoard = !compact && h >= DESKTOP_HEIGHT;
+					let partyMark: readonly [number, number, number] | null = null,
+						partyTop = origin[1],
+						partyHeight = 0,
+						partyWidth = 0;
+					let rows: ReturnType<typeof partyOverlay>;
+					if ( nativeBoard ) {
+						rows = partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs );
+					} else {
+						const bandWidth = Math.min( w, PARTY_BAND_MAX_WIDTH ) - origin[0];
+						partyTop = compact ? Math.max( origin[1], targetBottom ) : origin[1];
+						partyHeight = Math.max( 1, partyFloor - partyTop );
+						partyWidth = Math.max( 1, bandWidth );
+						partyMark = [ quads.length, controls.length, blocks.length ];
+						rows = partyOverlay(
+							game,
+							next.entities,
+							h,
+							origin[0],
+							partyTop,
+							false,
+							partyColumns( partyMembers( game ).length, bandWidth, partyHeight )
+						);
+					}
+					for ( const row of rows ) {
 						const [x, y] = row.position;
 						authoredImage(
 							{ ...hudData.windows.ifquickpartywnd!.GDR_QPB_SLOT_0!, rect: [ 0, 0, 122, 40 ] },
@@ -12466,7 +12538,7 @@ export function createUi( ports: UiPorts ) {
 						// 5BA840 passes no character, so party abnormal cells carry no grade.
 						const buff = authoredRect( slot.GDR_QPS_PARTY_BUFF!, x, y ),
 							state = partyBuffStates.get( row.member.id );
-						if ( options.partyBuffs && row.entity && state ) {
+						if ( options.partyBuffs && nativeBoard && row.entity && state ) {
 							buffViewer(
 								"party-buff:" + row.member.id + ":",
 								buffViewerIcons(
@@ -12481,7 +12553,32 @@ export function createUi( ports: UiPorts ) {
 							);
 						}
 					}
+					if ( partyMark ) {
+						fitUiGroup(
+							quads,
+							controls,
+							partyMark[0],
+							partyMark[1],
+							[ origin[0], partyTop, partyWidth, partyHeight ],
+							full,
+							{ blocks, firstBlock: partyMark[2], leaveWhenFits: true }
+						);
+						if ( compact ) {
+							// The touch layout's left stack (pets overlay, telemetry,
+							// banners) continues below the fitted board.
+							let boardBottom = partyTop;
+							for ( let i = partyMark[0]; i < quads.length; i++ ) {
+								boardBottom = Math.max( boardBottom, quads[i]!.rect[1] + quads[i]!.rect[3] );
+							}
+							targetBottom = Math.max( targetBottom, boardBottom );
+						}
+					}
 				}
+				// The chat is part of the native HUD a fine pointer keeps, so it
+				// stays drawn under the scaled underbar. In the touch layout it
+				// stays behind the "chat" overlay, exactly as before #2406:
+				// showing it without the overlay would be a product change,
+				// not a degradation of the native layout.
 				if ( hudData && panel !== "Chat" && (!compact || compact.overlay === "chat") ) {
 					const lines = game?.chat?.lines ?? [],
 						key: unknown[] = [
@@ -12528,6 +12625,11 @@ export function createUi( ports: UiPorts ) {
 										bottom: compact.bottom,
 										maxRows: Math.max( 1, Math.floor( (h - compact.bottom - 100) / 56 ) )
 									} :
+									underbarScale < 1 ?
+									// The chat bottom rides the scaled underbar; this compact
+									// branch only re-anchors it, the width stays the native
+									// 399 whenever the window holds it.
+									{ bottom: underbarHeight, maxRows: 6 } :
 									undefined,
 								layout: hudData.chat,
 								width: w,
@@ -12772,7 +12874,16 @@ export function createUi( ports: UiPorts ) {
 					compactTelemetryTop = Math.max( targetBottom, compactTelemetryTop );
 					targetBottom = drawTransientBanners( compactTelemetryTop + HUD_TOOLS_HEIGHT + 12 );
 				}
-				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
+				const barX = compact ? 0 : Math.trunc( (w - UNDERBAR_WIDTH) / 2 ),
+					barY = compact ? compact.top : h - UNDERBAR_HEIGHT;
+				// Port-only, not native: a fine pointer on a window narrower than the
+				// underbar keeps the native bottom HUD; the whole strip
+				// (bar, slots, pets, whisper list, system filter, queue chip) scales
+				// to the window together instead of being swapped for bigger
+				// controls. The fit below anchors the group to the bottom center.
+				const barStrip = compact || w >= UNDERBAR_WIDTH ?
+					null :
+					[ quads.length, controls.length, blocks.length ] as const;
 				if ( hudData && !compact ) {
 					retainedHud( barLayoutCache, [
 						hudData,
@@ -12943,7 +13054,7 @@ export function createUi( ports: UiPorts ) {
 					const wx = 0,
 						wy = compact ?
 							Math.max( 80, compact.top - 200 ) :
-							h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
+							h - underbarHeight - chatStrip,
 						node = hudData.chat.GDR_WHISPERLIST!;
 					authoredImage( node, wx, wy );
 					const r = authoredRect( node, wx, wy );
@@ -13211,6 +13322,35 @@ export function createUi( ports: UiPorts ) {
 						quads.push( ...chip.over );
 					}
 				}
+				if ( barStrip ) {
+					// The bounds are the strip's own extent at the width's scale, so
+					// fitUiGroup lands the group bottom-center anchored exactly where
+					// the transform means it: same call, same text-run scaling, no
+					// separate transform to keep in step with the windows'.
+					const strip = quads.slice( barStrip[0] );
+					if ( strip.length ) {
+						const left = Math.min( ...strip.map( q => q.rect[0] ) ),
+							top = Math.min( ...strip.map( q => q.rect[1] ) ),
+							right = Math.max( ...strip.map( q => q.rect[0] + q.rect[2] ) ),
+							scale = Math.min( 1, w / Math.max( 1, right - left ) ),
+							width = Math.max( 1, (right - left) * scale ),
+							height = Math.max( 1, (h - top) * scale );
+						fitUiGroup(
+							quads,
+							controls,
+							barStrip[0],
+							barStrip[1],
+							[
+								Math.floor( (w - width) / 2 ),
+								h - height,
+								width,
+								height
+							],
+							full,
+							{ blocks, firstBlock: barStrip[2] }
+						);
+					}
+				}
 				if ( hudData && (!compact || compact.overlay === "extra") ) {
 					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
@@ -13336,7 +13476,7 @@ export function createUi( ports: UiPorts ) {
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						compact ? w - 84 : barX + 652,
+						compact || w < UNDERBAR_WIDTH ? w - 84 : barX + 652,
 						barY - 40,
 						80,
 						false,

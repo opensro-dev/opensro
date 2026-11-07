@@ -659,8 +659,10 @@ func (rt *Runtime) commitRebirth(divisionID string, character *enterworld.Charac
 		character.DeathKind = 0   // cleared by the native town teleport
 		// The re-entry presents any waiting inventory expansion; the record
 		// adopts the capacity those packets carry (zero for a present-point
-		// rebirth, which builds no entry).
+		// rebirth, which builds no entry), and the inventory-pages floor
+		// they present with it (zero native).
 		character.AdoptInventorySize(prepared.InventorySize)
+		character.RaiseInventoryFloor(prepared.InventoryBase)
 		untouchable = rt.grantReviveUntouchable(divisionID, character, rt.Now().UnixMilli())
 		return true
 	})

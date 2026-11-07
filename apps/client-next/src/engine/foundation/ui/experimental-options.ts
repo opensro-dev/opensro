@@ -331,6 +331,26 @@ export function phoneDisplay( display: DisplayClass ): boolean {
 
 /*
 ================
+browserDisplayClass
+
+What this window reports about its display, read once per call: the primary
+pointer's coarseness and the screen's short side in CSS pixels. This is the
+one reader of the pointer class - the renderer and the UI runtime both call
+it. A host without matchMedia reads as a fine pointer, so layout keeps the
+desktop rule; a test that wants the touch layout stubs a coarse matchMedia
+before the UI is created, instead of relying on a production default.
+================
+*/
+export function browserDisplayClass(): DisplayClass {
+	const query = globalThis.matchMedia?.( "(pointer: coarse)" ),
+		screen = globalThis.screen,
+		width = screen?.width ?? 0,
+		height = screen?.height ?? 0;
+	return { coarsePointer: query ? query.matches : false, shortSide: Math.min( width, height ) };
+}
+
+/*
+================
 sceneRenderScale
 
 The render scale the scene is drawn at this frame. Only the phone cap
