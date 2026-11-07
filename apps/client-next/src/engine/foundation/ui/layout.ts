@@ -12,6 +12,12 @@ and shrink together; screen-wide modal coverage remains on the screen.
 import type { UiControl, UiQuad, UiRect, UiTextLayout } from "@/engine/contracts/ui";
 import { scaleTextRun } from "@/engine/foundation/rendering/text-run";
 
+// The original's smallest screen mode: below it the native HUD degrades
+// (the UI runtime scales it in) and the touch layout takes over for a
+// coarse pointer. One definition for every fitting decision.
+export const DESKTOP_WIDTH = 800;
+export const DESKTOP_HEIGHT = 600;
+
 /*
 ================
 FitUiGroupOptions

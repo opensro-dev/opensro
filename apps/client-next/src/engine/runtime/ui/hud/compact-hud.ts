@@ -17,12 +17,13 @@ there only traded information for space.
 */
 import type { UiRect, UiControl } from "@/engine/contracts/ui";
 import { closedPanel } from "@/engine/foundation/ui/panels";
+import { DESKTOP_HEIGHT, DESKTOP_WIDTH } from "@/engine/foundation/ui/layout";
 
-// The original's smallest screen mode, and the authored underbar that
-// spans it: below this mode the native HUD degrades (it is scaled in
-// ui.ts) and the touch layout below takes over for a coarse pointer.
-export const DESKTOP_WIDTH = 800;
-export const DESKTOP_HEIGHT = 600;
+// The authored underbar that spans the original's smallest screen mode
+// (DESKTOP_WIDTH in foundation/ui/layout.ts, re-exported here for the
+// HUD's callers): below that mode the native HUD degrades (it is scaled
+// in ui.ts) and the touch layout below takes over for a coarse pointer.
+export { DESKTOP_HEIGHT, DESKTOP_WIDTH };
 export const UNDERBAR_WIDTH = 800;
 export const UNDERBAR_HEIGHT = 52;
 const SLOT_COUNT = 11;

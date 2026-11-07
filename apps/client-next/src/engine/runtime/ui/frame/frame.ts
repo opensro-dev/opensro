@@ -14,11 +14,10 @@ import type { BuffViewerIcon } from "@/engine/foundation/ui/buff-viewer";
 import type { CloseControlId, UiFrame } from "./frame-contract";
 import { closedPanel } from "@/engine/foundation/ui/panels";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
-import { fitUiGroup } from "@/engine/foundation/ui/layout";
+import { DESKTOP_HEIGHT, DESKTOP_WIDTH, fitUiGroup } from "@/engine/foundation/ui/layout";
 import { frameRing } from "@/engine/foundation/ui/frame-ring";
 import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
-import { DESKTOP_HEIGHT, DESKTOP_WIDTH } from "../hud/compact-hud";
 
 /*
 ================
