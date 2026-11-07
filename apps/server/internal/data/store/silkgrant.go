@@ -55,5 +55,8 @@ ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.
 	if err != nil {
 		return domain.MallBalance{}, err
 	}
+	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: amount}); err != nil {
+		return domain.MallBalance{}, err
+	}
 	return balance, tx.Commit()
 }
