@@ -18,6 +18,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -33,8 +34,8 @@ owner's world comes from WorldStore.SnapshotExisting: seeding it
 would read the live record outside the character door, so a tick
 whose owner has no world entry yet abstains with everything else
 that must commit through the record - the bind, a battle, a roar, a
-pickup, a mercenary, the refusals - and advancePet judges it on the
-companion copy exactly as before. The stuck answer stays lazy the
+pickup, a mercenary, a relocation, the refusals - and advancePet
+judges it on the companion copy exactly as before. The stuck answer stays lazy the
 same way: a stuck event raised by the judged step takes the copy
 only to answer it.
 ================
@@ -127,6 +128,15 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	}
 	if nowMs < state.wolf.howlHoldUntil {
 		return state.follower.Stop(nowMs), true
+	}
+	// A follower whose region the owner's live region cannot be walked
+	// to relocates inside the formation step, and the step publishes
+	// the respawn from the pet record (publishPetRelocation: name,
+	// body status, life, level). The facts carry none of those, so the
+	// tick abstains on exactly the gate the step relocates on and the
+	// copy publishes the respawn as before.
+	if !monster.FollowLocationCompatible(state.follower.Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
+		return nil, false
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
 		*following = true

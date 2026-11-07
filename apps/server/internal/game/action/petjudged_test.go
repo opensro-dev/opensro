@@ -15,6 +15,7 @@ commit through the record (#2139). This suite holds that line.
 package action
 
 import (
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -153,21 +154,21 @@ func TestReadPetTickFactsAllocatesScalarsOnly(t *testing.T) {
 
 /*
 ================
-petChasingWolfFixture
+petWolfFixture
 
-petFollowFixture's bound follow, but the pet is a band-3 wolf
-whose owner then steps away in the world store, far past the
-follow distance: the chase installs the follow-run factor on the
-live record mid-window, and the judged lane must carry that
-installation through its facts or its run speed drifts off the
-copy's and the wolf ends somewhere else.
+petFollowFixture's bound follow, but the pet is a named band-3
+wolf whose owner then moves in the world store as displace says:
+a step away in the same region (the chase test) or a warp to a
+region the follower cannot walk to (the relocation test). The
+wolf has a name and a level so a spawn presentation built from
+anything less than the record shows.
 ================
 */
-func petChasingWolfFixture(t *testing.T) (*Runtime, petOwnerKey, int64) {
+func petWolfFixture(t *testing.T, displace func(w *simulation.WorldState)) (*Runtime, petOwnerKey, int64) {
 	t.Helper()
 	c := companionCopyBenchOwner()
 	c.ActiveCOS = &enterworld.CharacterCOS{
-		GID: 60001, RefObjID: 9, Codename: "COS_P_WOLF_090",
+		GID: 60001, RefObjID: 9, Codename: "COS_P_WOLF_090", Name: "Wolfie", Level: 90,
 		CurrentHP: 5000, Summoned: true, Satiety: companion.MaximumSatiety,
 	}
 	refs := testCosSource(testItems())
@@ -191,8 +192,24 @@ func petChasingWolfFixture(t *testing.T) (*Runtime, petOwnerKey, int64) {
 	}
 	rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name),
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },
-		func(w *simulation.WorldState) { w.Spawn.X += 200 })
+		displace)
 	return rt, key, now
+}
+
+/*
+================
+petChasingWolfFixture
+
+The wolf whose owner steps away in the world store, far past the
+follow distance: the chase installs the follow-run factor on the
+live record mid-window, and the judged lane must carry that
+installation through its facts or its run speed drifts off the
+copy's and the wolf ends somewhere else.
+================
+*/
+func petChasingWolfFixture(t *testing.T) (*Runtime, petOwnerKey, int64) {
+	t.Helper()
+	return petWolfFixture(t, func(w *simulation.WorldState) { w.Spawn.X += 200 })
 }
 
 /*
@@ -241,5 +258,56 @@ func TestAdvancePetJudgedFollowMatchesTheCopyForAChasingWolf(t *testing.T) {
 	judged, copied := run(false), run(true)
 	if judged != copied {
 		t.Fatalf("judged follow ended at %+v, forced-copy follow at %+v", judged, copied)
+	}
+}
+
+/*
+================
+TestAdvancePetJudgedAbstainsWhenTheOwnerWarps
+
+When the owner warps to a region the follower cannot walk to, the
+formation step relocates the follower and publishes its respawn
+from the pet record (name, body status, life, level). The judged
+facts carry none of those, so a judged tick that answered here
+would publish a dead, nameless pet: the lane must abstain and let
+the copy publish, and the full tick must then match the
+forced-copy tick frame for frame.
+================
+*/
+func TestAdvancePetJudgedAbstainsWhenTheOwnerWarps(t *testing.T) {
+	warp := func(w *simulation.WorldState) { w.Spawn.RegionID += 2 }
+
+	probe, probeKey, probeNow := petWolfFixture(t, warp)
+	probeState := probe.petSessionFor(probeKey.division, "benchowner", probeKey.gid)
+	probeFacts := probe.readPetTickFacts(probeKey.division, probeState.character, probeKey.gid)
+	if !probeFacts.admitted {
+		t.Fatal("wolf not admitted")
+	}
+	var following bool
+	var answerStuck func() []simulation.Frame
+	if _, handled := probe.advancePetJudged(probeKey, probeState, probeFacts, probeNow+100, &following, &answerStuck); handled {
+		t.Fatal("judged lane answered a relocation tick from its facts view; the respawn would publish a dead, nameless pet")
+	}
+
+	run := func(forceCopy bool) []simulation.Frame {
+		rt, key, now := petWolfFixture(t, warp)
+		if forceCopy {
+			rt.companionCopy = func(divisionID string, character *enterworld.Character) *enterworld.Character {
+				return character.SnapshotCompanion()
+			}
+		}
+		frames := rt.advancePet(key, now+100)
+		state := rt.petSessionFor(key.division, "benchowner", key.gid)
+		if region := state.follower.Position(now + 100).RegionID; region != 23714 {
+			t.Fatalf("follower ended in region %d, want the owner's 23714; the warp never relocated it", region)
+		}
+		return frames
+	}
+	judged, copied := run(false), run(true)
+	if len(judged) == 0 {
+		t.Fatal("the warp tick published nothing; the differential is vacuous")
+	}
+	if !reflect.DeepEqual(judged, copied) {
+		t.Fatalf("judged warp tick published %d frames, forced-copy %d, and they differ", len(judged), len(copied))
 	}
 }
