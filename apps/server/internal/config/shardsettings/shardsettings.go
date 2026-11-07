@@ -403,6 +403,11 @@ var Settings = []Setting{
 	// instead of the operator backup's 20-36 minute rows. "off" keeps the
 	// authored row.
 	{Env: "SRO_BETA_UNIQUE_RESPAWN", NomadVar: "beta_unique_respawn", Default: "off", Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2719): the Ch'in Tomb cave's authored 6-8 second
+	// respawn delays keep it feeling empty; when on, respawning cave nests
+	// (regions 32770-32775) draw over 1-3 seconds instead. Nests and drops
+	// are unchanged. "off" is native.
+	{Env: "SRO_JANGAN_CAVE_RESPAWN", NomadVar: "jangan_cave_respawn", Default: "off"},
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native. The catalogue
 	// publishes the caps the shard runs, so it reads the setting too.
