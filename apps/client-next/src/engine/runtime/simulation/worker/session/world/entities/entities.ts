@@ -677,6 +677,22 @@ export function createEntities(
 		},
 		/*
 		================
+		structureFacts
+
+		A fortress structure reference's name, packed TypeID word and level
+		column: the facts 754A40's upgrade arm (75529A) judges the zone's
+		standing structure by, through the same catalog as structureName.
+		================
+		*/
+		structureFacts(
+			refObjId: number
+		): { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined {
+			const reference = refs.get( refObjId );
+			if ( reference?.kind !== "structure" || reference.name === undefined ) return undefined;
+			return { name: reference.name, tidWord: reference.tidWord, level: reference.level ?? 0 };
+		},
+		/*
+		================
 		playerModels
 
 		The player models of one country in reference order, each with its

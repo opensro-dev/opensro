@@ -251,6 +251,7 @@ type BootstrapResult struct {
 	AvatarMagicOptions   []AvatarMagicOptionRow
 	SiegeItemForgeGroups []SiegeItemForgeGroupRow
 	SiegeFortressData    []SiegeFortressDataRow
+	SiegeStructUpgrades  []SiegeStructUpgradeRow
 	GameWorldData        []GameWorldDataRow
 	AvatarItems          []EquipItemRow
 	EquipItems           []EquipItemRow
@@ -330,6 +331,7 @@ type bootstrapSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -416,6 +418,7 @@ type bootstrapBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -459,6 +462,7 @@ type bootstrapReferenceBlobSuccessView struct {
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
 	SiegeItemForgeGroups      []SiegeItemForgeGroupRow `json:"siegeItemForgeGroups"`
 	SiegeFortressData         []SiegeFortressDataRow   `json:"siegeFortressData"`
+	SiegeStructUpgrades       []SiegeStructUpgradeRow  `json:"siegeStructureUpgrades"`
 	GameWorldData             []GameWorldDataRow       `json:"gameWorldData"`
 	AvatarItems               []EquipItemRow           `json:"avatarItems"`
 	EquipItems                []EquipItemRow           `json:"equipItems"`
@@ -534,6 +538,7 @@ func (r *BootstrapResult) blobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -591,6 +596,7 @@ func (r *BootstrapResult) referenceBlobView() any {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,
@@ -661,6 +667,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		AvatarMagicOptions:        r.AvatarMagicOptions,
 		SiegeItemForgeGroups:      r.SiegeItemForgeGroups,
 		SiegeFortressData:         r.SiegeFortressData,
+		SiegeStructUpgrades:       r.SiegeStructUpgrades,
 		GameWorldData:             r.GameWorldData,
 		AvatarItems:               r.AvatarItems,
 		EquipItems:                r.EquipItems,

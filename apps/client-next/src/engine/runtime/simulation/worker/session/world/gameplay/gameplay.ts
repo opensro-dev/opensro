@@ -166,7 +166,8 @@ import {
 	FORTRESS_AIDE_CAPABILITY,
 	FORTRESS_STRUCTURE_LIST,
 	FORTRESS_STRUCTURE_REPAIR,
-	FORTRESS_STRUCTURE_UPGRADE
+	FORTRESS_STRUCTURE_UPGRADE,
+	fortressVariantTarget
 } from "@/engine/foundation/gameplay/fortress-map";
 import {
 	type FortressForgeItem,
@@ -198,6 +199,7 @@ import {
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
 import { petNameRefusal, petNameRequest, petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import {
+	EVENT_NOTICE_COLOR_ARGB,
 	fortressNotice,
 	isServerNoticeChannel,
 	serverNotification,
@@ -222,9 +224,14 @@ import {
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
-	academyOpenRequest
+	academyOpenRequest,
+	academyPassBuffRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
+import {
+	academyAcknowledgment,
+	academyBuffNotices,
+	academyStatusNotice
+} from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -371,6 +378,9 @@ interface WorldReferences {
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structureFacts?: (
+		refObjId: number
+	) => { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -1241,6 +1251,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	let plusSevenNotices = true;
 	// The Experimental "Item break notices" row, on the same terms.
 	let breakNotices = true;
+	// The Experimental "Highlight event notices" row (#2727): while on, a
+	// shard event notice queues with the event colour; off is the native
+	// beige line.
+	let highlightEventNotices = true;
 	// The Experimental "Homing projectiles" row: off by default so projectiles
 	// fly to their launch-captured endpoint as natively.
 	let homingProjectiles = false;
@@ -1689,6 +1703,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 			dropPlusNotices = value.dropPlusNotices !== false;
 			plusSevenNotices = value.plusSevenNotices !== false;
 			breakNotices = value.breakNotices !== false;
+			highlightEventNotices = value.highlightEventNotices !== false;
 			homingProjectiles = value.homingProjectiles === true;
 			smartPetPickup = value.smartPetPickup !== false;
 			if ( !smartPetPickup ) cosPickup.spaceChanged();
@@ -2719,6 +2734,10 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "academy-compulsory-graduate" ) {
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
+			}
+			if ( command.kind === "academy-pass-buff" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyPassBuffRequest() );
 			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
@@ -4149,11 +4168,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame );
+					const next = academyPacket( academy, frame, now );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
 							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
+						}
+						for ( const buffNotice of academyBuffNotices( academy, frame ) ) {
+							notices = [ ...notices.slice( -99 ), { ...buffNotice, sequence: ++noticeSequence } ];
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (
@@ -4261,11 +4283,21 @@ Packet handling must not depend on which HUD panel is currently open.
 						const structure = fortressNext.zones?.find( row =>
 							row.zone === fortressNext.service?.reference
 						);
-						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
-							fortressStructureNotice(
-								fortressNext,
-								structure?.ref ? worldReferences.structureName?.( structure.ref ) : undefined
+						const standing = structure?.ref ?
+							worldReferences.structureFacts?.( structure.ref ) :
+							undefined;
+						let variantName: string | undefined;
+						if ( structure?.ref ) {
+							const variant = fortressVariantTarget(
+								fortressNext.structureUpgrades?.get( structure.ref ),
+								structure.ref
 							);
+							if ( variant !== structure.ref ) {
+								variantName = worldReferences.structureName?.( variant );
+							}
+						}
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
+							fortressStructureNotice( fortressNext, standing, variantName );
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {
@@ -4314,7 +4346,17 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( notice?.plusSeven && !plusSevenNotices ) return false;
 				if ( notice?.itemBreak && !breakNotices ) return false;
 				if ( notice ) {
-					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					// Port-only, not native (#2727): while the "Highlight
+					// event notices" row is on, a shard event notice carries
+					// the event colour into the message log; the banner and
+					// the chat line keep their own presentation.
+					notices = [ ...notices.slice( -99 ), {
+						...notice,
+						sequence: ++noticeSequence,
+						...(notice.shardEvent && highlightEventNotices ?
+							{ colorArgb: EVENT_NOTICE_COLOR_ARGB } :
+							{})
+					} ];
 					if ( frame.opcode === 0x3667 && isServerNoticeChannel( frame.payload[0] ) ) {
 						chat.receive( frame, localGid );
 					}

@@ -75,6 +75,8 @@ const OFF = Object.freeze( {
 	plusSevenNotices: true,
 	// On by default: the shard's item break notices show (#1738).
 	breakNotices: true,
+	// On by default (owner ask 2026-11-06, #2727): shard event notices print red in the message log.
+	highlightEventNotices: true,
 	// Off by default: each player opts in to the unique damage ranking.
 	uniqueDamageRank: false,
 	// Off by default: V hides only monsters and players, as the original does.
@@ -325,12 +327,20 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
 		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages, the moving sun among them;
-	// render scale joins Image without changing the indices used to reopen
-	// the existing tabs.
+	// Lighting keeps the direct-light stages, the moving sun among them,
+	// and holds the silk history row for room (#2269); render scale joins
+	// Image without changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "sealUnderHeading", "dungeonCharacterPvs" ]
+		[
+			"sunShadow",
+			"dynamicSun",
+			"perPixelLighting",
+			"enchantSparks",
+			"sealUnderHeading",
+			"dungeonCharacterPvs",
+			"silkHistory"
+		]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
@@ -550,6 +560,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,
@@ -568,6 +579,7 @@ test("the predicted run-up defaults on and reaches only the worker's slice", () 
 		dropPlusNotices: true,
 		plusSevenNotices: true,
 		breakNotices: true,
+		highlightEventNotices: true,
 		homingProjectiles: false,
 		smartPetPickup: true,
 		sunDropMarker: false,

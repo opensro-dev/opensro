@@ -193,6 +193,15 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-dungeon-character-pvs",
 				label: "Dungeon character PVS",
 				description: "Hide characters in unseen dungeon rooms."
+			},
+			{
+				// Here for room (#2269): the window fits seven rows a tab
+				// and every other tab holds seven already; the option,
+				// its key and its default are unaffected.
+				key: "silkHistory",
+				id: "experimental-silk-history",
+				label: "Silk charge history",
+				description: "Enable the Item Mall's Buying list: your silk spending by period."
 			}
 		]
 	},
@@ -260,10 +269,10 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Item break notices",
 			description: "Show the shard's item break announcements."
 		}, {
-			key: "uniqueDamageRank",
-			id: "experimental-unique-damage-rank",
-			label: "Unique damage ranking",
-			description: "When a unique you hit dies, show who did the most."
+			key: "highlightEventNotices",
+			id: "experimental-highlight-event-notices",
+			label: "Highlight event notices",
+			description: "Show shard event announcements in red in the message log."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
@@ -353,13 +362,13 @@ export const EXPERIMENTAL_TABS: readonly {
 			label: "Quest target markers",
 			description: "Show every active quest's target on M and the minimap."
 		}, {
-			// Here for room (#2269): the window fits seven rows a tab
-			// and Windows and diagnostics holds seven already; the
-			// option, its key and its default are unaffected.
-			key: "silkHistory",
-			id: "experimental-silk-history",
-			label: "Silk charge history",
-			description: "Enable the Item Mall's Buying list: your silk spending by period."
+			// Moved from Notices (#2727): the window fits seven rows a
+			// tab and the event highlight row joins Shard notices; the
+			// option, its key and its default are unchanged.
+			key: "uniqueDamageRank",
+			id: "experimental-unique-damage-rank",
+			label: "Unique damage ranking",
+			description: "When a unique you hit dies, show who did the most."
 		} ]
 	},
 	{
