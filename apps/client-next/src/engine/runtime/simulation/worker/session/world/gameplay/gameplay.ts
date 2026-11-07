@@ -492,11 +492,13 @@ export function createGameplay(
 		Pick<import("@/engine/contracts/gameplay").VitalState, "hp" | "mp" | "maxHp" | "maxMp" | "abnormal">
 	> = {};
 	let partyMatching = emptyPartyMatching();
-	// The native window's two session facts the foundation state does
-	// not carry: whether the auto-match chain still lives (75EBD0's
-	// caller decides its prints by it), and whether the party filled
-	// at any moment while the player's listing stood (data_cea6e0,
-	// set by the 634DC9 watcher, consumed by the delete answer).
+	// The native window's two facts the foundation state does not
+	// carry. The auto-match chain still living is a session fact
+	// (75EBD0's caller decides its prints by it). The filled-party
+	// latch is not: the native byte (data_cea6e0) is a process global
+	// the roster watcher sets (634DC9) and only the delete answer
+	// clears, so it survives world entry and exit until that answer
+	// spends it.
 	let partyMatchAutoSession = false;
 	let partyMatchFullLatch = false;
 	// The shard's configured level cap, published at world entry (#1749);
@@ -1542,7 +1544,6 @@ selected entities, cooldowns or world-entry state.
 		petTraining.clear();
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
-		partyMatchFullLatch = false;
 		levelCap = NATIVE_LEVEL_CAP;
 		entryVitals = {};
 		warnings = [ false, false ];
@@ -1741,7 +1742,6 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			teleportMode = 0;
 			partyMatching = emptyPartyMatching();
 			partyMatchAutoSession = false;
-			partyMatchFullLatch = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
