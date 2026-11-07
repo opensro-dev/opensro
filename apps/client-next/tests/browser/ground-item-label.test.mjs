@@ -10,7 +10,7 @@ test('production drop names retain native backing and centered glyphs on the GPU
   const result=await page.evaluate(async()=>{
    const {createUi}=await import('/src/engine/runtime/ui/ui.ts'),{createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createRenderer}=await import('/src/engine/runtime/renderer/renderer.ts'),{projectCharacterLabels}=await import('/src/engine/foundation/ui/character-labels.ts');
    const canvas=document.createElement('canvas'),renderer=createRenderer(canvas),assets=createAssets();let scene;
-   const ui=createUi(assets,()=>{},s=>{scene=s;},(id,image)=>renderer.setUiTexture(id,image),location.origin,'http://fixture.invalid');
+   const ui=createUi({assets,commands:()=>{},publish:s=>{scene=s;},texture:(id,image)=>renderer.setUiTexture(id,image),base:location.origin,apiBase:'http://fixture.invalid'});
    const entity={gid:1,kind:'local-player',regionId:257,x:0,y:0,z:0,heading:0,name:'Player'};
    const state={session:{phase:'world',revision:1,character:'Player'},gameplay:{localGid:1,pose:{...entity,angle:0},vitals:[],inventory:[],target:0},entities:[entity,{...entity,gid:123,kind:'ground-item',x:20,name:'Gold',groundItem:{typeFlags:0x2ec,goldAmount:43,tint:0}}],width:512,height:256,worldReady:true,dropNamesHeld:true};
    try{

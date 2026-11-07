@@ -65,7 +65,7 @@ const preHalloweenAccountVersion = 35
 const preOnlineRecordVersion = 36
 const preAcademyBuffVersion = 37
 const preSilkHistoryVersion = 38
-const preForgeBoundVersion = 39
+const preWantedDecayVersion = 39
 const preNameReservationLayoutVersion = 10
 const preSilkHistoryLayoutVersion = 11
 
@@ -261,10 +261,14 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
-	case preForgeBoundVersion:
-		// Schema 39 ran at layout 12 and has no forge-bound mark on its
-		// item rows; its items read unbound (#1980). Records read unchanged.
-		if layout < CurrentLayoutVersion || layout > CurrentLayoutVersion {
+	case preWantedDecayVersion:
+		// Schema 39 ran at layout 12 and stamped the wanted level's
+		// seven-day lapse; under the decay that stamp is unread and a
+		// streak is stamped fresh at its first judging door, so no
+		// saved streak decays early (#2721). It also has no forge-bound
+		// mark on its item rows; its items read unbound (#1980).
+		// Records read unchanged.
+		if layout < preNameReservationLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout

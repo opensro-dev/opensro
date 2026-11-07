@@ -691,6 +691,12 @@ The item is born bound, whatever the spec said.
 */
 func (b *forgeBuilder) assemble(now time.Time) (inventory.Item, bool) {
 	ref := b.ref
+	// The parser bounded every value already (forgeParseInt against the
+	// key table); these refusals only re-assert the bounds where the
+	// narrow conversions below can see them.
+	if b.spec.count > math.MaxUint16 || b.spec.plus > math.MaxUint8 {
+		return inventory.Item{}, false
+	}
 	item := inventory.Item{
 		RefObjID: ref.RefObjID, Codename: ref.Codename,
 		TypeFlags: ref.TypeFlags(), Quantity: 1, ForgeBound: true,
@@ -777,6 +783,12 @@ func (b *forgeBuilder) forgeSummon(now time.Time) (*domain.CharacterCOS, bool) {
 	if !ok {
 		return nil, false
 	}
+	// The parser bounded petLevel to forgePetLevelMax already; this
+	// refusal only re-asserts the bound where the u8 conversion below
+	// can see it.
+	if b.spec.petLevel > math.MaxUint8 {
+		return nil, false
+	}
 	level := int64(1)
 	if b.spec.petLevel >= 0 {
 		level = int64(b.spec.petLevel)
@@ -796,7 +808,7 @@ func (b *forgeBuilder) forgeSummon(now time.Time) (*domain.CharacterCOS, bool) {
 	}
 	if charRef.TidWord>>11 == 4 {
 		summon.CommandMode = initialPickupCompanionMode
-		summon.Container = &domain.COSContainer{Capacity: initialPickupCompanionSlots}
+		summon.Container = &domain.COSContainer{Capacity: b.rt.petInventoryCapacity(initialPickupCompanionSlots)}
 		minutes, present := b.ref.NativeFields.Lookup("itemParam1_29c")
 		if !present || math.IsNaN(minutes) || math.IsInf(minutes, 0) ||
 			minutes <= 0 || minutes > math.MaxInt32/60 || math.Trunc(minutes) != minutes {

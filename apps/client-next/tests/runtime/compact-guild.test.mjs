@@ -14,6 +14,13 @@ import assert from "node:assert/strict";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
+// This file exercises the touch layout at small sizes. Node has no
+// matchMedia and the production reader defaults to a fine pointer, so the
+// test chooses touch by stubbing a coarse pointer before any UI is created
+// (it reads the display class once, at creation).
+globalThis.matchMedia = /** @type {typeof globalThis.matchMedia} */ (
+	/** @type {unknown} */ (() => ({ matches: true, media: "(pointer: coarse)" }))
+);
 const { topmostControlAt } = await import( "../../src/engine/foundation/ui/hit-test.ts" );
 const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 

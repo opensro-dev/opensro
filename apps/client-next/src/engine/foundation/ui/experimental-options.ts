@@ -61,6 +61,10 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Port-only, not native: drifting procedural clouds, the sun's
+	// atmospheric glow and a rim light against the sky (pipelines.ts's
+	// stages.w). Off by default; off is the native gradient and disc.
+	readonly skyDetail: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
@@ -327,6 +331,26 @@ export function phoneDisplay( display: DisplayClass ): boolean {
 
 /*
 ================
+browserDisplayClass
+
+What this window reports about its display, read once per call: the primary
+pointer's coarseness and the screen's short side in CSS pixels. This is the
+one reader of the pointer class - the renderer and the UI runtime both call
+it. A host without matchMedia reads as a fine pointer, so layout keeps the
+desktop rule; a test that wants the touch layout stubs a coarse matchMedia
+before the UI is created, instead of relying on a production default.
+================
+*/
+export function browserDisplayClass(): DisplayClass {
+	const query = globalThis.matchMedia?.( "(pointer: coarse)" ),
+		screen = globalThis.screen,
+		width = screen?.width ?? 0,
+		height = screen?.height ?? 0;
+	return { coarsePointer: query ? query.matches : false, shortSide: Math.min( width, height ) };
+}
+
+/*
+================
 sceneRenderScale
 
 The render scale the scene is drawn at this frame. Only the phone cap
@@ -427,6 +451,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
+		skyDetail: enabled( "skyDetail" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
@@ -533,6 +558,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly skyDetail: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
@@ -557,6 +583,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
+		skyDetail: options.skyDetail,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,

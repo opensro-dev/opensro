@@ -289,11 +289,23 @@ func (rt *Runtime) advancePetInDivision(key petOwnerKey, nowMs int64) (int64, []
 	frames = append(frames, rt.advancePenguin(key, nowMs)...)
 	rt.advancePetGearFields(key, nowMs)
 	rt.advancePetGearPoison(key, nowMs)
+	// One facts capture, and at most one owner snapshot behind it,
+	// serve the tailwind, crow-kit, plume and wolf lanes (#2030):
+	// nothing between here and the wolf lane writes an owner record
+	// the walk judges - the plume heal only raises hit points, the
+	// lanes before it write session state and frame queues - so the
+	// four walks may judge the same captured values. The arm drops
+	// before the spirit lane: it and the hunt lane judge fresh. The
+	// deferred clear is panic hygiene only; the explicit one below
+	// is the one the spirit lane's freshness rests on.
+	factsKey := rt.armElementalFacts(key, nowMs)
+	defer rt.clearElementalFacts(factsKey)
 	rt.advanceTailwind(key, nowMs)
 	rt.advanceCrowKit(key, nowMs)
 	rt.advanceCrowPlume(key, nowMs)
 	rt.resetWolfExecution(key, nowMs)
 	frames = append(frames, rt.advanceWolfKit(key, nowMs)...)
+	rt.clearElementalFacts(factsKey)
 	frames = append(frames, rt.advancePetSpirit(key, nowMs)...)
 	frames = append(frames, rt.advancePetBond(key, rt.petSessionFor(key.division, key.name, key.gid), nowMs)...)
 	frames = append(frames, rt.advancePetSatiety(key, nowMs)...)

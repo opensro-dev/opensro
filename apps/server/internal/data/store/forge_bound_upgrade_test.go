@@ -33,7 +33,7 @@ func TestForgeBoundUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preForgeBoundVersion)
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preWantedDecayVersion)
 	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
 		t.Fatalf("upgrade %q: %v", backup, err)
 	}

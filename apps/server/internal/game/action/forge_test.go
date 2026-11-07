@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -373,6 +374,18 @@ func TestForgeStackableAvatarCapsuleAndPet(t *testing.T) {
 		}
 		if want := int64(1_000_000/1000 + 60*60); pet.RentalExpiresAtUnix != want {
 			t.Fatalf("rental expiry = %d, want %d", pet.RentalExpiresAtUnix, want)
+		}
+	})
+	t.Run("forged pickup pet bag follows the five-page rule", func(t *testing.T) {
+		c := forgeTestGM()
+		rt, _ := forgeTestRuntime(c, forgeTestItems())
+		rt.PetInventoryPages = true
+		if _, ok := rt.ForgeGMItem(testDivision, c.Name, "SUMMON_PICKUP pet.level=1"); !ok {
+			t.Fatal("pickup pet forge refused")
+		}
+		pet := forgedDrop(t, rt).Summon
+		if pet == nil || pet.Container == nil || pet.Container.Capacity != companion.PetInventorySlots {
+			t.Fatalf("pickup bag = %+v, want capacity %d", pet, companion.PetInventorySlots)
 		}
 	})
 	t.Run("plain summoner without pet keys stays unmade", func(t *testing.T) {

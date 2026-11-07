@@ -202,9 +202,23 @@ raised structure.
 func TestStructureUpgradeResendsTheRoster(t *testing.T) {
 	rt, c, _, jangan, _, _ := upgradeFixture(t)
 	rosters := captureRosters(t, rt, c.Name)
-	if got := upgradeAnswer(t, upgradeRequest(rt, c, jangan, testPositionZone, 0)); len(got) < 2 || got[1] != 1 {
+	result := upgradeRequest(rt, c, jangan, testPositionZone, 0)
+	if got := upgradeAnswer(t, result); len(got) < 2 || got[1] != 1 {
 		t.Fatalf("upgrade answered % x", got)
 	}
+	if len(*rosters) != 0 {
+		t.Fatal("replacement roster was pushed before the upgrade reply")
+	}
+	replied := false
+	for _, frame := range result.Frames {
+		if frame.Opcode == opFortressInteractionResult {
+			replied = true
+		}
+		if frame.Opcode == opFortressWarState && !replied {
+			t.Fatal("replacement roster precedes the upgrade reply in the actor burst")
+		}
+	}
+	rt.PushCharacterFrames(testDivision, c.Name, result.Frames)
 	if len(*rosters) != 1 {
 		t.Fatalf("rosters after the upgrade = %d, want 1", len(*rosters))
 	}

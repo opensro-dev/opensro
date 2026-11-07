@@ -151,6 +151,10 @@ var Settings = []Setting{
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
+	// Port-only, not native: every pet bag holds five pages of 28 slots
+	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// native: a grab pet holds 28 slots and a transport its authored size.
+	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
@@ -296,6 +300,11 @@ var Settings = []Setting{
 	{Env: "SRO_FLAGWAR_START_UTC", NomadVar: "flagwar_start_utc", Default: "20:00"},
 	{Env: "SRO_FLAGWAR_MIN_PLAYERS", NomadVar: "flagwar_min_players", Default: "4"},
 	{Env: "SRO_BETA_GROWTH", NomadVar: "beta_growth", Default: "off", Catalogue: true, Validation: ValueSwitch},
+	// Owner, 2026-11-07 (#2769): port-only, not native - a character's
+	// inventory base is 2.5 pages from creation instead of the native one
+	// page the expansion quests then grow. On by the owner's call; "off"
+	// is native. Existing records keep whatever capacity they hold.
+	{Env: "SRO_INVENTORY_PAGES", NomadVar: "inventory_pages", Default: "on"},
 	// Unset keeps every level at the level-1 pace; our deployment's bands
 	// (#1606: 1-59 at the pace, 60-110 on one smooth curve) are in
 	// config/shard-settings.json. The catalogue prices quest rewards
@@ -313,6 +322,10 @@ var Settings = []Setting{
 	// elixirs off the smith. On by default (it extends the extra goods);
 	// off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
+	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
+	// potion merchant, at Hotan's native price of 900. On by default;
+	// off restores the native Jangan shop.
+	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.

@@ -235,6 +235,8 @@ type API struct {
 	settingsPath            string
 	chatLog                 http.Handler
 	chatLogPath             string
+	census                  http.Handler
+	censusPath              string
 	operator                http.Handler
 	notices                 *noticePublisher
 	observatory             *observatoryReader
@@ -416,6 +418,10 @@ func (api *API) Handler() http.Handler {
 	}
 	if api.chatLog != nil {
 		mux.Handle(api.chatLogPath, api.chatLog)
+	}
+	if api.census != nil {
+		mux.Handle(api.censusPath, api.census)
+		mux.Handle(api.censusPath+"/", api.census)
 	}
 	if api.settings != nil {
 		mux.Handle(api.settingsPath, api.settings)

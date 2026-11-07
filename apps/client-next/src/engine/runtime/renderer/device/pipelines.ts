@@ -258,7 +258,33 @@ struct SkyOut {@builtin(position) position:vec4f,@location(0) ray:vec3f}
  let p=array<vec2f,6>(vec2f(-1,1),vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1))[i];
  var o:SkyOut;o.position=vec4f(p,1,1);o.ray=env.forward.xyz+p.x*env.right.xyz+p.y*env.up.xyz;return o;
 }
-@fragment fn fs(o:SkyOut)->@location(0) vec4f {return vec4f(mix(env.horizon.rgb,env.zenith.rgb,clamp(normalize(o.ray).y*env.zenith.w,0,1)),1);}`
+fn skyHash(p:vec2f)->f32{
+ let q=fract(p*vec2f(123.34,456.21));
+ return fract(q.x*q.y*(q.x+q.y)*7857.13);
+}
+fn skyNoise(p:vec2f)->f32{
+ let i=floor(p);
+ let f=fract(p);
+ let u=f*f*(3.0-2.0*f);
+ return mix(mix(skyHash(i),skyHash(i+vec2f(1,0)),u.x),mix(skyHash(i+vec2f(0,1)),skyHash(i+vec2f(1,1)),u.x),u.y);
+}
+@fragment fn fs(o:SkyOut)->@location(0) vec4f{
+ let ray=normalize(o.ray);
+ var colour=mix(env.horizon.rgb,env.zenith.rgb,clamp(ray.y*env.zenith.w,0,1));
+ // Port-only sky detail (stages.w): drifting procedural clouds and the
+ // sun's atmospheric glow, off the native gradient and the authored disc.
+ if(env.stages.w>0.5){
+  if(ray.y>0.01){
+   let at=ray.xz/ray.y*3.0+vec2f(env.skyTime.y*0.02,0.0);
+   let cloud=skyNoise(at)*0.5+skyNoise(at*2.3)*0.3+skyNoise(at*5.1)*0.2;
+   let cover=smoothstep(0.55,0.75,cloud)*smoothstep(0.42,0.12,ray.y);
+   colour=mix(colour,mix(colour*0.9+vec3f(0.1),clamp(env.sun.rgb,vec3f(0),vec3f(1))*0.4+vec3f(0.6),0.5),cover*0.75);
+  }
+  let sunAmount=pow(max(0.0,dot(ray,normalize(env.sunDirection.xyz))),64.0);
+  colour+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*sunAmount*0.35;
+ }
+ return vec4f(colour,1);
+}`
 	} );
 	const preparedSky = created.createRenderPipelineAsync( {
 		layout: "auto",
@@ -457,6 +483,13 @@ var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textur
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
 		let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  var surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
+ // Port-only sky detail (stages.w): a rim light against the sky; additive
+ // on the lit surface, never on the unlit path (options.y) where it would
+ // double the diffuse.
+ if(env.stages.w>0.5&&material.options.y<0.5){
+  let rim=pow(1.0-abs(dot(normalize(input.normal),env.forward.xyz)),3.0);
+  surfaceLight+=clamp(env.sun.rgb,vec3f(0),vec3f(1))*rim*0.25;
+ }
  // Per-pixel character lighting (experimental): the retail vs_1_1 path
  // saturates each vertex's lighting before interpolation (o.objectLighting,
  // A5D450's diagonal in object space); the stage re-evaluates the same

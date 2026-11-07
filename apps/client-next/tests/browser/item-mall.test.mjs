@@ -53,17 +53,17 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 			let mannequinActors = [];
 
 			let scene, semantics;
-			const ui = createUi(
+			const ui = createUi( {
 				assets,
-				command => commands.push( command ),
-				value => {
+				commands: command => commands.push( command ),
+				publish: value => {
 					scene = value;
 					renderer.setUi( value );
 				},
-				( id, image ) => renderer.setUiTexture( id, image ),
-				location.origin,
-				"https://fixture.invalid"
-			);
+				texture: ( id, image ) => renderer.setUiTexture( id, image ),
+				base: location.origin,
+				apiBase: "https://fixture.invalid"
+			} );
 			const entity = {
 				gid: 1,
 				regionId: 1,

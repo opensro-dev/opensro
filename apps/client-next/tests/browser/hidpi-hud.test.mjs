@@ -41,17 +41,17 @@ test( "Retina HUD keeps native logical size and blocks inventory clicks", { time
 			const renderer = createRenderer( canvas ), assets = createAssets();
 			let scene, semantics;
 			const worldClicks = [];
-			const ui = createUi(
+			const ui = createUi( {
 				assets,
-				() => {},
-				value => {
+				commands: () => {},
+				publish: value => {
 					scene = value;
 					renderer.setUi( value );
 				},
-				( id, image ) => renderer.setUiTexture( id, image ),
-				location.origin,
-				"https://fixture.invalid"
-			);
+				texture: ( id, image ) => renderer.setUiTexture( id, image ),
+				base: location.origin,
+				apiBase: "https://fixture.invalid"
+			} );
 			const platform = createPlatform(
 				canvas,
 				document.createElement( "output" ),

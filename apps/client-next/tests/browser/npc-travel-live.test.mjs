@@ -26,7 +26,7 @@ test('authored dock NPC renders and remains interactive after travelling',{timeo
   await installPursuitRecorder(page,[0x30d7,0x36ab,0xb45a,0xb05a]);
   await page.route('**/src/engine/runtime/ui/ui.ts*',async route=>{
    const response=await route.fetch(),source=await response.text();assert.ok(source.includes('export function createUi('));
-   await route.fulfill({response,body:source.replace('export function createUi(','function createObservedUi(')+'\nexport function createUi(...args){const owner=createObservedUi(...args);globalThis.__npcProbe={owner};return owner;}'});
+   await route.fulfill({response,body:source.replace('export function createUi(','function createObservedUi(')+'\nexport function createUi(ports){const owner=createObservedUi(ports);globalThis.__npcProbe={owner};return owner;}'});
   });
   await bootPlayableSession(page,character);await page.context().tracing.start({screenshots:true,snapshots:true});
   await page.waitForFunction(()=>Object.values(__pursuit.entities).some(e=>e.refObjId===7524),null,{timeout:15000});

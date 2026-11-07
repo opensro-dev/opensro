@@ -62,6 +62,12 @@ type forgeRateWindowState struct {
 /*
 ================
 GMItemForgeFromEnv
+
+The /FORGE switch (port-only, issue #1980): "on", "1" or "true"
+enable; everything else - unset, "off", "0", "false", or a typo -
+reads off. Off is the native direction, so a mistyped value fails
+safe as a silent no-op and, unlike the raising companion switch
+(PetInventoryPagesEnabled), needs no boot error.
 ================
 */
 func GMItemForgeFromEnv() bool {
