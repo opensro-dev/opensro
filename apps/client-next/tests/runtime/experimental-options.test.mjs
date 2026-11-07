@@ -140,6 +140,8 @@ const OFF = Object.freeze( {
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
 	sealUnderHeading: false,
+	// Off by default: the set tiers on an item tooltip are port-only.
+	setBonusTooltip: false,
 	// Off by default (#2269): the Item Mall's Buying list; the native
 	// window is inert and its mall button is born disabled.
 	silkHistory: false
@@ -366,7 +368,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	);
 	// Effects holds the port-only image effects; HD, appended last, holds
 	// the HD texture set's row (#2061).
-	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail" ] );
+	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail", "setBonusTooltip" ] );
 	assert.deepEqual( EXPERIMENTAL_TABS[9].rows.map( row => row.key ), [ "hdTextures" ] );
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

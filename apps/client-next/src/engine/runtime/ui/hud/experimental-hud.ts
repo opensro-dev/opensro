@@ -422,6 +422,13 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-sky-detail",
 			label: "Sky detail",
 			description: "Drifting clouds, sun glow and rim light."
+		}, {
+			// Here for room: the window fits seven rows a tab and the item
+			// tooltip rows sit in tabs that are full (as sealUnderHeading).
+			key: "setBonusTooltip",
+			id: "experimental-set-bonus-tooltip",
+			label: "Set bonus on item tooltips",
+			description: "List an armor piece's set tiers and worn pieces."
 		} ]
 	},
 	{

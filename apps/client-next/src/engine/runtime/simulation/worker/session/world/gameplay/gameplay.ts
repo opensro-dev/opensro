@@ -121,6 +121,7 @@ import {
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { NATIVE_LEVEL_CAP, publishedLevelCap } from "@/engine/foundation/gameplay/level-cap";
+import { type EquipmentSet, publishedEquipmentSets } from "@/engine/foundation/gameplay/equipment-sets";
 import {
 	gmCatalog as decodeGmCatalog,
 	gmRequest,
@@ -499,6 +500,7 @@ export function createGameplay(
 	// The shard's configured level cap, published at world entry (#1749);
 	// the native cap until a bootstrap says otherwise.
 	let levelCap = NATIVE_LEVEL_CAP;
+	let equipmentSets: readonly EquipmentSet[] = [];
 	let gmItems = gmItemReferences( {} );
 	// Port-only: the compact catalogues a GM's console helper filters. Built
 	// only for a GM entry; ordinary characters never pay for the list. The
@@ -1540,6 +1542,7 @@ selected entities, cooldowns or world-entry state.
 		partyMatching = emptyPartyMatching();
 		partyMatchAutoSession = false;
 		levelCap = NATIVE_LEVEL_CAP;
+		equipmentSets = [];
 		entryVitals = {};
 		warnings = [ false, false ];
 		eligibility = { gm: false, pcRoomEvent: false };
@@ -1738,6 +1741,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			partyMatching = emptyPartyMatching();
 			partyMatchAutoSession = false;
 			levelCap = publishedLevelCap( (value as { levelCap?: unknown; } | null)?.levelCap );
+			equipmentSets = publishedEquipmentSets( (value as { equipmentSets?: unknown; } | null)?.equipmentSets );
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
@@ -5905,6 +5909,7 @@ The published plane when something changed since the last take, else null.
 				notices,
 				partyMatching,
 				levelCap,
+				...(equipmentSets.length ? { equipmentSets } : {}),
 				academy,
 				pkStatus,
 				guide,

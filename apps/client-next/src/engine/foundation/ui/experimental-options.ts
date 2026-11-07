@@ -266,6 +266,10 @@ export interface ExperimentalOptions {
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
 	// native place.
 	readonly sealUnderHeading: boolean;
+	// Port-only, not native: an equipment tooltip lists its set's tiers and how many pieces are worn,
+	// on a shard that applies set bonuses (SRO_CAP110_SET_BONUSES). Off unless turned on; the
+	// native client has no set rows.
+	readonly setBonusTooltip: boolean;
 	// Port-only, not native (#2269): the Item Mall's Buying list (native
 	// CIFSilkBuyList), listing recorded silk uses by period. The native
 	// window is never instantiated, its Inquire handler is an empty stub
@@ -501,6 +505,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
 		sealUnderHeading: enabled( "sealUnderHeading" ),
+		setBonusTooltip: enabled( "setBonusTooltip" ),
 		silkHistory: enabled( "silkHistory" )
 	};
 }

@@ -840,6 +840,8 @@ export interface GameplayState extends MoverPublication {
 	// (level-cap.ts): the party form and the quest guide bound their level
 	// windows by it. Absent means the native cap (foundation/gameplay/level-cap.ts).
 	readonly levelCap?: number;
+	// The set groups of a shard that applies set bonuses (equipment-sets.ts); absent means none.
+	readonly equipmentSets?: readonly import("@/engine/foundation/gameplay/equipment-sets").EquipmentSet[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];

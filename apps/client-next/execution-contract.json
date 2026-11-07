@@ -1856,6 +1856,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/item-tooltip-set.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"lookup"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/count-job.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

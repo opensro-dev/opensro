@@ -54,6 +54,9 @@ const (
 	setLinkCellStride     = 2
 )
 
+// setNameSymbolCell is the refsetitemgroup column naming the set's text symbol.
+const setNameSymbolCell = 4
+
 // The tier requirement is a worn-piece count; no set can ask for more
 // pieces than there are equipment slots.
 const (
@@ -149,6 +152,7 @@ type TextdataSetGroups struct {
 	once    sync.Once
 	tiers   map[int64][]SetTier
 	options map[int][]SetOption
+	names   map[int64]string
 }
 
 /*
@@ -215,6 +219,7 @@ applies, never a wrong bonus.
 */
 func (t *TextdataSetGroups) load() {
 	t.tiers = map[int64][]SetTier{}
+	t.names = map[int64]string{}
 	t.options = map[int][]SetOption{}
 	codenames := map[int]string{}
 
@@ -311,6 +316,9 @@ func (t *TextdataSetGroups) load() {
 			return tiers[i].RequiredCount < tiers[j].RequiredCount
 		})
 		t.tiers[group] = tiers
+		if len(fields) > setNameSymbolCell {
+			t.names[group] = strings.TrimSpace(fields[setNameSymbolCell])
+		}
 	}
 	log.Infof("bootstrap: equipment set catalogue loaded from %s (%d group(s), %d magic group(s))", t.dir, len(t.tiers), len(t.options))
 }

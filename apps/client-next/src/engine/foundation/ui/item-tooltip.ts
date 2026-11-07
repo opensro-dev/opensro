@@ -18,6 +18,8 @@ import { tooltipDescription } from "./tooltip-description";
 import { itemTooltipStats } from "./item-tooltip-stats";
 import { itemTooltipRecovery } from "./item-tooltip-recovery";
 import { itemTooltipStone } from "./item-tooltip-stone";
+import { itemTooltipSet, wornSetPieces } from "./item-tooltip-set";
+import type { EquipmentSet } from "../gameplay/equipment-sets";
 import { tooltipFormat, type TooltipRow } from "./tooltip-rows";
 // 56CDA0/56CB80 family dispatch, 564230 name, 558CB0 degree and
 // 568500 requirements. This takes an item instance, never just a ref id.
@@ -30,7 +32,14 @@ export function itemTooltip(
 	item: InventoryItem,
 	progression: Progression,
 	text: ( symbol: string ) => string,
-	viewer?: { readonly country?: number; readonly sex?: number; readonly sealUnderHeading?: boolean; }
+	viewer?: {
+		readonly country?: number;
+		readonly sex?: number;
+		readonly sealUnderHeading?: boolean;
+		// Port-only (Experimental "Set bonus on item tooltips"): the shard's published sets and the
+		// character's equipment, which together decide the set block.
+		readonly sets?: { readonly groups: readonly EquipmentSet[]; readonly equipment: readonly InventoryItem[]; };
+	}
 ): readonly TooltipRow[] {
 	if ( item.name === undefined ) return [];
 	const f = item.tooltip?.fields,
@@ -253,6 +262,13 @@ export function itemTooltip(
 	if ( magic.length ) {
 		space();
 		rows.push( ...magic );
+	}
+	if ( viewer?.sets && equipment ) {
+		const setRows = itemTooltipSet( item, viewer.sets.groups, wornSetPieces( viewer.sets.equipment ), text );
+		if ( setRows.length ) {
+			space();
+			rows.push( ...setRows );
+		}
 	}
 	// 55A7B0: the published inventory/shop/COS item slots show stack capacity
 	// and the actual instance quantity. Timed COS extension uses quantity as
