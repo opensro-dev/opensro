@@ -7,8 +7,8 @@ crest-delete.test.mjs - the crest delete items' client behaviour
 ITEM_ETC_UNION_CREST_DELETE sends the ordinary item use; its 0xB5BD
 success answer raises the native completion box (755E40's codename
 chain: a confirm-variant box titled UIIT_STT_CONFIRM_BOX with the
-DELETE_COMPLETE body). The register items' answers raise nothing:
-their flow is the owner-blocked half of #2282.
+DELETE_COMPLETE body). The register items' answers are the register
+flow's business (crest-register.test.mjs).
 
 ===========================================================================
 */
@@ -104,17 +104,9 @@ test("a union crest delete's success answer names the union line", () => {
 	} );
 });
 
-test("a refused delete answer and a register answer raise no box", () => {
+test("a refused delete answer raises no box", () => {
 	const refused = world( [ { refObjId: 9269 } ] );
 	refused.game.command( { kind: "item-use", slot: 20, crestDelete: true }, 1 );
 	refused.game.receive( { opcode: 0xb5bd, payload: Uint8Array.from( [ 2, 0 ] ) }, 2 );
 	assert.deepEqual( (refused.game.take()?.notices ?? []).filter( notice => notice.dialog ), [] );
-
-	const register = world( [ { refObjId: 9268 } ] );
-	register.game.command( { kind: "item-use", slot: 20 }, 1 );
-	register.game.receive(
-		{ opcode: 0xb5bd, payload: Uint8Array.from( [ 1, 20, ...u16( 4 ), ...u16( CREST_FLAGS ) ] ) },
-		2
-	);
-	assert.deepEqual( (register.game.take()?.notices ?? []).filter( notice => notice.dialog ), [] );
 });

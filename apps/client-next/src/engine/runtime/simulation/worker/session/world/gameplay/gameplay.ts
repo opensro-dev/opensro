@@ -103,6 +103,13 @@ import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/uni
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
 import { nameChangeFailureText } from "@/engine/foundation/gameplay/name-change";
 import { crestDeleteKeys, crestDeleteKind } from "@/engine/foundation/gameplay/crest-delete";
+import {
+	crestRegisterKeys,
+	crestRegisterKind,
+	crestRegisterResult,
+	crestRegisterUploadPayload
+} from "@/engine/foundation/gameplay/crest-register";
+import { CREST_UPLOAD_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
@@ -1150,6 +1157,11 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	// those codes and must stay exact for every other use, so the
 	// translation lives here, keyed on the flight, not in the mapper.
 	let renameUseInFlight = false;
+	// A crest register upload (#2282) stays in flight until the upload
+	// lane answers; a second confirmed register is held while one is
+	// outstanding. The success box is the 0xB5BD answer's business, not
+	// this flight's, exactly as a delete's box is.
+	let crestUploadInFlight = false;
 	let flagWarTeam: number | null = null;
 	let progression: Progression = { masteries: [] };
 	const skillGroups = new Map<number, { group: number; level: number; }>();
@@ -1561,6 +1573,7 @@ selected entities, cooldowns or world-entry state.
 		gmReplies = [];
 		tradeStars = 0;
 		notices = [];
+		crestUploadInFlight = false;
 		guide = undefined;
 		guideSummons.clear();
 		academy = undefined;
@@ -3674,6 +3687,21 @@ state here before a command can claim a native wire conversation.
 				if ( sent && command.renameName !== undefined ) renameUseInFlight = true;
 				return sent;
 			}
+			if ( command.kind === "crest-register" ) {
+				// #2282 (register half): the confirm box already asked and
+				// the picker already chose; the upload rides the crest
+				// lane to the server, which re-judges the row server-side
+				// anyway. One upload outstanding at a time.
+				if ( crestUploadInFlight ) return null;
+				const uploadSlot = command.slot;
+				const row = inventory.state().inventory.find( r => r.slot === uploadSlot );
+				if ( !row || crestRegisterKind( row.refObjId ) !== command.crestKind ) return null;
+				crestUploadInFlight = true;
+				return sendFrame( {
+					opcode: CREST_UPLOAD_CONTROL,
+					payload: crestRegisterUploadPayload( command.crestKind, command.slot, command.image )
+				} );
+			}
 			if ( command.kind === "premium-command" || command.kind === "count-job-use" ) {
 				// The chat command (6AD990) finds its row by item type; the
 				// package window's button (6AFB40) names its own row. Either way
@@ -5088,6 +5116,32 @@ Packet handling must not depend on which HUD panel is currently open.
 						return true;
 					}
 				}
+				if ( frame.opcode === CREST_UPLOAD_CONTROL ) {
+					// #2282 (register half): the upload lane's one answer. A
+					// success raises nothing here - the 0xB5BD behind it opens
+					// the completion box, as a delete's does. A refusal prints
+					// its native line: the gate's notice byte when one rides
+					// along, else the reason's own line.
+					const result = crestRegisterResult( frame.payload );
+					crestUploadInFlight = false;
+					if ( !result.ok ) {
+						const notice = result.code !== undefined ?
+							constantNativeNotice( 1, result.code ) :
+							{
+								key: result.reason === "overlap" ?
+									crestRegisterKeys( "guild" ).refused :
+									result.reason === "invalid" ?
+									crestRegisterKeys( "guild" ).error :
+									crestRegisterKeys( "guild" ).fail,
+								value: 0
+							};
+						if ( notice ) {
+							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						}
+					}
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 19 ) {
 					inventory.cosPurchase( frame.payload );
 					dirty = true;
@@ -5142,8 +5196,9 @@ Packet handling must not depend on which HUD panel is currently open.
 				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
 				// 755E40's codename chain: a crest delete's success raises
 				// the completion box (confirm variant, UIIT_STT_CONFIRM_BOX
-				// title, the DELETE_COMPLETE body), where the register
-				// items would open their 0x1A/0x1B boxes (#2272's half).
+				// title, the DELETE_COMPLETE body); a crest register's
+				// success raises its 0x1A/0x1B box (the REGISTER_COMPLETE
+				// body and the four information lines).
 				const crestKind = used ? crestDeleteKind( used.refObjId ) : undefined;
 				if ( used && crestKind ) {
 					notices = [ ...notices.slice( -99 ), {
@@ -5153,6 +5208,21 @@ Packet handling must not depend on which HUD panel is currently open.
 						dialog: {
 							title: "UIIT_STT_CONFIRM_BOX",
 							lines: [ crestDeleteKeys( crestKind ).complete ]
+						},
+						sequence: ++noticeSequence
+					} ];
+					dirty = true;
+				}
+				const registerKind = used ? crestRegisterKind( used.refObjId ) : undefined;
+				if ( used && registerKind ) {
+					const keys = crestRegisterKeys( registerKind );
+					notices = [ ...notices.slice( -99 ), {
+						key: "",
+						value: 0,
+						bannerOnly: true,
+						dialog: {
+							title: "UIIT_STT_CONFIRM_BOX",
+							lines: [ keys.complete, ...keys.information ]
 						},
 						sequence: ++noticeSequence
 					} ];

@@ -539,6 +539,7 @@ export function startRuntime(
 					setCursorVisible: visible => platform.setCursorVisible( visible ),
 					setDamageNumbers: shown => characters.setDamageNumbers( shown ),
 					saveCameraWaypoints: text => platform.saveCameraWaypoints( text ),
+					pickCrestImage: (): Promise<Uint8Array | null> => platform.pickCrestImage(),
 					playSoundByName: name => audio.playByName( name ),
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )

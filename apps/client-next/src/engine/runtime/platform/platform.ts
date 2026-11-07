@@ -684,6 +684,16 @@ export function createPlatform(
 		},
 		/*
 		================
+		pickCrestImage
+
+		The UI bridge owns the DOM pick behind the crest register (#2282).
+		================
+		*/
+		pickCrestImage() {
+			return bridge.pickCrestImage();
+		},
+		/*
+		================
 		saveVideoOptions
 		================
 		*/

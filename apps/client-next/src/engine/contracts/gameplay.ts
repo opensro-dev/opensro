@@ -458,6 +458,15 @@ export type GameplayCommand =
 		readonly crestDelete?: boolean;
 	}
 	| {
+		readonly kind: "crest-register";
+		readonly slot: number;
+		readonly crestKind: import("@/engine/foundation/gameplay/crest-register").CrestRegisterKind;
+		// The picked image's raw bytes (owner's 2026-11-07 contract,
+		// #2282): the worker base64s them onto the crest upload lane;
+		// the server alone judges and re-encodes them.
+		readonly image: Uint8Array;
+	}
+	| {
 		readonly kind: "navigation";
 		readonly requestId?: number;
 		readonly regionId: number;
