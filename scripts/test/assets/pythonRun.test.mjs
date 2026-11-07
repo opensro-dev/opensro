@@ -126,6 +126,61 @@ test("PRECEDENCE: an operation traceback with module noise above it classifies o
   );
 });
 
+// THE #2711 SHAPE. A unittest discovery run under an interpreter without
+// the build modules prints one import traceback per test module and ends
+// with unittest's own summary, so the missing module is never the last
+// line - a last-line-only rule reads this as an operation failure and the
+// fallback to a provisioned interpreter never happens (check.yml's
+// check:client-preparation, 2026-11-07). Warnings the interpreter prints
+// (ResourceWarning) are not exceptions and must not count as the payload
+// having run.
+test("a discovery run that only fails to import classifies missing-module", () => {
+  const stderr = [
+    "EEE",
+    "======================================================================",
+    "ERROR: test_pk2_reader (unittest.loader._FailedTest.test_pk2_reader)",
+    "----------------------------------------------------------------------",
+    "ImportError: Failed to import test module: test_pk2_reader",
+    "Traceback (most recent call last):",
+    String.raw`  File "D:\Tools\msys64\mingw64\lib\python3.12\unittest\loader.py", line 396, in _find_test_path`,
+    String.raw`  File "H:\sro\rebuild\scripts\test\python\test_pk2_reader.py", line 11, in <module>`,
+    "    from Crypto.Cipher import Blowfish",
+    "ModuleNotFoundError: No module named 'Crypto'",
+    "",
+    "ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='cp1252'>",
+    "----------------------------------------------------------------------",
+    "Ran 115 tests in 79.590s",
+    "",
+    "FAILED (errors=23)"
+  ].join("\n");
+  const verdict = classifyPythonFailure(failedAttempt(stderr));
+  assert.equal(verdict.kind, "missing-module");
+  assert.match(verdict.summary, /No module named 'Crypto'/);
+  assert.equal(verdict.permission, null);
+});
+
+// The boundary: import failures AND a real test failure. The payload ran,
+// so its failure is authoritative and no interpreter fallback may follow.
+test("import failures beside a real test failure classify operation", () => {
+  const stderr = [
+    "ImportError: Failed to import test module: test_pk2_reader",
+    "ModuleNotFoundError: No module named 'Crypto'",
+    "======================================================================",
+    "FAIL: test_round_trip (test_archive.TestArchive.test_round_trip)",
+    "----------------------------------------------------------------------",
+    "Traceback (most recent call last):",
+    String.raw`  File "H:\sro\rebuild\scripts\test\python\test_archive.py", line 88, in test_round_trip`,
+    "AssertionError: 4 != 5",
+    "----------------------------------------------------------------------",
+    "Ran 40 tests in 3.1s",
+    "",
+    "FAILED (failures=1, errors=1)"
+  ].join("\n");
+  const verdict = classifyPythonFailure(failedAttempt(stderr));
+  assert.equal(verdict.kind, "operation");
+  assert.equal(verdict.permission, null);
+});
+
 test("a spawn error classifies no-interpreter regardless of stderr", () => {
   const verdict = classifyPythonFailure(
     failedAttempt("", { exitCode: null, spawnError: new Error("spawn py ENOENT") })
