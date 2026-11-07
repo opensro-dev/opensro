@@ -10,6 +10,8 @@ versus empty values because bootstrap uses absence to identify unseeded data.
 */
 package domain
 
+import "reflect"
+
 /*
 ================
 cloneCharacter
@@ -33,6 +35,27 @@ independent copy in cloneCharacterFiltered, or this copy aliases it.
 */
 func CloneCharacter(source *Character) *Character {
 	return cloneCharacter(source)
+}
+
+/*
+================
+CloneCharacterStaged
+
+The store's next committed copy: the same detached, value-equal copy
+CloneCharacter returns, except that a child `previous` already holds
+in the same value is shared with it instead of copied again.
+`previous` must be a staged copy itself (this function's or
+CloneCharacter's result, or nil): nothing writes a staged copy after
+staging, so the sharing keeps the new copy exactly as detached from
+the live record as a full clone, and the section walk comparing the
+two copies cannot see a write cross between them. Staging a whole
+deep clone per save was the live tick's largest allocator (#2030);
+between two saves most of a record's bulk compares equal, so most of
+the copy is the record shell.
+================
+*/
+func CloneCharacterStaged(source, previous *Character) *Character {
+	return cloneCharacterFilteredFrom(source, rowsAll, previous)
 }
 
 /*
@@ -166,135 +189,106 @@ The one clone walk; rows narrows the two inventory children.
 ================
 */
 func cloneCharacterFiltered(source *Character, rows cloneRows) *Character {
+	return cloneCharacterFilteredFrom(source, rows, nil)
+}
+
+/*
+================
+cloneCharacterFilteredFrom
+
+cloneCharacterFiltered against a previous full copy: a child the
+previous copy already holds in the same value is shared with it
+instead of copied again (stagedChild). Only the full walk shares,
+and only against a previous staged copy; the narrowed walks pass no
+previous, and the inventory children share only in their full form -
+a narrowed copy must never inherit the previous copy's whole
+inventory. Every mutable child added to Character must acquire its
+stagedChild line here, exactly as it once acquired a clone line.
+================
+*/
+func cloneCharacterFilteredFrom(source *Character, rows cloneRows, previous *Character) *Character {
 	if source == nil {
 		return nil
 	}
+	previousChild := Character{}
+	if previous != nil {
+		previousChild = *previous
+	}
 	clone := *source
-	clone.PK = clonePointer(source.PK)
-	clone.Online = clonePointer(source.Online)
-	if source.Online != nil {
-		clone.Online.Days = cloneSlice(source.Online.Days)
-	}
-	clone.EventMembership = clonePointer(source.EventMembership)
-	if source.Aggressions != nil {
-		clone.Aggressions = make(map[uint32]uint32, len(source.Aggressions))
-		for gid, ticks := range source.Aggressions {
-			clone.Aggressions[gid] = ticks
-		}
-	}
+	clone.PK = stagedChild(source.PK, previousChild.PK, clonePointer)
+	clone.Online = stagedChild(source.Online, previousChild.Online, cloneOnlineRecord)
+	clone.EventMembership = stagedChild(source.EventMembership, previousChild.EventMembership, clonePointer)
+	clone.Aggressions = stagedChild(source.Aggressions, previousChild.Aggressions, cloneMapValue)
 
-	clone.RaceIndex = clonePointer(source.RaceIndex)
-	clone.Gender = clonePointer(source.Gender)
-	clone.ModelRef = clonePointer(source.ModelRef)
-	clone.WeaponIndex = clonePointer(source.WeaponIndex)
-	clone.ProtectorIndex = clonePointer(source.ProtectorIndex)
-	clone.BodyShapeByte = clonePointer(source.BodyShapeByte)
-	clone.HeightIndex = clonePointer(source.HeightIndex)
-	clone.VolumeIndex = clonePointer(source.VolumeIndex)
-	clone.HeightScale = clonePointer(source.HeightScale)
-	clone.VolumeScale = clonePointer(source.VolumeScale)
+	clone.RaceIndex = stagedChild(source.RaceIndex, previousChild.RaceIndex, clonePointer)
+	clone.Gender = stagedChild(source.Gender, previousChild.Gender, clonePointer)
+	clone.ModelRef = stagedChild(source.ModelRef, previousChild.ModelRef, clonePointer)
+	clone.WeaponIndex = stagedChild(source.WeaponIndex, previousChild.WeaponIndex, clonePointer)
+	clone.ProtectorIndex = stagedChild(source.ProtectorIndex, previousChild.ProtectorIndex, clonePointer)
+	clone.BodyShapeByte = stagedChild(source.BodyShapeByte, previousChild.BodyShapeByte, clonePointer)
+	clone.HeightIndex = stagedChild(source.HeightIndex, previousChild.HeightIndex, clonePointer)
+	clone.VolumeIndex = stagedChild(source.VolumeIndex, previousChild.VolumeIndex, clonePointer)
+	clone.HeightScale = stagedChild(source.HeightScale, previousChild.HeightScale, clonePointer)
+	clone.VolumeScale = stagedChild(source.VolumeScale, previousChild.VolumeScale, clonePointer)
 
-	clone.Level = clonePointer(source.Level)
-	clone.MaxLevel = clonePointer(source.MaxLevel)
-	clone.CurrentHP = clonePointer(source.CurrentHP)
-	clone.CurrentMP = clonePointer(source.CurrentMP)
-	clone.SkillPoints = clonePointer(source.SkillPoints)
-	clone.StatPoints = clonePointer(source.StatPoints)
-	clone.Experience = clonePointer(source.Experience)
-	clone.SkillExp = clonePointer(source.SkillExp)
-	clone.Gold = clonePointer(source.Gold)
-	clone.Strength = clonePointer(source.Strength)
-	clone.Intellect = clonePointer(source.Intellect)
-	clone.GuildID = clonePointer(source.GuildID)
-	clone.ExperiencePercent = clonePointer(source.ExperiencePercent)
-	clone.FigureIndex = clonePointer(source.FigureIndex)
+	clone.Level = stagedChild(source.Level, previousChild.Level, clonePointer)
+	clone.MaxLevel = stagedChild(source.MaxLevel, previousChild.MaxLevel, clonePointer)
+	clone.CurrentHP = stagedChild(source.CurrentHP, previousChild.CurrentHP, clonePointer)
+	clone.CurrentMP = stagedChild(source.CurrentMP, previousChild.CurrentMP, clonePointer)
+	clone.SkillPoints = stagedChild(source.SkillPoints, previousChild.SkillPoints, clonePointer)
+	clone.StatPoints = stagedChild(source.StatPoints, previousChild.StatPoints, clonePointer)
+	clone.Experience = stagedChild(source.Experience, previousChild.Experience, clonePointer)
+	clone.SkillExp = stagedChild(source.SkillExp, previousChild.SkillExp, clonePointer)
+	clone.Gold = stagedChild(source.Gold, previousChild.Gold, clonePointer)
+	clone.Strength = stagedChild(source.Strength, previousChild.Strength, clonePointer)
+	clone.Intellect = stagedChild(source.Intellect, previousChild.Intellect, clonePointer)
+	clone.GuildID = stagedChild(source.GuildID, previousChild.GuildID, clonePointer)
+	clone.ExperiencePercent = stagedChild(source.ExperiencePercent, previousChild.ExperiencePercent, clonePointer)
+	clone.FigureIndex = stagedChild(source.FigureIndex, previousChild.FigureIndex, clonePointer)
 
 	switch rows {
 	case rowsAll:
-		clone.MissionInventory = cloneInventoryRows(source.MissionInventory)
+		clone.MissionInventory = stagedChild(source.MissionInventory, previousChild.MissionInventory, cloneInventoryRows)
 	case rowsCast:
 		clone.MissionInventory = cloneCastRows(source.MissionInventory)
 	default:
 		clone.MissionInventory = cloneEquipmentRows(source.MissionInventory)
 	}
-	clone.Buyback = cloneSlice(source.Buyback)
-	for i := range clone.Buyback {
-		clone.Buyback[i].Item.Summon = CloneCOS(source.Buyback[i].Item.Summon)
-		clone.Buyback[i].Item.MagicOptions = cloneSlice(source.Buyback[i].Item.MagicOptions)
-	}
-	clone.World = cloneCharacterWorld(source.World)
-	clone.ActiveCOS = CloneCOS(source.ActiveCOS)
-	clone.Mercenaries = cloneSlice(source.Mercenaries)
-	for i, soldier := range clone.Mercenaries {
-		clone.Mercenaries[i] = CloneCOS(soldier)
-	}
-	clone.CapturedCOS = CloneCOS(source.CapturedCOS)
-	clone.Brood = cloneSlice(source.Brood)
-	for i, pet := range source.Brood {
-		clone.Brood[i] = CloneCOS(pet)
-	}
-	clone.PetSkillWindows = cloneSlice(source.PetSkillWindows)
-	clone.ParamJobs = cloneSlice(source.ParamJobs)
-	clone.CompositeJobs = cloneSlice(source.CompositeJobs)
-	if source.PremiumClock != nil {
-		clock := *source.PremiumClock
-		clone.PremiumClock = &clock
-	}
-	if source.LevelReachedAt != nil {
-		clone.LevelReachedAt = make(map[uint8]int64, len(source.LevelReachedAt))
-		for level, at := range source.LevelReachedAt {
-			clone.LevelReachedAt[level] = at
-		}
-	}
-	if source.ItemGroupCooldowns != nil {
-		clone.ItemGroupCooldowns = make(map[uint32]int64, len(source.ItemGroupCooldowns))
-		for group, until := range source.ItemGroupCooldowns {
-			clone.ItemGroupCooldowns[group] = until
-		}
-	}
-	clone.TimedSkillJobs = cloneSlice(source.TimedSkillJobs)
+	clone.Buyback = stagedChild(source.Buyback, previousChild.Buyback, cloneBuybackRows)
+	clone.World = stagedChild(source.World, previousChild.World, cloneCharacterWorld)
+	clone.ActiveCOS = stagedChild(source.ActiveCOS, previousChild.ActiveCOS, CloneCOS)
+	clone.Mercenaries = stagedChild(source.Mercenaries, previousChild.Mercenaries, cloneCOSSet)
+	clone.CapturedCOS = stagedChild(source.CapturedCOS, previousChild.CapturedCOS, CloneCOS)
+	clone.Brood = stagedChild(source.Brood, previousChild.Brood, cloneCOSSet)
+	clone.PetSkillWindows = stagedChild(source.PetSkillWindows, previousChild.PetSkillWindows, cloneSlice)
+	clone.ParamJobs = stagedChild(source.ParamJobs, previousChild.ParamJobs, cloneSlice)
+	clone.CompositeJobs = stagedChild(source.CompositeJobs, previousChild.CompositeJobs, cloneSlice)
+	clone.PremiumClock = stagedChild(source.PremiumClock, previousChild.PremiumClock, clonePointer)
+	clone.LevelReachedAt = stagedChild(source.LevelReachedAt, previousChild.LevelReachedAt, cloneMapValue)
+	clone.ItemGroupCooldowns = stagedChild(source.ItemGroupCooldowns, previousChild.ItemGroupCooldowns, cloneMapValue)
+	clone.TimedSkillJobs = stagedChild(source.TimedSkillJobs, previousChild.TimedSkillJobs, cloneSlice)
 	if rows == rowsEquipment {
 		clone.AvatarInventory = nil
 	} else {
-		clone.AvatarInventory = cloneAvatarInventory(source.AvatarInventory)
+		clone.AvatarInventory = stagedChild(source.AvatarInventory, previousChild.AvatarInventory, cloneAvatarInventory)
 	}
-	clone.Masteries = cloneSlice(source.Masteries)
-	clone.Skills = cloneSlice(source.Skills)
-	if source.OffensiveSkillCooldowns != nil {
-		clone.OffensiveSkillCooldowns = make(map[uint32]int64, len(source.OffensiveSkillCooldowns))
-		for group, until := range source.OffensiveSkillCooldowns {
-			clone.OffensiveSkillCooldowns[group] = until
-		}
-	}
-	if source.SharedSkillCooldowns != nil {
-		clone.SharedSkillCooldowns = make(map[uint8]int64, len(source.SharedSkillCooldowns))
-		for group, until := range source.SharedSkillCooldowns {
-			clone.SharedSkillCooldowns[group] = until
-		}
-	}
-	clone.MostWanted = clonePointer(source.MostWanted)
-	clone.VisualFlags = clonePointer(source.VisualFlags)
-	clone.Mission = cloneMissionRuntime(source.Mission)
-	clone.QuickSlots = cloneSlice(source.QuickSlots)
-	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
-	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
-	if source.QuestCompletionCounts != nil {
-		clone.QuestCompletionCounts = make(map[uint32]uint32, len(source.QuestCompletionCounts))
-		for id, count := range source.QuestCompletionCounts {
-			clone.QuestCompletionCounts[id] = count
-		}
-	}
-	clone.ActiveQuests = cloneActiveQuests(source.ActiveQuests)
-	if source.QuestSupplies != nil {
-		clone.QuestSupplies = make(map[uint32]QuestSupplyState, len(source.QuestSupplies))
-		for id, supply := range source.QuestSupplies {
-			clone.QuestSupplies[id] = supply
-		}
-	}
-	clone.TrackedQuests = cloneTrackedQuests(source.TrackedQuests)
-	clone.EnterEventGroupIds = cloneSlice(source.EnterEventGroupIds)
-	clone.BlockedWhisperers = cloneSlice(source.BlockedWhisperers)
-	clone.Friends = cloneSlice(source.Friends)
+	clone.Masteries = stagedChild(source.Masteries, previousChild.Masteries, cloneSlice)
+	clone.Skills = stagedChild(source.Skills, previousChild.Skills, cloneSlice)
+	clone.OffensiveSkillCooldowns = stagedChild(source.OffensiveSkillCooldowns, previousChild.OffensiveSkillCooldowns, cloneMapValue)
+	clone.SharedSkillCooldowns = stagedChild(source.SharedSkillCooldowns, previousChild.SharedSkillCooldowns, cloneMapValue)
+	clone.MostWanted = stagedChild(source.MostWanted, previousChild.MostWanted, clonePointer)
+	clone.VisualFlags = stagedChild(source.VisualFlags, previousChild.VisualFlags, clonePointer)
+	clone.Mission = stagedChild(source.Mission, previousChild.Mission, cloneMissionRuntime)
+	clone.QuickSlots = stagedChild(source.QuickSlots, previousChild.QuickSlots, cloneSlice)
+	clone.CompletedQuestIds = stagedChild(source.CompletedQuestIds, previousChild.CompletedQuestIds, cloneSlice)
+	clone.EndedQuestIds = stagedChild(source.EndedQuestIds, previousChild.EndedQuestIds, cloneSlice)
+	clone.QuestCompletionCounts = stagedChild(source.QuestCompletionCounts, previousChild.QuestCompletionCounts, cloneMapValue)
+	clone.ActiveQuests = stagedChild(source.ActiveQuests, previousChild.ActiveQuests, cloneActiveQuests)
+	clone.QuestSupplies = stagedChild(source.QuestSupplies, previousChild.QuestSupplies, cloneMapValue)
+	clone.TrackedQuests = stagedChild(source.TrackedQuests, previousChild.TrackedQuests, cloneTrackedQuests)
+	clone.EnterEventGroupIds = stagedChild(source.EnterEventGroupIds, previousChild.EnterEventGroupIds, cloneSlice)
+	clone.BlockedWhisperers = stagedChild(source.BlockedWhisperers, previousChild.BlockedWhisperers, cloneSlice)
+	clone.Friends = stagedChild(source.Friends, previousChild.Friends, cloneSlice)
 
 	return &clone
 }
@@ -327,6 +321,92 @@ func cloneSlice[T any](source []T) []T {
 	}
 	clone := make([]T, len(source))
 	copy(clone, source)
+	return clone
+}
+
+/*
+================
+stagedChild
+
+One child of a staged copy: the previous copy's child, shared, when
+the live child still equals it, and a fresh detach of the live child
+otherwise. Equality is reflect.DeepEqual - stricter than the section
+walk's per-field comparison (it also sees fields no section covers,
+and keeps nil distinct from empty), so a shared child is one the
+section walk also reads as unchanged and the comparison's verdicts
+cannot move. The previous copy is staged output, which nothing
+writes after staging, so sharing it detaches the new copy from the
+live record exactly as a fresh clone would.
+================
+*/
+func stagedChild[T any](source, previous T, clone func(T) T) T {
+	if reflect.DeepEqual(source, previous) {
+		return previous
+	}
+	return clone(source)
+}
+
+/*
+================
+cloneMapValue
+
+Detach one flat map child without converting a nil map to an empty one.
+================
+*/
+func cloneMapValue[K comparable, V any](source map[K]V) map[K]V {
+	if source == nil {
+		return nil
+	}
+	clone := make(map[K]V, len(source))
+	for key, value := range source {
+		clone[key] = value
+	}
+	return clone
+}
+
+/*
+================
+cloneOnlineRecord
+
+The online record with its per-day rows detached.
+================
+*/
+func cloneOnlineRecord(source *OnlineRecord) *OnlineRecord {
+	clone := clonePointer(source)
+	if clone != nil {
+		clone.Days = cloneSlice(source.Days)
+	}
+	return clone
+}
+
+/*
+================
+cloneBuybackRows
+
+Buyback rows with each row's summon and magic options detached.
+================
+*/
+func cloneBuybackRows(source []BuybackEntry) []BuybackEntry {
+	clone := cloneSlice(source)
+	for i := range clone {
+		clone[i].Item.Summon = CloneCOS(source[i].Item.Summon)
+		clone[i].Item.MagicOptions = cloneSlice(source[i].Item.MagicOptions)
+	}
+	return clone
+}
+
+/*
+================
+cloneCOSSet
+
+A companion slice with every companion detached.
+================
+*/
+func cloneCOSSet(source []*CharacterCOS) []*CharacterCOS {
+	clone := cloneSlice(source)
+	for i := range clone {
+		clone[i] = CloneCOS(source[i])
+	}
 	return clone
 }
 

@@ -249,7 +249,7 @@ export type UiEvent =
 		composing: boolean;
 	}
 	| { kind: "focus"; id: string | null; }
-	| { kind: "key"; code: string; shift?: boolean; ctrl?: boolean; };
+	| { kind: "key"; code: string; shift?: boolean; ctrl?: boolean; space?: boolean; };
 /*
 ================
 UiBridge

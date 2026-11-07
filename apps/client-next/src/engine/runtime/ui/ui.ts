@@ -9314,8 +9314,13 @@ export function createUi( ports: UiPorts ) {
 						dirty = true;
 						return;
 					}
+					// Game_OnKeyDown 68111A: with Space held (GetKeyState(VK_SPACE)) the
+					// digit is offset by 0x28, and 572990 takes a key above 10 as the
+					// slot itself, so Space+1..0 uses the extended bar (41..50) on any
+					// F1-F4 page; a bare digit stays on the page.
 					if ( /^Digit[0-9]$/.test( event.code ) ) {
-						activate( "hotbar:" + hotbarSlot( hotbarPage, Number( event.code.slice( 5 ) ) || 10 ) );
+						const key = Number( event.code.slice( 5 ) ) || 10;
+						activate( "hotbar:" + (event.space ? extendedSlot( key - 1 ) : hotbarSlot( hotbarPage, key )) );
 						return;
 					}
 					const names: Record<number, UiPanel> = {

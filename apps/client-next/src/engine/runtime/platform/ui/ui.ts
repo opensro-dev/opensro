@@ -277,7 +277,7 @@ export function createUiBridge(
 		if (
 			code !== "Escape" && code !== "Space" && event.key !== "Enter" &&
 			!editing && !event.repeat
-		) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey, space: layoutKeys.held( "Space" ) } );
 		if ( code === "Escape" && !event.repeat ) {
 			emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 			// The GM prompt owns Escape: it dismisses the catalogue and keeps
