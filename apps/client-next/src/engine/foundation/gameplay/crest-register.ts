@@ -51,8 +51,9 @@ The flow's lines for one kind: the confirm box's title and body (the
 native FILE/FOLDER lines kept verbatim though the browser picker
 supersedes the folder convention), the already-standing refusal printed
 at OK, the upload lane's fail and error lines, and the completion box's
-body with its four information lines. The guild box takes the confirm
-title; the union box its own register title.
+body with its four information lines. Both confirm boxes take the
+generic confirm caption; the union register string is the third body
+line of its box, not a title (client message-box composer, kind 0x18).
 ================
 */
 export function crestRegisterKeys( kind: CrestRegisterKind ): {
@@ -86,10 +87,11 @@ export function crestRegisterKeys( kind: CrestRegisterKind ): {
 			information
 		} :
 		{
-			title: "UIIT_CTL_UNION_CREST_REGISTER",
+			title: "UIIT_STT_CONFIRM_BOX",
 			lines: [
 				"UIIT_MSG_UNION_USER_CREST",
 				"UIIT_MSG_UNION_USER_CREST_FOLDER",
+				"UIIT_CTL_UNION_CREST_REGISTER",
 				"UIIT_MSG_UNION_CREST_REGISTER"
 			],
 			refused: "UIIT_MSG_CREST_REGISTER_OVERLAP",

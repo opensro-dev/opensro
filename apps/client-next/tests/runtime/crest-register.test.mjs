@@ -96,10 +96,11 @@ test("the register items are known by their shipped reference ids", () => {
 		]
 	} );
 	assert.deepEqual( crestRegisterKeys( "union" ), {
-		title: "UIIT_CTL_UNION_CREST_REGISTER",
+		title: "UIIT_STT_CONFIRM_BOX",
 		lines: [
 			"UIIT_MSG_UNION_USER_CREST",
 			"UIIT_MSG_UNION_USER_CREST_FOLDER",
+			"UIIT_CTL_UNION_CREST_REGISTER",
 			"UIIT_MSG_UNION_CREST_REGISTER"
 		],
 		refused: "UIIT_MSG_CREST_REGISTER_OVERLAP",
