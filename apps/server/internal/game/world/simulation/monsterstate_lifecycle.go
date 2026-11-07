@@ -28,6 +28,19 @@ const (
 	betaUniqueRespawnMaxSec = 90 * 60
 )
 
+// EnvJanganCaveRespawn turns the fast Ch'in Tomb respawn window on ("on", "1", "true").
+// Port-only, not native (owner decision 2026-11-07, #2719): the cave's authored
+// 6-8 second respawn delays keep it feeling empty against Wing Tribe's 1-3
+// seconds; when on, a respawning non-unique cave nest draws over 1-3 seconds
+// instead. Unique nests keep their own rule (the beta unique window, else
+// their authored row). Nests and drops are unchanged. Off or unset keeps the
+// authored row.
+const (
+	EnvJanganCaveRespawn    = "SRO_JANGAN_CAVE_RESPAWN"
+	janganCaveRespawnMinSec = 1
+	janganCaveRespawnMaxSec = 3
+)
+
 /*
 ================
 BetaUniqueRespawnEnabled
@@ -36,6 +49,36 @@ BetaUniqueRespawnEnabled
 func BetaUniqueRespawnEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvBetaUniqueRespawn))) {
 	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+JanganCaveRespawnEnabled
+================
+*/
+func JanganCaveRespawnEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvJanganCaveRespawn))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+janganCaveRegion
+
+The Ch'in Tomb cave regions: the six tomb floors, 0x8002..0x8007
+(32770..32775). Donwhang Stone Cave (0x8001) is a different cave and is not
+in the owner's plan.
+================
+*/
+func janganCaveRegion(regionID uint16) bool {
+	switch regionID {
+	case 32770, 32771, 32772, 32773, 32774, 32775:
 		return true
 	}
 	return false
@@ -286,15 +329,28 @@ MonsterState.nestDelay
 Port-only, not native (owner decision 2026-10-18): with
 SRO_BETA_UNIQUE_RESPAWN on, a respawning unique nest draws its respawn
 delay over 45-90 minutes instead of the operator backup's 20-36 minute
-rows. Off or unset keeps the authored row.
+rows. Port-only, not native (owner decision 2026-11-07, #2719): with
+SRO_JANGAN_CAVE_RESPAWN on, a respawning non-unique nest in the Ch'in
+Tomb cave regions draws over 1-3 seconds instead of the authored 6-8
+seconds; a unique nest keeps the beta window above or its authored row.
+Off or unset keeps the authored row.
 ================
 */
 func (s *MonsterState) nestDelay(nest monster.NestRow, ratePct float32) (uint32, uint32) {
 	minSec, maxSec := nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec
-	if BetaUniqueRespawnEnabled() && nest.Respawn {
-		if ref, ok := s.template.Refs[nest.RefObjID]; ok && nestIsUnique(nest, ref) {
-			minSec, maxSec = betaUniqueRespawnMinSec, betaUniqueRespawnMaxSec
-		}
+	unique := false
+	if ref, ok := s.template.Refs[nest.RefObjID]; ok {
+		unique = nestIsUnique(nest, ref)
+	}
+	if BetaUniqueRespawnEnabled() && nest.Respawn && unique {
+		minSec, maxSec = betaUniqueRespawnMinSec, betaUniqueRespawnMaxSec
+	}
+	// The cave window never outranks the unique rule: a unique's authored
+	// 1800-3600 seconds (the tomb guardians, Flame Master and White Snake
+	// rows) must not collapse to 1-3 seconds when both flags are on, as
+	// the deployment enables them.
+	if nest.Respawn && !unique && JanganCaveRespawnEnabled() && janganCaveRegion(nest.RegionID) {
+		minSec, maxSec = janganCaveRespawnMinSec, janganCaveRespawnMaxSec
 	}
 	return monster.NestDelay(minSec, maxSec, ratePct, s.randomWord)
 }

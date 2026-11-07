@@ -616,7 +616,15 @@ export function createPlatform(
 				event.code !== "F12")
 		) event.preventDefault();
 		if ( !event.repeat ) onGesture();
-		if ( !event.repeat ) onUi( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		if ( !event.repeat ) {
+			onUi( {
+				kind: "key",
+				code,
+				shift: event.shiftKey,
+				ctrl: event.ctrlKey,
+				space: layoutKeys.held( "Space" )
+			} );
+		}
 		if ( !event.repeat ) {
 			onInput( { kind: "key", code, down: true, timeMs: timeMs() } );
 		}
