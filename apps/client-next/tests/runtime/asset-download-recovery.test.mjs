@@ -35,7 +35,9 @@ function fixture( t, fetch ) {
 	t.mock.method( globalThis, "fetch", fetch );
 	const messages = [];
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 	} );
@@ -303,7 +305,11 @@ for ( const dispose of [ false, true ] ) {
 			return asset.serve( url, options );
 		} );
 		const loader = createLoader( message => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					message.kind
+				)
+			) {
 				messages.push( message );
 			}
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -353,7 +359,9 @@ test("invalid range is a transient transport failure even when response cleanup 
 		return new Response( failedBody(), { status: 206, headers: { "Content-Range": "bytes 0-9/10" } } );
 	} );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 	} );
@@ -652,7 +660,11 @@ test(
 			return Promise.resolve( asset.serve( url, options ) );
 		} );
 		const loader = createLoader( message => {
-			if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+			if (
+				![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes(
+					message.kind
+				)
+			) {
 				messages.push( message );
 			}
 			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -804,7 +816,9 @@ test("a middlebox answering a ranged read with 200 is a transient transport fail
 		return new Response( "the whole object; the Range header was ignored", { status: 200 } );
 	} );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 	} );
@@ -844,7 +858,9 @@ test("a pack block shorter than its claimed range is a transient transport failu
 		} );
 	} );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -869,7 +885,9 @@ test("a decoder failure on unverified bytes is a transient transport failure", a
 	} );
 	t.mock.method( globalThis, "fetch", async () => new Response( Uint8Array.of( 1, 2, 3 ) ) );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 		if ( message.kind === "bytes" || message.kind === "error" ) deliver();
@@ -935,7 +953,9 @@ test("a decoder failure on verified bytes stays permanent", async t => {
 		async url => url.endsWith( "/manifest.json" ) ? Response.json( asset.manifest ) : new Response( asset.pack )
 	);
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 		if ( message.kind === "bytes" || message.kind === "error" ) deliver();

@@ -23,7 +23,8 @@ test("deferred visibility controls native 50-ms ticks and strict query cadence",
 	function frame( time, result ) {
 		owner.begin( time, [ { ...actor, time } ] );
 		const query = owner.plan( [ 1 ], new Set( [ 1 ] ) );
-		owner.complete( query ? [ result ] : undefined );
+		if ( query ) owner.deliver( [ result ] );
+		owner.complete();
 		return { query, ...owner.sample( 1 ) };
 	}
 	assert.equal( frame( 0 ).draw, false );
@@ -58,13 +59,15 @@ test("missing visible frames reset fading, retired IDs and model replacements ca
 	owner.complete();
 	owner.begin( .6, [ actor ] );
 	owner.plan( [ 1 ], new Set( [ 1 ] ) );
-	owner.complete( [ true ] );
+	owner.deliver( [ true ] );
+	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 255 );
 	owner.begin( .7, [ actor ] );
 	owner.plan( [], new Set() );
 	owner.begin( 1.2, [ actor ] );
 	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
-	owner.complete( [ false ] );
+	owner.deliver( [ false ] );
+	owner.complete();
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	owner.begin( 1.3, [ { ...actor, model: "replacement" } ] );
 	assert.equal( owner.sample( 1 ).time, 0 );
@@ -172,7 +175,8 @@ test("production renderer freezes the actual EFP graph while hidden and resumes 
 		owner.prepare( gpu, {}, 257, undefined, false, time );
 		const writes = ordinaryWrites;
 		const plan = owner.deferredPlan( 257, [ 0, 0, 30 ] );
-		owner.completeDeferred( plan.query ? [ visible ] : undefined );
+		if ( plan.query ) owner.deliverDeferred( [ visible ] );
+		owner.completeDeferred();
 		const draws = owner.prepare( gpu, {}, 257, undefined, false, time, true );
 		assert.equal( ordinaryWrites, writes, "deferred continuation repeated ordinary uploads" );
 		return draws.map( d => d.instances[12] );
@@ -281,11 +285,13 @@ test("ordinary fallback keeps instance alpha, bypasses query cadence and ticks e
 	assert.equal( owner.sample( 1 ).alpha, 0 );
 	owner.begin( 1.2, [ actor ] );
 	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
-	owner.complete( [ true ] );
+	owner.deliver( [ true ] );
+	owner.complete();
 	assert.equal( owner.sample( 1 ).instanceAlpha, 255 );
 	owner.begin( 1.8, [ actor ] );
 	owner.plan( [ 1 ], new Set( [ 1 ] ) );
-	owner.complete( [ false ] );
+	owner.deliver( [ false ] );
+	owner.complete();
 	assert.equal( owner.sample( 1 ).instanceAlpha, 0 );
 	const before = owner.sample( 1 ).time;
 	owner.begin( 2, [ actor ], false );
@@ -296,4 +302,46 @@ test("ordinary fallback keeps instance alpha, bypasses query cadence and ticks e
 	const paused = owner.sample( 1 ).time;
 	owner.begin( 3, [ { ...actor, deferredParticle: { offset: 11, nightOnly: true } } ], false, false );
 	assert.equal( owner.sample( 1 ).time, paused );
+});
+
+test("a query in flight completes on last visibility and its answer lands on a later frame", () => {
+	const owner = createDeferredParticles();
+	owner.begin( 0, [ actor ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.complete();
+	owner.begin( .6, [ actor ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	// The issuing frame completes without the answer: no throw, no fade yet.
+	owner.complete();
+	assert.equal( owner.sample( 1 ).alpha, 0 );
+	// The next cadence slot does not issue a second query behind the first.
+	owner.begin( 1.2, [ actor ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.complete();
+	assert.equal( owner.sample( 1 ).alpha, 0 );
+	// A malformed answer is refused and the query stays in flight.
+	assert.throws( () => owner.deliver( [ true, false ] ), /results/ );
+	owner.deliver( [ true ] );
+	owner.begin( 1.3, [ actor ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), false );
+	owner.complete();
+	assert.equal( owner.sample( 1 ).visible, true );
+	assert.ok( owner.sample( 1 ).alpha > 0 );
+	// Nothing is in flight any more.
+	assert.throws( () => owner.deliver( [ true ] ), /results/ );
+});
+
+test("an answer issued for a replaced model does not light its replacement", () => {
+	const owner = createDeferredParticles();
+	owner.begin( 0, [ actor ] );
+	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	owner.complete();
+	owner.begin( .6, [ actor ] );
+	assert.equal( owner.plan( [ 1 ], new Set( [ 1 ] ) ), true );
+	owner.begin( .7, [ { ...actor, model: "replacement" } ] );
+	owner.deliver( [ true ] );
+	assert.equal( owner.sample( 1 ).visible, false );
+	owner.plan( [ 1 ], new Set( [ 1 ] ) );
+	owner.complete();
+	assert.equal( owner.sample( 1 ).alpha, 0 );
 });

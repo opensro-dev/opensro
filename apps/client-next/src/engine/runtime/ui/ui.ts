@@ -229,7 +229,7 @@ import {
 	UNDERBAR_WIDTH
 } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
-import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
+import { createExperimentalHud, experimentalTabs } from "./hud/experimental-hud";
 import {
 	browserDisplayClass,
 	renderScales,
@@ -668,7 +668,8 @@ import {
 import {
 	companionAutoPotion,
 	playerVigorAutoPotion,
-	transportPotionBlocked
+	transportPotionBlocked,
+	TRANSPORT_POTION_RETRY_MS
 } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
@@ -1119,7 +1120,7 @@ defaultUiPorts.
 ================
 */
 export interface UiPorts {
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel" | "hdAvailable">;
 	commands: ( command: SessionCommand ) => void;
 	publish: ( scene: UiScene | null ) => void;
 	texture: ( id: string, image: UiTexture | null ) => void;
@@ -3682,9 +3683,8 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
-			const row = experimentalTabs( view?.session ).flatMap( tab => tab.rows ).find( candidate =>
-				candidate.id === id
-			);
+			const row = experimentalTabs( view?.session, assets.hdAvailable?.() ?? false )
+				.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
 			else if ( id.startsWith( "experimental-render-scale:" ) ) {
 				experimental.selectRenderScale( Number( id.slice( "experimental-render-scale:".length ) ) );
@@ -9580,46 +9580,63 @@ export function createUi( ports: UiPorts ) {
 					""
 			);
 			// Port-only: one pair of item bindings serves both companion HP thresholds.
+			// The two deciders can only fire with a channel open and something
+			// to drink, so a frame with neither bound skips their inputs
+			// whole: the idle HUD neither reads vitals nor allocates here.
 			if (
 				experimental.state().saved.transportAutoPotion && next.session?.phase === "world" &&
 				next.worldReady && (!next.frontend || next.frontend.phase === "world") && next.gameplay
 			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
-				const shared = {
-					items: game.inventory,
-					quickSlots: game.quickSlots ?? [],
-					cooldowns: game.itemCooldowns ?? [],
-					settings: companionPotions.state().saved,
-					now: clock,
-					lastSentMs: companionPotions.state().lastSentMs,
-					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
-						!!(carriedItem || carriedShortcut)
-				};
-				const use = playerVigorAutoPotion( {
-					...shared,
-					vital: game.vitals.find( v => v.gid === game.localGid )
-				} ) ?? companionAutoPotion( {
-					records: game.cosRecords ?? [],
-					maxima: (game.cosRecords ?? []).map( record => ({
-						gid: record.gid,
-						maxHp: petReference(
-							references?.get( record.refObjId ),
-							game.petTraining?.gid === record.gid ? game.petTraining : undefined,
-							next.entities.find( e => e.gid === record.gid )?.petResolve,
-							clock,
-							record.level
-						)?.maxHp ?? 0
-					}) ),
-					vitals: game.vitals,
-					items: game.inventory,
-					quickSlots: game.quickSlots ?? [],
-					cooldowns: game.itemCooldowns ?? [],
-					settings: companionPotions.state().saved,
-					now: clock,
-					lastSentMs: companionPotions.state().lastSentMs,
-					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
-						!!(carriedItem || carriedShortcut)
-				} );
+				const potionState = companionPotions.state(), potionSettings = potionState.saved;
+				const potionBlocked = transportPotionBlocked( game ) || itemMall.read().visible ||
+					!!(carriedItem || carriedShortcut);
+				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
+					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
+				let use: { readonly slot: number; readonly companionGid?: number; } | null = null;
+				if ( !potionBlocked && !potionRetrying ) {
+					if (
+						autoPotionEntry( potionSettings.vigorHp ).enabled ||
+						autoPotionEntry( potionSettings.vigorMp ).enabled
+					) {
+						use = playerVigorAutoPotion( {
+							items: game.inventory,
+							quickSlots: game.quickSlots ?? [],
+							cooldowns: game.itemCooldowns ?? [],
+							settings: potionSettings,
+							now: clock,
+							lastSentMs: potionState.lastSentMs,
+							blocked: potionBlocked,
+							vital: game.vitals.find( v => v.gid === game.localGid )
+						} );
+					}
+					if (
+						!use && (game.cosRecords?.length ?? 0) > 0 && game.inventory.length > 0 &&
+						(game.quickSlots?.length ?? 0) > 0
+					) {
+						use = companionAutoPotion( {
+							records: game.cosRecords ?? [],
+							maxima: (game.cosRecords ?? []).map( record => ({
+								gid: record.gid,
+								maxHp: petReference(
+									references?.get( record.refObjId ),
+									game.petTraining?.gid === record.gid ? game.petTraining : undefined,
+									next.entities.find( e => e.gid === record.gid )?.petResolve,
+									clock,
+									record.level
+								)?.maxHp ?? 0
+							}) ),
+							vitals: game.vitals,
+							items: game.inventory,
+							quickSlots: game.quickSlots ?? [],
+							cooldowns: game.itemCooldowns ?? [],
+							settings: potionSettings,
+							now: clock,
+							lastSentMs: potionState.lastSentMs,
+							blocked: potionBlocked
+						} );
+					}
+				}
 				if ( use ) {
 					sendGameplay( {
 						kind: "item-use",
@@ -14364,7 +14381,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Options-style tabs over one framed list: a header naming the tab,
 					// then a checkbox or numeric selection with its help line below it.
 					// The window grows with the selected tab, as CIFOption::OnTab does.
-					const { tab, draft } = experimental.state(), page = experimentalTabs( next.session )[tab]!;
+					const { tab, draft } = experimental.state(),
+						tabs = experimentalTabs( next.session, assets.hdAvailable?.() ?? false ),
+						page = tabs[tab]!;
 					const rowPitch = 46, listTop = 98, width = 386;
 					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
 					const [px, py] = windowOrigin( "Experimental", [
@@ -14377,12 +14396,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10, panelCloseId( "Experimental" ) );
 					// The native tab is 78 pixels; more tabs than the window holds share its width.
-					const tabWidth = Math.min( 78, Math.floor( (width - 10) / EXPERIMENTAL_TABS.length ) ),
-						tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
-					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
+					const tabWidth = Math.min( 78, Math.floor( (width - 10) / tabs.length ) ),
+						tabStart = (width - (tabs.length * tabWidth - 2)) / 2;
+					for ( let i = 0; i < tabs.length; i++ ) {
 						nativeTab(
 							"experimental-tab:" + i,
-							EXPERIMENTAL_TABS[i]!.title,
+							tabs[i]!.title,
 							[ px + tabStart + i * tabWidth, py + 40, tabWidth - 2, 24 ],
 							tab === i,
 							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
