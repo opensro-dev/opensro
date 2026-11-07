@@ -238,7 +238,6 @@ test("the main index certifies a published HD set, and only then", async () => {
 	}
 });
 
-<<<<<<< HEAD
 /*
 ================
 the main index stamps what this build published
@@ -288,8 +287,6 @@ test("the main index stamps what this build published, not what the disk holds",
 	}
 });
 
-=======
->>>>>>> origin/main
 test("an HD build with no variants writes no pack index", async () => {
 	const root = mkdtempSync( path.join( tmpdir(), "sro-hd-empty-" ) );
 	try {
