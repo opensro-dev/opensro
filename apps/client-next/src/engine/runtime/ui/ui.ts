@@ -1123,7 +1123,9 @@ extensions. createUi falls back to these per field, exactly as its
 defaulted parameters did before the record.
 ================
 */
-export function defaultUiPorts(): Required<Omit<UiPorts, "assets" | "commands" | "publish" | "texture" | "base" | "apiBase">> {
+export function defaultUiPorts(): Required<
+	Omit<UiPorts, "assets" | "commands" | "publish" | "texture" | "base" | "apiBase">
+> {
 	return {
 		clickSound: () => {},
 		sound: () => {},

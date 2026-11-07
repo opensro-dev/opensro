@@ -164,7 +164,14 @@ test("localization collects invalid results while hidden but defers retries unti
 
 test("the UI frame loop drains HUD requests after leaving the dock", t => {
 	const { assets, messages, complete } = fixture( t );
-	const ui = createUi( { assets, commands: () => {}, publish: () => {}, texture: () => {}, base: ORIGIN, apiBase: ORIGIN } );
+	const ui = createUi( {
+		assets,
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: ORIGIN,
+		apiBase: ORIGIN
+	} );
 	t.after( () => ui.dispose() );
 	/** @type {import('../../src/engine/contracts/ui.ts').UiView} */
 	const view = {
@@ -197,7 +204,14 @@ test("the UI frame loop drains HUD requests after leaving the dock", t => {
 test("explicit UI timing observes comparison and publication without forcing redraws", t => {
 	const { assets } = fixture( t );
 	const published = [], spans = [], active = [];
-	const ui = createUi( { assets, commands: () => {}, publish: scene => published.push( scene ), texture: () => {}, base: ORIGIN, apiBase: ORIGIN } );
+	const ui = createUi( {
+		assets,
+		commands: () => {},
+		publish: scene => published.push( scene ),
+		texture: () => {},
+		base: ORIGIN,
+		apiBase: ORIGIN
+	} );
 	t.after( () => ui.dispose() );
 	const probe = {
 		/*

@@ -112,28 +112,30 @@ export function uiFixture(
 				return id;
 			},
 			cancel: id => pending.delete( id )
-		}, {
-		commands,
-		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
-		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
-		/*
+		},
+		{
+			commands,
+			// Scenes are recorded as drawn: text runs expanded into the glyph quads the
+			// GPU packer writes (text-run.ts), so assertions read painted glyphs.
+			/*
 		================
 		recordProduct
 		================
 		*/
-		publish: s => {
-			products.push( s );
-			scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
-		},
-		texture: ( ...args ) => textures.push( args ),
-		sound: kind => sounds.push( kind ),
-		saveOptions,
-		audioPreference,
-		saveSight,
-		saveBindings,
-		saveVideo,
-		extensions
-	} ) );
+			publish: s => {
+				products.push( s );
+				scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
+			},
+			texture: ( ...args ) => textures.push( args ),
+			sound: kind => sounds.push( kind ),
+			saveOptions,
+			audioPreference,
+			saveSight,
+			saveBindings,
+			saveVideo,
+			extensions
+		}
+	) );
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },
