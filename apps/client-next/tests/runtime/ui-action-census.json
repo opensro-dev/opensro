@@ -14466,6 +14466,7 @@
 				"experimental-tab:5",
 				"experimental-tab:6",
 				"experimental-tab:7",
+				"experimental-tab:8",
 				"experimental-ui-scale",
 				"ext-drag",
 				"ext-horizontal",
@@ -14509,13 +14510,13 @@
 				"window-drag:Experimental"
 			],
 			"focus": null,
-			"hash": "0c05634359726925",
+			"hash": "e2de5207f72a53bd",
 			"keys": {
 				"Enter": {
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "0c05634359726925",
+					"hash": "e2de5207f72a53bd",
 					"panel": "Experimental",
 					"removed": []
 				},
@@ -14546,6 +14547,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -14566,7 +14568,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "527e0a7896f65a0f",
+					"hash": "f5bee283a9a9576a",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:1",
@@ -14596,7 +14598,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d5b35114bf4a99bd",
+					"hash": "7741568534d591ee",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:1",
@@ -14626,7 +14628,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "7c29e2fcc4b71726",
+					"hash": "3e2632b42a73fbb2",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:1",
@@ -14650,7 +14652,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "958aca1e00d68035",
+					"hash": "f0d97fcb7995feff",
 					"panel": "Experimental",
 					"removed": [
 						"chat-line:0",
@@ -14680,7 +14682,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "0c05634359726925",
+					"hash": "e2de5207f72a53bd",
 					"panel": "Experimental",
 					"removed": []
 				},
@@ -14688,7 +14690,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "330370904b7d4a8c",
+					"hash": "04b86cd8f9627b56",
 					"panel": "Experimental",
 					"removed": [
 						"chat-line:0",
@@ -14703,7 +14705,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "330370904b7d4a8c",
+					"hash": "04b86cd8f9627b56",
 					"panel": "Experimental",
 					"removed": [
 						"chat-line:0",
@@ -14718,7 +14720,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "330370904b7d4a8c",
+					"hash": "04b86cd8f9627b56",
 					"panel": "Experimental",
 					"removed": [
 						"chat-line:0",
@@ -14733,7 +14735,7 @@
 					"added": [],
 					"commands": [],
 					"focus": "chat-text",
-					"hash": "330370904b7d4a8c",
+					"hash": "04b86cd8f9627b56",
 					"panel": "Experimental",
 					"removed": [
 						"chat-line:0",
@@ -14773,6 +14775,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -14805,6 +14808,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -14836,6 +14840,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -14860,7 +14865,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "246a19ebf473086f",
+					"hash": "ad8c3a8414c56d84",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14886,7 +14891,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "19d7cf9614ff6ba5",
+					"hash": "be765e95e4aba09c",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14912,7 +14917,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "1a78b68fda72e6c6",
+					"hash": "f45475ec82874eb0",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14938,7 +14943,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "d5114298b1356436",
+					"hash": "b2522093f38cd8e0",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14964,7 +14969,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "64905dc42b8a23b0",
+					"hash": "dd2f57bc6b19108e",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14990,7 +14995,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "2429dd9f436cf367",
+					"hash": "66d73d4b8fd65d8b",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15016,7 +15021,27 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "5ba57ecc7991bad3",
+					"hash": "d2310ea74030636e",
+					"panel": "Experimental",
+					"removed": [
+						"experimental-anisotropic-filtering",
+						"experimental-float-bloom",
+						"experimental-hdr-tone-map",
+						"experimental-phone-render-cap",
+						"experimental-post-processing",
+						"experimental-render-scale:100",
+						"experimental-render-scale:50",
+						"experimental-render-scale:75",
+						"experimental-ui-scale"
+					]
+				},
+				"experimental-tab:8": {
+					"added": [
+						"experimental-sky-detail"
+					],
+					"commands": [],
+					"focus": null,
+					"hash": "5bdf238bd8661a84",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -15037,7 +15062,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "e0fab73cc57b2e34",
+					"hash": "167a505bac2eafd6",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:41",
@@ -15064,7 +15089,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "f7f655804b5e8981",
+					"hash": "91bb772114c80841",
 					"panel": "Experimental",
 					"removed": []
 				},
@@ -15084,7 +15109,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "527e0a7896f65a0f",
+					"hash": "f5bee283a9a9576a",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:1",
@@ -15114,7 +15139,7 @@
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "7c29e2fcc4b71726",
+					"hash": "3e2632b42a73fbb2",
 					"panel": "Experimental",
 					"removed": [
 						"hotbar:1",
@@ -15189,6 +15214,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -15274,6 +15300,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"ext-drag",
 						"ext-horizontal",
@@ -15321,7 +15348,7 @@
 					"added": [],
 					"commands": [],
 					"focus": null,
-					"hash": "cfda95e57871ba93",
+					"hash": "05ab9d60c3461c71",
 					"panel": "Experimental",
 					"removed": [
 						"mall-notice-close",
@@ -15409,6 +15436,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"ext-drag",
 						"ext-horizontal",
@@ -15466,7 +15494,7 @@
 						}
 					],
 					"focus": null,
-					"hash": "0c05634359726925",
+					"hash": "e2de5207f72a53bd",
 					"panel": "Experimental",
 					"removed": []
 				},
@@ -15512,6 +15540,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -15549,6 +15578,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -15588,6 +15618,7 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					]
@@ -15596,7 +15627,7 @@
 			},
 			"wheel": {
 				"changed": {},
-				"noop": 80
+				"noop": 81
 			}
 		},
 		"Fortress map": {
@@ -46817,12 +46848,13 @@
 						"experimental-tab:5",
 						"experimental-tab:6",
 						"experimental-tab:7",
+						"experimental-tab:8",
 						"experimental-ui-scale",
 						"window-drag:Experimental"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "0c05634359726925",
+					"hash": "e2de5207f72a53bd",
 					"panel": "Experimental",
 					"removed": [
 						"close-window:System",
