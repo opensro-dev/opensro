@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -22,6 +24,7 @@ has nothing to do.
 ================
 */
 func TestOnlineRecordUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-36 layout-11 authority upgrades to 37 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

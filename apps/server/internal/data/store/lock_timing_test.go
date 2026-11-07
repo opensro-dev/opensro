@@ -40,6 +40,8 @@ commit finishes.
 ================
 */
 func TestSlowCommitShowsInAConcurrentReadersWait(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := &enterworld.Character{Name: "timed"}
 	if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {

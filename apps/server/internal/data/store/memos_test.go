@@ -80,6 +80,8 @@ func TestLetterMailboxPersistsAcrossReopen(t *testing.T) {
 }
 
 func TestLetterDoorRefusesRecordsOutsidePersistedWireBounds(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 	sender := memoTestCharacter("Sender")
@@ -105,6 +107,8 @@ func TestLetterDoorRefusesRecordsOutsidePersistedWireBounds(t *testing.T) {
 }
 
 func TestLetterDoorReportsMailboxFull(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defer s.Close()
 	sender := memoTestCharacter("Sender")

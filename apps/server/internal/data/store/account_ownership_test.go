@@ -10,6 +10,8 @@ import (
 )
 
 func TestTransferCharacterOwnershipCommitsEveryMatchingCharacter(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	authority := openTest(t, dir, clock)
@@ -51,6 +53,8 @@ func TestTransferCharacterOwnershipCommitsEveryMatchingCharacter(t *testing.T) {
 }
 
 func TestTransferCharacterOwnershipRollsBackMemoryAndDiskOnCommitFailure(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	authority := openTest(t, dir, clock)
@@ -82,6 +86,8 @@ func TestTransferCharacterOwnershipRollsBackMemoryAndDiskOnCommitFailure(t *test
 }
 
 func TestTransferCharacterOwnershipRefusesAmbiguousOrInvalidRequests(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	authority := openTest(t, dir, newTestClock())
 	if err := authority.CreateCharacter(
@@ -113,6 +119,8 @@ func TestTransferCharacterOwnershipRefusesAmbiguousOrInvalidRequests(t *testing.
 }
 
 func TestTransferCharacterOwnershipRefusesRetainedGameplayChanges(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	authority := openTest(t, dir, newTestClock())
 	gold := int64(0)

@@ -58,6 +58,8 @@ duplicate index would silently drop a field from comparison).
 ================
 */
 func TestCharacterSectionsCoverEveryPersistedField(t *testing.T) {
+	t.Parallel()
+
 	characterType := reflect.TypeOf(domain.Character{})
 	persisted := 0
 	for i := 0; i < characterType.NumField(); i++ {
@@ -87,6 +89,8 @@ TestCommitSkipsCharacterWhoseSectionsMatch
 ================
 */
 func TestCommitSkipsCharacterWhoseSectionsMatch(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, copy := stageCommittedCopy(t, s)
 	before := readCharacterRecordRaw(t, s, testDivision, strings.ToLower(c.Name))
@@ -112,6 +116,8 @@ bytes for the mutated record - the save format is untouched.
 ================
 */
 func TestCommitWritesChangedSectionsByteIdentical(t *testing.T) {
+	t.Parallel()
+
 	mutations := []struct {
 		name  string
 		apply func(c *domain.Character)
@@ -151,6 +157,8 @@ them must not force an encode.
 ================
 */
 func TestCommitIgnoresEphemeralFields(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, copy := stageCommittedCopy(t, s)
 
@@ -176,6 +184,8 @@ copy would compare equal here and lose the save.
 ================
 */
 func TestCommitDetectsInPlaceMutations(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, _ := stageCommittedCopy(t, s)
 	s.MutateCharacter(c, "sections-test", func() {
@@ -214,6 +224,8 @@ loses the save.
 ================
 */
 func TestCommitDetectsInPlacePointerChildMutations(t *testing.T) {
+	t.Parallel()
+
 	t.Run("most wanted streak", func(t *testing.T) {
 		s := openTest(t, t.TempDir(), newTestClock())
 		c, _ := stageCommittedCopy(t, s)
@@ -253,6 +265,8 @@ next in-place mutation compare the record against itself and vanish.
 ================
 */
 func TestCommitDetectsMutationAfterDigestRefresh(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, _ := stageCommittedCopy(t, s)
 
@@ -278,6 +292,8 @@ TestReleaseCommittedCopyRestoresEncode
 ================
 */
 func TestReleaseCommittedCopyRestoresEncode(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, copy := stageCommittedCopy(t, s)
 
@@ -299,6 +315,8 @@ TestDoorTransactionRollbackRetainsNothing
 ================
 */
 func TestDoorTransactionRollbackRetainsNothing(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, copy := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
@@ -420,6 +438,8 @@ TestDoorTransactionDeleteDropsCopy
 ================
 */
 func TestDoorTransactionDeleteDropsCopy(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, _ := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}
@@ -448,6 +468,8 @@ TestDoorTransactionSkipsUnchangedRow
 ================
 */
 func TestDoorTransactionSkipsUnchangedRow(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c, copy := stageCommittedCopy(t, s)
 	key := committedCharacterKey{division: testDivision, id: c.ID}

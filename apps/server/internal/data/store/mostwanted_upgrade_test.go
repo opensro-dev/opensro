@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -21,6 +23,8 @@ A schema 23 authority at layout 9 upgrades to 24 with its records untouched
 ================
 */
 func TestMostWantedUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-23 layout-9 authority upgrades to 24 with its records untouched")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -61,6 +65,7 @@ upgrade has nothing to do.
 ================
 */
 func TestMostWantedExpiryUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-34 layout-11 authority upgrades to 35 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

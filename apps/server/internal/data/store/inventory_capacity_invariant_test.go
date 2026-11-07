@@ -9,6 +9,8 @@ import (
 // A persisted capacity outside 45..77, or waiting slots that overflow it,
 // is refused at load: the entry block would promise slots no tab can show.
 func TestLoadRefusesAnOutOfRangeInventoryCapacity(t *testing.T) {
+	t.Parallel()
+
 	valid := func(size, waiting uint8) *domain.Character {
 		return &domain.Character{ID: 1, Name: "expander", AccountID: "account", InventorySize: size, InventoryExpansion: waiting}
 	}
