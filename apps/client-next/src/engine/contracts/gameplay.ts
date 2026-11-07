@@ -357,6 +357,7 @@ export type GameplayCommand =
 		readonly kind: "mall-buy";
 		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
 	}
+	| { readonly kind: "mall-silk-inquire"; readonly period: number; }
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -467,6 +468,7 @@ export type GameplayCommand =
 	| { readonly kind: "cos-select"; readonly gid: number; }
 	| { readonly kind: "npc-talk"; }
 	| { readonly kind: "npc-withdraw"; }
+	| { readonly kind: "npc-event-exchange"; }
 	| { readonly kind: "npc-choice"; readonly choice: number; }
 	| { readonly kind: "npc-close"; }
 	| import("@/engine/foundation/gameplay/withdrawal").WithdrawalCommand
@@ -754,6 +756,7 @@ Presentation owns the derived skillIndex; it never travels back to simulation.
 */
 export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
+	readonly itemMallSilkHistory?: import("./item-mall").MallSilkHistoryState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;
@@ -768,6 +771,10 @@ export interface GameplayState extends MoverPublication {
 	readonly returnScroll?: import("@/engine/foundation/gameplay/return-scroll").ReturnScrollCast;
 	readonly huntingPoints?: readonly import("@/engine/foundation/gameplay/hunting").HuntingPoint[];
 	readonly npcConversation?: import("@/engine/foundation/gameplay/npc-dialogue").NpcConversation;
+	// The greeting symbol a firing 0xB47C exchange answer left on the
+	// talk window (75D030), or null: while it stands the prompt is that
+	// symbol and the talk capabilities read as cleared.
+	readonly npcEventGreeting?: string | null;
 	// Hiding CIFNpcWindow does not release the selected NPC or its service lock.
 	readonly npcWindow?: { readonly hidden: boolean; readonly revision: number; };
 	readonly restorationRevision?: number;

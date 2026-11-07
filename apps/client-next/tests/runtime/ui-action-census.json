@@ -14881,11 +14881,12 @@
 						"experimental-enchant-sparks",
 						"experimental-per-pixel-lighting",
 						"experimental-seal-under-heading",
+						"experimental-silk-history",
 						"experimental-sun-shadow"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9ce4151be3380dce",
+					"hash": "19d7cf9614ff6ba5",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14929,15 +14930,15 @@
 					"added": [
 						"experimental-break-notices",
 						"experimental-drop-plus-notices",
+						"experimental-highlight-event-notices",
 						"experimental-job-kill-notices",
 						"experimental-notice-links",
 						"experimental-plus-seven-notices",
-						"experimental-short-notices",
-						"experimental-unique-damage-rank"
+						"experimental-short-notices"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "4fed05b3ad4d7ff2",
+					"hash": "d5114298b1356436",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
@@ -14984,11 +14985,12 @@
 						"experimental-pet-pickup-filter",
 						"experimental-quest-tracker-markers",
 						"experimental-transport-auto-potion",
+						"experimental-unique-damage-rank",
 						"experimental-v-hides-companions"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "b5c0dc4dc1f74bfb",
+					"hash": "2429dd9f436cf367",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

@@ -156,6 +156,8 @@ import {
 	mallPageNumberPresentation,
 	mallCurrencyRows,
 	mallQuestionLayout,
+	mallSilkPeriodTexts,
+	mallSilkHistoryDate,
 	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
 import {
@@ -177,7 +179,7 @@ import {
 	skillTrainingReason
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
-import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
+import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
@@ -1375,6 +1377,8 @@ export function createUi(
 	}
 	let recallConfirm: number | null = null;
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
+	// The saved Academy buff's pass question (6E2840's simple-box type 9).
+	let academyBuffPass = false;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
 	// The europe variant the next plain load draws, chosen a load ahead so
@@ -3668,6 +3672,29 @@ export function createUi(
 			dirty = true;
 			return;
 		}
+		if ( id === "item-mall-silk-open" ) {
+			itemMall.openSilk();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-combo" ) {
+			itemMall.toggleSilkCombo();
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-silk-period:" ) ) {
+			itemMall.selectSilkPeriod( Number( id.slice( "item-mall-silk-period:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-inquire" && view?.gameplay ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			if ( !view.gameplay.inventoryPending ) {
+				sendGameplay( { kind: "mall-silk-inquire", period: state.silk.period } );
+			}
+			dirty = true;
+			return;
+		}
 		if ( id.startsWith( "item-mall-category:" ) ) {
 			itemMall.browse( Number( id.slice( "item-mall-category:".length ) ) );
 			dirty = true;
@@ -3967,14 +3994,16 @@ export function createUi(
 			return;
 		}
 		if (
-			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
-			id.startsWith( "npc-choice:" )
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-event-exchange" || id === "npc-close" ||
+			id === "npc-talkend" || id.startsWith( "npc-choice:" )
 		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
 					id === "npc-withdraw" ?
 					{ kind: "npc-withdraw" } :
+					id === "npc-event-exchange" ?
+					{ kind: "npc-event-exchange" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -7133,6 +7162,32 @@ export function createUi(
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
 			}
+			if ( academyBuffPass ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-buff-pass-cancel"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-buff-pass-confirm"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.academy?.savedBuff ) {
+						sendGameplay( { kind: "academy-pass-buff" } );
+					}
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
 
 			if ( groundDrop ) {
 				if ( event.kind === "key" ) {
@@ -8846,7 +8901,7 @@ export function createUi(
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const cancel = buffBoard(
+				const boardRow = buffBoard(
 					view.gameplay,
 					view.simulationTimeMs ?? 0,
 					undefined,
@@ -8854,8 +8909,15 @@ export function createUi(
 					undefined,
 					hudCopy
 				)
-					.find( row => row.id === event.id )
-					?.cancel;
+					.find( row => row.id === event.id );
+				// 6E2840: the saved Academy buff's slot asks the pass
+				// question; its Yes is the academy-buff-pass-confirm box.
+				if ( boardRow?.passBuff ) {
+					academyBuffPass = true;
+					dirty = true;
+					return;
+				}
+				const cancel = boardRow?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
 					buffDismiss = { skillId: cancel.skillId, instance: cancel.instance };
@@ -9925,6 +9987,10 @@ export function createUi(
 					buffDismiss = null;
 					dirty = true;
 				}
+			}
+			if ( (phase !== "world" || !next.gameplay?.academy?.savedBuff) && academyBuffPass ) {
+				academyBuffPass = false;
+				dirty = true;
 			}
 			if ( phase !== "world" ) autoPotionInput.reset();
 			else {
@@ -12237,8 +12303,9 @@ export function createUi(
 							helpText: icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
-							// vtable +0x70 left-button handler); the rest only hover.
-							kind: icon.id.startsWith( "count-job:" ) ? "button" : "region",
+							// vtable +0x70 left-button handler), as is the saved
+							// Academy buff's pass slot; the rest only hover.
+							kind: icon.id.startsWith( "count-job:" ) || icon.passBuff ? "button" : "region",
 							rightActivate: !!icon.cancel,
 							rect: r
 						} );
@@ -16588,7 +16655,10 @@ export function createUi(
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const capabilities = game.targetCapabilities ?? 0;
+					// 75D030 clears the talk capabilities on a firing
+					// exchange answer: while its greeting stands, the
+					// menu reads as if the capability word were zero.
+					const capabilities = game.npcEventGreeting ? 0 : (game.targetCapabilities ?? 0);
 					// 5D7870's outcome page replaces the menu of the NPC that told it.
 					const outcomePage = game.npcConversation.phase === "menu" &&
 							jobHud.outcome() === game.npcConversation.gid,
@@ -16625,7 +16695,13 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: gachaHud.noVoucherFor() === game.npcConversation.gid ?
+						prompt: game.npcEventGreeting ?
+							copy( game.npcEventGreeting ) :
+							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+							// greeting with the event's own line.
+							(capabilities & EVENT_EXCHANGE_FUNCTION) ?
+							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
+							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
 							outcomePage ?
 							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
@@ -16684,6 +16760,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canEventExchange: !!(capabilities & EVENT_EXCHANGE_FUNCTION),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -19072,12 +19149,19 @@ export function createUi(
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						hudCopy( at( 11 ).text ),
+						// 6B21F6: once this side has confirmed, the button reads
+						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
+						// Confirm caption stays until then.
+						state.approved ?
+							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
+							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
@@ -24235,7 +24319,9 @@ export function createUi(
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+					// 530D51: the type-0xC repair box (52F460) titles itself
+					// UIIT_STT_AGREEMENT_BOX, not the generic confirm title.
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
 					} ),
@@ -24248,9 +24334,15 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
+				// 52F460: the store's repair-all button (5B2B10) raises
+				// confirmation type 0x0C, which ShowByType passes on as
+				// the configure kind; the kind-0x0C arm (530D51)
+				// captions the action button UIIT_CTL_REPAIR_ALL
+				// ("Repair all"), not a generic Yes (xref 530E91).
 				button(
 					"repair-all-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
+					// 530E91: the box's action button reads UIIT_CTL_REPAIR_ALL.
+					hudCopy( "UIIT_CTL_REPAIR_ALL" ) || hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
@@ -24618,6 +24710,18 @@ export function createUi(
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
+			}
+			if ( worldVisible && academyBuffPass ) {
+				// 6E2840: the pass question is a plain simple message box
+				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
+					yes: "academy-buff-pass-confirm",
+					no: "academy-buff-pass-cancel"
+				} );
 			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
@@ -25068,7 +25172,20 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
@@ -25910,11 +26027,16 @@ export function createUi(
 					nativePage( root, ox, oy );
 					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
 					// through CIFButton_SetEnabled(false), even in the retail client.
+					// Port-only (#2269): the Experimental silk history option enables
+					// Buying List (6); Obtained List (7) stays native-disabled.
+					const silkHistoryEnabled = experimental.state().saved.silkHistory;
 					for ( const node of Object.values( root ) ) {
 						if ( node.type !== "CIFButton" ) continue;
 						// Control ids are unique: the frame X already owns "item-mall-close".
 						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
 							"item-mall-home" :
+							node.id === 6 && silkHistoryEnabled ?
+							"item-mall-silk-open" :
 							"item-mall-root:" + node.id;
 						authoredLabeledButton(
 							node,
@@ -25924,6 +26046,8 @@ export function createUi(
 							hudCopy( node.text ),
 							node.id === 4 || node.id === 5 ?
 								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+								node.id === 6 ?
+								!silkHistoryEnabled :
 								node.id !== 8 && node.id !== 3
 						);
 					}
@@ -26086,164 +26210,276 @@ export function createUi(
 					const shopOrigin = mallControl( root, 50 ).rect;
 					const shop = data.windows.ifitemmallshop!;
 					for ( const node of authoredPaintOrder( shop ) ) {
-						if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
+						if (
+							state.silk.open ?
+								node.creationSection === 3 || node.creationSection === 4 ||
+								node.creationSection === 5 || node.creationSection === 9 :
+								node.creationSection === 0 || state.category === -1 && node.creationSection === 2
+						) {
 							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
 						}
 					}
 
 					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-					const currentTab = state.tabs[state.tab];
-					const description = state.category === -1 ?
-						"UIIT_STT_SILKMALL_MAIN_INTRO" :
-						state.category === 7 ?
-						"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-						currentTab ?
-						mallDescription( currentTab.category, currentTab.tab ) :
-						"";
-					authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
-					if ( state.category === -1 ) {
+					if ( state.silk.open ) {
+						// Port-only (#2269): the Buying list page. CIFSilkBuyList's
+						// OnCreate (0x6CED10) builds these same sections but never
+						// fills a row; the rows are the worker's recorded-history
+						// publication for the selected period.
+						const history = game.itemMallSilkHistory;
+						const shown = history?.period === state.silk.period ? history : undefined;
 						authoredChrome(
-							{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+							{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
 							sx,
 							sy
 						);
-					}
-					if ( state.category === 7 ) {
-						const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-						authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-						const buyAll = mallControl( shop, 42 );
-						authoredLabeledButton(
-							buyAll,
+						authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
+						authoredText( mallControl( shop, 31 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" ) );
+						authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
+						authoredText(
+							mallControl( shop, 36 ),
 							sx,
 							sy,
-							"item-mall-buy-all",
-							hudCopy( buyAll.text ),
-							state.count === 0 || state.batchPending || !!game.inventoryPending
+							shown?.pending ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
+								shown && shown.rows.length === 0 ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
+								""
 						);
-					}
-					if ( state.category >= 0 ) {
-						for ( let index = 0; index < state.tabs.length; index++ ) {
-							const tab = state.tabs[index]!;
-							const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-							authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+						authoredText(
+							mallControl( shop, 26 ),
+							sx,
+							sy,
+							shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
+						);
+						if ( shown ) {
+							// The layout authors fourteen row bars (80..93 at y=189,
+							// step 23); the newest recorded uses fill them in order.
+							for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
+								const row = shown.rows[index]!, y = sy + 189 + index * 23;
+								quads.push(
+									...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads(
+										mallSilkHistoryDate( row.at ),
+										[ sx + 220, y, 154, 24 ],
+										full,
+										white,
+										{ hAlign: 1, vAlign: 1 }
+									)
+								);
+							}
 						}
-						const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-						if ( manager.count > 0 ) {
-							const template = {
-								...mallControl( data.windows.ifpagemanager!, 10 ),
-								client: [ 0, 0, 0, 0 ] as UiRect,
-								hAlign: 1,
-								vAlign: 1
-							};
-							authoredText(
-								{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-								sx,
-								sy,
-								"["
-							);
-							authoredText(
-								{
-									...template,
-									rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
-								},
-								sx,
-								sy,
-								"]"
-							);
-							for ( let index = 0; index < manager.count; index++ ) {
-								const page = manager.first + index;
-								const control = {
-									...template,
-									rect: [
-										manager.x + index * manager.width,
-										manager.y,
-										manager.width,
-										manager.height
-									] as UiRect
-								};
-								// The current page draws in the manager's highlight
-								// colour and styled face (mallPageNumberPresentation).
-								const presentation = mallPageNumberPresentation( page, state.page );
-								authoredText(
-									presentation.color ? { ...control, color: presentation.color } : control,
-									sx,
-									sy,
-									String( page + 1 ),
-									false,
-									presentation.fontStyle
+						authoredLabeledButton(
+							mallControl( shop, 28 ),
+							sx,
+							sy,
+							"item-mall-silk-inquire",
+							hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
+							!!shown?.pending || !!game.inventoryPending
+						);
+						const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
+						comboBox(
+							combo,
+							"item-mall-silk-combo",
+							hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
+							hudCopy( mallSilkPeriodTexts[state.silk.period]! )
+						);
+						if ( state.silk.comboOpen ) {
+							const list: UiRect = [
+								combo[0],
+								combo[1] + combo[3],
+								combo[2],
+								mallSilkPeriodTexts.length * 18
+							];
+							rect( list, [ 0, 0, 0, 1 ] );
+							blocks.push( list );
+							for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
+								const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
+								if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
+								quads.push(
+									...text.quads(
+										hudCopy( mallSilkPeriodTexts[index]! ),
+										[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
+										cell,
+										white
+									)
 								);
 								controls.push( {
-									id: "item-mall-page:" + page,
-									label: String( page + 1 ),
-									rect: authoredRect( control, sx, sy ),
-									kind: "button"
+									id: "item-mall-silk-period:" + index,
+									label: hudCopy( mallSilkPeriodTexts[index]! ),
+									rect: cell,
+									kind: "button",
+									selected: index === state.silk.period
 								} );
 							}
-							if ( manager.previous >= 0 ) {
-								const node = mallControl( data.windows.ifpagemanager!, 1 );
-								authoredButton(
-									{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.previous,
-									""
-								);
-							}
-							if ( manager.next < manager.pages ) {
-								const node = mallControl( data.windows.ifpagemanager!, 2 );
-								authoredButton(
-									{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.next,
-									""
-								);
-							}
 						}
-
-						const row = data.windows.ifitemmallshopslot!;
-						for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
-							const offer = state.offers[index];
-							const origin = mallControl( shop, 61 + index ).rect;
-							const rx = sx + origin[0], ry = sy + origin[1];
-							if ( !offer ) {
-								// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
-								// an empty slot hides its bar, name, price, silk mark, icon and
-								// buttons, but the slot and its background (50) stay.
-								authoredChrome( mallControl( row, 50 ), rx, ry );
-								continue;
+					} else {
+						const currentTab = state.tabs[state.tab];
+						const description = state.category === -1 ?
+							"UIIT_STT_SILKMALL_MAIN_INTRO" :
+							state.category === 7 ?
+							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+							currentTab ?
+							mallDescription( currentTab.category, currentTab.tab ) :
+							"";
+						authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						if ( state.category === -1 ) {
+							authoredChrome(
+								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+								sx,
+								sy
+							);
+						}
+						if ( state.category === 7 ) {
+							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+							const buyAll = mallControl( shop, 42 );
+							authoredLabeledButton(
+								buyAll,
+								sx,
+								sy,
+								"item-mall-buy-all",
+								hudCopy( buyAll.text ),
+								state.count === 0 || state.batchPending || !!game.inventoryPending
+							);
+						}
+						if ( state.category >= 0 ) {
+							for ( let index = 0; index < state.tabs.length; index++ ) {
+								const tab = state.tabs[index]!;
+								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+								authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
 							}
-							nativePage( row, rx, ry, [ 8, 10, 11 ] );
-							authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-							authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-							authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-							const icon = iconPath( offer.icon );
-							if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-							controls.push( {
-								id: "item-mall-offer:" + offer.packageId,
-								label: hudCopy( offer.name ),
-								rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-								kind: "button"
-							} );
-							for ( const node of Object.values( row ) ) {
-								if ( node.type !== "CIFButton" ) continue;
-								const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-									"item-mall-buy:" + index :
-									node.id === 6 ?
-									"item-mall-reserve:" + index :
-									"item-mall-row:" + index + ":" + node.id;
-								authoredLabeledButton(
-									node,
-									rx,
-									ry,
-									action,
-									hudCopy(
-										node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
-									),
-									(node.id === 3 ?
-										!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-										node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
+							if ( manager.count > 0 ) {
+								const template = {
+									...mallControl( data.windows.ifpagemanager!, 10 ),
+									client: [ 0, 0, 0, 0 ] as UiRect,
+									hAlign: 1,
+									vAlign: 1
+								};
+								authoredText(
+									{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
+									sx,
+									sy,
+									"["
 								);
+								authoredText(
+									{
+										...template,
+										rect: [
+											manager.x + manager.count * manager.width,
+											manager.y,
+											4,
+											manager.height
+										]
+									},
+									sx,
+									sy,
+									"]"
+								);
+								for ( let index = 0; index < manager.count; index++ ) {
+									const page = manager.first + index;
+									const control = {
+										...template,
+										rect: [
+											manager.x + index * manager.width,
+											manager.y,
+											manager.width,
+											manager.height
+										] as UiRect
+									};
+									// The current page draws in the manager's highlight
+									// colour and styled face (mallPageNumberPresentation).
+									const presentation = mallPageNumberPresentation( page, state.page );
+									authoredText(
+										presentation.color ? { ...control, color: presentation.color } : control,
+										sx,
+										sy,
+										String( page + 1 ),
+										false,
+										presentation.fontStyle
+									);
+									controls.push( {
+										id: "item-mall-page:" + page,
+										label: String( page + 1 ),
+										rect: authoredRect( control, sx, sy ),
+										kind: "button"
+									} );
+								}
+								if ( manager.previous >= 0 ) {
+									const node = mallControl( data.windows.ifpagemanager!, 1 );
+									authoredButton(
+										{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.previous,
+										""
+									);
+								}
+								if ( manager.next < manager.pages ) {
+									const node = mallControl( data.windows.ifpagemanager!, 2 );
+									authoredButton(
+										{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.next,
+										""
+									);
+								}
+							}
+
+							const row = data.windows.ifitemmallshopslot!;
+							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+								const offer = state.offers[index];
+								const origin = mallControl( shop, 61 + index ).rect;
+								const rx = sx + origin[0], ry = sy + origin[1];
+								if ( !offer ) {
+									// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+									// an empty slot hides its bar, name, price, silk mark, icon and
+									// buttons, but the slot and its background (50) stay.
+									authoredChrome( mallControl( row, 50 ), rx, ry );
+									continue;
+								}
+								nativePage( row, rx, ry, [ 8, 10, 11 ] );
+								authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+								authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+								const icon = iconPath( offer.icon );
+								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+								controls.push( {
+									id: "item-mall-offer:" + offer.packageId,
+									label: hudCopy( offer.name ),
+									rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+									kind: "button"
+								} );
+								for ( const node of Object.values( row ) ) {
+									if ( node.type !== "CIFButton" ) continue;
+									const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+										"item-mall-buy:" + index :
+										node.id === 6 ?
+										"item-mall-reserve:" + index :
+										"item-mall-row:" + index + ":" + node.id;
+									authoredLabeledButton(
+										node,
+										rx,
+										ry,
+										action,
+										hudCopy(
+											node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
+										),
+										(node.id === 3 ?
+											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+											node.id !== 4 && node.id !== 6) ||
+											!!game.inventoryPending || state.batchPending
+									);
+								}
 							}
 						}
 					}

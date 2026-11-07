@@ -10,6 +10,7 @@ The resuscitation receipt has its own revision so presentation opens once.
 ===========================================================================
 */
 import {
+	decodeEventExchangeResult,
 	decodeNpcDialogue,
 	npcGid,
 	npcConversationTransition,
@@ -21,6 +22,11 @@ import type { WireFrame } from "@/engine/contracts/network";
 const RESUSCITATION_OPEN = 0x3230;
 const NPC_DIALOG = 0x3773;
 const NPC_ACTION = 0x7338;
+// Row 0x15's send (7026B0) and its answer (75D030): the Christmas
+// event item exchange. The send carries no body and no precondition -
+// whether the bag holds the socks is the server's check, answered 2/3.
+const EVENT_EXCHANGE = 0x747c;
+const EVENT_EXCHANGE_RESULT = 0xb47c;
 const TALK_MASK = 2;
 // Row 0x16's click (5DA1B0 case 0x16): the withdrawal capability bit
 // sent back as the 0x7338 mask.
@@ -34,6 +40,10 @@ createNpcConversation
 export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 	let state: NpcConversation = { phase: "closed" };
 	let interactionMask = 0, restorationRevision = 0;
+	// 75D030: a firing exchange answer replaces the talk greeting with
+	// its symbol and clears the capabilities; the HUD reads the symbol
+	// through eventGreeting() and shows no service rows beside it.
+	let eventGreeting: string | null = null;
 	let window = { hidden: false, revision: 0 };
 	return {
 		/*
@@ -43,6 +53,7 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		*/
 		select( gid: number ) {
 			state = npcConversationTransition( state, { type: "select", gid: npcGid( gid ) } );
+			eventGreeting = null;
 			window = { hidden: false, revision: window.revision + 1 };
 		},
 		/*
@@ -111,6 +122,28 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		},
 		/*
 		================
+		exchange
+
+		Row 0x15 (capability EVENT_EXCHANGE_FUNCTION): 7026B0 sends the
+		exchange opcode with no body and no bag precondition; the
+		answer is the 0xB47C arm in receive().
+
+		The native send has no answer state - 7026B0 fires and forgets.
+		The port runs the conversation's ordinary request transition, so
+		an exchange the server never answers sits in waiting until the
+		generic deadline marks it uncertain; that wait is the port's,
+		not the native client's. Clicks landing inside it are refused
+		silently by the gameplay guard, never by a throw from here.
+		================
+		*/
+		exchange( now: number ) {
+			const next = npcConversationTransition( state, { type: "request", now } );
+			if ( next.phase !== "waiting" ) throw Error( "NPC transition" );
+			send( { opcode: EVENT_EXCHANGE, payload: new Uint8Array( 0 ) } );
+			state = next;
+		},
+		/*
+		================
 		choose
 		================
 		*/
@@ -136,6 +169,17 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 				if ( state.phase === "waiting" || state.phase === "uncertain" ) {
 					state = npcConversationTransition( state, { type: "close" } );
 					restorationRevision++;
+				}
+				return true;
+			}
+			if ( frame.opcode === EVENT_EXCHANGE_RESULT ) {
+				// 75D030: a firing byte sets the greeting and clears the
+				// capabilities; any other byte is silent. The packet is
+				// this conversation's business even when it fails to fire.
+				const symbol = decodeEventExchangeResult( frame.payload );
+				if ( symbol !== null && state.phase !== "closed" ) {
+					eventGreeting = symbol;
+					state = npcConversationTransition( state, { type: "event-result" } );
 				}
 				return true;
 			}
@@ -173,6 +217,18 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		},
 		/*
 		================
+		eventGreeting
+
+		The 75D030 greeting symbol a firing exchange answer left on the
+		talk window, or null. While it stands, the HUD shows it as the
+		prompt with the capabilities cleared, as native does.
+		================
+		*/
+		eventGreeting() {
+			return eventGreeting;
+		},
+		/*
+		================
 		interaction
 		================
 		*/
@@ -195,6 +251,7 @@ export function createNpcConversation( send: ( frame: WireFrame ) => void ) {
 		*/
 		clear() {
 			state = npcConversationTransition( state, { type: "close" } );
+			eventGreeting = null;
 			interactionMask = 0;
 			window = { hidden: false, revision: window.revision + 1 };
 			restorationRevision = 0;

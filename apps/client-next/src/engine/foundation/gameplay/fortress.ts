@@ -119,6 +119,10 @@ export interface FortressState {
 	// Each event zone's structure (fortress-map.ts): the 0x0F roster fills a
 	// record, 0x0B moves its state word and the 0x18 list its minutes.
 	readonly zones?: readonly FortressZoneRecord[];
+	// Each structure reference's upgrade targets, resolved by the server
+	// bootstrap from siegestructupgradedata.txt: 754A40's upgrade arm
+	// resolves the standing structure's variant from the same table.
+	readonly structureUpgrades?: ReadonlyMap<number, readonly number[]>;
 }
 
 /*
@@ -161,6 +165,7 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			officialRefObjId?: number;
 			taxTargets?: number;
 		}[];
+		siegeStructureUpgrades?: { ref: number; targets: number[]; }[];
 	};
 	const worlds = (b.gameWorldData ?? []).map( r => ({ id: r.gameWorldId, code: r.warName }) ),
 		fortresses = (b.siegeFortressData ?? []).map( r => ({
@@ -179,12 +184,31 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			rows.some( r => !Number.isInteger( r.id ) || r.id < 0 || r.id > 0xffffffff || typeof r.code !== "string" )
 		) throw Error( "Invalid fortress reference table" );
 	}
+	const structureUpgrades = new Map<number, readonly number[]>();
+	for ( const row of b.siegeStructureUpgrades ?? [] ) {
+		if (
+			!Number.isInteger( row?.ref ) || row.ref < 0 || row.ref > 0xffffffff ||
+			!Array.isArray( row.targets ) || row.targets.length > 16 ||
+			row.targets.some( target => !Number.isInteger( target ) || target < 0 || target > 0xffffffff )
+		) throw Error( "Invalid fortress structure upgrade table" );
+		structureUpgrades.set( row.ref, [ ...row.targets ] );
+	}
+	if ( structureUpgrades.size > 65536 ) throw Error( "Invalid fortress structure upgrade table" );
 	// 77B220 -> 862B80: preserve the complete packed word, then resolve its low u16.
 	const worldId = b.localPlayerEntry?.fortressWorld ?? 0x10001;
 	if ( !Number.isInteger( worldId ) || worldId < 0 || worldId > 0xffffffff ) {
 		throw Error( "Invalid packed fortress world" );
 	}
-	return { worldId, worlds, fortresses, forge: fortressForgeCatalog( value ), wars: [], registered: [], listId: 0 };
+	return {
+		worldId,
+		worlds,
+		fortresses,
+		forge: fortressForgeCatalog( value ),
+		wars: [],
+		registered: [],
+		listId: 0,
+		structureUpgrades
+	};
 }
 
 const FORTRESS_TIMER_PERIOD_MS = 1000;
