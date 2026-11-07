@@ -160,15 +160,15 @@ import {
 	fortressTaxNotice,
 	fortressDismissNotice,
 	fortressStructureNotice,
-	type FortressApplication
+	type FortressApplication,
+	type FortressStructureNoticeReference
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
 	FORTRESS_AIDE_CAPABILITY,
 	FORTRESS_STRUCTURE_LIST,
 	FORTRESS_STRUCTURE_REPAIR,
-	FORTRESS_STRUCTURE_UPGRADE,
-	fortressVariantTarget
+	FORTRESS_STRUCTURE_UPGRADE
 } from "@/engine/foundation/gameplay/fortress-map";
 import {
 	type FortressForgeItem,
@@ -377,13 +377,8 @@ player models, an item reference and the NPCs a ground click must clear.
 interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
-	readonly item: (
-		refObjId: number
-	) => { readonly typeFlags: number; readonly name: string; } | undefined;
-	readonly structureName?: ( refObjId: number ) => string | undefined;
-	readonly structureFacts?: (
-		refObjId: number
-	) => { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined;
+	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly structure?: ( refObjId: number ) => FortressStructureNoticeReference | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -4020,7 +4015,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( mostWanted.receive( frame ) ) {
+				if ( mostWanted.receive( frame, now ) ) {
 					dirty = true;
 					return true;
 				}
@@ -4311,21 +4306,11 @@ Packet handling must not depend on which HUD panel is currently open.
 						const structure = fortressNext.zones?.find( row =>
 							row.zone === fortressNext.service?.reference
 						);
-						const standing = structure?.ref ?
-							worldReferences.structureFacts?.( structure.ref ) :
-							undefined;
-						let variantName: string | undefined;
-						if ( structure?.ref ) {
-							const variant = fortressVariantTarget(
-								fortressNext.structureUpgrades?.get( structure.ref ),
-								structure.ref
-							);
-							if ( variant !== structure.ref ) {
-								variantName = worldReferences.structureName?.( variant );
-							}
-						}
 						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
-							fortressStructureNotice( fortressNext, standing, variantName );
+							fortressStructureNotice(
+								fortressNext,
+								structure?.ref ? worldReferences.structure?.( structure.ref ) : undefined
+							);
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {

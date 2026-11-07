@@ -85,17 +85,17 @@ test(
 						jobs.delete( id );
 					}
 				};
-				const ui = createUi(
+				const ui = createUi( {
 					assets,
-					c => commands.push( c ),
-					s => {
+					commands: c => commands.push( c ),
+					publish: s => {
 						scene = s;
 						renderer.setUi( s );
 					},
-					( id, image ) => renderer.setUiTexture( id, image ),
-					location.origin,
-					"http://fixture.invalid"
-				);
+					texture: ( id, image ) => renderer.setUiTexture( id, image ),
+					base: location.origin,
+					apiBase: "http://fixture.invalid"
+				} );
 				const platform = createPlatform(
 					document.querySelector( "canvas" ),
 					document.querySelector( "output" ),

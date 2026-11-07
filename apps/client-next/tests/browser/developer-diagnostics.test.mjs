@@ -171,17 +171,17 @@ async function hudToolsFixture( page ) {
 		const assets = createAssets(), renderer = createRenderer( canvas );
 		let scene, semantics;
 		const commands = [], worldClicks = [], actions = [];
-		const ui = createUi(
+		const ui = createUi( {
 			assets,
-			command => commands.push( command ),
-			value => {
+			commands: command => commands.push( command ),
+			publish: value => {
 				scene = value;
 				renderer.setUi( value );
 			},
-			( id, image ) => renderer.setUiTexture( id, image ),
-			location.origin,
-			"https://fixture.invalid"
-		);
+			texture: ( id, image ) => renderer.setUiTexture( id, image ),
+			base: location.origin,
+			apiBase: "https://fixture.invalid"
+		} );
 		const platform = createPlatform(
 			canvas,
 			document.createElement( "output" ),

@@ -1,56 +1,29 @@
 /*
 ===========================================================================
 
-transport-auto-potion.ts - the trade transport's own automatic HP potion
+transport-auto-potion.ts - shared companion HP potions and abnormal cures
 
-Port-only, not native (owner, 2026-10-24, trader thread item 6): the
-Experimental row "Transport auto-potion". v1.150's automatic potion
-(70C550) watches only the player: a transport potion on its HP quickslot
-is spent on the selected companion when the PLAYER's HP drops. With the
-row on, the player's own summoned transport is watched instead: when its
-HP falls to the auto-potion HP percentage, a transport HP potion
-(ITEM_ETC_COS_HP_POTION_*, ETC 3/3/1/4) from the bag is used on it through
-the ordinary item use, so the server keeps every rule (range, cooldown,
-death). Off, the default, is the native client.
+Port-only, not native: the Experimental companion auto-potion option.
+The T dialog binds one HP potion and one pet universal pill for owned riding
+transports, trade transports and attack pets, with separate HP thresholds.
+Item use remains the native request: the server validates every consumption.
+Off is the native player-only automatic recovery.
 
 ===========================================================================
 */
 import type { CosRecord, InventoryItem } from "@/engine/contracts/gameplay";
 import { itemCooldown, type ItemCooldown } from "./item-cooldowns";
+import { autoPotionEntry, autoPotionItemSlot } from "./auto-potion";
+import type { QuickSlot } from "./quickslots";
 
-// A trade transport's COS band (the reference's TID4, as cosClass reads it).
-const TRANSPORT_BAND = 2;
 // ETC 3/3/1/4: the transport and pet HP potion family.
 const ETC_FAMILY_MASK = 0x7c;
 const ETC_FAMILY = 0x6c;
 const POTION_GROUP = 1;
 const COS_HP_POTION_SUBTYPE = 4;
-// The first bag slot after the equipment.
-const FIRST_BAG_SLOT = 13;
 // A sent use waits for its answer (inventoryPending); a refused one is
-// retried no faster than this.
-export const TRANSPORT_POTION_RETRY_MS = 1000;
-
-/*
-================
-TransportPotionInput
-================
-*/
-export interface TransportPotionInput {
-	readonly records: readonly CosRecord[];
-	// The transport reference's maximum HP, 0 when it is not loaded.
-	readonly maxHp: ( refObjId: number ) => number;
-	readonly items: readonly InventoryItem[];
-	readonly cooldowns: readonly ItemCooldown[];
-	// The native auto-potion HP percentage (1-100).
-	readonly percent: number;
-	readonly now: number;
-	// When the last automatic use was sent, or undefined.
-	readonly lastSentMs?: number;
-	// An inventory transaction is open, or a window that refuses item use
-	// (stall, shop, storage) is open.
-	readonly blocked: boolean;
-}
+// retried after the server's 1100 ms lane plus one 100 ms scheduling margin.
+export const TRANSPORT_POTION_RETRY_MS = 1200;
 
 /*
 ================
@@ -84,30 +57,127 @@ export function isTransportHpPotion( typeFlags: number ): boolean {
 
 /*
 ================
-transportAutoPotion
+CompanionPotionInput
 
-The use to send now, or null. The threshold is the native auto-potion
-arithmetic (70C28F): percent / 100 as float32, times the maximum,
-truncated; at or below it the transport is healed.
+Port-only, not native. Maxima and abnormal masks are authoritative snapshots;
+never infer missing HP from a selected actor or cure an unrelated companion.
 ================
 */
-export function transportAutoPotion(
-	input: TransportPotionInput
+export interface CompanionPotionInput {
+	readonly records: readonly CosRecord[];
+	readonly items: readonly InventoryItem[];
+	readonly cooldowns: readonly ItemCooldown[];
+	readonly now: number;
+	readonly lastSentMs?: number;
+	readonly blocked: boolean;
+	readonly settings: {
+		readonly transport: number;
+		readonly attack: number;
+		readonly bindings: { readonly hp: number; readonly cure: number; };
+	};
+	readonly quickSlots: readonly QuickSlot[];
+	readonly maxima: readonly { readonly gid: number; readonly maxHp: number; }[];
+	readonly vitals: readonly { readonly gid: number; readonly abnormal?: number; }[];
+}
+/*
+================
+companionAutoPotion
+
+One request per retry interval across both companions. Shared item cooldowns
+remain server-owned. Cures precede HP only on an actually afflicted companion.
+================
+*/
+export function companionAutoPotion(
+	input: CompanionPotionInput
 ): { readonly slot: number; readonly companionGid: number; } | null {
-	if ( input.blocked ) return null;
-	if ( input.lastSentMs !== undefined && input.now - input.lastSentMs < TRANSPORT_POTION_RETRY_MS ) return null;
-	const transport = input.records.find( record => record.band === TRANSPORT_BAND && !record.dead && record.hp > 0 );
-	if ( !transport ) return null;
-	const maxHp = input.maxHp( transport.refObjId );
-	if ( !(maxHp > 0) ) return null;
-	const threshold = Math.trunc( maxHp * Math.fround( input.percent / 100 ) ) >>> 0;
-	if ( transport.hp > threshold ) return null;
-	const potion = input.items
-		.filter( item =>
-			item.slot >= FIRST_BAG_SLOT && item.quantity > 0 && isTransportHpPotion( item.typeFlags ) &&
-			!itemCooldown( input.cooldowns, item, input.now )
-		)
-		.sort( ( a, b ) => a.slot - b.slot )[0];
-	if ( !potion ) return null;
-	return { slot: potion.slot, companionGid: transport.gid };
+	if (
+		input.blocked ||
+		input.lastSentMs !== undefined && input.now >= input.lastSentMs &&
+			input.now - input.lastSentMs < TRANSPORT_POTION_RETRY_MS
+	) return null;
+	const bindings = input.settings.bindings;
+	for ( const kind of [ "cure", "hp" ] as const ) {
+		const entry = autoPotionEntry( bindings[kind] );
+		if ( kind === "cure" && !entry.enabled ) continue;
+		const binding = input.quickSlots.find( row => row.slot === entry.slot );
+		const slot = binding ? autoPotionItemSlot( binding, input.items ) : null;
+		const item = slot === null ? undefined : input.items.find( row => row.slot === slot );
+		if ( !item || item.quantity <= 0 || itemCooldown( input.cooldowns, item, input.now ) ) continue;
+		const flags = item.typeFlags;
+		if (
+			kind === "hp" ?
+				!isTransportHpPotion( flags ) :
+				!((flags & ETC_FAMILY_MASK) === ETC_FAMILY && (flags >>> 7 & 15) === 2 && (flags >>> 11 & 31) === 7)
+		) continue;
+		for ( const record of input.records ) {
+			if ( record.dead || record.hp <= 0 || record.band !== 1 && record.band !== 2 && record.band !== 3 ) {
+				continue;
+			}
+			const channel = autoPotionEntry( input.settings[record.band === 3 ? "attack" : "transport"] );
+			if ( kind === "hp" && !channel.enabled ) continue;
+			if ( kind === "cure" ) {
+				// Port-only: attempt the pill for any negative status; the server owns cure eligibility.
+				if ( (input.vitals.find( vital => vital.gid === record.gid )?.abnormal ?? 0) === 0 ) continue;
+			} else {
+				const maxHp = input.maxima.find( row => row.gid === record.gid )?.maxHp ?? 0;
+				if (
+					!(maxHp > 0) || record.hp >= maxHp ||
+					record.hp > Math.trunc( maxHp * Math.fround( channel.percent / 100 ) )
+				) continue;
+			}
+			return { slot: item.slot, companionGid: record.gid };
+		}
+	}
+	return null;
+}
+
+/*
+================
+PlayerVigorInput
+
+Port-only recovery channels; the native player settings packet stays unchanged.
+================
+*/
+export interface PlayerVigorInput
+	extends Pick<CompanionPotionInput, "items" | "quickSlots" | "cooldowns" | "now" | "lastSentMs" | "blocked"> {
+	readonly settings: { readonly vigorHp: number; readonly vigorMp: number; };
+	readonly vital?: {
+		readonly hp?: number;
+		readonly mp?: number;
+		readonly maxHp?: number;
+		readonly maxMp?: number;
+		readonly abnormal?: number;
+	};
+}
+/*
+================
+playerVigorAutoPotion
+
+Both thresholds may bind one vigor stack; admit only one request per retry.
+================
+*/
+export function playerVigorAutoPotion( input: PlayerVigorInput ): { readonly slot: number; } | null {
+	const v = input.vital;
+	if (
+		input.blocked || !(v?.hp && v.hp > 0) ||
+		input.lastSentMs !== undefined && input.now >= input.lastSentMs &&
+			input.now - input.lastSentMs < TRANSPORT_POTION_RETRY_MS
+	) return null;
+	for ( const key of [ "vigorHp", "vigorMp" ] as const ) {
+		const entry = autoPotionEntry( input.settings[key] ), hp = key === "vigorHp";
+		const current = hp ? v.hp : v.mp, max = hp ? v.maxHp : v.maxMp;
+		if (
+			!entry.enabled || current === undefined || !max || current >= max ||
+			current > Math.trunc( max * entry.percent / 100 ) || hp && ((v.abnormal ?? 0) & 0x20) !== 0
+		) continue;
+		const binding = input.quickSlots.find( row => row.slot === entry.slot );
+		const slot = binding ? autoPotionItemSlot( binding, input.items ) : null;
+		const item = input.items.find( row => row.slot === slot );
+		if (
+			!item || item.quantity <= 0 || (item.typeFlags & 0xffff) !== 0x18ec ||
+			itemCooldown( input.cooldowns, item, input.now )
+		) continue;
+		return { slot: item.slot };
+	}
+	return null;
 }

@@ -8,12 +8,21 @@ SQLite's automatic checkpoint runs inside whichever commit crosses its
 copy and fsync the others never see coming (the 1,126 ms commit in one
 skill's store update). configureDB now sets wal_autocheckpoint=0 on the
 writer handle, and this goroutine copies the frames instead: every few
-seconds it runs wal_checkpoint(PASSIVE) on its own handle - never
-RESTART or TRUNCATE, so a reader is never waited on and Close keeps its
-final TRUNCATE. Durability is unchanged: committed transactions were
-already durable in the WAL at their commit; the checkpoint only copies
-pages into the main file, and a crash mid-checkpoint leaves the WAL
-whole for the next boot's replay.
+seconds it runs wal_checkpoint(PASSIVE) on its own handle, so a reader
+is never waited on and durability is unchanged: committed transactions
+were already durable in the WAL at their commit; the checkpoint only
+copies pages into the main file, and a crash mid-checkpoint leaves the
+WAL whole for the next boot's replay.
+
+PASSIVE never shrinks the file, so a WAL that grows behind a reader
+keeps its high-water mark forever - observed live on 2026-11-05: the
+WAL peaked at 9.6 GB while checkpoints completed, and slow commits
+clustered behind it. When a cycle drains completely yet leaves the
+file past walCeilingBytes, the same lane escalates once to
+wal_checkpoint(TRUNCATE) - the reset Close already performs at
+shutdown - so the file returns to the limit the next commits reuse.
+The ceiling keeps an ordinary backup pin from ever reaching it, and a
+cycle that ends starved never truncates: no door ever waits on this.
 
 The counters land on /transport/metrics inside store_lock
 (lock_timing.go), so a checkpoint starved by a long-lived reader (a
@@ -26,7 +35,10 @@ that mysteriously replays for minutes.
 package store
 
 import (
+	"context"
+	"database/sql"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -53,6 +65,13 @@ const (
 	// starved whatever the busy counters say: boot replays every byte
 	// of it.
 	walStarvationBytes = 64 << 20
+	// walCeilingBytes is the drained WAL size past which one cycle
+	// resets the file with wal_checkpoint(TRUNCATE). It stands at four
+	// times the starvation line so an ordinary backup hold - the WAL
+	// the 2026-11-05 backup pinned was 68 MB when the starved line
+	// first fired - never reaches it; only a file stuck at its
+	// high-water mark after the reader left pays the shrink.
+	walCeilingBytes = 256 << 20
 	// walBusyStreakToLog is the run of busy-ended cycles that names
 	// the starvation in the log; the counters carry it from the first.
 	walBusyStreakToLog = 3
@@ -77,9 +96,15 @@ type walCheckpointer struct {
 	done    chan struct{}
 	stopped chan struct{}
 
+	// ceiling is walCeilingBytes held in an atomic so the tests can
+	// stand at a smaller file; production never changes it.
+	ceiling atomic.Int64
+
 	cycles      atomic.Int64
 	busyCycles  atomic.Int64
 	busyStreak  atomic.Int64
+	resets      atomic.Int64
+	resetBusy   atomic.Int64
 	walBytes    atomic.Int64
 	walBytesMax atomic.Int64
 
@@ -103,6 +128,7 @@ func startWALCheckpointer(dbPath string) *walCheckpointer {
 		done:    make(chan struct{}),
 		stopped: make(chan struct{}),
 	}
+	c.ceiling.Store(walCeilingBytes)
 	go c.run()
 	return c
 }
@@ -158,7 +184,9 @@ ended starved. PASSIVE's own busy flag only says the checkpoint could
 not run at all; the quieter starvation - frames it could not move
 past the oldest reader, expected under a backup - reads in the
 result's last two columns. Either way it counts toward the
-starvation line; it is never an error worth failing on.
+starvation line; it is never an error worth failing on. A drained
+cycle whose file still stands past the ceiling resets it in place
+(resetWAL) before the size lands on the counters.
 ================
 */
 func (c *walCheckpointer) cycle() (starved bool) {
@@ -184,6 +212,11 @@ func (c *walCheckpointer) cycle() (starved bool) {
 	}
 
 	size := walFileBytes(c.dbPath)
+	if !starved && size > c.ceilingBytes() && c.resetWAL(db) {
+		// The reset dropped the file; report the size it left, not
+		// the high-water mark this cycle started from.
+		size = walFileBytes(c.dbPath)
+	}
 	c.walBytes.Store(size)
 	for {
 		peak := c.walBytesMax.Load()
@@ -201,6 +234,71 @@ func (c *walCheckpointer) cycle() (starved bool) {
 		c.logStarved(size)
 	}
 	return starved
+}
+
+/*
+================
+walCheckpointer.ceilingBytes
+
+The drained size past which a cycle resets the file: the stored
+value, or walCeilingBytes when nothing stored one (a checkpointer
+built outside startWALCheckpointer).
+================
+*/
+func (c *walCheckpointer) ceilingBytes() int64 {
+	if ceiling := c.ceiling.Load(); ceiling > 0 {
+		return ceiling
+	}
+	return walCeilingBytes
+}
+
+/*
+================
+walCheckpointer.resetWAL
+
+One wal_checkpoint(TRUNCATE) on the cycle's own handle: the same
+reset Close runs, taken here because a completed checkpoint left
+the file past the ceiling and PASSIVE alone never returns those
+pages to the filesystem. Only a drained cycle reaches it, so the
+reader that pinned the file is already gone.
+
+TRUNCATE, unlike PASSIVE, holds off new writers while it is pending
+and waits on any reader still using the WAL through the busy handler.
+Under the handle's busy_timeout (5 s) one live read would stall every
+door commit behind this lane for up to that long. The reset therefore
+runs on a pinned connection with busy_timeout=0: a writer or reader in
+the way makes it busy at once, which counts and retries next cycle.
+Returns whether the file was reset.
+================
+*/
+func (c *walCheckpointer) resetWAL(db *sql.DB) bool {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Warnf("store: wal reset connection: %v", err)
+		return false
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "PRAGMA busy_timeout=0"); err != nil {
+		log.Warnf("store: wal reset busy_timeout: %v", err)
+		return false
+	}
+	var busyFlag, walPages, checkpointedPages int
+	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busyFlag, &walPages, &checkpointedPages)
+	if isBusy(err) {
+		c.resetBusy.Add(1)
+		return false
+	}
+	if err != nil {
+		log.Warnf("store: wal_checkpoint(TRUNCATE) failed: %v", err)
+		return false
+	}
+	if busyFlag != 0 {
+		c.resetBusy.Add(1)
+		return false
+	}
+	c.resets.Add(1)
+	return true
 }
 
 /*
@@ -251,4 +349,21 @@ func walFileBytes(dbPath string) int64 {
 		return 0
 	}
 	return info.Size()
+}
+
+/*
+================
+isBusy
+
+Whether err is SQLite's SQLITE_BUSY ("database is locked"): with
+busy_timeout=0 a reset that meets a writer or reader returns it at
+once instead of waiting.
+================
+*/
+func isBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "SQLITE_BUSY") || strings.Contains(msg, "database is locked")
 }

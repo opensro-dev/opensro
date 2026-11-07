@@ -224,6 +224,14 @@ func newGameplayPlane(
 			items.UniqueRules.GapExempt, items.UniqueRules.PopTicket, items.UniqueRules.MaxLevelLoot, items.UniqueRules.SealDrops,
 			progression.EnvUniqueGapExempt, progression.EnvUniquePopTicket, progression.EnvUniqueMaxLevelLoot, progression.EnvUniqueSealDrops)
 	}
+	// SRO_JANGAN_XL_POTIONS (port-only, not native; owner 2026-11-07):
+	// the X-Large potions join Jangan's potion tab at Hotan's price, as
+	// extra goods on the same catalogue. "off" is the native Jangan shop.
+	xlGoods, err := commerce.JanganXLPotionGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	extraGoods = append(extraGoods, xlGoods...)
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
 	items.TradeTiers = action.TradeTiersFromEnv()
@@ -561,6 +569,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
+	// a character to the 2.5-page inventory base, never lowers one.
+	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
+	if game.deps.InventoryPages {
+		log.Infof("inventory: 2.5-page base ON (%s); off is the native one page", enterworld.EnvInventoryPages)
+	}
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
 	// Port-only, not native: the Bandit Den scroll counts down half as long,
@@ -735,6 +749,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
+	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
+	if err != nil {
+		return err
+	}
 	if stats.Growth.Enabled {
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate

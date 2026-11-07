@@ -15,7 +15,7 @@ test('a failed UI child cannot strand sibling owners or leave the published scen
  const original=Object.getOwnPropertyDescriptor(globalThis,'__uiCleanupOwners');t.after(()=>{if(original)Object.defineProperty(globalThis,'__uiCleanupOwners',original);else delete globalThis.__uiCleanupOwners;});
  for(const failed of Object.keys(factories)){
   const disposed=[],scenes=[];globalThis.__uiCleanupOwners=Object.fromEntries(Object.keys(factories).map(key=>[key,{dispose(){disposed.push(key);if(key===failed)throw Error(key);}}]));
-  const ui=createUi({},()=>{},scene=>scenes.push(scene),()=>{},'https://fixture.invalid','https://fixture.invalid');
+  const ui=createUi({assets:{},commands:()=>{},publish:scene=>scenes.push(scene),texture:()=>{},base:'https://fixture.invalid',apiBase:'https://fixture.invalid'});
   assert.throws(()=>ui.dispose(),error=>error instanceof AggregateError&&error.errors.length===1);
   assert.deepEqual(disposed.sort(),Object.keys(factories).sort());assert.deepEqual(scenes,[null]);ui.dispose();assert.equal(disposed.length,6);
  }

@@ -40,7 +40,10 @@ export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 				response.end();
 				return;
 			}
-			if ( !pathname.startsWith( "/assets/" ) ) return next();
+			// The published tree is served whole: /assets and the HD set's
+			// own /hd subtree (#2061) take this same path in dev, preview
+			// and the release server, so no route exists only here.
+			if ( !pathname.startsWith( "/assets/" ) && !pathname.startsWith( "/hd/" ) ) return next();
 			if ( request.method && request.method !== "GET" && request.method !== "HEAD" ) {
 				response.statusCode = 405;
 				response.setHeader( "Allow", "GET, HEAD" );
