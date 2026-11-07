@@ -392,13 +392,19 @@ export function createPresentationActions() {
 					// this cast, so the bite plays the authored pet-rend clip on attack1's
 					// timing (foundation/animation/bear-roar.ts withWolfRend).
 					const emote = entity.emote;
+					const penguin = entity.kind === "cos" && /^COS_P_PENGUIN/.test( resource.codename ) && emote &&
+						emote.action >= 34 && emote.action <= 36;
 					if (
-						entity.kind === "cos" && emote && emote.action >= 4 && emote.action <= 6 &&
-						/^COS_P_WOLF/.test( resource.codename ) &&
+						emote &&
+						(penguin ||
+							entity.kind === "cos" && emote.action >= 4 && emote.action <= 6 &&
+								/^COS_P_WOLF/.test( resource.codename )) &&
 						Math.abs( emote.atMs - (cast.receivedAtMs ?? emote.atMs) ) <= 250
 					) {
 						for ( const [index, phase] of phases.entries() ) {
-							if ( phase?.clip === "attack1" ) phases[index] = { ...phase, clip: "pet-rend" };
+							if ( phase?.clip === "attack1" ) {
+								phases[index] = { ...phase, clip: penguin ? "pet-blizzard" : "pet-rend" };
+							}
 						}
 					}
 					const age = simulationMs !== undefined && cast.receivedAtMs !== undefined ?

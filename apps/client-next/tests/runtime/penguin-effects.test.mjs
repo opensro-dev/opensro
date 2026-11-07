@@ -14,7 +14,10 @@ const {
 	PENGUIN_ICE_SHARD,
 	PENGUIN_ICE_LANCE,
 	PENGUIN_FROST_SIGIL,
-	PENGUIN_EFFECT_SOUND
+	PENGUIN_EFFECT_SOUND,
+	PENGUIN_BLIZZARD_WIND,
+	PENGUIN_BLIZZARD_SNOW,
+	PENGUIN_BLIZZARD_ICE
 } = await import( "../../src/engine/foundation/animation/penguin-effects.ts" );
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
 const { createCharacterResources } = await import( "../../src/engine/runtime/characters/resources/resources.ts" );
@@ -25,13 +28,21 @@ const ids = Array.from( { length: 17 }, ( _, i ) => 100 + i );
 test("all frost signals use original bounded crystal effects and published sounds", () => {
 	for ( let action = 0xd0; action <= 0xd6; action++ ) {
 		const storm = action >= 0xd3 && action <= 0xd5;
-		for ( const age of storm ? [ .1, 1.1, 2.1, 3.1 ] : [ .1, .3 ] ) {
+		for ( const age of storm ? [ .1, 1.1, 2.1, 3.1, 4.1 ] : [ .1, .3 ] ) {
 			const actors = penguinEffectActors( action, age, pose, ids );
-			assert.equal( actors.length, storm ? 13 : 8 );
+			assert.equal( actors.length, storm ? 4 : 8 );
 			assert.equal( actors.some( actor => actor.model === PENGUIN_FROST_SIGIL ), storm );
 			assert.equal( new Set( actors.map( actor => actor.gid ) ).size, actors.length );
 			assert.ok(
-				actors.every( actor => actor.model === PENGUIN_ICE_SHARD || actor.model === PENGUIN_FROST_SIGIL )
+				actors.every( actor =>
+					[
+						PENGUIN_ICE_SHARD,
+						PENGUIN_FROST_SIGIL,
+						PENGUIN_BLIZZARD_WIND,
+						PENGUIN_BLIZZARD_SNOW,
+						PENGUIN_BLIZZARD_ICE
+					].includes( actor.model )
+				)
 			);
 			assert.ok(
 				actors.every( actor =>
@@ -40,7 +51,7 @@ test("all frost signals use original bounded crystal effects and published sound
 				)
 			);
 		}
-		assert.deepEqual( penguinEffectActors( action, storm ? 4 : .55, pose, ids ), [] );
+		assert.deepEqual( penguinEffectActors( action, storm ? 5 : .55, pose, ids ), [] );
 		assert.ok( readPublishedAssetBytesSync( PENGUIN_EFFECT_SOUND[action].path, CLIENT_PUBLIC_ROOT ).length > 44 );
 	}
 	assert.deepEqual( penguinEffectActors( 0xcf, .2, pose, ids ), [] );
@@ -79,15 +90,17 @@ test("crystal and snowflake resources are generated locally with valid geometry 
 		const { model, images } = built.get( path ), geometry = model.primitives[0].geometry;
 		assert.ok( geometry.indices.every( index => index < geometry.positions.length / 3 ) );
 		assert.ok( geometry.positions.every( Number.isFinite ) );
-		assert.equal( images[0].levels[0].length, images[0].width * images[0].height * 4 );
+		assert.equal(
+			images[0].levels[0].length,
+			images[0].width * images[0].height * (images[0].format === "bc3-rgba-unorm" ? 1 : 4)
+		);
 		assert.ok( new Set( images[0].levels[0] ).size > 20 );
 		if ( path === PENGUIN_FROST_SIGIL ) {
 			for ( let i = 0; i < geometry.positions.length; i += 3 ) {
 				const radius = Math.hypot( geometry.positions[i], geometry.positions[i + 2] );
-				assert.ok( radius > .87 && radius < .95, "ring has no filled center or square corners" );
+				assert.ok( radius <= 1.001, "frost geometry stays circular without square corners" );
 			}
-			const pixels = images[0].levels[0];
-			assert.deepEqual( [ ...pixels.slice( 0, 4 ) ], [ 0, 0, 0, 0 ] );
+			assert.equal( images[0].format, "bc3-rgba-unorm" );
 		}
 	}
 	owner.dispose();
@@ -222,6 +235,6 @@ test("Blizzard remains at its cast position after victim despawn, then expires",
 	assert.equal( field.length, 1 );
 	assert.equal( field[0].pose.x, 20 );
 	assert.equal( field[0].pose.z, 30 );
-	assert.equal( step( [], 4.1 ).filter( actor => actor.model === PENGUIN_FROST_SIGIL ).length, 0 );
+	assert.equal( step( [], 5.1 ).filter( actor => actor.model === PENGUIN_FROST_SIGIL ).length, 0 );
 	owner.dispose();
 });

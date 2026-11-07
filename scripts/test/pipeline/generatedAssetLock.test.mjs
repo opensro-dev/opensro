@@ -82,6 +82,30 @@ export const rm = realFs.rm;
 export const stat = realFs.stat;
 export const writeFile = realFs.writeFile;
 `;
+// The publish-race wrapper: the first publish inside the claimed mutex
+// directory removes the whole lock dir underneath itself - the
+// empty-state release landing between the claim and its owner record,
+// which the retrying publisher must survive.
+const MUTEX_PUBLISH_FS_WRAPPER_SOURCE = `import { promises as realFs } from "node:fs";
+import path from "node:path";
+let injected = false;
+export const mkdir = realFs.mkdir;
+export const readFile = realFs.readFile;
+export const readdir = realFs.readdir;
+export const realpath = realFs.realpath;
+export const rename = realFs.rename;
+export const rm = realFs.rm;
+export const stat = realFs.stat;
+export async function writeFile( target, data, options ) {
+	const text = String( target );
+	if ( !injected && text.includes( path.sep + "mutex" + path.sep ) ) {
+		injected = true;
+		console.error( "INJECTED lock dir removal during the mutex publish" );
+		await realFs.rm( path.dirname( path.dirname( text ) ), { recursive: true, force: true } );
+	}
+	return realFs.writeFile( target, data, options );
+}
+`;
 const MUTEX_RACE_DRIVER = `
 import { register } from "node:module";
 import path from "node:path";
@@ -534,6 +558,16 @@ test("a contender whose lock dir is removed before its mutex claim still enters"
 	const child = start( f, { cwd: f.owner, language: "node", driver: MUTEX_RACE_DRIVER } );
 	assert.equal( await child.finished, 0, child.output );
 	assert.match( child.output, /INJECTED lock dir removal/ );
+	assert.match( child.output, /ENTERED/ );
+});
+
+test("a contender whose lock dir is removed during its mutex record publish still enters", async ( t ) => {
+	const f = await fixture( t );
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceHook.mjs" ), MUTEX_RACE_HOOK_SOURCE );
+	await writeFile( path.join( f.owner, "scripts", "mutexRaceFsWrapper.mjs" ), MUTEX_PUBLISH_FS_WRAPPER_SOURCE );
+	const child = start( f, { cwd: f.owner, language: "node", driver: MUTEX_RACE_DRIVER } );
+	assert.equal( await child.finished, 0, child.output );
+	assert.match( child.output, /INJECTED lock dir removal during the mutex publish/ );
 	assert.match( child.output, /ENTERED/ );
 });
 

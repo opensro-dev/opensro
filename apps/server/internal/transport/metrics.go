@@ -208,6 +208,10 @@ type Metrics struct {
 	// StoreLock is the authority store's lock waits, write holds and commit
 	// phases (store/lock_timing.go), when the GameWorld installed them.
 	StoreLock any `json:"store_lock,omitempty"`
+	// TickZones is every tick zone's exact cumulative count and time
+	// since boot, keyed "<kind>:<name>" (simulation/zone_ledger.go,
+	// #2824): two snapshots give each zone's milliseconds per tick.
+	TickZones map[string]TickZone `json:"tick_zones,omitempty"`
 	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
 	// goroutines since start (runtime_stats.go).
 	Runtime RuntimeStats `json:"runtime"`
@@ -235,6 +239,31 @@ the transport never imports the store that counts.
 */
 func (h *Hub) SetEconomyMetrics(read func() map[string]uint64) {
 	h.economyMetrics.Store(&read)
+}
+
+/*
+==================
+TickZone
+
+One tick zone's totals in tick_zones: how many times it ran and its
+summed wall time, both cumulative since boot.
+==================
+*/
+type TickZone struct {
+	Count   uint64  `json:"count"`
+	TotalMs float64 `json:"total_ms"`
+}
+
+/*
+==================
+SetTickZoneMetrics
+
+Installs the provider of the tick_zones block, as SetNavigationMetrics
+does: the transport never imports the simulation that times the zones.
+==================
+*/
+func (h *Hub) SetTickZoneMetrics(read func() map[string]TickZone) {
+	h.tickZoneMetrics.Store(&read)
 }
 
 /*
@@ -376,6 +405,9 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.storeLockMetrics.Load(); read != nil && *read != nil {
 		metrics.StoreLock = (*read)()
+	}
+	if read := h.tickZoneMetrics.Load(); read != nil && *read != nil {
+		metrics.TickZones = (*read)()
 	}
 	if read := h.placementMetrics.Load(); read != nil && *read != nil {
 		if counts := (*read)(); len(counts) > 0 {
