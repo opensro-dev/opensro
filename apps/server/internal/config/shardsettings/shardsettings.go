@@ -151,6 +151,10 @@ var Settings = []Setting{
 	// Grab and growth pets at four fifths of their run speed (#320): never
 	// deployed, so the deployment default stays native.
 	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
+	// Port-only, not native: every pet bag holds five pages of 28 slots
+	// (#2770). The owner approved it on by default (2026-11-07); "off" is
+	// native: a grab pet holds 28 slots and a transport its authored size.
+	{Env: "SRO_PET_INVENTORY_PAGES", NomadVar: "pet_inventory_pages", Default: "on"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},

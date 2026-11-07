@@ -118,6 +118,7 @@ func publicRules() publicstats.RulesResponse {
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
 	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
+	petInventoryPagesOn, _ := companion.PetInventoryPagesEnabled()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
 	flagWar, _ := action.FlagWarSettingsFromEnv()
@@ -165,6 +166,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Growth pets use their original skills and stats.",
 				Now:    "Bear, wolf, penguin and crow have two active and three passive skill rows. Monster equipment drops can also yield same-degree pet gear with up to six bonuses; the database controls its relative drop chance.",
 				Why:    "Owner-approved attack-pet expansion; competitive and instanced worlds keep original stats."},
+			{Flag: companion.EnvPetInventoryPages, On: petInventoryPagesOn,
+				Native: "A grab pet's bag holds 28 slots, and a transport's bag holds its authored size.",
+				Now:    "Every grab pet and transport holds five pages of 28 slots (140 in all). A pet carrying a smaller bag gains the slots when summoned; turning the rule off never removes an item or shrinks a bag.",
+				Why:    "Owner-requested convenience: five pages of pet storage without a per-pet upgrade item."},
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
