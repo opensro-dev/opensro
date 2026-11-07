@@ -174,14 +174,26 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 /*
 ================
 validBenchmarkFixtureReset
+
+Outdoor spawns sit inside one 1920-unit sector. Dungeon regions (the
+0x8000 region bit) carry positions in the floor's own wide frame - the
+tomb nests and the world-space cases span thousands of units either side
+of zero - so a dungeon spawn is checked against that frame instead of
+refusing every cave pose past the entrance.
 ================
 */
 func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest, levelCap int64) bool {
+	xInRange := finiteInRange(request.Spawn.X, 0, 1920)
+	zInRange := finiteInRange(request.Spawn.Z, 0, 1920)
+	if request.Spawn.RegionID&0x8000 != 0 {
+		xInRange = finiteInRange(request.Spawn.X, -32768, 32768)
+		zInRange = finiteInRange(request.Spawn.Z, -32768, 32768)
+	}
 	return strings.TrimSpace(request.CharacterName) != "" &&
 		strings.TrimSpace(request.FixtureID) != "" && len(strings.TrimSpace(request.FixtureID)) <= 128 &&
 		request.Spawn.RegionID > 0 && request.Spawn.RegionID <= 0xffff &&
-		finiteInRange(request.Spawn.X, 0, 1920) &&
-		finiteInRange(request.Spawn.Z, 0, 1920) &&
+		xInRange &&
+		zInRange &&
 		finite(request.Spawn.Y) && request.Spawn.Y >= -32768 && request.Spawn.Y <= 32767 &&
 		request.Spawn.Angle >= 0 && request.Spawn.Angle <= 0xffff &&
 		(request.MovementMode == 1 || request.MovementMode == 3) &&
