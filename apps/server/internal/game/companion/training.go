@@ -20,6 +20,7 @@ the live pet's training.
 package companion
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -59,17 +60,22 @@ func AttackPetExpansionEnabled() bool {
 ================
 PetInventoryPagesEnabled
 
-The five-page pet bag is on unless the shard turns it off: an explicit
-"off", "0" or "false" is native; anything else, including unset, is on.
-Port-only, not native (owner 2026-11-07).
+The five-page pet bag's switch (port-only, not native; owner
+2026-11-07): unset or an on value is the owner's default-on, an off
+value is native, and anything else is a boot error naming the setting -
+the grammar of the other default-on shard switches. A typo must fail
+loud: a raised bag is persisted and never lowered, so reading a
+mistyped value as "on" would silently migrate every saved bag.
 ================
 */
-func PetInventoryPagesEnabled() bool {
+func PetInventoryPagesEnabled() (bool, error) {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvPetInventoryPages))) {
-	case "off", "0", "false":
-		return false
+	case "", "1", "on", "true":
+		return true, nil
+	case "0", "off", "false":
+		return false, nil
 	}
-	return true
+	return false, fmt.Errorf("%s=%q: want on or off", EnvPetInventoryPages, os.Getenv(EnvPetInventoryPages))
 }
 
 /*
