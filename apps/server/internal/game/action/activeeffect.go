@@ -557,14 +557,33 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 		return nil
 	}
 	rows := rt.effects.Snapshot(divisionID, characterName)
+	out, _, _ := rt.projectEntrySkills(rows, nowMs)
+	return out
+}
+
+/*
+================
+projectEntrySkills
+
+The spawn projection of one registry view at one instant, in one
+pass: the entry rows, the view row each entry row came from, and
+whether each view row was live. EntrySkills and SpawnEntrySkills
+share this pass so the entry bootstrap and the tick can never
+disagree on the projection's shape.
+================
+*/
+func (rt *Runtime) projectEntrySkills(rows []statuseffect.Effect, nowMs int64) ([]enterworld.EntrySkill, []int, []bool) {
 	out := make([]enterworld.EntrySkill, 0, len(rows))
-	for _, effect := range rows {
+	sourceIndex := make([]int, 0, len(rows))
+	live := make([]bool, len(rows))
+	for i, effect := range rows {
+		live[i] = !effect.Expired(nowMs)
 		// Natively the buff list omits source-phase linked rows from ordinary spawn effects;
 		// they use the private B5ED relationship presentation instead.
 		if (effect.LinkToken != 0 || effect.SourceTargetGID != 0) && effect.Phase == 1 {
 			continue
 		}
-		if effect.StopRequested || effect.Expired(nowMs) {
+		if effect.StopRequested || !live[i] {
 			continue
 		}
 		ref, ok := rt.deps.SkillData().SkillByID(effect.SkillID)
@@ -582,8 +601,145 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 			row.Remaining = &remaining
 		}
 		out = append(out, row)
+		sourceIndex = append(sourceIndex, i)
+	}
+	return out, sourceIndex, live
+}
+
+/*
+================
+entrySpawnProjection
+
+One owner's cached spawn projection (SpawnEntrySkills): the registry
+view it was built from (a published view is never edited, so holding
+its header is safe), each view row's liveness at build time, and for
+each projected row the view row it came from, so a later call can
+refresh the remaining times in place instead of rebuilding.
+================
+*/
+/*
+================
+entrySpawnOwner
+
+The cache key: the caller-supplied division and character name as a
+pair, so a lookup builds no joined string per tick.
+================
+*/
+type entrySpawnOwner struct {
+	divisionID    string
+	characterName string
+}
+
+/*
+================
+entrySpawnProjection
+================
+*/
+type entrySpawnProjection struct {
+	source      []statuseffect.Effect
+	live        []bool
+	sourceIndex []int
+	out         []enterworld.EntrySkill
+	builtAtMs   int64
+}
+
+/*
+================
+SpawnEntrySkills
+
+The tick's spawn projection: the same rows EntrySkills builds, kept
+per owner and handed out again while the owner's registry view and
+every row's liveness are unchanged, with the remaining times
+refreshed in place. The peer-appearance tick calls this once per
+session per tick; rebuilding the projection each time allocated a
+fresh slice plus two boxed values per token row for a check that
+almost always finds nothing changed (#2030).
+
+The returned slice is SHARED: the caller reads it promptly, never
+retains it past the tick and never mutates it. The entry bootstrap
+must not use this - EntrySkills still builds it a fresh projection,
+because the bootstrap retains its rows while it encodes.
+================
+*/
+func (rt *Runtime) SpawnEntrySkills(divisionID, characterName string) []enterworld.EntrySkill {
+	if rt == nil {
+		return nil
+	}
+	return rt.spawnEntrySkillsAt(divisionID, characterName, rt.Now().UnixMilli())
+}
+
+/*
+================
+spawnEntrySkillsAt
+
+SpawnEntrySkills at a supplied world instant (the deterministic
+clock the projection tests drive).
+================
+*/
+func (rt *Runtime) spawnEntrySkillsAt(divisionID, characterName string, nowMs int64) []enterworld.EntrySkill {
+	if rt == nil || rt.deps == nil || rt.effects == nil || rt.deps.SkillData() == nil {
+		return nil
+	}
+	rows := rt.effects.Snapshot(divisionID, characterName)
+	if len(rows) == 0 {
+		out, _, _ := rt.projectEntrySkills(rows, nowMs)
+		return out
+	}
+	key := entrySpawnOwner{divisionID: divisionID, characterName: characterName}
+	rt.entrySpawnMu.Lock()
+	defer rt.entrySpawnMu.Unlock()
+	if cached, ok := rt.entrySpawnCache[key]; ok && cached != nil && nowMs >= cached.builtAtMs &&
+		entrySpawnSourceUnchanged(rows, cached, nowMs) {
+		for i, row := range cached.out {
+			if row.Remaining != nil {
+				*row.Remaining = rows[cached.sourceIndex[i]].RemainingMs(nowMs)
+			}
+		}
+		return cached.out
+	}
+	out, sourceIndex, live := rt.projectEntrySkills(rows, nowMs)
+	if rt.entrySpawnCache == nil {
+		rt.entrySpawnCache = make(map[entrySpawnOwner]*entrySpawnProjection)
+	}
+	// Bound the book by owner count: past the cap the whole cache is
+	// dropped and the tick rebuilds what it still needs. Owners are
+	// online characters, so the cap is far above a shard's population.
+	if len(rt.entrySpawnCache) > 4096 {
+		rt.entrySpawnCache = make(map[entrySpawnOwner]*entrySpawnProjection)
+	}
+	rt.entrySpawnCache[key] = &entrySpawnProjection{
+		source:      rows,
+		live:        live,
+		sourceIndex: sourceIndex,
+		out:         out,
+		builtAtMs:   nowMs,
 	}
 	return out
+}
+
+/*
+================
+entrySpawnSourceUnchanged
+
+Whether a registry view still projects exactly what the cached
+projection was built from: same rows in the fields the projection
+reads, and no row's liveness flipped at the new instant (a row can
+expire on time alone, with the view untouched). Nothing allocates.
+================
+*/
+func entrySpawnSourceUnchanged(rows []statuseffect.Effect, cached *entrySpawnProjection, nowMs int64) bool {
+	if len(rows) != len(cached.source) {
+		return false
+	}
+	for i, row := range rows {
+		was := cached.source[i]
+		if row.SkillID != was.SkillID || row.Phase != was.Phase || row.StopRequested != was.StopRequested ||
+			row.LinkToken != was.LinkToken || row.SourceTargetGID != was.SourceTargetGID ||
+			row.InstanceToken != was.InstanceToken || row.Expired(nowMs) == cached.live[i] {
+			return false
+		}
+	}
+	return true
 }
 
 /*
