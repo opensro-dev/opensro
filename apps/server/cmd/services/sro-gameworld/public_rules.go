@@ -116,6 +116,7 @@ func publicRules() publicstats.RulesResponse {
 	alexandriaOn, _ := alexandria.EnabledFromEnv()
 	shopGoods, _ := commerce.ExtraGoodsFromEnv()
 	janganAlchemyOn, _ := commerce.JanganAlchemyShopActiveFromEnv()
+	xlPotionsOn, _ := commerce.JanganXLPotionsFromEnv()
 	thiefCartTownAreasOn, _ := townarea.ThiefCartTownAreasFromEnv()
 	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	rideFactor, rideOn, _ := enterworld.MallRideSpeedFromEnv()
@@ -289,6 +290,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Jangan's grocer is Grocery Trader Jinjin, her alchemy goods share one tab, and the smith sells the elixirs.",
 				Now:    "Jangan's grocer is OpenSRO Alchemy - Jangan: elixirs and powders, attribute stones and alchemy stones on three tabs of their own, the elixirs moved from the smith.",
 				Why:    "A player's request: one alchemy shop in Jangan."},
+			{Flag: commerce.EnvJanganXLPotions, On: xlPotionsOn,
+				Native: "Jangan's potion merchant sells the two smallest HP and MP potions; X-Large potions sell only in Hotan.",
+				Now:    "Jangan's potion merchant also sells X-Large HP and MP potions at Hotan's price of 900 gold.",
+				Why:    "The owner's convenience set: the endgame potions in the starting town."},
 			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
 				Native: "The Item Mall lists the v1.150 goods.",
 				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
