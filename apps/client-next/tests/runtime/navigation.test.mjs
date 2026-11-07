@@ -482,7 +482,9 @@ test("asset worker admits and publishes the navigation lane within its request b
 		async () => new Response( bytes( "/assets/world/dungeon/dungeon-resources.json" ) )
 	);
 	const loader = createLoader( r => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( r.kind ) ) results.push( r );
+		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( r.kind ) ) {
+			results.push( r );
+		}
 	} );
 	t.after( () => loader.dispose() );
 	loader.receive( {

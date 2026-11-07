@@ -79,6 +79,9 @@ function censusFixture( commands ) {
 	const ui = createUi( {
 		assets: {
 			available: () => 8,
+			// The census inventories the published build's full UI; the HD
+			// row (#2800) is listed while a set is published, as here.
+			hdAvailable: () => true,
 			take: id => {
 				const bytes = pending.get( id );
 				pending.delete( id );
