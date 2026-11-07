@@ -38,6 +38,7 @@ function effectOwner() {
 			health: () => ({ phase: "running" }),
 			install() {},
 			textureFeatures() {},
+			hdTextures() {},
 			dispose() {
 				jobs.clear();
 			},

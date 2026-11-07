@@ -194,6 +194,10 @@ func openAuthorityPlane(
 			enterworld.EnvMallRideSpeed, rideFactor, scaled)
 	}
 	options := store.OptionsFromEnv()
+	// Port-only, not native (owner, 2026-11-07, #2769): new characters are
+	// created at the 2.5-page inventory base; the world entry raises the
+	// rest (wiring_gameplay.go publishes the same reading to the entry).
+	options.InventoryPages = enterworld.InventoryPagesFromEnv()
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
 	options.DefaultInventory = enterworld.StarterInventorySeeder(
 		characterRoster,

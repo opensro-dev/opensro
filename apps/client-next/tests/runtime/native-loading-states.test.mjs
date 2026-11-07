@@ -21,16 +21,16 @@ fixture
 function fixture() {
 	let scene;
 	const commands = [];
-	const ui = createUi(
-		{ available: () => 0, take: () => null, request: () => 0, cancel: () => {} },
-		command => commands.push( command ),
-		value => {
+	const ui = createUi( {
+		assets: { available: () => 0, take: () => null, request: () => 0, cancel: () => {} },
+		commands: command => commands.push( command ),
+		publish: value => {
 			scene = value;
 		},
-		() => {},
-		"https://fixture.invalid",
-		"https://fixture.invalid"
-	);
+		texture: () => {},
+		base: "https://fixture.invalid",
+		apiBase: "https://fixture.invalid"
+	} );
 	return { ui, commands, scene: () => scene };
 }
 

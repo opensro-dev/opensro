@@ -565,63 +565,71 @@ export function fortressDismissNotice( state: FortressState ): SystemNotice | nu
 	return { key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE", value: 0, nativeType: 0 };
 }
 
-// 754A40's structure success actions (7551BA, 75529A and 7554F9).
+// 754A40's construction, upgrade and repair success arms.
 const STRUCTURE_CONSTRUCTION_COMPLETE = 0x0a;
 const STRUCTURE_UPGRADE_COMPLETE = 0x0b;
 const STRUCTURE_REPAIR_COMPLETE = 0x0c;
 const STRUCTURE_NOTICE_CAPACITY = 0x100;
+const STRUCTURE_TYPE_MASK = 0xfffc;
+const STRUCTURE_HEADQUARTERS = 0x2ac4;
+const STRUCTURE_DEFENSIVE_POSITION = 0x22c4;
 
-// The standing structure's TypeID fields (1/2/5) leave the word's last
-// field: 5 the headquarters (4F3A80), 4 a defensive position (74F3A0),
-// 2 a guard tower (74F360). The helpers read all three from the packed
-// word the catalog carries.
-const STRUCTURE_TYPE_HEADQUARTERS = 5;
-const STRUCTURE_TYPE_DEFENSIVE_POSITION = 4;
+/*
+================
+FortressStructureNoticeReference
+
+The standing structure's catalog fields, independent of visible actors.
+upgradeName is the default variant's name (7E14E0 with type -1).
+================
+*/
+export type FortressStructureNoticeReference = {
+	readonly name?: string;
+	readonly tidWord: number;
+	readonly level: number;
+	readonly upgradeName?: string;
+};
 
 /*
 ================
 fortressStructureNotice
 
-754A40's structure success arms send one line to type-0 chat and the
-banner (755264). Construction (0x0A) and repair (0x0C) name the zone's
-standing structure. The upgrade arm (0x0B, 75529A) judges the standing
-structure by its TypeID word and its level - the zone record's +0x18,
-the level column the 0x3887 roster copied from the reference: a
-headquarters (1/2/5/5) and a level-0 defensive position (1/2/5/4) print
-CONSTRUCTION_COMPLETE, the position naming its resolved upgrade variant
-(state.structureUpgrades, fortressVariantTarget); everything else
-prints UPGRADE_COMPLETE with the standing name. No zone record or no
-catalog name means no line. The caller supplies the standing structure's
-facts and the variant's name.
+7551BA, 75529A and 7554F9 resolve the reply's event zone to its current
+structure. 75537A uses construction wording for headquarters; 7553DC does
+so for a level-0 defensive position, naming its default upgrade instead.
+The roster copies RefObjChar+1A8 to zone+18 at 76E2A7/76E2B5: this is level,
+not the roster's state word or the reply's tower variant. Every branch
+sends the same line to type-0 chat and the banner. Missing names skip it.
 ================
 */
 export function fortressStructureNotice(
 	state: FortressState,
-	standing: { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined,
-	variantName: string | undefined
+	reference: FortressStructureNoticeReference | undefined
 ): SystemNotice | null {
 	const service = state.service;
-	if ( !service || service.result !== 1 || standing === undefined ) return null;
-	let key: string | undefined, name = standing.name;
-	if ( service.action === STRUCTURE_CONSTRUCTION_COMPLETE ) {
-		key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
-	} else if ( service.action === STRUCTURE_REPAIR_COMPLETE ) {
-		key = "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE";
-	} else if ( service.action === STRUCTURE_UPGRADE_COMPLETE ) {
-		const word = standing.tidWord,
-			shape = (word >>> 2 & 7) === 1 && (word >>> 5 & 3) === 2 && (word >>> 7 & 15) === 5 ?
-				word >>> 11 & 31 :
-				0;
-		if ( shape === STRUCTURE_TYPE_HEADQUARTERS ) {
+	if ( !service || service.result !== 1 ) return null;
+	let name = reference?.name;
+	let key: string;
+	switch ( service.action ) {
+		case STRUCTURE_CONSTRUCTION_COMPLETE:
 			key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
-		} else if ( shape === STRUCTURE_TYPE_DEFENSIVE_POSITION && standing.level === 0 ) {
-			key = "UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE";
-			name = variantName ?? standing.name;
-		} else {
-			key = "UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE";
+			break;
+		case STRUCTURE_REPAIR_COMPLETE:
+			key = "UIIT_MSG_FORT_BATTLEAIDE_REPAIR_COMPLETE";
+			break;
+		case STRUCTURE_UPGRADE_COMPLETE: {
+			if ( !reference ) return null;
+			const type = reference.tidWord & STRUCTURE_TYPE_MASK;
+			const building = type === STRUCTURE_DEFENSIVE_POSITION && reference.level === 0;
+			key = type === STRUCTURE_HEADQUARTERS || building ?
+				"UIIT_MSG_FORT_BATTLEAIDE_CONSTRUCTION_COMPLETE" :
+				"UIIT_MSG_FORT_BATTLEAIDE_UPGRADE_COMPLETE";
+			if ( building ) name = reference.upgradeName;
+			break;
 		}
+		default:
+			return null;
 	}
-	if ( key === undefined ) return null;
+	if ( name === undefined ) return null;
 	return {
 		key,
 		value: 0,

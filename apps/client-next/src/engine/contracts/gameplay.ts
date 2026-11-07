@@ -357,6 +357,7 @@ export type GameplayCommand =
 		readonly kind: "mall-buy";
 		readonly request: import("@/engine/foundation/gameplay/item-mall-wire").MallPurchase;
 	}
+	| { readonly kind: "mall-silk-inquire"; readonly period: number; }
 	| { readonly kind: "shop-open"; readonly gid: number; }
 	| { readonly kind: "shop-buy"; readonly tab: number; readonly slot: number; readonly quantity: number; }
 	| { readonly kind: "shop-sell"; readonly slot: number; readonly quantity: number; }
@@ -764,6 +765,7 @@ Presentation owns the derived skillIndex; it never travels back to simulation.
 */
 export interface GameplayState extends MoverPublication {
 	readonly itemMall?: import("./item-mall").MallState;
+	readonly itemMallSilkHistory?: import("./item-mall").MallSilkHistoryState;
 	readonly betaPlayers?: readonly BetaMapPlayer[];
 	// Port-only damage ranking of the latest unique kill (unique-rank.ts).
 	readonly uniqueDamageRank?: import("./unique-rank").UniqueDamageRank | null;

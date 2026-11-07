@@ -96,17 +96,189 @@ func hasElementalCandidate(c *enterworld.Character, q elementalQuery) bool {
 	return found
 }
 
-/*
-================
-hasPassive
-
-companion.Passive's verdict without its level: the slotted rows alone
-decide it, so no modifiers are computed.
-================
-*/
 func hasPassive(pet *domain.CharacterCOS, name string) bool {
 	_, _, ok := companion.Passive(pet, name, companion.Modifiers{})
 	return ok
+}
+
+/*
+================
+elementalPetFacts
+
+One companion's record-filter row in an owner's armed facts (#2030):
+the fields hasElementalCandidate judges per pet - gid, kind, and the
+two passives any elemental query names.
+================
+*/
+type elementalPetFacts struct {
+	gid      uint32
+	kind     string
+	tailwind bool
+	feathers bool
+}
+
+/*
+================
+elementalWalkFacts
+
+What one owner's elemental walk judges on, captured once per pet tick
+by armElementalFacts (#2030): the owner's record viability, the
+expansion owner half, the town verdict, one record-filter row per
+companion, and the one pet-owner snapshot the admitted lanes share
+(installed by the first lane that reaches the copy). The lanes used
+to repeat elementalWalkRefused's door read - and, past it, the owner
+copy - once per lane, three to four times per owner per tick.
+================
+*/
+type elementalWalkFacts struct {
+	owner       *enterworld.Character
+	nowMs       int64
+	ownerViable bool
+	expansionOK bool
+	townJudged  bool
+	inTown      bool
+	pets        []elementalPetFacts
+	snapshot    *enterworld.Character
+}
+
+/*
+================
+elementalWalkFacts.walkRefused
+
+The facts' own answer to elementalWalkRefused for one query, judged
+without a store read. answered is false when the facts cannot decide -
+the owner has no world entry to judge the town on (the copy path seeds
+and judges it exactly as before), or the query names a passive the
+capture never folded - and the caller then walks as before.
+================
+*/
+func (f *elementalWalkFacts) walkRefused(q elementalQuery) (refused, answered bool) {
+	switch q.passive {
+	case "", "Tailwind", "Guiding Feathers":
+	default:
+		return false, false
+	}
+	if !f.ownerViable || !f.expansionOK {
+		return true, true
+	}
+	candidate := false
+	for _, pet := range f.pets {
+		if (q.gid == 0 || pet.gid == q.gid) && pet.kind == q.kind &&
+			(q.passive == "" || q.passive == "Tailwind" && pet.tailwind || q.passive == "Guiding Feathers" && pet.feathers) {
+			candidate = true
+			break
+		}
+	}
+	if !candidate {
+		return true, true
+	}
+	if !f.townJudged {
+		return false, false
+	}
+	return !q.allowTown && f.inTown, true
+}
+
+/*
+================
+armElementalFacts
+
+Capture one pet owner's walk facts under its division lane and arm
+them for the tailwind, crow-kit, plume and wolf lanes of this tick.
+The capture reads the record exactly where the lanes' own first read
+read it - after the brood, penguin and gear lanes have had their
+writes - and folds the same record filter hasElementalCandidate folds
+per query, for every companion at once. The returned key clears the
+arm; the zero key means nothing armed (the expansion off, the seam
+up, or no session yet), and every lane then walks as before.
+================
+*/
+func (rt *Runtime) armElementalFacts(key petOwnerKey, now int64) petOwnerKey {
+	var none petOwnerKey
+	if !rt.AttackPetExpansion || rt.Monsters == nil || rt.companionCopy != nil || rt.Worlds == nil {
+		return none
+	}
+	state := rt.petSessionFor(key.division, key.name, key.gid)
+	if state == nil || state.character == nil {
+		return none
+	}
+	owner := state.character
+	facts := &elementalWalkFacts{owner: owner, nowMs: now, pets: make([]elementalPetFacts, 0, 4)}
+	rt.deps.Read(key.division, func() {
+		facts.ownerViable = !owner.DeletePending && enterworld.CharacterAlive(owner)
+		if !facts.ownerViable {
+			return
+		}
+		owner.VisitCompanions(func(pet *domain.CharacterCOS) bool {
+			if pet.BroodStage == 0 && pet.Summoned && pet.CurrentHP != 0 {
+				facts.pets = append(facts.pets, elementalPetFacts{
+					gid:      pet.GID,
+					kind:     companion.PetKind(pet.Codename),
+					tailwind: hasPassive(pet, "Tailwind"),
+					feathers: hasPassive(pet, "Guiding Feathers"),
+				})
+			}
+			return true
+		})
+		facts.expansionOK = len(facts.pets) > 0 && !rt.inFreeBattle(owner) &&
+			!wearsJobSuit(owner, rt.deps.ItemReferences()) &&
+			domain.CharacterWorldInstance(owner) == domain.DefaultWorldInstance
+	})
+	if facts.ownerViable {
+		if ownerWorld, ok := rt.Worlds.SnapshotExisting(simulation.WorldKey(key.division, owner.Name)); ok {
+			facts.townJudged = true
+			facts.inTown = townRegion(ownerWorld.LiveSpawnAt(now).RegionID)
+		}
+	}
+	ownerKey := petOwnerKey{division: key.division, name: strings.ToLower(owner.Name)}
+	rt.elementalFactsMu.Lock()
+	if rt.elementalFacts == nil {
+		rt.elementalFacts = make(map[petOwnerKey]*elementalWalkFacts)
+	}
+	rt.elementalFacts[ownerKey] = facts
+	rt.elementalFactsMu.Unlock()
+	return ownerKey
+}
+
+/*
+================
+armedElementalFacts
+
+The facts armed for this owner and tick, if any. The companionCopy
+seam abstains exactly as elementalWalkRefused abstains: behind it the
+walk must judge on the full copy, so no entry is served. Owner
+identity and the tick's clock both guard the entry, so a stale arm
+can never answer for a re-seated character or a later tick.
+================
+*/
+func (rt *Runtime) armedElementalFacts(division string, owner *enterworld.Character, now int64) (*elementalWalkFacts, bool) {
+	if rt.companionCopy != nil || owner == nil {
+		return nil, false
+	}
+	rt.elementalFactsMu.Lock()
+	facts := rt.elementalFacts[petOwnerKey{division: division, name: strings.ToLower(owner.Name)}]
+	rt.elementalFactsMu.Unlock()
+	if facts == nil || facts.owner != owner || facts.nowMs != now {
+		return nil, false
+	}
+	return facts, true
+}
+
+/*
+================
+clearElementalFacts
+
+Drop one owner's armed facts. advancePetInDivision clears after the
+wolf lane: the spirit, bond and hunt lanes that follow must judge
+fresh records, as they always have.
+================
+*/
+func (rt *Runtime) clearElementalFacts(ownerKey petOwnerKey) {
+	if ownerKey.division == "" {
+		return
+	}
+	rt.elementalFactsMu.Lock()
+	delete(rt.elementalFacts, ownerKey)
+	rt.elementalFactsMu.Unlock()
 }
 
 /*
@@ -177,7 +349,18 @@ func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld
 	if !rt.AttackPetExpansion || rt.Monsters == nil {
 		return step, false
 	}
-	gid, kind, allowTown := q.gid, q.kind, q.allowTown
+	// Facts armed for this owner's tick (#2030) judge the refusal and
+	// lend the one owner snapshot; a walk the facts cannot decide,
+	// and every walk with nothing armed, runs exactly as before.
+	if facts, ok := rt.armedElementalFacts(division, owner, now); ok {
+		if refused, answered := facts.walkRefused(q); answered {
+			if refused {
+				return step, false
+			}
+			return rt.elementalMatchingOnFacts(division, owner, q, now, facts)
+		}
+	}
+	allowTown := q.allowTown
 	// A refusal the door-read facts already decide never reaches the
 	// copy below (#2030); an admitted walk judges as before.
 	if refused, judged := rt.elementalWalkRefused(division, owner, q, now); judged && refused {
@@ -193,6 +376,47 @@ func (rt *Runtime) elementalCompanionMatching(division string, owner *enterworld
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !allowTown && rt.inTown(division, snapshot) {
 		return step, false
 	}
+	return rt.elementalSelect(division, snapshot, q, now)
+}
+
+/*
+================
+elementalMatchingOnFacts
+
+The admitted half of an armed walk: the lanes share the facts' one
+owner snapshot instead of copying per lane. The first lane to reach
+the copy takes it under the walk's own admission and installs it;
+the admission judge runs on the copy it installed exactly as the
+unarmed walk judges. A snapshot a previous lane installed already
+passed that judge on these same captured values.
+================
+*/
+func (rt *Runtime) elementalMatchingOnFacts(division string, owner *enterworld.Character, q elementalQuery, now int64, facts *elementalWalkFacts) (petCombatStep, bool) {
+	var step petCombatStep
+	snapshot := facts.snapshot
+	if snapshot == nil {
+		snapshot = rt.characterSnapshotCompanionAdmitted(division, owner, func(c *enterworld.Character) bool {
+			return !c.DeletePending && enterworld.CharacterAlive(c) && hasElementalCandidate(c, q)
+		})
+		if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || !q.allowTown && rt.inTown(division, snapshot) {
+			return step, false
+		}
+		facts.snapshot = snapshot
+	}
+	return rt.elementalSelect(division, snapshot, q, now)
+}
+
+/*
+================
+elementalSelect
+
+The pet loop of the eligibility walk over one admitted owner copy:
+the first companion passing every gate wins the step.
+================
+*/
+func (rt *Runtime) elementalSelect(division string, snapshot *enterworld.Character, q elementalQuery, now int64) (petCombatStep, bool) {
+	var step petCombatStep
+	gid, kind, allowTown := q.gid, q.kind, q.allowTown
 	for _, pet := range snapshot.Companions() {
 		if pet.BroodStage != 0 {
 			continue

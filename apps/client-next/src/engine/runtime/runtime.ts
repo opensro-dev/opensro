@@ -376,6 +376,7 @@ export function startRuntime(
 				mainThreadOwnWalk = event.value.mainThreadOwnWalk === true;
 				if ( !mainThreadOwnWalk ) localMover.reset();
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				assets.hdTextures( event.value.hdTextures );
 				simulation.session( { kind: "experimental-gameplay", value: experimentalGameplay( event.value ) } );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
@@ -502,28 +503,28 @@ export function startRuntime(
 			} )
 		);
 		const ui = own(
-			createUi(
+			createUi( {
 				assets,
-				sessionCommand,
-				renderer.setUi,
-				renderer.setUiTexture,
-				new URL( "/", import.meta.url ).href,
+				commands: sessionCommand,
+				publish: renderer.setUi,
+				texture: renderer.setUiTexture,
+				base: new URL( "/", import.meta.url ).href,
 				apiBase,
-				audio.uiClick,
-				audio.uiSound,
-				() => random.range( 1, 3 ),
-				count => random.range( 0, count ),
-				value => platform.saveGameOptions( value ),
-				( value, commit ) => {
+				clickSound: audio.uiClick,
+				sound: audio.uiSound,
+				loadingVariant: () => random.range( 1, 3 ),
+				chooseTip: count => random.range( 0, count ),
+				saveOptions: value => platform.saveGameOptions( value ),
+				audioPreference: ( value, commit ) => {
 					audio.options( value );
 					if ( commit ) platform.saveAudioOptions( value );
 				},
-				value => platform.saveSightMode( value ),
-				value => platform.saveInputOptions( value ),
-				value => platform.saveVideoOptions( value ),
-				value => platform.saveChatBlocks( value ),
-				value => platform.saveQuickslotOptions( value ),
-				{
+				saveSight: value => platform.saveSightMode( value ),
+				saveBindings: value => platform.saveInputOptions( value ),
+				saveVideo: value => platform.saveVideoOptions( value ),
+				saveBlocks: value => platform.saveChatBlocks( value ),
+				saveQuickslots: value => platform.saveQuickslotOptions( value ),
+				extensions: {
 					bugReport,
 					setRenderMode: ( mode, enabled ) => renderer.setWorldRenderMode( mode, enabled ),
 					setWorldFieldOfView: degrees => world.setFieldOfView( degrees ),
@@ -544,7 +545,7 @@ export function startRuntime(
 					saveExperimental: value => platform.saveExperimentalOptions( value ),
 					saveWindowPositions: value => platform.saveWindowPositions( value )
 				}
-			)
+			} )
 		);
 		let lastDockPick = "none";
 		// Deliberate deviation (see world-double-click.ts): a drifted second

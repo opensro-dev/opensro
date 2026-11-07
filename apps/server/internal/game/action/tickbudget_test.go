@@ -68,10 +68,16 @@ const (
 // waiting cast verdict pricing from its prepared snapshot (#2139),
 // measured 68,183 B / 1,056 allocs; with the elemental eligibility
 // walk's refusal judged on door-read facts instead of the pet-owner
-// copy (#2030), measured 66,296 B / 997 allocs.
+// copy (#2030), measured 66,296 B / 997 allocs; with the judged pet
+// tick's facts slimmed to the lane's eight scalar reads instead of
+// a copied companion record (#2030), measured 56,978 B / 974 allocs
+// (bytes only: the facts container was one allocation either way);
+// with the four elemental lanes judging one armed facts capture and
+// sharing one owner snapshot per owner tick (#2030), measured
+// 54,405 B / 902 allocs.
 const (
-	tickBudgetBytesPerTick  = 73000
-	tickBudgetAllocsPerTick = 1100
+	tickBudgetBytesPerTick  = 60000
+	tickBudgetAllocsPerTick = 1020
 )
 
 /*

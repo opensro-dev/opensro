@@ -347,6 +347,13 @@ type Runtime struct {
 	// differential test sets it, to the full copy. Nil is the narrow
 	// copy.
 	companionCopy func(divisionID string, character *enterworld.Character) *enterworld.Character
+	// elementalFacts holds each pet owner's armed elemental-walk facts
+	// (petwolf.go, #2030), keyed by division and lower-cased owner name.
+	// advancePetInDivision arms one entry per owner tick and clears it
+	// after the wolf lane; elementalFactsMu owns the map only - an
+	// entry itself is read and written under its division's lane.
+	elementalFactsMu sync.Mutex
+	elementalFacts   map[petOwnerKey]*elementalWalkFacts
 	// castCopy, when set, replaces the press/release cast copy
 	// (characterSnapshotCast); only the cast-copy differential tests
 	// set it, to the full or the combat copy. Nil is the cast copy.
@@ -561,6 +568,10 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
+	// PetInventoryPages gives every pet bag five pages (companion
+	// PetInventorySlots; port-only, not native; owner 2026-11-07).
+	// False is native.
+	PetInventoryPages bool
 	// Port-only: DB-configured chance of extra pet gear per admitted normal equipment drop.
 	PetGearDropFactor float64
 	PetGearAffixes    []companion.AffixDef

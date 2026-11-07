@@ -14881,11 +14881,12 @@
 						"experimental-enchant-sparks",
 						"experimental-per-pixel-lighting",
 						"experimental-seal-under-heading",
+						"experimental-silk-history",
 						"experimental-sun-shadow"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "9ce4151be3380dce",
+					"hash": "19d7cf9614ff6ba5",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",

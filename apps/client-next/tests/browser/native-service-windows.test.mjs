@@ -38,10 +38,10 @@ test( "native service windows admit assets and preserve typed transactions", { t
 				renderer = createRenderer( document.querySelector( "canvas" ) ),
 				commands = [];
 			let semantics, scene;
-			const ui = createUi(
+			const ui = createUi( {
 				assets,
-				c => commands.push( c ),
-				s => {
+				commands: c => commands.push( c ),
+				publish: s => {
 					scene = s;
 					renderer.setUi(
 						s ?
@@ -58,10 +58,10 @@ test( "native service windows admit assets and preserve typed transactions", { t
 							null
 					);
 				},
-				( id, image ) => renderer.setUiTexture( id, image ),
-				location.origin,
-				"http://fixture.invalid"
-			);
+				texture: ( id, image ) => renderer.setUiTexture( id, image ),
+				base: location.origin,
+				apiBase: "http://fixture.invalid"
+			} );
 			const item = {
 				slot: 14,
 				refObjId: 3630,

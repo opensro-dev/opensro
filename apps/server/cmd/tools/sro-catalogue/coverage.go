@@ -59,6 +59,7 @@ var catalogueReaders = map[string]string{
 	"SRO_UNIQUE_SEAL_DROPS":                  "BuildDropTables publishes it in the unique object (unique.sealDrops, progression.UniqueRulesFromEnv)",
 	"SRO_SHOP_EXTRA_GOODS":                   "shardShops reads it (commerce.ExtraGoodsFromEnv) into the shops' extra tabs",
 	"SRO_JANGAN_ALCHEMY_SHOP":                "shardShops reads it through the extra goods (commerce.JanganAlchemyShopFromEnv regroups Jangan's alchemy tabs)",
+	"SRO_JANGAN_XL_POTIONS":                  "shardShops reads it (commerce.JanganXLPotionGoodsFromEnv) into Jangan's potion tab",
 	"SRO_STACK_SIZES":                        "shardItems reads it (enterworld.StackSizesFromEnv) into items.json's stack caps",
 	"SRO_ALEXANDRIA":                         "BuildNpcs' roster reads it (simulation.LoadNpcWorldRoster hides the city while off, alexandria.Hidden)",
 }
@@ -77,7 +78,9 @@ var catalogueExempt = map[string]string{
 	"SRO_BETA_SILK_ACTIVE_ONLY":               "which hours count for the silk grant; the catalogue publishes no account state",
 	"SRO_MAINTENANCE_MESSAGE":                 "the refusal shown during a release window; no catalogue file carries it",
 	"SRO_PET_PACING":                          "pet movement speed at runtime; the catalogue publishes no movement speeds",
+	"SRO_PET_INVENTORY_PAGES":                 "a pet's inventory size at runtime; the catalogue publishes no pet state",
 	"SRO_STORAGE_AUTO_STACK":                  "where a quick move lands in storage at runtime; the catalogue publishes no storage behaviour",
+	"SRO_INVENTORY_PAGES":                     "a character's inventory base at creation and world entry; the catalogue publishes no character state",
 	"SRO_FAST_DEN_RETURN":                     "a scroll countdown at runtime; the catalogue publishes no timers",
 	"SRO_UNIQUE_DAMAGE_RANK":                  "a post-kill damage notice; the catalogue publishes no notices",
 	"SRO_CLOSED_OBJECT_RESCUE":                "a login placement rescue; monsters.json publishes nests, not login placement",

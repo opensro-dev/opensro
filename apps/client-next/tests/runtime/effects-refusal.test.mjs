@@ -53,6 +53,7 @@ function fixture() {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			textureFeatures() {},
+			hdTextures() {},
 			install() {},
 			dispose() {},
 			request( url, limit, decode ) {
@@ -162,6 +163,7 @@ function trapFixture( count ) {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			textureFeatures() {},
+			hdTextures() {},
 			install() {},
 			dispose() {},
 			request( url, limit, decode ) {
@@ -266,6 +268,7 @@ function spinFixture() {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			textureFeatures() {},
+			hdTextures() {},
 			install() {},
 			dispose() {},
 			request( url, limit, decode ) {
@@ -353,6 +356,7 @@ function staticFixture( stage ) {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			textureFeatures() {},
+			hdTextures() {},
 			install() {},
 			dispose() {},
 			request( url, limit, decode ) {
@@ -477,6 +481,7 @@ function attachedFixture( stage ) {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			textureFeatures() {},
+			hdTextures() {},
 			install() {},
 			dispose() {},
 			request( url, limit, decode ) {

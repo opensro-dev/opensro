@@ -24,9 +24,13 @@ export const CHAT_HISTORY_CONTROL = 16;
 // The beta's earned silk pushes the account's new mall balance (server
 // action/betasilk.go opMallBalance; port-only, not native).
 export const MALL_BALANCE_CONTROL = 17;
+// The silk charge history inquiry and its answer (server action/itemmall.go
+// opMallSilkHistory; port-only, not native: the native window's Inquire
+// handler is an empty stub and no packet exists).
+export const MALL_SILK_HISTORY_CONTROL = 18;
 // The crest register upload (server action/crestregister.go
 // opCrestRegister; #2282): the picked crest image rides up, the verdict
-// rides back. 18 is the Item Mall silk history lane.
+// rides back.
 export const CREST_UPLOAD_CONTROL = 19;
 
 /*
@@ -37,5 +41,6 @@ isWorldControl
 export function isWorldControl( opcode: number ): boolean {
 	return opcode === SHOP_CATALOG_CONTROL || opcode === SHOP_INVENTORY_CONTROL ||
 		opcode === SHOP_BUYBACK_CONTROL || opcode === COMMERCE_REFERENCES_CONTROL || opcode === MALL_CATALOG_CONTROL ||
-		opcode === CHAT_HISTORY_CONTROL || opcode === MALL_BALANCE_CONTROL || opcode === CREST_UPLOAD_CONTROL;
+		opcode === CHAT_HISTORY_CONTROL || opcode === MALL_BALANCE_CONTROL || opcode === MALL_SILK_HISTORY_CONTROL ||
+		opcode === CREST_UPLOAD_CONTROL;
 }

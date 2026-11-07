@@ -15,7 +15,7 @@ test('live NPC title drag and ESC retire the selected conversation',{timeout:300
   await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
    const response=await route.fetch(),source=await response.text();
    assert.ok(source.includes('export function createUi('));
-   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(...args){const commands=args[1],publish=args[2],events=[];let scene;args[2]=s=>{scene=s;return publish(s);};args[1]=c=>{events.push(c);return commands(c);};const owner=createObservedUi(...args);globalThis.__npcWindowProbe={owner,commands:args[1],events,get scene(){return scene;}};return {...owner,step(view,now){globalThis.__npcWindowProbe.view=view;return owner.step(view,now);}};}`;
+   const body=source.replace('export function createUi(','function createObservedUi(')+`\nexport function createUi(ports){const commands=ports.commands,publish=ports.publish,events=[];let scene;ports.publish=s=>{scene=s;return publish(s);};ports.commands=c=>{events.push(c);return commands(c);};const owner=createObservedUi(ports);globalThis.__npcWindowProbe={owner,commands:ports.commands,events,get scene(){return scene;}};return {...owner,step(view,now){globalThis.__npcWindowProbe.view=view;return owner.step(view,now);}};}`;
    await route.fulfill({response,body,contentType:'application/javascript'});
   });
   await bootPlayableSession(page,'asd2');

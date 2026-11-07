@@ -16,8 +16,10 @@ import (
 	"errors"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -106,11 +108,11 @@ The server's slot grant refuses slots past the limit and its caller ignores the 
 func TestExpansionRewardPastTheLimitStillCompletes(t *testing.T) {
 	rt := expansionRuntime(t)
 	c, def := readyToTurnIn(t, rt, "QSP_CH_EXINVENTORY_1", 0)
-	c.InventorySize = 70
+	c.InventorySize = 105
 	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err != nil {
 		t.Fatalf("turn-in: %v", err)
 	}
-	if !questCompleted(c, def.RefID) || c.InventorySize != 70 || c.InventoryExpansion != 0 {
+	if !questCompleted(c, def.RefID) || c.InventorySize != 105 || c.InventoryExpansion != 0 {
 		t.Fatalf("completed %v, capacity %d (+%d)", questCompleted(c, def.RefID), c.InventorySize, c.InventoryExpansion)
 	}
 }
@@ -217,6 +219,132 @@ func TestExpansionAppliesLiveAtTurnIn(t *testing.T) {
 
 /*
 ================
+expansionOffer
+
+The offer row for one codename in an NPC's options, if the NPC offers it.
+================
+*/
+func expansionOffer(options []NpcOption, codename string) (NpcOption, bool) {
+	for _, option := range options {
+		if option.Codename == codename && !option.Complete {
+			return option, true
+		}
+	}
+	return NpcOption{}, false
+}
+
+/*
+================
+TestExpansionChainOfferedHuntedAndTurnedIn
+
+The first chain end to end on the shipped catalog: the Jangan accessory
+dealer offers QSP_CH_EXINVENTORY_1 at level 5, Mangnyang kills drop its
+collect item until the held cap, and the talk turn-in pays the 10 slots
+live with one 0x3092.
+================
+*/
+func TestExpansionChainOfferedHuntedAndTurnedIn(t *testing.T) {
+	rt := expansionRuntime(t)
+	race, level, gold := int64(enterworld.RaceChina), int64(5), int64(0)
+	c := &enterworld.Character{ID: 8, Name: "chainwalker", ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex: &race, Level: &level, Gold: &gold}
+
+	offer, offered := expansionOffer(rt.OptionsForNpc(c, "NPC_CH_ACCESSORY"), "QSP_CH_EXINVENTORY_1")
+	if !offered || offer.PromptSymbol != "SN_TALK_QSP_CH_EXINVENTORY_1_01" {
+		t.Fatalf("Jangan offer = %+v, %v", offer, offered)
+	}
+	if _, err := rt.StartQuest(c, "QSP_CH_EXINVENTORY_1"); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	if len(c.ActiveQuests) != 1 {
+		t.Fatalf("active quests = %+v", c.ActiveQuests)
+	}
+
+	roll := func() (uint32, error) { return 1, nil }
+	if drops := rt.MonsterDrops(c, "MOB_CH_GYO", 0, roll); len(drops) != 0 {
+		t.Fatalf("a non-target monster dropped: %v", drops)
+	}
+	drops := rt.MonsterDrops(c, "MOB_CH_MANGNYANG", 0, roll)
+	if len(drops) != 1 || drops[0] != (inventory.ItemAmount{Codename: "ITEM_QSP_CH_EXINVENTORY_1_01", Count: 1}) {
+		t.Fatalf("Mangnyang drops = %v", drops)
+	}
+
+	def, _ := rt.Defs.ByCodename("QSP_CH_EXINVENTORY_1")
+	c.MissionInventory = []enterworld.InventoryRow{{
+		Slot: 20, RefObjID: def.CollectItemRefID, Codename: def.CollectItemCodename,
+		StackCount: int64(def.CollectCount), VarianceBits: "0",
+	}}
+	if drops := rt.MonsterDrops(c, "MOB_CH_MANGNYANG", 0, roll); len(drops) != 0 {
+		t.Fatalf("drops past the held cap: %v", drops)
+	}
+
+	result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
+	if err != nil {
+		t.Fatalf("turn-in: %v", err)
+	}
+	if !questCompleted(c, def.RefID) || c.InventoryCapacity() != 55 {
+		t.Fatalf("completed %v, capacity %d, want true and 55", questCompleted(c, def.RefID), c.InventoryCapacity())
+	}
+	announced := 0
+	for _, frame := range result.Frames {
+		if frame.Opcode == OpStorageCapacity {
+			announced++
+			if !bytes.Equal(frame.Payload, []byte{1, 55}) {
+				t.Fatalf("0x3092 payload = % X, want [01 37]", frame.Payload)
+			}
+		}
+	}
+	if announced != 1 {
+		t.Fatalf("0x3092 frames = %d, want 1", announced)
+	}
+}
+
+/*
+================
+TestExpansionChainGatesOffers
+
+The chain's gates on the shipped catalog: the first quest waits for
+level 5, the West-China sequel waits for the first quest, and each
+country's dealer offers only its own line's first quest.
+================
+*/
+func TestExpansionChainGatesOffers(t *testing.T) {
+	rt := expansionRuntime(t)
+	race, level, gold := int64(enterworld.RaceChina), int64(4), int64(0)
+	young := &enterworld.Character{ID: 9, Name: "tooyoung", ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex: &race, Level: &level, Gold: &gold}
+	if _, offered := expansionOffer(rt.OptionsForNpc(young, "NPC_CH_ACCESSORY"), "QSP_CH_EXINVENTORY_1"); offered {
+		t.Fatal("the first expansion quest was offered at level 4")
+	}
+	if _, err := rt.StartQuest(young, "QSP_CH_EXINVENTORY_1"); err == nil {
+		t.Fatal("the first expansion quest was accepted at level 4")
+	}
+
+	level = 30
+	traveller := &enterworld.Character{ID: 10, Name: "westbound", ModelCodename: "CHAR_CH_MAN_ADVENTURER",
+		RaceIndex: &race, Level: &level, Gold: &gold}
+	if _, offered := expansionOffer(rt.OptionsForNpc(traveller, "NPC_WC_ACCESSORY"), "QSP_WC_EXINVENTORY_2"); offered {
+		t.Fatal("the sequel was offered before the first quest")
+	}
+	first, _ := rt.Defs.ByCodename("QSP_CH_EXINVENTORY_1")
+	traveller.CompletedQuestIds = []uint32{first.RefID}
+	if _, offered := expansionOffer(rt.OptionsForNpc(traveller, "NPC_WC_ACCESSORY"), "QSP_WC_EXINVENTORY_2"); !offered {
+		t.Fatal("the sequel stayed closed after the first quest")
+	}
+
+	euRace, euLevel := int64(enterworld.RaceEurope), int64(5)
+	european := &enterworld.Character{ID: 11, Name: "constantin", ModelCodename: "CHAR_EU_MAN_ADVENTURER",
+		RaceIndex: &euRace, Level: &euLevel, Gold: &gold}
+	if _, offered := expansionOffer(rt.OptionsForNpc(european, "NPC_EU_ACCESSORY"), "QSP_EU_EXINVENTORY_1"); !offered {
+		t.Fatal("the European first quest was not offered")
+	}
+	if _, offered := expansionOffer(rt.OptionsForNpc(european, "NPC_CH_ACCESSORY"), "QSP_CH_EXINVENTORY_1"); offered {
+		t.Fatal("the Chinese first quest was offered to a European")
+	}
+}
+
+/*
+================
 TestExpansionPastTheLimitAnnouncesNothing
 
 A refused grant changes no capacity, so no 0x3092 follows it.
@@ -225,7 +353,7 @@ A refused grant changes no capacity, so no 0x3092 follows it.
 func TestExpansionPastTheLimitAnnouncesNothing(t *testing.T) {
 	rt := expansionRuntime(t)
 	c, def := readyToTurnIn(t, rt, "QSP_CH_EXINVENTORY_1", 0)
-	c.InventorySize = 70
+	c.InventorySize = 105
 	result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
 	if err != nil {
 		t.Fatalf("turn-in: %v", err)
@@ -235,7 +363,48 @@ func TestExpansionPastTheLimitAnnouncesNothing(t *testing.T) {
 			t.Fatalf("a refused grant announced % X", frame.Payload)
 		}
 	}
-	if c.InventorySize != 70 || c.InventoryExpansion != 0 {
-		t.Fatalf("capacity %d (+%d), want 70 (+0)", c.InventorySize, c.InventoryExpansion)
+	if c.InventorySize != 105 || c.InventoryExpansion != 0 {
+		t.Fatalf("capacity %d (+%d), want 105 (+0)", c.InventorySize, c.InventoryExpansion)
+	}
+}
+
+/*
+================
+TestExpansionChainFromThePagesBaseReachesThreePages
+
+Under SRO_INVENTORY_PAGES the chain still pays its own slots: from the
+2.5-page base the four grants land exactly on the three-page maximum,
+each announced live.
+================
+*/
+func TestExpansionChainFromThePagesBaseReachesThreePages(t *testing.T) {
+	rt := expansionRuntime(t)
+	size := domain.InventoryPagesBase
+	var completed []uint32
+	for _, code := range []string{"QSP_CH_EXINVENTORY_1", "QSP_WC_EXINVENTORY_2", "QSP_KT_EXINVENTORY_3", "QSP_RM_EXINVENTORY_4"} {
+		c, def := readyToTurnIn(t, rt, code, 15_000)
+		c.InventorySize = size
+		c.CompletedQuestIds = completed
+		result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
+		if err != nil {
+			t.Fatalf("%s turn-in: %v", code, err)
+		}
+		size += def.RewardInventorySlots
+		if c.InventoryCapacity() != size {
+			t.Fatalf("after %s capacity = %d, want %d", code, c.InventoryCapacity(), size)
+		}
+		announced := false
+		for _, frame := range result.Frames {
+			if frame.Opcode == OpStorageCapacity && bytes.Equal(frame.Payload, []byte{1, size}) {
+				announced = true
+			}
+		}
+		if !announced {
+			t.Fatalf("after %s no 0x3092 announced %d", code, size)
+		}
+		completed = append(completed, def.RefID)
+	}
+	if size != domain.MaxInventorySize {
+		t.Fatalf("chain reached %d, want the %d maximum", size, domain.MaxInventorySize)
 	}
 }

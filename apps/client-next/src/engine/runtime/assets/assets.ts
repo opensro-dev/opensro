@@ -24,7 +24,7 @@ import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
 import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
-import { chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
+import { chooseHdTextureVariant, chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 const REQUEST_CAPACITY = 4;
 // A load's watchdog is a stall window, not a total budget: the worker notes
 // the bytes it reads per job (job-progress), and a job that keeps moving
@@ -329,12 +329,35 @@ export function createAssets(): AssetOwner {
 	// so with the switch off it is given at once, else when the device knows
 	// its features (textureFeatures).
 	let compressedTextures = false, variantSent = false;
+	// Port-only (#2061): the HD set's row, read from the same stored
+	// record. Nothing is sent while it is off, so the worker fetches
+	// none of the set; when it is on, the format follows the device's
+	// features (textureFeatures), and a live toggle re-sends it.
+	let hdTexturesEnabled = false, lastFeatures: readonly string[] | null = null;
 	try {
-		compressedTextures = storedExperimentalOptions( globalThis.localStorage ).options.compressedTextures;
+		const options = storedExperimentalOptions( globalThis.localStorage ).options;
+		compressedTextures = options.compressedTextures;
+		hdTexturesEnabled = options.hdTextures;
 	} catch {}
 	if ( !compressedTextures ) {
 		send( { kind: "texture-variant", variant: null } );
 		variantSent = true;
+	}
+	/*
+	================
+	sendHdTextures
+
+	The HD decision as it stands: the chosen format once the device's
+	features are known, nothing before (the worker's set is off until
+	then, and no texture waits on it - the originals serve).
+	================
+	*/
+	function sendHdTextures( features: readonly string[] ) {
+		if ( disposed ) return;
+		send( {
+			kind: "hd-textures",
+			format: hdTexturesEnabled ? chooseHdTextureVariant( new Set( features ), true ) : null
+		} );
 	}
 	return {
 		/*
@@ -347,7 +370,23 @@ export function createAssets(): AssetOwner {
 		textureFeatures( features: readonly string[] ) {
 			if ( disposed || variantSent ) return;
 			variantSent = true;
+			lastFeatures = features;
 			send( { kind: "texture-variant", variant: chooseTextureVariant( new Set( features ), true ) } );
+			sendHdTextures( features );
+		},
+		/*
+		================
+		hdTextures
+
+		The HD row's live state. The device's features are the owner's to
+		remember, so a toggle after they arrive re-sends the decision at
+		once; before they arrive it only records the row.
+		================
+		*/
+		hdTextures( enabled: boolean ) {
+			if ( disposed ) return;
+			hdTexturesEnabled = enabled;
+			if ( lastFeatures ) sendHdTextures( lastFeatures );
 		},
 		/*
 		================
