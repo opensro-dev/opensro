@@ -276,13 +276,24 @@ test("a still fails named at the drawing bound, and the next row is not condemne
 		assert.equal( rejectedSecond, null, "the next row never rejected" );
 	} ));
 
-test("an interactive view still fails at once on a latched failure", () =>
+test("an interactive view waits out a latched failure and fails named at the drawing bound", () =>
 	withBrowserGlobals( async () => {
 		const { host, latch, setReady } = latchHost( "?monster=1933" );
 		const viewer = createViewer( host );
+		let rejected = /** @type {any} */ (null);
+		scope.window.__viewerStill.then( () => {}, error => {
+			rejected = error;
+		} );
 		latch( "asset failed" );
 		setReady( true );
-		assert.equal( viewer.frame( 0 ), "done" );
+		// No early death (#2772): the latch may be one refused part the
+		// wearer still draws without, so the view draws on like a still.
+		assert.equal( viewer.frame( 0 ), "draw" );
+		for ( let now = 1000; now <= 300000; now += 1000 ) viewer.frame( now );
+		await Promise.resolve();
+		assert.equal( rejected, null, "no rejection before the drawing bound" );
+		// One more frame crosses it: the failure names its asset.
+		assert.equal( viewer.frame( 301000 ), "done" );
 		await assert.rejects(
 			scope.window.__viewerStill,
 			/asset-load: \/assets\/res\/tomb\/flame\.bsr: model part failed to load$/
