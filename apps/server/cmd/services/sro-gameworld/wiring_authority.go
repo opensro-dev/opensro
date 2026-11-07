@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/item/loot"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/social/crest"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/readiness"
@@ -59,6 +60,11 @@ type authorityPlane struct {
 	agentAPI   *agentapi.API
 	loadQuests questDefinitionLoader
 	textdata   *enterworld.TextdataCatalogs
+	// crests is the uploaded-crest store over the marks directory
+	// (#2282): shared by the action runtime (the register lane) and
+	// the Agent API (the /marks/ resolver). Nil when no marks
+	// directory is configured - uploads have nowhere to live.
+	crests *crest.Store
 }
 
 /*
@@ -246,6 +252,21 @@ func openAuthorityPlane(
 			"the top ranks will show on the board and refuse learning (raise the cap or rebuild without the database tier)",
 			highest, progression.EnvLevelCap, levelCap)
 	}
+	// The crest store lives in the marks directory (#2282): uploaded
+	// crests are stored there content-addressed beside any host art,
+	// and the same instance serves the register lane, so an upload
+	// resolves by name the moment it commits. No marks directory,
+	// no store - the register lane refuses honestly.
+	marksDir := os.Getenv(agentapi.EnvMarksDir)
+	var crests *crest.Store
+	if marksDir != "" {
+		var err error
+		crests, err = crest.NewStore(marksDir)
+		if err != nil {
+			authorityStore.Close()
+			return authorityPlane{}, fmt.Errorf("crest store: %w", err)
+		}
+	}
 	config := agentapi.Config{
 		Store:                 authorityStore,
 		CharacterPresentation: characterPresentationProjector(characterRoster, textdata.Levels),
@@ -258,7 +279,8 @@ func openAuthorityPlane(
 		PrivateNetwork:          os.Getenv("SRO_GAMEWORLD_PRIVATE_NETWORK") == "1",
 		Readiness:               ready,
 		EnterWorldAuthSecret:    enterWorldSecret,
-		MarksDir:                os.Getenv(agentapi.EnvMarksDir),
+		MarksDir:                marksDir,
+		Crests:                  crests,
 		MaintenanceGatePath:     strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)),
 		MaintenanceMessage:      agentapi.MaintenanceMessageFromEnv(),
 		AuthoredAreas:           devPaths.AuthoredAreas,
@@ -296,6 +318,7 @@ func openAuthorityPlane(
 		agentAPI:   api,
 		loadQuests: loadQuests,
 		textdata:   textdata,
+		crests:     crests,
 	}, nil
 }
 

@@ -396,6 +396,10 @@ func newGameWorldApplication(
 	// one history event per committed grant.
 	gameplay.items.SilkWallet = authority.store
 	gameplay.items.RecordSilkGrant = func(grant action.SilkGrant) { journal.Record(silkGrantEvent(grant)) }
+	// Crest uploads and staff removals (#2282): the crest store over
+	// the marks directory, and one audit event per committed change.
+	gameplay.items.Crests = authority.crests
+	gameplay.items.RecordCrestChange = func(change action.CrestChange) { journal.Record(crestChangeEvent(change)) }
 	// The mute book opens before admission: a muted character's first
 	// bind after a restart must already find its record (#2671).
 	application.mutes, err = openMuteBook(ts.Hub, ownedShard.ID)
