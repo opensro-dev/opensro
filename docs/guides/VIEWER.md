@@ -57,7 +57,11 @@ P6 `look` object: `bodyRefObjId`, `worn[]` of `{slot, refItemId, plus}`,
   `window.__viewerStill` with `Error(reason)`, whose `cause.stage` is the same stage.
   `reason` is one of a fixed set, exported from `viewer-request.ts`:
   `no-webgpu`, `bad-request`, `unknown-monster`, `asset-load`, `render`, `timeout`.
-  A look whose body or any item the game does not have fails `bad-request`.
+  A look whose body the catalogue lacks fails `bad-request`; an item it
+  cannot type or dress is left off, as the game draws such a wearer
+  without the part. A latched presentation failure never fails a draw
+  early (#2772): per-path loads keep retrying behind it, and only the
+  timeout names it `asset-load`.
   `stage` says how far the draw got: `request`, `catalogue` (the presentation
   catalogue loading), `model` (the model loading), `first-frame` (framed, not yet
   read), or `readback`.
@@ -146,6 +150,7 @@ yet. Adding it there is the step that puts the viewer on the live site.
   whole browser suite:
   - Tiger Girl (1954) as a 256-pixel transparent still that spans most of the frame;
   - an unknown id failing `unknown-monster`;
-  - a dressed look as a still, and an unknown item failing `bad-request`;
+  - a dressed look as a still, an unknown item left off it, and the
+    interactive view drawing a look whose part the catalogue refuses;
   - the interactive view asking for no frames when idle and redrawing on a drag.
 - `tests/runtime/ui-equality.test.mjs`: a doll quad whose camera moved is a new quad.
