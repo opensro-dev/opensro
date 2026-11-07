@@ -310,6 +310,53 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/ui/frame/frame.ts",
+			"functions": [
+				"uiAdditiveImage",
+				"uiBeginWindow",
+				"uiBuffViewer",
+				"uiButton",
+				"uiCloseButton",
+				"uiComboBox",
+				"uiEndWindow",
+				"uiImage",
+				"uiLabel",
+				"uiRect",
+				"uiWindowBox",
+				"uiWindowOrigin"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/window-placement.ts",
+			"functions": [
+				"frame"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": [
+				"compactCloseControl"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/notice-text.ts",
 			"provider": "src/engine/runtime/ui/hud/quest-banner.ts",
 			"functions": [

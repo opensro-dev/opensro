@@ -671,6 +671,21 @@ import {
 import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
+import {
+	uiAdditiveImage,
+	uiBeginWindow,
+	uiBuffViewer,
+	uiButton,
+	uiCloseButton,
+	uiComboBox,
+	uiEndWindow,
+	uiImage,
+	uiLabel,
+	uiRect,
+	uiWindowBox,
+	uiWindowOrigin
+} from "./frame/frame";
+import type { UiFrame } from "./frame/frame";
 import { createGuideResources } from "./guide/resources";
 import { createQuestInfo } from "./hud/quest-info";
 import {
@@ -10143,6 +10158,78 @@ export function createUi(
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h );
+			// The frame builder (frame/frame.ts) draws this frame. Its array
+			// and interaction fields are accessors: the sections below
+			// re-seed the arrays as they walk, and the primitives must
+			// always draw into the arrays this step currently holds.
+			const frame: UiFrame = {
+				get quads() {
+					return quads;
+				},
+				set quads( next: UiQuad[] ) {
+					quads = next;
+				},
+				get controls() {
+					return controls;
+				},
+				set controls( next: UiControl[] ) {
+					controls = next;
+				},
+				get blocks() {
+					return blocks;
+				},
+				set blocks( next: UiRect[] ) {
+					blocks = next;
+				},
+				get paths() {
+					return paths;
+				},
+				set paths( next: string[] ) {
+					paths = next;
+				},
+				full,
+				width: w,
+				height: h,
+				text,
+				resources,
+				placement: windowPlacement,
+				contentImages,
+				windowMissing,
+				admittedWindows,
+				windowPaths: commonWindowPaths,
+				fontPath,
+				phase,
+				compact,
+				chrome: {
+					frame: FRAME,
+					frameParts: PARTS,
+					button: BUTTON,
+					buttonFocus: BUTTON_FOCUS,
+					buttonPress: BUTTON_PRESS,
+					buttonDisable: BUTTON_DISABLE,
+					close: CLOSE,
+					closePress: CLOSE_PRESS,
+					closeFocus: CLOSE_FOCUS
+				},
+				get pressed() {
+					return pressed;
+				},
+				set pressed( next: string | null ) {
+					pressed = next;
+				},
+				get hover() {
+					return hover;
+				},
+				set hover( next: string | null ) {
+					hover = next;
+				},
+				get focus() {
+					return focus;
+				},
+				set focus( next: string | null ) {
+					focus = next;
+				}
+			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
@@ -10167,18 +10254,7 @@ export function createUi(
 				id = "window-drag:" + name,
 				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
 			) {
-				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
-				const drag = options.drag;
-				controls.push( {
-					id,
-					label: name,
-					kind: "region",
-					draggable: true,
-					rect: drag ?
-						[ r[0] + drag[0], r[1] + drag[1], drag[2], drag[3] ] :
-						[ r[0] + 10, r[1], r[2] - 21, 34 ]
-				} );
-				return r;
+				return uiWindowOrigin( frame, name, initial, id, options );
 			}
 			/*
 			================
@@ -10192,38 +10268,15 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
+				uiRect( frame, r, color, textureId, uv, clip );
 			}
-			// CIFStateSlot children render after the icon: the admittance overlay
-			// (6E8410), then the gauge at {0, cell, cell, 4} (6E7FA0).
 			/*
 			================
 			buffViewer
 			================
 			*/
 			function buffViewer( prefix: string, icons: readonly BuffViewerIcon[], ox: number, oy: number ) {
-				for ( const icon of icons ) {
-					const r: UiRect = [ ox + icon.x, oy + icon.y, icon.size, icon.size ],
-						gauge: UiRect = [ r[0], r[1] + icon.size, icon.size, 4 ];
-					for ( const layer of [ icon.path, ...icon.overlay ] ) {
-						if ( layer ) {
-							paths.push( layer );
-							if ( resources.has( layer ) ) rect( r, white, layer );
-						}
-					}
-					for ( const layer of icon.gauge ) {
-						paths.push( layer );
-						if ( resources.has( layer ) ) rect( gauge, white, layer );
-					}
-					controls.push( {
-						id: prefix + icon.id,
-						label: icon.label,
-						helpSource: icon.helpSource,
-						kind: "region",
-						rect: r
-					} );
-					blocks.push( r );
-				}
+				uiBuffViewer( frame, prefix, icons, ox, oy );
 			}
 			/*
 			================
@@ -10237,23 +10290,15 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				paths.push( path );
-				if ( resources.has( path ) ) rect( r, color, path, uv, clip );
+				uiImage( frame, r, path, color, uv, clip );
 			}
 			/*
 			================
 			additiveImage
-
-			An effect sheet without alpha, drawn additively: black adds nothing. INFERENCE: the
-			native effect statics (ga_effect_*, alcm_effect_prepare) are opaque DXT1 art, so the
-			original can only show them by adding them to what is behind.
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
-				paths.push( path );
-				if ( resources.has( path ) ) {
-					quads.push( { rect: r, color: white, texture: path, uv, clip: full, additive: true } );
-				}
+				uiAdditiveImage( frame, r, path, uv );
 			}
 			/*
 			================
@@ -10267,23 +10312,15 @@ export function createUi(
 				color: readonly [number, number, number, number] = white,
 				clip: UiRect = full
 			) {
-				quads.push(
-					...text.quads( value, [ x, y, Math.max( 0, clip[0] + clip[2] - x ), 22 ], clip, color, {
-						vAlign: 0
-					} )
-				);
+				uiLabel( frame, value, x, y, color, clip );
 			}
-			// A window is one resource admission. Keep demand while withholding BOTH
-			// pixels and hit areas, so a cold open cannot expose an empty clickable shell.
 			/*
 			================
 			beginWindow
 			================
 			*/
 			function beginWindow() {
-				const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-				paths.push( ...commonWindowPaths );
-				return mark;
+				return uiBeginWindow( frame );
 			}
 			/*
 			================
@@ -10298,60 +10335,7 @@ export function createUi(
 				// instead of every quad's raw extent.
 				source?: UiRect
 			) {
-				const admittedWindow = admittedWindows.get( owner );
-				// Everything still loading is reported (tests wait on it before a raster);
-				// only the window's own art holds its admission.
-				const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
-				windowMissing.push( ...unloaded );
-				const gaps = unloaded.filter( path => !contentImages.has( path ) );
-				const key = phase + ":" + w + ":" + h;
-				if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-					quads.length = mark[0];
-					controls.length = mark[1];
-					blocks.length = mark[2];
-					// Keep a fully admitted popup until its replacement is ready. Old image
-					// demand stays alive; stale content controls cannot dispatch new-tab actions.
-					if ( admittedWindow?.key === key ) {
-						quads.push( ...admittedWindow.quads );
-						blocks.push( ...admittedWindow.blocks );
-						paths.push( ...admittedWindow.paths );
-						controls.push(
-							...admittedWindow.controls.map( c => ({
-								...c,
-								disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-									c.disabled :
-									true
-							}) )
-						);
-					}
-				} else {
-					// Fit within this window before caching/publication; text behind a modal
-					// must not become a neighboring column of that modal.
-					if ( compact ) {
-						const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-							full :
-							compact.bounds;
-						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-							blocks,
-							firstBlock: mark[2],
-							disableDrag: compactWindowDrag,
-							...(source ? { sourceBounds: source } : {})
-						} );
-						for ( let i = mark[1]; i < controls.length; i++ ) {
-							controls[i] = compactCloseControl( controls[i]!, windowBounds );
-						}
-					}
-					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-					quads.length = mark[0];
-					quads.push( ...painted );
-					admittedWindows.set( owner, {
-						key,
-						quads: painted,
-						controls: controls.slice( mark[1] ),
-						blocks: blocks.slice( mark[2] ),
-						paths: paths.slice( mark[3] )
-					} );
-				}
+				uiEndWindow( frame, mark, owner, source );
 			}
 			/*
 			================
@@ -10359,15 +10343,7 @@ export function createUi(
 			================
 			*/
 			function windowBox( title: string, x: number, y: number, width: number, height: number ) {
-				const r: UiRect = [ x, y, width, height ];
-				blocks.push( r );
-				rect( r, [ .06, .075, .065, .96 ] );
-				quads.push(
-					...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
-				);
-				quads.push(
-					...text.quads( title, [ x + 10, y + 12, width - 21, 12 ], full, white, { hAlign: 1, vAlign: 1 } )
-				);
+				uiWindowBox( frame, title, x, y, width, height );
 			}
 			/*
 			================
@@ -10384,29 +10360,7 @@ export function createUi(
 				selected = false,
 				clientTop?: number
 			) {
-				const r: UiRect = [ x, y, width, 24 ];
-				blocks.push( r );
-				controls.push( { id, label: value, rect: r, kind: "button", disabled, selected } );
-				const down = !disabled && ((pressed === id && hover === id) || selected),
-					path = disabled ?
-						BUTTON_DISABLE :
-						down ?
-						BUTTON_PRESS :
-						((pressed === null && hover === id) || focus === id) ?
-						BUTTON_FOCUS :
-						BUTTON;
-				if ( [ BUTTON, BUTTON_FOCUS, BUTTON_PRESS, BUTTON_DISABLE ].every( resources.has ) ) {
-					rect( r, white, path );
-				}
-				quads.push(
-					...text.quads(
-						value,
-						[ x + (down ? 1 : 0), y + (down ? 1 : 0) + (clientTop ?? 0), width, 24 - (clientTop ?? 0) ],
-						r,
-						buttonTextColor( [ 254 / 255, 251 / 255, 216 / 255, 1 ], buttonAccess( false, disabled ) ),
-						{ hAlign: 1, vAlign: clientTop === undefined ? 1 : 0 }
-					)
-				);
+				uiButton( frame, id, value, x, y, width, disabled, selected, clientTop );
 			}
 			/*
 			================
@@ -10414,12 +10368,7 @@ export function createUi(
 			================
 			*/
 			function closeButton( x: number, y: number, id: CloseControlId ) {
-				const r: UiRect = [ x, y, 16, 16 ];
-				blocks.push( r );
-				controls.push( { id, label: "Close", rect: r, kind: "button" } );
-				if ( resources.has( CLOSE ) && resources.has( CLOSE_PRESS ) && resources.has( CLOSE_FOCUS ) ) {
-					rect( r, white, pressed === id ? CLOSE_PRESS : hover === id ? CLOSE_FOCUS : CLOSE );
-				}
+				uiCloseButton( frame, x, y, id );
 			}
 			/*
 			================
@@ -10849,16 +10798,7 @@ export function createUi(
 			================
 			*/
 			function comboBox( r: UiRect, id: string, label: string, value: string, disabled = false ) {
-				const chrome = comboBoxChrome(
-					r,
-					resources.size,
-					full,
-					!disabled && pressed === id ? 2 : !disabled && hover === id ? 1 : 0
-				);
-				paths.push( ...chrome.paths );
-				quads.push( ...chrome.quads );
-				quads.push( ...text.quads( value, chrome.textRect, r, white, { hAlign: 1, vAlign: 1 } ) );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
+				uiComboBox( frame, r, id, label, value, disabled );
 			}
 			/*
 			================
