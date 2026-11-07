@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/paramkeeper"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -56,6 +58,8 @@ func crowdStoreRuntime(tb testing.TB, batched bool) (*Runtime, *store.Store, *fa
 	deps := &enterworld.Deps{
 		Characters:       st.Characters(),
 		Items:            testItems(),
+		Skills:           staticSkillSource{},
+		MagicOptions:     &emptyMagicOptionSource{},
 		NpcSpawns:        enterworld.NpcSpawnConfig{Roster: simulation.DefaultNpcRoster()},
 		MutateCharacter:  st.MutateCharacter,
 		MutateCharacters: st.MutateCharacters,
@@ -118,6 +122,40 @@ func TestRecoveringCrowdCommitsOncePerTick(t *testing.T) {
 				t.Fatalf("batched %v: %s never recovered", batched, c.Name)
 			}
 		}
+	}
+}
+
+/*
+================
+TestRecoveringCrowdReusesMemoizedStats
+
+The recovery pulse reads each member's stats through
+PlayerStatsWithModifiers, whose content-keyed memo (combat/statscache.go)
+engages only when every reference source carries an identity. The crowd
+fixture wires its sources the way production does (maps and pointers),
+so this test and the bench below measure the rebuild production
+actually pays - with a source missing, the memo refuses every call and
+the pulse clones the keeper graph per member per pulse (#2030).
+================
+*/
+func TestRecoveringCrowdReusesMemoizedStats(t *testing.T) {
+	rt, _, clock, crowd := crowdStoreRuntime(t, true)
+	now := clock.NowMs()
+	for pulse := int64(1); pulse <= 2; pulse++ {
+		for _, c := range crowd {
+			hp := int64(1)
+			c.CurrentHP = &hp
+		}
+		rt.advanceNaturalRecovery(now + pulse*4000)
+	}
+	c := crowd[0]
+	writes := rt.statModifierWrites(testDivision, c)
+	writes = append(writes,
+		paramkeeper.Write{Parameter: itemParamHPRecovery, Source: recoveryPostureSource, Value: standingRecoveryRate},
+		paramkeeper.Write{Parameter: itemParamMPRecovery, Source: recoveryPostureSource, Value: standingRecoveryRate},
+	)
+	if _, _, _, ok := combat.LookupMemoizedPlayerStats(c, rt.statCatalogs(), writes, rt.playerAbnormal(testDivision, c.Name)); !ok {
+		t.Fatal("the recovery pulse rebuilt the stats projection instead of reusing the memoised one")
 	}
 }
 

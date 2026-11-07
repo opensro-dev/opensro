@@ -66,10 +66,12 @@ const (
 // measured 83,925 B / 1,324 allocs; with the pet tick's idle satiety
 // and crow-recharge update doors judged under the read door and the
 // waiting cast verdict pricing from its prepared snapshot (#2139),
-// measured 68,183 B / 1,056 allocs.
+// measured 68,183 B / 1,056 allocs; with the elemental eligibility
+// walk's refusal judged on door-read facts instead of the pet-owner
+// copy (#2030), measured 66,296 B / 997 allocs.
 const (
-	tickBudgetBytesPerTick  = 75000
-	tickBudgetAllocsPerTick = 1161
+	tickBudgetBytesPerTick  = 73000
+	tickBudgetAllocsPerTick = 1100
 )
 
 /*

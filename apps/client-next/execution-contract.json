@@ -1345,7 +1345,8 @@
 			"functions": [
 				"callback:createGameplay:1",
 				"callback:createGameplay:4",
-				"structureName"
+				"structureName",
+				"structureFacts"
 			]
 		},
 		{
@@ -1788,6 +1789,13 @@
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"lookup"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/ui/buff-board.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
 			]
 		},
 		{

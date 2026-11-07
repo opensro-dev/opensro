@@ -166,7 +166,8 @@ import {
 	FORTRESS_AIDE_CAPABILITY,
 	FORTRESS_STRUCTURE_LIST,
 	FORTRESS_STRUCTURE_REPAIR,
-	FORTRESS_STRUCTURE_UPGRADE
+	FORTRESS_STRUCTURE_UPGRADE,
+	fortressVariantTarget
 } from "@/engine/foundation/gameplay/fortress-map";
 import {
 	type FortressForgeItem,
@@ -223,9 +224,14 @@ import {
 	academyRequest,
 	academyPacket,
 	academyNoticeRequest,
-	academyOpenRequest
+	academyOpenRequest,
+	academyPassBuffRequest
 } from "@/engine/foundation/gameplay/academy";
-import { academyAcknowledgment, academyStatusNotice } from "@/engine/foundation/gameplay/academy-notices";
+import {
+	academyAcknowledgment,
+	academyBuffNotices,
+	academyStatusNotice
+} from "@/engine/foundation/gameplay/academy-notices";
 import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
@@ -372,6 +378,9 @@ interface WorldReferences {
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structureFacts?: (
+		refObjId: number
+	) => { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -2726,6 +2735,10 @@ state here before a command can claim a native wire conversation.
 				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
 				return sendFrame( academyCompulsoryGraduateRequest( command.name ) );
 			}
+			if ( command.kind === "academy-pass-buff" ) {
+				if ( !academy || !localGid ) throw Error( "Academy session is not initialized" );
+				return sendFrame( academyPassBuffRequest() );
+			}
 			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
 			// checks ran in the name box.
 			if ( command.kind === "cos-name" ) {
@@ -4154,11 +4167,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 				}
 				if ( academy ) {
-					const next = academyPacket( academy, frame );
+					const next = academyPacket( academy, frame, now );
 					if ( next ) {
 						const statusNotice = academyStatusNotice( academy, next, frame );
 						if ( statusNotice ) {
 							notices = [ ...notices.slice( -99 ), { ...statusNotice, sequence: ++noticeSequence } ];
+						}
+						for ( const buffNotice of academyBuffNotices( academy, frame ) ) {
+							notices = [ ...notices.slice( -99 ), { ...buffNotice, sequence: ++noticeSequence } ];
 						}
 						// 769C6B / 769DA3 / 771750: matching and honor-ranking failures use academy category 1D.
 						if (
@@ -4266,11 +4282,21 @@ Packet handling must not depend on which HUD panel is currently open.
 						const structure = fortressNext.zones?.find( row =>
 							row.zone === fortressNext.service?.reference
 						);
-						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
-							fortressStructureNotice(
-								fortressNext,
-								structure?.ref ? worldReferences.structureName?.( structure.ref ) : undefined
+						const standing = structure?.ref ?
+							worldReferences.structureFacts?.( structure.ref ) :
+							undefined;
+						let variantName: string | undefined;
+						if ( structure?.ref ) {
+							const variant = fortressVariantTarget(
+								fortressNext.structureUpgrades?.get( structure.ref ),
+								structure.ref
 							);
+							if ( variant !== structure.ref ) {
+								variantName = worldReferences.structureName?.( variant );
+							}
+						}
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
+							fortressStructureNotice( fortressNext, standing, variantName );
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {
