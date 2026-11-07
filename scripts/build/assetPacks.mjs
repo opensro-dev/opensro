@@ -143,7 +143,7 @@ export async function buildAssetPacks( options = {} ) {
 	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
 	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
 
-	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
+	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, hd?: boolean, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
 		format: "sro-asset-pack-index",
 		version: ASSET_PACK_VERSION,
@@ -183,6 +183,20 @@ export async function buildAssetPacks( options = {} ) {
 
 	index.groups.sort( ( left, right ) => left.name.localeCompare( right.name ) );
 	index.assets.sort( ( left, right ) => left.path.localeCompare( right.path ) );
+	// The build/server contract for the HD channel (#2800): the main index
+	// certifies that this published tree carries the HD set's own index, so
+	// the client can list the Experimental row without ever fetching /hd.
+	// The stamp names no HD byte and follows what this build published
+	// (#2812): the full build passes its own HD step's outcome as
+	// hdPublished, so a first HD build stamps and a build that skipped the
+	// set never does - a stale hd/ tree on disk certifies nothing. Callers
+	// that run no HD step (the standalone repack) leave it unset, and the
+	// tree's already-published HD index certifies as before.
+	const hdPublished = options.hdPublished ??
+		Boolean( await stat( path.join( root, "hd", "packs", "manifest.json" ) ).catch( () => null ) );
+	if ( packRoot === "/assets" && hdPublished ) {
+		index.hd = true;
+	}
 	validateAssetPackIndex( index, packRoot );
 	await prepareAssetDelivery( index, root );
 	// Sparse builders publish partial indexes; the final merged publication

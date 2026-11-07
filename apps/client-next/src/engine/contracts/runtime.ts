@@ -245,7 +245,6 @@ The runtime grants scene and resource commands without exposing device ownership
 */
 export interface Renderer extends Disposable {
 	setFrameWork?( work: FrameWork ): void;
-	readbackWaitMs?(): number;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	/** The current device's adapter facts for bug reports, null before one. */

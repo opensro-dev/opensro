@@ -146,9 +146,14 @@ function owner( t, compressedTextures, hdTextures = false ) {
 	const saved = Object.getOwnPropertyDescriptor( globalThis, "Worker" ),
 		storage = Object.getOwnPropertyDescriptor( globalThis, "localStorage" );
 	const messages = [];
+	let worker = null;
 	Object.defineProperty( globalThis, "Worker", {
 		configurable: true,
 		value: class {
+			constructor() {
+				worker = this;
+			}
+			onmessage = null;
 			postMessage( message ) {
 				messages.push( message );
 			}
@@ -175,7 +180,9 @@ function owner( t, compressedTextures, hdTextures = false ) {
 	return {
 		assets,
 		variants: () => messages.filter( message => message.kind === "texture-variant" ),
-		hd: () => messages.filter( message => message.kind === "hd-textures" )
+		hd: () => messages.filter( message => message.kind === "hd-textures" ),
+		// The worker's word on the published build (#2800), as it arrives.
+		tellAvailable: available => worker.onmessage( { data: { kind: "hd-availability", available } } )
 	};
 }
 
@@ -220,21 +227,54 @@ test("HD variants mirror native texture paths under the /hd root, and nothing el
 	assert.equal( hdTextureVariantPath( "/other/stone.texture", "bc7" ), null );
 });
 
-test("with the HD row on the worker is told the format with the features, and a live toggle re-tells it", t => {
+test("with the HD row on the worker is told the format once the set is known published, and a live toggle re-tells it", t => {
 	const pc = owner( t, true, true );
 	assert.deepEqual( pc.hd(), [], "nothing is sent before the device is known" );
 	pc.assets.textureFeatures( [ BC, ASTC ] );
-	assert.deepEqual( pc.hd(), [ { kind: "hd-textures", format: "bc7" } ] );
+	assert.deepEqual(
+		pc.hd(),
+		[ { kind: "hd-textures", format: null } ],
+		"the device is known but the build has not certified a set"
+	);
+	pc.tellAvailable( true );
+	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" }
+	] );
 	pc.assets.hdTextures( false );
 	pc.assets.hdTextures( true );
 	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
 		{ kind: "hd-textures", format: "bc7" },
 		{ kind: "hd-textures", format: null },
 		{ kind: "hd-textures", format: "bc7" }
 	] );
 	const phone = owner( t, true, true );
 	phone.assets.textureFeatures( [ ASTC ] );
-	assert.deepEqual( phone.hd(), [ { kind: "hd-textures", format: "astc" } ] );
+	phone.tellAvailable( true );
+	assert.deepEqual( phone.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "astc" }
+	] );
+});
+
+test("a saved HD row does nothing while the published build carries no set (#2800)", t => {
+	const pc = owner( t, true, true );
+	assert.equal( pc.assets.hdAvailable(), false, "no word from the build yet" );
+	pc.assets.textureFeatures( [ BC, ASTC ] );
+	pc.tellAvailable( false );
+	assert.deepEqual(
+		pc.hd(),
+		[ { kind: "hd-textures", format: null } ],
+		"the worker is never told a format, so it fetches nothing of the set"
+	);
+	assert.equal( pc.assets.hdAvailable(), false );
+	pc.tellAvailable( true );
+	assert.equal( pc.assets.hdAvailable(), true, "the row appears the day a set is published" );
+	assert.deepEqual( pc.hd(), [
+		{ kind: "hd-textures", format: null },
+		{ kind: "hd-textures", format: "bc7" }
+	] );
 });
 
 test("with the HD row off the worker hears null once the features arrive, and never a format", t => {

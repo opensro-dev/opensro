@@ -16,7 +16,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1210,
+			"line": 1211,
 			"name": "consolePhase",
 			"shared": true
 		},
@@ -31,7 +31,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1210,
+			"line": 1211,
 			"name": "consoleY",
 			"shared": true
 		},
@@ -42,7 +42,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1210,
+			"line": 1211,
 			"name": "consoleLast",
 			"shared": false
 		},
@@ -65,7 +65,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1210,
+			"line": 1211,
 			"name": "consoleText",
 			"shared": true
 		},
@@ -76,7 +76,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1210,
+			"line": 1211,
 			"name": "gmObserved",
 			"shared": false
 		},
@@ -95,7 +95,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1211,
+			"line": 1212,
 			"name": "consoleRows",
 			"shared": true
 		},
@@ -114,7 +114,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1211,
+			"line": 1212,
 			"name": "consoleHistory",
 			"shared": true
 		},
@@ -133,7 +133,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1211,
+			"line": 1212,
 			"name": "consoleHistoryIndex",
 			"shared": true
 		},
@@ -144,7 +144,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1213,
+			"line": 1214,
 			"name": "debugMessages",
 			"shared": false
 		},
@@ -159,7 +159,7 @@
 					"writes": 7
 				}
 			},
-			"line": 1216,
+			"line": 1217,
 			"name": "debugClock",
 			"shared": true
 		},
@@ -170,7 +170,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1222,
+			"line": 1223,
 			"name": "debugZoomRail",
 			"shared": false
 		},
@@ -181,7 +181,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1223,
+			"line": 1224,
 			"name": "debugFreeCamera",
 			"shared": false
 		},
@@ -192,7 +192,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1224,
+			"line": 1225,
 			"name": "debugCursorVisible",
 			"shared": false
 		},
@@ -203,7 +203,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1234,
+			"line": 1235,
 			"name": "cameraWaypointsLoaded",
 			"shared": false
 		},
@@ -214,7 +214,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1248,
+			"line": 1249,
 			"name": "debugCameraSpeed",
 			"shared": false
 		},
@@ -225,7 +225,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1249,
+			"line": 1250,
 			"name": "debugFast",
 			"shared": false
 		},
@@ -236,13 +236,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1250,
+			"line": 1251,
 			"name": "debugFrameStats",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@22055": {
+				"anonymous@22074": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -255,7 +255,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1251,
+			"line": 1252,
 			"name": "debugShowIds",
 			"shared": true
 		},
@@ -266,7 +266,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1252,
+			"line": 1253,
 			"name": "debugMoveSpeed",
 			"shared": false
 		},
@@ -277,7 +277,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1258,
+			"line": 1259,
 			"name": "debugWireFrame",
 			"shared": false
 		},
@@ -288,7 +288,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1259,
+			"line": 1260,
 			"name": "debugGround",
 			"shared": false
 		},
@@ -299,7 +299,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1260,
+			"line": 1261,
 			"name": "debugSky",
 			"shared": false
 		},
@@ -310,7 +310,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1261,
+			"line": 1262,
 			"name": "debugMapObjects",
 			"shared": false
 		},
@@ -321,7 +321,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1262,
+			"line": 1263,
 			"name": "debugCharacters",
 			"shared": false
 		},
@@ -332,7 +332,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1263,
+			"line": 1264,
 			"name": "debugLevelOfDetail",
 			"shared": false
 		},
@@ -347,7 +347,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1269,
+			"line": 1270,
 			"name": "debugUiVisible",
 			"shared": true
 		},
@@ -370,7 +370,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1270,
+			"line": 1271,
 			"name": "video",
 			"shared": true
 		},
@@ -393,7 +393,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1270,
+			"line": 1271,
 			"name": "videoDraft",
 			"shared": true
 		},
@@ -412,7 +412,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1270,
+			"line": 1271,
 			"name": "videoScroll",
 			"shared": true
 		},
@@ -431,7 +431,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1270,
+			"line": 1271,
 			"name": "videoCombo",
 			"shared": true
 		},
@@ -454,7 +454,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1271,
+			"line": 1272,
 			"name": "bindings",
 			"shared": true
 		},
@@ -477,7 +477,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1271,
+			"line": 1272,
 			"name": "bindingDraft",
 			"shared": true
 		},
@@ -500,7 +500,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1271,
+			"line": 1272,
 			"name": "bindingSelected",
 			"shared": true
 		},
@@ -519,7 +519,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1271,
+			"line": 1272,
 			"name": "bindingScroll",
 			"shared": true
 		},
@@ -538,7 +538,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1272,
+			"line": 1273,
 			"name": "sight",
 			"shared": true
 		},
@@ -561,7 +561,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1272,
+			"line": 1273,
 			"name": "sightDraft",
 			"shared": true
 		},
@@ -588,7 +588,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1273,
+			"line": 1274,
 			"name": "audioSaved",
 			"shared": true
 		},
@@ -615,7 +615,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1273,
+			"line": 1274,
 			"name": "audioDraft",
 			"shared": true
 		},
@@ -634,7 +634,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1274,
+			"line": 1275,
 			"name": "localBlocks",
 			"shared": true
 		},
@@ -653,7 +653,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1275,
+			"line": 1276,
 			"name": "blockTab",
 			"shared": true
 		},
@@ -676,7 +676,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1275,
+			"line": 1276,
 			"name": "blockOffset",
 			"shared": true
 		},
@@ -699,7 +699,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1275,
+			"line": 1276,
 			"name": "blockSelected",
 			"shared": true
 		},
@@ -718,7 +718,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1275,
+			"line": 1276,
 			"name": "blockInput",
 			"shared": true
 		},
@@ -749,17 +749,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1276,
+			"line": 1277,
 			"name": "blockDialog",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20240": {
+				"anonymous@20259": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20245": {
+				"anonymous@20264": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -780,7 +780,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1279,
+			"line": 1280,
 			"name": "friendSelected",
 			"shared": true
 		},
@@ -803,7 +803,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1279,
+			"line": 1280,
 			"name": "friendOffset",
 			"shared": true
 		},
@@ -822,7 +822,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1279,
+			"line": 1280,
 			"name": "friendInput",
 			"shared": true
 		},
@@ -857,13 +857,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1280,
+			"line": 1281,
 			"name": "friendDialog",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20442": {
+				"anonymous@20461": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -884,7 +884,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1284,
+			"line": 1285,
 			"name": "letterSelected",
 			"shared": true
 		},
@@ -907,13 +907,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1284,
+			"line": 1285,
 			"name": "letterOffset",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20408": {
+				"anonymous@20427": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -926,7 +926,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1284,
+			"line": 1285,
 			"name": "letterSortByTime",
 			"shared": true
 		},
@@ -941,7 +941,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1284,
+			"line": 1285,
 			"name": "letterSortDescending",
 			"shared": true
 		},
@@ -968,7 +968,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1285,
+			"line": 1286,
 			"name": "letterDraft",
 			"shared": true
 		},
@@ -999,7 +999,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1285,
+			"line": 1286,
 			"name": "letterDeleting",
 			"shared": true
 		},
@@ -1034,7 +1034,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1338,
+			"line": 1339,
 			"name": "petNameDialog",
 			"shared": true
 		},
@@ -1057,21 +1057,21 @@
 					"writes": 1
 				}
 			},
-			"line": 1339,
+			"line": 1340,
 			"name": "petNameInput",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12874": {
+				"anonymous@12891": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@22055": {
+				"anonymous@22074": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1096,7 +1096,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1340,
+			"line": 1341,
 			"name": "options",
 			"shared": true
 		},
@@ -1119,7 +1119,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1340,
+			"line": 1341,
 			"name": "optionDraft",
 			"shared": true
 		},
@@ -1138,7 +1138,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1341,
+			"line": 1342,
 			"name": "optionTab",
 			"shared": true
 		},
@@ -1157,7 +1157,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1342,
+			"line": 1343,
 			"name": "optionScroll",
 			"shared": true
 		},
@@ -1176,7 +1176,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1343,
+			"line": 1344,
 			"name": "beginnerDraft",
 			"shared": true
 		},
@@ -1195,7 +1195,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1344,
+			"line": 1345,
 			"name": "potionCombo",
 			"shared": true
 		},
@@ -1210,7 +1210,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1345,
+			"line": 1346,
 			"name": "potionComboOffset",
 			"shared": true
 		},
@@ -1229,7 +1229,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1346,
+			"line": 1347,
 			"name": "potionDraft",
 			"shared": true
 		},
@@ -1240,13 +1240,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1370,
+			"line": 1371,
 			"name": "buffTick",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1255,13 +1255,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1372,
+			"line": 1373,
 			"name": "berserkActor",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1270,7 +1270,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1372,
+			"line": 1373,
 			"name": "berserkStarted",
 			"shared": true
 		},
@@ -1281,7 +1281,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1372,
+			"line": 1373,
 			"name": "berserkFrame",
 			"shared": false
 		},
@@ -1292,7 +1292,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1372,
+			"line": 1373,
 			"name": "berserkDisplayed",
 			"shared": false
 		},
@@ -1307,7 +1307,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1373,
+			"line": 1374,
 			"name": "equipmentWarningPhase",
 			"shared": true
 		},
@@ -1318,7 +1318,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1373,
+			"line": 1374,
 			"name": "equipmentWarningDue",
 			"shared": false
 		},
@@ -1333,7 +1333,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1373,
+			"line": 1374,
 			"name": "equipmentWarningVisible",
 			"shared": true
 		},
@@ -1344,18 +1344,18 @@
 					"writes": 2
 				}
 			},
-			"line": 1375,
+			"line": 1376,
 			"name": "cautionVisible",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12339": {
+				"anonymous@12356": {
 					"reads": 3,
 					"writes": 0
 				}
 			},
-			"line": 1375,
+			"line": 1376,
 			"name": "cautionFrame",
 			"shared": false
 		},
@@ -1366,7 +1366,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1376,
+			"line": 1377,
 			"name": "targetGradeIcon",
 			"shared": false
 		},
@@ -1381,13 +1381,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1382,
+			"line": 1383,
 			"name": "targetBuffState",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12339": {
+				"anonymous@12356": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1400,7 +1400,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1384,
+			"line": 1385,
 			"name": "petBuffState",
 			"shared": true
 		},
@@ -1411,7 +1411,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1385,
+			"line": 1386,
 			"name": "skillIndex",
 			"shared": false
 		},
@@ -1422,7 +1422,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1398,
+			"line": 1399,
 			"name": "partyBuffs",
 			"shared": false
 		},
@@ -1437,7 +1437,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1399,
+			"line": 1400,
 			"name": "partyBuffStates",
 			"shared": true
 		},
@@ -1448,17 +1448,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1400,
+			"line": 1401,
 			"name": "partyRoster",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@1467": {
+				"anonymous@1468": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@1479": {
+				"anonymous@1480": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -1471,7 +1471,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1401,
+			"line": 1402,
 			"name": "boardSuppressed",
 			"shared": true
 		},
@@ -1482,7 +1482,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1401,
+			"line": 1402,
 			"name": "boardSuppressionDue",
 			"shared": false
 		},
@@ -1505,13 +1505,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1487,
+			"line": 1488,
 			"name": "recallConfirm",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10250": {
+				"anonymous@10267": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -1528,7 +1528,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1488,
+			"line": 1489,
 			"name": "buffDismiss",
 			"shared": true
 		},
@@ -1547,7 +1547,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1490,
+			"line": 1491,
 			"name": "academyBuffPass",
 			"shared": true
 		},
@@ -1558,7 +1558,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1491,
+			"line": 1492,
 			"name": "loading",
 			"shared": false
 		},
@@ -1569,7 +1569,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1492,
+			"line": 1493,
 			"name": "loadingGeneration",
 			"shared": false
 		},
@@ -1580,7 +1580,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1492,
+			"line": 1493,
 			"name": "loadingTravelRevision",
 			"shared": false
 		},
@@ -1595,7 +1595,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1495,
+			"line": 1496,
 			"name": "nextLoadingVariant",
 			"shared": true
 		},
@@ -1614,7 +1614,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1498,
+			"line": 1499,
 			"name": "leaveRequested",
 			"shared": true
 		},
@@ -1645,7 +1645,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1527,
+			"line": 1528,
 			"name": "specialtyCombo",
 			"shared": true
 		},
@@ -1656,7 +1656,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1536,
+			"line": 1537,
 			"name": "productionClock",
 			"shared": false
 		},
@@ -1667,7 +1667,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1536,
+			"line": 1537,
 			"name": "productionSecond",
 			"shared": false
 		},
@@ -1678,7 +1678,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1539,
+			"line": 1540,
 			"name": "alchemyOutcomeSeen",
 			"shared": false
 		},
@@ -1693,7 +1693,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1539,
+			"line": 1540,
 			"name": "alchemyClock",
 			"shared": true
 		},
@@ -1708,7 +1708,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1540,
+			"line": 1541,
 			"name": "alchemyEffect",
 			"shared": true
 		},
@@ -1719,7 +1719,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1562,
+			"line": 1563,
 			"name": "gmCatalogSeen",
 			"shared": false
 		},
@@ -1730,7 +1730,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1562,
+			"line": 1563,
 			"name": "gmCatalogAcked",
 			"shared": false
 		},
@@ -1741,7 +1741,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1570,
+			"line": 1571,
 			"name": "academyWasVisible",
 			"shared": false
 		},
@@ -1752,7 +1752,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1573,
+			"line": 1574,
 			"name": "academyOpenedSeen",
 			"shared": false
 		},
@@ -1767,7 +1767,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1589,
+			"line": 1590,
 			"name": "mallNotice",
 			"shared": true
 		},
@@ -1782,7 +1782,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1594,
+			"line": 1595,
 			"name": "guideThumbTravel",
 			"shared": true
 		},
@@ -1797,7 +1797,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1594,
+			"line": 1595,
 			"name": "guideScrollMax",
 			"shared": true
 		},
@@ -1812,7 +1812,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1594,
+			"line": 1595,
 			"name": "guideIndexMax",
 			"shared": true
 		},
@@ -1839,7 +1839,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1595,
+			"line": 1596,
 			"name": "guideX",
 			"shared": true
 		},
@@ -1866,7 +1866,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1595,
+			"line": 1596,
 			"name": "guideY",
 			"shared": true
 		},
@@ -1885,7 +1885,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1596,
+			"line": 1597,
 			"name": "academySelection",
 			"shared": true
 		},
@@ -1900,7 +1900,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1596,
+			"line": 1597,
 			"name": "academySort",
 			"shared": true
 		},
@@ -1915,7 +1915,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1596,
+			"line": 1597,
 			"name": "academyAscending",
 			"shared": true
 		},
@@ -1930,7 +1930,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1597,
+			"line": 1598,
 			"name": "academyName",
 			"shared": true
 		},
@@ -1945,7 +1945,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1597,
+			"line": 1598,
 			"name": "academyGrade",
 			"shared": true
 		},
@@ -1960,7 +1960,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1597,
+			"line": 1598,
 			"name": "academyKind",
 			"shared": true
 		},
@@ -1975,7 +1975,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1597,
+			"line": 1598,
 			"name": "academyCombo",
 			"shared": true
 		},
@@ -1990,7 +1990,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1598,
+			"line": 1599,
 			"name": "academyFilter",
 			"shared": true
 		},
@@ -2009,7 +2009,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1599,
+			"line": 1600,
 			"name": "guideSidebar",
 			"shared": true
 		},
@@ -2028,7 +2028,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1599,
+			"line": 1600,
 			"name": "guideTab",
 			"shared": true
 		},
@@ -2047,7 +2047,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1599,
+			"line": 1600,
 			"name": "guideIndexScroll",
 			"shared": true
 		},
@@ -2066,7 +2066,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1601,
+			"line": 1602,
 			"name": "guideEvent",
 			"shared": true
 		},
@@ -2077,7 +2077,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1601,
+			"line": 1602,
 			"name": "guideObserved",
 			"shared": false
 		},
@@ -2088,7 +2088,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1601,
+			"line": 1602,
 			"name": "guideRequested",
 			"shared": false
 		},
@@ -2107,7 +2107,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1601,
+			"line": 1602,
 			"name": "guidePending",
 			"shared": true
 		},
@@ -2126,7 +2126,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1601,
+			"line": 1602,
 			"name": "guideScroll",
 			"shared": true
 		},
@@ -2137,7 +2137,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1602,
+			"line": 1603,
 			"name": "guideOrigin",
 			"shared": false
 		},
@@ -2156,7 +2156,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1603,
+			"line": 1604,
 			"name": "rememberedMainPopup",
 			"shared": true
 		},
@@ -2167,13 +2167,13 @@
 					"writes": 4
 				}
 			},
-			"line": 1623,
+			"line": 1624,
 			"name": "layoutResourcesRevision",
 			"shared": false
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2186,7 +2186,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1624,
+			"line": 1625,
 			"name": "chatHidden",
 			"shared": true
 		},
@@ -2205,13 +2205,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1624,
+			"line": 1625,
 			"name": "whispersOpen",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12874": {
+				"anonymous@12891": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2224,13 +2224,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1624,
+			"line": 1625,
 			"name": "statusFilterOpen",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2243,13 +2243,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1626,
+			"line": 1627,
 			"name": "chatRows",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2262,13 +2262,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1626,
+			"line": 1627,
 			"name": "chatTab",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12874": {
+				"anonymous@12891": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -2281,7 +2281,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1626,
+			"line": 1627,
 			"name": "statusRows",
 			"shared": true
 		},
@@ -2292,7 +2292,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1627,
+			"line": 1628,
 			"name": "minimapZoom",
 			"shared": false
 		},
@@ -2307,7 +2307,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1627,
+			"line": 1628,
 			"name": "minimapTarget",
 			"shared": true
 		},
@@ -2318,7 +2318,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1627,
+			"line": 1628,
 			"name": "minimapLast",
 			"shared": false
 		},
@@ -2329,7 +2329,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1630,
+			"line": 1631,
 			"name": "minimapRoomName",
 			"shared": false
 		},
@@ -2339,7 +2339,7 @@
 					"reads": 1,
 					"writes": 1
 				},
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2348,7 +2348,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1631,
+			"line": 1632,
 			"name": "abilityDetails",
 			"shared": true
 		},
@@ -2359,7 +2359,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1631,
+			"line": 1632,
 			"name": "mapWorldLoading",
 			"shared": false
 		},
@@ -2386,7 +2386,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1633,
+			"line": 1634,
 			"name": "serverList",
 			"shared": true
 		},
@@ -2396,7 +2396,7 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@2559": {
+				"anonymous@2560": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2413,7 +2413,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1634,
+			"line": 1635,
 			"name": "serverDraft",
 			"shared": true
 		},
@@ -2428,21 +2428,21 @@
 					"writes": 0
 				}
 			},
-			"line": 1635,
+			"line": 1636,
 			"name": "serverOffset",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12874": {
+				"anonymous@12891": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27515": {
+				"anonymous@27534": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2523,17 +2523,17 @@
 					"writes": 2
 				}
 			},
-			"line": 1636,
+			"line": 1637,
 			"name": "hover",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@12874": {
+				"anonymous@12891": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -2614,7 +2614,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1637,
+			"line": 1638,
 			"name": "pressed",
 			"shared": true
 		},
@@ -2629,7 +2629,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1640,
+			"line": 1641,
 			"name": "diagnosticError",
 			"shared": true
 		},
@@ -2648,7 +2648,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1645,
+			"line": 1646,
 			"name": "worldShown",
 			"shared": true
 		},
@@ -2659,7 +2659,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1646,
+			"line": 1647,
 			"name": "minimapQueryKey",
 			"shared": false
 		},
@@ -2674,7 +2674,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1647,
+			"line": 1648,
 			"name": "deathIdentity",
 			"shared": true
 		},
@@ -2697,7 +2697,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1647,
+			"line": 1648,
 			"name": "deathDismissed",
 			"shared": true
 		},
@@ -2720,7 +2720,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1647,
+			"line": 1648,
 			"name": "deathPosition",
 			"shared": true
 		},
@@ -2731,7 +2731,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1648,
+			"line": 1649,
 			"name": "deathLifeAt",
 			"shared": false
 		},
@@ -2742,7 +2742,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1648,
+			"line": 1649,
 			"name": "deathStateAt",
 			"shared": false
 		},
@@ -2765,7 +2765,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1648,
+			"line": 1649,
 			"name": "rebirthDue",
 			"shared": true
 		},
@@ -2784,7 +2784,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1648,
+			"line": 1649,
 			"name": "deathRequested",
 			"shared": true
 		},
@@ -2795,7 +2795,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1649,
+			"line": 1650,
 			"name": "deathObserved",
 			"shared": false
 		},
@@ -2806,7 +2806,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1710,
+			"line": 1711,
 			"name": "inviteIdentity",
 			"shared": false
 		},
@@ -2821,7 +2821,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1711,
+			"line": 1712,
 			"name": "invitePosition",
 			"shared": true
 		},
@@ -2836,7 +2836,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1712,
+			"line": 1713,
 			"name": "disconnectPosition",
 			"shared": true
 		},
@@ -2847,7 +2847,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1713,
+			"line": 1714,
 			"name": "noticeDialogSequence",
 			"shared": false
 		},
@@ -2866,7 +2866,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1714,
+			"line": 1715,
 			"name": "activeNoticeDialog",
 			"shared": true
 		},
@@ -2881,7 +2881,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1720,
+			"line": 1721,
 			"name": "noticeDialogPosition",
 			"shared": true
 		},
@@ -2896,7 +2896,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1721,
+			"line": 1722,
 			"name": "noticeDialogFrame",
 			"shared": true
 		},
@@ -2911,7 +2911,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1722,
+			"line": 1723,
 			"name": "systemX",
 			"shared": true
 		},
@@ -2926,7 +2926,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1722,
+			"line": 1723,
 			"name": "systemY",
 			"shared": true
 		},
@@ -2941,7 +2941,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1723,
+			"line": 1724,
 			"name": "dollYaw",
 			"shared": true
 		},
@@ -2960,7 +2960,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1723,
+			"line": 1724,
 			"name": "avatarView",
 			"shared": true
 		},
@@ -2975,7 +2975,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1724,
+			"line": 1725,
 			"name": "tooltipMemo",
 			"shared": true
 		},
@@ -3034,11 +3034,11 @@
 					"writes": 3
 				},
 				"step": {
-					"reads": 10,
+					"reads": 9,
 					"writes": 1
 				}
 			},
-			"line": 1738,
+			"line": 1739,
 			"name": "carriedItem",
 			"shared": true
 		},
@@ -3061,7 +3061,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1740,
+			"line": 1741,
 			"name": "structureRemoval",
 			"shared": true
 		},
@@ -3076,7 +3076,7 @@
 					"writes": 4
 				}
 			},
-			"line": 1779,
+			"line": 1780,
 			"name": "titleNotice",
 			"shared": true
 		},
@@ -3107,7 +3107,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1786,
+			"line": 1787,
 			"name": "uiNow",
 			"shared": true
 		},
@@ -3118,7 +3118,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1787,
+			"line": 1788,
 			"name": "nextPoll",
 			"shared": false
 		},
@@ -3129,7 +3129,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1788,
+			"line": 1789,
 			"name": "lastSessionRevision",
 			"shared": false
 		},
@@ -3144,7 +3144,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1789,
+			"line": 1790,
 			"name": "serversRequested",
 			"shared": true
 		},
@@ -3155,7 +3155,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1790,
+			"line": 1791,
 			"name": "serversRetryAt",
 			"shared": false
 		},
@@ -3166,7 +3166,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1791,
+			"line": 1792,
 			"name": "lastNativeTitleStatus",
 			"shared": false
 		},
@@ -3181,7 +3181,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1792,
+			"line": 1793,
 			"name": "loginReplyPending",
 			"shared": true
 		},
@@ -3199,7 +3199,7 @@
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@2387": {
+				"anonymous@2388": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -3628,7 +3628,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1793,
+			"line": 1794,
 			"name": "view",
 			"shared": true
 		},
@@ -3639,7 +3639,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1794,
+			"line": 1795,
 			"name": "revision",
 			"shared": false
 		},
@@ -3962,7 +3962,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1795,
+			"line": 1796,
 			"name": "dirty",
 			"shared": true
 		},
@@ -3981,7 +3981,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1796,
+			"line": 1797,
 			"name": "disposed",
 			"shared": true
 		},
@@ -3991,7 +3991,7 @@
 					"reads": 0,
 					"writes": 2
 				},
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4128,7 +4128,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1797,
+			"line": 1798,
 			"name": "focus",
 			"shared": true
 		},
@@ -4138,7 +4138,7 @@
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4243,13 +4243,13 @@
 					"writes": 0
 				}
 			},
-			"line": 1798,
+			"line": 1799,
 			"name": "composing",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 2,
 					"writes": 0
 				},
@@ -4314,7 +4314,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1799,
+			"line": 1800,
 			"name": "selection",
 			"shared": true
 		},
@@ -4333,7 +4333,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1800,
+			"line": 1801,
 			"name": "lastProduct",
 			"shared": true
 		},
@@ -4360,7 +4360,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1807,
+			"line": 1808,
 			"name": "servers",
 			"shared": true
 		},
@@ -4375,7 +4375,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1808,
+			"line": 1809,
 			"name": "roster",
 			"shared": true
 		},
@@ -4385,7 +4385,7 @@
 					"reads": 0,
 					"writes": 1
 				},
-				"anonymous@10426": {
+				"anonymous@10443": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4406,13 +4406,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1809,
+			"line": 1810,
 			"name": "selectedServer",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10452": {
+				"anonymous@10469": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4429,7 +4429,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1810,
+			"line": 1811,
 			"name": "selectedCharacter",
 			"shared": true
 		},
@@ -4456,7 +4456,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1811,
+			"line": 1812,
 			"name": "account",
 			"shared": true
 		},
@@ -4483,7 +4483,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1812,
+			"line": 1813,
 			"name": "password",
 			"shared": true
 		},
@@ -4502,7 +4502,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1813,
+			"line": 1814,
 			"name": "endpoint",
 			"shared": true
 		},
@@ -4521,7 +4521,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1814,
+			"line": 1815,
 			"name": "partySettings",
 			"shared": true
 		},
@@ -4536,7 +4536,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1814,
+			"line": 1815,
 			"name": "partyDraft",
 			"shared": true
 		},
@@ -4583,7 +4583,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1815,
+			"line": 1816,
 			"name": "popupPosition",
 			"shared": true
 		},
@@ -4602,7 +4602,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1817,
+			"line": 1818,
 			"name": "socialName",
 			"shared": true
 		},
@@ -4625,7 +4625,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1818,
+			"line": 1819,
 			"name": "socialSubject",
 			"shared": true
 		},
@@ -4648,7 +4648,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1819,
+			"line": 1820,
 			"name": "socialContents",
 			"shared": true
 		},
@@ -4667,17 +4667,17 @@
 					"writes": 1
 				}
 			},
-			"line": 1820,
+			"line": 1821,
 			"name": "socialAmount",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@20636": {
+				"anonymous@20655": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20722": {
+				"anonymous@20741": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -4706,7 +4706,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1821,
+			"line": 1822,
 			"name": "socialMember",
 			"shared": true
 		},
@@ -4733,7 +4733,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1822,
+			"line": 1823,
 			"name": "socialPage",
 			"shared": true
 		},
@@ -4756,7 +4756,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1823,
+			"line": 1824,
 			"name": "confirmSocial",
 			"shared": true
 		},
@@ -4783,7 +4783,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1824,
+			"line": 1825,
 			"name": "partyOptions",
 			"shared": true
 		},
@@ -4802,7 +4802,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1826,
+			"line": 1827,
 			"name": "grantAsk",
 			"shared": true
 		},
@@ -4821,7 +4821,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1829,
+			"line": 1830,
 			"name": "crestDeleteAsk",
 			"shared": true
 		},
@@ -4840,7 +4840,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1833,
+			"line": 1834,
 			"name": "crestRegisterAsk",
 			"shared": true
 		},
@@ -4875,7 +4875,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1838,
+			"line": 1839,
 			"name": "goldAmount",
 			"shared": true
 		},
@@ -4906,7 +4906,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1839,
+			"line": 1840,
 			"name": "confirmDrop",
 			"shared": true
 		},
@@ -4953,7 +4953,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1840,
+			"line": 1841,
 			"name": "goldDialog",
 			"shared": true
 		},
@@ -4984,7 +4984,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1841,
+			"line": 1842,
 			"name": "groundDrop",
 			"shared": true
 		},
@@ -5019,7 +5019,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1842,
+			"line": 1843,
 			"name": "splitStack",
 			"shared": true
 		},
@@ -5038,7 +5038,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1842,
+			"line": 1843,
 			"name": "splitAmount",
 			"shared": true
 		},
@@ -5069,7 +5069,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1845,
+			"line": 1846,
 			"name": "exchangeCount",
 			"shared": true
 		},
@@ -5088,7 +5088,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1845,
+			"line": 1846,
 			"name": "exchangeAmount",
 			"shared": true
 		},
@@ -5107,7 +5107,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1846,
+			"line": 1847,
 			"name": "shopOpenRequest",
 			"shared": true
 		},
@@ -5138,7 +5138,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1847,
+			"line": 1848,
 			"name": "shopWarning",
 			"shared": true
 		},
@@ -5161,13 +5161,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1850,
+			"line": 1851,
 			"name": "sellAllPhase",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@9715": {
+				"anonymous@9732": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5180,7 +5180,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1850,
+			"line": 1851,
 			"name": "sellAllGid",
 			"shared": true
 		},
@@ -5195,7 +5195,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1851,
+			"line": 1852,
 			"name": "sellAllRun",
 			"shared": true
 		},
@@ -5218,7 +5218,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1854,
+			"line": 1855,
 			"name": "allBuyProgress",
 			"shared": true
 		},
@@ -5237,7 +5237,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1855,
+			"line": 1856,
 			"name": "shopPage",
 			"shared": true
 		},
@@ -5256,7 +5256,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1855,
+			"line": 1856,
 			"name": "shopTab",
 			"shared": true
 		},
@@ -5291,7 +5291,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1855,
+			"line": 1856,
 			"name": "shopDialog",
 			"shared": true
 		},
@@ -5322,7 +5322,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1855,
+			"line": 1856,
 			"name": "shopChoice",
 			"shared": true
 		},
@@ -5341,7 +5341,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1855,
+			"line": 1856,
 			"name": "shopQuantity",
 			"shared": true
 		},
@@ -5364,7 +5364,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1856,
+			"line": 1857,
 			"name": "shopPosition",
 			"shared": true
 		},
@@ -5387,7 +5387,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1857,
+			"line": 1858,
 			"name": "cosTab",
 			"shared": true
 		},
@@ -5406,7 +5406,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1858,
+			"line": 1859,
 			"name": "cosDraft",
 			"shared": true
 		},
@@ -5433,7 +5433,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1860,
+			"line": 1861,
 			"name": "petTrainingAskedRef",
 			"shared": true
 		},
@@ -5452,7 +5452,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1862,
+			"line": 1863,
 			"name": "petStateAsked",
 			"shared": true
 		},
@@ -5467,7 +5467,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1863,
+			"line": 1864,
 			"name": "cosBoundGid",
 			"shared": true
 		},
@@ -5482,7 +5482,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1864,
+			"line": 1865,
 			"name": "cosBoundMode",
 			"shared": true
 		},
@@ -5509,7 +5509,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1865,
+			"line": 1866,
 			"name": "guildDialog",
 			"shared": true
 		},
@@ -5536,7 +5536,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1866,
+			"line": 1867,
 			"name": "guildTab",
 			"shared": true
 		},
@@ -5551,7 +5551,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1867,
+			"line": 1868,
 			"name": "guildSort",
 			"shared": true
 		},
@@ -5566,7 +5566,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1868,
+			"line": 1869,
 			"name": "guildDescending",
 			"shared": true
 		},
@@ -5581,7 +5581,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1869,
+			"line": 1870,
 			"name": "guildNameMode",
 			"shared": true
 		},
@@ -5596,7 +5596,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1870,
+			"line": 1871,
 			"name": "alchemyMode",
 			"shared": true
 		},
@@ -5619,7 +5619,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1871,
+			"line": 1872,
 			"name": "alchemySlots",
 			"shared": true
 		},
@@ -5634,7 +5634,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1872,
+			"line": 1873,
 			"name": "alchemyQuantity",
 			"shared": true
 		},
@@ -5649,7 +5649,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1873,
+			"line": 1874,
 			"name": "processPage",
 			"shared": true
 		},
@@ -5660,7 +5660,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1874,
+			"line": 1875,
 			"name": "gachaWasVisible",
 			"shared": false
 		},
@@ -5679,7 +5679,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1875,
+			"line": 1876,
 			"name": "selectedAction",
 			"shared": true
 		},
@@ -5702,7 +5702,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1876,
+			"line": 1877,
 			"name": "partyMatchSelection",
 			"shared": true
 		},
@@ -5721,7 +5721,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1876,
+			"line": 1877,
 			"name": "partyMatchOffset",
 			"shared": true
 		},
@@ -5736,7 +5736,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1877,
+			"line": 1878,
 			"name": "partyMatchSort",
 			"shared": true
 		},
@@ -5751,7 +5751,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1877,
+			"line": 1878,
 			"name": "partyMatchDescending",
 			"shared": true
 		},
@@ -5770,7 +5770,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1878,
+			"line": 1879,
 			"name": "partySearch",
 			"shared": true
 		},
@@ -5785,7 +5785,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1879,
+			"line": 1880,
 			"name": "partySearchDraft",
 			"shared": true
 		},
@@ -5804,7 +5804,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1880,
+			"line": 1881,
 			"name": "partyPurposeOpen",
 			"shared": true
 		},
@@ -5815,7 +5815,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1881,
+			"line": 1882,
 			"name": "partyProgressTick",
 			"shared": false
 		},
@@ -5830,13 +5830,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1881,
+			"line": 1882,
 			"name": "partyProgressVisible",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@23308": {
+				"anonymous@23327": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -5845,7 +5845,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1882,
+			"line": 1883,
 			"name": "partyAuto",
 			"shared": true
 		},
@@ -5864,7 +5864,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1883,
+			"line": 1884,
 			"name": "partyDialog",
 			"shared": true
 		},
@@ -5879,7 +5879,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1884,
+			"line": 1885,
 			"name": "partyForm",
 			"shared": true
 		},
@@ -5894,7 +5894,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1893,
+			"line": 1894,
 			"name": "questPosition",
 			"shared": true
 		},
@@ -5913,7 +5913,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1893,
+			"line": 1894,
 			"name": "questDetailScroll",
 			"shared": true
 		},
@@ -5932,7 +5932,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1893,
+			"line": 1894,
 			"name": "questDetailMax",
 			"shared": true
 		},
@@ -5967,7 +5967,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1894,
+			"line": 1895,
 			"name": "practice",
 			"shared": true
 		},
@@ -5994,7 +5994,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1894,
+			"line": 1895,
 			"name": "questDetails",
 			"shared": true
 		},
@@ -6013,7 +6013,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1895,
+			"line": 1896,
 			"name": "skillTab",
 			"shared": true
 		},
@@ -6032,7 +6032,7 @@
 					"writes": 2
 				}
 			},
-			"line": 1895,
+			"line": 1896,
 			"name": "selectedMastery",
 			"shared": true
 		},
@@ -6051,7 +6051,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1895,
+			"line": 1896,
 			"name": "skillScroll",
 			"shared": true
 		},
@@ -6074,7 +6074,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1900,
+			"line": 1901,
 			"name": "selectedSkill",
 			"shared": true
 		},
@@ -6089,13 +6089,13 @@
 					"writes": 1
 				}
 			},
-			"line": 1900,
+			"line": 1901,
 			"name": "skillPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@13068": {
+				"anonymous@13085": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6112,7 +6112,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1900,
+			"line": 1901,
 			"name": "hotbarPage",
 			"shared": true
 		},
@@ -6127,7 +6127,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1900,
+			"line": 1901,
 			"name": "trainingMode",
 			"shared": true
 		},
@@ -6146,7 +6146,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1900,
+			"line": 1901,
 			"name": "clearHotbar",
 			"shared": true
 		},
@@ -6169,17 +6169,17 @@
 					"writes": 1
 				},
 				"step": {
-					"reads": 9,
+					"reads": 8,
 					"writes": 1
 				}
 			},
-			"line": 1901,
+			"line": 1902,
 			"name": "carriedShortcut",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@9770": {
+				"anonymous@9787": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6204,7 +6204,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1902,
+			"line": 1903,
 			"name": "quickslotTime",
 			"shared": true
 		},
@@ -6215,7 +6215,7 @@
 					"writes": 1
 				}
 			},
-			"line": 1902,
+			"line": 1903,
 			"name": "quickslotTick",
 			"shared": false
 		},
@@ -6238,7 +6238,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1903,
+			"line": 1904,
 			"name": "extVertical",
 			"shared": true
 		},
@@ -6261,7 +6261,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1904,
+			"line": 1905,
 			"name": "extDouble",
 			"shared": true
 		},
@@ -6284,7 +6284,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1905,
+			"line": 1906,
 			"name": "extOpen",
 			"shared": true
 		},
@@ -6307,7 +6307,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1906,
+			"line": 1907,
 			"name": "extTransparent",
 			"shared": true
 		},
@@ -6334,7 +6334,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1907,
+			"line": 1908,
 			"name": "extSlotLock",
 			"shared": true
 		},
@@ -6357,7 +6357,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1908,
+			"line": 1909,
 			"name": "extPositionLock",
 			"shared": true
 		},
@@ -6372,7 +6372,7 @@
 					"writes": 0
 				}
 			},
-			"line": 1909,
+			"line": 1910,
 			"name": "extOptions",
 			"shared": true
 		},
@@ -6399,7 +6399,7 @@
 					"writes": 3
 				}
 			},
-			"line": 1910,
+			"line": 1911,
 			"name": "extPosition",
 			"shared": true
 		},
@@ -6414,13 +6414,13 @@
 					"writes": 0
 				}
 			},
-			"line": 1911,
+			"line": 1912,
 			"name": "extDraft",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@16322": {
+				"anonymous@16341": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6433,13 +6433,13 @@
 					"writes": 1
 				}
 			},
-			"line": 2006,
+			"line": 2007,
 			"name": "selectedQuest",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@9842": {
+				"anonymous@9859": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6456,7 +6456,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2006,
+			"line": 2007,
 			"name": "trackedQuest",
 			"shared": true
 		},
@@ -6483,7 +6483,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2006,
+			"line": 2007,
 			"name": "confirmAbandon",
 			"shared": true
 		},
@@ -6506,7 +6506,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2006,
+			"line": 2007,
 			"name": "questPage",
 			"shared": true
 		},
@@ -6525,13 +6525,13 @@
 					"writes": 1
 				}
 			},
-			"line": 2006,
+			"line": 2007,
 			"name": "chatPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6560,7 +6560,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2007,
+			"line": 2008,
 			"name": "chatText",
 			"shared": true
 		},
@@ -6587,7 +6587,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2007,
+			"line": 2008,
 			"name": "chatTarget",
 			"shared": true
 		},
@@ -6606,7 +6606,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2007,
+			"line": 2008,
 			"name": "chatChannel",
 			"shared": true
 		},
@@ -6617,7 +6617,7 @@
 					"writes": 3
 				}
 			},
-			"line": 2007,
+			"line": 2008,
 			"name": "chatFeedbackObserved",
 			"shared": false
 		},
@@ -6632,13 +6632,13 @@
 					"writes": 3
 				}
 			},
-			"line": 2008,
+			"line": 2009,
 			"name": "caretDue",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@12783": {
+				"anonymous@12800": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -6675,7 +6675,7 @@
 					"writes": 3
 				}
 			},
-			"line": 2008,
+			"line": 2009,
 			"name": "caretVisible",
 			"shared": true
 		},
@@ -6742,7 +6742,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2009,
+			"line": 2010,
 			"name": "focusRevision",
 			"shared": true
 		},
@@ -6813,7 +6813,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2010,
+			"line": 2011,
 			"name": "focusRequest",
 			"shared": true
 		},
@@ -6836,7 +6836,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2011,
+			"line": 2012,
 			"name": "windowMissing",
 			"shared": true
 		},
@@ -7055,7 +7055,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2013,
+			"line": 2014,
 			"name": "panel",
 			"shared": true
 		},
@@ -7138,7 +7138,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2014,
+			"line": 2015,
 			"name": "inventorySlot",
 			"shared": true
 		},
@@ -7165,7 +7165,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2015,
+			"line": 2016,
 			"name": "inventoryPage",
 			"shared": true
 		},
@@ -7200,7 +7200,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2016,
+			"line": 2017,
 			"name": "cosSlot",
 			"shared": true
 		},
@@ -7227,7 +7227,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2017,
+			"line": 2018,
 			"name": "cosPage",
 			"shared": true
 		},
@@ -7246,17 +7246,17 @@
 					"writes": 1
 				}
 			},
-			"line": 2018,
+			"line": 2019,
 			"name": "cosPlayerPage",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@1774": {
+				"anonymous@1775": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@2395": {
+				"anonymous@2396": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7297,7 +7297,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2019,
+			"line": 2020,
 			"name": "cosGid",
 			"shared": true
 		},
@@ -7308,7 +7308,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2020,
+			"line": 2021,
 			"name": "serverPage",
 			"shared": false
 		},
@@ -7351,7 +7351,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2021,
+			"line": 2022,
 			"name": "pending",
 			"shared": true
 		},
@@ -7366,7 +7366,7 @@
 					"writes": 2
 				}
 			},
-			"line": 2022,
+			"line": 2023,
 			"name": "rosterRequested",
 			"shared": true
 		},
@@ -7377,7 +7377,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2023,
+			"line": 2024,
 			"name": "lastPhase",
 			"shared": false
 		},
@@ -7388,7 +7388,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2024,
+			"line": 2025,
 			"name": "message",
 			"shared": false
 		},
@@ -7398,63 +7398,59 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10693": {
+				"anonymous@10710": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10781": {
+				"anonymous@10798": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10829": {
+				"anonymous@10846": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13239": {
+				"anonymous@13256": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13263": {
+				"anonymous@13280": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13437": {
+				"anonymous@13454": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@20190": {
+				"anonymous@20209": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@20722": {
+				"anonymous@20741": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@23308": {
+				"anonymous@23327": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24600": {
+				"anonymous@24619": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24674": {
+				"anonymous@24693": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@24979": {
+				"anonymous@24998": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@26405": {
-					"reads": 1,
-					"writes": 0
-				},
-				"anonymous@26518": {
+				"anonymous@26424": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7462,7 +7458,11 @@
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@27801": {
+				"anonymous@26556": {
+					"reads": 1,
+					"writes": 0
+				},
+				"anonymous@27820": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7687,41 +7687,41 @@
 					"writes": 52
 				}
 			},
-			"line": 2027,
+			"line": 2028,
 			"name": "controls",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10693": {
+				"anonymous@10710": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10781": {
+				"anonymous@10798": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10829": {
+				"anonymous@10846": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 4,
 					"writes": 0
 				},
-				"anonymous@12339": {
+				"anonymous@12356": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13068": {
+				"anonymous@13085": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13143": {
+				"anonymous@13160": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@13437": {
+				"anonymous@13454": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -7842,41 +7842,41 @@
 					"writes": 43
 				}
 			},
-			"line": 2027,
+			"line": 2028,
 			"name": "blocks",
 			"shared": true
 		},
 		{
 			"buckets": {
-				"anonymous@10693": {
+				"anonymous@10710": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10781": {
+				"anonymous@10798": {
 					"reads": 1,
 					"writes": 0
 				},
-				"anonymous@10829": {
+				"anonymous@10846": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@12042": {
+				"anonymous@12059": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@12339": {
+				"anonymous@12356": {
 					"reads": 3,
 					"writes": 0
 				},
-				"anonymous@13068": {
+				"anonymous@13085": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13143": {
+				"anonymous@13160": {
 					"reads": 2,
 					"writes": 0
 				},
-				"anonymous@13263": {
+				"anonymous@13280": {
 					"reads": 1,
 					"writes": 0
 				},
@@ -8053,7 +8053,7 @@
 					"writes": 0
 				}
 			},
-			"line": 2027,
+			"line": 2028,
 			"name": "paths",
 			"shared": true
 		},
@@ -8068,7 +8068,7 @@
 					"writes": 1
 				}
 			},
-			"line": 2032,
+			"line": 2033,
 			"name": "contentImages",
 			"shared": true
 		}
@@ -8077,31 +8077,31 @@
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3683,
+			"line": 3684,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "exact",
-			"line": 3686,
+			"line": 3687,
 			"pattern": "chat-send"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3689,
+			"line": 3690,
 			"pattern": "gm-helper-row:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3698,
+			"line": 3699,
 			"pattern": "gm-helper-tab:"
 		},
 		{
 			"fn": "activate",
 			"kind": "prefix",
-			"line": 3710,
+			"line": 3711,
 			"pattern": "experimental-"
 		},
 		{

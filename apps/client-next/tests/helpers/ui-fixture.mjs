@@ -61,6 +61,9 @@ export function uiFixture(
 	const ui = createUi( uiPorts(
 		{
 			available: () => 8,
+			// The fixture's published build carries the HD set (#2800), so
+			// the Experimental HD row is listed in fixture scenes.
+			hdAvailable: () => true,
 			take: id => {
 				const bytes = pending.get( id );
 				if ( bytes?.path && hold( bytes.path ) ) return null;
