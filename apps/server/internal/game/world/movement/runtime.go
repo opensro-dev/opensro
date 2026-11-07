@@ -118,8 +118,11 @@ type Runtime struct {
 	// read door, preserving action -> character lock ordering.
 	PetPresentation        func(divisionID, characterName string) *simulation.PeerCOS
 	CompanionPresentations func(divisionID, characterName string) []*simulation.PeerCOS
-	// SpawnSkills is the character's active effect projection (the same one
-	// the local entry snapshot carries); peer spawn rows publish it.
+	// SpawnSkills is the character's active effect projection (the same
+	// rows the local entry snapshot carries); peer spawn rows publish
+	// it. The wired implementation (action SpawnEntrySkills, #2030)
+	// hands out a shared projection: the tick reads it promptly and
+	// never retains or mutates it.
 	ActionSpeed func(divisionID, characterName string) float32
 	SpawnSkills func(divisionID, characterName string) []enterworld.EntrySkill
 	// Now abstracts the clock for deterministic tests.

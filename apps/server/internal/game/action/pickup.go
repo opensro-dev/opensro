@@ -10,6 +10,7 @@ package action
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -135,6 +136,13 @@ func (rt *Runtime) grantPickup(
 	groundItem grounditem.Item,
 	doors characterDoors,
 ) OpResult {
+	// Port-only (forge.go, issue #1980): a bound forged drop belongs to
+	// the character that forged it, for good - the native owner
+	// reservation expires, this one does not. Anyone else's pickup,
+	// by hand or by the trade-goods door, is the locked-by-other answer.
+	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, character.Name) {
+		return pickupRefusal(wire.ErrCodeLockedByOther)
+	}
 	// Natively trade goods leave the party's item share for the picker's
 	// transport (tradepickup.go). Trade goods keep their own immediate
 	// door on both lanes (grantTradeGoodsPickup predates the batch).
@@ -175,6 +183,12 @@ grantPickup's grant for a recipient the rotation already chose.
 func (rt *Runtime) grantPickupTo(g pickupGrant, doors characterDoors) (result OpResult) {
 	divisionID, worldKey, groundItem, characterSnapshot := g.division, g.worldKey, g.item, g.snapshot
 	picker, character := g.picker, g.recipient
+	// Port-only (forge.go, issue #1980): the party rotation may choose
+	// the recipient, but a bound forged drop may only ever land with
+	// the character that forged it.
+	if groundItem.ForgeBound && !strings.EqualFold(groundItem.DroppedBy, character.Name) {
+		return pickupRefusal(wire.ErrCodeLockedByOther)
+	}
 	defer func() {
 		result = rt.routeSharedPickup(result, g)
 		// A granted pickup publishes its scoop; only then does the party learn of it.
@@ -370,5 +384,6 @@ func groundInventoryItem(g grounditem.Item, quantity uint16) inventory.Item {
 		MagicOptions:      g.MagicOptions,
 		TransformRefObjID: g.TransformRefObjID,
 		Summon:            domain.CloneCOS(g.Summon),
+		ForgeBound:        g.ForgeBound,
 	}
 }

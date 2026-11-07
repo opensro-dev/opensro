@@ -7,6 +7,7 @@ activeCos.container.capacity
 activeCos.container.rows
 activeCos.container.rows[].codename
 activeCos.container.rows[].durability
+activeCos.container.rows[].forgeBound
 activeCos.container.rows[].magicOptions
 activeCos.container.rows[].plus
 activeCos.container.rows[].recordId
@@ -91,6 +92,7 @@ avatarInventory.capacity
 avatarInventory.rows
 avatarInventory.rows[].codename
 avatarInventory.rows[].durability
+avatarInventory.rows[].forgeBound
 avatarInventory.rows[].magicOptions
 avatarInventory.rows[].plus
 avatarInventory.rows[].recordId
@@ -219,6 +221,7 @@ mercenaries[].container.capacity
 mercenaries[].container.rows
 mercenaries[].container.rows[].codename
 mercenaries[].container.rows[].durability
+mercenaries[].container.rows[].forgeBound
 mercenaries[].container.rows[].magicOptions
 mercenaries[].container.rows[].plus
 mercenaries[].container.rows[].recordId
@@ -276,6 +279,7 @@ mission.eventGuideStateMaskUpdatedAt
 missionInventory
 missionInventory[].codename
 missionInventory[].durability
+missionInventory[].forgeBound
 missionInventory[].magicOptions
 missionInventory[].plus
 missionInventory[].recordId

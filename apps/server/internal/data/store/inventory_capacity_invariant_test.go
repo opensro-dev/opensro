@@ -11,6 +11,8 @@ import (
 // show. A record the inventory-pages rule raised (93..109) loads under
 // either flag setting, which is how it keeps its slots.
 func TestLoadRefusesAnOutOfRangeInventoryCapacity(t *testing.T) {
+	t.Parallel()
+
 	valid := func(size, waiting uint8) *domain.Character {
 		return &domain.Character{ID: 1, Name: "expander", AccountID: "account", InventorySize: size, InventoryExpansion: waiting}
 	}

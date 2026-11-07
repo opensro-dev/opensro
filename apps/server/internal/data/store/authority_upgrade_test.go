@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -23,6 +24,8 @@ TestTradeUpgradePreservesExistingFortressTablesAndRecords
 ================
 */
 func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
+	tier.Long(t, "the trade upgrade preserves existing fortress tables and records")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -177,6 +180,7 @@ TestMallUpgradePreservesAuthorityAndBackup
 ================
 */
 func TestMallUpgradePreservesAuthorityAndBackup(t *testing.T) {
+	tier.Long(t, "the mall upgrade preserves authority contents and its backup")
 	dir := filepath.Join(t.TempDir(), "quoted' authority")
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
@@ -231,6 +235,7 @@ TestMallUpgradeRefusesInvalidSource
 ================
 */
 func TestMallUpgradeRefusesInvalidSource(t *testing.T) {
+	tier.Long(t, "the mall upgrade refuses an invalid source")
 	dir := t.TempDir()
 	makePreMallAuthority(t, dir)
 	db, err := connectDB(filepath.Join(dir, DBFileName))
@@ -254,6 +259,7 @@ TestMallUpgradeRollsBackSchemaOnCommitFailure
 ================
 */
 func TestMallUpgradeRollsBackSchemaOnCommitFailure(t *testing.T) {
+	tier.Long(t, "the mall upgrade rolls the schema back when its commit fails")
 	dir := t.TempDir()
 	makePreMallAuthority(t, dir)
 	db, err := connectDB(filepath.Join(dir, DBFileName))
@@ -296,6 +302,7 @@ contents, validate the existing graph, and only advance the record version.
 ================
 */
 func TestCompanionUpgradePreservesExistingWarehouseAndBackup(t *testing.T) {
+	tier.Long(t, "a schema-14 upgrade preserves the account tables, validates the graph and only advances the record version")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -366,6 +373,7 @@ in place and the upgraded store then keeps a fortress death point's world.
 ================
 */
 func TestWorldPointUpgradeKeepsSchema15Records(t *testing.T) {
+	tier.Long(t, "schema-15 records stay byte-for-byte through the world-point upgrade")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	if err := s.CreateCharacter(testDivision, "account", seededCharacter()); err != nil {
@@ -427,6 +435,7 @@ TestGuildWarUpgradePreservesLayoutSixAuthority
 ================
 */
 func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
+	tier.Long(t, "the guild-war upgrade preserves a layout-six authority")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -479,6 +488,7 @@ validates as schema 17, and the upgraded store reads the ended quests.
 ================
 */
 func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
+	tier.Long(t, "schema-17 records survive the ended-quest upgrade byte-for-byte")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -532,6 +542,7 @@ Schema 18 has no job reward or ranking snapshot: its authority upgrades to
 ================
 */
 func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
+	tier.Long(t, "a schema-18 authority upgrades to 19 with every record in place")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -571,6 +582,7 @@ every record in place, and a decoration written afterwards persists.
 ================
 */
 func TestStallDecorationUpgradeKeepsSchema19Records(t *testing.T) {
+	tier.Long(t, "a schema-19 authority upgrades to 20 with every record in place")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
