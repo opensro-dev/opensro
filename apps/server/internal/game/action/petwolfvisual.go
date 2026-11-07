@@ -73,15 +73,15 @@ func wolfBonusEmote(reason string) uint8 {
 
 /*
 ================
-wolfRendQueued
+petSkillWindupEmote
 
-The queued Savage Rend book a wolf's next strike will use, when its row is
+The queued Savage Rend or Blizzard book a pet's next strike will use, when its row is
 ready; the windup then announces the rend clip with the cast.
 ================
 */
-func (rt *Runtime) wolfRendQueued(step petCombatStep) (uint8, bool) {
+func (rt *Runtime) petSkillWindupEmote(step petCombatStep) (uint8, bool) {
 	s, ok := companion.PetSkill(step.pet, step.pet.Training.Queued)
-	if !ok || s.EffectName() != "Savage Rend" || !rt.petExpansionAllowed(step.snapshot, step.pet) ||
+	if !ok || (s.EffectName() != "Savage Rend" && s.EffectName() != "Blizzard") || !rt.petExpansionAllowed(step.snapshot, step.pet) ||
 		!companion.RowReady(&step.pet.Training, s.Row, step.nowMs) {
 		return 0, false
 	}
