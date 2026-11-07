@@ -39,6 +39,12 @@ export function createItemMall() {
 	let question: { kind: "reserve" | "remove" | "worn" | "basket"; offers: readonly MallOffer[]; } | null = null;
 	let queue: readonly (MallOffer & MallPurchase)[] = [];
 	let awaiting: { revision: number; offer: MallOffer; } | null = null;
+	// The Buying list page (native CIFSilkBuyList): open, the period combo's
+	// selection (0..3) and whether its dropdown is open. The rows themselves
+	// are the worker's MallSilkHistoryState publication, never local state.
+	let silkOpen = false;
+	let silkPeriod = 0;
+	let silkComboOpen = false;
 
 	/*
 	================
@@ -101,6 +107,9 @@ export function createItemMall() {
 		bagPage = 0;
 		compactView = "shop";
 		compactBagPage = 0;
+		silkOpen = false;
+		silkPeriod = 0;
+		silkComboOpen = false;
 		revision = 0;
 		basket.clear();
 		worn.clear();
@@ -129,6 +138,8 @@ export function createItemMall() {
 			compactView = "shop";
 			selected = null;
 			pointDialog = false;
+			silkOpen = false;
+			silkComboOpen = false;
 			worn.clear();
 			question = null;
 			queue = [];
@@ -167,6 +178,40 @@ export function createItemMall() {
 			page = 0;
 			selected = null;
 			pointDialog = false;
+			silkOpen = false;
+			silkComboOpen = false;
+		},
+		/*
+		================
+		openSilk
+
+		The frame's Buying List button (child 6). The native button is born
+		disabled (0x6BC17E); the port enables it only behind the Experimental
+		silk history option, and the renderer owns that gate - opening the
+		page here is unconditional so the state stays testable.
+		================
+		*/
+		openSilk() {
+			silkOpen = true;
+			silkComboOpen = false;
+		},
+		/*
+		================
+		selectSilkPeriod
+		================
+		*/
+		selectSilkPeriod( index: number ) {
+			if ( !Number.isInteger( index ) || index < 0 || index > 3 ) return;
+			silkPeriod = index;
+			silkComboOpen = false;
+		},
+		/*
+		================
+		toggleSilkCombo
+		================
+		*/
+		toggleSilkCombo() {
+			silkComboOpen = !silkComboOpen;
 		},
 		/*
 		================
@@ -297,6 +342,7 @@ export function createItemMall() {
 			const currentPage = Math.min( page, Math.max( 0, Math.ceil( offers.length / pageSize ) - 1 ) );
 			return {
 				question,
+				silk: { open: silkOpen, period: silkPeriod, comboOpen: silkComboOpen },
 				batchPending: queue.length > 0 || awaiting !== null,
 				questionReady: state ? questionReady( state ) : false,
 				pointLimit: pointLimit(),

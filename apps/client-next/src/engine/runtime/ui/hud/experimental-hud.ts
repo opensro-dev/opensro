@@ -193,6 +193,15 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-dungeon-character-pvs",
 				label: "Dungeon character PVS",
 				description: "Hide characters in unseen dungeon rooms."
+			},
+			{
+				// Here for room (#2269): the window fits seven rows a tab
+				// and every other tab holds seven already; the option,
+				// its key and its default are unaffected.
+				key: "silkHistory",
+				id: "experimental-silk-history",
+				label: "Silk charge history",
+				description: "Enable the Item Mall's Buying list: your silk spending by period."
 			}
 		]
 	},
