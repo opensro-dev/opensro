@@ -166,7 +166,8 @@ import {
 	FORTRESS_AIDE_CAPABILITY,
 	FORTRESS_STRUCTURE_LIST,
 	FORTRESS_STRUCTURE_REPAIR,
-	FORTRESS_STRUCTURE_UPGRADE
+	FORTRESS_STRUCTURE_UPGRADE,
+	fortressVariantTarget
 } from "@/engine/foundation/gameplay/fortress-map";
 import {
 	type FortressForgeItem,
@@ -377,6 +378,9 @@ interface WorldReferences {
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
 	readonly structureName?: ( refObjId: number ) => string | undefined;
+	readonly structureFacts?: (
+		refObjId: number
+	) => { readonly name: string; readonly tidWord: number; readonly level: number; } | undefined;
 	readonly monster: (
 		codename: string
 	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
@@ -4278,11 +4282,21 @@ Packet handling must not depend on which HUD panel is currently open.
 						const structure = fortressNext.zones?.find( row =>
 							row.zone === fortressNext.service?.reference
 						);
-						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
-							fortressStructureNotice(
-								fortressNext,
-								structure?.ref ? worldReferences.structureName?.( structure.ref ) : undefined
+						const standing = structure?.ref ?
+							worldReferences.structureFacts?.( structure.ref ) :
+							undefined;
+						let variantName: string | undefined;
+						if ( structure?.ref ) {
+							const variant = fortressVariantTarget(
+								fortressNext.structureUpgrades?.get( structure.ref ),
+								structure.ref
 							);
+							if ( variant !== structure.ref ) {
+								variantName = worldReferences.structureName?.( variant );
+							}
+						}
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext ) ??
+							fortressStructureNotice( fortressNext, standing, variantName );
 						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {

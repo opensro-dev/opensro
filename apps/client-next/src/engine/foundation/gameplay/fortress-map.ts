@@ -225,7 +225,19 @@ with no reference: the top rank.
 ================
 */
 export function fortressUpgradeTarget( catalog: FortressMapCatalog, ref: number ): number {
-	const targets = catalog.structures.get( ref )?.upgrades;
+	return fortressVariantTarget( catalog.structures.get( ref )?.upgrades, ref );
+}
+
+/*
+================
+fortressVariantTarget
+
+One structure's variant at type -1 over its upgrade targets (the
+bootstrap's resolved siegestructupgradedata rows): the second target,
+the first when there is only one, the structure itself with no row.
+================
+*/
+export function fortressVariantTarget( targets: readonly number[] | null | undefined, ref: number ): number {
 	if ( !targets?.length ) return ref;
 	return targets.length > 1 ? targets[1]! : targets[0]!;
 }
