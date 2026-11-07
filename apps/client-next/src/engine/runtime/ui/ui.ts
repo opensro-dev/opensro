@@ -25135,18 +25135,19 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					// 528920 cases 0xA and 0xB both caption the primary
-					// button UIIT_CTL_STALL_REGISTER, not Confirm: the
-					// register-item modal pushes 0xA (5999F1), the
-					// modify-item modal pushes 0xB (599D8A), and both
-					// arms share the tail at 52918F that sets the string
-					// on the +0x800 button.
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
 					authoredLabeledButton(
 						at( 215 ),
 						x,
 						y,
 						"stall-prompt-ok",
-						hudCopy( "UIIT_CTL_STALL_REGISTER" )
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
 					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
