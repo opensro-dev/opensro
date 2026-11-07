@@ -76,10 +76,13 @@ const (
 // sharing one owner snapshot per owner tick (#2030), measured
 // 54,405 B / 902 allocs; with the crow-brood tick judging on
 // door-read facts and taking the owner copy only on a tick that
-// fires a brood event (#2030), measured 48,993 B / 858 allocs.
+// fires a brood event (#2030), measured 48,993 B / 858 allocs;
+// with the elemental walk's armed facts recycled across ticks
+// instead of captured fresh per owner tick (#2030), measured
+// 45,541 B / 822 allocs.
 const (
-	tickBudgetBytesPerTick  = 54000
-	tickBudgetAllocsPerTick = 970
+	tickBudgetBytesPerTick  = 50100
+	tickBudgetAllocsPerTick = 910
 )
 
 /*

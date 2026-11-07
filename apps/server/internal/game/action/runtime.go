@@ -362,10 +362,13 @@ type Runtime struct {
 	// elementalFacts holds each pet owner's armed elemental-walk facts
 	// (petwolf.go, #2030), keyed by division and lower-cased owner name.
 	// advancePetInDivision arms one entry per owner tick and clears it
-	// after the wolf lane; elementalFactsMu owns the map only - an
-	// entry itself is read and written under its division's lane.
-	elementalFactsMu sync.Mutex
-	elementalFacts   map[petOwnerKey]*elementalWalkFacts
+	// after the wolf lane; elementalFactsMu owns the map and the
+	// recycle list - an entry itself is read and written under its
+	// division's lane. elementalFactsFree holds cleared captures for
+	// the next arm to reset and reuse (takeElementalFacts).
+	elementalFactsMu   sync.Mutex
+	elementalFacts     map[petOwnerKey]*elementalWalkFacts
+	elementalFactsFree []*elementalWalkFacts
 	// castCopy, when set, replaces the press/release cast copy
 	// (characterSnapshotCast); only the cast-copy differential tests
 	// set it, to the full or the combat copy. Nil is the cast copy.
