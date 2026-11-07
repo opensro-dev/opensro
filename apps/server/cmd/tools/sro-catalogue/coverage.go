@@ -136,6 +136,7 @@ var catalogueExempt = map[string]string{
 	"SRO_REVERSE_RETURN_MAP":                  "destinations the reverse return scroll offers at runtime; no catalogue file publishes return destinations",
 	"SRO_HUNTING_GUIDE":                       "hunting areas drawn on the world map from the monster data at runtime; monsters.json publishes the same monsters either way",
 	"SRO_GM_SETSPEED":                         "a GM command; no catalogue file carries it",
+	"SRO_GM_ITEM_FORGE":                       "a GM command; no catalogue file carries it",
 	"SRO_GM_TRAINING_DUMMY":                   "GM-only training targets; the catalogue publishes the shipped population, not GM summons",
 	"SRO_TEAM_DEATH_REVIVE":                   "where a battle death revives at runtime; no catalogue file carries it",
 	"SRO_FLAGWAR_START_UTC":                   "the Capture the Flag schedule; the catalogue's event list carries no Capture the Flag row",
