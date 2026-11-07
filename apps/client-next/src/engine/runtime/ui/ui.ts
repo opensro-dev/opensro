@@ -55,7 +55,8 @@ const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
 // CIFChatModule sets both text boxes' row pitch through 523C20(15).
 const STALL_CHAT_ROW = 15;
-const EDIT_CARET_WIDTH = 1;
+// CIFEdit_OnRender (522B50) draws the caret 2 px wide and one line tall.
+const EDIT_CARET_WIDTH = 2;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -11094,6 +11095,7 @@ export function createUi( ports: UiPorts ) {
 				const r = authoredRect( node, ox, oy ),
 					ink = native ? authoredClientRect( node, ox, oy ) : r,
 					hAlign = native ? node.hAlign : 0,
+					vAlign = node.vAlign,
 					width = text.run( value ).width,
 					offset = Math.max( 0, ink[2] - width ) *
 						(hAlign === 2 ? 1 : hAlign === 1 ? .5 : 0);
@@ -11119,6 +11121,16 @@ export function createUi( ports: UiPorts ) {
 				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
 				const scroll = focus === id && width > ink[2] ? Math.max( 0, caret - ink[2] + EDIT_CARET_WIDTH ) : 0,
 					box: UiRect = [ ink[0] - scroll, ink[1], Math.max( ink[2], width ), ink[3] ];
+				// CIFEdit (522B50) lays its single line out in the client rect
+				// by VAlign and draws the caret over that line box alone,
+				// never over the whole control height.
+				const lineHeight = Math.min( text.boardHeight() || ink[3], ink[3] ),
+					lineTop = Math.round( ink[1] ) +
+						(vAlign === 1 ?
+							Math.floor( (ink[3] - lineHeight) / 2 ) :
+							vAlign === 2 ?
+							Math.floor( ink[3] - lineHeight ) :
+							0);
 				if ( focus === id && end > start ) {
 					rect(
 						[ ink[0] + offset + before - scroll, ink[1], through - before, ink[3] ],
@@ -11133,7 +11145,7 @@ export function createUi( ports: UiPorts ) {
 						ink
 					);
 				}
-				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
+				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign, vAlign } ) );
 				if ( focus === id && caretVisible ) {
 					// A right-aligned empty edit puts the caret on the clip's right
 					// edge, which the clip excludes; keep the native-looking caret
@@ -11142,7 +11154,7 @@ export function createUi( ports: UiPorts ) {
 						ink[0] + ink[2] - EDIT_CARET_WIDTH,
 						Math.max( ink[0], ink[0] + offset + caret - scroll )
 					);
-					rect( [ caretX, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
+					rect( [ caretX, lineTop, EDIT_CARET_WIDTH, lineHeight ], white, "", [
 						0,
 						0,
 						1,
