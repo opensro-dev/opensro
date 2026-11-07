@@ -469,7 +469,9 @@ test("minimap catalog commits complete coverage atomically and disposes pending 
 	const other = createMinimapResources( assets, "https://fixture.invalid" );
 	other.step( false, true );
 	other.dispose();
-	assert.deepEqual( cancelled, [ 2 ] );
+	// Each owner has a retail and a later floor catalogue and the dungeon pages:
+	// the first owner left the last two pending, the second all three.
+	assert.deepEqual( cancelled, [ 2, 3, 4, 5, 6 ] );
 });
 
 /*
