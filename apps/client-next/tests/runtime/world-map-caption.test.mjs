@@ -37,41 +37,43 @@ function captionAt( pose ) {
 	} );
 	try {
 		let caption = "";
-		hud.present( /** @type {any} */ ({
-			next: { entities: [] },
-			game: { pose },
-			pose,
-			panel: "Map",
-			w: 1200,
-			h: 900,
-			full: [ 0, 0, 1200, 900 ],
-			hover: null,
-			hudData: { map: {} },
-			trackedQuest: 0,
-			minimapResources: { positions: () => undefined },
-			mapTeleport: { view: () => {} },
-			reverseScrollHud: { mapping: () => false },
-			text: {
-				path: () => null,
-				run: ( value ) => ({ width: value.length * 6 }),
-				extentHeight: () => 12,
-				quads: () => []
-			},
-			resources: { has: () => true, size: () => undefined },
-			paths: [],
-			quads: [],
-			controls: [],
-			hudCopy: ( key ) => COPY[key] ?? "",
-			beginWindow: () => [ 0, 0, 0, 0 ],
-			endWindow: () => {},
-			windowBox: ( title ) => {
-				caption = title;
-			},
-			authoredButton: () => {},
-			authoredLabeledButton: () => {},
-			closeButton: () => {},
-			image: () => {}
-		}) );
+		hud.present(
+			/** @type {any} */ ({
+				next: { entities: [] },
+				game: { pose },
+				pose,
+				panel: "Map",
+				w: 1200,
+				h: 900,
+				full: [ 0, 0, 1200, 900 ],
+				hover: null,
+				hudData: { map: {} },
+				trackedQuest: 0,
+				minimapResources: { positions: () => undefined },
+				mapTeleport: { view: () => {} },
+				reverseScrollHud: { mapping: () => false },
+				text: {
+					path: () => null,
+					run: ( value ) => ({ width: value.length * 6 }),
+					extentHeight: () => 12,
+					quads: () => []
+				},
+				resources: { has: () => true, size: () => undefined },
+				paths: [],
+				quads: [],
+				controls: [],
+				hudCopy: ( key ) => COPY[key] ?? "",
+				beginWindow: () => [ 0, 0, 0, 0 ],
+				endWindow: () => {},
+				windowBox: ( title ) => {
+					caption = title;
+				},
+				authoredButton: () => {},
+				authoredLabeledButton: () => {},
+				closeButton: () => {},
+				image: () => {}
+			})
+		);
 		return caption;
 	} finally {
 		hud.dispose();
