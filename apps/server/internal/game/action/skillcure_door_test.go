@@ -36,7 +36,7 @@ that the real store would have parked forever.
 ================
 */
 type storeDoor struct {
-	t     *testing.T
+	t     testing.TB
 	mu    sync.RWMutex
 	inner enterworld.StaticCharacterSource
 }
@@ -48,7 +48,7 @@ installStoreDoor
 Route the fixture's doors and its character source through one store lock.
 ================
 */
-func installStoreDoor(t *testing.T, rt *Runtime) *storeDoor {
+func installStoreDoor(t testing.TB, rt *Runtime) *storeDoor {
 	t.Helper()
 	deps := rt.deps.(*enterworld.Deps)
 	door := &storeDoor{t: t, inner: fixtureCharacters(deps.Characters)}

@@ -5,7 +5,8 @@ academy-notices.ts - Academy response acknowledgments and 0x3AC5 notices
 
 Decodes the camp action acknowledgments (0xB4D4, 0xB785, 0xB10A, 0xB36D,
 0xB220, 0xB7C5) and maps authoritative 0x3AC5 transitions onto their
-native child-23 notice banners and system chat messages (773C60).
+native child-23 notice banners and system chat messages (773C60). The
+cumulated-buff prints of 0x3CC1 / 0xB00C live here too.
 
 ===========================================================================
 */
@@ -173,4 +174,43 @@ export function academyStatusNotice(
 		return constantNativeNotice( 0x1d, p[2]! );
 	}
 	return null;
+}
+
+/*
+================
+academyBuffNotices
+
+The cumulated-buff prints (67A600 type 0, system chat): 770E70 state
+7's time-over line, 770970 mode 2's pass refusal, and one received
+line per mode-0 row. The received line names the row's donor and is
+skipped when the donor is out of the roster or is the camp master
+(81AFB0 compares the donor's name with the master's name).
+================
+*/
+export function academyBuffNotices(
+	state: AcademyState,
+	frame: WireFrame
+): readonly SystemNotice[] {
+	const p = frame.payload;
+	if ( frame.opcode === 0x3cc1 ) {
+		return p[0] === 7 ? [ { key: "UIIT_CTL_TC_SAVE_BUFF_TIME_OVER", value: 0, nativeType: 0 } ] : [];
+	}
+	if ( frame.opcode !== 0xb00c || p.length < 1 ) return [];
+	if ( p[0] === 2 ) return [ { key: "UIIT_MSG_TC_PASS_ERROR", value: 0, nativeType: 0 } ];
+	if ( p[0] !== 0 || p.length < 2 ) return [];
+	const count = p[1]! << 24 >> 24;
+	if ( count <= 0 || 2 + count * 12 > p.length ) return [];
+	const view = new DataView( p.buffer, p.byteOffset, p.byteLength ), notices: SystemNotice[] = [];
+	for ( let i = 0; i < count; i++ ) {
+		const donor = state.members?.find( m => m.id === view.getUint32( 2 + i * 12 + 4, true ) );
+		if ( donor && donor.kind !== 0 ) {
+			notices.push( {
+				key: "UIIT_MSG_TC_RECIEVE_BUFF",
+				value: 0,
+				nativeType: 0,
+				arguments: [ donor.name ]
+			} );
+		}
+	}
+	return notices;
 }

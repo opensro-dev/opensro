@@ -687,6 +687,7 @@ func (rt *Runtime) commitRebirth(divisionID string, character *enterworld.Charac
 	corpses, corpseDespawns := rt.retireCompanionCorpses(divisionID, character)
 	frames := missionReentryFrames(prepared.Packets)
 	frames = append(frames, corpses...)
+	frames = append(frames, rt.petArrivalFrames(divisionID, character)...)
 	frames = append(frames, headActor...)
 	frames = append(frames, headPublic...)
 	// Re-entry reconstructs the client actor. A retained runtime body status

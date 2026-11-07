@@ -11,7 +11,7 @@ later floor catalogue holds the Ch'in Tomb art the v1.150 archives lack
 */
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { minimapNpcPositions } from "@/engine/foundation/ui/minimap-catalog";
-import { minimapArt, minimapDungeons, minimapWithLaterFloors } from "@/engine/foundation/ui/minimap-tiles";
+import { minimapArt, minimapDungeonRooms, minimapDungeons, minimapWithLaterFloors } from "@/engine/foundation/ui/minimap-tiles";
 
 const RETAIL_FLOOR_CATALOG = "/assets/data/mission-dungeon-minimap.json";
 const LATER_FLOOR_CATALOG = "/assets/data/later-dungeon-minimap.json";
@@ -73,6 +73,7 @@ export function createMinimapResources( assets: MinimapAssets, base: string ) {
 			const retail = dungeon.data(), extra = laterDungeon.data();
 			return retail && extra ? minimapWithLaterFloors( retail, extra ) : retail;
 		},
+		rooms: dungeon.rooms,
 		art() {
 			const retail = dungeon.art(), extra = laterDungeon.art();
 			return retail && extra ? new Map( [ ...retail, ...extra ] ) : retail;
@@ -101,6 +102,7 @@ function createDungeonResources( assets: MinimapAssets, base: string, catalog: s
 		data: ReturnType<typeof minimapDungeons> | undefined,
 		error: string | null = null;
 	let art: ReturnType<typeof minimapArt> | undefined;
+	let rooms: ReturnType<typeof minimapDungeonRooms> | undefined;
 	return {
 		step( needed: boolean ) {
 			if ( state === "idle" && needed && assets.available() > 0 ) {
@@ -116,9 +118,11 @@ function createDungeonResources( assets: MinimapAssets, base: string, catalog: s
 						}
 						const value = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) ),
 							nextArt = minimapArt( value ),
-							nextData = minimapDungeons( value );
+							nextData = minimapDungeons( value ),
+							nextRooms = minimapDungeonRooms( value );
 						art = nextArt;
 						data = nextData;
+						rooms = nextRooms;
 						state = "ready";
 					} catch ( e ) {
 						error = String( e );
@@ -130,6 +134,7 @@ function createDungeonResources( assets: MinimapAssets, base: string, catalog: s
 			return false;
 		},
 		data: () => data,
+		rooms: () => rooms,
 		art: () => art,
 		error: () => error,
 		dispose() {
@@ -137,6 +142,7 @@ function createDungeonResources( assets: MinimapAssets, base: string, catalog: s
 			state = "disposed";
 			data = undefined;
 			art = undefined;
+			rooms = undefined;
 		}
 	};
 }

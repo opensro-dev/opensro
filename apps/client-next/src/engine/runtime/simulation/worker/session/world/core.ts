@@ -65,6 +65,7 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 		country: refObjId => entities.characterCountry( refObjId ),
 		playerModels: country => entities.playerModels( country ),
 		item: refObjId => entities.itemReference( refObjId ),
+		structure: refObjId => entities.structureReference( refObjId ),
 		monster: codename => entities.monsterReference( codename ),
 		npcs: () => entities.npcs()
 	} );

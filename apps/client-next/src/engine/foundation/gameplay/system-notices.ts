@@ -144,6 +144,25 @@ export const SEAL_NOTICE_COLOR_SUN = 0xffff4517;
 
 /*
 ================
+EVENT_NOTICE_COLOR_ARGB
+
+Port-only, not native (#2727, owner ask 2026-11-06): a shard event
+notice (the shardEvent arm above) prints in this red in the bottom-right
+message log, so an event announcement stands out from ordinary lines.
+The native box has no event colour to adopt: CGInterface_ChatSystem-
+Message 0x67A600 (asm 67A624-67A633) colours only category 6 light blue
+(0xFFBACFF2) and every other category, 7 included, the default
+0xFFDBC99B; the one other appender, CGInterface_PrintColoredNotice
+0x67A6D0, is passed that same beige by every server-driven caller
+(0x75C001, 0x75C0E4, 0x75E298). The red is the client's house red
+(buff-tooltip.ts). It rides the "Highlight event notices" Experimental
+row, on by default at the owner's ask; off restores the native beige.
+================
+*/
+export const EVENT_NOTICE_COLOR_ARGB = 0xffff4a4a;
+
+/*
+================
 sealNoticeColorArgb
 
 The notice colour for an item's seal fields (rarity 2 and the

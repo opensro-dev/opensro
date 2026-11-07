@@ -105,6 +105,19 @@ const ORB_DETAIL_FULL = 3;
 
 /*
 ================
+stackOf
+
+The bounded stack of a caught value, for the incident report (#2559):
+the session bounds what it files at the same 8192, so a stack cut here
+loses nothing. Not an Error, no stack.
+================
+*/
+function stackOf( cause: unknown ): string | undefined {
+	return cause instanceof Error && cause.stack ? cause.stack.slice( 0, 8192 ) : undefined;
+}
+
+/*
+================
 createCharacterPresentation
 
 Own character catalog admission and actor assembly across the dock, creation
@@ -165,6 +178,7 @@ export function createCharacterPresentation(
 	const output: PresentationOutput = {
 		displayed: new Map<number, CharacterActor>(),
 		failure: null,
+		failureCause: null,
 		cameraTarget: null,
 		cameraFade: null,
 		previewReady: false,
@@ -176,6 +190,10 @@ export function createCharacterPresentation(
 	const animationEmission = createAnimationEmission( allocateActor );
 	const auxiliary = createAuxiliaryPresentation( allocateActor );
 	const modelEmission = createModelEmission( allocateActor );
+	// The Item Mall mannequin's glow steps in the same frame as the world
+	// pass, so its emitters get their own lane: one emission owner sees
+	// one lane's step per frame. Party portraits publish no glow.
+	const portraitEmission = createModelEmission( allocateActor );
 	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
 	const statusOwner = createStatusOwner();
@@ -280,6 +298,7 @@ export function createCharacterPresentation(
 		scenery.reset();
 		entityLod.reset();
 		modelEmission.reset();
+		portraitEmission.reset();
 		structureVisuals.reset();
 		animationEmission.reset();
 		auxiliary.resetStages();
@@ -358,6 +377,7 @@ export function createCharacterPresentation(
 			gameplay?.localGid !== undefined ? appearances.get( gameplay.localGid )?.dependencies ?? [] : []
 		);
 		output.failure = null;
+		output.failureCause = null;
 		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
 		posePresentation.samples( samples );
 		const result = resources.poll();
@@ -882,7 +902,7 @@ export function createCharacterPresentation(
 			{ local, gameplay, next, seconds, blindHeld },
 			output,
 			published,
-			{ renderer, resources, mallPreview }
+			{ renderer, resources, mallPreview, portraitEmission }
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
@@ -947,6 +967,7 @@ export function createCharacterPresentation(
 				if ( event.kind === "reset" ) {
 					presentationState.clearStances();
 					modelEmission.reset();
+					portraitEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
 					auxiliary.resetStages();
@@ -984,6 +1005,7 @@ export function createCharacterPresentation(
 			return weather.eventRain( published, () => {
 				presentationState.clearStances();
 				modelEmission.reset();
+				portraitEmission.reset();
 				structureVisuals.reset();
 				animationEmission.reset();
 				auxiliary.resetStages();
@@ -1129,7 +1151,7 @@ export function createCharacterPresentation(
 				(effects.error() ?
 					{ path: null, message: effects.error() as string } :
 					output.failure ?
-					{ path: null, message: output.failure } :
+					{ path: null, message: output.failure, stack: stackOf( output.failureCause ) } :
 					null),
 		/*
 		================
@@ -1172,6 +1194,7 @@ export function createCharacterPresentation(
 		reset() {
 			teardown( "reset" );
 			output.failure = null;
+			output.failureCause = null;
 			renderer.setCharacterActors( [] );
 		},
 		/*

@@ -156,6 +156,8 @@ import {
 	mallPageNumberPresentation,
 	mallCurrencyRows,
 	mallQuestionLayout,
+	mallSilkPeriodTexts,
+	mallSilkHistoryDate,
 	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
 import {
@@ -177,7 +179,7 @@ import {
 	skillTrainingReason
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
-import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
+import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
@@ -489,7 +491,7 @@ import {
 	isMainPopupPage,
 	type MainPopupPage
 } from "@/engine/foundation/ui/main-popup";
-import { closedPanel, isUiPanel, panelCloseId, type PanelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
+import { closedPanel, isUiPanel, panelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
@@ -656,13 +658,13 @@ import {
 } from "@/engine/foundation/ui/loading-presentation";
 import { feedbackLevels } from "@/engine/foundation/gameplay/feedback-levels";
 import { systemMessageLayout } from "@/engine/foundation/ui/system-message-layout";
-import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout, sunDropChatColor } from "@/engine/foundation/ui/chat-layout";
 import { worldMapFrame, worldMapImagePaths, worldMapQuads } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
+	minimapAreaName,
 	minimapCoordinates,
 	minimapRotation,
 	skillPointReadouts
@@ -713,6 +715,8 @@ import { createLocalization } from "./localization/localization";
 import { createTitleUi } from "./title/title";
 import { serverListRefreshDue, titleStatusKey, titleStatusMessage } from "@/engine/foundation/ui/title-status";
 import { buttonAccess, buttonTextColor } from "@/engine/foundation/ui/button-state";
+import * as frameDraw from "./frame/frame";
+import type { CloseControlId, UiFrame } from "./frame/frame-contract";
 import { createUiText } from "./text/text";
 import { createUiAssets } from "./resources/resources";
 import { frameParts, frameRing } from "@/engine/foundation/ui/frame-ring";
@@ -835,12 +839,6 @@ import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/con
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
 import type { EntityState } from "@/engine/contracts/world";
 import type { UiTexture } from "@/engine/contracts/texture";
-
-// A window frame's close control is named after its window: a panel's own
-// panelCloseId, or a service window's "<window>-close" (a stall visitor
-// leaves). A bare "close" is not one: shared by every frame, it was unique
-// only while a single window showed.
-type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -1254,6 +1252,18 @@ export function createUi(
 		CLOSE_FOCUS,
 		...PARTS.map( p => FRAME + p + ".png" )
 	];
+	const frameChrome = {
+		frame: FRAME,
+		parts: PARTS,
+		button: BUTTON,
+		buttonFocus: BUTTON_FOCUS,
+		buttonPress: BUTTON_PRESS,
+		buttonDisable: BUTTON_DISABLE,
+		close: CLOSE,
+		closePress: CLOSE_PRESS,
+		closeFocus: CLOSE_FOCUS
+	};
+	const frameCompactPolicy = { windowDrag: compactWindowDrag, closeControl: compactCloseControl };
 	const combatGlyphPaths = damageTextAssets();
 	let buffTick = -1;
 	// Derived two-state presentation clock; body channel 4 remains authoritative.
@@ -1374,6 +1384,8 @@ export function createUi(
 	}
 	let recallConfirm: number | null = null;
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
+	// The saved Academy buff's pass question (6E2840's simple-box type 9).
+	let academyBuffPass = false;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
 	// The europe variant the next plain load draws, chosen a load ahead so
@@ -1506,6 +1518,9 @@ export function createUi(
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
 	let chatRows = 2, chatTab = 0, statusRows = 2;
 	let minimapZoom = 160, minimapTarget = 160, minimapLast: number | null = null;
+	// The last dungeon room name the area-name control showed; native
+	// keeps it when the current room has none (865690 returns null).
+	let minimapRoomName = "";
 	let abilityDetails = false, mapWorldLoading = false;
 	const title = createTitleUi( assets, base );
 	let serverList = false,
@@ -1615,7 +1630,7 @@ export function createUi(
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
 	// The structure target window's delete question (517750 -> 517CA0).
-	let structureRemoval: { gid: number; action: number; fortress: number; name: string; } | null = null;
+	let structureRemoval: { gid: number; action: number; fortress: number; name: string; kind: number; } | null = null;
 	/*
 	================
 	followStorageMove
@@ -3599,8 +3614,8 @@ export function createUi(
 			executeCosCommand( Number( id.slice( 12 ) ) );
 			return;
 		}
-		// Port-only wolf skill tree (pet-training.ts): learn a level or reset.
-		if ( id.startsWith( "pet-skill-up:" ) && experimental.state().saved.attackPetTraining ) {
+		// Port-only: the server's 0x3FB1 state admits training; no saved client setting.
+		if ( id.startsWith( "pet-skill-up:" ) && view?.gameplay?.petTraining?.gid === cosGid ) {
 			sendGameplay( {
 				kind: "cos-training",
 				gid: cosGid,
@@ -3609,7 +3624,7 @@ export function createUi(
 			} );
 			return;
 		}
-		if ( id.startsWith( "pet-skill:" ) && experimental.state().saved.attackPetTraining ) {
+		if ( id.startsWith( "pet-skill:" ) && view?.gameplay?.petTraining?.gid === cosGid ) {
 			const skill = view?.gameplay?.petTraining?.skills.find( entry => entry.id === Number( id.slice( 10 ) ) );
 			if ( skill?.action && skill.level > 0 ) {
 				sendGameplay( {
@@ -3622,7 +3637,7 @@ export function createUi(
 			}
 			return;
 		}
-		if ( id === "pet-skill-reset" && experimental.state().saved.attackPetTraining ) {
+		if ( id === "pet-skill-reset" && view?.gameplay?.petTraining?.gid === cosGid ) {
 			sendGameplay( { kind: "cos-training", gid: cosGid, operation: PET_TRAINING_OP.refund, arg: 0 } );
 			return;
 		}
@@ -3661,6 +3676,29 @@ export function createUi(
 		}
 		if ( id === "item-mall-home" ) {
 			itemMall.browse( -1 );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-open" ) {
+			itemMall.openSilk();
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-combo" ) {
+			itemMall.toggleSilkCombo();
+			dirty = true;
+			return;
+		}
+		if ( id.startsWith( "item-mall-silk-period:" ) ) {
+			itemMall.selectSilkPeriod( Number( id.slice( "item-mall-silk-period:".length ) ) );
+			dirty = true;
+			return;
+		}
+		if ( id === "item-mall-silk-inquire" && view?.gameplay ) {
+			const state = itemMall.read( view.gameplay.itemMall );
+			if ( !view.gameplay.inventoryPending ) {
+				sendGameplay( { kind: "mall-silk-inquire", period: state.silk.period } );
+			}
 			dirty = true;
 			return;
 		}
@@ -3963,14 +4001,16 @@ export function createUi(
 			return;
 		}
 		if (
-			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
-			id.startsWith( "npc-choice:" )
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-event-exchange" || id === "npc-close" ||
+			id === "npc-talkend" || id.startsWith( "npc-choice:" )
 		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
 					id === "npc-withdraw" ?
 					{ kind: "npc-withdraw" } :
+					id === "npc-event-exchange" ?
+					{ kind: "npc-event-exchange" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -4774,6 +4814,17 @@ export function createUi(
 				partySearch = { ...partySearchDraft, min, max };
 				partyMatchOffset = 0;
 				partyMatchSelection = 0;
+				// The committed search is one answer, not a reopen:
+				// the worker prints PSEARCH_NORESULT on an empty list.
+				sendGameplay( {
+					kind: "party-match-search",
+					filter: {
+						name: partySearch.name,
+						purpose: partySearch.purpose,
+						min,
+						max
+					}
+				} );
 			}
 		} else if ( id === "party-match:purpose" ) partyPurposeOpen = !partyPurposeOpen;
 		else if ( id.startsWith( "party-purpose:" ) ) {
@@ -5098,10 +5149,8 @@ export function createUi(
 					if (
 						binding.payload > PET_SKILL_SHORTCUT_BASE && binding.payload <= PET_SKILL_SHORTCUT_BASE + 255
 					) {
-						if ( experimental.state().saved.attackPetTraining ) {
-							const command = quickSlotCommand( binding, game! );
-							if ( command ) sendGameplay( command );
-						}
+						const command = quickSlotCommand( binding, game! );
+						if ( command ) sendGameplay( command );
 						return;
 					}
 					executeAction( binding.payload & 0xffffff );
@@ -5230,6 +5279,20 @@ export function createUi(
 					reversePoint: point.id
 				} );
 			}
+			dirty = true;
+		} else if ( id === "academy-buff-saved" && view.gameplay ) {
+			const boardRow = buffBoard(
+				view.gameplay,
+				view.simulationTimeMs ?? 0,
+				undefined,
+				undefined,
+				undefined,
+				hudCopy
+			).find( row => row.id === id );
+			// The saved buff is published as a normal button. Route its
+			// existing 6E2840 pass question through the same activation path.
+			if ( !boardRow?.passBuff ) return;
+			academyBuffPass = true;
 			dirty = true;
 		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
@@ -5853,7 +5916,7 @@ export function createUi(
 		} else if ( id.startsWith( "cos-tab:" ) ) {
 			const tab = Number( id.slice( 8 ) ),
 				record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
-			const training = record?.band === 3 && experimental.state().saved.attackPetTraining;
+			const training = record?.band === 3 && view.gameplay?.petTraining?.gid === record.gid;
 			if (
 				tab === 0 || tab === 1 && (cosHasInventory( record ) || training) ||
 				tab === 2 && (record?.band === 4 || training)
@@ -5985,7 +6048,13 @@ export function createUi(
 			const game = view.gameplay, target = view.entities.find( row => row.gid === game?.target );
 			const action = target ? structureRemoveAction( target ) : 0, fortress = fortressStaffView().fortress;
 			if ( target && action && fortress !== undefined ) {
-				structureRemoval = { gid: target.gid, action, fortress, name: target.name };
+				structureRemoval = {
+					gid: target.gid,
+					action,
+					fortress,
+					name: target.name,
+					kind: fortressTargetKind( target )
+				};
 			}
 		} else if ( id === "inventory-next" ) {
 			// 59DF10 pages the bag alone: the 13 sockets hold no page.
@@ -6085,6 +6154,17 @@ export function createUi(
 		resourceError: () =>
 			(worldShown ? null : resources.error()) ?? hud.error() ?? text.error() ?? guideResources.error() ??
 				minimapResources.error() ?? null,
+		/*
+		================
+		resourceFailure
+
+		The facts behind resourceError for the incident report (#2559),
+		in the same precedence: only the demand resources keep path and
+		attempt facts; the other families report their bare text, so
+		they hand back nothing here.
+		================
+		*/
+		resourceFailure: () => (worldShown ? null : resources.failure()) ?? null,
 		/*
 		================
 		entryReady
@@ -7095,6 +7175,32 @@ export function createUi(
 							s.effect.skill === pending.skillId && s.effect.token === pending.instance
 						)
 					) sendGameplay( { kind: "effect-cancel", skillId: pending.skillId, token: 0 } );
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
+			if ( academyBuffPass ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-buff-pass-cancel"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-buff-pass-confirm"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.academy?.savedBuff ) {
+						sendGameplay( { kind: "academy-pass-buff" } );
+					}
 					return;
 				}
 				if (
@@ -9896,6 +10002,10 @@ export function createUi(
 					dirty = true;
 				}
 			}
+			if ( (phase !== "world" || !next.gameplay?.academy?.savedBuff) && academyBuffPass ) {
+				academyBuffPass = false;
+				dirty = true;
+			}
 			if ( phase !== "world" ) autoPotionInput.reset();
 			else {
 				// 572770 reads the selected/dragged control; 561D50 checks the
@@ -10113,6 +10223,32 @@ export function createUi(
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h );
+			const drawFrame: UiFrame = {
+				quads,
+				controls,
+				blocks,
+				paths,
+				w,
+				h,
+				full,
+				hud: hud.data(),
+				text,
+				resources,
+				windowPlacement,
+				compact,
+				chrome: frameChrome,
+				compactPolicy: frameCompactPolicy,
+				white,
+				commonWindowPaths,
+				admittedWindows,
+				windowMissing,
+				contentImages,
+				phase,
+				fontPath,
+				pressed,
+				hover,
+				focus
+			};
 			let targetBottom = 0, compactTelemetryTop = 4;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
@@ -10137,18 +10273,7 @@ export function createUi(
 				id = "window-drag:" + name,
 				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
 			) {
-				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
-				const drag = options.drag;
-				controls.push( {
-					id,
-					label: name,
-					kind: "region",
-					draggable: true,
-					rect: drag ?
-						[ r[0] + drag[0], r[1] + drag[1], drag[2], drag[3] ] :
-						[ r[0] + 10, r[1], r[2] - 21, 34 ]
-				} );
-				return r;
+				return frameDraw.windowOrigin( drawFrame, { name, initial, id, options } );
 			}
 			/*
 			================
@@ -10162,7 +10287,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				if ( r[2] > 0 && r[3] > 0 ) quads.push( { rect: r, color, texture: textureId, uv, clip } );
+				return frameDraw.rect( drawFrame, { r, color, textureId, uv, clip } );
 			}
 			// CIFStateSlot children render after the icon: the admittance overlay
 			// (6E8410), then the gauge at {0, cell, cell, 4} (6E7FA0).
@@ -10172,28 +10297,7 @@ export function createUi(
 			================
 			*/
 			function buffViewer( prefix: string, icons: readonly BuffViewerIcon[], ox: number, oy: number ) {
-				for ( const icon of icons ) {
-					const r: UiRect = [ ox + icon.x, oy + icon.y, icon.size, icon.size ],
-						gauge: UiRect = [ r[0], r[1] + icon.size, icon.size, 4 ];
-					for ( const layer of [ icon.path, ...icon.overlay ] ) {
-						if ( layer ) {
-							paths.push( layer );
-							if ( resources.has( layer ) ) rect( r, white, layer );
-						}
-					}
-					for ( const layer of icon.gauge ) {
-						paths.push( layer );
-						if ( resources.has( layer ) ) rect( gauge, white, layer );
-					}
-					controls.push( {
-						id: prefix + icon.id,
-						label: icon.label,
-						helpSource: icon.helpSource,
-						kind: "region",
-						rect: r
-					} );
-					blocks.push( r );
-				}
+				return frameDraw.buffViewer( drawFrame, { prefix, icons, ox, oy } );
 			}
 			/*
 			================
@@ -10207,8 +10311,7 @@ export function createUi(
 				uv: UiRect = [ 0, 0, 1, 1 ],
 				clip: UiRect = full
 			) {
-				paths.push( path );
-				if ( resources.has( path ) ) rect( r, color, path, uv, clip );
+				return frameDraw.image( drawFrame, { r, path, color, uv, clip } );
 			}
 			/*
 			================
@@ -10220,10 +10323,7 @@ export function createUi(
 			================
 			*/
 			function additiveImage( r: UiRect, path: string, uv: UiRect = [ 0, 0, 1, 1 ] ) {
-				paths.push( path );
-				if ( resources.has( path ) ) {
-					quads.push( { rect: r, color: white, texture: path, uv, clip: full, additive: true } );
-				}
+				return frameDraw.additiveImage( drawFrame, r, path, uv );
 			}
 			/*
 			================
@@ -10237,11 +10337,7 @@ export function createUi(
 				color: readonly [number, number, number, number] = white,
 				clip: UiRect = full
 			) {
-				quads.push(
-					...text.quads( value, [ x, y, Math.max( 0, clip[0] + clip[2] - x ), 22 ], clip, color, {
-						vAlign: 0
-					} )
-				);
+				return frameDraw.label( drawFrame, { value, x, y, color, clip } );
 			}
 			// A window is one resource admission. Keep demand while withholding BOTH
 			// pixels and hit areas, so a cold open cannot expose an empty clickable shell.
@@ -10251,9 +10347,7 @@ export function createUi(
 			================
 			*/
 			function beginWindow() {
-				const mark = [ quads.length, controls.length, blocks.length, paths.length ] as const;
-				paths.push( ...commonWindowPaths );
-				return mark;
+				return frameDraw.beginWindow( drawFrame );
 			}
 			/*
 			================
@@ -10268,60 +10362,7 @@ export function createUi(
 				// instead of every quad's raw extent.
 				source?: UiRect
 			) {
-				const admittedWindow = admittedWindows.get( owner );
-				// Everything still loading is reported (tests wait on it before a raster);
-				// only the window's own art holds its admission.
-				const unloaded = paths.slice( mark[3] ).filter( path => !resources.has( path ) );
-				windowMissing.push( ...unloaded );
-				const gaps = unloaded.filter( path => !contentImages.has( path ) );
-				const key = phase + ":" + w + ":" + h;
-				if ( !fontPath || !resources.has( fontPath ) || gaps.length ) {
-					quads.length = mark[0];
-					controls.length = mark[1];
-					blocks.length = mark[2];
-					// Keep a fully admitted popup until its replacement is ready. Old image
-					// demand stays alive; stale content controls cannot dispatch new-tab actions.
-					if ( admittedWindow?.key === key ) {
-						quads.push( ...admittedWindow.quads );
-						blocks.push( ...admittedWindow.blocks );
-						paths.push( ...admittedWindow.paths );
-						controls.push(
-							...admittedWindow.controls.map( c => ({
-								...c,
-								disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
-									c.disabled :
-									true
-							}) )
-						);
-					}
-				} else {
-					// Fit within this window before caching/publication; text behind a modal
-					// must not become a neighboring column of that modal.
-					if ( compact ) {
-						const windowBounds = owner === "item-mall" || owner === "compact-guild" || compact.top < 200 ?
-							full :
-							compact.bounds;
-						fitUiGroup( quads, controls, mark[0], mark[1], windowBounds, full, {
-							blocks,
-							firstBlock: mark[2],
-							disableDrag: compactWindowDrag,
-							...(source ? { sourceBounds: source } : {})
-						} );
-						for ( let i = mark[1]; i < controls.length; i++ ) {
-							controls[i] = compactCloseControl( controls[i]!, windowBounds );
-						}
-					}
-					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
-					quads.length = mark[0];
-					quads.push( ...painted );
-					admittedWindows.set( owner, {
-						key,
-						quads: painted,
-						controls: controls.slice( mark[1] ),
-						blocks: blocks.slice( mark[2] ),
-						paths: paths.slice( mark[3] )
-					} );
-				}
+				return frameDraw.endWindow( drawFrame, mark, owner, source );
 			}
 			/*
 			================
@@ -10329,15 +10370,7 @@ export function createUi(
 			================
 			*/
 			function windowBox( title: string, x: number, y: number, width: number, height: number ) {
-				const r: UiRect = [ x, y, width, height ];
-				blocks.push( r );
-				rect( r, [ .06, .075, .065, .96 ] );
-				quads.push(
-					...frameRing( r, FRAME, PARTS.map( part => resources.size( FRAME + part + ".png" ) ), full )
-				);
-				quads.push(
-					...text.quads( title, [ x + 10, y + 12, width - 21, 12 ], full, white, { hAlign: 1, vAlign: 1 } )
-				);
+				return frameDraw.windowBox( drawFrame, { title, x, y, width, height } );
 			}
 			/*
 			================
@@ -10354,29 +10387,7 @@ export function createUi(
 				selected = false,
 				clientTop?: number
 			) {
-				const r: UiRect = [ x, y, width, 24 ];
-				blocks.push( r );
-				controls.push( { id, label: value, rect: r, kind: "button", disabled, selected } );
-				const down = !disabled && ((pressed === id && hover === id) || selected),
-					path = disabled ?
-						BUTTON_DISABLE :
-						down ?
-						BUTTON_PRESS :
-						((pressed === null && hover === id) || focus === id) ?
-						BUTTON_FOCUS :
-						BUTTON;
-				if ( [ BUTTON, BUTTON_FOCUS, BUTTON_PRESS, BUTTON_DISABLE ].every( resources.has ) ) {
-					rect( r, white, path );
-				}
-				quads.push(
-					...text.quads(
-						value,
-						[ x + (down ? 1 : 0), y + (down ? 1 : 0) + (clientTop ?? 0), width, 24 - (clientTop ?? 0) ],
-						r,
-						buttonTextColor( [ 254 / 255, 251 / 255, 216 / 255, 1 ], buttonAccess( false, disabled ) ),
-						{ hAlign: 1, vAlign: clientTop === undefined ? 1 : 0 }
-					)
-				);
+				return frameDraw.button( drawFrame, { id, value, x, y, width, disabled, selected, clientTop } );
 			}
 			/*
 			================
@@ -10384,12 +10395,7 @@ export function createUi(
 			================
 			*/
 			function closeButton( x: number, y: number, id: CloseControlId ) {
-				const r: UiRect = [ x, y, 16, 16 ];
-				blocks.push( r );
-				controls.push( { id, label: "Close", rect: r, kind: "button" } );
-				if ( resources.has( CLOSE ) && resources.has( CLOSE_PRESS ) && resources.has( CLOSE_FOCUS ) ) {
-					rect( r, white, pressed === id ? CLOSE_PRESS : hover === id ? CLOSE_FOCUS : CLOSE );
-				}
+				return frameDraw.closeButton( drawFrame, x, y, id );
 			}
 			/*
 			================
@@ -10819,16 +10825,7 @@ export function createUi(
 			================
 			*/
 			function comboBox( r: UiRect, id: string, label: string, value: string, disabled = false ) {
-				const chrome = comboBoxChrome(
-					r,
-					resources.size,
-					full,
-					!disabled && pressed === id ? 2 : !disabled && hover === id ? 1 : 0
-				);
-				paths.push( ...chrome.paths );
-				quads.push( ...chrome.quads );
-				quads.push( ...text.quads( value, chrome.textRect, r, white, { hAlign: 1, vAlign: 1 } ) );
-				controls.push( { id, label, rect: r, kind: "button", disabled } );
+				return frameDraw.comboBox( drawFrame, { r, id, label, value, disabled } );
 			}
 			/*
 			================
@@ -11683,7 +11680,7 @@ export function createUi(
 				);
 				quads.push( ...output.quads );
 				controls.push( ...output.controls );
-				paths = output.paths;
+				paths = drawFrame.paths = output.paths;
 				if ( (next.frontend.phase === "dock" || next.frontend.phase === "create") && !next.frontend.dialog ) {
 					blocks.push( ...output.controls.map( control => control.rect ) );
 				} else blocks.push( full );
@@ -12144,8 +12141,7 @@ export function createUi(
 				if ( hudData && game && hudData.root.GDR_MAGICSTATEBOARD ) {
 					const origin = authoredRect( hudData.root.GDR_MAGICSTATEBOARD, 0, 0 );
 					if ( game.buffSlots?.length ) paths.push( "/assets/images/Media_extracted/icon/buf_effect.png" );
-					const ownerPet = experimental.state().saved.attackPetTraining &&
-							game.cosRecords?.some( pet => pet.gid === game.petTraining?.gid && pet.hp > 0 ) ?
+					const ownerPet = game.cosRecords?.some( pet => pet.gid === game.petTraining?.gid && pet.hp > 0 ) ?
 						game.petTraining :
 						undefined;
 					for (
@@ -12154,9 +12150,8 @@ export function createUi(
 							next.simulationTimeMs ?? 0,
 							boardSuppressed,
 							ownerPet,
-							experimental.state().saved.attackPetTraining,
-							hudCopy,
-							experimental.state().saved.mostWantedBuff
+							true,
+							hudCopy
 						)
 					) {
 						if ( !icon.path ) continue;
@@ -12209,8 +12204,9 @@ export function createUi(
 							helpText: icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
-							// vtable +0x70 left-button handler); the rest only hover.
-							kind: icon.id.startsWith( "count-job:" ) ? "button" : "region",
+							// vtable +0x70 left-button handler), as is the saved
+							// Academy buff's pass slot; the rest only hover.
+							kind: icon.id.startsWith( "count-job:" ) || icon.passBuff ? "button" : "region",
 							rightActivate: !!icon.cancel,
 							rect: r
 						} );
@@ -12955,7 +12951,7 @@ export function createUi(
 					if ( !attackPet ) petTrainingAskedRef = 0;
 					const stateAsk = petStateAsk(
 						petStateAsked,
-						experimental.state().saved.attackPetTraining ? attackPet : undefined,
+						attackPet,
 						game?.petTraining?.gid,
 						Date.now()
 					);
@@ -12983,9 +12979,8 @@ export function createUi(
 					const petDesign = binding?.kind === 0x4a && binding.payload > PET_SKILL_SHORTCUT_BASE ?
 						petSkillDesign( binding.payload - PET_SKILL_SHORTCUT_BASE ) :
 						undefined;
-					const petAvailable =
-						!!(petDesign && binding && game && experimental.state().saved.attackPetTraining &&
-							quickSlotCommand( binding, game ));
+					const petAvailable = !!(petDesign && binding && game &&
+						quickSlotCommand( binding, game ));
 					const name = skill ?
 						localization.text( skill.nameSymbol, skill.name ) :
 						item ?
@@ -13273,7 +13268,7 @@ export function createUi(
 						clearHotbar
 					);
 				}
-				hover = mapHud.present( {
+				hover = drawFrame.hover = mapHud.present( {
 					next,
 					game,
 					pose,
@@ -13375,12 +13370,20 @@ export function createUi(
 					}
 					if ( pose ) {
 						const [xText, yText] = minimapCoordinates( pose );
-						authoredText(
-							nodes.GDR_MINIMAP_TEXT_AREANAME!,
-							mx,
-							my,
-							hudData.zones[String( pose.regionId )] ?? ""
-						);
+						const roomLabels = minimapResources.rooms()?.get( pose.regionId ),
+							roomLabel = game?.navigationRoom !== undefined && roomLabels ?
+								roomLabels[game.navigationRoom] :
+								undefined,
+							areaName = minimapAreaName( {
+								dungeon: roomLabels !== undefined,
+								roomLabel,
+								outdoorName: hudData.zones[String( pose.regionId )] ?? "",
+								zones: hudData.zones,
+								strings: hudData.strings,
+								lastRoomName: minimapRoomName
+							} );
+						if ( roomLabels !== undefined ) minimapRoomName = areaName;
+						authoredText( nodes.GDR_MINIMAP_TEXT_AREANAME!, mx, my, areaName );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_X!, mx, my, xText );
 						authoredText( nodes.GDR_MINIMAP_TEXT_POS_Y!, mx, my, yText );
 						const floor = minimapResources.dungeons()?.get( pose.regionId )?.find( f =>
@@ -14908,7 +14911,7 @@ export function createUi(
 					}
 					endWindow( admission );
 					if ( partySettings ) {
-						controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
+						controls = drawFrame.controls = controls.filter( c => c.id.startsWith( "party-setting" ) );
 						blocks.push( full );
 					}
 				}
@@ -15759,7 +15762,7 @@ export function createUi(
 						px = Math.floor( (w - 320) / 2 ),
 						py = Math.floor( (h - 334) / 2 ),
 						prefix = ROOT + "interface/messagebox/msgbox2_window_";
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow();
 					blocks.push( full );
 					blocks.push( [ px, py, 320, 334 ] );
@@ -15888,7 +15891,7 @@ export function createUi(
 					endWindow( admission, "skill-confirm" );
 				}
 				if ( confirmAbandon && questDetails ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					const admission = beginWindow(),
 						meta = guideResources.data()?.questPresentation.records[selectedQuest];
 					blocks.push( full );
@@ -16035,7 +16038,7 @@ export function createUi(
 					{ prefix: "reverse-scroll:", cancel: "reverse-scroll-cancel" } :
 					null;
 				if ( reverseBox ) {
-					controls = [];
+					controls = drawFrame.controls = [];
 					// Port-only: the scroll's box grows a map row when it is offered.
 					const mapRow = reverseScrollHud.active() && reverseMapOffered();
 					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
@@ -16248,7 +16251,7 @@ export function createUi(
 						// 61B6C0 / 61E340 ask through a 6888C0 simple message box, type 1:
 						// white text and Yes/No, unlike the entry window below.
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						simpleMessageBox( {
 							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -16262,7 +16265,7 @@ export function createUi(
 						const mark = beginWindow(),
 							dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
 							dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -16553,7 +16556,10 @@ export function createUi(
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const capabilities = game.targetCapabilities ?? 0;
+					// 75D030 clears the talk capabilities on a firing
+					// exchange answer: while its greeting stands, the
+					// menu reads as if the capability word were zero.
+					const capabilities = game.npcEventGreeting ? 0 : (game.targetCapabilities ?? 0);
 					// 5D7870's outcome page replaces the menu of the NPC that told it.
 					const outcomePage = game.npcConversation.phase === "menu" &&
 							jobHud.outcome() === game.npcConversation.gid,
@@ -16590,7 +16596,13 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: gachaHud.noVoucherFor() === game.npcConversation.gid ?
+						prompt: game.npcEventGreeting ?
+							copy( game.npcEventGreeting ) :
+							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+							// greeting with the event's own line.
+							(capabilities & EVENT_EXCHANGE_FUNCTION) ?
+							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
+							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
 							outcomePage ?
 							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
@@ -16649,6 +16661,7 @@ export function createUi(
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canEventExchange: !!(capabilities & EVENT_EXCHANGE_FUNCTION),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -17512,6 +17525,28 @@ export function createUi(
 							);
 						}
 					}
+					// 660930 (OnCreate) also sets the four style-0x80 help texts:
+					// the info area (502) and the three column heads (511..513)
+					// carry TP explanations, as the tax window's 19..21 do.
+					for (
+						const [id, key] of [
+							[ 502, "UIIT_MSG_TP_FORT_WARAPPLY_INFO" ],
+							[ 511, "UIIT_MSG_TP_FORT_WARAPPLY_FORTRESS" ],
+							[ 512, "UIIT_MSG_TP_FORT_WARAPPLY_GUILD" ],
+							[ 513, "UIIT_MSG_TP_FORT_WARAPPLY_APPLICATION" ]
+						] as const
+					) {
+						const help = byId( id );
+						if ( help ) {
+							controls.push( {
+								id: "fortress-war-help:" + id,
+								label: hudCopy( help.text ),
+								kind: "region",
+								rect: authoredRect( help, px, py ),
+								helpText: hudCopy( key )
+							} );
+						}
+					}
 					const list = byId( 515 );
 					if ( list ) {
 						const [lx, ly] = authoredRect( list, px, py ),
@@ -18095,7 +18130,7 @@ export function createUi(
 						bindCosDraft( records[0] );
 					}
 					const record = records.find( r => r.gid === cosGid ),
-						training = record?.band === 3 && experimental.state().saved.attackPetTraining,
+						training = record?.band === 3 && game?.petTraining?.gid === record.gid,
 						hasInventory = cosHasInventory( record ) || training,
 						busy = !!game?.inventoryPending;
 					// 7785D9..77864C: 0xB05B selector 2 re-binds CIFCOSSetup (6A95E0) when
@@ -18251,12 +18286,10 @@ export function createUi(
 							}
 						}
 					} else if ( cosTab === 0 && record ) {
-						// Every number is the server's (#1548): the published training
-						// whatever the row; the row gates only the training UI.
+						// Every number is the server's (#1548); only this pet's
+						// published state may override its native reference.
 						const publishedTraining = game?.petTraining?.gid === record.gid ? game.petTraining : undefined;
-						const trainingState = experimental.state().saved.attackPetTraining ?
-							publishedTraining :
-							undefined;
+						const trainingState = publishedTraining;
 						const reference = petReference(
 							hudData.cosReferences.get( record.refObjId ),
 							publishedTraining,
@@ -18691,7 +18724,7 @@ export function createUi(
 					*/
 					function petNameDialogBox( dialog: { readonly phase: "input" | "confirm"; } ) {
 						const mark = beginWindow();
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( full );
 						if ( dialog.phase === "confirm" ) {
 							simpleMessageBox( {
@@ -18959,13 +18992,13 @@ export function createUi(
 						exchangeHud.reset();
 						if ( goldDialog === "exchange" ) {
 							goldDialog = false;
-							focus = null;
+							focus = drawFrame.focus = null;
 						}
 						return;
 					}
 					if ( state.ownLocked && goldDialog === "exchange" ) {
 						goldDialog = false;
-						focus = null;
+						focus = drawFrame.focus = null;
 					}
 					const admission = beginWindow(),
 						[px, py] = windowOrigin( "Exchange", [
@@ -19017,12 +19050,19 @@ export function createUi(
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						hudCopy( at( 11 ).text ),
+						// 6B21F6: once this side has confirmed, the button reads
+						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
+						// Confirm caption stays until then.
+						state.approved ?
+							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
+							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
@@ -19595,7 +19635,7 @@ export function createUi(
 				*/
 				function friendDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					if ( friendDialog === "remove" ) {
 						simpleMessageBox( {
@@ -19897,7 +19937,7 @@ export function createUi(
 				*/
 				function letterDialogBox() {
 					const mark = beginWindow();
-					controls = [];
+					controls = drawFrame.controls = [];
 					blocks.push( full );
 					simpleMessageBox( {
 						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
@@ -21858,6 +21898,7 @@ export function createUi(
 						guideEvent = state.event;
 						guideScroll = 0;
 						setPanel( "Game Guide" );
+						drawFrame.focus = focus;
 						dirty = true;
 					} else {
 						if ( !guidePending ) sound( "quest" );
@@ -22254,10 +22295,10 @@ export function createUi(
 				(game.social.invitation.type !== 5 && game.social.invitation.type !== 6 ||
 					next.entities.some( e => e.gid === game.social!.invitation!.gid && e.guildName ))
 			) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "invite-accept" && focus !== "invite-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22367,10 +22408,10 @@ export function createUi(
 			if ( friendPrompt && worldVisible && !game?.social?.invitation ) {
 				// 760C90 opens confirm box 0x23 (52F460): "'name' proposed to make
 				// friends with you." over "Will you accept it?", answered Yes / No.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "friend-accept" && focus !== "friend-refuse" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -22419,8 +22460,8 @@ export function createUi(
 			if ( friendConclusion && worldVisible && !game?.social?.invitation ) {
 				// 760FB0 case 2 opens confirm box 0x22 (52F460): "[friend] and
 				// [local]'s" over the acceptance line, with one Confirm.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [
@@ -22442,7 +22483,7 @@ export function createUi(
 					py = Math.floor( (h - 149) / 2 ),
 					prefix = ROOT + "interface/messagebox/msgbox2_window_",
 					layout = hud.data()!.windows.ifpartyjoinprogress!;
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				paths.push( ...PARTS.map( p => prefix + p + ".png" ) );
 				quads.push(
@@ -22497,7 +22538,7 @@ export function createUi(
 					height = request ? 315 : automatic ? 337 : 373,
 					px = Math.floor( (w - width) / 2 ),
 					py = Math.floor( (h - height) / 2 );
-				controls = [];
+				controls = drawFrame.controls = [];
 				blocks.push( full );
 				if ( remove ) {
 					// 635300 asks through a 6888C0 simple message box, type 1 (Yes/No).
@@ -22721,8 +22762,8 @@ export function createUi(
 						hud.data()!.windows.ifitemmallconfirmbuy!,
 					locked = !!game.inventoryPending,
 					quantityMode = quote?.quantityMode ?? "readonly";
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -22918,8 +22959,8 @@ export function createUi(
 					height = notice ? 310 : donate ? 240 : guildDialog === "role" ? 310 : 148,
 					mx = Math.max( 0, (w - width) / 2 ),
 					my = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile(
@@ -23126,8 +23167,8 @@ export function createUi(
 						unlimited :
 						String( id === 26 ? value * 10 : value ) + " " +
 						hudCopy( id === 24 ? "PARAM_DAY" : id === 25 ? "UIIT_STT_HOUR" : "UIIT_STT_MINUTE" );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( surrender ) {
 					const box = guildProposalLayout( w, h ),
 						enemy = game?.social?.wars?.find( row => row.id === warDialog.selected )?.name ?? "";
@@ -23279,8 +23320,8 @@ export function createUi(
 					value = noticeText( hudCopy, { key: result.key, value: 0, arguments: result.names } ) +
 						(result.additionalKey ? "\n" + hudCopy( result.additionalKey ) : "");
 				const box = noticeDialog( w, h, value, value => text.run( value ).width );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23315,8 +23356,8 @@ export function createUi(
 					question = unionAsk.kind === "exit" ?
 						hudCopy( "UIIT_MSG_GUILD_QUESTION_ALLY_EXIT" ) :
 						hudCopy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_EXPEL" ).replace( "%s", () => unionAsk.name );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( title ),
 					lines: [ question ],
@@ -23329,8 +23370,8 @@ export function createUi(
 				// The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION, a ban of
 				// the selected member), Secede and Disband, and the party ban,
 				// each ask their native question before anything is sent.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( socialAsk.title ),
 					lines: socialAsk.lines.map( line => {
@@ -23344,8 +23385,8 @@ export function createUi(
 			if ( worldVisible && crestDeleteAsk ) {
 				// 52F460 types 0x16/0x19 (#2282): the confirm box title and
 				// the one-line question whether to delete the emblem.
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( crestDeleteKeys( crestDeleteAsk.kind ).confirm ) ],
@@ -23356,8 +23397,8 @@ export function createUi(
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23404,8 +23445,8 @@ export function createUi(
 				const item = making ?
 					productionAsk.item :
 					fortressProductionItems().find( row => row.refObjId === productionAsk.order.refObjId );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23476,8 +23517,8 @@ export function createUi(
 					Object.entries( taxBox ).filter( ( [name] ) => name.startsWith( prefix ) )
 				);
 				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23571,8 +23612,8 @@ export function createUi(
 						] :
 						[ name, row?.requestFee ?? 0 ]
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: message.split( "\n" ),
@@ -23676,8 +23717,8 @@ export function createUi(
 					byId = ( id: number ) => nodes.find( n => n.id === id ),
 					jx = Math.max( 0, (w - root.rect[2]) / 2 ),
 					jy = Math.max( 0, (h - root.rect[3]) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame( root, jx, jy, hudCopy( root.text ), "academy-judge-close" );
 				nativePage( page, jx, jy, [ 20, 30, 31 ] );
 				const radio = byId( 20 );
@@ -23772,8 +23813,8 @@ export function createUi(
 						12,
 					false
 				);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -23826,8 +23867,8 @@ export function createUi(
 					const x = Math.max( 0, (w - electionRoot.rect[2]) / 2 ),
 						y = Math.max( 0, (h - electionRoot.rect[3]) / 2 );
 					const at = ( id: number ) => Object.values( electionPage ).find( n => n.id === id )!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...electionRoot,
@@ -23917,8 +23958,8 @@ export function createUi(
 						m.grade !== 0
 					).sort( ( a, b ) => a.id - b.id ) ?? [];
 					const offset = guildManagerHud.transferPosition( members.length );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{
 							...transferRoot,
@@ -23987,8 +24028,8 @@ export function createUi(
 					const price = guildLevelUpPrice( level );
 					const say = ( key: string, ...args: string[] ) =>
 						noticeText( hudCopy, { key, value: 0, arguments: args } );
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					authoredChrome(
 						{ ...levelRoot, type: "CIFFrame", rect: [ 0, 0, levelRoot.rect[2], levelRoot.rect[3] ] },
 						x,
@@ -24093,8 +24134,8 @@ export function createUi(
 						]
 					};
 					const [first, second] = lines[guildAsk?.kind ?? guildField?.kind ?? "vote"]!;
-					controls = [];
-					blocks = [ full ];
+					controls = drawFrame.controls = [];
+					blocks = drawFrame.blocks = [ full ];
 					paths.push( ...partyProposalAssets() );
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24169,8 +24210,8 @@ export function createUi(
 			if ( worldVisible && repairCost !== null ) {
 				// 5B2B10 raises box 0x0C: Repair All's question and its total.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24180,7 +24221,9 @@ export function createUi(
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+					// 530D51: the type-0xC repair box (52F460) titles itself
+					// UIIT_STT_AGREEMENT_BOX, not the generic confirm title.
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
 					} ),
@@ -24193,9 +24236,15 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
+				// 52F460: the store's repair-all button (5B2B10) raises
+				// confirmation type 0x0C, which ShowByType passes on as
+				// the configure kind; the kind-0x0C arm (530D51)
+				// captions the action button UIIT_CTL_REPAIR_ALL
+				// ("Repair all"), not a generic Yes (xref 530E91).
 				button(
 					"repair-all-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
+					// 530E91: the box's action button reads UIIT_CTL_REPAIR_ALL.
+					hudCopy( "UIIT_CTL_REPAIR_ALL" ) || hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
@@ -24215,8 +24264,8 @@ export function createUi(
 				const at = ( id: number ) => Object.values( typePage ).find( row => row.id === id );
 				const height = typeRoot.rect[3] + grow;
 				const px = Math.max( 0, (w - typeRoot.rect[2]) / 2 ), py = Math.max( 0, (h - height) / 2 );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				nativeFrame(
 					{ ...typeRoot, rect: [ typeRoot.rect[0], typeRoot.rect[1], typeRoot.rect[2], height ] },
 					px,
@@ -24306,8 +24355,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24337,8 +24386,8 @@ export function createUi(
 			if ( worldVisible && structureRemoval ) {
 				// 517750 raises UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW naming the target.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24353,7 +24402,14 @@ export function createUi(
 						vAlign: 0
 					} ),
 					...text.quads(
-						hudCopy( "UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW" ).replace( "%s", structureRemoval.name ),
+						// 517750 picks the question by the window kind (+0x384):
+						// kinds 1/2 delete a structure, kind 3 dismisses the
+						// summoned monster (517360's 0x64..0x66 boxes).
+						hudCopy(
+							structureRemoval.kind === 3 ?
+								"UIIT_MSG_FORT_SUMMONMON_DISMISS_WINDOW" :
+								"UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW"
+						).replace( "%s", structureRemoval.name ),
 						layout.name,
 						full,
 						white,
@@ -24402,8 +24458,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24441,8 +24497,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24473,8 +24529,8 @@ export function createUi(
 			if ( worldVisible && teleportShown ) {
 				// Map teleport: the recall-appoint message box geometry.
 				const layout = guildProposalLayout( w, h );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24529,8 +24585,8 @@ export function createUi(
 						white,
 						resources.size
 					);
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets(), ...message.paths );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24557,10 +24613,22 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
+			if ( worldVisible && academyBuffPass ) {
+				// 6E2840: the pass question is a plain simple message box
+				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
+					yes: "academy-buff-pass-confirm",
+					no: "academy-buff-pass-cancel"
+				} );
+			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_EVENTGUIDE" ),
 					lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) ],
@@ -24570,8 +24638,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && sellAllPhase !== null ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox(
 					sellAllPhase === "confirm" ?
 						{
@@ -24591,8 +24659,8 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && shopWarning ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ hudCopy( "UIIT_MSG_CANNOT_BUYBACK_ITEM_SELL" ).replace( "%s", shopWarning.name ) ],
@@ -24602,8 +24670,8 @@ export function createUi(
 				} );
 			}
 			if ( worldVisible && groundDrop ) {
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
 					lines: [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
@@ -24673,8 +24741,8 @@ export function createUi(
 					layout = messageBox( w, h, 300, 183 ),
 					[x, y] = layout.frame,
 					item = game?.inventory.find( i => i.slot === promptStack.slot );
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24781,8 +24849,8 @@ export function createUi(
 				const amount = warDialog.money ?? goldAmount,
 					inputId = warDialog.money !== null ? "war-money" : "gold-amount";
 				const layout = messageBox( w, h, 308, 148 ), [x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -24876,8 +24944,8 @@ export function createUi(
 						stallBox.kind === "network-buy" ?
 						stall.network.rows[stallBox.row] :
 						undefined;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				// 5A2795 / 5ADA0F use 6888C0's text-sized MsgBoxSimple. The personal
 				// purchase question uses that same native construction by inference.
 				simpleMessageBox( {
@@ -24904,8 +24972,8 @@ export function createUi(
 				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
 					layout = messageBox( w, h, boxWidth, boxHeight ),
 					[x, y] = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -25006,7 +25074,20 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
@@ -25132,10 +25213,10 @@ export function createUi(
 				const kept = ( id: string | null ) =>
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25195,10 +25276,10 @@ export function createUi(
 					!!id &&
 					(id.startsWith( "rebirth-" ) || id.startsWith( "invite-" ) || id.startsWith( "resurrection-" ) ||
 						id.startsWith( "instance-" ));
-				controls = controls.filter( c => kept( c.id ) );
-				blocks = [ full ];
+				controls = drawFrame.controls = controls.filter( c => kept( c.id ) );
+				blocks = drawFrame.blocks = [ full ];
 				if ( !kept( focus ) ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				paths.push( ...partyProposalAssets() );
@@ -25246,8 +25327,8 @@ export function createUi(
 				paths.push( ...art );
 				nativeLoadError = art.every( path => resources.has( path ) ) && !!text.path() &&
 					resources.has( text.path()! ) && !text.error();
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( nativeLoadError ) {
 					quads.push(
 						...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full )
@@ -25312,8 +25393,8 @@ export function createUi(
 					noticeDialogPosition
 				);
 				noticeDialogFrame = layout.frame;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
 				controls.push( {
 					id: "notice-dialog-drag",
@@ -25367,10 +25448,10 @@ export function createUi(
 				*/
 				const layout = disconnectDialog( w, h, disconnectPosition ),
 					copy = ( key: string, fallback: string ) => hudCopy( key ) || title.catalog( key ) || fallback;
-				controls = [];
-				blocks = [ full ];
+				controls = drawFrame.controls = [];
+				blocks = drawFrame.blocks = [ full ];
 				if ( focus !== "disconnect-confirm" ) {
-					focus = null;
+					focus = drawFrame.focus = null;
 					composing = false;
 				}
 				controls.push( {
@@ -25428,11 +25509,11 @@ export function createUi(
 				// Underlying windows retain state while the mall is open; CGWndBase
 				// input dispatch (9FEC50 -> CGInterface_OnWorldMessage 67CCA0) still
 				// forwards world pointer events outside CIFItemMall's bounds.
-				controls = [];
+				controls = drawFrame.controls = [];
 				const mallAdmission = beginWindow();
 				paths.push( ...mallMenuArtwork() );
 				if ( compact ) {
-					blocks = [ full ];
+					blocks = drawFrame.blocks = [ full ];
 					// Port-only, owner-approved reflow. Never scale the Mall's text or
 					// combine its background with a purchase dialog's fitting bounds.
 					const margin = 8, touch = 40, gap = 4, cardHeight = 112, tabPitch = 28;
@@ -25834,7 +25915,7 @@ export function createUi(
 					windowMissing.push( ...missing );
 					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
 						quads.length = mallAdmission[0];
-						controls = [];
+						controls = drawFrame.controls = [];
 					} else {
 						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
 						quads.length = mallAdmission[0];
@@ -25848,11 +25929,16 @@ export function createUi(
 					nativePage( root, ox, oy );
 					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
 					// through CIFButton_SetEnabled(false), even in the retail client.
+					// Port-only (#2269): the Experimental silk history option enables
+					// Buying List (6); Obtained List (7) stays native-disabled.
+					const silkHistoryEnabled = experimental.state().saved.silkHistory;
 					for ( const node of Object.values( root ) ) {
 						if ( node.type !== "CIFButton" ) continue;
 						// Control ids are unique: the frame X already owns "item-mall-close".
 						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
 							"item-mall-home" :
+							node.id === 6 && silkHistoryEnabled ?
+							"item-mall-silk-open" :
 							"item-mall-root:" + node.id;
 						authoredLabeledButton(
 							node,
@@ -25862,6 +25948,8 @@ export function createUi(
 							hudCopy( node.text ),
 							node.id === 4 || node.id === 5 ?
 								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+								node.id === 6 ?
+								!silkHistoryEnabled :
 								node.id !== 8 && node.id !== 3
 						);
 					}
@@ -26024,164 +26112,276 @@ export function createUi(
 					const shopOrigin = mallControl( root, 50 ).rect;
 					const shop = data.windows.ifitemmallshop!;
 					for ( const node of authoredPaintOrder( shop ) ) {
-						if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
+						if (
+							state.silk.open ?
+								node.creationSection === 3 || node.creationSection === 4 ||
+								node.creationSection === 5 || node.creationSection === 9 :
+								node.creationSection === 0 || state.category === -1 && node.creationSection === 2
+						) {
 							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
 						}
 					}
 
 					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-					const currentTab = state.tabs[state.tab];
-					const description = state.category === -1 ?
-						"UIIT_STT_SILKMALL_MAIN_INTRO" :
-						state.category === 7 ?
-						"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-						currentTab ?
-						mallDescription( currentTab.category, currentTab.tab ) :
-						"";
-					authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
-					if ( state.category === -1 ) {
+					if ( state.silk.open ) {
+						// Port-only (#2269): the Buying list page. CIFSilkBuyList's
+						// OnCreate (0x6CED10) builds these same sections but never
+						// fills a row; the rows are the worker's recorded-history
+						// publication for the selected period.
+						const history = game.itemMallSilkHistory;
+						const shown = history?.period === state.silk.period ? history : undefined;
 						authoredChrome(
-							{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+							{ ...mallControl( shop, 40 ), text: "UIIT_STT_SILK_INQUIRY_MONTH_SILK" },
 							sx,
 							sy
 						);
-					}
-					if ( state.category === 7 ) {
-						const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-						authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-						const buyAll = mallControl( shop, 42 );
-						authoredLabeledButton(
-							buyAll,
+						authoredText( mallControl( shop, 30 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_NUMBER" ) );
+						authoredText( mallControl( shop, 31 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_CHARGE_SILK" ) );
+						authoredText( mallControl( shop, 32 ), sx, sy, hudCopy( "UIIT_STT_SILK_INQUIRY_DATE" ) );
+						authoredText(
+							mallControl( shop, 36 ),
 							sx,
 							sy,
-							"item-mall-buy-all",
-							hudCopy( buyAll.text ),
-							state.count === 0 || state.batchPending || !!game.inventoryPending
+							shown?.pending ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_WAIT" ) :
+								shown && shown.rows.length === 0 ?
+								hudCopy( "UIIT_MSG_SILK_INQUIRY_NOT_INQUIRY" ) :
+								""
 						);
-					}
-					if ( state.category >= 0 ) {
-						for ( let index = 0; index < state.tabs.length; index++ ) {
-							const tab = state.tabs[index]!;
-							const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-							authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+						authoredText(
+							mallControl( shop, 26 ),
+							sx,
+							sy,
+							shown ? `${shown.total}${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}` : ""
+						);
+						if ( shown ) {
+							// The layout authors fourteen row bars (80..93 at y=189,
+							// step 23); the newest recorded uses fill them in order.
+							for ( let index = 0; index < Math.min( shown.rows.length, 14 ); index++ ) {
+								const row = shown.rows[index]!, y = sy + 189 + index * 23;
+								quads.push(
+									...text.quads( String( index + 1 ), [ sx + 24, y, 50, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads( String( row.charged ), [ sx + 74, y, 146, 24 ], full, white, {
+										hAlign: 1,
+										vAlign: 1
+									} ),
+									...text.quads(
+										mallSilkHistoryDate( row.at ),
+										[ sx + 220, y, 154, 24 ],
+										full,
+										white,
+										{ hAlign: 1, vAlign: 1 }
+									)
+								);
+							}
 						}
-						const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-						if ( manager.count > 0 ) {
-							const template = {
-								...mallControl( data.windows.ifpagemanager!, 10 ),
-								client: [ 0, 0, 0, 0 ] as UiRect,
-								hAlign: 1,
-								vAlign: 1
-							};
-							authoredText(
-								{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-								sx,
-								sy,
-								"["
-							);
-							authoredText(
-								{
-									...template,
-									rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
-								},
-								sx,
-								sy,
-								"]"
-							);
-							for ( let index = 0; index < manager.count; index++ ) {
-								const page = manager.first + index;
-								const control = {
-									...template,
-									rect: [
-										manager.x + index * manager.width,
-										manager.y,
-										manager.width,
-										manager.height
-									] as UiRect
-								};
-								// The current page draws in the manager's highlight
-								// colour and styled face (mallPageNumberPresentation).
-								const presentation = mallPageNumberPresentation( page, state.page );
-								authoredText(
-									presentation.color ? { ...control, color: presentation.color } : control,
-									sx,
-									sy,
-									String( page + 1 ),
-									false,
-									presentation.fontStyle
+						authoredLabeledButton(
+							mallControl( shop, 28 ),
+							sx,
+							sy,
+							"item-mall-silk-inquire",
+							hudCopy( "UIIT_CTL_SILK_INQUIRY" ),
+							!!shown?.pending || !!game.inventoryPending
+						);
+						const combo = authoredRect( mallControl( shop, 70 ), sx, sy );
+						comboBox(
+							combo,
+							"item-mall-silk-combo",
+							hudCopy( "UIIT_STT_SILK_INQUIRY_PERIOD" ),
+							hudCopy( mallSilkPeriodTexts[state.silk.period]! )
+						);
+						if ( state.silk.comboOpen ) {
+							const list: UiRect = [
+								combo[0],
+								combo[1] + combo[3],
+								combo[2],
+								mallSilkPeriodTexts.length * 18
+							];
+							rect( list, [ 0, 0, 0, 1 ] );
+							blocks.push( list );
+							for ( let index = 0; index < mallSilkPeriodTexts.length; index++ ) {
+								const cell: UiRect = [ list[0], list[1] + index * 18, list[2], 18 ];
+								if ( index === state.silk.period ) rect( cell, [ .2, .25, .3, 1 ] );
+								quads.push(
+									...text.quads(
+										hudCopy( mallSilkPeriodTexts[index]! ),
+										[ cell[0] + 4, cell[1], cell[2] - 8, cell[3] ],
+										cell,
+										white
+									)
 								);
 								controls.push( {
-									id: "item-mall-page:" + page,
-									label: String( page + 1 ),
-									rect: authoredRect( control, sx, sy ),
-									kind: "button"
+									id: "item-mall-silk-period:" + index,
+									label: hudCopy( mallSilkPeriodTexts[index]! ),
+									rect: cell,
+									kind: "button",
+									selected: index === state.silk.period
 								} );
 							}
-							if ( manager.previous >= 0 ) {
-								const node = mallControl( data.windows.ifpagemanager!, 1 );
-								authoredButton(
-									{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.previous,
-									""
-								);
-							}
-							if ( manager.next < manager.pages ) {
-								const node = mallControl( data.windows.ifpagemanager!, 2 );
-								authoredButton(
-									{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-									sx,
-									sy,
-									"item-mall-page:" + manager.next,
-									""
-								);
-							}
 						}
-
-						const row = data.windows.ifitemmallshopslot!;
-						for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
-							const offer = state.offers[index];
-							const origin = mallControl( shop, 61 + index ).rect;
-							const rx = sx + origin[0], ry = sy + origin[1];
-							if ( !offer ) {
-								// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
-								// an empty slot hides its bar, name, price, silk mark, icon and
-								// buttons, but the slot and its background (50) stay.
-								authoredChrome( mallControl( row, 50 ), rx, ry );
-								continue;
+					} else {
+						const currentTab = state.tabs[state.tab];
+						const description = state.category === -1 ?
+							"UIIT_STT_SILKMALL_MAIN_INTRO" :
+							state.category === 7 ?
+							"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+							currentTab ?
+							mallDescription( currentTab.category, currentTab.tab ) :
+							"";
+						authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+						if ( state.category === -1 ) {
+							authoredChrome(
+								{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+								sx,
+								sy
+							);
+						}
+						if ( state.category === 7 ) {
+							const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+							authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+							const buyAll = mallControl( shop, 42 );
+							authoredLabeledButton(
+								buyAll,
+								sx,
+								sy,
+								"item-mall-buy-all",
+								hudCopy( buyAll.text ),
+								state.count === 0 || state.batchPending || !!game.inventoryPending
+							);
+						}
+						if ( state.category >= 0 ) {
+							for ( let index = 0; index < state.tabs.length; index++ ) {
+								const tab = state.tabs[index]!;
+								const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+								authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
 							}
-							nativePage( row, rx, ry, [ 8, 10, 11 ] );
-							authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-							authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-							authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-							const icon = iconPath( offer.icon );
-							if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-							controls.push( {
-								id: "item-mall-offer:" + offer.packageId,
-								label: hudCopy( offer.name ),
-								rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-								kind: "button"
-							} );
-							for ( const node of Object.values( row ) ) {
-								if ( node.type !== "CIFButton" ) continue;
-								const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-									"item-mall-buy:" + index :
-									node.id === 6 ?
-									"item-mall-reserve:" + index :
-									"item-mall-row:" + index + ":" + node.id;
-								authoredLabeledButton(
-									node,
-									rx,
-									ry,
-									action,
-									hudCopy(
-										node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
-									),
-									(node.id === 3 ?
-										!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-										node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+							const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
+							if ( manager.count > 0 ) {
+								const template = {
+									...mallControl( data.windows.ifpagemanager!, 10 ),
+									client: [ 0, 0, 0, 0 ] as UiRect,
+									hAlign: 1,
+									vAlign: 1
+								};
+								authoredText(
+									{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
+									sx,
+									sy,
+									"["
 								);
+								authoredText(
+									{
+										...template,
+										rect: [
+											manager.x + manager.count * manager.width,
+											manager.y,
+											4,
+											manager.height
+										]
+									},
+									sx,
+									sy,
+									"]"
+								);
+								for ( let index = 0; index < manager.count; index++ ) {
+									const page = manager.first + index;
+									const control = {
+										...template,
+										rect: [
+											manager.x + index * manager.width,
+											manager.y,
+											manager.width,
+											manager.height
+										] as UiRect
+									};
+									// The current page draws in the manager's highlight
+									// colour and styled face (mallPageNumberPresentation).
+									const presentation = mallPageNumberPresentation( page, state.page );
+									authoredText(
+										presentation.color ? { ...control, color: presentation.color } : control,
+										sx,
+										sy,
+										String( page + 1 ),
+										false,
+										presentation.fontStyle
+									);
+									controls.push( {
+										id: "item-mall-page:" + page,
+										label: String( page + 1 ),
+										rect: authoredRect( control, sx, sy ),
+										kind: "button"
+									} );
+								}
+								if ( manager.previous >= 0 ) {
+									const node = mallControl( data.windows.ifpagemanager!, 1 );
+									authoredButton(
+										{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.previous,
+										""
+									);
+								}
+								if ( manager.next < manager.pages ) {
+									const node = mallControl( data.windows.ifpagemanager!, 2 );
+									authoredButton(
+										{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
+										sx,
+										sy,
+										"item-mall-page:" + manager.next,
+										""
+									);
+								}
+							}
+
+							const row = data.windows.ifitemmallshopslot!;
+							for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+								const offer = state.offers[index];
+								const origin = mallControl( shop, 61 + index ).rect;
+								const rx = sx + origin[0], ry = sy + origin[1];
+								if ( !offer ) {
+									// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+									// an empty slot hides its bar, name, price, silk mark, icon and
+									// buttons, but the slot and its background (50) stay.
+									authoredChrome( mallControl( row, 50 ), rx, ry );
+									continue;
+								}
+								nativePage( row, rx, ry, [ 8, 10, 11 ] );
+								authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+								authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+								authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+								const icon = iconPath( offer.icon );
+								if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+								controls.push( {
+									id: "item-mall-offer:" + offer.packageId,
+									label: hudCopy( offer.name ),
+									rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+									kind: "button"
+								} );
+								for ( const node of Object.values( row ) ) {
+									if ( node.type !== "CIFButton" ) continue;
+									const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+										"item-mall-buy:" + index :
+										node.id === 6 ?
+										"item-mall-reserve:" + index :
+										"item-mall-row:" + index + ":" + node.id;
+									authoredLabeledButton(
+										node,
+										rx,
+										ry,
+										action,
+										hudCopy(
+											node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
+										),
+										(node.id === 3 ?
+											!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+											node.id !== 4 && node.id !== 6) ||
+											!!game.inventoryPending || state.batchPending
+									);
+								}
 							}
 						}
 					}
@@ -26192,7 +26392,7 @@ export function createUi(
 						const currencies = currencyLayout.rows;
 						const dialogWidth = 327, height = currencyLayout.height;
 						const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, dialogWidth, height ] );
 						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
 						paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -26297,7 +26497,7 @@ export function createUi(
 							Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
 						);
 						const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ mx, my, layout.width, layout.height ] );
 						paths.push( ...partyProposalAssets() );
 						quads.push(
@@ -26433,7 +26633,7 @@ export function createUi(
 						const pointPage = data.windows.ifitemmallusepoint!;
 						const pointWidth = 233, pointHeight = 177;
 						const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
-						controls = [];
+						controls = drawFrame.controls = [];
 						blocks.push( [ px, py, pointWidth, pointHeight ] );
 						quads.push(
 							...frameRing(
@@ -26477,7 +26677,7 @@ export function createUi(
 				const buttonY = state.resuscitation ? RESUSCITATION_CONFIRM_BUTTON_Y : WITHDRAWAL_CONFIRM_BUTTON_Y;
 				const px = Math.floor( (w - width) / 2 ), py = Math.floor( (h - height) / 2 );
 				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-				controls = [];
+				controls = drawFrame.controls = [];
 				const admission = beginWindow();
 				blocks.push( full );
 				paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
@@ -27088,7 +27288,7 @@ export function createUi(
 			gauges.end();
 			// Text runs travel to the renderer whole: the GPU packer writes one record
 			// per glyph straight into its buffer (text-run.ts, device/ui.ts).
-			quads = resolveTextOverlaps( quads );
+			quads = drawFrame.quads = resolveTextOverlaps( quads );
 			probe?.detailEnd( "ui-finalize" );
 			probe?.detailBegin( "ui-compare" );
 			const unchanged = lastProduct && lastProduct.width === w && lastProduct.height === h &&

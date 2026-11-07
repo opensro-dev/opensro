@@ -325,8 +325,9 @@ function SkillPane_ParamSpecs(): ReadonlyMap<number, SkillPaneParamSpec> {
 	spec( "rcur", 1, 0x1d4, "runtime" );
 	spec( "dmgr", 4, 0x1d8 );
 	spec( "dgmp", 1, 0x1dc );
-	// +0x1e0 is gameplay-only: the complete CSkillParameters_AppendLocalizedTooltip body has no read of
-	// this pointer (TC crown-buff text comes from its authored description).
+	// CSkillData_IndexParameterTags stores hvir at +0x1e0 and
+	// CSkillParameters_AppendLocalizedTooltip @0x7faa83 reads it for the
+	// berserk-gauge chance line (#2273); gameplay consumes the block too.
 	spec( "hwir", 1, 0x1e0, "runtime" );
 	spec( "abnb", 1, 0x1e4 );
 	spec( "dtt", 2, 0x1e8 );

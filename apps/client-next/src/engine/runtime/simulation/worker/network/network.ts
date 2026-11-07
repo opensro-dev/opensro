@@ -42,6 +42,9 @@ const NET_JOURNAL_RECORDS = 4096;
 // QUIC path that stalls pre-WELCOME never silently holds a login.
 const WT_CONNECT_DEADLINE_MS = 3000;
 const WT_WELCOME_DEADLINE_MS = 10000;
+// The EnterWorld answer's opcode: the one frame that proves an entry
+// presented on a link was answered on it (#2632).
+const ENTER_WORLD_RESULT_OPCODE = 7;
 // The serverCertificateHashes pinning window: the browser pins only
 // certificates valid for at most 14 days (apps/server certs.go), which
 // is exactly the development certificate; a public one is used plainly.
@@ -193,6 +196,17 @@ export function createNetwork(
 	// Remembered with wtFailed for the session; each socket takeover
 	// copies it into transportFallback so the report names the attempt.
 	let wtFailReason = 0;
+	// The entry the current link presented (enterWorld) and whether its
+	// answer came back on the same link. A WebTransport link that ends
+	// with an entry still unanswered - the session died on its own, or
+	// the world session's stall deadline tore it down - has indicted
+	// the QUIC path exactly as a pre-WELCOME death does (#2632): the
+	// retry must ride the socket, not present the next admission to
+	// the same stalled path until the character-select fallback.
+	let entryPresented = false, entryAnswered = false;
+	// The current link is the WebTransport one; set where each link is
+	// installed, cleared with the entry state in disconnect.
+	let linkIsWebTransport = false;
 	// The connect in flight: endpoint and hello for the socket fallback,
 	// and whether that fallback already ran. It runs at most once - see
 	// wtClosed - so an admission is never presented a third time.
@@ -227,6 +241,12 @@ export function createNetwork(
 	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
 	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
+	// The server's session id from the latest WELCOME (transportSessionId()).
+	// It survives the link's end on purpose: the failure it ends in is
+	// reported after disconnect() ran, and names this session so the
+	// incident joins the transport's log lines (#2558). The next
+	// WELCOME replaces it; a resume keeps the same server session.
+	let transportSession: string | undefined;
 	// The current link's open and last-inbound times (performance.now());
 	// receivedAt is the one last-inbound stamp (receivedAt(), #1474).
 	let openedAt = -Infinity, receivedAt = -Infinity;
@@ -268,6 +288,16 @@ export function createNetwork(
 	================
 	*/
 	function disconnect() {
+		// An unanswered entry ends the WebTransport path's credit for
+		// the session (see entryPresented): whatever tore the link
+		// down, the next connect goes straight to the socket.
+		if ( linkIsWebTransport && welcomed && entryPresented && !entryAnswered ) {
+			wtFailed = true;
+			if ( !wtFailReason ) wtFailReason = 4;
+		}
+		entryPresented = false;
+		entryAnswered = false;
+		linkIsWebTransport = false;
 		epoch++;
 		welcomed = false;
 		pendingPing = false;
@@ -389,6 +419,7 @@ export function createNetwork(
 			receivedAt = performance.now();
 			const frame = codec.decode( data );
 			receivedFrames++;
+			if ( frame.opcode === ENTER_WORLD_RESULT_OPCODE ) entryAnswered = true;
 			note( NET_JOURNAL_IN, frame.opcode, data.byteLength );
 			if ( frame.opcode === 5 ) {
 				if ( frame.payload.length !== 1 ) throw new Error( "Invalid transport goodbye" );
@@ -422,10 +453,12 @@ export function createNetwork(
 				if ( frame.opcode !== 2 ) {
 					throw new Error( "Expected transport welcome" );
 				}
-				if ( !codec.welcome( frame.payload ).resumed ) {
+				const welcome = codec.welcome( frame.payload );
+				if ( !welcome.resumed ) {
 					streamPosition = 0;
 					largeFrameUnacked = false;
 				}
+				transportSession = welcome.sessionId.toString();
 				welcomed = true;
 				clearWelcomeDeadline();
 				send( codec.transportReport( transportFallback ) );
@@ -496,6 +529,7 @@ export function createNetwork(
 			}
 		};
 		link = mine;
+		linkIsWebTransport = false;
 		const active = () => !disposed && generation === epoch && link === mine;
 		// An error event is always followed by a close event (WebSocket
 		// close steps), which alone carries the code: report at the close.
@@ -852,6 +886,7 @@ export function createNetwork(
 				}
 			};
 			link = mine;
+			linkIsWebTransport = true;
 			// The one open stamp (see openedAt): the socket resets it per
 			// attempt, and a WT close guards on this link being current,
 			// so a stale stamp is never read (GH #2148).
@@ -923,6 +958,18 @@ export function createNetwork(
 			return receivedAt;
 		},
 		/*
+		================
+		transportSessionId
+
+		The server's session id from the latest WELCOME (#2558), kept
+		past the link's end so a failure report can name the session
+		the transport's log lines carry.
+		================
+		*/
+		transportSessionId() {
+			return transportSession;
+		},
+		/*
   ================
   pingMs
 
@@ -946,6 +993,7 @@ export function createNetwork(
 		enterWorld( division, character, token ) {
 			if ( !welcomed ) throw new Error( "Transport handshake incomplete" );
 			send( codec.enterWorld( division, character, token ) );
+			entryPresented = true;
 		},
 		webTransport( enabled: boolean ) {
 			wtEnabled = enabled;
@@ -958,8 +1006,13 @@ export function createNetwork(
 			if ( endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:" ) {
 				throw new Error( "Invalid transport URL" );
 			}
-			// Without a resume token the server starts a fresh stream.
-			if ( !resume?.length ) streamPosition = 0;
+			// Without a resume token the server starts a fresh stream:
+			// the old session's id dies with its stream, so a failure
+			// before this connect's WELCOME cannot name it (#2558).
+			if ( !resume?.length ) {
+				streamPosition = 0;
+				transportSession = undefined;
+			}
 			const hello = codec.hello( admission, resume, streamPosition );
 			disconnect();
 			attempt = { endpoint, hello, fellBack: false };

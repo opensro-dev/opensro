@@ -44,7 +44,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 		return OpResult{DiagnosticRefusal: "timed-target-admission-refused"}
 	}
 	target := rt.findCharacterByGid(division, cast.TargetGid)
-	view := rt.characterSnapshot(division, target)
+	view := rt.characterSnapshotCombat(division, target)
 	if view == nil {
 		return offensiveRefusal(0x3006)
 	}

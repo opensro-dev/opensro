@@ -17,6 +17,7 @@ import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
 import { experimentalGameplay, experimentalVideo } from "@/engine/foundation/ui/experimental-options";
+import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
@@ -128,16 +129,25 @@ export function startRuntime(
 	}
 	try {
 		const random = createPresentationRandom( presentationSeed );
+		// Fetch-shaped failures of the last second, for the offline
+		// burst rule in reportRuntimeIncident (#2559), and when the
+		// last asset_offline was filed: one incident per burst.
+		const fetchFailures: { at: number; source: string; }[] = [];
+		let offlineReportedAt = -Infinity;
+		// One asset_offline per outage window; the window's other fetch
+		// failures are the same outage, never asset failures (#2559).
+		const OFFLINE_REPORT_GAP_MS = 5000;
 		const runtimeErrors = createRuntimeErrors( ( source, error ) => {
 			const message = `${source}: ${error}`;
 			console.error( "[SRO runtime] " + message );
 			bugReport.note( message );
 			ui.runtimeError( message );
-			// The resource families behind the fatal loading screen file
-			// the same failure as a client incident (#2337): they keep no
-			// recovery clock, so the error text is their whole evidence.
+			// The resource families behind the loading screen file the
+			// same failure as a client incident (#2337), under a code
+			// that names its cause (#2559): reportRuntimeIncident holds
+			// the classification.
 			if ( [ "Frontend", "Characters", "Audio", "Interface", "Assets" ].includes( source ) ) {
-				reportAssetIncident( "fatal_asset_failed", { error: message, transient: false, attempts: 0 } );
+				reportRuntimeIncident( source, error, message );
 			}
 		} );
 		const presentation = own( createPresentation() );
@@ -247,6 +257,101 @@ export function startRuntime(
 				message: `asset=${
 					failure.path ?? "-"
 				} transient=${failure.transient} attempts=${failure.attempts} error=${failure.error}`
+			} );
+		}
+		// What one owner knows about its standing failure beyond the
+		// error text: the asset behind it, its retry facts, and the
+		// stack when the failure was a thrown error.
+		type RuntimeIncidentFacts = {
+			message: string;
+			path?: string | null;
+			attempts?: number;
+			transient?: boolean;
+			stack?: string;
+		};
+		/*
+		================
+		runtimeIncidentFacts
+
+		The facts of the failure the poll just surfaced, from the owner
+		behind the source. Facts count only when they describe that
+		failure (same message): an owner can hold an older failure
+		beside the one now standing. Owners injected by tests may keep
+		no facts at all.
+		================
+		*/
+		function runtimeIncidentFacts( source: string, error: string ): RuntimeIncidentFacts | undefined {
+			const facts: RuntimeIncidentFacts | null | undefined = source === "Characters" ?
+				characters.failure?.() :
+				source === "Audio" ?
+				audio.failure?.() :
+				source === "Interface" ?
+				ui.resourceFailure?.() :
+				source === "Frontend" ?
+				frontend.failure?.() :
+				null;
+			return facts && facts.message === error ? facts : undefined;
+		}
+		/*
+		================
+		reportRuntimeIncident
+
+		Files one runtime error under a code that names its cause
+		(#2559), where fatal_asset_failed once filed everything with
+		constant fields: a network burst or an offline browser files
+		asset_offline (once per burst), a thrown error files
+		runtime_exception with its stack, the asset worker's death
+		stays fatal_asset_failed (it actually stops the session), and
+		everything else files asset_failed with the retry owner's real
+		facts - fields it does not know are dropped, not filled in.
+		================
+		*/
+		function reportRuntimeIncident( source: string, error: string, message: string ) {
+			const facts = runtimeIncidentFacts( source, error );
+			if ( /failed to fetch|networkerror|load failed/i.test( error ) ) {
+				const now = performance.now();
+				fetchFailures.push( { at: now, source } );
+				while ( fetchFailures.length && now - fetchFailures[0]!.at > 1000 ) fetchFailures.shift();
+				const burst = fetchFailures.length >= 3 &&
+					new Set( fetchFailures.map( failure => failure.source ) ).size >= 2;
+				if ( globalThis.navigator?.onLine === false || burst ) {
+					if ( now - offlineReportedAt >= OFFLINE_REPORT_GAP_MS ) {
+						offlineReportedAt = now;
+						sessionCommand( {
+							kind: "client-report",
+							incidentKind: "asset",
+							code: "asset_offline",
+							message
+						} );
+					}
+					return;
+				}
+			} else if ( facts?.stack ) {
+				sessionCommand( {
+					kind: "client-report",
+					incidentKind: "runtime",
+					code: "runtime_exception",
+					message,
+					stack: facts.stack
+				} );
+				return;
+			}
+			if ( source === "Assets" ) {
+				sessionCommand( {
+					kind: "client-report",
+					incidentKind: "asset",
+					code: "fatal_asset_failed",
+					message: `error=${message}`
+				} );
+				return;
+			}
+			const transient = facts?.transient !== undefined ? ` transient=${facts.transient}` : "";
+			const attempts = facts?.attempts !== undefined ? ` attempts=${facts.attempts}` : "";
+			sessionCommand( {
+				kind: "client-report",
+				incidentKind: "asset",
+				code: "asset_failed",
+				message: `asset=${facts?.path ?? "-"}${transient}${attempts} error=${message}`
 			} );
 		}
 		/*
@@ -1065,12 +1170,19 @@ export function startRuntime(
 							followedRoom,
 							presentation.gameplay()?.navigationBlock
 						) === true;
+				// Holding V hides the followed character whole (2570): the ring
+				// belongs to the published body, so it goes with the body,
+				// like the room-culled ring above.
+				const followedBlind = followed !== undefined && input.blindHeld() &&
+					(blindableCharacter( followed, presentation.gameplay()?.localGid ) ||
+						renderer.vHidesCompanions?.() === true &&
+							blindableCompanion( followed, presentation.gameplay()?.localGid ));
 				renderer.setSelectionDecal(
 					frontendState.phase !== "world" || !decal ?
 						null :
 						decal.kind === "ground" ?
 						{ pose: decal.pose, slot: 0 } :
-						followed && !followedHidden ?
+						followed && !followedHidden && !followedBlind ?
 						{
 							pose: {
 								regionId: followed.regionId,
