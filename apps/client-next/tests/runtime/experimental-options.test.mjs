@@ -52,6 +52,8 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
+	// Off by default: sky detail is a port-only deviation.
+	skyDetail: false,
 	// On by default (owner 2026-10-25): a press walks at once and stops
 	// where the server casts.
 	predictedRunUp: true,
@@ -244,6 +246,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		skyDetail: false,
 		// Smooth camera is on by default (owner 2026-10-15).
 		smoothCamera: true,
 		// Enchant sparks are on by default (owner 2026-10-17).
@@ -325,7 +328,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects" ]
 	);
 	// Lighting keeps the direct-light stages, the moving sun among them,
 	// and holds the silk history row for room (#2269); render scale joins
@@ -342,6 +345,8 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 			"silkHistory"
 		]
 	);
+	// Effects, appended last, holds the port-only image effects.
+	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail" ] );
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
