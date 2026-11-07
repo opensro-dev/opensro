@@ -41,7 +41,7 @@ for ( const rig of [ "p_bear01", "p_bear02" ] ) {
 		const head = defined( pose.socket( "Bip01 Head" ) );
 		const torsoLength = Math.abs( head[14] - defined( pose.socket( "Bip01 Pelvis" ) )[14] );
 		const feet = [ "Bip01 L Foot", "Bip01 R Foot" ].map( name => defined( pose.socket( name ) ) );
-		for ( const time of [ .2, .65, 1, 1.38, 1.85, 2.2 ] ) {
+		for ( const time of [ .10, .25, .50, .75, 1, 1.20, 1.40 ] ) {
 			pose.evaluate( "pet-roar", time, false );
 			for ( const [index, name] of [ "Bip01 L Foot", "Bip01 R Foot" ].entries() ) {
 				const foot = defined( pose.socket( name ) );
@@ -97,7 +97,7 @@ test("only a bear's roar emote selects the dedicated clip, and the posture expir
 		deadGids: new Set(),
 		hitByActor: new Map(),
 		castByActor: new Map(),
-		resources: { duration: ( _path, role ) => role === "pet-roar" ? 2.2 : 1 },
+		resources: { duration: ( _path, role ) => role === "pet-roar" ? 1.4 : 1 },
 		random: { range: () => 0 },
 		active: new Set( [ 1 ] ),
 		pendingDeaths: new Set(),
@@ -124,4 +124,47 @@ test("only a bear's roar emote selects the dedicated clip, and the posture expir
 	entity.emote.revision++;
 	state.step( { ...frame, seconds: 4 }, { failure: null }, published );
 	assert.equal( defined( state.idleStates.get( 1 ) ).posture, undefined );
+});
+
+test("roar debris travels outward without stretching particles or exposing card edges", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	const debris = defined( createProceduralEffect( "/assets/effects/bear-roar-debris" ) );
+	const primitive = debris.model.primitives[0];
+	assert.equal( debris.model.nodes.length, 48 );
+	assert.equal( primitive.joints.length, 48 );
+	assert.equal( primitive.inverseBind.length, 48 * 16 );
+	assert.equal( defined( primitive.geometry.joints ).length, primitive.geometry.positions.length / 3 * 4 );
+	assert.equal(
+		defined( primitive.geometry.material ).fadeAlphaOnly,
+		false,
+		"dust must preserve texture coverage when fading"
+	);
+	assert.deepEqual( defined( primitive.geometry.material ).blendPair, { source: 5, destination: 6 } );
+	for ( const channel of debris.model.clips[0].channels ) {
+		assert.equal( channel.path, "translation", "fixed-size dust and leaves, never growing cards" );
+		assert.ok( Math.hypot( defined( channel.values.at( -3 ) ), defined( channel.values.at( -1 ) ) ) > 220 );
+		assert.ok( channel.values.every( Number.isFinite ) );
+	}
+	const pixels = debris.images[0].levels[0];
+	for ( const x of [ 0, 31, 32, 63 ] ) assert.equal( pixels[x * 4 + 3], 0 );
+	const mouth = defined( createProceduralEffect( "/assets/effects/challenging-roar-aura" ) );
+	const vertices = mouth.model.primitives[0].geometry.positions;
+	assert.ok( vertices.every( Number.isFinite ) );
+	assert.equal( Math.max( ...Array.from( vertices ).filter( ( _, index ) => index % 3 === 0 ) ), 22 );
+});
+
+test("roar rings stay thin and on the ground at full radius without changing counter ripples", async () => {
+	const { createProceduralEffect } = await import(
+		"../../src/engine/runtime/characters/resources/procedural-effects.ts"
+	);
+	const ring = defined( createProceduralEffect( "/assets/effects/bear-roar-ring" ) );
+	const vertices = ring.model.primitives[0].geometry.positions;
+	for ( let i = 0; i < vertices.length; i += 3 ) {
+		assert.ok( vertices[i + 1] * 300 < .31 );
+		assert.ok( Math.hypot( vertices[i], vertices[i + 2] ) >= .993 );
+	}
+	const counter = defined( createProceduralEffect( "/assets/effects/pet-counter-ripple" ) );
+	assert.ok( counter.model.primitives[0].geometry.positions[1] > .02 );
 });
