@@ -8,6 +8,7 @@ renderer.ts - GPU resource lifetime and ordered scene, character and UI passes
 import { pickVolumeDepth } from "@/engine/foundation/rendering/pick-volume";
 import { defaultVideoOptions, videoOptions, backgroundDrawDistance } from "@/engine/foundation/rendering/video-options";
 import {
+	browserDisplayClass,
 	experimentalOptions,
 	experimentalVideo,
 	phoneDisplay,
@@ -62,12 +63,10 @@ export function createRenderer(
 	let video = defaultVideoOptions();
 	// Experimental > Video, all off (native) until the saved preference arrives.
 	let experimental = experimentalVideo( experimentalOptions() );
-	// #1806: a phone gets the Phone resolution cap. Read once: the display
-	// class does not change while the page lives.
-	const phone = phoneDisplay( {
-		coarsePointer: globalThis.matchMedia?.( "(pointer: coarse)" ).matches ?? false,
-		shortSide: Math.min( globalThis.screen?.width ?? 0, globalThis.screen?.height ?? 0 )
-	} );
+	// #1806: a phone gets the Phone resolution cap. Read once, through the
+	// one display-class reader the UI runtime also uses: the display class
+	// does not change while the page lives.
+	const phone = phoneDisplay( browserDisplayClass() );
 	const portrait = createPortrait( createCharacters() );
 	// A released draw never reaches a submit; the report names who kept it.
 	const staleDraws = createStaleDrawGuard(

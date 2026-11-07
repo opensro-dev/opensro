@@ -16,6 +16,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 
+// This file exercises the touch layout. Node has no matchMedia and the
+// production reader defaults to a fine pointer, so the test chooses touch
+// by stubbing a coarse pointer before the UI is created (it reads the
+// display class once, at creation).
+globalThis.matchMedia = /** @type {typeof globalThis.matchMedia} */ (
+	/** @type {unknown} */ (() => ({ matches: true, media: "(pointer: coarse)" }))
+);
+
 /*
 ================
 draw

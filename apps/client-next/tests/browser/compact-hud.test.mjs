@@ -440,6 +440,8 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 								[ "chat-text", "ext-drag", "minimap-in", "cos-status:9" ].includes( row.id )
 							)
 						);
+						// The touch layout keeps its chat behind the "chat" overlay:
+						// no chat input is admitted without it (#2408 review).
 						assert.deepEqual( report.bindings, desktop.bindings );
 						reports[name] = report;
 						await page.screenshot( { path: `${artifactDirectory}/${name}.png` } );
