@@ -54,10 +54,18 @@ def archive_bytes(files):
 	server = builder.folder([])
 	silkroad = builder.folder([])
 	textdata = builder.folder([])
-	builder.blocks[root] = [(1, b"server_dep", server, 0)]
+	resinfo = builder.folder([])
+	builder.blocks[root] = [(1, b"server_dep", server, 0), (1, b"resinfo", resinfo, 0)]
 	builder.blocks[server] = [(1, b"silkroad", silkroad, 0)]
 	builder.blocks[silkroad] = [(1, b"textdata", textdata, 0)]
-	builder.blocks[textdata] = [(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items()]
+	# A name under resinfo/ is a Media root file of the resinfo folder; the rest are textdata tables.
+	builder.blocks[textdata] = [
+		(2, name.encode("ascii"), *builder.add_payload(raw)) for name, raw in files.items() if not name.startswith("resinfo/")
+	]
+	builder.blocks[resinfo] = [
+		(2, name.split("/", 1)[1].encode("ascii"), *builder.add_payload(raw))
+		for name, raw in files.items() if name.startswith("resinfo/")
+	]
 	return builder.build()
 
 
@@ -447,6 +455,13 @@ class ImportTests(unittest.TestCase):
 			(base / "textdataname.txt").write_bytes(utf16([]))
 			for name in ("itemdata.txt", "textdataname.txt"):
 				os.link(base / name, target / name)
+			glow_native, glow_target = native / importer.GLOW_ROOT, output / importer.GLOW_ROOT
+			glow_native.mkdir(parents=True)
+			glow_target.mkdir(parents=True)
+			(glow_native / importer.GLOW_TIERS).write_bytes(b"1\t3\t0,0\ta.ddj\t4\t7\t1,1,1\t1,1,1\t1000\t0\r\n")
+			native_glow = b"ITEM_CH_SWORD_10_A\t1\r\n"
+			(glow_native / importer.GLOW_TABLE).write_bytes(native_glow)
+			os.link(glow_native / importer.GLOW_TABLE, glow_target / importer.GLOW_TABLE)
 			with patch.dict(os.environ, {importer.FLAG: "off"}):
 				self.assertFalse(importer.add_items(later, native, output)["enabled"])
 			new = weapon("ITEM_EU_SWORD_11_A", 11, "1", 31)
@@ -461,12 +476,18 @@ class ImportTests(unittest.TestCase):
 				"refmagicoptgroup.txt": utf16([magic_group(2), magic_group(3), magic_group(4)]),
 				"magicoption.txt": utf16([magic_option(389)]),
 			}
+			# The later file lists the new piece and one the import does not carry; a group the tier table lacks is refused.
+			files["resinfo/itemoption.txt"] = b"ITEM_EU_SWORD_11_A\t1\r\nITEM_EU_AXE_11_A\t1\r\nITEM_EU_SWORD_11_B\t9\r\n"
 			(later / "Media.pk2").write_bytes(archive_bytes(files))
 			(later / "Data.pk2").write_bytes(archive_bytes({}))
 			(later / "Particles.pk2").write_bytes(archive_bytes({}))
 			with patch.dict(os.environ, {importer.FLAG: "on"}), patch.object(importer, "copy_asset_closure", return_value=[]):
 				first = importer.add_items(later, native, output)
 				second = importer.add_items(later, native, output)
+			self.assertEqual(first["glowRowsAdded"], ["ITEM_EU_SWORD_11_A"])
+			self.assertEqual(
+				(glow_target / importer.GLOW_TABLE).read_bytes(), native_glow + b"ITEM_EU_SWORD_11_A\t1\r\n")
+			self.assertEqual((glow_native / importer.GLOW_TABLE).read_bytes(), native_glow)
 			self.assertEqual(first["idMap"], second["idMap"])
 			self.assertEqual(first["setCatalogue"], {"groups": 1, "magicGroups": 3, "optionIds": [389], "setItems": 0})
 			self.assertEqual(importer.tables.table_rows((target / items.SET_GROUP_TABLE).read_bytes()), [set_group(13)])
@@ -478,6 +499,20 @@ class ImportTests(unittest.TestCase):
 			self.assertFalse((target / items.SET_GROUP_TABLE).exists())
 			self.assertFalse((target / items.MAGIC_GROUP_TABLE).exists())
 			self.assertEqual((target / "itemdata.txt").read_bytes(), original_manifest)
+			self.assertEqual((glow_target / importer.GLOW_TABLE).read_bytes(), native_glow)
+
+	# ================
+	# test_glow_rows_follow_the_imported_codenames
+	# ================
+	def test_glow_rows_follow_the_imported_codenames(self):
+		native = "ITEM_CH_SWORD_10_A\t1\r\n// note\r\n"
+		later = "ITEM_CH_SWORD_10_A\t3\r\nITEM_X_11_SET_B_RARE\t3\r\nITEM_Y_11_SET_B\t2\r\nITEM_Z_11\t8\r\n"
+		text, added = items.glow_rows(native, later, {"ITEM_CH_SWORD_10_A", "ITEM_X_11_SET_B_RARE", "ITEM_Z_11"}, {1, 2, 3, 4})
+		# A listed code keeps its group; an unimported code and a group the tier table lacks add nothing.
+		self.assertEqual(added, ["ITEM_X_11_SET_B_RARE"])
+		self.assertEqual(text, native + "ITEM_X_11_SET_B_RARE\t3\r\n")
+		self.assertEqual(items.glow_rows(native, later, set(), {1, 2, 3, 4}), (native, []))
+		self.assertEqual(items.glow_rows("A\t1", "B\t1\r\n", {"B"}, {1})[0], "A\t1\r\nB\t1\r\n")
 
 	# ================
 	# test_set_item_without_its_group_fails_the_import

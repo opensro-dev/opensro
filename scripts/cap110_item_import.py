@@ -33,6 +33,9 @@ FLAG = "SRO_CAP110_ITEMS"
 REPORT_NAME = ".opensro-cap110-items.json"
 FOLDERS = {"Data": "Data_extracted", "Media": "Media_extracted", "Particles": "Particles_extracted"}
 TEXT_ROOT = Path("Media_extracted") / tables.TEXTDATA
+GLOW_ROOT = Path("Media_extracted") / "resinfo"
+GLOW_TABLE = "itemoption.txt"
+GLOW_TIERS = "itemtypenumber.txt"
 PARSED_EXTENSIONS = (".bsr", ".bmt", ".efp")
 
 
@@ -177,6 +180,9 @@ def add_items(vsro_root, native, output):
 				if catalogue.exists():
 					catalogue.unlink()
 			write_atomically(manifest, (native / TEXT_ROOT / "itemdata.txt").read_bytes())
+			glow = safe_target(output / GLOW_ROOT, GLOW_TABLE)
+			if glow.exists():
+				write_atomically(glow, (native / GLOW_ROOT / GLOW_TABLE).read_bytes())
 			marker.unlink()
 		return {"enabled": False, "added": 0}
 	with ExitStack() as stack:
@@ -245,12 +251,25 @@ def add_items(vsro_root, native, output):
 			b"\xff\xfe" + text_tables.table_text(set_magic).encode("utf-16-le"),
 		)
 		write_atomically(text_path, merged_text)
+		# The glow group of each imported piece the v1.150 file does not list (set weapons and shields).
+		native_glow = (native / GLOW_ROOT / GLOW_TABLE).read_bytes().decode("latin1")
+		later_entry = index.get("resinfo/" + GLOW_TABLE)
+		glow_groups = {
+			int(line.split()[0]) for line in (native / GLOW_ROOT / GLOW_TIERS).read_text(encoding="latin1").splitlines()
+			if line.strip() and not line.strip().startswith("//")
+		}
+		glow_text, glow_added = items.glow_rows(
+			native_glow, sro_pk2.payload(media, later_entry).decode("latin1") if later_entry else "",
+			{row[items.CODENAME] for row in equipment}, glow_groups,
+		)
+		write_atomically(safe_target(output / GLOW_ROOT, GLOW_TABLE), glow_text.encode("latin1"))
 		write_atomically(manifest, b"\xff\xfe" + (base_manifest + "\r\n" + items.OUTPUT_SHARD + "\r\n").encode("utf-16-le"))
 		summary.update({
 			"enabled": True, "format": "opensro-cap110-equipment-v2", "portOnly": True,
 			"laterArchiveHashes": identities, "shardSha256": sro_pk2.digest(raw_shard),
 			"nativeItemHashes": native_hashes,
 			"absentAuthoredDescriptions": missing_descriptions,
+			"glowRowsAdded": glow_added,
 			"assets": assets, "shopsImported": False,
 			"shopDependencies": shops,
 			"setCatalogue": catalogue,

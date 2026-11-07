@@ -282,6 +282,35 @@ def set_catalogue(set_group_rows, magic_group_rows, option_rows, equipment):
 
 
 # ================
+# glow_rows
+#
+# Port-only inference. resinfo\\itemoption.txt names the reinforcement glow group
+# of each item, and the v1.150 file knows no imported piece of a set, so a
+# +8 weapon of a degree 11 set drew no glow at all (the v1.150 tier table
+# serves groups 1-4 to the items that are listed). The later client's file
+# lists them; their rows join the v1.150 file unchanged, for the imported
+# codenames only and only for a group the v1.150 tier table has. A code the
+# v1.150 file already lists keeps its own group (the two clients number their
+# groups differently, so native rows are never replaced). Returns the file
+# text and the codenames added.
+# ================
+def glow_rows(native_text, later_text, codenames, native_groups):
+	def parse(text):
+		rows = {}
+		for line in text.splitlines():
+			cells = line.split()
+			if len(cells) == 2 and not cells[0].startswith("//"):
+				rows[cells[0]] = int(cells[1])
+		return rows
+	native, later = parse(native_text), parse(later_text)
+	added = sorted(code for code in codenames if code in later and code not in native and later[code] in native_groups)
+	if not added:
+		return native_text, []
+	tail = "" if native_text.endswith("\n") or not native_text else "\r\n"
+	return native_text + tail + "".join(f"{code}\t{later[code]}\r\n" for code in added), added
+
+
+# ================
 # merge_texts
 #
 # Later equip/skill translations use the same language order as the city's
