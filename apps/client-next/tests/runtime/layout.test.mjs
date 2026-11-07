@@ -291,7 +291,7 @@ test("fitting keeps every run's sampling: shrunk bitmap runs stay nearest for th
 });
 
 test("compactHudLayout reserves a progression strip between quickslots and tools while keeping window bounds above slots", () => {
-	assert.equal( compactHudLayout( 800, 600 ), null );
+	assert.equal( compactHudLayout( 800, 600, true ), null );
 	for (
 		const [width, height, expectedExpWidth] of [
 			[ 375, 667, 256 ],
@@ -300,7 +300,7 @@ test("compactHudLayout reserves a progression strip between quickslots and tools
 			[ 320, 568, 256 ]
 		]
 	) {
-		const layout = compactHudLayout( width, height );
+		const layout = compactHudLayout( width, height, true );
 		assert.ok( layout && layout.exp, `${width}x${height}: compact layout with exp strip` );
 		assert.deepEqual( layout.bounds, [ 0, 0, width, layout.top ] );
 		assert.equal( layout.exp[2], expectedExpWidth );
@@ -312,7 +312,7 @@ test("compactHudLayout reserves a progression strip between quickslots and tools
 		assert.equal( layout.exp[1], maxSlotBottom, `${width}x${height}: exp strip sits directly below hotbar` );
 		assert.ok( layout.exp[1] + layout.exp[3] <= minToolTop, `${width}x${height}: exp strip stays above tools` );
 	}
-	const tiny = compactHudLayout( 200, 200 );
+	const tiny = compactHudLayout( 200, 200, true );
 	assert.ok( tiny );
 	assert.equal( tiny.exp, null );
 });
@@ -322,7 +322,11 @@ test("the compact HUD is the touch layout: a fine pointer keeps the desktop HUD 
 	assert.equal( compactHudLayout( 854, 393, false ), null, "fine pointer, short landscape window" );
 	assert.equal( compactHudLayout( 640, 480, false ), null, "fine pointer, narrow window" );
 	assert.ok( compactHudLayout( 854, 393, true ), "touch below desktop size keeps the compact layout" );
-	assert.ok( compactHudLayout( 393, 854 ), "no pointer class reads as touch for legacy callers" );
+	assert.equal(
+		compactHudLayout( 393, 854, false ),
+		null,
+		"a fine pointer in a phone-shaped window keeps the native HUD"
+	);
 });
 
 test("fitUiGroup leaves an already-fitting group exactly where the caller placed it", () => {
@@ -360,4 +364,52 @@ test("fitUiGroup leaves an already-fitting group exactly where the caller placed
 	assert.deepEqual( over[0].rect, [ 87.5, 0, 525, 600 ] );
 	assert.equal( overControls[0].rect[3], 600 );
 	assert.equal( overControls[0].draggable, true );
+});
+
+test("fitUiGroup disables drag on an empty group, and leaveWhenFits spares only a fitting one", () => {
+	const screen = /** @type {UiRect} */ ([ 0, 0, 1024, 600 ]);
+	// No quads and no sourceBounds: there is nothing to transform, but a
+	// caller that asked for drag to be disabled still gets it disabled.
+	/** @type {UiControl[]} */
+	const emptyControls = [ {
+		id: "window-drag:Inventory",
+		kind: "region",
+		label: "Inventory",
+		rect: /** @type {UiRect} */ ([ 10, 10, 50, 50 ]),
+		draggable: true
+	} ];
+	fitUiGroup( [], emptyControls, 0, 0, screen, screen, { disableDrag: true } );
+	assert.equal( emptyControls[0].draggable, false, "an empty group still loses its drag" );
+	fitUiGroup( [], emptyControls, 0, 0, screen, screen, { disableDrag: true, leaveWhenFits: true } );
+	assert.equal( emptyControls[0].draggable, false, "leaveWhenFits cannot spare a group with no extent" );
+	// A fitting group keeps its drag under leaveWhenFits; an oversized one
+	// is fitted and loses it.
+	const local = /** @type {UiRect} */ ([ 100, 120, 200, 150 ]);
+	/** @type {UiControl[]} */
+	const fittingControls = [ {
+		id: "window-drag:Inventory",
+		kind: "region",
+		label: "Inventory",
+		rect: local,
+		draggable: true
+	} ];
+	fitUiGroup( [ quad( local, screen ) ], fittingControls, 0, 0, screen, screen, {
+		disableDrag: true,
+		leaveWhenFits: true
+	} );
+	assert.equal( fittingControls[0].draggable, true, "a fitting group keeps its drag" );
+	const tall = /** @type {UiRect} */ ([ 0, 0, 700, 800 ]);
+	/** @type {UiControl[]} */
+	const overControls = [ {
+		id: "window-drag:Inventory",
+		kind: "region",
+		label: "Inventory",
+		rect: tall,
+		draggable: true
+	} ];
+	fitUiGroup( [ quad( tall, screen ) ], overControls, 0, 0, screen, screen, {
+		disableDrag: true,
+		leaveWhenFits: true
+	} );
+	assert.equal( overControls[0].draggable, false, "an oversized group is fitted and loses its drag" );
 });

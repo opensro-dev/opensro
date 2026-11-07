@@ -44,6 +44,7 @@ type PartyShadePosition = Pick<Pose, "regionId" | "x" | "y" | "z">;
 const PARTY_ROW_PITCH = 56;
 const PARTY_COLUMN_PITCH = 133;
 const PARTY_ROW_PITCH_WITH_BUFFS = 73;
+const PARTY_BOTTOM_RESERVE = 230;
 /*
 ================
 partyMembers
@@ -98,14 +99,23 @@ export function partyOverlay(
 	columns?: number
 ) {
 	const members = partyMembers( game ), pitch = buffs ? PARTY_ROW_PITCH_WITH_BUFFS : PARTY_ROW_PITCH;
-	const rowsPerColumn = columns ?
-		Math.max( 1, Math.ceil( members.length / columns ) ) :
-		Math.max( 1, Math.floor( (height - y - PARTY_ROW_PITCH_WITH_BUFFS - 230) / pitch ) + 1 );
+	// Without `columns` this is the native 5BCBB0 loop, exactly: wrap before
+	// placing a row whose bottom would enter the 230px reserve, even when
+	// that moves the first row into the second column. With `columns` the
+	// port-only band packs a fixed grid instead (see partyColumns).
+	const rowsPerColumn = columns ? Math.max( 1, Math.ceil( members.length / columns ) ) : 0;
+	let column = 0, rowY = 0;
 	return members.map( ( member, index ) => {
-		const column = Math.floor( index / rowsPerColumn ) * PARTY_COLUMN_PITCH,
-			rowY = index % rowsPerColumn * pitch,
-			entity = entities.find( e => e.kind === "player" && e.name === member.name ),
+		if ( columns ) {
+			column = Math.floor( index / rowsPerColumn ) * PARTY_COLUMN_PITCH;
+			rowY = index % rowsPerColumn * pitch;
+		} else if ( height - y - rowY - PARTY_ROW_PITCH_WITH_BUFFS < PARTY_BOTTOM_RESERVE ) {
+			column += PARTY_COLUMN_PITCH;
+			rowY = 0;
+		}
+		const entity = entities.find( e => e.kind === "player" && e.name === member.name ),
 			position = [ x + column + 13, y + rowY ] as const;
+		if ( !columns ) rowY += pitch;
 		// An untrained slot is 0 and stays empty; a roster without the pair
 		// (switch off) yields nothing.
 		const masteries = [ member.primaryMastery, member.secondaryMastery ].flatMap( ( id, slot ) => {

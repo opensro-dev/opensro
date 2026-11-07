@@ -394,11 +394,12 @@ test("a phone is a coarse pointer on a short screen; touch laptops and tablets a
 	assert.equal( phoneDisplay( { coarsePointer: true, shortSide: 0 } ), false, "no screen reported" );
 });
 
-test("the browser display class reports the pointer, and a host without matchMedia reads as touch", () => {
-	// Node has no matchMedia: the compact HUD must keep its small-screen
-	// contract there, so the missing query reads as a coarse pointer.
+test("the browser display class reports the pointer, and a host without matchMedia reads as fine", () => {
+	// Node has no matchMedia: the missing query reads as a fine pointer, the
+	// same default the renderer used before the shared reader existed, so a
+	// test that wants touch stubs a coarse matchMedia (below).
 	// The stubs answer the one question the source asks (`.matches`).
-	assert.equal( browserDisplayClass().coarsePointer, true );
+	assert.equal( browserDisplayClass().coarsePointer, false );
 	const media = globalThis.matchMedia, screen = globalThis.screen;
 	const stub = /** @param {boolean} matches */ ( matches ) => /** @type {typeof globalThis.matchMedia} */ (
 		/** @type {unknown} */ (() => ({ matches, media: "(pointer: coarse)" }))
@@ -415,7 +416,7 @@ test("the browser display class reports the pointer, and a host without matchMed
 		globalThis.matchMedia = media;
 		globalThis.screen = screen;
 	}
-	assert.equal( browserDisplayClass().coarsePointer, true, "the stub is gone again" );
+	assert.equal( browserDisplayClass().coarsePointer, false, "the stub is gone again" );
 });
 
 test("phone resolution defaults on and only an explicit false turns it off", () => {

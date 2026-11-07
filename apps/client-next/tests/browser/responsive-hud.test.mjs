@@ -6,8 +6,9 @@ responsive-hud.test.mjs - a small viewport degrades the native HUD, never replac
 A fine pointer below the original's smallest screen mode keeps the native
 underbar (scaled to the window), the chat line and the party board in a
 bounded left band; a touch screen keeps the compact layout with the same
-party band and a visible chat line. Uses the real assets, UI, platform and
-renderer without a live character, like compact-hud.test.mjs.
+party band, and its chat stays behind the "chat" overlay as it always has.
+Uses the real assets, UI, platform and renderer without a live character,
+like compact-hud.test.mjs.
 
 ===========================================================================
 */
@@ -25,7 +26,7 @@ const PARTY_BAND_WIDTH = 480;
 const RECT_EPSILON = 0.1;
 const HOTBAR_IDS = Array.from( { length: 11 }, ( _, index ) => `hotbar:${index}` );
 // The fine-pointer windows: every one is below the original's smallest mode,
-// so each exercises the scaled underbar, the always-drawn chat and the
+// so each exercises the scaled underbar, the native chat and the
 // banded party board on a real renderer.
 const FINE_VIEWPORTS = [
 	{ width: 1024, height: 600 },
@@ -243,7 +244,7 @@ async function openFixture( page ) {
 
 for ( const touch of [ false, true ] ) {
 	test(
-		`${touch ? "touch" : "fine pointer"}: a small viewport keeps the chat, the party band and the native underbar`,
+		`${touch ? "touch" : "fine pointer"}: a small viewport keeps the party band and the native underbar`,
 		{ timeout: 240000 },
 		async () => {
 			const launched = await launchProbeBrowser( { viewport: DESKTOP } );
@@ -270,20 +271,25 @@ for ( const touch of [ false, true ] ) {
 							await new Promise( requestAnimationFrame );
 							await new Promise( requestAnimationFrame );
 						} );
-						const report = await admit(
-							page,
-							fixture,
-							[ "hud-menu", "chat-text", partyRow, ...HOTBAR_IDS ]
-						);
+						const required = touch ?
+							[ "hud-menu", partyRow, ...HOTBAR_IDS ] :
+							[ "hud-menu", "chat-text", partyRow, ...HOTBAR_IDS ];
+						const report = await admit( page, fixture, required );
 						const name = `${viewport.width}x${viewport.height}`;
 						assert.deepEqual( errors, [], `${name}: page errors` );
 						assert.deepEqual( report.logical, [ viewport.width, viewport.height ], name );
 						contained( report.controls, viewport );
 						partyRows( report, viewport );
-						// The chat line never leaves the screen on a small viewport.
+						// The native chat line never leaves the screen on a fine
+						// pointer; the touch layout keeps its chat behind the
+						// "chat" overlay, so no chat input is admitted there.
 						const chat = report.controls.find( row => row.id === "chat-text" );
-						assert.ok( chat, `${name}: chat line admitted` );
-						assert.ok( chat.rect[1] + chat.rect[3] <= viewport.height, `${name}: chat inside` );
+						if ( touch ) {
+							assert.equal( chat, undefined, `${name}: touch chat stays behind its overlay` );
+						} else {
+							assert.ok( chat, `${name}: chat line admitted` );
+							assert.ok( chat.rect[1] + chat.rect[3] <= viewport.height, `${name}: chat inside` );
+						}
 						// The compact tool row belongs to touch alone; a fine pointer
 						// keeps the native underbar scaled to the window.
 						assert.equal(

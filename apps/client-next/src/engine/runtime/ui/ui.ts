@@ -47,10 +47,16 @@ const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
 // pk.DeathTeam, the 0x37CE mode that labels the death box "standing" (52FF33).
 const TEAM_DEATH_MODE = 2;
-// Port-only, not native: below this much room above the compact bar a log
-// row starves the party board and the game view, so the compact chat shows
-// its input line alone (the "chat" tool still expands the log).
-const COMPACT_CHAT_LOG_MIN_HEIGHT = 380;
+// Port-only, not native (#2406): the widest band the small-viewport party
+// board may occupy, on the left of the screen.
+const PARTY_BAND_MAX_WIDTH = 480;
+// The chat strip a visible chat occupies above the underbar, in the terms
+// chat-layout.ts totals it by: a 62px frame of tabs and input, 56px per
+// log row, or the 20px input line alone - plus the party board's 4px gap.
+const CHAT_STRIP_FRAME = 62;
+const CHAT_STRIP_ROW = 56;
+const CHAT_STRIP_INPUT = 20;
+const PARTY_CHAT_GAP = 4;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -208,7 +214,16 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
 import { isMallUseConfirmItem } from "@/engine/foundation/gameplay/mall-use";
-import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import {
+	createCompactHud,
+	compactHudLayout,
+	compactWindowDrag,
+	compactCloseControl,
+	DESKTOP_HEIGHT,
+	DESKTOP_WIDTH,
+	UNDERBAR_HEIGHT,
+	UNDERBAR_WIDTH
+} from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import {
@@ -10221,27 +10236,25 @@ export function createUi(
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h, displayClass.coarsePointer );
 			let targetBottom = 0, compactTelemetryTop = 4;
-			// Port-only, not native: below the original's smallest screen mode the
-			// native HUD adapts instead of being swapped for a different one. The
-			// chat keeps a visible line on every compact screen; only a very short
-			// one (a phone held wide) drops the default log row so the party board
-			// keeps readable rows. The "chat" overlay still expands the log.
-			const compactChatRows = compact ?
-				Math.min(
-					chatRows,
-					compact.overlay === "chat" ? 6 : h - compact.bottom >= COMPACT_CHAT_LOG_MIN_HEIGHT ? 1 : 0
-				) :
-				chatRows;
-			// The chat strip the party board must stay clear of: the native bottom
-			// zone (underbar plus tabs and rows) on a fine pointer, the compact
-			// stack plus the visible chat lines on touch. The underbar's scale is
-			// the width's (its art is exactly 800 wide), so the chat and the party
-			// reserve follow the scaled bar without waiting for its measurement.
-			const underbarScale = !compact && w < 800 ? w / 800 : 1,
-				underbarHeight = compact ? compact.bottom : 52 * underbarScale;
+			// The chat strip the party board must stay clear of, counting only
+			// a chat that is actually drawn: the native bottom zone (underbar
+			// plus tabs and rows) on a fine pointer, and on touch the compact
+			// stack plus the chat lines only while the "chat" overlay is open
+			// (the touch layout keeps its chat behind that overlay, as it
+			// always has). The underbar's scale is the width's (its art is
+			// exactly UNDERBAR_WIDTH wide), so the chat and the party reserve
+			// follow the scaled bar without waiting for its measurement.
+			const visibleChatRows = compact ? (compact.overlay === "chat" ? chatRows : 0) : chatRows,
+				chatStrip = compact && compact.overlay !== "chat" ?
+					0 :
+					visibleChatRows > 0 ?
+					CHAT_STRIP_FRAME + visibleChatRows * CHAT_STRIP_ROW :
+					CHAT_STRIP_INPUT;
+			const underbarScale = !compact && w < UNDERBAR_WIDTH ? w / UNDERBAR_WIDTH : 1,
+				underbarHeight = compact ? compact.bottom : UNDERBAR_HEIGHT * underbarScale;
 			const partyFloor = compact ?
-				h - compact.bottom - (compactChatRows > 0 ? 62 + compactChatRows * 56 : 20) - 4 :
-				h - underbarHeight - (chatRows > 0 ? 62 + chatRows * 56 : 20) - 4;
+				h - compact.bottom - chatStrip - PARTY_CHAT_GAP :
+				h - underbarHeight - chatStrip - PARTY_CHAT_GAP;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -10438,7 +10451,7 @@ export function createUi(
 						for ( let i = mark[1]; i < controls.length; i++ ) {
 							controls[i] = compactCloseControl( controls[i]!, windowBounds );
 						}
-					} else if ( w < 800 || h < 600 ) {
+					} else if ( w < DESKTOP_WIDTH || h < DESKTOP_HEIGHT ) {
 						// Port-only, not native: a fine pointer below the original's
 						// smallest screen mode keeps the desktop windows; one that
 						// cannot hold the viewport is scaled into it, and a window
@@ -12442,7 +12455,7 @@ export function createUi(
 					// 230px bottom reserve would wrap every row into its own column
 					// marching across the screen, so the board is placed without its
 					// buff rows in a bounded left band and scaled into it.
-					const nativeBoard = !compact && h >= 600;
+					const nativeBoard = !compact && h >= DESKTOP_HEIGHT;
 					let partyMark: readonly [number, number, number] | null = null,
 						partyTop = origin[1],
 						partyHeight = 0,
@@ -12451,7 +12464,7 @@ export function createUi(
 					if ( nativeBoard ) {
 						rows = partyOverlay( game, next.entities, h, origin[0], origin[1], options.partyBuffs );
 					} else {
-						const bandWidth = Math.min( w, 480 ) - origin[0];
+						const bandWidth = Math.min( w, PARTY_BAND_MAX_WIDTH ) - origin[0];
 						partyTop = compact ? Math.max( origin[1], targetBottom ) : origin[1];
 						partyHeight = Math.max( 1, partyFloor - partyTop );
 						partyWidth = Math.max( 1, bandWidth );
@@ -12596,11 +12609,12 @@ export function createUi(
 						}
 					}
 				}
-				// Port-only, not native: the chat never leaves the screen on a small
-				// viewport. In the touch layout it shows its input line and (while
-				// room remains) one log row without opening the "chat" overlay; the
-				// overlay expands it and adds the whisper list below.
-				if ( hudData && panel !== "Chat" ) {
+				// The chat is part of the native HUD a fine pointer keeps, so it
+				// stays drawn under the scaled underbar. In the touch layout it
+				// stays behind the "chat" overlay, exactly as before #2406:
+				// showing it without the overlay would be a product change,
+				// not a degradation of the native layout.
+				if ( hudData && panel !== "Chat" && (!compact || compact.overlay === "chat") ) {
 					const lines = game?.chat?.lines ?? [],
 						key: unknown[] = [
 							hudData,
@@ -12608,7 +12622,6 @@ export function createUi(
 							w,
 							h,
 							chatRows,
-							compactChatRows,
 							compact?.bottom,
 							chatTab,
 							chatText,
@@ -12656,7 +12669,7 @@ export function createUi(
 								layout: hudData.chat,
 								width: w,
 								height: h,
-								rows: compact ? compactChatRows : chatRows,
+								rows: chatRows,
 								tab: chatTab,
 								input: chatText,
 								lines,
@@ -12896,13 +12909,14 @@ export function createUi(
 					compactTelemetryTop = Math.max( targetBottom, compactTelemetryTop );
 					targetBottom = drawTransientBanners( compactTelemetryTop + HUD_TOOLS_HEIGHT + 12 );
 				}
-				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
+				const barX = compact ? 0 : Math.trunc( (w - UNDERBAR_WIDTH) / 2 ),
+					barY = compact ? compact.top : h - UNDERBAR_HEIGHT;
 				// Port-only, not native: a fine pointer on a window narrower than the
-				// underbar's 800 pixels keeps the native bottom HUD; the whole strip
+				// underbar keeps the native bottom HUD; the whole strip
 				// (bar, slots, pets, whisper list, system filter, queue chip) scales
 				// to the window together instead of being swapped for bigger
 				// controls. The fit below anchors the group to the bottom center.
-				const barStrip = compact || w >= 800 ?
+				const barStrip = compact || w >= UNDERBAR_WIDTH ?
 					null :
 					[ quads.length, controls.length, blocks.length ] as const;
 				if ( hudData && !compact ) {
@@ -13075,7 +13089,7 @@ export function createUi(
 					const wx = 0,
 						wy = compact ?
 							Math.max( 80, compact.top - 200 ) :
-							h - underbarHeight - (chatRows ? 62 + chatRows * 56 : 20),
+							h - underbarHeight - chatStrip,
 						node = hudData.chat.GDR_WHISPERLIST!;
 					authoredImage( node, wx, wy );
 					const r = authoredRect( node, wx, wy );
@@ -13497,7 +13511,7 @@ export function createUi(
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						compact || w < 800 ? w - 84 : barX + 652,
+						compact || w < UNDERBAR_WIDTH ? w - 84 : barX + 652,
 						barY - 40,
 						80,
 						false,

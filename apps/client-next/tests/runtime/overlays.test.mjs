@@ -148,6 +148,32 @@ test("party wraps with the native bottom reserve and option-specific row pitch",
 	] );
 	assert.deepEqual( partyOverlay( state, [], 600, 4, 137, false )[1].position, [ 17, 193 ] );
 });
+test("the native wrap moves even the first row when the reserve does not fit", () => {
+	const state = {
+		...game,
+		social: {
+			...game.social,
+			members: [
+				game.social.members[0],
+				...Array.from( { length: 7 }, ( _, i ) => ({ id: i + 20, name: "P" + i, status: 0xaa }) )
+			]
+		}
+	};
+	// 5BCBB0 wraps before placing a row: with 190px under the board's top
+	// (400 - 137 - 73 < 230) every row, the first included, starts a new
+	// 133px column. The bounded band exists because this native rule
+	// marches across a small screen; the native branch must not be
+	// "fixed" into keeping the first row at column 0.
+	assert.deepEqual( partyOverlay( state, [], 400, 4, 137, false ).map( r => r.position ), [
+		[ 150, 137 ],
+		[ 283, 137 ],
+		[ 416, 137 ],
+		[ 549, 137 ],
+		[ 682, 137 ],
+		[ 815, 137 ],
+		[ 948, 137 ]
+	] );
+});
 test("a small viewport fills a bounded column grid instead of marching one member per column", () => {
 	const state = {
 		...game,

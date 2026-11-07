@@ -330,11 +330,11 @@ export function phoneDisplay( display: DisplayClass ): boolean {
 browserDisplayClass
 
 What this window reports about its display, read once per call: the primary
-pointer's coarseness and the screen's short side in CSS pixels. Every browser
-reports a pointer class; a host without matchMedia (the UI tests) reads as
-touch, so the compact HUD keeps covering small viewports there exactly as it
-did before the pointer class existed, and the fine-pointer path is chosen by
-stubbing a fine matchMedia. The renderer builds the same record inline.
+pointer's coarseness and the screen's short side in CSS pixels. This is the
+one reader of the pointer class - the renderer and the UI runtime both call
+it. A host without matchMedia reads as a fine pointer, so layout keeps the
+desktop rule; a test that wants the touch layout stubs a coarse matchMedia
+before the UI is created, instead of relying on a production default.
 ================
 */
 export function browserDisplayClass(): DisplayClass {
@@ -342,7 +342,7 @@ export function browserDisplayClass(): DisplayClass {
 		screen = globalThis.screen,
 		width = screen?.width ?? 0,
 		height = screen?.height ?? 0;
-	return { coarsePointer: query ? query.matches : true, shortSide: Math.min( width, height ) };
+	return { coarsePointer: query ? query.matches : false, shortSide: Math.min( width, height ) };
 }
 
 /*

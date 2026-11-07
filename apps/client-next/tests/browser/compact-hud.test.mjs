@@ -437,12 +437,11 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 						slotBackgrounds( report );
 						assert.ok(
 							!report.controls.some( row =>
-								[ "ext-drag", "minimap-in", "cos-status:9" ].includes( row.id )
+								[ "chat-text", "ext-drag", "minimap-in", "cos-status:9" ].includes( row.id )
 							)
 						);
-						// The chat never leaves the screen: its input line is admitted
-						// without the overlay, and the overlay expands the log.
-						assert.ok( report.controls.some( row => row.id === "chat-text" ) );
+						// The touch layout keeps its chat behind the "chat" overlay:
+						// no chat input is admitted without it (#2408 review).
 						assert.deepEqual( report.bindings, desktop.bindings );
 						reports[name] = report;
 						await page.screenshot( { path: `${artifactDirectory}/${name}.png` } );
