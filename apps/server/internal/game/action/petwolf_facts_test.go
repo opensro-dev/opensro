@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -169,6 +170,95 @@ func TestArmedElementalWalkFactsAgree(t *testing.T) {
 			t.Fatal("eligible wolf refused")
 		}
 	})
+
+	// No world entry at arm time: the town verdict cannot be judged,
+	// so the armed walk must abstain and fall through to the walk
+	// that seeds and judges, not invent a verdict.
+	t.Run("missing world abstains", func(t *testing.T) {
+		rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+		makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+		rt.AttackPetExpansion = true
+		roarField(t, rt, c, clock)
+		rt.Worlds.Forget(simulation.WorldKey(testDivision, c.Name))
+		now := clock.NowMs()
+		key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
+		armed := rt.armElementalFacts(key, now)
+		facts, ok := rt.armedElementalFacts(testDivision, c, now)
+		if !ok || facts.townJudged {
+			t.Fatal("armed facts judged a town with no world entry")
+		}
+		rt.clearElementalFacts(armed)
+		q := elementalQuery{gid: c.ActiveCOS.GID, kind: "Crow"}
+		verdict(t, rt, c, q, now)
+	})
+
+	// A passive the capture never folded: the armed walk abstains
+	// and the unarmed walk judges, instead of the facts inventing
+	// a refusal.
+	t.Run("unknown passive abstains", func(t *testing.T) {
+		rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+		makeTrainedPet(rt, c, "COS_P_RAVEN_040", 90)
+		rt.AttackPetExpansion = true
+		roarField(t, rt, c, clock)
+		now := clock.NowMs()
+		q := elementalQuery{gid: c.ActiveCOS.GID, kind: "Crow", passive: "NoSuchPassive"}
+		key := petOwnerKey{division: testDivision, name: c.Name, gid: c.ActiveCOS.GID}
+		armed := rt.armElementalFacts(key, now)
+		facts, ok := rt.armedElementalFacts(testDivision, c, now)
+		if !ok {
+			t.Fatal("facts did not arm")
+		}
+		if _, answered := facts.walkRefused(q); answered {
+			t.Fatal("facts answered a passive they never folded")
+		}
+		rt.clearElementalFacts(armed)
+		if verdict(t, rt, c, q, now) {
+			t.Fatal("unknown passive admitted")
+		}
+	})
+}
+
+/*
+================
+TestArmedElementalWalkServesTheGearProcShape
+
+strikePetTargets fires the gear element and proc walks (petarea.go)
+synchronously behind a committed strike, inside the armed window -
+not from a lane head. Those walks call elementalCompanion with the
+striking pet's own kind; behind one arm they must judge what the
+unarmed walk judges, off the same one snapshot, even after the
+strike's side of the record (here the pet's MP) moved.
+================
+*/
+func TestArmedElementalWalkServesTheGearProcShape(t *testing.T) {
+	rt, clock, c, _ := newPetCombatRuntime(t, 100000, attackPetBand)
+	makeTrainedPet(rt, c, "COS_P_BEAR_090", 90)
+	rt.AttackPetExpansion = true
+	roarField(t, rt, c, clock)
+	now := clock.NowMs()
+	gid := c.ActiveCOS.GID
+
+	plain, ok := rt.elementalCompanion(testDivision, c, gid, "Bear", now)
+	if !ok {
+		t.Fatal("eligible bear refused unarmed")
+	}
+	key := petOwnerKey{division: testDivision, name: c.Name, gid: gid}
+	armed := rt.armElementalFacts(key, now)
+	if armed.division == "" {
+		t.Fatal("facts did not arm")
+	}
+	defer rt.clearElementalFacts(armed)
+	// The committed strike's record weather: fields the walk never
+	// judges move inside the window.
+	c.ActiveCOS.CurrentMP = 1
+	served, ok := rt.elementalCompanion(testDivision, c, gid, "Bear", now)
+	if !ok {
+		t.Fatal("gear walk refused inside the window")
+	}
+	again, ok := rt.elementalCompanion(testDivision, c, gid, "Bear", now)
+	if !ok || again.snapshot != served.snapshot || served.snapshot == plain.snapshot {
+		t.Fatal("window walks must share the arm's one snapshot")
+	}
 }
 
 /*
