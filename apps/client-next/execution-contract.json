@@ -2,6 +2,36 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/window-placement.ts",
+			"functions": [
+				"frame"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": [
+				"compactWindowDrag",
+				"compactCloseControl"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/input/input.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
