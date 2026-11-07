@@ -3,6 +3,7 @@
   "root": "src/engine/runtime/runtime.ts",
   "bootstrap": "src/bootstrap.ts",
   "modules": {
+    "src/engine/runtime/ui/frame/frame.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/pet-training/pet-training.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/hud/reverse-return-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
@@ -250,6 +251,7 @@
     "src/engine/runtime/assets/worker/entry.ts": "src/engine/runtime/assets/assets.ts"
   },
   "contracts": {
+    "src/engine/runtime/ui/frame/frame-contract.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/assets/worker/packs/internal/pack-contract.ts": "src/engine/runtime/assets/worker/packs/packs.ts",
     "src/engine/runtime/renderer/internal/gpu-contract.ts": "src/engine/runtime/renderer/renderer.ts",
     "src/engine/runtime/assets/worker/world/internal/resource-contract.ts": "src/engine/runtime/assets/worker/world/world.ts",
