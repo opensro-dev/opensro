@@ -34,7 +34,7 @@ test("CIF define registry follows active config/define.txt lines", async () => {
 	assert.equal( parseCifDefines( "//DISABLED\n ENABLED // comment\n" ).ENABLED, true );
 });
 
-test("CIF preprocessor preserves lines and rejects malformed directive ownership", () => {
+test("CIF preprocessor preserves lines and repairs malformed directive ownership", () => {
 	const source = "first\n#ifdef LIVE\nactive\n#else\ninactive\n#endif\nlast";
 	assert.equal(
 		applyCifPreprocessor( source, { LIVE: true } ).split( "\n" ).length,
@@ -42,8 +42,33 @@ test("CIF preprocessor preserves lines and rejects malformed directive ownership
 	);
 	assert.match( applyCifPreprocessor( source, { LIVE: true } ), /active/ );
 	assert.doesNotMatch( applyCifPreprocessor( source, { LIVE: true } ), /\ninactive\n/ );
-	assert.throws( () => applyCifPreprocessor( "#else", {} ), /without #ifdef/ );
-	assert.throws( () => applyCifPreprocessor( "#ifdef OPEN", {} ), /unterminated/ );
+});
+
+test("CIF preprocessor reads a directive by its keyword, whatever follows it", () => {
+	// A later client's layouts write "#endif // KEY" and tabs (2026-11-07):
+	// the exact-line compare took them for content and failed the build.
+	const source = [ "#ifdef\tLIVE // note", "shown", "#else // other", "hidden", "#endif // LIVE", "after" ].join(
+		"\n"
+	);
+	const output = applyCifPreprocessor( source, { LIVE: true }, () => assert.fail( "no warning expected" ) );
+	assert.deepEqual( output.split( "\n" ), [ "", "shown", "", "", "", "after" ] );
+	const negated = [ "#ifndef OFF", "kept", "#else", "dropped", "#endif" ].join( "\n" );
+	assert.deepEqual( applyCifPreprocessor( negated, {} ).split( "\n" ), [ "", "kept", "", "", "" ] );
+});
+
+test("CIF preprocessor warns and repairs a broken structure instead of failing the build", () => {
+	const warnings = [];
+	const warn = message => warnings.push( message );
+	// An #ifdef left open: closed at the end of the file, lines kept.
+	const open = [ "before", "#ifdef CONTENT_CHARGING_SYSTEM", "charged", "after" ].join( "\n" );
+	assert.deepEqual( applyCifPreprocessor( open, {}, warn ).split( "\n" ), [ "before", "", "", "" ] );
+	assert.match( warnings.at( -1 ), /CONTENT_CHARGING_SYSTEM opened at line 2 has no #endif/ );
+	// A stray #else or #endif, and a second #else, are ignored.
+	const stray = [ "#else", "x", "#endif", "y" ].join( "\n" );
+	assert.deepEqual( applyCifPreprocessor( stray, {}, warn ).split( "\n" ), [ "", "x", "", "y" ] );
+	const twice = [ "#ifdef A", "a", "#else", "b", "#else", "c", "#endif" ].join( "\n" );
+	assert.deepEqual( applyCifPreprocessor( twice, {}, warn ).split( "\n" ), [ "", "", "", "b", "", "c", "" ] );
+	assert.equal( warnings.length, 4 );
 });
 
 test("every shipped resinfo source has a published layout", async () => {
