@@ -402,6 +402,22 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 	assert.deepEqual( control( "stall-prompt-quantity" )?.rect, [ x + 20, y + 102, 42, 20 ] );
 	assert.deepEqual( control( "stall-prompt-ok" )?.rect, [ x + 123, y + 101, 76, 24 ] );
 	assert.deepEqual( control( "stall-prompt-cancel" )?.rect, [ x + 203, y + 101, 76, 24 ] );
+	// 528920 captions the primary button per mode: the modify modal
+	// (mode 0xB, entry 529212) pushes UIIT_STT_BUY at 529240 before the
+	// shared tail, so this prompt's button reads Buy, not Register.
+	const okRect = control( "stall-prompt-ok" )?.rect ?? [ 0, 0, 0, 0 ];
+	const captionRun = f.products.at( -1 )?.quads.find( quad =>
+		quad.run && quad.run.glyphs.length === "Buy".length &&
+		quad.rect[0] >= okRect[0] && quad.rect[1] >= okRect[1] &&
+		quad.rect[0] + quad.rect[2] <= okRect[0] + okRect[2] &&
+		quad.rect[1] + quad.rect[3] <= okRect[1] + okRect[3]
+	);
+	assert.ok( captionRun, "the modify prompt's primary button carries a 3-glyph caption" );
+	assert.deepEqual(
+		captionRun.run.glyphs.map( glyph => glyph.uv ),
+		glyphWindows( "Buy" ),
+		"the modify prompt's primary button reads Buy"
+	);
 	assert.ok(
 		f.scenes.at( -1 )?.quads.some( quad =>
 			quad.texture === ITEM_ICON && quad.rect.every( ( value, i ) => value === [ x + 25, y + 51, 32, 32 ][i] )
@@ -621,6 +637,12 @@ test("a bag item dropped anywhere on an empty owner stall cell opens its focused
 	assert.equal( price.value, "" );
 	assert.equal( control( "stall-prompt-quantity" )?.value, "20" );
 	assert.equal( promptFrame?.focusRequest?.id, "stall-prompt-price", "5A1D9B focuses the price edit" );
+	// 528920 mode 0xA (entry 52915C) falls into the tail at 52918F, which
+	// captions the +0x800 button UIIT_CTL_STALL_REGISTER: a fresh
+	// registration's price prompt confirms with Register, where the
+	// modify prompt above reads Buy.
+	const okButton = defined( control( "stall-prompt-ok" ), "the register prompt's primary button" );
+	assert.equal( okButton.label, "Register", "the register prompt's primary button reads Register" );
 	const caret = (f.scenes.at( -1 )?.quads ?? []).find( quad =>
 		quad.texture === "" && quad.rect[2] === 1 && quad.color.every( c => c === 1 ) &&
 		quad.clip.every( ( value, i ) => value === price.rect[i] )

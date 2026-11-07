@@ -479,6 +479,68 @@ test("register, modify and delete successes close as centre banners", () => {
 	} );
 });
 
+/*
+================
+partyJoinFrame
+
+One 0x3E58 type-2 JOIN frame carrying one full member row (mask 0x37),
+the bytes party-membership.test.mjs pins for the roster lane.
+================
+*/
+function partyJoinFrame( id, name ) {
+	const u32 = n => [ n & 255, (n >>> 8) & 255, (n >>> 16) & 255, n >>> 24 ];
+	return {
+		opcode: 0x3e58,
+		payload: Uint8Array.from( [
+			2,
+			0x37,
+			...u32( id ),
+			Buffer.byteLength( name ),
+			0,
+			...Buffer.from( name ),
+			...u32( 1907 ),
+			20,
+			0x9a,
+			1,
+			1,
+			10,
+			0,
+			0,
+			0,
+			20,
+			0,
+			...u32( 0 )
+		] )
+	};
+}
+
+test("the delete banner keeps the COMPLETE2 latch across a relog until a delete answer spends it", () => {
+	// Native: the latch is a process-global byte. The roster watcher
+	// sets it when the party fills under a standing listing, and only
+	// the delete answer reads and clears it - world entry and exit
+	// never touch it, so a filled-then-relogged listing still closes
+	// with the COMPLETE2 wording.
+	const g = createGameplay( () => {} );
+	const lastNoticeKey = () => (g.take()?.notices ?? []).at( -1 )?.key;
+	const enter = () => {
+		g.bootstrap( { academyMember: false } );
+		g.seed( { gid: 1, regionId: 25000, x: 0, y: 0, z: 0, heading: 0 } );
+	};
+	enter();
+	g.receive( ack( 0xb6ff ), 0 );
+	for ( let i = 0; i < 4; i++ ) g.receive( partyJoinFrame( 100 + i, `Peer${i}` ), 0 );
+	g.reset();
+	enter();
+	g.receive( ack( 0xb6ff ), 0 );
+	g.receive( { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) }, 0 );
+	assert.equal( lastNoticeKey(), "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE2" );
+	// The answer spent the latch: the next delete closes plainly.
+	g.receive( ack( 0xb6ff ), 0 );
+	g.receive( { opcode: 0xb535, payload: Uint8Array.of( 1, 42, 0, 0, 0 ) }, 0 );
+	assert.equal( lastNoticeKey(), "UIIT_MSG_PARTYMATCH_DELETE_COMPLETE" );
+	g.dispose();
+});
+
 test("party fullness follows the native cap for the share option (818820)", () => {
 	// Without EXP share the roster caps at four: the register guard's
 	// last arm and the delete latch both read this, not a constant 8.
