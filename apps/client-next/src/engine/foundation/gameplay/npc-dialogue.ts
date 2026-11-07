@@ -35,6 +35,7 @@ export type NpcConversationEvent =
 	| { readonly type: "select"; readonly gid: NpcGid; }
 	| { readonly type: "request"; readonly now: number; }
 	| { readonly type: "reply"; readonly dialogue: NpcDialogue; }
+	| { readonly type: "event-result"; }
 	| { readonly type: "tick"; readonly now: number; }
 	| { readonly type: "close"; };
 // Low-level engine forbids external dependencies (verify-ownership). This
@@ -65,6 +66,13 @@ export function npcConversationTransition( state: NpcConversation, event: NpcCon
 					dialogue: event.dialogue
 				} :
 				state;
+		// 75D030: a firing exchange answer clears the talk capabilities
+		// and replaces the greeting, so the conversation returns to its
+		// menu page whatever it was showing.
+		case "event-result":
+			return state.phase === "closed" ?
+				state :
+				{ phase: "menu", gid: state.gid, dialogueRevision: state.dialogueRevision + 1 };
 		case "tick":
 			return state.phase === "waiting" && event.now >= state.deadline ?
 				{
@@ -128,4 +136,25 @@ export function decodeNpcDialogue( p: Uint8Array ): NpcDialogue {
 	}
 	if ( offset !== p.length ) throw Error( "NPC dialogue trailing bytes" );
 	return { kind: kind as 1 | 2 | 3 | 4 | 5, prompt, options, ...(item ? { item } : {}) };
+}
+
+/*
+================
+decodeEventExchangeResult
+
+75D030: the event exchange answer (0xB47C) is one result byte - 1 is
+the compensation greeting - and, for result 2, one sub-byte: 3 the
+socks error, 4 the inventory error. Every firing path clears the talk
+capabilities and sets the greeting to the returned symbol; any other
+byte is silent natively and returns null here.
+================
+*/
+export function decodeEventExchangeResult( payload: Uint8Array ): string | null {
+	if ( payload.length < 1 ) throw Error( "Truncated event exchange result" );
+	if ( payload[0] === 1 ) return "UIIT_MSG_XMAS_EVENT_COMPENSATION";
+	if ( payload[0] !== 2 ) return null;
+	if ( payload.length < 2 ) throw Error( "Truncated event exchange result" );
+	if ( payload[1] === 3 ) return "UIIT_MSG_XMAS_EVENT_ERROR_SOCKS";
+	if ( payload[1] === 4 ) return "UIIT_MSG_XMAS_EVENT_ERROR_INVENTORY";
+	return null;
 }
