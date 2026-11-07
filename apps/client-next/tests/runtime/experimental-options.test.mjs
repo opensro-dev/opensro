@@ -27,7 +27,7 @@ const {
 	sceneRenderScale,
 	uiScaleFactor
 } = experimentalModule;
-const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
+const { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
@@ -196,6 +196,22 @@ test("safe loading defaults off and persists only after Confirm", () => {
 	restored.reset();
 	assert.equal( restored.state().saved.safeLoadingScreen, true, "Default only changes the draft" );
 	assert.equal( restored.confirm().safeLoadingScreen, false );
+});
+
+test("the HD row is listed only while the published build carries the set (#2800)", () => {
+	const world = /** @type {import("../../src/engine/contracts/session").SessionState} */ ({
+		phase: "world",
+		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1 }
+	});
+	const keys = tabs => tabs.flatMap( tab => tab.rows.map( row => row.key ) );
+	assert.ok( keys( experimentalTabs( world, true ) ).includes( "hdTextures" ), "the set is published" );
+	assert.ok( keys( experimentalTabs( null, true ) ).includes( "hdTextures" ), "also outside the world list" );
+	for ( const session of [ world, null, undefined ] ) {
+		const tabs = experimentalTabs( session, false );
+		assert.ok( !keys( tabs ).includes( "hdTextures" ), "no set, no row to toggle dead" );
+		assert.ok( tabs.every( tab => tab.rows.length > 0 ), "the emptied HD tab goes with its row" );
+		assert.ok( !tabs.some( tab => tab.title === "HD" ) );
+	}
 });
 
 test("experimental drafts require Confirm and Default only changes the draft", () => {

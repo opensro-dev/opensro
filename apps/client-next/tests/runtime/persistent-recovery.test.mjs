@@ -239,7 +239,9 @@ function workerFixture( t, corrupt = false, expected = 1 ) {
 		complete = () => resolve( undefined );
 	} );
 	const loader = createLoader( message => {
-		if ( ![ "progress", "job-progress", "job-decoding", "job-fetching" ].includes( message.kind ) ) {
+		if (
+			![ "progress", "job-progress", "job-decoding", "job-fetching", "hd-availability" ].includes( message.kind )
+		) {
 			messages.push( message );
 		}
 		if ( messages.length === expected ) complete();

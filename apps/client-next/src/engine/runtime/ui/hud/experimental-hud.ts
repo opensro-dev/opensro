@@ -426,6 +426,8 @@ export const EXPERIMENTAL_TABS: readonly {
 			// Port-only, not native (#2061): the row is live, no reload -
 			// switching it on fetches the set's own index and starts its
 			// download; off stops the download and the originals serve.
+			// Listed only while the build carries the set (#2800,
+			// experimentalTabs), so it is never a dead toggle.
 			key: "hdTextures",
 			id: "experimental-hd-textures",
 			label: "HD textures",
@@ -459,11 +461,20 @@ experimentalTabs
 
 Port-only, not native. The shard's published reference is the capability;
 a saved local preference cannot reveal an option the shard has disabled.
+The same rule hides the HD row (#2800): it is listed only while the
+published build carries the set's index (the main pack index certifies
+it; hdAvailable), and a tab left with no rows - the HD tab holds only
+that row - goes with it.
 ================
 */
-export function experimentalTabs( session: SessionState | null | undefined ) {
-	if ( session?.phase === "world" && session.huntingGuide ) return EXPERIMENTAL_TABS;
-	return EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
+export function experimentalTabs( session: SessionState | null | undefined, hdAvailable: boolean ) {
+	const tabs = session?.phase === "world" && session.huntingGuide ?
+		EXPERIMENTAL_TABS :
+		EXPERIMENTAL_TABS.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "monsterGuide" ) }) );
+	if ( hdAvailable ) return tabs;
+	return tabs
+		.map( tab => ({ ...tab, rows: tab.rows.filter( row => row.key !== "hdTextures" ) }) )
+		.filter( tab => tab.rows.length > 0 );
 }
 
 /*

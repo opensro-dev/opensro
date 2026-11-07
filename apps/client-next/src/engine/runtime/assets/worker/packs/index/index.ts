@@ -131,6 +131,9 @@ export function createPackIndex() {
 			return {
 				packs,
 				assets,
+				// The build's HD certification (#2800): the main index sets
+				// hd when the published tree carries /hd/packs/manifest.json.
+				hd: v.hd === true,
 				animations,
 				animationManifests: animationManifests.map( e => e.publicPath ),
 				animationOrder: new Map( animationManifests.map( ( e, i ) => [ e.publicPath, i ] ) )

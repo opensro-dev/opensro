@@ -37,7 +37,10 @@ export function createDeferredParticles() {
 			draw: boolean;
 		}
 	>();
-	let queued: readonly number[] = [], eligible: readonly number[] = [], due = false;
+	let queued: readonly number[] = [],
+		eligible: readonly number[] = [],
+		due = false,
+		issued: Map<number, object> | null = null;
 	return {
 		begin( seconds: number, actors: readonly CharacterActor[], enabled = true, night = true ) {
 			if ( previousSeconds !== null && seconds < previousSeconds ) tickRemainder = 0;
@@ -98,20 +101,35 @@ export function createDeferredParticles() {
 			queryRemainder += delta;
 			due = queryRemainder > 500;
 			if ( due ) queryRemainder %= 500;
-			return due && eligible.length > 0;
+			// One query in flight at a time: the device owner refuses a
+			// second while one is pending, so the slot is spent and the
+			// next slot asks again. The answer lands through deliver(),
+			// between frames; the native fade (AEC0D0) ramps alpha at
+			// 1.5 per ms, so consuming it a frame late changes nothing
+			// visible - and no frame ever waits on the GPU for it (#2573).
+			if ( !due || !eligible.length || issued ) return false;
+			issued = new Map( eligible.map( id => [ id, rows.get( id )! ] ) );
+			return true;
 		},
 		eligible: () => eligible,
-		complete( results?: readonly boolean[] ) {
-			if ( results && (results.length !== eligible.length || !due) ) {
-				throw Error( "Invalid particle query results" );
+		deliver( results: readonly boolean[] ) {
+			if ( !issued || results.length !== issued.size ) throw Error( "Invalid particle query results" );
+			let i = 0;
+			for ( const [id, asked] of issued ) {
+				// A row replaced since its query was issued starts dark:
+				// the answer belongs to the row that was asked about.
+				const row = rows.get( id );
+				if ( row === asked ) row.visible = results[i]!;
+				i++;
 			}
-			if ( due && eligible.length && !results ) throw Error( "Missing particle query results" );
-			const enabled = new Set( eligible ),
-				visibility = new Map( eligible.map( ( id, i ) => [ id, results?.[i] ] ) );
+			issued = null;
+		},
+		complete() {
+			const enabled = new Set( eligible );
 			for ( const id of queued ) {
 				const row = rows.get( id )!,
 					allowed = enabled.has( id ),
-					visible = allowed ? (due ? visibility.get( id )! : row.visible) : false;
+					visible = allowed ? row.visible : false;
 				if ( !advanceDeferredAlpha( row, visible, frame, delta ) ) {
 					row.draw = false;
 					continue;
@@ -131,6 +149,7 @@ export function createDeferredParticles() {
 			rows.clear();
 			queued = [];
 			eligible = [];
+			issued = null;
 			deltaFor = createModifierDelta();
 			frame =
 				delta =
