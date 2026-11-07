@@ -2,6 +2,12 @@
 
 ## Behavior
 
+This is port-only pet gameplay, not native Silkroad behavior. The
+[owner decision recorded on 6 November 2026](https://github.com/opensro-dev/opensro/pull/2625#issuecomment-6675542034)
+delegates pet balance to the author and explicitly accepts the five-second,
+five-hit design without a separate approval. The existing default-off
+`SRO_ATTACK_PET_EXPANSION` setting still gates it.
+
 Blizzard I–III now last five seconds. Damage lands at release and at approximately +1, +2, +3 and +4 seconds. The field fades by +5 seconds. Book III freezes eligible enemies on the fifth pulse only if they remained exposed to every pulse; normal resistance applies. There is no sixth pulse.
 
 Per-pulse damage and the existing 20-second base cooldown are unchanged, so the additional fifth pulse increases total damage by 25%. Book I keeps its 5m radius; Books II/III keep 7m. The storyboard's 8m and 4s labels were not used to change those radii: the explicit duration request was five seconds. Target-centred gameplay is preserved.
