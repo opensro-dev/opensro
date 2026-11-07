@@ -558,6 +558,7 @@ import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { AUTO_SELECT_ACTION_ID, offeredActions } from "@/engine/foundation/ui/action-layout";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
+import { tooltipSetViewer } from "@/engine/foundation/ui/item-tooltip-set";
 import { commerceTooltip, mallTooltipRows } from "@/engine/foundation/ui/commerce-tooltip";
 import { effectivePartyOptions } from "@/engine/foundation/ui/party-options";
 import { monsterPartyNameplate } from "@/engine/foundation/ui/monster-nameplate";
@@ -1735,6 +1736,8 @@ export function createUi( ports: UiPorts ) {
 		country: number | undefined;
 		sex: number | undefined;
 		sealUnderHeading: boolean;
+		setGroups: unknown;
+		setEquipment: unknown;
 		rows: readonly TooltipRow[];
 	} | null = null;
 	// The item riding the cursor, by the slot control it left (slot:, avatar:,
@@ -27724,12 +27727,21 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							gender = next.session?.characters?.find( row => row.name === next.session?.character )
 								?.gender,
 							sex = gender === 0 ? 1 : gender === 1 ? 0 : undefined,
-							sealUnderHeading = experimental.state().saved.sealUnderHeading;
+							sealUnderHeading = experimental.state().saved.sealUnderHeading,
+							// Port-only set block: the published groups with the bag they are counted in.
+							sets = tooltipSetViewer(
+								experimental.state().saved.setBonusTooltip,
+								game.equipmentSets,
+								game.inventory
+							),
+							setGroups = sets?.groups,
+							setEquipment = sets?.equipment;
 						if (
 							tooltipMemo && tooltipMemo.item === item && tooltipMemo.skill === skill &&
 							tooltipMemo.progression === game.progression && tooltipMemo.learned === game.skills &&
 							tooltipMemo.catalog === hudData.tooltipSkills && tooltipMemo.country === country &&
-							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading
+							tooltipMemo.sex === sex && tooltipMemo.sealUnderHeading === sealUnderHeading &&
+							tooltipMemo.setGroups === setGroups && tooltipMemo.setEquipment === setEquipment
 						) tooltip = tooltipMemo.rows;
 						else {
 							tooltip = item ?
@@ -27737,7 +27749,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, sets }
 								) :
 								skillTooltip(
 									{
@@ -27758,6 +27770,8 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 								country,
 								sex,
 								sealUnderHeading,
+								setGroups,
+								setEquipment,
 								rows: tooltip
 							};
 						}
@@ -27767,7 +27781,7 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									item,
 									game.progression ?? { masteries: [] },
 									lookup,
-									{ country, sex, sealUnderHeading }
+									{ country, sex, sealUnderHeading, sets }
 								)
 							);
 						}
