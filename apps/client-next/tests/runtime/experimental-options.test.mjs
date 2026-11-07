@@ -132,7 +132,10 @@ const OFF = Object.freeze( {
 	warpArrivalSound: false,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
-	sealUnderHeading: false
+	sealUnderHeading: false,
+	// Off by default (#2269): the Item Mall's Buying list; the native
+	// window is inert and its mall button is born disabled.
+	silkHistory: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {
@@ -324,12 +327,20 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
 		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup" ]
 	);
-	// Lighting keeps the direct-light stages, the moving sun among them;
-	// render scale joins Image without changing the indices used to reopen
-	// the existing tabs.
+	// Lighting keeps the direct-light stages, the moving sun among them,
+	// and holds the silk history row for room (#2269); render scale joins
+	// Image without changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "dynamicSun", "perPixelLighting", "enchantSparks", "sealUnderHeading", "dungeonCharacterPvs" ]
+		[
+			"sunShadow",
+			"dynamicSun",
+			"perPixelLighting",
+			"enchantSparks",
+			"sealUnderHeading",
+			"dungeonCharacterPvs",
+			"silkHistory"
+		]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();

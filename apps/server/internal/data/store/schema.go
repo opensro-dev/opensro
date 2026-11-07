@@ -124,7 +124,10 @@ func isVersionMismatch(err error) bool {
 // saved buff a student accumulates and the received rows it passes to
 // the Guardian. Members saved earlier carry none of it and hold no
 // buff; the offline upgrade rewrites no record.
-const CurrentVersion = 38
+// Version 39 changes no record: layout 12 adds the silk_history table
+// (port-only, silkhistory.go), the movement record the Item Mall's silk
+// history window lists (#2269). The upgrade rewrites no record.
+const CurrentVersion = 39
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

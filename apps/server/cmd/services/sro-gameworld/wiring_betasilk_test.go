@@ -105,6 +105,15 @@ func (w *betaWiringWallet) PurchaseMall(c *domain.Character, cost domain.MallBal
 
 /*
 ================
+SilkHistory
+================
+*/
+func (w *betaWiringWallet) SilkHistory(*domain.Character, int, int) ([]domain.SilkHistoryRow, uint32, error) {
+	return nil, 0, nil
+}
+
+/*
+================
 betaWiringSource
 ================
 */
