@@ -174,6 +174,13 @@ type Runtime struct {
 	effects         *statuseffect.Registry
 	periodicEffects linkedpulse.Registry
 
+	// entrySpawnCache is the tick's shared spawn projection per owner
+	// (activeeffect.go SpawnEntrySkills): entrySpawnMu owns the map and
+	// the cached rows' remaining-time refresh. The entry bootstrap does
+	// not use it; EntrySkills still builds a fresh projection per call.
+	entrySpawnMu    sync.Mutex
+	entrySpawnCache map[entrySpawnOwner]*entrySpawnProjection
+
 	// partyAuras are open efr-kind-2 contexts. The tick owns joins.
 	partyAuras  []partyAura
 	partyAuraMu sync.Mutex
