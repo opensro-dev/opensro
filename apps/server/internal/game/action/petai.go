@@ -56,8 +56,9 @@ type petSession struct {
 	character           *enterworld.Character
 	refObjID            uint32
 	follower            *simulation.PetFollower
-	// Transport COS do not run follower AI. Their admission anchor belongs to
-	// this same presentation owner; mounted motion comes from the rider owner.
+	// judgedPet is the judged tick's scratch pet view (petjudged.go).
+	judgedPet enterworld.CharacterCOS
+	// Transport COS do not run follower AI; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
 	// tether is the parked trade transport's hold on its owner this tick
