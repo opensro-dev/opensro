@@ -668,7 +668,8 @@ import {
 import {
 	companionAutoPotion,
 	playerVigorAutoPotion,
-	transportPotionBlocked
+	transportPotionBlocked,
+	TRANSPORT_POTION_RETRY_MS
 } from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
@@ -9579,46 +9580,63 @@ export function createUi( ports: UiPorts ) {
 					""
 			);
 			// Port-only: one pair of item bindings serves both companion HP thresholds.
+			// The two deciders can only fire with a channel open and something
+			// to drink, so a frame with neither bound skips their inputs
+			// whole: the idle HUD neither reads vitals nor allocates here.
 			if (
 				experimental.state().saved.transportAutoPotion && next.session?.phase === "world" &&
 				next.worldReady && (!next.frontend || next.frontend.phase === "world") && next.gameplay
 			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
-				const shared = {
-					items: game.inventory,
-					quickSlots: game.quickSlots ?? [],
-					cooldowns: game.itemCooldowns ?? [],
-					settings: companionPotions.state().saved,
-					now: clock,
-					lastSentMs: companionPotions.state().lastSentMs,
-					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
-						!!(carriedItem || carriedShortcut)
-				};
-				const use = playerVigorAutoPotion( {
-					...shared,
-					vital: game.vitals.find( v => v.gid === game.localGid )
-				} ) ?? companionAutoPotion( {
-					records: game.cosRecords ?? [],
-					maxima: (game.cosRecords ?? []).map( record => ({
-						gid: record.gid,
-						maxHp: petReference(
-							references?.get( record.refObjId ),
-							game.petTraining?.gid === record.gid ? game.petTraining : undefined,
-							next.entities.find( e => e.gid === record.gid )?.petResolve,
-							clock,
-							record.level
-						)?.maxHp ?? 0
-					}) ),
-					vitals: game.vitals,
-					items: game.inventory,
-					quickSlots: game.quickSlots ?? [],
-					cooldowns: game.itemCooldowns ?? [],
-					settings: companionPotions.state().saved,
-					now: clock,
-					lastSentMs: companionPotions.state().lastSentMs,
-					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
-						!!(carriedItem || carriedShortcut)
-				} );
+				const potionState = companionPotions.state(), potionSettings = potionState.saved;
+				const potionBlocked = transportPotionBlocked( game ) || itemMall.read().visible ||
+					!!(carriedItem || carriedShortcut);
+				const potionRetrying = potionState.lastSentMs !== undefined && clock >= potionState.lastSentMs &&
+					clock - potionState.lastSentMs < TRANSPORT_POTION_RETRY_MS;
+				let use: { readonly slot: number; readonly companionGid?: number; } | null = null;
+				if ( !potionBlocked && !potionRetrying ) {
+					if (
+						autoPotionEntry( potionSettings.vigorHp ).enabled ||
+						autoPotionEntry( potionSettings.vigorMp ).enabled
+					) {
+						use = playerVigorAutoPotion( {
+							items: game.inventory,
+							quickSlots: game.quickSlots ?? [],
+							cooldowns: game.itemCooldowns ?? [],
+							settings: potionSettings,
+							now: clock,
+							lastSentMs: potionState.lastSentMs,
+							blocked: potionBlocked,
+							vital: game.vitals.find( v => v.gid === game.localGid )
+						} );
+					}
+					if (
+						!use && (game.cosRecords?.length ?? 0) > 0 && game.inventory.length > 0 &&
+						(game.quickSlots?.length ?? 0) > 0
+					) {
+						use = companionAutoPotion( {
+							records: game.cosRecords ?? [],
+							maxima: (game.cosRecords ?? []).map( record => ({
+								gid: record.gid,
+								maxHp: petReference(
+									references?.get( record.refObjId ),
+									game.petTraining?.gid === record.gid ? game.petTraining : undefined,
+									next.entities.find( e => e.gid === record.gid )?.petResolve,
+									clock,
+									record.level
+								)?.maxHp ?? 0
+							}) ),
+							vitals: game.vitals,
+							items: game.inventory,
+							quickSlots: game.quickSlots ?? [],
+							cooldowns: game.itemCooldowns ?? [],
+							settings: potionSettings,
+							now: clock,
+							lastSentMs: potionState.lastSentMs,
+							blocked: potionBlocked
+						} );
+					}
+				}
 				if ( use ) {
 					sendGameplay( {
 						kind: "item-use",
