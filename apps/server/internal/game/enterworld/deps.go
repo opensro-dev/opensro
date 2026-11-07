@@ -66,6 +66,11 @@ type refObjSnapshotCache struct {
 
 type Deps struct {
 	BrowserReferences *BrowserReferences
+	// SiegeStructUpgrades is the resolved siege structure upgrade
+	// table the bootstrap publishes (fortress_upgrades.go); the
+	// composition root resolves it once from the boot textdata, and
+	// fixtures leave it empty.
+	SiegeStructUpgrades []SiegeStructUpgradeRow
 	// refObjCache memoizes the filtered RefObj snapshot; installed by
 	// NewDevDepsWithRoster, nil in fixtures (see refObjSnapshotCache).
 	refObjCache *refObjSnapshotCache

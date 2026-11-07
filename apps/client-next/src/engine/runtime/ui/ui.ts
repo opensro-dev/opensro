@@ -177,7 +177,7 @@ import {
 	skillTrainingReason
 } from "@/engine/foundation/gameplay/skill-catalog";
 import { alchemySelection, alchemySlotCapacity } from "@/engine/foundation/ui/alchemy-selection";
-import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
+import { EVENT_EXCHANGE_FUNCTION, npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
@@ -1434,6 +1434,8 @@ export function createUi( ports: UiPorts ) {
 	}
 	let recallConfirm: number | null = null;
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
+	// The saved Academy buff's pass question (6E2840's simple-box type 9).
+	let academyBuffPass = false;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
 	// The europe variant the next plain load draws, chosen a load ahead so
@@ -4026,14 +4028,16 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if (
-			id === "npc-talk" || id === "npc-withdraw" || id === "npc-close" || id === "npc-talkend" ||
-			id.startsWith( "npc-choice:" )
+			id === "npc-talk" || id === "npc-withdraw" || id === "npc-event-exchange" || id === "npc-close" ||
+			id === "npc-talkend" || id.startsWith( "npc-choice:" )
 		) {
 			sendGameplay(
 				id === "npc-talk" ?
 					{ kind: "npc-talk" } :
 					id === "npc-withdraw" ?
 					{ kind: "npc-withdraw" } :
+					id === "npc-event-exchange" ?
+					{ kind: "npc-event-exchange" } :
 					id.startsWith( "npc-choice:" ) ?
 					{ kind: "npc-choice", choice: Number( id.slice( 11 ) ) } :
 					{ kind: "npc-close" }
@@ -7192,6 +7196,32 @@ export function createUi( ports: UiPorts ) {
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
 			}
+			if ( academyBuffPass ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "academy-buff-pass-cancel"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "academy-buff-pass-confirm"
+				) {
+					academyBuffPass = false;
+					dirty = true;
+					if ( view?.session?.phase === "world" && view.gameplay?.academy?.savedBuff ) {
+						sendGameplay( { kind: "academy-pass-buff" } );
+					}
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
 
 			if ( groundDrop ) {
 				if ( event.kind === "key" ) {
@@ -8905,7 +8935,7 @@ export function createUi( ports: UiPorts ) {
 					if ( item ) moveAvatar( false, item.slot );
 					return;
 				}
-				const cancel = buffBoard(
+				const boardRow = buffBoard(
 					view.gameplay,
 					view.simulationTimeMs ?? 0,
 					undefined,
@@ -8913,8 +8943,15 @@ export function createUi( ports: UiPorts ) {
 					undefined,
 					hudCopy
 				)
-					.find( row => row.id === event.id )
-					?.cancel;
+					.find( row => row.id === event.id );
+				// 6E2840: the saved Academy buff's slot asks the pass
+				// question; its Yes is the academy-buff-pass-confirm box.
+				if ( boardRow?.passBuff ) {
+					academyBuffPass = true;
+					dirty = true;
+					return;
+				}
+				const cancel = boardRow?.cancel;
 				if ( !cancel ) return;
 				if ( cancel.mode === "confirm" ) {
 					buffDismiss = { skillId: cancel.skillId, instance: cancel.instance };
@@ -9984,6 +10021,10 @@ export function createUi( ports: UiPorts ) {
 					buffDismiss = null;
 					dirty = true;
 				}
+			}
+			if ( (phase !== "world" || !next.gameplay?.academy?.savedBuff) && academyBuffPass ) {
+				academyBuffPass = false;
+				dirty = true;
 			}
 			if ( phase !== "world" ) autoPotionInput.reset();
 			else {
@@ -12296,8 +12337,9 @@ export function createUi( ports: UiPorts ) {
 							helpText: icon.helpText,
 							helpSource: icon.helpSource,
 							// A package slot is clicked open (6E2840, the board's
-							// vtable +0x70 left-button handler); the rest only hover.
-							kind: icon.id.startsWith( "count-job:" ) ? "button" : "region",
+							// vtable +0x70 left-button handler), as is the saved
+							// Academy buff's pass slot; the rest only hover.
+							kind: icon.id.startsWith( "count-job:" ) || icon.passBuff ? "button" : "region",
 							rightActivate: !!icon.cancel,
 							rect: r
 						} );
@@ -16647,7 +16689,10 @@ export function createUi( ports: UiPorts ) {
 					*/
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
-					const capabilities = game.targetCapabilities ?? 0;
+					// 75D030 clears the talk capabilities on a firing
+					// exchange answer: while its greeting stands, the
+					// menu reads as if the capability word were zero.
+					const capabilities = game.npcEventGreeting ? 0 : (game.targetCapabilities ?? 0);
 					// 5D7870's outcome page replaces the menu of the NPC that told it.
 					const outcomePage = game.npcConversation.phase === "menu" &&
 							jobHud.outcome() === game.npcConversation.gid,
@@ -16684,7 +16729,13 @@ export function createUi( ports: UiPorts ) {
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: gachaHud.noVoucherFor() === game.npcConversation.gid ?
+						prompt: game.npcEventGreeting ?
+							copy( game.npcEventGreeting ) :
+							// 5D9409: EVENT_EXCHANGE_FUNCTION replaces the
+							// greeting with the event's own line.
+							(capabilities & EVENT_EXCHANGE_FUNCTION) ?
+							copy( "UIIT_MSG_XMAS_EVENT_SO-OK" ) :
+							gachaHud.noVoucherFor() === game.npcConversation.gid ?
 							copy( "SN_TALK_CH_GACHA_OPERATOR_3" ) :
 							outcomePage ?
 							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
@@ -16743,6 +16794,7 @@ export function createUi( ports: UiPorts ) {
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						canGacha: !!(capabilities & GACHA_FUNCTION),
 						canGachaOperator: !!(capabilities & GACHA_OPERATOR_FUNCTION),
+						canEventExchange: !!(capabilities & EVENT_EXCHANGE_FUNCTION),
 						canWithdrawSkill: !!(capabilities & 0x200),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -19131,12 +19183,19 @@ export function createUi( ports: UiPorts ) {
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
 						py,
 						"exchange-confirm",
-						hudCopy( at( 11 ).text ),
+						// 6B21F6: once this side has confirmed, the button reads
+						// UIIT_CTL_ACKNOWLEDGMENT ("Approve"); the authored
+						// Confirm caption stays until then.
+						state.approved ?
+							hudCopy( "UIIT_CTL_ACKNOWLEDGMENT" ) || hudCopy( at( 11 ).text ) :
+							hudCopy( at( 11 ).text ),
 						state.approved || state.ownLocked && !state.theirLocked
 					);
 					authoredLabeledButton( at( 12 ), px, py, "exchange-cancel", hudCopy( at( 12 ).text ) );
@@ -24294,7 +24353,9 @@ export function createUi( ports: UiPorts ) {
 						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
 						full
 					),
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+					// 530D51: the type-0xC repair box (52F460) titles itself
+					// UIIT_STT_AGREEMENT_BOX, not the generic confirm title.
+					...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), layout.title, full, white, {
 						hAlign: 1,
 						vAlign: 0
 					} ),
@@ -24307,9 +24368,15 @@ export function createUi( ports: UiPorts ) {
 						vAlign: 0
 					} )
 				);
+				// 52F460: the store's repair-all button (5B2B10) raises
+				// confirmation type 0x0C, which ShowByType passes on as
+				// the configure kind; the kind-0x0C arm (530D51)
+				// captions the action button UIIT_CTL_REPAIR_ALL
+				// ("Repair all"), not a generic Yes (xref 530E91).
 				button(
 					"repair-all-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
+					// 530E91: the box's action button reads UIIT_CTL_REPAIR_ALL.
+					hudCopy( "UIIT_CTL_REPAIR_ALL" ) || hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
@@ -24677,6 +24744,18 @@ export function createUi( ports: UiPorts ) {
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
+			}
+			if ( worldVisible && academyBuffPass ) {
+				// 6E2840: the pass question is a plain simple message box
+				// (type 9): the confirm title and UIIT_CTL_TC_PASS_BUFF.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_CTL_TC_PASS_BUFF" ) ],
+					yes: "academy-buff-pass-confirm",
+					no: "academy-buff-pass-cancel"
+				} );
 			}
 			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
 			if ( worldVisible && allBuyProgress ) {
@@ -25127,7 +25206,20 @@ export function createUi( ports: UiPorts ) {
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
