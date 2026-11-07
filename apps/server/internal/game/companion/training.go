@@ -28,6 +28,15 @@ import (
 
 const EnvAttackPetExpansion = "SRO_ATTACK_PET_EXPANSION"
 
+// EnvPetInventoryPages: port-only, not native. The owner approved the
+// five-page pet bag on by default (2026-11-07); "off" is native.
+const EnvPetInventoryPages = "SRO_PET_INVENTORY_PAGES"
+
+// PetInventorySlots is the bag a pet carries under the five-page rule:
+// five pages of the native one-page size (28), so the client pages it
+// generically. Port-only, not native.
+const PetInventorySlots uint8 = 140
+
 // Cooldown kinds (the design's "Trigger / cooldown kind").
 const (
 	TriggerTimer   = "Timer"
@@ -44,6 +53,23 @@ AttackPetExpansionEnabled
 */
 func AttackPetExpansionEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(EnvAttackPetExpansion)), "on")
+}
+
+/*
+================
+PetInventoryPagesEnabled
+
+The five-page pet bag is on unless the shard turns it off: an explicit
+"off", "0" or "false" is native; anything else, including unset, is on.
+Port-only, not native (owner 2026-11-07).
+================
+*/
+func PetInventoryPagesEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvPetInventoryPages))) {
+	case "off", "0", "false":
+		return false
+	}
+	return true
 }
 
 /*

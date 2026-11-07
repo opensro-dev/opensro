@@ -280,6 +280,29 @@ func TestTrainingFlagDefaultsOff(t *testing.T) {
 
 /*
 ================
+TestPetInventoryPagesDefaultsOn
+================
+*/
+func TestPetInventoryPagesDefaultsOn(t *testing.T) {
+	for _, value := range []string{"", "on", "1", "true", "ON", "unexpected"} {
+		t.Setenv(EnvPetInventoryPages, value)
+		if !PetInventoryPagesEnabled() {
+			t.Fatalf("%q turned the five-page bag off", value)
+		}
+	}
+	for _, value := range []string{"off", "0", "false", "OFF", " off "} {
+		t.Setenv(EnvPetInventoryPages, value)
+		if PetInventoryPagesEnabled() {
+			t.Fatalf("%q kept the five-page bag on", value)
+		}
+	}
+	if PetInventorySlots != 5*28 {
+		t.Fatalf("five-page bag = %d slots, want 140", PetInventorySlots)
+	}
+}
+
+/*
+================
 TestRoarRadiusMeters
 ================
 */

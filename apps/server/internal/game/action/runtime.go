@@ -560,6 +560,10 @@ type Runtime struct {
 	PetExpPace func(ownerLevel int64) float64
 	// Port-only Hunter wolf pilot; off preserves native companion behavior.
 	AttackPetExpansion bool
+	// PetInventoryPages gives every pet bag five pages (companion
+	// PetInventorySlots; port-only, not native; owner 2026-11-07).
+	// False is native.
+	PetInventoryPages bool
 	// Port-only: DB-configured chance of extra pet gear per admitted normal equipment drop.
 	PetGearDropFactor float64
 	PetGearAffixes    []companion.AffixDef
