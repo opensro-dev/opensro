@@ -42,6 +42,17 @@ const (
 	benchmarkFixtureMaxSkills    = 64
 )
 
+// benchmarkDungeonRegionBit and benchmarkOutdoorSectorSize mirror
+// world.DungeonRegionBit / world.OutdoorRegionSize (geometry.go:17-19),
+// which agent/api may not import (architecture_test.go:106);
+// benchmarkDungeonFrameHalf bounds a dungeon spawn's |x| and |z| (the
+// tomb nests span about +/-21000 inside that frame).
+const (
+	benchmarkDungeonRegionBit  = 0x8000
+	benchmarkOutdoorSectorSize = 1920
+	benchmarkDungeonFrameHalf  = 32768
+)
+
 /*
 ================
 benchmarkFixtureSpawn
@@ -175,19 +186,19 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 ================
 validBenchmarkFixtureReset
 
-Outdoor spawns sit inside one 1920-unit sector. Dungeon regions (the
-0x8000 region bit) carry positions in the floor's own wide frame - the
-tomb nests and the world-space cases span thousands of units either side
-of zero - so a dungeon spawn is checked against that frame instead of
+Outdoor spawns sit inside one sector. Dungeon regions (the dungeon
+region bit) carry positions in the floor's own wide frame - the tomb
+nests and the world-space cases span thousands of units either side of
+zero - so a dungeon spawn is checked against that frame instead of
 refusing every cave pose past the entrance.
 ================
 */
 func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest, levelCap int64) bool {
-	xInRange := finiteInRange(request.Spawn.X, 0, 1920)
-	zInRange := finiteInRange(request.Spawn.Z, 0, 1920)
-	if request.Spawn.RegionID&0x8000 != 0 {
-		xInRange = finiteInRange(request.Spawn.X, -32768, 32768)
-		zInRange = finiteInRange(request.Spawn.Z, -32768, 32768)
+	xInRange := finiteInRange(request.Spawn.X, 0, benchmarkOutdoorSectorSize)
+	zInRange := finiteInRange(request.Spawn.Z, 0, benchmarkOutdoorSectorSize)
+	if request.Spawn.RegionID&benchmarkDungeonRegionBit != 0 {
+		xInRange = finiteInRange(request.Spawn.X, -benchmarkDungeonFrameHalf, benchmarkDungeonFrameHalf)
+		zInRange = finiteInRange(request.Spawn.Z, -benchmarkDungeonFrameHalf, benchmarkDungeonFrameHalf)
 	}
 	return strings.TrimSpace(request.CharacterName) != "" &&
 		strings.TrimSpace(request.FixtureID) != "" && len(strings.TrimSpace(request.FixtureID)) <= 128 &&
