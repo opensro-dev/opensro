@@ -140,6 +140,7 @@ function playbackFixture() {
 		progress: unexpectedPlaybackWork,
 		health: unexpectedPlaybackWork,
 		textureFeatures: unexpectedPlaybackWork,
+		hdTextures: unexpectedPlaybackWork,
 		install: unexpectedPlaybackWork,
 		dispose: unexpectedPlaybackWork,
 		request: unexpectedPlaybackWork,

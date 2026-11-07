@@ -30,6 +30,7 @@ const D3DFMT_DXT5 = 0x35545844;
 const NTX_ETC2_RGB8A1 = 0x31413245; // "E2A1"
 const NTX_ETC2_RGBA8 = 0x38413245; // "E2A8"
 const NTX_ASTC_4X4 = 0x34345341; // "AS44"
+const NTX_BC7 = 0x55374342; // "BC7U", the HD variant's code (#2061)
 // A variant's optional trailing picking mask: this tag, then width x height
 // alpha bytes of level 0 (NativeTexture.pickAlpha).
 const NTX_PICK_ALPHA = 0x38414b50; // "PKA8"
@@ -48,8 +49,8 @@ export function nativeTextureBlockBytes( format: NativeTexture["format"] ): numb
 	if ( format === "bgra8unorm" ) return 0;
 	if ( format === "bc1-rgba-unorm" || format === "etc2-rgb8a1unorm" ) return COLOR_BLOCK_BYTES;
 	if (
-		format === "bc2-rgba-unorm" || format === "bc3-rgba-unorm" || format === "etc2-rgba8unorm" ||
-		format === "astc-4x4-unorm"
+		format === "bc2-rgba-unorm" || format === "bc3-rgba-unorm" || format === "bc7-rgba-unorm" ||
+		format === "etc2-rgba8unorm" || format === "astc-4x4-unorm"
 	) return ALPHA_BLOCK_BYTES;
 	throw Error( "Unsupported native texture format" );
 }
@@ -137,7 +138,11 @@ samples it, and picking reads the variant's own mask).
 ================
 */
 export function nativeTextureDecodable( format: NativeTexture["format"] ): boolean {
-	return format === "bgra8unorm" || nativeTextureFeature( format ) === "texture-compression-bc";
+	// Only the retail formats have a CPU decoder. BC7 shares their WebGPU
+	// feature but not their block layout: calling it decodable would run
+	// its blocks through the BC3 reader and invent texels.
+	return format === "bgra8unorm" || format === "bc1-rgba-unorm" || format === "bc2-rgba-unorm" ||
+		format === "bc3-rgba-unorm";
 }
 
 /*
@@ -170,6 +175,8 @@ export function decodeNativeTexture( bytes: Uint8Array ): NativeTexture {
 		"etc2-rgba8unorm" :
 		code === NTX_ASTC_4X4 ?
 		"astc-4x4-unorm" :
+		code === NTX_BC7 ?
+		"bc7-rgba-unorm" :
 		(() => {
 			throw Error( "Unsupported native texture format" );
 		})();

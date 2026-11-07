@@ -53,6 +53,7 @@ function fixture() {
 		health: () => ({ phase: "running" }),
 		install() {},
 		textureFeatures() {},
+		hdTextures() {},
 		dispose() {},
 		available: () => 4 - pending.size,
 		/*

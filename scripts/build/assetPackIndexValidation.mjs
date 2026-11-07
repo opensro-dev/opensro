@@ -10,12 +10,12 @@ import { storedLength, validStoredForm } from "./shared/packFormat.mjs";
 
 const MAX_CLIENT_PACK_BYTES = 64 << 20;
 
-/** Client path admission (index.ts `path`): /assets/ rooted, no escapes or URL syntax. */
-function assertClientPath( value, label ) {
+/** Client path admission (index.ts `path`): rooted at the index's own subtree, no escapes or URL syntax. */
+function assertClientPath( value, label, root ) {
 	if ( typeof value !== "string" || !value ) throw new Error( `Asset pack manifest ${label} is not a path.` );
 	const lower = value.toLowerCase();
 	if (
-		!lower.startsWith( "/assets/" ) ||
+		!lower.startsWith( root + "/" ) ||
 		/[\\%?#]/.test( lower ) ||
 		lower.split( "/" ).some( ( part ) => part === "." || part === ".." )
 	) {
@@ -23,7 +23,10 @@ function assertClientPath( value, label ) {
 	}
 }
 
-export function validateAssetPackIndex( index ) {
+// root names the subtree the index serves: "/assets" for the default
+// pack index, "/hd" for the HD set's own index (#2061). The default keeps
+// every existing index under the rule it was admitted with.
+export function validateAssetPackIndex( index, root = "/assets" ) {
 	const groupStats = new Map();
 	const packStats = new Map();
 
@@ -47,9 +50,9 @@ export function validateAssetPackIndex( index ) {
 		} );
 
 		for ( const pack of group.packs ) {
-			assertClientPath( pack.path, `pack path` );
-			if ( !/^\/assets\/packs\/.+\.bin$/i.test( pack.path ) ) {
-				throw new Error( `Asset pack manifest pack ${pack.path} is not a /assets/packs/*.bin identity.` );
+			assertClientPath( pack.path, `pack path`, root );
+			if ( !new RegExp( `^${root}/packs/.+\\.bin$`, "i" ).test( pack.path ) ) {
+				throw new Error( `Asset pack manifest pack ${pack.path} is not a ${root}/packs/*.bin identity.` );
 			}
 			if ( !Number.isSafeInteger( pack.bytes ) || pack.bytes < 12 || pack.bytes > MAX_CLIENT_PACK_BYTES ) {
 				throw new Error(
@@ -70,7 +73,7 @@ export function validateAssetPackIndex( index ) {
 
 	const seenAssets = new Set();
 	for ( const asset of index.assets ) {
-		assertClientPath( asset.path, `asset path` );
+		assertClientPath( asset.path, `asset path`, root );
 		// Case-folded like the client, so two groups can never both claim one path.
 		const key = asset.path.toLowerCase();
 		if ( seenAssets.has( key ) ) {

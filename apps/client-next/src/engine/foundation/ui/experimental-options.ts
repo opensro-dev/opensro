@@ -86,6 +86,14 @@ export interface ExperimentalOptions {
 	// without BC are affected, where RGBA ends the tab; off is the native
 	// texture content.
 	readonly compressedTextures: boolean;
+	// Port-only, not native (#2061): the HD texture set, the asset build's
+	// x2 AI-upscaled world object textures served from their own /hd
+	// subtree behind a separate pack index. Off unless turned on (the
+	// owner's choice, 2026-11-07): off, the asset worker fetches none of
+	// the set, not even its index; on, the index is fetched and the set
+	// downloads with progress, and the retail texture stays the fallback
+	// for every path the set does not hold.
+	readonly hdTextures: boolean;
 	// Port-only, not native: characters and effects share one nearest-first
 	// order under the renderer's CHARACTER_ACTORS (the original keeps every
 	// decoration, 85C020), so a far character gives way to a near effect.
@@ -456,6 +464,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
+		hdTextures: enabled( "hdTextures" ),
 		sharedActorRoom: record.sharedActorRoom !== false,
 		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,

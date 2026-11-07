@@ -65,6 +65,8 @@ const audiences = {
 	"ui-icons": "public",
 	"particle-textures": "public",
 	"texture-variants-astc": "public",
+	"texture-variants-hd-bc7": "public",
+	"texture-variants-hd-astc": "public",
 	"game-models": "public",
 	"mission-minimap": "public",
 	"mission-npc-vat": "public",
