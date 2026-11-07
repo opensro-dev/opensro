@@ -86,7 +86,7 @@ import {
 } from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
-import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MALL_BALANCE_CONTROL, MALL_SILK_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
@@ -587,6 +587,17 @@ purchaseMall
 		purchaseMall( request: MallPurchase, now: number ) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
 			const frame = mall.purchase( request, now );
+			send( frame );
+			return frame;
+		},
+		/*
+================
+inquireMallSilkHistory
+================
+		*/
+		inquireMallSilkHistory( period: number, now: number ) {
+			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const frame = mall.inquireSilkHistory( period, now );
 			send( frame );
 			return frame;
 		},
@@ -1710,6 +1721,11 @@ receive
 				mall.balance( p );
 				return true;
 			}
+			if ( op === MALL_SILK_HISTORY_CONTROL ) {
+				mall.silkHistoryAnswer( p );
+				published = null;
+				return true;
+			}
 			if ( op === 15 ) {
 				const items = mall.projection( p );
 				if ( items !== undefined ) {
@@ -2364,6 +2380,7 @@ state
 		state() {
 			return {
 				itemMall: mall.state(),
+				itemMallSilkHistory: mall.silkHistory(),
 				itemCooldowns,
 				avatarInventory: [ ...avatars.values() ].map( present ),
 				alchemy: alchemy.state(),

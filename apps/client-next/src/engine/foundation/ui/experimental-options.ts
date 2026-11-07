@@ -246,6 +246,12 @@ export interface ExperimentalOptions {
 	// call in FormatWeapon, after 568500). Off unless turned on; off is the
 	// native place.
 	readonly sealUnderHeading: boolean;
+	// Port-only, not native (#2269): the Item Mall's Buying list (native
+	// CIFSilkBuyList), listing recorded silk uses by period. The native
+	// window is never instantiated, its Inquire handler is an empty stub
+	// (0x6CE6F0) and its mall button is born disabled (0x6BC17E). Off
+	// unless turned on; off is the original.
+	readonly silkHistory: boolean;
 }
 
 /*
@@ -451,7 +457,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		questTrackerMarkers: enabled( "questTrackerMarkers" ),
 		sunDropMarker: enabled( "sunDropMarker" ),
 		warpArrivalSound: enabled( "warpArrivalSound" ),
-		sealUnderHeading: enabled( "sealUnderHeading" )
+		sealUnderHeading: enabled( "sealUnderHeading" ),
+		silkHistory: enabled( "silkHistory" )
 	};
 }
 

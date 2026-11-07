@@ -130,7 +130,10 @@ const OFF = Object.freeze( {
 	warpArrivalSound: false,
 	// Off by default (#2496): the seal line under the item name instead of
 	// after the requirement rows (558FF0 at 56B099).
-	sealUnderHeading: false
+	sealUnderHeading: false,
+	// Off by default (#2269): the Item Mall's Buying list; the native
+	// window is inert and its mall button is born disabled.
+	silkHistory: false
 } );
 
 test("touch inspection defaults on and only an explicit false turns it off", () => {

@@ -352,6 +352,14 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-quest-tracker-markers",
 			label: "Quest target markers",
 			description: "Show every active quest's target on M and the minimap."
+		}, {
+			// Here for room (#2269): the window fits seven rows a tab
+			// and Windows and diagnostics holds seven already; the
+			// option, its key and its default are unaffected.
+			key: "silkHistory",
+			id: "experimental-silk-history",
+			label: "Silk charge history",
+			description: "Enable the Item Mall's Buying list: your silk spending by period."
 		} ]
 	},
 	{

@@ -3512,6 +3512,7 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind === "mall-open" ) return inventory.openMall( now );
 			if ( command.kind === "mall-buy" ) return inventory.purchaseMall( command.request, now );
+			if ( command.kind === "mall-silk-inquire" ) return inventory.inquireMallSilkHistory( command.period, now );
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||

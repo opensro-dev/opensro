@@ -14983,12 +14983,13 @@
 						"experimental-pet-click-opens-window",
 						"experimental-pet-pickup-filter",
 						"experimental-quest-tracker-markers",
+						"experimental-silk-history",
 						"experimental-transport-auto-potion",
 						"experimental-v-hides-companions"
 					],
 					"commands": [],
 					"focus": null,
-					"hash": "b5c0dc4dc1f74bfb",
+					"hash": "9dc9f7b9e3260ec1",
 					"panel": "Experimental",
 					"removed": [
 						"experimental-anisotropic-filtering",
