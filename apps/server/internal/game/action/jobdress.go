@@ -532,7 +532,7 @@ func (rt *Runtime) completeJobDressInDivision(dress jobDress, c *enterworld.Char
 			var private, public []wire.Frame
 			rt.deps.UpdateDeferred(c, "most-wanted-dress", func() bool {
 				private, public = rt.mostWantedRefresh(dress.division, c, now)
-				private = append(private, rt.mostWantedStateFrame(c))
+				private = append(private, rt.mostWantedStateFrame(c, now))
 				return false
 			})
 			result.Frames = append(result.Frames, private...)

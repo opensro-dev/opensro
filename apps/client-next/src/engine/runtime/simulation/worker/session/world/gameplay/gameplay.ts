@@ -4020,7 +4020,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( mostWanted.receive( frame ) ) {
+				if ( mostWanted.receive( frame, now ) ) {
 					dirty = true;
 					return true;
 				}
