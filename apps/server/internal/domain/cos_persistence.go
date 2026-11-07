@@ -53,6 +53,59 @@ func CloneCOS(source *CharacterCOS) *CharacterCOS {
 
 /*
 ================
+cloneCOSCompanion
+
+The pet-owner view's companion copy (character_clone.go): the record
+whole but for its deep children, which no reader of the view reads -
+the lanes judge on the record's scalars and training, values and
+fixed arrays the struct copy carries intact (petbond.go rides a door
+copy with both nil for the same reason). What remains aliases
+nothing mutable, so the copy is as detached as CloneCOS's; cloning a
+transport's 177 trade rows into every per-tick owner copy was the
+view's bulk (#2030). A reader that grows a container or rental read
+through the view widens this copy first.
+================
+*/
+func cloneCOSCompanion(source *CharacterCOS) *CharacterCOS {
+	if source == nil {
+		return nil
+	}
+	copy := *source
+	copy.Container = nil
+	copy.Rentals = nil
+	return &copy
+}
+
+/*
+================
+cloneCOSCompanionActive
+
+The view's active companion: cloneCOSCompanion, except the container
+rides as its cargo facts. The one container read through the view is
+the caravan verdict (the combat target lane's cargoGoldValue): it
+weighs each row's codename, stack and type, so the rows ride as
+values with their own deep children (the row's summon and magic
+options) left behind - nothing through the view reads those either,
+and VisitCompanions never walks container rows.
+================
+*/
+func cloneCOSCompanionActive(source *CharacterCOS) *CharacterCOS {
+	clone := cloneCOSCompanion(source)
+	if clone == nil || source.Container == nil {
+		return clone
+	}
+	bag := *source.Container
+	bag.Rows = cloneSlice(source.Container.Rows)
+	for i := range bag.Rows {
+		bag.Rows[i].Summon = nil
+		bag.Rows[i].MagicOptions = nil
+	}
+	clone.Container = &bag
+	return clone
+}
+
+/*
+================
 COSItemState
 
 The server derives the item state from the retained record's alive/summoned bits.
