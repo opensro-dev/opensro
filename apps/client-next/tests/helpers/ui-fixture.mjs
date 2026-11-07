@@ -19,6 +19,26 @@ export const fontAtlas = JSON.parse(
 );
 /*
 ================
+uiPorts
+
+The one place tests build the ports record createUi reads (#2516):
+fixture base URLs and dropped callbacks by default, overridden per test.
+================
+*/
+export function uiPorts( assets, overrides = {} ) {
+	return {
+		assets,
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		...overrides
+	};
+}
+
+/*
+================
 uiFixture
 ================
 */
@@ -38,7 +58,7 @@ export function uiFixture(
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
 	let nextId = 0;
-	const ui = createUi(
+	const ui = createUi( uiPorts(
 		{
 			available: () => 8,
 			take: id => {
@@ -92,7 +112,7 @@ export function uiFixture(
 				return id;
 			},
 			cancel: id => pending.delete( id )
-		},
+		}, {
 		commands,
 		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
 		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
@@ -101,26 +121,19 @@ export function uiFixture(
 		recordProduct
 		================
 		*/
-		s => {
+		publish: s => {
 			products.push( s );
 			scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
 		},
-		( ...args ) => textures.push( args ),
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		kind => sounds.push( kind ),
-		undefined,
-		undefined,
+		texture: ( ...args ) => textures.push( args ),
+		sound: kind => sounds.push( kind ),
 		saveOptions,
 		audioPreference,
 		saveSight,
 		saveBindings,
 		saveVideo,
-		undefined,
-		undefined,
 		extensions
-	);
+	} ) );
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },

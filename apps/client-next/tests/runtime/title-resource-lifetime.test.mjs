@@ -139,7 +139,7 @@ test("hidden title does not admit remaining layouts when the first four finish",
 
 test("world UI frames collect title layouts without rendering the title", t => {
 	const { assets, messages, complete } = fixture( t );
-	const ui = createUi( assets, () => {}, () => {}, () => {}, ORIGIN, ORIGIN );
+	const ui = createUi( { assets, commands: () => {}, publish: () => {}, texture: () => {}, base: ORIGIN, apiBase: ORIGIN } );
 	t.after( () => ui.dispose() );
 	/** @type {import('../../src/engine/contracts/ui.ts').UiView} */
 	const view = {

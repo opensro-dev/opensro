@@ -12,7 +12,7 @@ test('capture ground movement speed against authoritative receipt',{skip:!proces
   await route.fulfill({response,body:source.replace(pattern,m=>m+"if([10,0xb738,0x376f].includes(frame.opcode))console.info('SPEED_COMPARE '+JSON.stringify({now,opcode:frame.opcode,payload:[...frame.payload]}));"),contentType:'application/javascript'});
  });
  await page.route('**/src/engine/runtime/ui/ui.ts',async route=>{
- const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('export function createUi(','function observedUi(')+`\nexport function createUi(...args){const owner=observedUi(...args);return {...owner,step(view,now){globalThis.__speedView=view;return owner.step(view,now);}};}`,contentType:'application/javascript'});
+ const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('export function createUi(','function observedUi(')+`\nexport function createUi(ports){const owner=observedUi(ports);return {...owner,step(view,now){globalThis.__speedView=view;return owner.step(view,now);}};}`,contentType:'application/javascript'});
  });
  await bootPlayableSession(page,process.env.SRO_SPEED_COMPARE_CHARACTER);
  const before=await page.evaluate(()=>{const g=__playableRuntime.gameplay();return {game:g,entity:__speedView.entities.find(e=>e.gid===g.localGid)};});

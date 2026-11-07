@@ -103,19 +103,18 @@ test(
 					worldReady: true,
 					simulationTimeMs: 1000
 				};
-				const ui = createUi(
+				const ui = createUi( {
 					assets,
-					c => commands.push( c ),
-					s => {
+					commands: c => commands.push( c ),
+					publish: s => {
 						scene = s;
 						renderer.setUi( s );
 					},
-					renderer.setUiTexture,
-					location.origin,
-					"http://fixture.invalid",
-					...Array( 10 ).fill( undefined ),
-					() => {}
-				);
+					texture: renderer.setUiTexture,
+					base: location.origin,
+					apiBase: "http://fixture.invalid",
+					saveQuickslots: () => {}
+				} );
 				const platform = createPlatform(
 					canvas,
 					document.querySelector( "output" ),

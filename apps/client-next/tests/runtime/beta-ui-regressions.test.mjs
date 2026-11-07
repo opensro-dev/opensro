@@ -107,8 +107,8 @@ function createFixture( held = [] ) {
 		height: 900,
 		worldReady: true
 	};
-	const ui = createUi(
-		{
+	const ui = createUi( {
+		assets: {
 			available: () => 8,
 			/*
 			================
@@ -143,15 +143,15 @@ function createFixture( held = [] ) {
 				inFlight.delete( id );
 			}
 		},
-		command => commands.push( command ),
+		commands: command => commands.push( command ),
 		// Recorded as drawn: text runs expanded into their glyph quads (text-run.ts).
-		next => {
+		publish: next => {
 			scene = next && { ...next, quads: expandTextRuns( next.quads ) };
 		},
-		() => {},
-		"https://fixture.invalid/",
-		"https://fixture.invalid/"
-	);
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/"
+	} );
 	/*
 	================
 	load
