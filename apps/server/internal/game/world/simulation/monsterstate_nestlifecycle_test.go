@@ -496,3 +496,46 @@ func TestJanganCaveRespawnWindow(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestJanganCaveRespawnSkipsUniqueNests
+
+A unique nest in the cave regions (the shipped rows are the tomb
+guardians, Flame Master and White Snake, authored 1800-3600 seconds)
+keeps its own rule: the authored seconds with only the cave flag on, and
+the beta unique window when SRO_BETA_UNIQUE_RESPAWN is also on, as the
+deployment enables both (#2719).
+================
+*/
+func TestJanganCaveRespawnSkipsUniqueNests(t *testing.T) {
+	uniqueRef := lifecycleRef(1)
+	uniqueRef.MonsterType = 3
+	caveUniqueNest := lifecycleNest(100)
+	caveUniqueNest.SpawnPoint.RegionID = 32774
+	caveUniqueNest.RespawnDelayMinSec = 1800
+	caveUniqueNest.RespawnDelayMaxSec = 3600
+	for _, tc := range []struct {
+		name  string
+		cave  string
+		beta  string
+		minMs uint32
+		maxMs uint32
+	}{
+		{"cave only", "on", "off", 1800_000, 3600_000},
+		{"cave and beta", "on", "on", 45 * 60 * 1000, 90 * 60 * 1000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(EnvJanganCaveRespawn, tc.cave)
+			t.Setenv(EnvBetaUniqueRespawn, tc.beta)
+			w := newLifecycleWorld(t, uniqueRef, caveUniqueNest)
+			// As above, the spawn never materializes; assert the rolled
+			// interval the nest runtime starts with.
+			w.s.StartDivision("division")
+			got := w.nest(0).intervalMs
+			if got < tc.minMs || got > tc.maxMs {
+				t.Fatalf("intervalMs = %d, want in [%d, %d]", got, tc.minMs, tc.maxMs)
+			}
+		})
+	}
+}
