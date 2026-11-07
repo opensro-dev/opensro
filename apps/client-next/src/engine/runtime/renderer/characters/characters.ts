@@ -3242,6 +3242,7 @@ the next full prepare pass, so this may run between frames.
 			return { query, points: input };
 		},
 		completeDeferred: deferred.complete,
+		deliverDeferred: deferred.deliver,
 		/*
 		================
 		setRenderMode

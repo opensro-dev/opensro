@@ -1043,7 +1043,6 @@ export function startRuntime(
 			frameWork.begin( now, visible );
 			renderer.setFrameWork?.( frameWork );
 			characters.frameWork( frameWork );
-			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -1432,7 +1431,6 @@ export function startRuntime(
 				if ( rendered ) {
 					await rendered;
 				}
-				waitMs = visible || admitting ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
@@ -1496,11 +1494,10 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				const cpuMs = performance.now() - cpuStart - waitMs;
+				const cpuMs = performance.now() - cpuStart;
 				sample( cpuHistory, cpuMs );
 				frameWork.recordCpu( cpuMs );
 				frameProbe()?.characterCount( "cpu-ms", cpuMs );
-				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
 				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
