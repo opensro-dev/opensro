@@ -47,6 +47,11 @@ func TestSlowCommitShowsInAConcurrentReadersWait(t *testing.T) {
 	}
 	lockClock := newTestClock()
 	s.mu.clock = lockClock.Now
+	// The commit ledger is a global max: on a loaded box a slow setup
+	// commit leaves maxima the planted door must beat (#2799). Reset
+	// the ledger so the longest-commit assertion is a comparison
+	// against the planted door only, not against the setup commits.
+	s.commits = commitTiming{}
 	inCommit, release := make(chan struct{}), make(chan struct{})
 	var released sync.Once
 	releaseCommit := func() { released.Do(func() { close(release) }) }
