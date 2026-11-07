@@ -138,6 +138,47 @@ func TestBenchmarkFixtureResetRefusesLiveCharacterAndInvalidCoordinates(t *testi
 	}
 }
 
+/*
+================
+TestBenchmarkFixtureResetAcceptsDungeonFrameSpawns
+
+Dungeon regions (the 0x8000 region bit) carry positions in the floor's own
+wide frame - the Qin-Shi Tomb nests sit thousands of units either side of
+zero - so a cave fixture pose is in range; the same coordinates outdoors,
+or a cave pose outside the frame, are still refused.
+================
+*/
+func TestBenchmarkFixtureResetAcceptsDungeonFrameSpawns(t *testing.T) {
+	api, _ := newTestAPI(t)
+	api.benchmarkFixtureControl = true
+	handler := authenticatedHandler(t, api, testAccount)
+	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
+
+	dungeon := benchmarkFixtureRequest("FixtureHero")
+	spawn := dungeon["spawn"].(map[string]any)
+	spawn["regionId"], spawn["x"], spawn["y"], spawn["z"] = 0x8005, 14122.1, 667.43, -174.86
+	recorder, response := postBenchmarkFixtureReset(t, handler, dungeon)
+	if recorder.Code != http.StatusOK || response["outcome"] != "reset" {
+		t.Fatalf("dungeon fixture reset = %d %#v", recorder.Code, response)
+	}
+	if recorder, response = postBenchmarkFixtureReset(t, handler, dungeon); recorder.Code != http.StatusOK || response["outcome"] != "already-reset" {
+		t.Fatalf("repeat dungeon reset = %d %#v, want already-reset", recorder.Code, response)
+	}
+
+	outdoor := benchmarkFixtureRequest("FixtureHero")
+	spawn = outdoor["spawn"].(map[string]any)
+	spawn["x"], spawn["z"] = 14122.1, -174.86
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, outdoor); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("wide-frame outdoor reset = %d, want 400", recorder.Code)
+	}
+
+	spawn = dungeon["spawn"].(map[string]any)
+	spawn["x"] = 32768
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, dungeon); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("out-of-frame dungeon reset = %d, want 400", recorder.Code)
+	}
+}
+
 func TestBenchmarkFixtureResetRequiresSessionWhenEnabled(t *testing.T) {
 	api, _ := newTestAPI(t)
 	api.benchmarkFixtureControl = true
