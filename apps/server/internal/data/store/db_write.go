@@ -121,7 +121,7 @@ func (w *characterRowTx) writeCharacterRecord(division string, c *domain.Charact
 	}
 	key := committedCharacterKey{division: division, id: c.ID}
 	w.written[key] = sha256.Sum256(record)
-	w.copies[key] = domain.CloneCharacter(c)
+	w.copies[key] = domain.CloneCharacterStaged(c, w.store.committedRows[key])
 	delete(w.deleted, key)
 	return nil
 }
