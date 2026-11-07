@@ -37,6 +37,15 @@ const operatorMaxSilkGrant = 1_000_000
 
 var operatorRequestID = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,80}$`)
 
+// operatorClause is a published rule's clause id ("C2", "chat.1"). Every
+// conduct action cites one, so the audit names the rule, not only staff
+// prose (#2671).
+var operatorClause = regexp.MustCompile(`^[A-Za-z0-9.-]{1,16}$`)
+
+// operatorMaxMuteMinutes bounds one chat mute at 30 days
+// (moderation.MaxMuteDuration); longer is an account block.
+const operatorMaxMuteMinutes = 30 * 24 * 60
+
 /*
 ================
 PlayerOperation
@@ -52,6 +61,11 @@ type PlayerOperation struct {
 	Reason    string              `json:"reason"`
 	// Silk is a grant-silk operation's amount.
 	Silk uint32 `json:"silk,omitempty"`
+	// Minutes is a mute-chat operation's length.
+	Minutes uint32 `json:"minutes,omitempty"`
+	// Clause is the rule clause a conduct action (mute-chat, unmute-chat,
+	// kick) cites; required for those, refused on the others.
+	Clause string `json:"clause,omitempty"`
 }
 
 /*
@@ -82,6 +96,12 @@ type PlayerOperations struct {
 	ResetStats func(PlayerOperation) (any, error)
 	// GrantSilk credits silk to the character's account (operator tooling).
 	GrantSilk func(PlayerOperation) (any, error)
+	// MuteChat, UnmuteChat and Kick are the conduct actions (#2671): a
+	// persisted chat mute on the character, its removal, and ending the
+	// character's session the way a logout does.
+	MuteChat   func(PlayerOperation) (any, error)
+	UnmuteChat func(PlayerOperation) (any, error)
+	Kick       func(PlayerOperation) (any, error)
 }
 
 /*
@@ -172,6 +192,15 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid player operation", http.StatusBadRequest)
 		return
 	}
+	conduct := request.Action == "mute-chat" || request.Action == "unmute-chat" || request.Action == "kick"
+	if conduct != (request.Clause != "") || (conduct && !operatorClause.MatchString(request.Clause)) {
+		http.Error(w, "a conduct action needs a rule clause id; other actions take none", http.StatusBadRequest)
+		return
+	}
+	if request.Action != "mute-chat" && request.Minutes != 0 {
+		http.Error(w, "minutes belong to mute-chat only", http.StatusBadRequest)
+		return
+	}
 	operation := endpoint.config.Rescue
 	switch request.Action {
 	case "", "rescue":
@@ -210,6 +239,23 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.ResetStats
+	case "mute-chat":
+		if endpoint.config.MuteChat == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 ||
+			request.Minutes == 0 || request.Minutes > operatorMaxMuteMinutes {
+			http.Error(w, "invalid chat mute", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.MuteChat
+	case "unmute-chat", "kick":
+		hook := endpoint.config.UnmuteChat
+		if request.Action == "kick" {
+			hook = endpoint.config.Kick
+		}
+		if hook == nil || request.Town != 0 || len(request.Items) != 0 || request.Silk != 0 {
+			http.Error(w, "invalid "+request.Action, http.StatusBadRequest)
+			return
+		}
+		operation = hook
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return

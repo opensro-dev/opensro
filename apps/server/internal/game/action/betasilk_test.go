@@ -204,6 +204,15 @@ func (w *fakeSilkWallet) PurchaseMall(_ *domain.Character, cost domain.MallBalan
 
 /*
 ================
+SilkHistory
+================
+*/
+func (w *fakeSilkWallet) SilkHistory(*domain.Character, int, int) ([]domain.SilkHistoryRow, uint32, error) {
+	return nil, 0, nil
+}
+
+/*
+================
 TestBetaSilkStartsAtFirstObservationAndRetriesCredit
 ================
 */

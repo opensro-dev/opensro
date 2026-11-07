@@ -18,6 +18,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -33,13 +34,13 @@ owner's world comes from WorldStore.SnapshotExisting: seeding it
 would read the live record outside the character door, so a tick
 whose owner has no world entry yet abstains with everything else
 that must commit through the record - the bind, a battle, a roar, a
-pickup, a mercenary, the refusals - and advancePet judges it on the
-companion copy exactly as before. The stuck answer stays lazy the
+pickup, a mercenary, a relocation, the refusals - and advancePet
+judges it on the companion copy exactly as before. The stuck answer stays lazy the
 same way: a stuck event raised by the judged step takes the copy
 only to answer it.
 ================
 */
-func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
+func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *petTickFacts, nowMs int64, following *bool, answerStuck *func() []simulation.Frame) ([]simulation.Frame, bool) {
 	// The forced-copy seam and any live battle state judge on the copy.
 	if rt.companionCopy != nil || state.combat != nil || state.roar != nil || state.pickup != nil {
 		return nil, false
@@ -48,7 +49,19 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts pe
 	if !ok {
 		return nil, false
 	}
-	pet := &facts.pet
+	// The pet view is the session's scratch record rebuilt whole from
+	// the door-read facts: only the eight carried values are set, every
+	// other field reads zero, and the abstain boundary above is what
+	// keeps a tick that needs more than these on the copy. The view is
+	// consumed inside this call - the formation step, mirror write
+	// included - and rebuilt on the next judged tick.
+	pet := &state.judgedPet
+	*pet = enterworld.CharacterCOS{
+		GID: facts.petGID, RefObjID: facts.petRefObjID, Codename: facts.petCodename,
+		BroodStage: facts.petBroodStage, Satiety: facts.petSatiety,
+		MercenaryAttributes: facts.petMercenaryAttributes,
+		FollowRunFactor:     facts.petFollowRunFactor, FollowRunSet: facts.petFollowRunSet,
+	}
 	ref, found := refs.CharacterRefByCodename(pet.Codename)
 	if !found || ref == nil || ref.RefObjID != pet.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
 		return nil, false
@@ -115,6 +128,15 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts pe
 	}
 	if nowMs < state.wolf.howlHoldUntil {
 		return state.follower.Stop(nowMs), true
+	}
+	// A follower whose region the owner's live region cannot be walked
+	// to relocates inside the formation step, and the step publishes
+	// the respawn from the pet record (publishPetRelocation: name,
+	// body status, life, level). The facts carry none of those, so the
+	// tick abstains on exactly the gate the step relocates on and the
+	// copy publishes the respawn as before.
+	if !monster.FollowLocationCompatible(state.follower.Position(nowMs).RegionID, ownerWorld.LiveSpawnAt(nowMs).RegionID) {
+		return nil, false
 	}
 	if ref.TidWord>>11 >= 3 && ref.TidWord>>11 <= domain.MercenaryBand {
 		*following = true

@@ -2,6 +2,36 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/window-placement.ts",
+			"functions": [
+				"frame"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [
+				"has",
+				"size"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [
+				"quads"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/frame/frame.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": [
+				"compactWindowDrag",
+				"compactCloseControl"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/input/input.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
@@ -560,6 +590,19 @@
 				"submit",
 				"beginTiming",
 				"prepare"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/bundle-encoder.ts",
+			"functions": [
+				"setPipeline",
+				"setBindGroup",
+				"setVertexBuffer",
+				"setIndexBuffer",
+				"draw",
+				"drawIndexed",
+				"finish"
 			]
 		},
 		{
@@ -1284,7 +1327,8 @@
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
 				"callback:createGameplay:1",
-				"callback:createGameplay:4"
+				"callback:createGameplay:4",
+				"structure"
 			]
 		},
 		{
@@ -1730,6 +1774,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/ui/buff-board.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/transport-auto-potion.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
@@ -1805,6 +1856,13 @@
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/count-job.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/param-job.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy"
@@ -3256,6 +3314,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "mallPreview.glow",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent mall preview owner supplies the committed mannequin's glow holder at the same publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.ready",
 			"function": "publishCharacters",
 			"kind": "callback",
@@ -4186,8 +4251,8 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "2ff181f7f7f5df805b9d70b2737b020211925d28b4952e02df5e39e1443750ea",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the readback ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the readback ordering above is unchanged by it.",
+			"sourceSha256": "e80d515a8b3adf9b3219356d521189b355d21061a5976d85bc88d4a060f218b9",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping. Startup also hands the asset owner the device texture features once (port-only texture variants), outside the frame. The frame also derives the own-mover step at its existing call site (the local mover's next frame, or the published own cast displacement adopted as a fixed segment, #1569); the readback ordering above is unchanged by it. The frame also files terminal asset-failure incidents (#2337) from its existing report block and, on renderer failure, one renderer incident before disposal; both are synchronous sends at existing call sites and do not change the readback ordering above. The own-mover world also carries the worker's relocation generation (a field read from the published gameplay state at the existing moverWorld call site), so a teleport inside the smoothing bound snaps; the readback ordering above is unchanged by it. The same report block now files its runtime-error incidents under cause-named codes (#2559: asset_failed with the retry owner's facts, runtime_exception with a bounded stack, asset_offline for fetch bursts and offline, fatal_asset_failed only for the asset worker's death); these are likewise synchronous sends at the existing call site and do not change the readback ordering above. The frame also suppresses the target selection ring while the followed target is blind-hidden (#2570): a pure read of the published entity and the held V key at the existing setSelectionDecal call site, so the readback ordering above is unchanged by it.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [
@@ -4200,14 +4265,15 @@
 		{
 			"file": "src/engine/runtime/renderer/device/particle-query.ts",
 			"function": "query",
-			"sourceSha256": "1a237d2b2c1c941499abc1a86aac280515b797a1237d57b90a9fca736ca984eb",
-			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
+			"sourceSha256": "5f5a585a19404f5e40d03e73b53ffff290eec615db97f9a1b5291e214309a45d",
+			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping and ends the wait quietly - one all-invisible answer - so the retained frame completes instead of wedging on the cancelled readback (#2560).",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,
 			"tests": [
 				"tests/browser/particle-query.test.mjs",
 				"tests/browser/deferred-particles.test.mjs",
-				"tests/runtime/deferred-particles.test.mjs"
+				"tests/runtime/deferred-particles.test.mjs",
+				"tests/runtime/particle-query-dispose.test.mjs"
 			]
 		}
 	]

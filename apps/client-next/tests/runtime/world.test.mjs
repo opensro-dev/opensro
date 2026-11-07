@@ -38,6 +38,7 @@ const { createEntities } = await load( "src/engine/runtime/simulation/worker/ses
 const { createWorldSession } = await load( "src/engine/runtime/simulation/worker/session/world/world.ts" );
 const { outOfMemoryFailure } = await load( "src/engine/runtime/simulation/worker/network/network.ts" );
 const { createSessionHttp } = await load( "src/engine/runtime/simulation/worker/session/http/http.ts" );
+const { equipmentBand } = await load( "src/engine/foundation/gameplay/peer-appearance.ts" );
 const { createPresentation } = await load( "src/engine/runtime/presentation/presentation.ts" );
 const { createSimulationInput } = await load( "src/engine/runtime/simulation/worker/input/input.ts" );
 
@@ -1424,6 +1425,162 @@ for ( const row of peerFixture.scenarios ) {
 		assert.equal( owner.count(), 0 );
 	});
 }
+test("player churn keeps the world registries flat (#2299)", () => {
+	const row = peerFixture.scenarios[0];
+	const owner = createEntities();
+	owner.bootstrap( {
+		...bootstrap,
+		refObjSnapshot: [ { refObjId: row.modelRefObjId, kind: "player" } ],
+		refItemSnapshot: row.equipment ?? []
+	} );
+	flush( owner );
+	const POPULATION = 60, CYCLES = 20000;
+	/*
+	================
+	playerSpawnFrame
+
+	A peer spawn (0x30D7) encoded field for field the way
+	decodePeerAppearance reads it, wearing the fixture's first items so
+	every arrival carries real equipment state.
+	================
+	*/
+	function playerSpawnFrame( gid ) {
+		const bytes = [];
+		const u8 = ( n ) => bytes.push( n & 255 );
+		const u16 = ( n ) => {
+			const b = Buffer.alloc( 2 );
+			b.writeUInt16LE( n );
+			bytes.push( ...b );
+		};
+		const u32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeUInt32LE( n >>> 0 );
+			bytes.push( ...b );
+		};
+		const f32 = ( n ) => {
+			const b = Buffer.alloc( 4 );
+			b.writeFloatLE( n );
+			bytes.push( ...b );
+		};
+		const str = ( s ) => {
+			u16( s.length );
+			for ( const c of s ) bytes.push( c.charCodeAt( 0 ) );
+		};
+		u32( row.modelRefObjId );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		const worn = (row.equipment ?? []).slice( 0, 3 );
+		u8( worn.length );
+		for ( const item of worn ) {
+			u32( item.refObjId );
+			if ( equipmentBand( item.typeFlags ) ) u8( 1 );
+		}
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u32( gid );
+		u16( 25256 );
+		f32( 10 );
+		f32( 20 );
+		f32( 1 );
+		u16( 0 );
+		u8( 0 );
+		u8( 1 );
+		u8( 0 );
+		u16( 0 );
+		u8( 1 );
+		u8( 0 );
+		u8( 0 );
+		f32( 5 );
+		f32( 16 );
+		f32( 1 );
+		u8( 0 );
+		str( "P" + gid );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		str( "" );
+		u32( 0 );
+		str( "" );
+		u32( 0 );
+		u32( 0 );
+		u32( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		u8( 0 );
+		return { opcode: 0x30d7, payload: Uint8Array.from( bytes ) };
+	}
+	/*
+	================
+	gidFrame
+
+	A one-gid frame: a despawn (0x36AB) or a speed update (0x376F), the
+	two packets a busy area applies to other players all session long.
+	================
+	*/
+	function gidFrame( opcode, gid ) {
+		const payload = new Uint8Array( opcode === 0x376f ? 12 : 4 ),
+			v = new DataView( payload.buffer );
+		v.setUint32( 0, gid, true );
+		if ( opcode === 0x376f ) {
+			v.setFloat32( 4, 6.5, true );
+			v.setFloat32( 8, 17.5, true );
+		}
+		return { opcode, payload };
+	}
+	let nextGid = 1000, firstRetired = 0;
+	const alive = [];
+	/*
+	================
+	spawnOne / retireOne
+
+	One arrival and one departure, so the visible population holds at
+	POPULATION while identities churn under it.
+	================
+	*/
+	function spawnOne() {
+		const gid = nextGid++;
+		owner.receive( playerSpawnFrame( gid ) );
+		alive.push( gid );
+	}
+	function retireOne() {
+		const gid = alive.shift();
+		if ( !firstRetired ) firstRetired = gid;
+		owner.receive( gidFrame( 0x36ab, gid ) );
+	}
+	for ( let i = 0; i < POPULATION; i++ ) spawnOne();
+	flush( owner );
+	assert.equal( owner.count(), POPULATION );
+	// Retention is judged on the registries themselves: every structure
+	// that can hold a player past its despawn roots in the entity table
+	// or the journal, and both are observable here. (A heap reading
+	// cannot separate retention from uncollected churn garbage in this
+	// harness; the GC-forced probe behind this test read a flat
+	// 17.6 MB across 40,000 of these cycles.)
+	for ( let cycle = 0; cycle < CYCLES; cycle++ ) {
+		retireOne();
+		spawnOne();
+		owner.receive( gidFrame( 0x376f, alive[cycle % POPULATION] ) );
+		if ( cycle % 50 === 49 ) flush( owner );
+		if ( cycle % 5000 === 4999 ) assert.equal( owner.count(), POPULATION );
+	}
+	flush( owner );
+	assert.equal( owner.count(), POPULATION, "population holds while identities churn" );
+	assert.equal( owner.read( firstRetired ), undefined, "a retired player leaves no entity behind" );
+	while ( alive.length ) retireOne();
+	flush( owner );
+	assert.equal( owner.count(), 0, "every registry entry leaves with its player" );
+	assert.equal( owner.take(), null, "the journal holds nothing back after the last departure" );
+	owner.dispose();
+});
+
 test("retail ordered equipment replacement and clear-by-slot accept zero and absent references", () => {
 	const row = peerFixture.scenarios[1], owner = createEntities();
 	owner.bootstrap( {
@@ -2301,6 +2458,57 @@ test("production core LIFE stops a nonlocal monster and rejects late advisory tr
 	core.receive( { opcode: 0xb738, payload: move }, 1002 );
 	core.step( 1018 );
 	assert.ok( flush( core ).events.some( e => e.kind === "state" && e.entity.gid === gid && e.entity.moving ) );
+	core.dispose();
+});
+
+test("a fatal deferred tick labels the mover, and the LIFE frame behind it kills and stops it in the same commit", async () => {
+	const { createWorldCore } = await load( "src/engine/runtime/simulation/worker/session/world/core.ts" );
+	const core = createWorldCore( () => {} );
+	core.bootstrap( bootstrap );
+	flush( core );
+	for ( const row of rows ) core.receive( row, 0 );
+	flush( core );
+	const gid = fixture.expect.gid, move = Buffer.alloc( 14 );
+	move.writeUInt32LE( gid );
+	move[4] = 1;
+	move.writeUInt16LE( 25256, 5 );
+	move.writeInt16LE( 1000, 7 );
+	move.writeInt16LE( 1000, 11 );
+	core.receive( { opcode: 0xb738, payload: move }, 1 );
+	core.step( 16 );
+	assert.ok( flush( core ).events.some( e => e.kind === "state" && e.entity.gid === gid && e.entity.moving ) );
+	// The server's fatal-share broadcast (server action/linkeddamage.go):
+	// the deferred tick with its death byte first, the life frames behind
+	// it. Native enters the death state and stops the mover inside the
+	// tick handler (client 0x775790); here the tick only labels, and the
+	// LIFE frame in the same broadcast owns the death and the stop, so
+	// both land at the same presented instant.
+	const tick = Buffer.alloc( 11 );
+	tick[0] = 1;
+	tick.writeUInt32LE( 9001, 1 );
+	tick[5] = 0x80;
+	tick.writeUInt32LE( gid, 6 );
+	tick[10] = 1;
+	const tickFrame = Buffer.concat( [ tick, Buffer.from( [ 25, 0, 0 ] ) ] );
+	core.receive( { opcode: 0xb3c6, payload: tickFrame }, 20 );
+	core.step( 24 );
+	const labelled = flush( core );
+	assert.ok(
+		labelled.events.some( e =>
+			e.kind === "gameplay" && e.state.environmentalDamage?.some( d => d.gid === gid && d.damage === 25 )
+		),
+		"the fatal tick published its damage label"
+	);
+	const alive = labelled.events.filter( e => e.kind === "state" && e.entity.gid === gid ).at( -1 )?.entity;
+	assert.equal( alive?.moving, true, "the tick alone stopped the mover" );
+	assert.notEqual( alive?.appearanceState[0], 2, "the tick alone killed the mover" );
+	const life = Buffer.alloc( 6 );
+	life.writeUInt32LE( gid );
+	life[5] = 2;
+	core.receive( { opcode: 0x3122, payload: life }, 24 );
+	const dead = flush( core ).events.find( e => e.kind === "state" && e.entity.gid === gid ).entity;
+	assert.equal( dead.appearanceState[0], 2 );
+	assert.equal( dead.moving, false );
 	core.dispose();
 });
 

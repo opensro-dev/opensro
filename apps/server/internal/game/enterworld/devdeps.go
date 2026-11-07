@@ -266,16 +266,17 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 	}
 
 	deps := &Deps{
-		Roster:            roster,
-		Characters:        source,
-		Items:             items,
-		Levels:            levels,
-		Skills:            skills,
-		MagicOptions:      magicOptions,
-		SetGroups:         textdata.SetGroups,
-		EquipItemsEnabled: paths.EquipItemsEnabled,
-		NpcSpawns:         npcSpawns,
-		ResolveDivisionID: DevResolveDivisionIDFromCatalog(source),
+		Roster:              roster,
+		Characters:          source,
+		Items:               items,
+		SiegeStructUpgrades: siegeStructureUpgradeRows(textdataDir, items),
+		Levels:              levels,
+		Skills:              skills,
+		MagicOptions:        magicOptions,
+		SetGroups:           textdata.SetGroups,
+		EquipItemsEnabled:   paths.EquipItemsEnabled,
+		NpcSpawns:           npcSpawns,
+		ResolveDivisionID:   DevResolveDivisionIDFromCatalog(source),
 		SystemMessages: func(character *Character) interface{} {
 			return BuildSystemMessages(chatConfig, character)
 		},

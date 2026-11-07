@@ -125,8 +125,11 @@ type Runtime struct {
 	returnGeneration atomic.Uint64
 	// surpriseFatalCount counts strikes that killed under a plan that
 	// could not kill: the roster gate's invariant made audible (#2030).
-	surpriseFatalCount  atomic.Uint64
-	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	surpriseFatalCount atomic.Uint64
+	returnCasts        sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
+	// arrivalLane holds the due return arrivals the tick handed off
+	// for the return lane to complete (returnscroll.go).
+	arrivalLane         returnArrivalLane
 	teleportArrivals    sync.Map // simulation.WorldKey -> struct{}: arrivals awaiting game-ready (teleportprotection.go)
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
@@ -524,6 +527,11 @@ type Runtime struct {
 	// KillStatsFlush receives the drained rollup (the economy history
 	// in the cmd wiring); nil keeps the rows in memory.
 	KillStatsFlush func(rows []KillStatRow) error
+	// OnlineSessions reads the session views of the characters entered
+	// in the world at the accrual instant (killstats.go, #2479): online
+	// time counts them, never the division roster of everyone who
+	// exists. Installed by the cmd wiring; nil accrues nobody.
+	OnlineSessions func() []simulation.SessionView
 	killStats      killStatTracker
 	// tradeOrigins is each trade good's home town, from the shops.
 	tradeOrigins map[uint32]tradeTown
@@ -674,6 +682,19 @@ type Runtime struct {
 		expDelta, skillExpDelta int64,
 		sourceGid uint32,
 	) ([]wire.Frame, bool)
+
+	// TrainingCampKill is the Academy cumulated-buff kill hook (#2270). The
+	// group reward loop calls it for each member's share before the grant:
+	// it accumulates the member's saved buff (or drains a received row for
+	// the bonus it returns, folded into the grant) and returns the private
+	// academy frames for that member's own session. Nil leaves
+	// cumulated-buff earning off (a unit runtime carries no camp door).
+	TrainingCampKill func(
+		divisionID string,
+		character *enterworld.Character,
+		exp, skillExp, monsterBaseExp int64,
+		nowMs int64,
+	) (bonusExp, bonusSkillExp int64, frames []wire.Frame)
 
 	// RefundExperience is the stat authority's door-free refund of EXP lost
 	// at death (a resurrection's share). Unlike UpdateExperience it is not a

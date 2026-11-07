@@ -39,13 +39,26 @@ func (s *Store) GrantBetaSilkStarter(accountID string, starter uint32) (bool, er
 	if err := s.flushDeferredLocked(); err != nil {
 		return false, err
 	}
-	result, err := s.db.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, 0, 0)
+	tx, err := s.beginTxLocked()
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, 0, 0)
 ON CONFLICT(account_id) DO NOTHING`, accountID, starter)
 	if err != nil {
 		return false, err
 	}
 	added, err := result.RowsAffected()
-	return added == 1, err
+	if err != nil || added != 1 {
+		return added == 1, err
+	}
+	// The starter silk is a charge like any other credit (silkhistory.go):
+	// it lands in the history with the wallet row that creates it.
+	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: starter}); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 /*
@@ -77,10 +90,16 @@ func (s *Store) CreditBetaSilk(accountID string, amount, bankCap uint32) (domain
 	if balance.Silk >= bankCap || amount == 0 {
 		return balance, false, nil
 	}
+	before := balance.Silk
 	balance.Silk = uint32(min(uint64(balance.Silk)+uint64(amount), uint64(bankCap)))
 	_, err = tx.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, ?, ?)
 ON CONFLICT(account_id) DO UPDATE SET silk = excluded.silk`, accountID, balance.Silk, balance.GiftSilk, balance.Points)
 	if err != nil {
+		return domain.MallBalance{}, false, err
+	}
+	// Only what actually landed is a charge (silkhistory.go): the cap can
+	// trim the credit below the amount asked for.
+	if err := insertSilkHistoryTx(tx, accountID, s.now().UnixMilli(), silkHistoryCharge, domain.MallBalance{Silk: balance.Silk - before}); err != nil {
 		return domain.MallBalance{}, false, err
 	}
 	return balance, true, tx.Commit()

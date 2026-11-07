@@ -90,7 +90,6 @@ apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
-apps/client-next/src/engine/foundation/rendering/dungeon-water.ts
 apps/client-next/src/engine/foundation/rendering/flares.ts
 apps/client-next/src/engine/foundation/rendering/geometry-vertices.ts
 apps/client-next/src/engine/foundation/rendering/material-timeline.ts
@@ -153,7 +152,6 @@ apps/client-next/src/engine/runtime/frontend/dialog/dialog.ts
 apps/client-next/src/engine/runtime/frontend/flow/flow.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
-apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/session/world/gameplay/feedback/feedback.ts
 apps/client-next/src/engine/runtime/ui/hud/messages.ts

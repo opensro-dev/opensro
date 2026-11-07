@@ -447,10 +447,21 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			exp, sexp = paramJobRewardBonus(a.character, exp, sexp, now)
 			// Port-only, not native (thiefparty.go): the member's party's thieves.
 			exp = thiefPartyExp(exp, rt.thiefPartyPercent(division, a.party, settings))
+			// Academy cumulated buff (#2270): the member accumulates (or
+			// drains a received row for the returned bonus) on the native
+			// per-member share, before the grant lands.
+			var buffFrames []wire.Frame
+			if rt.TrainingCampKill != nil && (exp != 0 || sexp != 0) {
+				var bonusExp, bonusSkillExp int64
+				bonusExp, bonusSkillExp, buffFrames = rt.TrainingCampKill(division, a.character, exp, sexp, int64(impact.Instance.Ref.ExpToGive), now)
+				exp += bonusExp
+				sexp += bonusSkillExp
+			}
 			var frames []wire.Frame
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
 			}
+			frames = append(frames, buffFrames...)
 			// Port-only, not native (killstats.go): the award counts in
 			// the recipient's band whether or not a sink is wired.
 			rt.countKillStatAward(a.character, exp, sexp, now)

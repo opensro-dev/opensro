@@ -27,12 +27,14 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/moderation"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/tunables"
 	"opensro.online/server/internal/game/world/alexandria"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/connjournal"
 	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
@@ -69,10 +71,15 @@ writer, releases the lease, and closes durable authority last.
 
 type gameWorldApplication struct {
 	history *history.Journal
+	// connJournal is the connection census (port-only, #2716); nil off.
+	connJournal *connjournal.Journal
 	// economy is the staff economy view's aggregates (port-only); nil off.
 	economy *economy.Service
 	// sealBoard is the weekly seal-drop counter (port-only); nil off.
 	sealBoard *sealboard.Service
+	// mutes is the staff chat mute book (#2671): opened before admission,
+	// reaped on a timer.
+	mutes *moderation.Book
 	// certificateWatch is the served WebTransport pair's staff alert
 	// (ops only, #1447); it reports nothing outside the public posture.
 	certificateWatch *transport.CertificateWatch
@@ -90,8 +97,12 @@ type gameWorldApplication struct {
 	controlErrors   <-chan error
 	reporter        *shard.Reporter
 	ticker          *simulation.Ticker
-	readiness       *readiness.Gate
-	leaseOwned      bool
+	// returnArrivals is the action runtime's return lane
+	// (RunReturnArrivals): it completes the return-scroll arrivals
+	// the tick hands off, beside the ticker in Run.
+	returnArrivals func(context.Context)
+	readiness      *readiness.Gate
+	leaseOwned     bool
 	// population and shardID let Run hold admission until the boot fill.
 	population *simulation.MonsterState
 	shardID    string
@@ -259,6 +270,10 @@ func newGameWorldApplication(
 	}
 	application.history = journal
 	ts.Hub.History = historyObserver{journal}
+	// Port-only, not native (SRO_CONNECTION_JOURNAL): wiring_census.go.
+	if err := installConnectionJournal(application, ts, journal, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	log.AddHook(journal)
 	// Port-only: the staff console's read of every tunable and SRO_ flag.
 	settingsHandler, err := settingsapi.Handler(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"),
@@ -318,11 +333,12 @@ func newGameWorldApplication(
 	// Built after gameplay construction: the static item rows name the
 	// alchemy and Magic Pop catalogues it configures.
 	references, err := enterworld.NewBrowserReferences(enterworld.BrowserReferenceSources{
-		Skills:       gameplay.deps.Skills,
-		ItemCommands: authority.textdata.Items,
-		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
-		Monsters:     enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
-		HuntingGuide: gameplay.deps.MonsterState,
+		Skills:              gameplay.deps.Skills,
+		ItemCommands:        authority.textdata.Items,
+		StaticItems:         enterworld.StaticRefItemRows(gameplay.deps),
+		Monsters:            enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
+		FortressUpgradeRefs: gameplay.items.FortressUpgradeReferences(),
+		HuntingGuide:        gameplay.deps.MonsterState,
 		// Empty unless SRO_REVERSE_RETURN_MAP is on (port-only, not native).
 		ReverseMapPoints: gameplay.items.ReverseReturnMapPoints(),
 	})
@@ -369,6 +385,7 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("peer item references: %w", err)
 	}
 	application.ticker = gameplay.newMissionTicker(peerReferences)
+	application.returnArrivals = gameplay.items.RunReturnArrivals
 	application.ticker.Commit = tickCommit(authority.store)
 	configureReadiness(ts, authority.store, application.readiness, application.ticker)
 	gameplay.installFollowFixture(authority.agentAPI, application.ticker)
@@ -380,6 +397,13 @@ func newGameWorldApplication(
 	// one history event per committed grant.
 	gameplay.items.SilkWallet = authority.store
 	gameplay.items.RecordSilkGrant = func(grant action.SilkGrant) { journal.Record(silkGrantEvent(grant)) }
+	// The mute book opens before admission: a muted character's first
+	// bind after a restart must already find its record (#2671).
+	application.mutes, err = openMuteBook(ts.Hub, ownedShard.ID)
+	if err != nil {
+		return nil, err
+	}
+	gameplay.mutes = application.mutes
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
@@ -547,6 +571,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 		application.ticker.Run(groupContext)
 		return nil
 	})
+	if application.returnArrivals != nil {
+		group.Go(func() error {
+			application.returnArrivals(groupContext)
+			return nil
+		})
+	}
 	if application.economy != nil {
 		group.Go(func() error {
 			application.economy.Run(groupContext)
@@ -556,6 +586,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.sealBoard != nil {
 		group.Go(func() error {
 			application.sealBoard.Run(groupContext)
+			return nil
+		})
+	}
+	if application.mutes != nil {
+		group.Go(func() error {
+			runMuteReaper(groupContext, application.mutes)
 			return nil
 		})
 	}
@@ -623,6 +659,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	log.Info("shutdown: complete")
 	if application.history != nil {
 		drainErr = errors.Join(drainErr, application.history.Close())
+	}
+	if application.connJournal != nil {
+		drainErr = errors.Join(drainErr, application.connJournal.Close())
 	}
 	// The tick has stopped, so the rollup is final: write it before the
 	// economy history closes (#1639).

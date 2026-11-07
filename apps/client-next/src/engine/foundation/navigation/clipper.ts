@@ -99,6 +99,7 @@ export function createNavigation() {
 	let objects: readonly NavPlacement[] = [], origin = 0, complete = false;
 	let blockKey = "", blockValue: number | undefined;
 	const floors = new Map<string, number | undefined>();
+	const rooms = new Map<string, number | undefined>();
 	const eventHandlers = new Map<string, Readonly<{ enter: number; exit: number; }>>();
 	const regions = new Map<number, {
 		blocked: Uint8Array;
@@ -405,6 +406,29 @@ export function createNavigation() {
 		},
 		/*
 		================
+		room
+
+		The DOF block's room index (CRTDunBlock_GetRoomIndex ACFB60,
+		block field +0x12C), the index CObj_GetDungeonRoomName (865690)
+		feeds the dungeon's room-name vector. 0xFFFFFFFF names no room.
+		================
+		*/
+		room( pose: Pose | null, owner?: NavOwner ) {
+			if ( !pose || !featuresAt( pose.regionId ).rooms || pose.regionId !== origin || !complete ) {
+				return undefined;
+			}
+			const key = [ revision, pose.regionId, pose.x, pose.y, pose.z, owner?.placement, owner?.cell ].join( ":" );
+			if ( rooms.has( key ) ) return rooms.get( key );
+			const point = [ pose.x, pose.y, pose.z ],
+				resolved = owner ?? dungeonOwnerPath( objects, point, point ).owner;
+			const room = resolved ? objects[resolved.placement]?.room : undefined,
+				value = room === 0xffffffff ? undefined : room;
+			if ( rooms.size >= 4096 ) rooms.clear();
+			rooms.set( key, value );
+			return value;
+		},
+		/*
+		================
 		registerEvent
 
 		Dormant natively, kept for surface parity (#1498): the v1.150
@@ -444,6 +468,7 @@ export function createNavigation() {
 		*/
 		install( regionId: number, value: unknown ) {
 			floors.clear();
+			rooms.clear();
 			blockKey = "";
 			blockValue = undefined;
 			if (
@@ -997,6 +1022,7 @@ export function createNavigation() {
 		*/
 		clear() {
 			floors.clear();
+			rooms.clear();
 			index = undefined;
 			revision++;
 			blockKey = "";
@@ -1020,5 +1046,5 @@ stay with the instance's owner.
 */
 export type NavigationView = Pick<
 	ReturnType<typeof createNavigation>,
-	"available" | "block" | "clip" | "floor" | "pick" | "surface"
+	"available" | "block" | "clip" | "floor" | "pick" | "room" | "surface"
 >;

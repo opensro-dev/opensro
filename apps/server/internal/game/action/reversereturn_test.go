@@ -201,6 +201,7 @@ func TestReverseReturnTakesThePlayerToWhereItDied(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("missing native reentry: %+v", sent)
 	}
@@ -346,6 +347,7 @@ func TestReverseScrollFromTheBagTakesThePlayerToWhereItDied(t *testing.T) {
 	rt.PushCharacterFrames = func(_, _ string, f []wire.Frame) { sent = append(sent, f...) }
 	clock.Advance(time.Second)
 	rt.TickHook()(clock.NowMs())
+	rt.processReturnArrivals()
 	if len(sent) == 0 || sent[0].Opcode != enterworld.OpcodeResetClient {
 		t.Fatalf("missing native reentry: %+v", sent)
 	}

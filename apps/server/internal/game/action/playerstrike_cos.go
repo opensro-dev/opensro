@@ -50,9 +50,13 @@ The native attack-target validation for a COS target, in the attackable check's 
  1. a dead, hidden (modes 6..7) or pickup-pet (+0x43C) COS refuses with 0x3006;
  2. an attacker in body mode 2 refuses with 0x3020;
  3. a target COS in body mode 2..4 refuses with 0x3020;
- 4. an owner in body mode 2..4 or on the caster's
-    free-battle team refuses with 0x3020, then the target becomes the owner
-    and the whole PvP chain runs on it (playerAttackRefusal). Zero admits.
+ 4. an owner in body mode 2..4 refuses with 0x3020, then the target becomes
+    the owner and the whole PvP chain runs on it (playerAttackRefusal).
+    There is no free-battle team refusal here: natively the team refusal
+    gates a companion attacker (the through-owner validation the pet
+    lanes keep) and a player victim, so a direct player strike on a
+    team-mate's companion reaches the PvP chain and books as a player
+    kill. Zero admits.
 
 ================
 */
@@ -83,9 +87,6 @@ func (rt *Runtime) cosTargetRefusalWith(division string, caster *enterworld.Char
 	owner := target.snapshot
 	if owner.NativeBodyStatus >= mercenaryBodyProtectedFirst && owner.NativeBodyStatus <= mercenaryBodyProtectedLast {
 		return 0x3020
-	}
-	if code := rt.companionTeamRefusal(caster, owner); code != 0 {
-		return code
 	}
 	return rt.playerAttackRefusal(division, caster, owner, now, flags)
 }
@@ -180,6 +181,7 @@ func (rt *Runtime) planPlayerCOSHitAt(st offensiveStage, target combatTarget, ca
 	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: target.at, block: block, displaceAt: -1,
 		winnerName: snapshot.Name,
 		context:    abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+	_, hit.winnerCape = rt.playerRelationEquipment(snapshot)
 	remainingHP := pet.CurrentHP
 	actor := criticalActor{division: division, character: snapshot.Name}
 	for range skill.Attack.ImpactCount {

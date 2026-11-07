@@ -704,7 +704,12 @@ export function createWorldMapHud( options: MapHudOptions ) {
 					mapCenter = null;
 				}
 				const page = worldMapPages( mapLayout ).find( row => row.id === mapPage ),
-					caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
+					// 576949: a town page captions as UIIT_PAG_LOCALMAP, the three
+					// wide chars at 0xBD959C (space dash space), then the town's
+					// own string; mode 0 keeps UIIT_PAG_WORLDMAP (5768EC).
+					caption = (page ?
+						hudCopy( "UIIT_PAG_LOCALMAP" ) + " - " + hudCopy( "UIIT_STT_" + page.name ) :
+						hudCopy( "UIIT_PAG_WORLDMAP" )) || "World Map";
 				windowBox( caption, mx, my, mw, mh );
 				const inner = mapClip;
 				// The map surface is CIFWorldMap itself, not a CIFButton: pressing or

@@ -77,6 +77,9 @@ var unlistedSettings = map[string]string{
 	// so there is no running rule for the page to state.
 	"SRO_CAP110_ITEMS":  "degree-11 equipment build input, consumed when the server data is built",
 	"SRO_CAP110_SKILLS": "degree-11 skill build input, consumed when the server data is built",
+	// Cosmetic item rows the variant build imports; the GameWorld reads no
+	// such switch, the items simply exist in the built data.
+	"SRO_MALL_AVATARS": "mall avatar build input, consumed when the server data is built",
 	// Staff telemetry (#1639): name-free kill and EXP rates for the
 	// staff console; players never meet it.
 	action.EnvKillStats: "staff kill and EXP rate telemetry, not a rule players meet",
@@ -243,8 +246,8 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "The original Halloween Day event, rebuilt for its seasonal window."},
 			{Flag: progression.EnvHalloweenHelmetSeal, On: progression.HalloweenHelmetSealFromEnv().Enabled(),
 				Native: "The event helmets trade like any other item.",
-				Now:    "The eight event helmets cannot be traded, stalled, stored, dropped or sold: the helmet stays with the character that earned it.",
-				Why:    "A helmet the event paid was never meant to reach a market."},
+				Now:    "The eight event helmets cannot be traded, stalled, stored, given to a pet or dropped: they stay with the character that earned them. A helmet may still be sold to an NPC merchant, which destroys it; the sale never puts it on the buyback bench, so no other player can take it.",
+				Why:    "A helmet the event paid was never meant to reach another player."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",

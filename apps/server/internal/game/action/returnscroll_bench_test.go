@@ -3,10 +3,10 @@
 
 returnscroll_bench_test.go - what one return-scroll tick costs in a wave
 
-advanceReturnScrolls completes at most maxReturnScrollCompletionsPerTick
-arrivals per tick under the tick publication gate. The live hook still
-spikes past 100 ms (#2143); this bench reproduces the wave that produces
-those ticks: many casts due at once, drained two per tick.
+advanceReturnScrolls hands the due wave to the return lane and runs
+no arrival itself (#2143); this bench reproduces the wave that used
+to produce 100 ms ticks: many casts due at once. The tick bench
+times the hand-off, the lane bench times the work that moved.
 
 ===========================================================================
 */
@@ -90,14 +90,16 @@ func (burst *returnBurst) seed() {
 ================
 BenchmarkAdvanceReturnScrollsBurst
 
-One advanceReturnScrolls call with a full wave due: the two completions
-the cap allows, plus the due-scan and sort of the whole wave.
+One advanceReturnScrolls call with a full wave due: the due scan,
+the sort and the hand-off to the return lane. The drain between
+iterations runs untimed, so every timed call sees the same wave.
 ================
 */
 func BenchmarkAdvanceReturnScrollsBurst(b *testing.B) {
 	burst := newReturnBurst(b, 16)
 	burst.seed()
 	burst.rt.advanceReturnScrolls(burst.now)
+	burst.rt.processReturnArrivals()
 	if burst.done == 0 {
 		b.Fatal("fixture completed no return scroll")
 	}
@@ -106,5 +108,36 @@ func BenchmarkAdvanceReturnScrollsBurst(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		burst.seed()
 		burst.rt.advanceReturnScrolls(burst.now)
+		b.StopTimer()
+		burst.rt.processReturnArrivals()
+		b.StartTimer()
+	}
+}
+
+/*
+================
+BenchmarkReturnArrivalLaneBurst
+
+One return-lane drain of a full due wave: the arrival work the tick
+used to run inline, now on the lane. The hand-off between
+iterations runs untimed.
+================
+*/
+func BenchmarkReturnArrivalLaneBurst(b *testing.B) {
+	burst := newReturnBurst(b, 16)
+	burst.seed()
+	burst.rt.advanceReturnScrolls(burst.now)
+	burst.rt.processReturnArrivals()
+	if burst.done == 0 {
+		b.Fatal("fixture completed no return scroll")
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		burst.seed()
+		burst.rt.advanceReturnScrolls(burst.now)
+		b.StartTimer()
+		burst.rt.processReturnArrivals()
 	}
 }

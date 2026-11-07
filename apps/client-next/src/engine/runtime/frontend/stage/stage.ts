@@ -25,6 +25,9 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 	const preload = createStagePreload( assets, base );
 	let manifest: StageManifest | null = null,
 		error: string | null = null,
+		// The thrown value behind error, for the incident report's
+		// stack (#2559); error keeps its text for the loading screen.
+		errorCause: unknown = null,
 		worldRequested = false,
 		admitted = false,
 		disposed = false,
@@ -99,6 +102,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		admitted = false;
 		settleAsked = false;
 		error = null;
+		errorCause = null;
 	}
 	return {
 		/*
@@ -185,6 +189,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 				}
 			} catch ( e ) {
 				error = String( e );
+				errorCause = e;
 				for ( const id of jobs.keys() ) assets.cancel( id );
 				jobs.clear();
 				renderer.cancelWorldUpdate();
@@ -226,6 +231,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		ready,
 		manifest: () => manifest,
 		error: () => error,
+		cause: () => errorCause,
 		/*
 		================
 		clear

@@ -95,7 +95,7 @@ newCombatTestRuntime
 ================
 */
 func newCombatTestRuntime(
-	t *testing.T,
+	t testing.TB,
 	monsterHP uint32,
 ) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	return newCombatTestRuntimeAtLevel(t, monsterHP, 1)
@@ -106,7 +106,7 @@ func newCombatTestRuntime(
 newCombatTestRuntimeAtLevel
 ================
 */
-func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+func newCombatTestRuntimeAtLevel(t testing.TB, monsterHP uint32, level uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	return newCombatTestRuntimeMonster(t, monsterHP, level, 0)
 }
 
@@ -119,7 +119,7 @@ thief bandit, 3 a hunter bandit (the jobmonster.go type words). The
 bandit stands where the ordinary fixture monster stands.
 ================
 */
-func newCombatTestRuntimeBandit(t *testing.T, monsterHP uint32, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+func newCombatTestRuntimeBandit(t testing.TB, monsterHP uint32, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	return newCombatTestRuntimeMonster(t, monsterHP, 1, typeID4)
 }
 
@@ -128,7 +128,7 @@ func newCombatTestRuntimeBandit(t *testing.T, monsterHP uint32, typeID4 uint8) (
 newCombatTestRuntimeMonster
 ================
 */
-func newCombatTestRuntimeMonster(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+func newCombatTestRuntimeMonster(t testing.TB, monsterHP uint32, level uint8, typeID4 uint8) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	return newCombatTestRuntimeMonsterTuned(t, monsterHP, level, typeID4, nil)
 }
 
@@ -140,7 +140,7 @@ The combat fixture with its target monster's reference tuned before the
 template is built (a real row's defenses, another codename).
 ================
 */
-func newCombatTestRuntimeMonsterTuned(t *testing.T, monsterHP uint32, level uint8, typeID4 uint8, tune func(*monster.MonsterRef)) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
+func newCombatTestRuntimeMonsterTuned(t testing.TB, monsterHP uint32, level uint8, typeID4 uint8, tune func(*monster.MonsterRef)) (*Runtime, *fakeClock, *enterworld.Character, monster.Instance) {
 	t.Helper()
 	const region = uint16(0x62A8)
 	clock := &fakeClock{now: time.UnixMilli(1_000_000)}
@@ -255,6 +255,12 @@ func newCombatTestRuntimeMonsterTuned(t *testing.T, monsterHP uint32, level uint
 		},
 		Items:  staticItemSource{sword.Codename: sword},
 		Levels: testCombatRewardLevels(),
+		// Production deps carry a magic-option catalogue with a source
+		// identity, so the stats memo engages; a source without an
+		// identity is computed fresh on every read (statscache.go).
+		// The fixture caster's rows carry no options for the empty
+		// catalogue to resolve.
+		MagicOptions: &emptyMagicOptionSource{},
 		Skills: staticSkillSource{2: {
 			ID:                      2,
 			Codename:                "SKILL_CH_SWORD_BASE_01",

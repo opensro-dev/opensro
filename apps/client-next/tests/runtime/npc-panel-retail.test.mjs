@@ -195,6 +195,32 @@ test("npcBranchLabel disambiguates duplicate shop group labels for multi-cultura
 	assert.equal( npcBranchLabel( branches[1], branches, patchedCopy ), "Purchase/sell/repair European weapon" );
 });
 
+test("the Christmas exchange row rides capability 0x40000 ahead of the withdrawal row", () => {
+	const state = { phase: "menu", gid: 7 };
+	const render = extra =>
+		npcTalkLayout( {
+			state,
+			layout,
+			origin: [ 100, 200 ],
+			copy: key => key,
+			measure,
+			draw: () => [],
+			size: () => [ 16, 16 ],
+			hover: null,
+			pressed: null,
+			top: 0,
+			...extra
+		} ).controls;
+	assert.ok( !render( {} ).some( c => c.id === "npc-event-exchange" ) );
+	const both = render( { canEventExchange: true, canWithdrawSkill: true } ),
+		ids = both.map( c => c.id );
+	// 5D96BD appends row 0x15 immediately before the 0x16 test (5D96D6).
+	assert.ok( ids.indexOf( "npc-event-exchange" ) < ids.indexOf( "npc-withdraw" ) );
+	assert.ok(
+		defined( both.find( c => c.id === "npc-event-exchange" ) ).label.includes( "UIIT_MSG_XMAS_EVENT_CHANGE" )
+	);
+});
+
 test("a teleport gate lists the reverse return's two destinations only with its capability", () => {
 	const state = { phase: "menu", gid: 7 };
 	const render = canReverseReturn =>

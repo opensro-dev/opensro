@@ -151,50 +151,6 @@ func hasSlot(a AffixDef, slot string) bool {
 	return false
 }
 
-/*
-================
-DropChance
-
-A kill's chance of one pet gear drop: the degree's base chance times the
-monster rank's multiplier (native rarity: low nibble 1 champion, 4-7 giant
-kinds, 3 and 8 unique).
-================
-*/
-func DropChance(d GearDegree, rarity uint8) float64 {
-	m := D.Rules.RankMultipliers
-	switch rarity & 0x0f {
-	case 1:
-		return d.DropChance * m.Champion
-	case 3, 8:
-		return d.DropChance * m.Unique
-	case 4, 5, 6, 7:
-		return d.DropChance * m.Giant
-	}
-	return d.DropChance * m.General
-}
-
-/*
-================
-DegreeForLevel
-
-The degree a monster of this level drops (its band's minimum pet level is
-the first monster level of the band); uniques drop one degree higher.
-================
-*/
-func DegreeForLevel(level uint8, unique bool) (GearDegree, bool) {
-	var found GearDegree
-	ok := false
-	for i, d := range D.Gear {
-		if level >= d.MinPetLevel {
-			found, ok = d, true
-			if unique && i+1 < len(D.Gear) {
-				found = D.Gear[i+1]
-			}
-		}
-	}
-	return found, ok
-}
-
 //============================================================================
 
 /*
