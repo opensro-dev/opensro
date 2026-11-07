@@ -564,7 +564,8 @@
 			"provider": "src/engine/runtime/assets/worker/loader.ts",
 			"functions": [
 				"download",
-				"activity"
+				"activity",
+				"hdAvailability"
 			]
 		},
 		{
@@ -1006,6 +1007,13 @@
 			"functions": [
 				"setUiTexture",
 				"setUi"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/ui.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"hdAvailable"
 			]
 		},
 		{

@@ -226,7 +226,7 @@ import {
 	UNDERBAR_WIDTH
 } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
-import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
+import { createExperimentalHud, experimentalTabs } from "./hud/experimental-hud";
 import {
 	browserDisplayClass,
 	renderScales,
@@ -1116,7 +1116,7 @@ defaultUiPorts.
 ================
 */
 export interface UiPorts {
-	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">;
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel" | "hdAvailable">;
 	commands: ( command: SessionCommand ) => void;
 	publish: ( scene: UiScene | null ) => void;
 	texture: ( id: string, image: UiTexture | null ) => void;
@@ -3679,9 +3679,8 @@ export function createUi( ports: UiPorts ) {
 			return;
 		}
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
-			const row = experimentalTabs( view?.session ).flatMap( tab => tab.rows ).find( candidate =>
-				candidate.id === id
-			);
+			const row = experimentalTabs( view?.session, assets.hdAvailable?.() ?? false )
+				.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
 			else if ( id.startsWith( "experimental-render-scale:" ) ) {
 				experimental.selectRenderScale( Number( id.slice( "experimental-render-scale:".length ) ) );
@@ -14345,7 +14344,9 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					// Options-style tabs over one framed list: a header naming the tab,
 					// then a checkbox or numeric selection with its help line below it.
 					// The window grows with the selected tab, as CIFOption::OnTab does.
-					const { tab, draft } = experimental.state(), page = experimentalTabs( next.session )[tab]!;
+					const { tab, draft } = experimental.state(),
+						tabs = experimentalTabs( next.session, assets.hdAvailable?.() ?? false ),
+						page = tabs[tab]!;
 					const rowPitch = 46, listTop = 98, width = 386;
 					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
 					const [px, py] = windowOrigin( "Experimental", [
@@ -14358,12 +14359,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10, panelCloseId( "Experimental" ) );
 					// The native tab is 78 pixels; more tabs than the window holds share its width.
-					const tabWidth = Math.min( 78, Math.floor( (width - 10) / EXPERIMENTAL_TABS.length ) ),
-						tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
-					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
+					const tabWidth = Math.min( 78, Math.floor( (width - 10) / tabs.length ) ),
+						tabStart = (width - (tabs.length * tabWidth - 2)) / 2;
+					for ( let i = 0; i < tabs.length; i++ ) {
 						nativeTab(
 							"experimental-tab:" + i,
-							EXPERIMENTAL_TABS[i]!.title,
+							tabs[i]!.title,
 							[ px + tabStart + i * tabWidth, py + 40, tabWidth - 2, 24 ],
 							tab === i,
 							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }

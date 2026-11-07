@@ -261,6 +261,14 @@ export function createAssets(): AssetOwner {
 			if ( !disposed && !failure ) noteJobFetching( event.data.id );
 			return;
 		}
+		if ( event.data.kind === "hd-availability" ) {
+			if ( !disposed && !failure && event.data.available !== hdSetAvailable ) {
+				hdSetAvailable = event.data.available;
+				// A saved "on" wakes only now that a set exists to serve.
+				if ( lastFeatures ) sendHdTextures( lastFeatures );
+			}
+			return;
+		}
 		if ( event.data.kind === "released" ) {
 			const job = jobs.get( event.data.id );
 			if ( job?.cancelled ) jobs.delete( event.data.id );
@@ -333,7 +341,10 @@ export function createAssets(): AssetOwner {
 	// record. Nothing is sent while it is off, so the worker fetches
 	// none of the set; when it is on, the format follows the device's
 	// features (textureFeatures), and a live toggle re-sends it.
-	let hdTexturesEnabled = false, lastFeatures: readonly string[] | null = null;
+	// Port-only (#2800): whether the published build carries the set at
+	// all, told by the worker with the main pack index. Until it does,
+	// the saved row is inert: no format is ever sent.
+	let hdTexturesEnabled = false, hdSetAvailable = false, lastFeatures: readonly string[] | null = null;
 	try {
 		const options = storedExperimentalOptions( globalThis.localStorage ).options;
 		compressedTextures = options.compressedTextures;
@@ -356,7 +367,7 @@ export function createAssets(): AssetOwner {
 		if ( disposed ) return;
 		send( {
 			kind: "hd-textures",
-			format: hdTexturesEnabled ? chooseHdTextureVariant( new Set( features ), true ) : null
+			format: hdTexturesEnabled && hdSetAvailable ? chooseHdTextureVariant( new Set( features ), true ) : null
 		} );
 	}
 	return {
@@ -387,6 +398,18 @@ export function createAssets(): AssetOwner {
 			if ( disposed ) return;
 			hdTexturesEnabled = enabled;
 			if ( lastFeatures ) sendHdTextures( lastFeatures );
+		},
+		/*
+		================
+		hdAvailable
+
+		Whether the published build carries the HD set (#2800), as the
+		worker reported with the main pack index; false until it does, so
+		the Experimental row stays hidden and the saved row inert.
+		================
+		*/
+		hdAvailable() {
+			return hdSetAvailable;
 		},
 		/*
 		================
