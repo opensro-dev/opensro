@@ -27,10 +27,10 @@ payload carries (the job alias while suited).
 func TestPublishRecordsPublicLinesOnly(t *testing.T) {
 	rt := &Runtime{history: map[string][]publicLine{}, members: map[uint64]publicMember{}, now: time.Now}
 	rt.Feed = chatfeed.New()
-	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeGlobal, "Kekw", "hello ☆ world"))
-	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeParty, "Kekw", "party secret"))
-	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeWhisper, "Kekw", "whisper secret"))
-	rt.publish("shard", "Kekw", EncodeChatBroadcastNamed(ChatTypeGlobal, "JobFox", "suited hello"))
+	rt.publish("shard", "Kekw", "hello ☆ world", publicLine{payload: EncodeChatBroadcastNamed(ChatTypeGlobal, "Kekw", "hello ☆ world")})
+	rt.publish("shard", "Kekw", "party secret", publicLine{payload: EncodeChatBroadcastNamed(ChatTypeParty, "Kekw", "party secret")})
+	rt.publish("shard", "Kekw", "whisper secret", publicLine{payload: EncodeChatBroadcastNamed(ChatTypeWhisper, "Kekw", "whisper secret")})
+	rt.publish("shard", "Kekw", "suited hello", publicLine{payload: EncodeChatBroadcastNamed(ChatTypeGlobal, "JobFox", "suited hello")})
 	lines := rt.Feed.Lines("shard", nil)
 	if len(lines) != 2 || lines[0].Kind != chatfeed.KindChat || lines[0].Character != "Kekw" ||
 		lines[0].Author != "Kekw" || lines[0].Text != "hello ☆ world" {

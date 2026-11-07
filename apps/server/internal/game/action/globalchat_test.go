@@ -304,3 +304,96 @@ func TestGlobalChattingRefusesARestrictedOrMalformedLine(t *testing.T) {
 		t.Fatal("a refused line was sent, spent the item or reached the website feed")
 	}
 }
+
+//============================================================================
+
+/*
+================
+globalChatLinkFixture
+
+The Global Chatting fixture with the item-link switch on and a +7 blade
+in bag slot 22 to link.
+================
+*/
+func globalChatLinkFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterworld.ItemRef, enterworld.InventoryRow) {
+	t.Helper()
+	rt, c, ref := globalChatFixture(t)
+	blade := enterworld.InventoryRow{Slot: 22, RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Plus: 7, Durability: 40, StackCount: 1, VarianceBits: "0"}
+	c.MissionInventory = append(c.MissionInventory, blade)
+	rt.ChatItemLinks = &chat.ItemLinks{Source: rt, Limit: 1}
+	return rt, c, ref, blade
+}
+
+/*
+================
+TestGlobalChattingLinkTail
+================
+*/
+func TestGlobalChattingLinkTail(t *testing.T) {
+	rt, c, ref, blade := globalChatLinkFixture(t)
+	var shard []wire.Frame
+	rt.PushShardPeerFrames = func(_, _ string, frames []wire.Frame) { shard = frames }
+	rt.PublicChat = chatfeed.New()
+	request := append(globalChatRequest(ref, "wts \uFFFC"), chat.EncodeLinkRefs([]chat.LinkRef{{Source: chat.LinkSourceInventory, Slot: 22}})...)
+	result := rt.HandleItemUse(testDivision, c, request)
+	body := enterworld.BuildItemBody(enterworld.InventoryWireItems([]enterworld.InventoryRow{blade})[0])
+	want := chat.AppendLinkTail(chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, c.Name, "wts \uFFFC"), []chat.LinkedItem{{Body: body}})
+	if len(result.Frames) != 4 || !bytes.Equal(result.Frames[3].Payload, want) {
+		t.Fatalf("author frames %+v, want the line % X", result.Frames, want)
+	}
+	// The linked item's references go ahead of the line (BUG-084).
+	if len(shard) != 2 || shard[0].Opcode != opCommerceItemReferences || !bytes.Equal(shard[1].Payload, want) {
+		t.Fatalf("shard push %+v", shard)
+	}
+	for _, row := range c.MissionInventory {
+		if row.Slot == 21 && row.StackCount != 2 {
+			t.Fatalf("the item was spent to %d, want 2", row.StackCount)
+		}
+	}
+}
+
+/*
+================
+TestGlobalChattingSwitchOffRefusesTail
+================
+*/
+func TestGlobalChattingSwitchOffRefusesTail(t *testing.T) {
+	rt, c, ref, _ := globalChatLinkFixture(t)
+	rt.ChatItemLinks = nil
+	pushed := false
+	rt.PushShardPeerFrames = func(string, string, []wire.Frame) { pushed = true }
+	rt.PublicChat = chatfeed.New()
+	request := append(globalChatRequest(ref, "wts \uFFFC"), chat.EncodeLinkRefs([]chat.LinkRef{{Source: chat.LinkSourceInventory, Slot: 22}})...)
+	rt.HandleItemUse(testDivision, c, request)
+	for _, row := range c.MissionInventory {
+		if row.Slot == 21 && row.StackCount != 3 {
+			t.Fatal("a linked line was spent with the switch off")
+		}
+	}
+	if pushed {
+		t.Fatal("a linked line went out with the switch off")
+	}
+}
+
+/*
+================
+TestGlobalChattingFeedAndLogCarryLabels
+================
+*/
+func TestGlobalChattingFeedAndLogCarryLabels(t *testing.T) {
+	rt, c, ref, _ := globalChatLinkFixture(t)
+	rt.PublicChat = chatfeed.New()
+	dir := t.TempDir()
+	rt.ModerationLog = chatlog.Open(dir, 30)
+	rt.PushShardPeerFrames = func(string, string, []wire.Frame) {}
+	request := append(globalChatRequest(ref, "wts \uFFFC"), chat.EncodeLinkRefs([]chat.LinkRef{{Source: chat.LinkSourceInventory, Slot: 22}})...)
+	rt.HandleItemUse(testDivision, c, request)
+	rt.ModerationLog.Close()
+	if lines := moderationLines(t, dir); len(lines) != 1 || lines[0].Text != "wts <ITEM_CH_SWORD_01_A_RARE +7>" {
+		t.Fatalf("moderation %+v", lines)
+	}
+	if lines := rt.PublicChat.Lines(testDivision, nil); len(lines) != 1 || lines[0].Text != "wts <ITEM_CH_SWORD_01_A_RARE +7>" {
+		t.Fatalf("feed %+v", lines)
+	}
+}

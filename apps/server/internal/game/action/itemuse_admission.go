@@ -86,7 +86,7 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 		return itemUseMercenary
 	}
 	// Native item use case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
-	if ref.TypeIDs == [4]int64{3, 3, 3, 5} {
+	if ref.TypeIDs == globalChatTypeIDs {
 		return itemUseGlobalChat
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {

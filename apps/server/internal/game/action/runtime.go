@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/namefilter"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chat"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/chatlog"
 	"opensro.online/server/internal/game/social/guildwar"
@@ -799,6 +800,9 @@ type Runtime struct {
 	// port-only, not native): its Global Chatting line reaches only
 	// itself. Nil mutes no one.
 	ChatShadowMuted func(accountID string) bool
+	// ChatItemLinks is the port-only SRO_CHAT_ITEM_LINKS switch for the
+	// Global Chatting line (globalchat.go); nil keeps the native tail.
+	ChatItemLinks *chat.ItemLinks
 	// ModerationLog keeps the Global Chatting line for the staff
 	// (chatlog, port-only, not native), muted lines included and
 	// marked. Record only queues the line; nil keeps no log.

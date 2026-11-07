@@ -128,20 +128,39 @@ export function noticeWrappedLinks(
 		const at = full.indexOf( itemName, from );
 		if ( at >= 0 ) spans.push( { kind: "item", start: at, end: at + itemName.length } );
 	}
-	const parts = { name: 0, item: 0 };
+	return projectSpans( full, rows, spans );
+}
+
+/*
+================
+projectSpans
+
+Spans of the full line projected onto its wrapped rows: each piece keeps
+its kind, its offset in the row and the text it covers; a span's second
+and later pieces carry their part number. Shared by the notice links and
+the chat item links (chat-item-links.ts).
+================
+*/
+export function projectSpans<K extends string>(
+	full: string,
+	rows: readonly string[],
+	spans: readonly { readonly kind: K; readonly start: number; readonly end: number; }[]
+): { readonly kind: K; readonly at: number; readonly value: string; readonly part?: number; }[][] {
+	const parts = new Map<K, number>();
 	let cursor = 0;
 	return rows.map( row => {
 		const rowStart = row ? full.indexOf( row, cursor ) : cursor;
 		if ( rowStart < 0 ) return [];
 		const rowEnd = rowStart + row.length;
 		cursor = rowEnd;
-		const links: NoticeRowLink[] = [];
+		const links: { kind: K; at: number; value: string; part?: number; }[] = [];
 		for ( const span of spans ) {
 			const start = Math.max( rowStart, span.start ), end = Math.min( rowEnd, span.end );
 			if ( end <= start ) continue;
 			const at = start - rowStart, value = row.slice( at, end - rowStart );
 			if ( !value.trim() ) continue;
-			const part = parts[span.kind]++;
+			const part = parts.get( span.kind ) ?? 0;
+			parts.set( span.kind, part + 1 );
 			links.push( { kind: span.kind, at, value, ...(part ? { part } : {}) } );
 		}
 		return links;

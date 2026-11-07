@@ -14,6 +14,7 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
+import { type ChatLinkRef, encodeChatLinkRefs } from "@/engine/foundation/gameplay/chat-item-links";
 import { isNameChangeScrollItem, nameChangeTail } from "@/engine/foundation/gameplay/name-change";
 import {
 	nativeStackIdentity,
@@ -1633,7 +1634,7 @@ full window after the stream falls silent, or at the hard limit.
 use
 ================
 		*/
-		use( n: number, now = 0, context?: CosItemUseContext, message?: string ) {
+		use( n: number, now = 0, context?: CosItemUseContext, message?: string, links: readonly ChatLinkRef[] = [] ) {
 			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
@@ -1646,7 +1647,7 @@ use
 			const tail = isNameChangeScrollItem( item.refObjId ) ?
 				nameChangeTail( context?.renameName ?? "" ) :
 				isGlobalChatItem( item.typeFlags ) ?
-				globalChatTail( message ?? "" ) :
+				Uint8Array.from( [ ...globalChatTail( message ?? "" ), ...encodeChatLinkRefs( links ) ] ) :
 				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
 			p.set( tail, 3 );

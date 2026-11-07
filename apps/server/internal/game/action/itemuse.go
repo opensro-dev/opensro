@@ -179,6 +179,9 @@ func (rt *Runtime) HandleItemUse(
 		return itemUseFailure(wire.ErrCodeCantUseItemWhileInteract)
 	}
 
+	// Port-only (SRO_CHAT_ITEM_LINKS): a Global Chatting line's warehouse
+	// links are read here, before the door that holds the store's lock.
+	globalChatStorage := rt.globalChatStorageLinks(divisionID, character, request, tail)
 	result := itemUseFailure(wire.ErrCodeInvalidRequest)
 	// A use that revives the player publishes after its commit (revivalFrames
 	// rebinds the resident region, which reads the committed character).
@@ -392,7 +395,7 @@ func (rt *Runtime) HandleItemUse(
 		}
 		if family == itemUseGlobalChat {
 			return rt.useGlobalChatting(globalChatUse{division: divisionID, character: character, row: rowIndex,
-				request: request}, tail, &result, &after)
+				request: request, storage: globalChatStorage}, tail, &result, &after)
 		}
 		if family == itemUseWarehouseTicket {
 			if len(tail) != 0 || rt.storageAuthority == nil {

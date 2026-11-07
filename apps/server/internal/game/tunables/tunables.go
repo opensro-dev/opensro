@@ -70,6 +70,9 @@ const (
 	ShortNoticeShowMs          = "short_notice_show_ms"
 	ShortNoticeFadeMs          = "short_notice_fade_ms"
 	ChatAckTimeoutMs           = "chat_ack_timeout_ms"
+	// ChatItemLinksPerMessage bounds the port-only item links of one chat
+	// line (SRO_CHAT_ITEM_LINKS; game/social/chat itemlinks.go).
+	ChatItemLinksPerMessage = "chat_item_links_per_message"
 	// The trade group (SRO_TRADE_JOB_BONUS, SRO_THIEF_PARTY_BONUS and
 	// SRO_TRADE_TIERS' Jangan routes; game/action).
 	TradeJobTraderPercentPerHunter  = "trade_job_trader_percent_per_hunter"
@@ -147,6 +150,12 @@ var Registry = []Setting{
 	{Key: ChatAckTimeoutMs, Env: "SRO_CHAT_ACK_TIMEOUT_MS", Kind: Int, Default: 10000, Min: 5000, Max: 30000,
 		Step: 1000, Class: Entry, Group: "Client", Label: "Chat confirmation wait", Unit: "ms",
 		Help: "How long the client waits for the server to confirm a chat line before saying it may not have arrived (the original has no such wait)."},
+	// Restart class: the client learns the limit at world entry, so the
+	// server's own check must never see another value (chat.MaxLinksOnWire
+	// is the maximum).
+	{Key: ChatItemLinksPerMessage, Env: "SRO_CHAT_ITEM_LINKS_PER_MESSAGE", Kind: Int, Default: 1, Min: 1, Max: 8,
+		Step: 1, Class: Restart, Group: "Client", Label: "Item links per chat line", Unit: "count",
+		Help: "How many item links one chat line may carry under SRO_CHAT_ITEM_LINKS."},
 	// The trade group: the port-only party bonuses and route profit, read
 	// once per sale or per reward (game/action). Each default is the value
 	// the rule shipped with, so a shard that sets nothing pays as before.

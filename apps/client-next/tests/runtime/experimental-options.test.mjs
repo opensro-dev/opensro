@@ -97,6 +97,8 @@ const OFF = Object.freeze( {
 	exchangeClickShortcuts: true,
 	// On by default (owner 2026-10-15): a notice's player and item are links.
 	noticeLinks: true,
+	// On by default (owner 2026-11-07): Alt+click links an item into chat.
+	chatItemLinks: true,
 	// On by default (owner 2026-10-15): the notice banner shows for 5 s.
 	shortNotices: true,
 	autoSelect: false,
@@ -347,8 +349,11 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects", "HD" ]
+		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects", "HD", "Chat" ]
 	);
+	// Chat, appended last, holds the chat-log links: the notice links moved
+	// from Notices, and the port-only item links (SRO_CHAT_ITEM_LINKS).
+	assert.deepEqual( EXPERIMENTAL_TABS[10].rows.map( row => row.key ), [ "noticeLinks", "chatItemLinks" ] );
 	// Lighting keeps the direct-light stages, the moving sun among them,
 	// and holds the silk history row for room (#2269); render scale joins
 	// Image without changing the indices used to reopen the existing tabs.
@@ -967,4 +972,10 @@ test("attack-pet training has no experimental toggle or saved opt-out", () => {
 		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
 		false
 	);
+});
+
+test("item links in chat are on unless explicitly false", () => {
+	assert.equal( experimentalOptions( {} ).chatItemLinks, true );
+	assert.equal( experimentalOptions( { chatItemLinks: false } ).chatItemLinks, false );
+	assert.equal( experimentalOptions( { chatItemLinks: "no" } ).chatItemLinks, true );
 });

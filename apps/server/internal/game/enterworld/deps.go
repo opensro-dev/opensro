@@ -116,6 +116,9 @@ type Deps struct {
 	// (inventory_pages.go): world entry presents and adopts the 2.5-page
 	// base; false is native.
 	InventoryPages bool
+	// ChatItemLinks publishes the port-only SRO_CHAT_ITEM_LINKS rule as its
+	// per-line link limit (game/social/chat itemlinks.go); 0 is native.
+	ChatItemLinks int64
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool

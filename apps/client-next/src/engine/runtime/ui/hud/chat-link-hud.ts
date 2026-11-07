@@ -1,0 +1,211 @@
+/*
+===========================================================================
+
+chat-link-hud.ts - the item links waiting in the chat editors
+
+Port-only, not native (SRO_CHAT_ITEM_LINKS, owner decision 2026-11-07).
+Alt+click on an item while the chat input or the Global Chatting box has
+focus puts a link in the line being typed. The text holds one
+CHAT_LINK_MARKER per link (chat-item-links.ts); this owner keeps, per
+editor and in marker order, where each item is and the label the editor
+draws in the marker's place. The hidden browser field holds the raw text,
+so a backspace over the marker removes the whole token, and the edit that
+removed it drops its link here.
+
+===========================================================================
+*/
+import {
+	CHAT_LINK_MARKER,
+	CHAT_LINK_SOURCE,
+	type ChatLinkRef,
+	chatLinkLabel,
+	markerCount,
+	replaceChatMarkers,
+	stripChatMarkers
+} from "@/engine/foundation/gameplay/chat-item-links";
+
+// The chat compose cap (CIFChatViewer_HandleChatInputKey 0x64 units); the
+// marker is one unit of it.
+const CHAT_LINE_LIMIT = 100;
+// An avatar slot id names the costume's type (typeFlags >>> 11).
+const AVATAR_TYPE_SHIFT = 11;
+
+/*
+================
+ChatLink
+
+One pending link: where the item is and what the editor shows for it.
+================
+*/
+export interface ChatLink {
+	readonly ref: ChatLinkRef;
+	readonly label: string;
+}
+
+/*
+================
+ChatLinkItem
+
+The fields of a held item a link reads.
+================
+*/
+interface ChatLinkItem {
+	readonly slot: number;
+	readonly name?: string;
+	readonly plus?: number;
+	readonly typeFlags?: number;
+}
+
+/*
+================
+ChatLinkSources
+
+The items a link may name, as the windows show them: the bag and worn
+gear, the costume slots, the open warehouse, the open pet bag.
+================
+*/
+export interface ChatLinkSources {
+	readonly inventory?: readonly ChatLinkItem[];
+	readonly avatarInventory?: readonly ChatLinkItem[];
+	readonly storage?: readonly ChatLinkItem[];
+	readonly pet?: readonly ChatLinkItem[];
+}
+
+/*
+================
+chatLinkFromActivate
+
+The link an Alt+click on control id would put in the line, or null when the
+id names no held item. An avatar id names the costume type; the server
+reads the costume by its slot.
+================
+*/
+export function chatLinkFromActivate( id: string, sources: ChatLinkSources ): ChatLink | null {
+	const colon = id.indexOf( ":" ), prefix = id.slice( 0, colon + 1 ), value = Number( id.slice( colon + 1 ) );
+	if ( colon < 0 || !Number.isInteger( value ) ) return null;
+	let source: number, item: ChatLinkItem | undefined;
+	if ( prefix === "slot:" ) {
+		source = CHAT_LINK_SOURCE.inventory;
+		item = sources.inventory?.find( row => row.slot === value );
+	} else if ( prefix === "storage-slot:" ) {
+		source = CHAT_LINK_SOURCE.storage;
+		item = sources.storage?.find( row => row.slot === value );
+	} else if ( prefix === "cos-slot:" ) {
+		source = CHAT_LINK_SOURCE.pet;
+		item = sources.pet?.find( row => row.slot === value );
+	} else if ( prefix === "avatar:" ) {
+		source = CHAT_LINK_SOURCE.avatar;
+		item = sources.avatarInventory?.find( row => (row.typeFlags ?? 0) >>> AVATAR_TYPE_SHIFT === value );
+	} else return null;
+	return item ? { ref: { source, slot: item.slot }, label: chatLinkLabel( item ) } : null;
+}
+
+/*
+================
+createChatLinkHud
+================
+*/
+export function createChatLinkHud() {
+	const editors = new Map<string, ChatLink[]>();
+	/*
+	================
+	linksOf
+	================
+	*/
+	function linksOf( editor: string ) {
+		return editors.get( editor ) ?? [];
+	}
+	return {
+		/*
+		================
+		insert
+
+		Puts link's marker at caret. At the limit the oldest link and its
+		marker go first; a line with no room for the marker takes nothing.
+		================
+		*/
+		insert( editor: string, text: string, caret: number, link: ChatLink, limit: number ) {
+			let links = [ ...linksOf( editor ) ];
+			if ( links.length >= limit && links.length ) {
+				// The oldest link is the first marker in the text.
+				const first = text.indexOf( CHAT_LINK_MARKER );
+				if ( first >= 0 ) {
+					text = text.slice( 0, first ) + text.slice( first + 1 );
+					if ( first < caret ) caret--;
+				}
+				links = links.slice( 1 );
+			}
+			if ( text.length + 1 > CHAT_LINE_LIMIT ) return { text, caret };
+			const index = markerCount( text.slice( 0, caret ) );
+			links.splice( index, 0, link );
+			editors.set( editor, links );
+			return { text: text.slice( 0, caret ) + CHAT_LINK_MARKER + text.slice( caret ), caret: caret + 1 };
+		},
+		/*
+		================
+		edited
+
+		The editor's text changed from before to after: links whose markers
+		the edit removed drop, and a marker the edit typed or pasted is no
+		link, so it is taken out. Returns the text the editor keeps.
+		================
+		*/
+		edited( editor: string, before: string, after: string ) {
+			let head = 0;
+			while ( head < before.length && head < after.length && before[head] === after[head] ) head++;
+			let tail = 0;
+			while (
+				tail < before.length - head && tail < after.length - head &&
+				before[before.length - 1 - tail] === after[after.length - 1 - tail]
+			) tail++;
+			const removed = before.slice( head, before.length - tail ),
+				inserted = after.slice( head, after.length - tail );
+			const links = [ ...linksOf( editor ) ];
+			const at = markerCount( before.slice( 0, head ) ), gone = markerCount( removed );
+			if ( gone ) {
+				links.splice( at, gone );
+				editors.set( editor, links );
+			}
+			if ( !inserted.includes( CHAT_LINK_MARKER ) ) return after;
+			return after.slice( 0, head ) + stripChatMarkers( inserted ) + after.slice( after.length - tail );
+		},
+		/*
+		================
+		links
+		================
+		*/
+		links( editor: string ): readonly ChatLinkRef[] {
+			return linksOf( editor ).map( link => link.ref );
+		},
+		/*
+		================
+		labels
+		================
+		*/
+		labels( editor: string ): readonly string[] {
+			return linksOf( editor ).map( link => link.label );
+		},
+		/*
+		================
+		display
+
+		What the editor draws for text: each marker as its label.
+		================
+		*/
+		display( editor: string, text: string ) {
+			return text.includes( CHAT_LINK_MARKER ) ?
+				replaceChatMarkers( text, linksOf( editor ).map( link => link.label ) ) :
+				text;
+		},
+		/*
+		================
+		clear
+
+		The line was sent or given up.
+		================
+		*/
+		clear( editor: string ) {
+			editors.delete( editor );
+		}
+	};
+}

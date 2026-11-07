@@ -165,6 +165,10 @@ export interface UiControl {
 	// up after the tap's own action, until the next touch elsewhere or a
 	// scroll. Set only while the Experimental touchInspect option is on.
 	readonly inspect?: boolean;
+	// Port-only (SRO_CHAT_ITEM_LINKS): a text editor that keeps its focus
+	// through an Alt press on another control, so an Alt+click on an item
+	// links it into the line being typed (chat-link-hud.ts).
+	readonly keepFocusOnAltPress?: boolean;
 	readonly min?: number;
 	readonly max?: number;
 	readonly maxLength?: number;
