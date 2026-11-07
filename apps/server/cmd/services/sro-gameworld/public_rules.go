@@ -270,7 +270,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Owner decision: storage fills less with split stacks."},
 			{Flag: enterworld.EnvInventoryPages, On: enterworld.InventoryPagesFromEnv(),
 				Native: "A new character carries one page of 32 bag slots, and the six expansion quests add 16 more.",
-				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages.",
+				Now:    "A new character carries two and a half pages (80 bag slots), and the expansion quests still add their 16, reaching the full three pages. Turning the rule off is native only for what new characters start with: a character already raised keeps its larger bag and every item in it.",
 				Why:    "Owner decision 2026-11-07 (#2769): players found the expansion quests not worth half a page."},
 			{Flag: action.EnvRaisedGoldCaps, On: action.RaisedGoldCapsFromEnv(),
 				Native: "A stall offer asks at most 1,000,000,000 gold, and one warehouse gold deposit moves at most 100,000,000.",

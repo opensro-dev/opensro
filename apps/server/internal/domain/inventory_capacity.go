@@ -24,7 +24,9 @@ is raised to it at world entry, never lowered; the quests still add their
 16 and reach the 109 maximum. The persisted InventorySize is the whole
 record of the rule: switching the flag off changes only what new
 characters start with - a record above the native base keeps its slots,
-because nothing here ever shrinks a capacity.
+because nothing here ever shrinks a capacity. So "off" is native for new
+records and for the quest ceiling a fresh record grows toward; it is not
+a shrink of records the rule already raised.
 
 ===========================================================================
 */
