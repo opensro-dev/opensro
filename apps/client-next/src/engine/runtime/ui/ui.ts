@@ -19124,6 +19124,8 @@ export function createUi(
 						hudCopy( "UIIT_STT_GOLD" ),
 						state.ownLocked
 					);
+					// 6B21B0: once the own offer locks, the server-driven confirm
+					// mode relabels this button UIIT_CTL_ACKNOWLEDGMENT ("Approve").
 					authoredLabeledButton(
 						at( 11 ),
 						px,
@@ -24307,6 +24309,11 @@ export function createUi(
 						vAlign: 0
 					} )
 				);
+				// 52F460: the store's repair-all button (5B2B10) raises
+				// confirmation type 0x0C, which ShowByType passes on as
+				// the configure kind; the kind-0x0C arm (530D51)
+				// captions the action button UIIT_CTL_REPAIR_ALL
+				// ("Repair all"), not a generic Yes (xref 530E91).
 				button(
 					"repair-all-confirm",
 					// 530E91: the box's action button reads UIIT_CTL_REPAIR_ALL.
@@ -25140,7 +25147,20 @@ export function createUi(
 						stallPriceDigits( stallPriceLimit( game.raisedGoldCaps === true ) ),
 						true
 					);
-					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					// 528920 captions the primary button per mode: the
+					// register modal (mode 0xA, entry 52915C) falls into
+					// the tail at 52918F, which sets UIIT_CTL_STALL_REGISTER
+					// on the +0x800 button; the modify modal (mode 0xB,
+					// entry 529212) pushes UIIT_STT_BUY at 529240 and joins
+					// the same tail, so an existing offer's price edit
+					// confirms with Buy, a new registration with Register.
+					authoredLabeledButton(
+						at( 215 ),
+						x,
+						y,
+						"stall-prompt-ok",
+						hudCopy( stallBox.modify ? "UIIT_STT_BUY" : "UIIT_CTL_STALL_REGISTER" )
+					);
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				}
 			}
