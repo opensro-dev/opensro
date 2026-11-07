@@ -115,7 +115,9 @@ export async function buildAssetPacks( options = {} ) {
 	// The subtree this index serves, and so the root every path in it is
 	// admitted under: the packs directory's parent (/assets for the
 	// default index, /hd for the HD set's own index, buildHdTexturePacks).
-	const packRoot = toPublicAssetPath( outputRoot, root ).replace( /\/packs$/, "" );
+	// An output below the packs directory (a slot or a test fixture) still
+	// names the same subtree.
+	const packRoot = toPublicAssetPath( outputRoot, root ).replace( /\/packs(\/.*)?$/, "" );
 	const indexPath = path.join( outputRoot, "manifest.json" );
 	const defaultTargetBytes = options.targetBytes ?? DEFAULT_ASSET_PACK_TARGET_BYTES;
 	const groups = options.groups ?? [];
