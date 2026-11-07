@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -73,6 +74,8 @@ TestUpgradeGivesTheMasterTheCommanderRole
 ================
 */
 func TestUpgradeGivesTheMasterTheCommanderRole(t *testing.T) {
+	tier.Long(t, "the upgrade gives the guild master the commander role")
+
 	dir := t.TempDir()
 	master, smith := roleMasterGuild(t, dir)
 	downgradeToLayout7(t, dir)
@@ -98,6 +101,8 @@ the role; the repair is the only change, and afterwards it is current.
 ================
 */
 func TestUpgradeRepairsACurrentStoreOnce(t *testing.T) {
+	tier.Long(t, "a current store whose master lacks the commander role is repaired once")
+
 	dir := t.TempDir()
 	master, smith := roleMasterGuild(t, dir)
 	if backup, err := UpgradeAuthority(dir, false); err != nil || backup != "" {
@@ -127,6 +132,8 @@ persisted authority even when the master already has the correct role.
 ================
 */
 func TestUpgradeRemovesStaleNonmasterCommanders(t *testing.T) {
+	tier.Long(t, "the upgrade removes stale non-master commander roles")
+
 	for _, older := range []bool{false, true} {
 		name := "current"
 		if older {

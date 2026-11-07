@@ -6,6 +6,7 @@ gold
 rows
 rows[].codename
 rows[].durability
+rows[].forgeBound
 rows[].magicOptions
 rows[].plus
 rows[].recordId

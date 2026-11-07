@@ -18,6 +18,8 @@ TestGrantSilkCreatesAddsAndRefusesOverflow
 ================
 */
 func TestGrantSilkCreatesAddsAndRefusesOverflow(t *testing.T) {
+	t.Parallel()
+
 	s, err := Open(t.TempDir(), Options{})
 	if err != nil {
 		t.Fatal(err)

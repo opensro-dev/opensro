@@ -154,6 +154,8 @@ TestFortressTaxCollectionRefusalOrder
 ================
 */
 func TestFortressTaxCollectionRefusalOrder(t *testing.T) {
+	t.Parallel()
+
 	f := newFortressTaxFixture(t, 100, 10)
 	for _, tc := range []struct {
 		name      string
@@ -189,6 +191,8 @@ TestFortressTaxCollectionSignedAmounts
 ================
 */
 func TestFortressTaxCollectionSignedAmounts(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name                            string
 		treasury, gold, requested, take int64
@@ -226,6 +230,8 @@ the treasury write. An earlier failure cannot satisfy this witness.
 ================
 */
 func TestFortressTaxCollectionRollbackAfterCharacterWrite(t *testing.T) {
+	t.Parallel()
+
 	f := newFortressTaxFixture(t, 100, 10)
 	const witness = "tax treasury failed after character credit"
 	for _, operation := range []string{"INSERT", "UPDATE"} {
@@ -262,6 +268,8 @@ TestFortressTaxCollectionConcurrentConservation
 ================
 */
 func TestFortressTaxCollectionConcurrentConservation(t *testing.T) {
+	t.Parallel()
+
 	const treasury, initialGold, workers, request = 333, 41, 32, 17
 	f := newFortressTaxFixture(t, treasury, initialGold)
 	type result struct {
@@ -332,6 +340,8 @@ and war periods active, only the temporary holder's master may collect.
 ================
 */
 func TestFortressTaxCollectionTemporaryHolder(t *testing.T) {
+	t.Parallel()
+
 	f := newFortressTaxFixture(t, 100, 10)
 	if err := f.s.Fortresses().SaveFortress(testDivision, domain.FortressRecord{
 		FortressID: 1, GuildID: f.guildID, TempGuildID: f.rivalGuildID, TaxGold: 100, TaxRate: 7, StaffFlags: 3,

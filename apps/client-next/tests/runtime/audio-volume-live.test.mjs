@@ -226,6 +226,7 @@ function fixture( t ) {
 			health: () => ({ phase: "running" }),
 			install: () => {},
 			textureFeatures() {},
+			hdTextures() {},
 			dispose: () => {},
 			available: () => 8,
 			request( path ) {

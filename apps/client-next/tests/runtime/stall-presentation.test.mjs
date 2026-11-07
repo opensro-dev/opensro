@@ -364,7 +364,7 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 				quad.clip[0] + quad.clip[2] <= clip[0] + clip[2] && quad.clip[1] + quad.clip[3] <= clip[1] + clip[3]
 			) ?? [];
 			const caret = quads.find( quad =>
-				quad.texture === "" && quad.rect[2] === 1 && quad.color.every( c => c === 1 )
+				quad.texture === "" && quad.rect[2] === 2 && quad.color.every( c => c === 1 )
 			);
 			assert.ok( caret, "the focused overflowing prompt paints its caret" );
 			assert.ok(
@@ -644,7 +644,7 @@ test("a bag item dropped anywhere on an empty owner stall cell opens its focused
 	const okButton = defined( control( "stall-prompt-ok" ), "the register prompt's primary button" );
 	assert.equal( okButton.label, "Register", "the register prompt's primary button reads Register" );
 	const caret = (f.scenes.at( -1 )?.quads ?? []).find( quad =>
-		quad.texture === "" && quad.rect[2] === 1 && quad.color.every( c => c === 1 ) &&
+		quad.texture === "" && quad.rect[2] === 2 && quad.color.every( c => c === 1 ) &&
 		quad.clip.every( ( value, i ) => value === price.rect[i] )
 	);
 	assert.ok( caret, "the focused empty price edit paints its caret" );

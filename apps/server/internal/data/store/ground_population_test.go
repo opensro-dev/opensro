@@ -6,6 +6,8 @@ import (
 )
 
 func TestGroundPopulationPersistenceThroughSQLite(t *testing.T) {
+	t.Parallel()
+
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	r := grounditem.NewRegistry()

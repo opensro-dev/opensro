@@ -120,6 +120,8 @@ the same character wins.
 ================
 */
 func TestTickBatchCommitsDeferredRowsOnceAtTheTicksEnd(t *testing.T) {
+	t.Parallel()
+
 	s, a, b := batchFixture(t)
 	disk := diskOpen(t, s)
 	before := s.Health().Commits
@@ -160,6 +162,8 @@ deferred rows with them.
 ================
 */
 func TestTickBatchKillLosesAtMostTheTick(t *testing.T) {
+	t.Parallel()
+
 	s, a, b := batchFixture(t)
 	disk := diskOpen(t, s)
 	s.BeginTickBatch()
@@ -191,6 +195,8 @@ neither on disk: never a duplicate, never a loss.
 ================
 */
 func TestTickBatchPickupLandsBothOrNeither(t *testing.T) {
+	t.Parallel()
+
 	s, a, _ := batchFixture(t)
 	disk := diskOpen(t, s)
 	registry := grounditem.NewRegistry()
@@ -228,6 +234,8 @@ disk must never hold the fortress without the rank.
 ================
 */
 func TestTickBatchFlushesBeforeEveryWriteOutsideTheDirtySet(t *testing.T) {
+	t.Parallel()
+
 	writes := []struct {
 		name  string
 		write func(s *Store) error
@@ -280,6 +288,8 @@ it); the next flush writes them.
 ================
 */
 func TestTickBatchFailedFlushKeepsItsRows(t *testing.T) {
+	t.Parallel()
+
 	s, a, _ := batchFixture(t)
 	disk := diskOpen(t, s)
 	s.BeginTickBatch()
@@ -311,6 +321,8 @@ TestDeferredDoorOutsideABatchCommitsAtOnce
 ================
 */
 func TestDeferredDoorOutsideABatchCommitsAtOnce(t *testing.T) {
+	t.Parallel()
+
 	s, a, _ := batchFixture(t)
 	disk := diskOpen(t, s)
 	s.UpdateCharacterDeferred(a, "no-batch", setGold(a, 5))
@@ -394,6 +406,8 @@ immediate doors.
 ================
 */
 func TestDeferredDoorStoresTheImmediateDoorsBytes(t *testing.T) {
+	t.Parallel()
+
 	nowA, nowB, nowC := storedPairRecords(t, false)
 	laterA, laterB, laterC := storedPairRecords(t, true)
 	if nowA != laterA || nowB != laterB || nowC != laterC {

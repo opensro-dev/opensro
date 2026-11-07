@@ -35,6 +35,7 @@ cancel
 		*/
 		cancel() {},
 		textureFeatures() {},
+		hdTextures() {},
 		/*
 ================
 install
