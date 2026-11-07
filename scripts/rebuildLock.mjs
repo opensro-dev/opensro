@@ -587,7 +587,19 @@ async function acquireStateMutex( lockDir, deadline ) {
 	const spinUntil = Math.min( deadline, Date.now() + MUTEX_SPIN_MS );
 
 	for ( ;; ) {
-		await mkdir( lockDir, { recursive: true } );
+		try {
+			await mkdir( lockDir, { recursive: true } );
+		} catch ( error ) {
+			// Windows: an idle release's removal of the state directory
+			// is still pending while a handle is open on it; the name
+			// exists but is not yet a directory again. The next round
+			// finds it gone (the Python claim ensures the same way).
+			if ( (isDeletePendingClaimError( error ) || error?.code === "ENOENT") && Date.now() < spinUntil ) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
+			throw error;
+		}
 		try {
 			await mkdir( mutexDir );
 		} catch ( error ) {
@@ -691,18 +703,35 @@ async function readStateFile( filePath ) {
 ================
 writeStateFile
 
-Atomic publish (write-temp-then-rename) so contenders never read a partial
-record, exactly as the single-owner protocol published owner.json.
+Atomic publish (write-temp-then-replace) so contenders never read a partial
+record, exactly as the single-owner protocol published owner.json. The
+empty-state releases remove the whole state directory, and a publish
+landing inside that removal re-creates its parent and tries again inside
+the spin budget instead of failing the claim it serves (the Python
+publisher retries the same window).
 ================
 */
 async function writeStateFile( filePath, record ) {
-	await mkdir( path.dirname( filePath ), { recursive: true } );
-	const temporary = `${filePath}.${record.token}.${Date.now()}.tmp`;
-	try {
-		await writeFile( temporary, `${JSON.stringify( record, null, 2 )}\n`, "utf8" );
-		await rename( temporary, filePath );
-	} finally {
-		await rm( temporary, { force: true } );
+	const giveUpAt = Date.now() + MUTEX_SPIN_MS;
+	for ( ;; ) {
+		const temporary = `${filePath}.${record.token}.${Date.now()}.tmp`;
+		try {
+			await mkdir( path.dirname( filePath ), { recursive: true } );
+			await writeFile( temporary, `${JSON.stringify( record, null, 2 )}\n`, "utf8" );
+			await rename( temporary, filePath );
+			return;
+		} catch ( error ) {
+			if (
+				(error?.code === "ENOENT" || isDeletePendingClaimError( error )) &&
+				Date.now() < giveUpAt
+			) {
+				await sleep( MUTEX_SPIN_SLEEP_MS );
+				continue;
+			}
+			throw error;
+		} finally {
+			await rm( temporary, { force: true } );
+		}
 	}
 }
 

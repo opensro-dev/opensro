@@ -348,6 +348,28 @@ class RebuildLockMutexRaceTest(unittest.TestCase):
 			self.assertIn("writer-token.json", str(live[0]["label"]))
 			self.assertTrue((waiting / "writer-token.json").exists(), "a live claim is never reaped")
 
+	def test_publish_retries_when_parent_removed_mid_publish(self) -> None:
+		# The empty-state releases remove the whole state directory; a
+		# publish landing inside that removal re-creates its parent and
+		# publishes again instead of failing the claim it serves (#2820).
+		# The removal is injected at the atomic replace, not timed.
+		with tempfile.TemporaryDirectory() as tmp:
+			target = Path(tmp) / "mutex" / "owner.json"
+			record = {"token": "test-token", "pid": os.getpid()}
+			real_replace = os.replace
+			replaces = []
+
+			def removing_replace(source: object, destination: object) -> None:
+				replaces.append(1)
+				if len(replaces) == 1:
+					shutil.rmtree(Path(tmp) / "mutex")
+				real_replace(source, destination)
+
+			with unittest.mock.patch("os.replace", removing_replace):
+				rebuild_lock.write_state_file(target, record)
+			self.assertEqual(len(replaces), 2, "the publish retried after the removal")
+			self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["token"], "test-token")
+
 
 if __name__ == "__main__":
 	unittest.main()
