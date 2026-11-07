@@ -595,7 +595,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		// Sections moved but the bytes did not (a nil slice became an
 		// empty one): refresh the staged copy so the next commit's
 		// comparison starts clean instead of re-encoding forever.
-		w.stagedRows[key] = domain.CloneCharacter(c)
+		w.stagedRows[key] = domain.CloneCharacterStaged(c, w.committedRows[key])
 		w.rows.skipped++
 		return nil
 	}
@@ -603,7 +603,7 @@ func upsertTimedTx(w *characterRowCommit, division string, c *domain.Character) 
 		return err
 	}
 	w.staged[key] = digest
-	w.stagedRows[key] = domain.CloneCharacter(c)
+	w.stagedRows[key] = domain.CloneCharacterStaged(c, w.committedRows[key])
 	w.rows.written++
 	return nil
 }
