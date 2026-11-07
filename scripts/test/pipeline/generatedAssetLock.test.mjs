@@ -485,8 +485,12 @@ test("a node release waits out a python contender holding its owner record open"
 	writer.stdin.end( "\n" );
 	assert.equal( await writer.finished, 0, writer.output );
 	assert.doesNotMatch( writer.output, /EBUSY|EPERM/ );
-	// The release could only finish once the opener let go.
-	assert.ok( Date.now() - releasedAt >= 2500, writer.output );
+	// The release could only finish once the opener let go. The wait
+	// itself exists only on Windows (a portable host deletes an open
+	// file at once), so the elapsed floor is asserted there only.
+	if ( process.platform === "win32" ) {
+		assert.ok( Date.now() - releasedAt >= 2500, writer.output );
+	}
 	assert.equal( await opener.finished, 0, opener.output );
 });
 
