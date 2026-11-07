@@ -27,6 +27,8 @@ gates the next queue. Everything survives a reopen.
 ================
 */
 func TestQueuedRenameAppliesAtLoginAndReservesOldName(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -127,6 +129,8 @@ reports the reason; the old name is untouched.
 ================
 */
 func TestQueuedRenameCancelsWhenTargetIsTaken(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -159,6 +163,8 @@ the decision refuses a rename during guild war at both checkpoints.
 ================
 */
 func TestQueuedRenameCancelsDuringGuildWar(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -198,6 +204,8 @@ reloaded) list refuses by login cancels as invalid, never lands.
 ================
 */
 func TestQueuedRenameCancelsWhenTheFilterRefuses(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)

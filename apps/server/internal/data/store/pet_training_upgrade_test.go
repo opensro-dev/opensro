@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -22,6 +23,8 @@ TestStoredPetCastsSurviveReopen
 ================
 */
 func TestStoredPetCastsSurviveReopen(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
@@ -55,6 +58,8 @@ equipment byte-for-byte while moving to the current schema; a repeated upgrade i
 ================
 */
 func TestPetTrainingUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "legacy lab schemas 23-25 and schema 26 keep learned pet ranks and equipment byte-for-byte through the upgrade")
+
 	for _, sourceVersion := range []int{prePetTrainingVersion, preSequentialPetTreeVersion, preGuildFoundedVersion, preAcademyHonorVersion, preMergedPetVersion, preStoredPetCastsVersion} {
 		t.Run(fmt.Sprint(sourceVersion), func(t *testing.T) {
 			dir := t.TempDir()

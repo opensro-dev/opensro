@@ -19,6 +19,8 @@ TestFortressStaffHireDurableAndOrdered
 ================
 */
 func TestFortressStaffHireDurableAndOrdered(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	leader, member := guildTestCharacter("hiremaster"), guildTestCharacter("hiremember")

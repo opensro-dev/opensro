@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -65,6 +66,8 @@ nothing, and every character of the account reads the same history.
 ================
 */
 func TestSilkHistoryRecordsPurchaseInCommit(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -123,6 +126,8 @@ even when the row list is capped, and charges never list as uses.
 ================
 */
 func TestSilkHistoryPeriodsLimitAndTotal(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	s := openTest(t, t.TempDir(), clock)
 	character := seededCharacter()
@@ -190,6 +195,8 @@ the beta credit trimmed by its cap, and the starter exactly once.
 ================
 */
 func TestSilkHistoryRecordsCharges(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	if _, err := s.GrantSilk("charge-account", 50); err != nil {
 		t.Fatal(err)
@@ -224,6 +231,8 @@ upgrade has nothing to do.
 ================
 */
 func TestSilkHistoryUpgradeAddsTable(t *testing.T) {
+	tier.Long(t, "a schema-38 layout-11 authority upgrades to 39/12 with an empty silk_history table")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()
