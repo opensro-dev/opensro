@@ -40,8 +40,17 @@ commit finishes.
 ================
 */
 func TestSlowCommitShowsInAConcurrentReadersWait(t *testing.T) {
-	t.Parallel()
-
+	// Serial, like its allocation sibling below: the assertion names the
+	// longest recorded commit, and the real-clock setup commits
+	// (CreateCharacter, the Open boot) sit in the same record. Under
+	// parallel CPU contention a setup commit's wall time can pass the
+	// injected clock's 150 ms slow door and get named instead (opensro3
+	// review on #2794, reproduced 1-in-3 on a loaded box). Nothing here
+	// needs a neighbour: the test builds its own store and goroutines.
+	// Serial alone still leaves this test's own setup commits in the
+	// record on a loaded box, so the commit record is cleared below,
+	// once setup is done and before the timed writer starts: the timed
+	// window then holds only the commit this test injects.
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := &enterworld.Character{Name: "timed"}
 	if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {
@@ -49,6 +58,7 @@ func TestSlowCommitShowsInAConcurrentReadersWait(t *testing.T) {
 	}
 	lockClock := newTestClock()
 	s.mu.clock = lockClock.Now
+	s.commits = commitTiming{}
 	inCommit, release := make(chan struct{}), make(chan struct{})
 	var released sync.Once
 	releaseCommit := func() { released.Do(func() { close(release) }) }
