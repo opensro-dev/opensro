@@ -65,7 +65,10 @@ const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
 // CIFChatModule sets both text boxes' row pitch through 523C20(15).
 const STALL_CHAT_ROW = 15;
-const EDIT_CARET_WIDTH = 1;
+// A single-line edit's caret: 2 px wide, one line tall. The native
+// CIFEdit geometry is not yet located, so the width and the line box
+// below are inference from the authored-layout model (#2615).
+const EDIT_CARET_WIDTH = 2;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	FRIEND_LIST_LIMIT,
@@ -210,6 +213,7 @@ import {
 } from "./hud/unique-banner";
 import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
+import { createCompanionPotions } from "./hud/companion-potions";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createMallUseHud } from "./hud/mall-use-hud";
@@ -661,7 +665,11 @@ import {
 	defaultAutoPotion,
 	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
-import { transportAutoPotion, transportPotionBlocked } from "@/engine/foundation/gameplay/transport-auto-potion";
+import {
+	companionAutoPotion,
+	playerVigorAutoPotion,
+	transportPotionBlocked
+} from "@/engine/foundation/gameplay/transport-auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
@@ -1187,6 +1195,7 @@ export function createUi( ports: UiPorts ) {
 		extensions = ports.extensions ?? defaults.extensions;
 	const bugReport = extensions.bugReport;
 	const experimental = createExperimentalHud();
+	const companionPotions = createCompanionPotions( pageStorage() );
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
 	// +0x7BC, the /Debug flag: the native debug-message switch (690C40 case 0).
@@ -1823,7 +1832,6 @@ export function createUi( ports: UiPorts ) {
 	let sellAllPhase: "confirm" | "selling" | null = null, sellAllGid = 0;
 	let sellAllRun: SellAllRun | null = null;
 	// When the transport auto-potion last sent a use (worker clock).
-	let transportPotionSentMs: number | undefined;
 	// 649C40: the buy-all progress box, up while a purchase past one stack deals.
 	let allBuyProgress = false;
 	let shopPage = 0, shopTab = 0, shopDialog = false, shopChoice: MerchantSelection | null = null, shopQuantity = "1";
@@ -2370,6 +2378,7 @@ export function createUi( ports: UiPorts ) {
 		}
 		if ( next === "Auto Potion" ) {
 			potionDraft = autoPotionDraft( view?.gameplay?.autoPotion ?? defaultAutoPotion() );
+			companionPotions.begin();
 			potionCombo = "";
 		}
 		if ( next === "Alchemy" ) {
@@ -4508,10 +4517,26 @@ export function createUi( ports: UiPorts ) {
 			}
 		} else if ( id === "potion-save" ) {
 			sendGameplay( { kind: "auto-potion-save", settings: potionDraft } );
+			companionPotions.save();
 			setPanel( "" );
+		} else if ( id === "potion-tab:character" || id === "potion-tab:companion" ) {
+			companionPotions.selectTab( id === "potion-tab:character" ? "character" : "companion" );
+			potionCombo = "";
+		} else if ( id.startsWith( "companion-potion-step:" ) ) {
+			const [, key, delta] = id.split( ":" );
+			if ( (key === "transport" || key === "attack") && (delta === "-1" || delta === "1") ) {
+				companionPotions.percent(
+					key,
+					autoPotionEntry( companionPotions.state().draft[key] ).percent + Number( delta )
+				);
+			}
+		} else if ( id.startsWith( "companion-potion-enable:" ) ) {
+			const key = id.slice( 24 );
+			if ( key === "transport" || key === "attack" || key === "cure" ) companionPotions.toggle( key );
 		} else if ( id.startsWith( "potion-enable:" ) ) {
 			const key = id.slice( 14 );
-			if ( key === "hp" || key === "mp" || key === "cure" ) {
+			if ( key === "vigorHp" || key === "vigorMp" ) companionPotions.toggle( key );
+			else if ( key === "hp" || key === "mp" || key === "cure" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
 				const saved = autoPotionEntry( (view.gameplay?.autoPotion ?? defaultAutoPotion())[key] );
 				// 63DC30 restores the committed threshold when re-enabling a slider.
@@ -4532,11 +4557,26 @@ export function createUi( ports: UiPorts ) {
 			const [, key, part, value] = id.split( ":" );
 			if ( (key === "hp" || key === "mp" || key === "cure") && (part === "page" || part === "key") ) {
 				potionDraft = autoPotionDraftChoice( potionDraft, key, part, Number( value ) );
+			} else if ( (key === "vigorHp" || key === "vigorMp") && (part === "page" || part === "key") ) {
+				companionPotions.choice( key, part, Number( value ) );
+			} else if ( (key === "companionHp" || key === "companionCure") && (part === "page" || part === "key") ) {
+				companionPotions.choice( key === "companionHp" ? "hp" : "cure", part, Number( value ) );
 			}
 			potionCombo = "";
 		} else if ( id.startsWith( "potion-step:" ) ) {
 			const [, key, delta] = id.split( ":" );
-			if ( key === "hp" || key === "mp" ) {
+			if ( key === "vigorHp" || key === "vigorMp" ) {
+				companionPotions.percent(
+					key,
+					Math.max(
+						1,
+						Math.min(
+							100,
+							autoPotionEntry( companionPotions.state().draft[key] ).percent + Number( delta )
+						)
+					)
+				);
+			} else if ( key === "hp" || key === "mp" ) {
 				const entry = autoPotionEntry( potionDraft[key] );
 				if ( !entry.enabled ) return;
 				potionDraft = {
@@ -9086,8 +9126,14 @@ export function createUi( ports: UiPorts ) {
 						(key === "bgm" || key === "effects" || key === "environment") && Number.isInteger( n ) &&
 						n >= 0 && n <= AUDIO_SLIDER_MAX
 					) updateAudioDraft( { ...audioDraft, [key]: audioSliderLevel( n ) } );
+				} else if ( event.id.startsWith( "companion-potion-percent:" ) ) {
+					const key = event.id.slice( 25 );
+					if ( key === "transport" || key === "attack" ) {
+						companionPotions.percent( key, Number( event.value ) );
+					}
 				} else if ( event.id.startsWith( "potion-percent:" ) ) {
 					const key = event.id.slice( 15 ), percent = Number( event.value );
+					if ( key === "vigorHp" || key === "vigorMp" ) companionPotions.percent( key, percent );
 					if (
 						(key === "hp" || key === "mp") && autoPotionEntry( potionDraft[key] ).enabled &&
 						Number.isInteger( percent ) && percent >= 1 && percent <= 100
@@ -9523,22 +9569,61 @@ export function createUi( ports: UiPorts ) {
 				setPanel( "Storage" );
 				dirty = true;
 			}
-			// Port-only (transport-auto-potion.ts): the transport's own potion.
-			if ( experimental.state().saved.transportAutoPotion && next.session?.phase === "world" && next.gameplay ) {
+			companionPotions.sync(
+				next.session?.phase === "world" ?
+					apiBase + "|" + (next.session.nativeServerName ?? "") + "|" + next.session.character :
+					""
+			);
+			// Port-only: one pair of item bindings serves both companion HP thresholds.
+			if (
+				experimental.state().saved.transportAutoPotion && next.session?.phase === "world" &&
+				next.worldReady && (!next.frontend || next.frontend.phase === "world") && next.gameplay
+			) {
 				const game = next.gameplay, references = hud.data()?.cosReferences, clock = next.simulationTimeMs ?? 0;
-				const use = transportAutoPotion( {
-					records: game.cosRecords ?? [],
-					maxHp: refObjId => references?.get( refObjId )?.maxHp ?? 0,
+				const shared = {
 					items: game.inventory,
+					quickSlots: game.quickSlots ?? [],
 					cooldowns: game.itemCooldowns ?? [],
-					percent: autoPotionEntry( (game.autoPotion ?? defaultAutoPotion()).hp ).percent,
+					settings: companionPotions.state().saved,
 					now: clock,
-					lastSentMs: transportPotionSentMs,
-					blocked: transportPotionBlocked( game )
+					lastSentMs: companionPotions.state().lastSentMs,
+					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
+						!!(carriedItem || carriedShortcut)
+				};
+				const use = playerVigorAutoPotion( {
+					...shared,
+					vital: game.vitals.find( v => v.gid === game.localGid )
+				} ) ?? companionAutoPotion( {
+					records: game.cosRecords ?? [],
+					maxima: (game.cosRecords ?? []).map( record => ({
+						gid: record.gid,
+						maxHp: petReference(
+							references?.get( record.refObjId ),
+							game.petTraining?.gid === record.gid ? game.petTraining : undefined,
+							next.entities.find( e => e.gid === record.gid )?.petResolve,
+							clock,
+							record.level
+						)?.maxHp ?? 0
+					}) ),
+					vitals: game.vitals,
+					items: game.inventory,
+					quickSlots: game.quickSlots ?? [],
+					cooldowns: game.itemCooldowns ?? [],
+					settings: companionPotions.state().saved,
+					now: clock,
+					lastSentMs: companionPotions.state().lastSentMs,
+					blocked: transportPotionBlocked( game ) || itemMall.read().visible ||
+						!!(carriedItem || carriedShortcut)
 				} );
 				if ( use ) {
-					sendGameplay( { kind: "item-use", slot: use.slot, companionGid: use.companionGid } );
-					transportPotionSentMs = clock;
+					sendGameplay( {
+						kind: "item-use",
+						slot: use.slot,
+						...("companionGid" in use && typeof use.companionGid === "number" ?
+							{ companionGid: use.companionGid } :
+							{})
+					} );
+					companionPotions.sent( clock );
 				}
 			}
 			if ( sellAllPhase === "selling" ) {
@@ -11139,6 +11224,7 @@ export function createUi( ports: UiPorts ) {
 				const r = authoredRect( node, ox, oy ),
 					ink = native ? authoredClientRect( node, ox, oy ) : r,
 					hAlign = native ? node.hAlign : 0,
+					vAlign = node.vAlign,
 					width = text.run( value ).width,
 					offset = Math.max( 0, ink[2] - width ) *
 						(hAlign === 2 ? 1 : hAlign === 1 ? .5 : 0);
@@ -11164,6 +11250,16 @@ export function createUi( ports: UiPorts ) {
 				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
 				const scroll = focus === id && width > ink[2] ? Math.max( 0, caret - ink[2] + EDIT_CARET_WIDTH ) : 0,
 					box: UiRect = [ ink[0] - scroll, ink[1], Math.max( ink[2], width ), ink[3] ];
+				// The one line sits in the client rect by authored VAlign
+				// and the caret covers that line box alone, never the
+				// whole control height (inference, see EDIT_CARET_WIDTH).
+				const lineHeight = Math.min( text.boardHeight() || ink[3], ink[3] ),
+					lineTop = Math.round( ink[1] ) +
+						(vAlign === 1 ?
+							Math.floor( (ink[3] - lineHeight) / 2 ) :
+							vAlign === 2 ?
+							Math.floor( ink[3] - lineHeight ) :
+							0);
 				if ( focus === id && end > start ) {
 					rect(
 						[ ink[0] + offset + before - scroll, ink[1], through - before, ink[3] ],
@@ -11178,7 +11274,7 @@ export function createUi( ports: UiPorts ) {
 						ink
 					);
 				}
-				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
+				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign, vAlign } ) );
 				if ( focus === id && caretVisible ) {
 					// A right-aligned empty edit puts the caret on the clip's right
 					// edge, which the clip excludes; keep the native-looking caret
@@ -11187,7 +11283,7 @@ export function createUi( ports: UiPorts ) {
 						ink[0] + ink[2] - EDIT_CARET_WIDTH,
 						Math.max( ink[0], ink[0] + offset + caret - scroll )
 					);
-					rect( [ caretX, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
+					rect( [ caretX, lineTop, EDIT_CARET_WIDTH, lineHeight ], white, "", [
 						0,
 						0,
 						1,
@@ -13685,16 +13781,126 @@ export function createUi( ports: UiPorts ) {
 				}
 				if ( panel === "Auto Potion" && hudData ) {
 					const admission = beginWindow();
-					const [px, py] = windowOrigin( "Auto Potion", [
-							Math.max( 0, (w - 394) / 2 ),
-							Math.max( 0, (h - 520) / 2 ),
-							394,
-							520
+					const companionEnabled = experimental.state().saved.transportAutoPotion;
+					const companionTab = companionEnabled && companionPotions.state().tab === "companion";
+					// Port-only: an expanded dialog must not inherit a clipped native origin.
+					const placed = windowPlacement.read( "window-drag:Auto Potion" );
+					if ( companionEnabled && placed && (placed[0] < 0 || placed[1] < 0) ) {
+						windowPlacement.drag( "window-drag:Auto Potion", 0, 0 );
+					}
+					const dialogWidth = companionEnabled ? 414 : 394,
+						dialogHeight = companionEnabled ? (companionTab ? 524 : 674) : 520;
+					const [originX, originY] = windowOrigin( "Auto Potion", [
+							Math.max( 0, (w - dialogWidth) / 2 ),
+							Math.max( 0, (h - (companionEnabled ? 674 : 520)) / 2 ),
+							dialogWidth,
+							dialogHeight
 						] ),
-						layout = hudData.windows.ifautopotion!,
-						slot = hudData.windows.ifautopotionslot!;
-					windowBox( hudCopy( "UIIT_STT_MACROPOTION" ) || "Auto Potion", px, py, 394, 520 );
-					closeButton( px + 369, py + 10, panelCloseId( "Auto Potion" ) );
+						// Bitmap tile joins must land on pixels, including odd-sized viewports.
+						px = Math.round( originX ),
+						py = Math.round( originY ),
+						layout = { ...hudData.windows.ifautopotion! },
+						slot = { ...hudData.windows.ifautopotionslot! };
+					if ( companionEnabled ) {
+						slot.GDR_AUTOPOTION_SLOT_DATA_BOX = {
+							...slot.GDR_AUTOPOTION_SLOT_DATA_BOX!,
+							rect: [ 85, 6, 0, 0 ]
+						};
+					}
+					if ( companionEnabled ) {
+						// Port-only layout: the owner's 394 x 542 tabbed mockup, in native pixels.
+						const positions: Record<string, UiRect> = {
+							GDR_AUTO_POTION_FRAME_1: [ 13, 62, 388, dialogHeight - 75 ],
+							GDR_AUTO_POTION_FRAME_2: [ 24, 75, 366, 114 ],
+							GDR_AUTO_POTION_BG_1: [ 25, 74, 364, dialogHeight - 99 ],
+							GDR_AUTO_POTION_SLOT_HP: [ 23, 201, 367, 73 ],
+							GDR_AUTO_POTION_SLOT_MP: [ 23, 281, 367, 73 ],
+							GDR_AUTO_POTION_ABNORMAL_CHECKBOX: [ 30, 529, 16, 16 ],
+							GDR_AUTO_POTION_ABNORMAL_NAME: [ 53, 531, 105, 16 ],
+							GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_BELT_STA: [ 156, 531, 45, 12 ],
+							GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_STA: [ 270, 531, 50, 12 ],
+							GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_BELT_COMBOBOX: [ 208, 527, 57, 20 ],
+							GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_COMBOBOX: [ 326, 527, 57, 20 ],
+							GDR_AUTO_POTION_DELAY_CHECKBOX: [ 30, 567, 16, 16 ],
+							GDR_AUTO_POTION_DELAY_NAME: [ 53, 570, 180, 16 ],
+							GDR_AUTO_POTION_DELAY_VERTSPINCTRL: [ 326, 564, 58, 25 ]
+						};
+						layout.GDR_AUTO_POTION_SLOT_VIGORHP = {
+							...layout.GDR_AUTO_POTION_SLOT_HP!,
+							rect: [ 23, 361, 367, 73 ]
+						};
+						layout.GDR_AUTO_POTION_SLOT_VIGORMP = {
+							...layout.GDR_AUTO_POTION_SLOT_MP!,
+							rect: [ 23, 441, 367, 73 ]
+						};
+						for (
+							const name of [
+								"NAME",
+								"DATA",
+								"DATA_UNIT_STA",
+								"QUICKSLOT_BELT_STA",
+								"QUICKSLOT_STA",
+								"QUICKSLOT_BELT_COMBOBOX",
+								"QUICKSLOT_COMBOBOX",
+								"SLIDERCTRL",
+								"CENTER_STA",
+								"MAX_STA"
+							]
+						) {
+							const key = "GDR_AUTOPOTION_SLOT_" + name, node = slot[key]!;
+							const shift = name === "NAME" ?
+								-2 :
+								name === "DATA" || name === "DATA_UNIT_STA" ?
+								31 :
+								name === "CENTER_STA" ?
+								10 :
+								20;
+							slot[key] = {
+								...node,
+								rect: [
+									node.rect[0] +
+									(name === "SLIDERCTRL" ? 0 : name === "QUICKSLOT_COMBOBOX" ? 21 : shift),
+									node.rect[1],
+									name === "NAME" ? 56 : name === "SLIDERCTRL" ? 354 : node.rect[2],
+									node.rect[3]
+								]
+							};
+						}
+						for ( const [name, rect] of Object.entries( positions ) ) {
+							layout[name] = { ...layout[name]!, rect };
+						}
+					}
+					windowBox( hudCopy( "UIIT_STT_MACROPOTION" ) || "Auto Potion", px, py, dialogWidth, dialogHeight );
+					closeButton( px + dialogWidth - 25, py + 10, panelCloseId( "Auto Potion" ) );
+					if ( companionEnabled ) {
+						for (
+							const [index, key, caption] of [ [ 0, "character", "Character" ], [
+								1,
+								"companion",
+								"Companion"
+							] ] as const
+						) {
+							const selected = companionPotions.state().tab === key;
+							const r: UiRect = [ px + 24 + index * 74, py + 40, 72, 24 ];
+							image( r, ROOT + "interface/ifcommon/com_long_tab_" + (selected ? "on" : "off") + ".png" );
+							controls.push( {
+								id: "potion-tab:" + key,
+								label: caption,
+								rect: r,
+								kind: "button",
+								selected
+							} );
+							quads.push(
+								...text.quads(
+									caption,
+									r,
+									full,
+									selected ? white : [ 191 / 255, 184 / 255, 162 / 255, 1 ],
+									{ hAlign: 1, vAlign: 1 }
+								)
+							);
+						}
+					}
 					const bg = layout.GDR_AUTO_POTION_BG_1!;
 					paths.push( bg.texture );
 					quads.push(
@@ -13712,17 +13918,42 @@ export function createUi( ports: UiPorts ) {
 							)
 						);
 					}
-					const desc = layout.GDR_AUTO_POTION_DESC_PML!,
-						descRect = authoredRect( desc, px, py ),
-						descOut = text.guide(
-							guideTokens( hudCopy( desc.text ) ),
-							descRect,
-							descRect,
-							desc.color,
+					if ( companionEnabled ) {
+						const heading = companionTab ? "Companion recovery settings" : "Auto recovery settings";
+						const body = companionTab ?
+							"Set the % of your transport or attack pet HP gage for auto recovery. Both companions share the pet HP potion and universal pill quick slots below." :
+							"Set the % of the HP, MP, or Vigor gage to the preferred value, then auto potion recovery will be in use. Remove the check to disable a category.";
+						rect( [ px + 30, py + 81, 354, 102 ], [ 8 / 255, 10 / 255, 9 / 255, .35 ] );
+						quads.push(
+							...text.quads( heading, [ px + 43, py + 91, 330, 17 ], full, [
+								239 / 255,
+								218 / 255,
+								164 / 255,
+								1
+							] )
+						);
+						const description = text.guide(
+							guideTokens( body ),
+							[ px + 43, py + 110, 330, 74 ],
+							full,
+							white,
 							resources.size
 						);
-					quads.push( ...descOut.quads );
-					paths.push( ...descOut.paths );
+						quads.push( ...description.quads );
+						paths.push( ...description.paths );
+					} else {
+						const desc = layout.GDR_AUTO_POTION_DESC_PML!,
+							descRect = authoredRect( desc, px, py ),
+							descOut = text.guide(
+								guideTokens( hudCopy( desc.text ) ),
+								descRect,
+								descRect,
+								desc.color,
+								resources.size
+							);
+						quads.push( ...descOut.quads );
+						paths.push( ...descOut.paths );
+					}
 					/*
 					================
 					check
@@ -13741,151 +13972,315 @@ export function createUi( ports: UiPorts ) {
 						image( r, path );
 						controls.push( { id, label: caption, rect: r, kind: "button", selected: enabled } );
 					};
+					/*
+================
+drawRail
+
+Keep retail arrow end-caps unscaled; widen only the middle rail.
+================
+					*/
+					const drawRail = ( rail: AuthoredControl, sx: number, sy: number ) => {
+						const r = authoredRect( rail, sx, sy );
+						if ( companionEnabled ) {
+							const size = resources.size( rail.texture );
+							if ( size ) {
+								for (
+									const [offset, width, source, sourceWidth] of [ [ 0, 20, 0, 20 ], [
+										20,
+										314,
+										20,
+										294
+									], [ 334, 20, 314, 20 ] ] as const
+								) {
+									image( [ r[0] + offset, r[1], width, 21 ], rail.texture, white, [
+										source / size[0],
+										0,
+										sourceWidth / size[0],
+										21 / size[1]
+									] );
+								}
+							}
+						} else authoredImage( rail, sx, sy );
+					};
 					const combos: { key: string; part: string; r: UiRect; selected: number; count: number; }[] = [];
-					for ( const key of [ "hp", "mp", "cure" ] as const ) {
-						const entry = autoPotionEntry( potionDraft[key] ),
-							page = key === "cure" ? potionDraft.curePage : Math.floor( (entry.slot - 1) / 10 ),
-							n = key === "cure" ? potionDraft.cureKey + 1 : (entry.slot - 1) % 10 + 1;
-						if ( key !== "cure" ) {
-							const parent = layout["GDR_AUTO_POTION_SLOT_" + key.toUpperCase()]!,
-								sx = px + parent.rect[0],
-								sy = py + parent.rect[1];
+					if ( !companionTab ) {
+						const keys = companionEnabled ?
+							([ "hp", "mp", "vigorHp", "vigorMp", "cure" ] as const) :
+							([ "hp", "mp", "cure" ] as const);
+						for ( const key of keys ) {
+							const vigor = key === "vigorHp" || key === "vigorMp";
+							const caption = vigor ? (key === "vigorHp" ? "Vigor HP" : "Vigor MP") : key.toUpperCase();
+							const entry = autoPotionEntry(
+									vigor ? companionPotions.state().draft[key] : potionDraft[key]
+								),
+								page = key === "cure" ? potionDraft.curePage : Math.floor( (entry.slot - 1) / 10 ),
+								n = key === "cure" ? potionDraft.cureKey + 1 : (entry.slot - 1) % 10 + 1;
+							if ( key !== "cure" ) {
+								const parent = layout["GDR_AUTO_POTION_SLOT_" + key.toUpperCase()]!,
+									sx = px + parent.rect[0],
+									sy = py + parent.rect[1];
+								check(
+									slot.GDR_AUTOPOTION_SLOT_CHECKBOX!,
+									sx,
+									sy,
+									"potion-enable:" + key,
+									entry.enabled,
+									caption
+								);
+								authoredText( slot.GDR_AUTOPOTION_SLOT_NAME!, sx, sy, caption );
+								authoredImage( slot.GDR_AUTOPOTION_SLOT_DATA_BOX!, sx, sy );
+								authoredText( slot.GDR_AUTOPOTION_SLOT_DATA!, sx, sy, String( entry.percent ) );
+								authoredText( slot.GDR_AUTOPOTION_SLOT_DATA_UNIT_STA!, sx, sy, "%" );
+								for ( const tail of [ "QUICKSLOT_STA", "QUICKSLOT_BELT_STA" ] ) {
+									const node = slot["GDR_AUTOPOTION_SLOT_" + tail]!;
+									authoredText( node, sx, sy, hudCopy( node.text ) );
+								}
+								const rail = slot.GDR_AUTOPOTION_SLOT_SLIDERCTRL!, r = authoredRect( rail, sx, sy );
+								drawRail( rail, sx, sy );
+								for ( const delta of [ -1, 1 ] ) {
+									controls.push( {
+										id: "potion-step:" + key + ":" + delta,
+										label: caption + (delta < 0 ? " decrease" : " increase"),
+										kind: "button",
+										rect: [ delta < 0 ? r[0] : r[0] + r[2] - 20, r[1] + 2, 20, 16 ],
+										disabled: !entry.enabled ||
+											(delta < 0 ? entry.percent <= 1 : entry.percent >= 100)
+									} );
+								}
+								controls.push( {
+									id: "potion-percent:" + key,
+									disabled: !entry.enabled,
+									label: caption + " threshold",
+									kind: "range",
+									rect: [ r[0] + 20, r[1] + 2, companionEnabled ? 314 : 292, 16 ],
+									min: 1,
+									max: 100,
+									value: String( entry.percent )
+								} );
+								const thumb = ROOT + "interface/ifcommon/com_scroll_button.png";
+								paths.push( thumb );
+								if ( entry.enabled && resources.has( thumb ) ) {
+									rect(
+										[
+											r[0] + 20 +
+											(Math.max( 1, entry.percent ) - 1) / 99 * (companionEnabled ? 296 : 276),
+											r[1] + 2,
+											16,
+											16
+										],
+										white,
+										thumb
+									);
+								}
+								for (
+									const [tail, value] of [ [ "MIN", "1" ], [ "CENTER", "50" ], [
+										"MAX",
+										"100"
+									] ] as const
+								) authoredText( slot["GDR_AUTOPOTION_SLOT_" + tail + "_STA"]!, sx, sy, value );
+								combos.push( {
+									key,
+									part: "page",
+									r: authoredRect( slot.GDR_AUTOPOTION_SLOT_QUICKSLOT_BELT_COMBOBOX!, sx, sy ),
+									selected: page,
+									count: 4
+								}, {
+									key,
+									part: "key",
+									r: authoredRect( slot.GDR_AUTOPOTION_SLOT_QUICKSLOT_COMBOBOX!, sx, sy ),
+									selected: n,
+									count: 10
+								} );
+							} else {
+								check(
+									layout.GDR_AUTO_POTION_ABNORMAL_CHECKBOX!,
+									px,
+									py,
+									"potion-enable:cure",
+									entry.enabled,
+									hudCopy( "UIIT_STT_MACROPOTION_ABNORMAL" )
+								);
+								for ( const tail of [ "NAME", "QUICKSLOT_STA", "QUICKSLOT_BELT_STA" ] ) {
+									const node = layout["GDR_AUTO_POTION_ABNORMAL_" + tail]!;
+									authoredText( node, px, py, hudCopy( node.text ) );
+								}
+								combos.push( {
+									key,
+									part: "page",
+									r: authoredRect( layout.GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_BELT_COMBOBOX!, px, py ),
+									selected: page,
+									count: 4
+								}, {
+									key,
+									part: "key",
+									r: authoredRect( layout.GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_COMBOBOX!, px, py ),
+									selected: n,
+									count: 10
+								} );
+							}
+						}
+						check(
+							layout.GDR_AUTO_POTION_DELAY_CHECKBOX!,
+							px,
+							py,
+							"potion-delay",
+							!!(potionDraft.timing & 128),
+							hudCopy( "UIIT_STT_MACROPOTION_DELAY" )
+						);
+						authoredText(
+							layout.GDR_AUTO_POTION_DELAY_NAME!,
+							px,
+							py,
+							hudCopy( "UIIT_STT_MACROPOTION_DELAY" )
+						);
+						/*
+					================
+					spinState
+					================
+					*/
+						const delayRect = authoredRect( layout.GDR_AUTO_POTION_DELAY_VERTSPINCTRL!, px, py ),
+							spinState = ( id: string ) => pressed === id && hover === id ? 2 : hover === id ? 1 : 0,
+							spin = verticalSpinChrome(
+								delayRect,
+								resources.size,
+								full,
+								spinState( "potion-time-up" ),
+								spinState( "potion-time-down" )
+							);
+						paths.push( ...spin.paths );
+						quads.push(
+							...spin.quads,
+							...text.quads( ((potionDraft.timing & 127) / 10).toFixed( 1 ), spin.textRect, full, white, {
+								hAlign: 0,
+								vAlign: 1
+							} )
+						);
+						controls.push(
+							{
+								id: "potion-time",
+								label: hudCopy( "UIIT_STT_MACROPOTION_DELAY" ),
+								kind: "region",
+								rect: spin.textRect,
+								value: ((potionDraft.timing & 127) / 10).toFixed( 1 )
+							},
+							{ id: "potion-time-up", label: "Increase potion delay", kind: "button", rect: spin.up },
+							{ id: "potion-time-down", label: "Decrease potion delay", kind: "button", rect: spin.down }
+						);
+					}
+					for ( const [name, id] of [ [ "OK", "potion-save" ], [ "CANCEL", "potion-cancel" ] ] as const ) {
+						const node = layout["GDR_AUTO_POTION_" + name + "_BTN"]!;
+						authoredLabeledButton(
+							node,
+							companionEnabled ? px + (name === "OK" ? 125 : 213) - node.rect[0] : px,
+							companionEnabled ? py + dialogHeight - 60 - node.rect[1] : py,
+							id,
+							hudCopy( node.text )
+						);
+					}
+					if ( companionTab ) {
+						const settings = companionPotions.state().draft;
+						for (
+							const [index, key, label] of [ [ 0, "transport", "Transport HP" ], [
+								1,
+								"attack",
+								"Attack pet HP"
+							] ] as const
+						) {
+							const entry = autoPotionEntry( settings[key] ), sx = px + 23, sy = py + 205 + index * 86;
 							check(
 								slot.GDR_AUTOPOTION_SLOT_CHECKBOX!,
 								sx,
 								sy,
-								"potion-enable:" + key,
+								"companion-potion-enable:" + key,
 								entry.enabled,
-								key.toUpperCase()
+								label
 							);
-							authoredText( slot.GDR_AUTOPOTION_SLOT_NAME!, sx, sy, key.toUpperCase() );
-							authoredImage( slot.GDR_AUTOPOTION_SLOT_DATA_BOX!, sx, sy );
-							authoredText( slot.GDR_AUTOPOTION_SLOT_DATA!, sx, sy, String( entry.percent ) );
-							authoredText( slot.GDR_AUTOPOTION_SLOT_DATA_UNIT_STA!, sx, sy, "%" );
-							for ( const tail of [ "QUICKSLOT_STA", "QUICKSLOT_BELT_STA" ] ) {
-								const node = slot["GDR_AUTOPOTION_SLOT_" + tail]!;
-								authoredText( node, sx, sy, hudCopy( node.text ) );
-							}
+							quads.push( ...text.quads( label, [ sx + 30, sy + 10, 230, 16 ], full, white ) );
+							authoredImage( slot.GDR_AUTOPOTION_SLOT_DATA_BOX!, px + 241, sy );
+							quads.push(
+								...text.quads( String( entry.percent ), [ px + 331, sy + 10, 25, 12 ], full, white, {
+									hAlign: 2
+								} )
+							);
+							quads.push( ...text.quads( "%", [ px + 364, sy + 10, 14, 12 ], full, white ) );
 							const rail = slot.GDR_AUTOPOTION_SLOT_SLIDERCTRL!, r = authoredRect( rail, sx, sy );
-							authoredImage( rail, sx, sy );
+							drawRail( rail, sx, sy );
+							controls.push( {
+								id: "companion-potion-percent:" + key,
+								label: label + " threshold",
+								kind: "range",
+								rect: [ r[0] + 20, r[1] + 2, 314, 16 ],
+								min: 1,
+								max: 100,
+								value: String( entry.percent ),
+								disabled: !entry.enabled
+							} );
 							for ( const delta of [ -1, 1 ] ) {
 								controls.push( {
-									id: "potion-step:" + key + ":" + delta,
-									label: key.toUpperCase() + (delta < 0 ? " decrease" : " increase"),
+									id: "companion-potion-step:" + key + ":" + delta,
+									label: label + (delta < 0 ? " decrease" : " increase"),
 									kind: "button",
 									rect: [ delta < 0 ? r[0] : r[0] + r[2] - 20, r[1] + 2, 20, 16 ],
 									disabled: !entry.enabled || (delta < 0 ? entry.percent <= 1 : entry.percent >= 100)
 								} );
 							}
-							controls.push( {
-								id: "potion-percent:" + key,
-								disabled: !entry.enabled,
-								label: key.toUpperCase() + " threshold",
-								kind: "range",
-								rect: [ r[0] + 20, r[1] + 2, 292, 16 ],
-								min: 1,
-								max: 100,
-								value: String( entry.percent )
-							} );
 							const thumb = ROOT + "interface/ifcommon/com_scroll_button.png";
-							paths.push( thumb );
-							if ( entry.enabled && resources.has( thumb ) ) {
-								rect(
-									[ r[0] + 20 + (Math.max( 1, entry.percent ) - 1) / 99 * 276, r[1] + 2, 16, 16 ],
-									white,
-									thumb
-								);
+							if ( entry.enabled ) {
+								image( [ r[0] + 20 + (entry.percent - 1) / 99 * 296, r[1] + 2, 16, 16 ], thumb );
 							}
 							for (
 								const [tail, value] of [ [ "MIN", "1" ], [ "CENTER", "50" ], [ "MAX", "100" ] ] as const
 							) authoredText( slot["GDR_AUTOPOTION_SLOT_" + tail + "_STA"]!, sx, sy, value );
-							combos.push( {
-								key,
-								part: "page",
-								r: authoredRect( slot.GDR_AUTOPOTION_SLOT_QUICKSLOT_BELT_COMBOBOX!, sx, sy ),
-								selected: page,
-								count: 4
-							}, {
-								key,
-								part: "key",
-								r: authoredRect( slot.GDR_AUTOPOTION_SLOT_QUICKSLOT_COMBOBOX!, sx, sy ),
-								selected: n,
-								count: 10
-							} );
-						} else {
-							check(
-								layout.GDR_AUTO_POTION_ABNORMAL_CHECKBOX!,
-								px,
-								py,
-								"potion-enable:cure",
-								entry.enabled,
-								hudCopy( "UIIT_STT_MACROPOTION_ABNORMAL" )
-							);
-							for ( const tail of [ "NAME", "QUICKSLOT_STA", "QUICKSLOT_BELT_STA" ] ) {
-								const node = layout["GDR_AUTO_POTION_ABNORMAL_" + tail]!;
-								authoredText( node, px, py, hudCopy( node.text ) );
+						}
+						for (
+							const [index, key, label] of [ [ 0, "hp", "Pet HP potion" ], [
+								1,
+								"cure",
+								"Universal pill"
+							] ] as const
+						) {
+							const sy = py + 381 + index * 38, entry = autoPotionEntry( settings.bindings[key] );
+							if ( key === "cure" ) {
+								check(
+									slot.GDR_AUTOPOTION_SLOT_CHECKBOX!,
+									px + 23,
+									sy - 6,
+									"companion-potion-enable:cure",
+									entry.enabled,
+									label
+								);
 							}
+							quads.push( ...text.quads( label, [ px + 53, sy + 4, 110, 16 ], full, white ) );
+							for (
+								const [tail, x, width] of [ [ "QUICKSLOT_BELT_STA", 156, 45 ], [
+									"QUICKSLOT_STA",
+									270,
+									50
+								] ] as const
+							) {
+								const node = slot["GDR_AUTOPOTION_SLOT_" + tail]!;
+								authoredText( { ...node, rect: [ x, 4, width, 12 ] }, px, sy, hudCopy( node.text ) );
+							}
+							const selected = key === "cure" ?
+								settings.bindings.curePage :
+								Math.floor( (entry.slot - 1) / 10 );
+							const number = key === "cure" ? settings.bindings.cureKey + 1 : (entry.slot - 1) % 10 + 1;
 							combos.push( {
-								key,
+								key: key === "hp" ? "companionHp" : "companionCure",
 								part: "page",
-								r: authoredRect( layout.GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_BELT_COMBOBOX!, px, py ),
-								selected: page,
+								r: [ px + 208, sy, 57, 20 ],
+								selected,
 								count: 4
 							}, {
-								key,
+								key: key === "hp" ? "companionHp" : "companionCure",
 								part: "key",
-								r: authoredRect( layout.GDR_AUTO_POTION_ABNORMAL_QUICKSLOT_COMBOBOX!, px, py ),
-								selected: n,
+								r: [ px + 326, sy, 57, 20 ],
+								selected: number,
 								count: 10
 							} );
 						}
 					}
-					check(
-						layout.GDR_AUTO_POTION_DELAY_CHECKBOX!,
-						px,
-						py,
-						"potion-delay",
-						!!(potionDraft.timing & 128),
-						hudCopy( "UIIT_STT_MACROPOTION_DELAY" )
-					);
-					authoredText( layout.GDR_AUTO_POTION_DELAY_NAME!, px, py, hudCopy( "UIIT_STT_MACROPOTION_DELAY" ) );
-					/*
-					================
-					spinState
-					================
-					*/
-					const delayRect = authoredRect( layout.GDR_AUTO_POTION_DELAY_VERTSPINCTRL!, px, py ),
-						spinState = ( id: string ) => pressed === id && hover === id ? 2 : hover === id ? 1 : 0,
-						spin = verticalSpinChrome(
-							delayRect,
-							resources.size,
-							full,
-							spinState( "potion-time-up" ),
-							spinState( "potion-time-down" )
-						);
-					paths.push( ...spin.paths );
-					quads.push(
-						...spin.quads,
-						...text.quads( ((potionDraft.timing & 127) / 10).toFixed( 1 ), spin.textRect, full, white, {
-							hAlign: 0,
-							vAlign: 1
-						} )
-					);
-					controls.push(
-						{
-							id: "potion-time",
-							label: hudCopy( "UIIT_STT_MACROPOTION_DELAY" ),
-							kind: "region",
-							rect: spin.textRect,
-							value: ((potionDraft.timing & 127) / 10).toFixed( 1 )
-						},
-						{ id: "potion-time-up", label: "Increase potion delay", kind: "button", rect: spin.up },
-						{ id: "potion-time-down", label: "Decrease potion delay", kind: "button", rect: spin.down }
-					);
-					for ( const [name, id] of [ [ "OK", "potion-save" ], [ "CANCEL", "potion-cancel" ] ] as const ) {
-						const node = layout["GDR_AUTO_POTION_" + name + "_BTN"]!;
-						authoredLabeledButton( node, px, py, id, hudCopy( node.text ) );
-					}
+
 					for ( const combo of combos ) {
 						comboBox(
 							combo.r,

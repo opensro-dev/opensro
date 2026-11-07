@@ -22,6 +22,8 @@ share of the pool, the contribution list and its reset, all persisted.
 ================
 */
 func TestCloseJobWeekCommitsTheSnapshot(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

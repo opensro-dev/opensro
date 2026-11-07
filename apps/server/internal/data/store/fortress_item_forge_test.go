@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/fortress"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 // forgeTestSmith classifies every item but the two trainer refs as the
@@ -78,6 +79,8 @@ for the same staff is busy. The payment and the order commit together.
 ================
 */
 func TestFortressItemForgeStartChargesAndOrders(t *testing.T) {
+	t.Parallel()
+
 	s, a, leader, member, id := forgeFixture(t, t.TempDir())
 	order := domain.FortressItemForgeRecord{FortressID: 1, ItemRefID: 19227, Count: 10, StartedAtMs: 1000, EndsAtMs: 601000}
 	start := func(actor int64, gold int64, gp uint32) uint8 {
@@ -144,6 +147,8 @@ removes the order. A cancelled order refunds nothing.
 ================
 */
 func TestFortressItemForgeCollectAndRestart(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s, a, leader, _, id := forgeFixture(t, dir)
 	setForgeRole(t, s, leader, leader, 0, 0)
@@ -230,6 +235,8 @@ table, its records untouched; a second upgrade has nothing to do.
 ================
 */
 func TestItemForgeUpgradeAddsTheProductionTable(t *testing.T) {
+	tier.Long(t, "a schema-20 layout-7 authority upgrades to 21 with the empty production table")
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

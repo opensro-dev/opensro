@@ -86,6 +86,14 @@ export interface ExperimentalOptions {
 	// without BC are affected, where RGBA ends the tab; off is the native
 	// texture content.
 	readonly compressedTextures: boolean;
+	// Port-only, not native (#2061): the HD texture set, the asset build's
+	// x2 AI-upscaled world object textures served from their own /hd
+	// subtree behind a separate pack index. Off unless turned on (the
+	// owner's choice, 2026-11-07): off, the asset worker fetches none of
+	// the set, not even its index; on, the index is fetched and the set
+	// downloads with progress, and the retail texture stays the fallback
+	// for every path the set does not hold.
+	readonly hdTextures: boolean;
 	// Port-only, not native: characters and effects share one nearest-first
 	// order under the renderer's CHARACTER_ACTORS (the original keeps every
 	// decoration, 85C020), so a far character gives way to a near effect.
@@ -188,10 +196,11 @@ export interface ExperimentalOptions {
 	// vectors without re-reading the target (CProjectileTrace_Process 8D8580,
 	// CProjectile_Bezier_Process 879650). Off unless turned on.
 	readonly homingProjectiles: boolean;
-	// Port-only, not native (owner 2026-10-24): the summoned trade transport
-	// drinks a transport HP potion at the auto-potion HP percentage
-	// (transport-auto-potion.ts). The original watches only the player
-	// (70C550). Off unless turned on.
+	// Port-only, not native (owner 2026-10-24, extended #2741): companion
+	// and vigor auto-potions (transport-auto-potion.ts, companion-potions.ts).
+	// The original watches only the player (70C550). On unless turned off
+	// (the owner's choice, 2026-11-07, #2741: an explicit exception to the
+	// off-by-default rule); off is the native player-only recovery.
 	readonly transportAutoPotion: boolean;
 	// Port-only, not native (#1448): connect over WebTransport (QUIC/UDP)
 	// first and fall back to the WebSocket when the path fails. On unless
@@ -419,7 +428,7 @@ experimentalOptions
 Only an explicit true enables a toggle, except smoothCamera, enchantSparks,
 compressedTextures, sharedActorRoom, mainThreadOwnWalk, greyDisabledTabs, jobKillNotices, dropPlusNotices,
 plusSevenNotices, breakNotices, highlightEventNotices, fitWindowLabels, dropOnBagTab, exchangeClickShortcuts, noticeLinks, shortNotices, confirmGuildBan,
-petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab and dungeonCharacterPvs, which only an explicit false turns off.
+petClickOpensWindow, smartPetPickup, touchInspect, phoneRenderCap, webTransport, eventChatTab, transportAutoPotion and dungeonCharacterPvs, which only an explicit false turns off.
 The pickup filter's kinds (petFilterGold and its siblings) also only turn off
 explicitly, and are read only while petPickupFilter is on.
 Missing or invalid render scales restore full resolution and missing or
@@ -456,6 +465,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
 		compressedTextures: record.compressedTextures !== false,
+		hdTextures: enabled( "hdTextures" ),
 		sharedActorRoom: record.sharedActorRoom !== false,
 		mainThreadOwnWalk: record.mainThreadOwnWalk !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
@@ -475,7 +485,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		autoSelect: enabled( "autoSelect" ),
 		confirmGuildBan: record.confirmGuildBan !== false,
 		homingProjectiles: enabled( "homingProjectiles" ),
-		transportAutoPotion: enabled( "transportAutoPotion" ),
+		transportAutoPotion: record.transportAutoPotion !== false,
 		webTransport: record.webTransport !== false,
 		petClickOpensWindow: record.petClickOpensWindow !== false,
 		smartPetPickup: record.smartPetPickup !== false,

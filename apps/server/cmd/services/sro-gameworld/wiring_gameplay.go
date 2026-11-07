@@ -377,7 +377,7 @@ func newGameplayPlane(
 	movementRuntime.MotionLocked = items.PlayerMotionLocked
 	movementRuntime.AdvanceResidentRegion = items.AdvanceResidentRegion
 	movementRuntime.CompanionPresentations = items.CompanionPresentations
-	movementRuntime.SpawnSkills = items.EntrySkills
+	movementRuntime.SpawnSkills = items.SpawnEntrySkills
 	movementRuntime.ActionSpeed = items.EntryActionSpeed
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt
@@ -569,6 +569,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native (owner, 2026-11-07, #2769): world entry raises
+	// a character to the 2.5-page inventory base, never lowers one.
+	game.deps.InventoryPages = enterworld.InventoryPagesFromEnv()
+	if game.deps.InventoryPages {
+		log.Infof("inventory: 2.5-page base ON (%s); off is the native one page", enterworld.EnvInventoryPages)
+	}
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
 	// Port-only, not native: the Bandit Den scroll counts down half as long,
@@ -681,6 +687,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// Port-only, not native: a GM's /FORGE item forge (issue #1980).
+	game.items.GMItemForge = action.GMItemForgeFromEnv()
+	if game.items.GMItemForge {
+		log.Infof("gm: /FORGE ON (%s); forged items are bound", action.EnvGMItemForge)
+	}
 	// Capture the Flag (native): the daily start and the house minimum.
 	flagWar, err := action.FlagWarSettingsFromEnv()
 	if err != nil {
@@ -743,6 +754,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	game.items.AttackPetExpansion = companion.AttackPetExpansionEnabled()
+	game.items.PetInventoryPages, err = companion.PetInventoryPagesEnabled()
+	if err != nil {
+		return err
+	}
 	if stats.Growth.Enabled {
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate

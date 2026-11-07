@@ -62,6 +62,9 @@ func gmCommandHubHandler(deps Dependencies, presence PresenceView, status ...Bod
 		if outcome.Ack != nil {
 			_ = s.Send(OpGmCommandAck, outcome.Ack)
 		}
+		for _, extra := range outcome.ExtraAcks {
+			_ = s.Send(OpGmCommandAck, extra)
+		}
 	}
 }
 

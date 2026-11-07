@@ -62,6 +62,9 @@ type GroundItemRecord struct {
 	OwnerJID          uint32  `json:"ownerJid,omitempty"`
 	DroppedBy         string  `json:"droppedBy,omitempty"`
 	DroppedAtMs       int64   `json:"droppedAtMs,omitempty"`
+	// ForgeBound carries the forge mark onto the ground plane so a bound
+	// drop stays bound through pickup and restart (issue #1980).
+	ForgeBound bool `json:"forgeBound,omitempty"`
 }
 
 // GroundSnapshot is the complete ground registry at one instant, including

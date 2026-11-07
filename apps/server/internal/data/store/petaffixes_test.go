@@ -15,6 +15,8 @@ TestPetAffixRulesDB
 ================
 */
 func TestPetAffixRulesDB(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	defaults := []PetAffixRule{{Code: 77, Name: "Cooldown", Group: "Cooldown", Minimum: 13, Maximum: 50, Weight: 40, RollPower: 3}}
 	if rows, err := s.PetAffixRules(defaults); err != nil || len(rows) != 1 || rows[0].Maximum != 50 {

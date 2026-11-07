@@ -7,6 +7,8 @@ import (
 )
 
 func TestCriminalRecordPersistsThroughCharacterDoor(t *testing.T) {
+	t.Parallel()
+
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	c := &domain.Character{Name: "PKFixture"}

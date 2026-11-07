@@ -57,6 +57,8 @@ func TestCreateCharacterEnforcesNativeNameLength(t *testing.T) {
 }
 
 func TestCreateCharacterReturnsTypedNameErrors(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)
@@ -79,6 +81,8 @@ func TestCreateCharacterReturnsTypedNameErrors(t *testing.T) {
 // clash - a native bug we do not copy (owner, 2026-10-28) - so the
 // refusal is unconditional and reuses the duplicate-name error class.
 func TestCreateCharacterRefusesExistingJobAlias(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	s := openTest(t, dir, clock)

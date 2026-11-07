@@ -15,6 +15,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -26,6 +28,8 @@ error; the offline upgrade validates it, commits it, and Open then succeeds.
 ================
 */
 func TestOpenRefusesThePreviousSchemaUntilUpgraded(t *testing.T) {
+	tier.Long(t, "an authority one schema behind refuses Open until the offline upgrade commits it")
+
 	dir := t.TempDir()
 	clock := newTestClock()
 	openTest(t, dir, clock).Close()

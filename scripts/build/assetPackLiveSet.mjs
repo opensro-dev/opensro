@@ -1,14 +1,15 @@
 /*
 ===========================================================================
 
-assetPackLiveSet.mjs - which files under assets/packs/ the published index uses
+assetPackLiveSet.mjs - which files under a packs root the published index uses
 
-The published pack index (assets/packs/manifest.json) is the single source of
-truth for delivery. A file under the packs root is live when the index or
-its precompressed variant names it: the index itself and every pack.
-Members travel compressed inside their packs
-(SROPACK2), so retired gzip transports and delivery.json are not live.
-Everything else under the packs root is a superseded build output.
+The published pack index (assets/packs/manifest.json, or the HD set's own
+hd/packs/manifest.json) is the single source of truth for delivery. A file
+under the packs root is live when the index or its precompressed variant
+names it: the index itself and every pack. Members travel compressed
+inside their packs (SROPACK2), so retired gzip transports and
+delivery.json are not live. Everything else under the packs root is a
+superseded build output.
 
 Both the full pack build (assetPacks.mjs) and the pack garbage collector
 (gc_asset_packs.mjs) use this one rule, so they cannot disagree about what
@@ -32,7 +33,7 @@ index. `indexPath` is the index file; `publicRoot` resolves the public
 asset paths the index names.
 ================
 */
-export function livePackFiles( publicRoot, indexPath, index ) {
+export function livePackFiles( publicRoot, indexPath, index, packRoot = "/assets" ) {
 	const live = new Set();
 	const add = ( filename ) => live.add( path.resolve( filename ).toLowerCase() );
 	for ( const suffix of INDEX_SIDECARS ) {
@@ -40,7 +41,7 @@ export function livePackFiles( publicRoot, indexPath, index ) {
 	}
 	for ( const group of index.groups ?? [] ) {
 		for ( const pack of group.packs ?? [] ) {
-			add( containedPublicFile( publicRoot, pack.path ) );
+			add( containedPublicFile( publicRoot, pack.path, packRoot ) );
 		}
 	}
 	return live;

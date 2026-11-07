@@ -155,7 +155,11 @@ for ( const laneCount of [ 1, 8 ] ) {
 			),
 			"every producer finished before the pack tail began"
 		);
-		assert.deepEqual( events.slice( -2 ), [ "start:packTree", "end:packTree" ], "the final pack tail runs last" );
+		assert.deepEqual(
+			events.slice( -2 ),
+			[ "start:buildHdTexturePacks", "end:buildHdTexturePacks" ],
+			"the HD pack step runs after the final pack tail"
+		);
 	});
 
 	test(`in-lane chains keep their order (${laneCount} lane(s))`, async () => {
@@ -209,12 +213,16 @@ test("a failed source-image conversion stops the build before any lane", async (
 });
 
 // Steps that consume the families' output, or run after the tree is complete.
-// The texture variants re-encode every native texture, the families' included.
+// The texture variants re-encode every native texture, the families' included;
+// the HD variants upscale the world textures the same way, and the HD pack
+// step packs that set behind its own index after the pack tail.
 const AFTER_FAMILIES = [
 	"buildTextureVariants",
+	"buildHdTextureVariants",
 	"buildUiImagePreloadManifest",
 	"buildBackgroundInstallAsset",
-	"packTree"
+	"packTree",
+	"buildHdTexturePacks"
 ];
 
 for ( const laneCount of [ 1, 8 ] ) {

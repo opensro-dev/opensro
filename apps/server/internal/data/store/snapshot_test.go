@@ -21,6 +21,8 @@ the live store but not the copy, and a new snapshot replaces the old one.
 ================
 */
 func TestSnapshotCopiesTheCommittedGeneration(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := newLedgerCharacter(t, s, "SnapOne", 250)
@@ -73,6 +75,8 @@ still commits, because WAL readers never block the writer.
 ================
 */
 func TestDoorCommitsWhileASnapshotReads(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := newLedgerCharacter(t, s, "SnapReader", 10)
 	reader, err := connectDB(s.dbPath)

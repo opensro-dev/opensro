@@ -84,6 +84,24 @@ export function minimapArt( value: unknown ): ReadonlyMap<string, string> {
 	}
 	return paths;
 }
+/*
+================
+minimapWithLaterFloors
+
+Fills the dungeons v1.150 art leaves without floors from the later catalogue.
+A dungeon with retail floors keeps them, so later art never replaces it.
+================
+*/
+export function minimapWithLaterFloors(
+	retail: ReadonlyMap<number, readonly MinimapFloor[]>,
+	later: ReadonlyMap<number, readonly MinimapFloor[]>
+): ReadonlyMap<number, readonly MinimapFloor[]> {
+	const merged = new Map( retail );
+	for ( const [sector, floors] of later ) {
+		if ( !merged.get( sector )?.length ) merged.set( sector, floors );
+	}
+	return merged;
+}
 export function minimapTiles( pose: Pose, zoom: number, floor?: MinimapFloor, art?: ReadonlyMap<string, string> ) {
 	if ( !art ) return [];
 	const dungeon = featuresAt( pose.regionId ).floorMinimap;

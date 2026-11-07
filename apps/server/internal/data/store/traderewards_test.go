@@ -19,6 +19,8 @@ TestTradeRewardPoolCommitsWithCharactersAndSurvivesReopen
 ================
 */
 func TestTradeRewardPoolCommitsWithCharactersAndSurvivesReopen(t *testing.T) {
+	t.Parallel()
+
 	dir, clock := t.TempDir(), newTestClock()
 	s := openTest(t, dir, clock)
 	c := guildTestCharacter("trader")
@@ -67,6 +69,8 @@ TestTradeRewardPoolRejectsUnknownShardAndInvalidRecord
 ================
 */
 func TestTradeRewardPoolRejectsUnknownShardAndInvalidRecord(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	if _, err := s.db.Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyTradeRewards, `{"lost":{"hunters":3,"thieves":2}}`); err != nil {
 		t.Fatal(err)
@@ -97,6 +101,8 @@ normal write-health retry, but disk must contain neither half until retry.
 ================
 */
 func TestTradeRewardPoolAndGoldCannotCommitSeparately(t *testing.T) {
+	t.Parallel()
+
 	s := openTest(t, t.TempDir(), newTestClock())
 	c := guildTestCharacter("poolfailure")
 	if err := s.CreateCharacter(testDivision, "test-account", c); err != nil {

@@ -10,6 +10,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -22,6 +24,7 @@ nothing to do.
 ================
 */
 func TestInstanceReturnUpgradeRewritesNothing(t *testing.T) {
+	tier.Long(t, "a schema-28 authority upgrades to 29 with its records untouched")
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	c := seededCharacter()

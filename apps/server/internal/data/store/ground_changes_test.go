@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/testsupport/tier"
 )
 
 /*
@@ -104,6 +105,8 @@ plane - and it persists.
 ================
 */
 func TestOneChangedDropIsOneRow(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	f.r.SetStackCount(testDivision, f.gids[9], 4)
 	changes := f.r.Changes()
@@ -124,6 +127,8 @@ stamp leaves the table behind and fails here by name.
 ================
 */
 func TestEveryRegistryMutatorPersists(t *testing.T) {
+	tier.Long(t, "every ground registry mutator brings its table to the registry on commit and after reopen")
+
 	instance := grounditem.Population{World: 0x1000a, Generation: 2}
 	dropped := time.Unix(1000, 0)
 	mutators := []struct {
@@ -158,6 +163,8 @@ func TestEveryRegistryMutatorPersists(t *testing.T) {
 	}
 	for _, m := range mutators {
 		t.Run(m.name, func(t *testing.T) {
+			t.Parallel()
+
 			f := newGroundChangeFixture(t)
 			m.mutate(f)
 			f.commitAndMatch(t, m.name)
@@ -176,6 +183,8 @@ writing the division.
 ================
 */
 func TestAVanishedDivisionDeletesEveryRow(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	f.r.Clear(testDivision)
 	if rows := f.r.Changes().Rows; len(rows) != len(f.gids) {
@@ -198,6 +207,8 @@ gid out again.
 ================
 */
 func TestTheGidCounterPersistsWhenItMoves(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	transient := f.r.Add(testDivision, grounditem.Item{RefObjID: 62, GoldAmount: 3})
 	f.r.Remove(testDivision, transient.Gid)
@@ -221,6 +232,8 @@ move, so the next flush writes the same rows again.
 ================
 */
 func TestARolledBackFlushAcknowledgesNothing(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	c := seededCharacter()
 	if err := f.s.CreateCharacter(testDivision, "ground-account", c); err != nil {
@@ -259,6 +272,8 @@ again - the same bytes, the table still equal to the registry.
 ================
 */
 func TestACrashBeforeTheAcknowledgementRewritesIdempotently(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	f.r.SetStackCount(testDivision, f.gids[2], 3)
 	f.r.Remove(testDivision, f.gids[11])
@@ -294,6 +309,8 @@ through that commit's acknowledgement, so the next commit writes it.
 ================
 */
 func TestARacingMutationSurvivesTheAcknowledgement(t *testing.T) {
+	t.Parallel()
+
 	f := newGroundChangeFixture(t)
 	f.r.SetStackCount(testDivision, f.gids[1], 2)
 	read := f.r.Changes()

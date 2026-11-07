@@ -18,10 +18,13 @@ export function createPackIndex() {
 		if ( typeof v !== "string" || !v ) throw new Error( "Invalid pack string" );
 		return v;
 	};
-	function path( v: unknown ): string {
+	// A pack index is admitted under one published root: /assets for the
+	// default set, /hd for the HD set (#2061). The root is part of the
+	// admission rule, never inferred from a path the index itself names.
+	function path( v: unknown, root: string ): string {
 		const s = text( v ).toLowerCase();
 		if (
-			!s.startsWith( "/assets/" ) || s.includes( "\\" ) || s.includes( "%" ) || s.includes( "?" ) ||
+			!s.startsWith( root + "/" ) || s.includes( "\\" ) || s.includes( "%" ) || s.includes( "?" ) ||
 			s.includes( "#" ) || s.split( "/" ).some( p => p === "." || p === ".." )
 		) throw new Error( "Invalid asset path" );
 		return s;
@@ -31,11 +34,11 @@ export function createPackIndex() {
 		if ( !/^[a-f0-9]{64}$/.test( s ) ) throw new Error( "Invalid pack digest" );
 		return s;
 	}
-	function entry( value: unknown, packPath: string ): PackEntry {
+	function entry( value: unknown, packPath: string, root: string ): PackEntry {
 		const v = object( value );
 		return {
 			publicPath: text( v.path ),
-			path: path( v.path ),
+			path: path( v.path, root ),
 			packPath,
 			offset: integer( v.offset ),
 			length: integer( v.length ),
@@ -68,7 +71,7 @@ export function createPackIndex() {
 		}
 	}
 	return {
-		manifest( value: unknown ) {
+		manifest( value: unknown, root = "/assets" ) {
 			const v = object( value );
 			if ( v.version !== PACK_VERSION ) throw new Error( "Unsupported pack manifest" );
 			const packs = new Map<string, PackDescriptor>(),
@@ -80,8 +83,8 @@ export function createPackIndex() {
 				groups.add( name );
 				let count = 0;
 				for ( const rawPack of array( group.packs ) ) {
-					const p = object( rawPack ), key = path( p.path );
-					if ( !key.startsWith( "/assets/packs/" ) || !key.endsWith( ".bin" ) || packs.has( key ) ) {
+					const p = object( rawPack ), key = path( p.path, root );
+					if ( !key.startsWith( root + "/packs/" ) || !key.endsWith( ".bin" ) || packs.has( key ) ) {
 						throw new Error( "Invalid or duplicate pack identity" );
 					}
 					const bytes = integer( p.bytes ), assetCount = integer( p.assetCount );
@@ -99,7 +102,9 @@ export function createPackIndex() {
 				if ( count !== integer( group.assetCount ) ) throw new Error( "Pack group count mismatch" );
 			}
 			for ( const raw of array( v.assets ) ) {
-				const row = object( raw ), e = entry( row, path( row.packPath ) ), pack = packs.get( e.packPath );
+				const row = object( raw ),
+					e = entry( row, path( row.packPath, root ), root ),
+					pack = packs.get( e.packPath );
 				if ( !pack || assets.has( e.path ) ) throw new Error( "Missing pack or duplicate asset" );
 				assets.set( e.path, e );
 				pack.entries.push( e );
@@ -144,7 +149,13 @@ export function createPackIndex() {
 			if ( header.format !== "sro-asset-pack" || header.version !== PACK_VERSION ) {
 				throw new Error( "Unsupported pack header" );
 			}
-			const files = array( header.files ).map( v => entry( v, pack.path ) );
+			// The header's members live under the same root its manifest
+			// was admitted with: the pack's own path names it
+			// (<root>/packs/<file>), and the manifest already held it to
+			// that root, so the header cannot widen it.
+			const files = array( header.files ).map( v =>
+				entry( v, pack.path, pack.path.slice( 0, pack.path.indexOf( "/packs/" ) ) )
+			);
 			if ( files.length !== pack.assetCount ) throw new Error( "Pack header count mismatch" );
 			if ( partial && bytes.length !== start ) throw new Error( "Invalid partial pack header" );
 			const table = new Map<string, PackEntry>();
