@@ -7,9 +7,11 @@ Port-only (issue #1980): a bound forged item refuses every exit that
 would hand it to another player or into the economy - the trade
 table, a stall offer, a merchant sale, a guild warehouse deposit, a
 player's ground drop - and on the ground only its forger may pick it
-up, by hand or by pet. Each refusal is pinned with the door's own
-failure code, and each door's unbound control proves the refusal is
-the bound mark, not the item.
+up, by hand or by pet. A bound pickup also lands as its own stack:
+it never pours into an unbound bag row, nor unbound quantity into a
+bound one. Each refusal is pinned with the door's own failure code,
+and each door's unbound control proves the refusal is the bound mark,
+not the item.
 
 ===========================================================================
 */
@@ -216,6 +218,87 @@ func TestBoundDropPickupBelongsToItsForger(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("the forger's bag holds %+v", gm.MissionInventory)
+	}
+}
+
+/*
+================
+boundBagPotionStacks
+
+The potion quantities in a character's bag, split by the bound mark,
+and how many potion rows carry them.
+================
+*/
+func boundBagPotionStacks(c *enterworld.Character) (boundQty, unboundQty, rows int) {
+	for _, row := range c.MissionInventory {
+		if row.Codename != forgePotionCodename {
+			continue
+		}
+		rows++
+		if row.ForgeBound {
+			boundQty += int(row.StackCount)
+		} else {
+			unboundQty += int(row.StackCount)
+		}
+	}
+	return boundQty, unboundQty, rows
+}
+
+/*
+================
+TestBoundPickupNeverMergesIntoAnUnboundStack
+
+The #2775 review's laundering probe, end to end: a bag holding an
+unbound potion stack picks up a bound forged stack (and the mirror
+image), and the two stay separate rows under their own marks.
+================
+*/
+func TestBoundPickupNeverMergesIntoAnUnboundStack(t *testing.T) {
+	seed := func(bound bool) *enterworld.Character {
+		gm := forgeTestGM()
+		gm.MissionInventory = []enterworld.InventoryRow{{
+			Slot: 13, RefObjID: 3630, Codename: forgePotionCodename,
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 10, ForgeBound: bound,
+		}}
+		return gm
+	}
+	pickup := func(t *testing.T, rt *Runtime, gm *enterworld.Character, gid uint32) {
+		t.Helper()
+		res := rt.HandleTargetInteract(testDivision, gm, wire.TargetInteract{Gid: gid}.Encode())
+		for _, frame := range res.Frames {
+			if frame.Opcode == wire.OpItemMoveResponse && len(frame.Payload) > 0 && frame.Payload[0] == 2 {
+				t.Fatalf("pickup refused: %+v", res.Frames)
+			}
+		}
+	}
+
+	gm := seed(false)
+	rt, _ := forgeTestRuntime(gm, forgeTestItems())
+	if _, ok := rt.ForgeGMItem(testDivision, gm.Name, forgePotionCodename+" count=25"); !ok {
+		t.Fatal("forge refused")
+	}
+	pickup(t, rt, gm, forgedDrop(t, rt).Gid)
+	if boundQty, unboundQty, rows := boundBagPotionStacks(gm); boundQty != 25 || unboundQty != 10 || rows != 2 {
+		t.Fatalf("bound pickup poured into the unbound stack: bound %d, unbound %d, rows %d (%+v)",
+			boundQty, unboundQty, rows, gm.MissionInventory)
+	}
+	if rt.Ground.Count(testDivision) != 0 {
+		t.Fatal("the pickup left part of the stack on the ground")
+	}
+
+	gm = seed(true)
+	rt, _ = forgeTestRuntime(gm, forgeTestItems())
+	spawn := simulation.SeedWorldState(gm).Spawn
+	drop := rt.Ground.Add(testDivision, grounditem.Item{
+		RefObjID: 3630, Codename: forgePotionCodename, TypeFlags: wire.PackTypeFlags(3, 3, 1, 1),
+		StackCount: 25, DroppedBy: gm.Name,
+		Position: grounditem.Point{RegionID: spawn.RegionID, X: float32(spawn.X), Z: float32(spawn.Z)},
+		Y:        float32(spawn.Y),
+	})
+	pickup(t, rt, gm, drop.Gid)
+	if boundQty, unboundQty, rows := boundBagPotionStacks(gm); boundQty != 10 || unboundQty != 25 || rows != 2 {
+		t.Fatalf("unbound pickup poured into the bound stack: bound %d, unbound %d, rows %d (%+v)",
+			boundQty, unboundQty, rows, gm.MissionInventory)
 	}
 }
 

@@ -93,7 +93,9 @@ type Item struct {
 	// by this field. A newly split row starts at zero; RefObjID is not a substitute.
 	RecordID uint64
 	// ForgeBound marks a GM-forged item (port only, issue #1980): it
-	// refuses trade, NPC sale, stall offer, mail attach and player drop.
+	// refuses trade, NPC sale, stall offer and player drop, and it is
+	// part of stack identity (tradegoods.go) so a merge can never pour
+	// bound quantity into an unbound row.
 	ForgeBound bool
 }
 

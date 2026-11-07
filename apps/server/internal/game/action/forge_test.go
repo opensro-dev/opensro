@@ -530,6 +530,32 @@ func TestForgeRateLimitMetersForgingNotHelp(t *testing.T) {
 
 /*
 ================
+TestForgeRateLimitIgnoresRefusedSpecs
+
+The allowance meters forged items, not attempts: a window full of
+malformed commands leaves the whole allowance intact.
+================
+*/
+func TestForgeRateLimitIgnoresRefusedSpecs(t *testing.T) {
+	c := forgeTestGM()
+	rt, _ := forgeTestRuntime(c, forgeTestItems())
+	for i := 0; i < forgeRateMax; i++ {
+		if _, ok := rt.ForgeGMItem(testDivision, c.Name, forgePotionCodename+" count=abc"); ok {
+			t.Fatal("a malformed spec forged an item")
+		}
+	}
+	for i := 0; i < forgeRateMax; i++ {
+		if _, ok := rt.ForgeGMItem(testDivision, c.Name, forgePotionCodename+" count=1"); !ok {
+			t.Fatalf("forge %d refused: refused specs consumed the allowance", i+1)
+		}
+	}
+	if _, ok := rt.ForgeGMItem(testDivision, c.Name, forgePotionCodename+" count=1"); ok {
+		t.Fatal("the forge past the rate limit went through")
+	}
+}
+
+/*
+================
 TestForgeRoundTripKeepsTheBoundMark
 
 Forge -> ground snapshot/restore (restart) -> pickup (ground to bag)

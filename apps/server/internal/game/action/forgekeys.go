@@ -464,6 +464,24 @@ func forgeParseUint(text string, lo, hi uint32) (uint32, bool) {
 
 /*
 ================
+forgeParseInt
+
+forgeParseUint narrowed to the int the spec fields store. The key
+table's ceiling already keeps every value far below this bound; the
+explicit check states the bound at the conversion itself, so the
+narrowing is provably lossless rather than trusted.
+================
+*/
+func forgeParseInt(text string, lo, hi uint32) (int, bool) {
+	parsed, ok := forgeParseUint(text, lo, hi)
+	if !ok || parsed > math.MaxInt32 {
+		return 0, false
+	}
+	return int(parsed), true
+}
+
+/*
+================
 forgeBuilder.apply
 
 Judge one key=value token against the table and record it. Any
@@ -489,25 +507,25 @@ func (b *forgeBuilder) apply(token string) bool {
 		// a legal token, never the opt-out.
 		return value == "1"
 	case forgeKeyPlus:
-		parsed, ok := forgeParseUint(value, key.lo, key.hi)
+		parsed, ok := forgeParseInt(value, key.lo, key.hi)
 		if !ok {
 			return false
 		}
-		b.spec.plus = int(parsed)
+		b.spec.plus = parsed
 		return true
 	case forgeKeyWhiteAll:
-		parsed, ok := forgeParseUint(value, key.lo, key.hi)
+		parsed, ok := forgeParseInt(value, key.lo, key.hi)
 		if !ok {
 			return false
 		}
-		b.spec.whiteAll = int(parsed)
+		b.spec.whiteAll = parsed
 		return true
 	case forgeKeyWhiteField:
-		parsed, ok := forgeParseUint(value, key.lo, key.hi)
+		parsed, ok := forgeParseInt(value, key.lo, key.hi)
 		if !ok {
 			return false
 		}
-		b.spec.whiteFields[key.field] = int(parsed)
+		b.spec.whiteFields[key.field] = parsed
 		return true
 	case forgeKeyBlue:
 		if b.spec.blueFull || b.blueBy[key.option.ID] {
@@ -540,11 +558,11 @@ func (b *forgeBuilder) apply(token string) bool {
 		b.spec.durability = int64(parsed)
 		return true
 	case forgeKeyCount:
-		parsed, ok := forgeParseUint(value, key.lo, key.hi)
+		parsed, ok := forgeParseInt(value, key.lo, key.hi)
 		if !ok {
 			return false
 		}
-		b.spec.count = int(parsed)
+		b.spec.count = parsed
 		return true
 	case forgeKeyTransform:
 		refs, ok := b.rt.deps.ItemReferences().(enterworld.CharacterRefSource)
@@ -559,11 +577,11 @@ func (b *forgeBuilder) apply(token string) bool {
 		b.spec.transformSet = true
 		return true
 	case forgeKeyPetLevel:
-		parsed, ok := forgeParseUint(value, key.lo, key.hi)
+		parsed, ok := forgeParseInt(value, key.lo, key.hi)
 		if !ok {
 			return false
 		}
-		b.spec.petLevel = int(parsed)
+		b.spec.petLevel = parsed
 		return true
 	case forgeKeyPetName:
 		if len(value) == 0 || len(value) > forgePetNameMaxBytes {

@@ -15,9 +15,9 @@ prints exactly that set).
 Safety, per the owner's ruling: the lane refuses unless
 SRO_GM_ITEM_FORGE is enabled (off is the native default; test shards
 enable it, live needs the owner's go); every forged item is born
-bound (ForgeBound - it refuses trade, NPC sale, stall offers, mail
-and player drops; the doors are enforced where those lanes move
-items, not here); the whole command validates before anything is
+bound (ForgeBound - it refuses trade, NPC sale, stall offers and
+player drops; the doors are enforced where those lanes move items,
+not here); the whole command validates before anything is
 built, so an unknown key or an out-of-range value forges nothing;
 and each GM is rate-limited, with every forge audit-logged with its
 full key set.
@@ -153,10 +153,6 @@ func (rt *Runtime) ForgeGMItem(division, name, text string) ([]string, bool) {
 	if !found {
 		return nil, false
 	}
-	if !rt.forgeRateAllow(c.Name, rt.Now()) {
-		log.Debugf("forge: %s refused (rate limit): %s", c.Name, text)
-		return nil, false
-	}
 	builder := rt.newForgeBuilder(ref)
 	for _, token := range tokens[1:] {
 		if !builder.apply(token) {
@@ -167,6 +163,12 @@ func (rt *Runtime) ForgeGMItem(division, name, text string) ([]string, bool) {
 	item, built := builder.assemble(rt.Now())
 	if !built {
 		log.Debugf("forge: %s refused (spec): %s", c.Name, text)
+		return nil, false
+	}
+	// The allowance meters forged items, not attempts: a refused spec
+	// costs nothing, so the stamp lands only once the item is real.
+	if !rt.forgeRateAllow(c.Name, rt.Now()) {
+		log.Debugf("forge: %s refused (rate limit): %s", c.Name, text)
 		return nil, false
 	}
 	var added grounditem.Item
