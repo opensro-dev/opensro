@@ -608,17 +608,6 @@ func (rt *Runtime) projectEntrySkills(rows []statuseffect.Effect, nowMs int64) (
 
 /*
 ================
-entrySpawnProjection
-
-One owner's cached spawn projection (SpawnEntrySkills): the registry
-view it was built from (a published view is never edited, so holding
-its header is safe), each view row's liveness at build time, and for
-each projected row the view row it came from, so a later call can
-refresh the remaining times in place instead of rebuilding.
-================
-*/
-/*
-================
 entrySpawnOwner
 
 The cache key: the caller-supplied division and character name as a
@@ -633,6 +622,12 @@ type entrySpawnOwner struct {
 /*
 ================
 entrySpawnProjection
+
+One owner's cached spawn projection (SpawnEntrySkills): the registry
+view it was built from (a published view is never edited, so holding
+its header is safe), each view row's liveness at build time, and for
+each projected row the view row it came from, so a later call can
+refresh the remaining times in place instead of rebuilding.
 ================
 */
 type entrySpawnProjection struct {
