@@ -48,7 +48,19 @@ func (rt *Runtime) advancePetJudged(key petOwnerKey, state *petSession, facts *p
 	if !ok {
 		return nil, false
 	}
-	pet := &facts.pet
+	// The pet view is the session's scratch record rebuilt whole from
+	// the door-read facts: only the eight carried values are set, every
+	// other field reads zero, and the abstain boundary above is what
+	// keeps a tick that needs more than these on the copy. The view is
+	// consumed inside this call - the formation step, mirror write
+	// included - and rebuilt on the next judged tick.
+	pet := &state.judgedPet
+	*pet = enterworld.CharacterCOS{
+		GID: facts.petGID, RefObjID: facts.petRefObjID, Codename: facts.petCodename,
+		BroodStage: facts.petBroodStage, Satiety: facts.petSatiety,
+		MercenaryAttributes: facts.petMercenaryAttributes,
+		FollowRunFactor:     facts.petFollowRunFactor, FollowRunSet: facts.petFollowRunSet,
+	}
 	ref, found := refs.CharacterRefByCodename(pet.Codename)
 	if !found || ref == nil || ref.RefObjID != pet.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !rt.companionFollows(ref.TidWord) {
 		return nil, false

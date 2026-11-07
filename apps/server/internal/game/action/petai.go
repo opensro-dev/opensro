@@ -56,6 +56,10 @@ type petSession struct {
 	character           *enterworld.Character
 	refObjID            uint32
 	follower            *simulation.PetFollower
+	// judgedPet is the judged tick's pet view (petjudged.go): the eight
+	// door-read facts rebuilt as a record, consumed inside the one
+	// judged call that filled it and rebuilt whole on the next.
+	judgedPet enterworld.CharacterCOS
 	// Transport COS do not run follower AI. Their admission anchor belongs to
 	// this same presentation owner; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
