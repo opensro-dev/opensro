@@ -309,6 +309,10 @@ var Settings = []Setting{
 	// elixirs off the smith. On by default (it extends the extra goods);
 	// off restores the native name and tabs.
 	{Env: "SRO_JANGAN_ALCHEMY_SHOP", NomadVar: "jangan_alchemy_shop", Default: "on", Catalogue: true},
+	// Owner, 2026-11-07 (#2771): X-Large HP/MP potions at Jangan's
+	// potion merchant, at Hotan's native price of 900. On by default;
+	// off restores the native Jangan shop.
+	{Env: "SRO_JANGAN_XL_POTIONS", NomadVar: "jangan_xl_potions", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.

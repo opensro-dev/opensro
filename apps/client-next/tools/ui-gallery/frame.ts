@@ -186,15 +186,15 @@ function backdrop( width: number, height: number ): UiQuad[] {
 	return rows;
 }
 
-const ui = createUi(
+const ui = createUi( {
 	assets,
-	command => {
+	commands: command => {
 		if ( command.kind === "gameplay" && command.command.kind.startsWith( "stall-" ) ) {
 			queue.push( command );
 			record( "command queued", command );
 		} else record( "unsupported integration", command );
 	},
-	scene => {
+	publish: scene => {
 		sceneTextures = [ ...new Set( scene?.quads.map( quad => quad.texture ) ?? [] ) ];
 		sceneAnchors = [
 			...new Set(
@@ -215,10 +215,10 @@ const ui = createUi(
 				null
 		);
 	},
-	( name, texture ) => renderer.setUiTexture( name, texture ),
-	location.origin,
-	"https://fixture.invalid"
-);
+	texture: ( name, texture ) => renderer.setUiTexture( name, texture ),
+	base: location.origin,
+	apiBase: "https://fixture.invalid"
+} );
 
 /*
 ================

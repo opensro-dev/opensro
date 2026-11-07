@@ -14,7 +14,7 @@ test('world map follows retail AUTO/MANUAL click, centre and drag rules',{timeou
   const result=await page.evaluate(async()=>{
    const {createAssets}=await import('/src/engine/runtime/assets/assets.ts'),{createUi}=await import('/src/engine/runtime/ui/ui.ts');
    const assets=createAssets();let scene,semantics,clicks=0;
-   const ui=createUi(assets,()=>{},s=>{scene=s;},()=>{},location.origin,'http://fixture.invalid',()=>{clicks++;});
+   const ui=createUi({assets,commands:()=>{},publish:s=>{scene=s;},texture:()=>{},base:location.origin,apiBase:'http://fixture.invalid',clickSound:()=>{clicks++;}});
    // Sector 160,97 lies west of Jangan (166..170): the AUTO page is the world map.
    const field={regionId:97*256+160,x:960,y:0,z:960,angle:0};
    const state={session:{phase:'world',revision:1,character:'Explorer',characters:[{name:'Explorer',level:1,maxHp:200,maxMp:200}]},gameplay:{localGid:1,pose:field,inventory:[],vitals:[{gid:1,hp:200,mp:200}],casts:[],guide:{country:1,seenMask:0xffffffff},progression:{level:1,experience:'0',skillPoints:0,skillExperience:0,masteries:[],stats:{strength:20,intellect:20,physicalMin:10,physicalMax:20,magicalMin:15,magicalMax:30,physicalDefense:5,magicalDefense:6,hit:7,parry:8,maxHp:200,maxMp:200}}},entities:[],width:1200,height:900,worldReady:true};

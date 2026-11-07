@@ -41,8 +41,9 @@ PlaneFeatures
 ================
 */
 export interface PlaneFeatures {
-	// minimapCoordinates: the minimap's X/Y readout. CIFMinimap converts
-	// outdoor sector coordinates only; a cave shows none.
+	// minimapCoordinates: the minimap's X/Y readout counts from the sector
+	// grid. CIFMinimap converts outdoor sector coordinates only; a cave reads
+	// from its own origin (hud-readouts.ts).
 	readonly minimapCoordinates: boolean;
 	// reverseReturnPoints: a reverse return scroll destination. The table's
 	// points are field positions the scroll lands on in the open world; a

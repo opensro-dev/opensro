@@ -224,6 +224,14 @@ func newGameplayPlane(
 			items.UniqueRules.GapExempt, items.UniqueRules.PopTicket, items.UniqueRules.MaxLevelLoot, items.UniqueRules.SealDrops,
 			progression.EnvUniqueGapExempt, progression.EnvUniquePopTicket, progression.EnvUniqueMaxLevelLoot, progression.EnvUniqueSealDrops)
 	}
+	// SRO_JANGAN_XL_POTIONS (port-only, not native; owner 2026-11-07):
+	// the X-Large potions join Jangan's potion tab at Hotan's price, as
+	// extra goods on the same catalogue. "off" is the native Jangan shop.
+	xlGoods, err := commerce.JanganXLPotionGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	extraGoods = append(extraGoods, xlGoods...)
 	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
 	// as ConfigureCommerce loads them, so it is set first.
 	items.TradeTiers = action.TradeTiersFromEnv()

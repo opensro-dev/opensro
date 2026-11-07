@@ -182,21 +182,21 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 					document.body.append( telemetry );
 					let scene, semantics;
 					const commands = [], worldClicks = [], textureSizes = new Map();
-					const ui = createUi(
+					const ui = createUi( {
 						assets,
-						command => commands.push( command ),
-						value => {
+						commands: command => commands.push( command ),
+						publish: value => {
 							scene = value;
 							renderer.setUi( value );
 						},
-						( id, image ) => {
+						texture: ( id, image ) => {
 							if ( image ) textureSizes.set( id, [ image.width, image.height ] );
 							else textureSizes.delete( id );
 							renderer.setUiTexture( id, image );
 						},
-						location.origin,
-						"https://fixture.invalid"
-					);
+						base: location.origin,
+						apiBase: "https://fixture.invalid"
+					} );
 					const platform = createPlatform(
 						canvas,
 						document.createElement( "output" ),

@@ -27,26 +27,15 @@ fixture
 */
 function fixture() {
 	const saved = [];
-	const ui = createUi(
-		{ available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
-		() => {},
-		() => {},
-		() => {},
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		{ saveWindowPositions: value => saved.push( value ) }
-	);
+	const ui = createUi( {
+		assets: { available: () => 0, request: () => 0, take: () => null, cancel: () => {} },
+		commands: () => {},
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		extensions: { saveWindowPositions: value => saved.push( value ) }
+	} );
 	/** @type {import("../../src/engine/contracts/ui.ts").UiView} */
 	const view = {
 		session: { phase: "world", revision: 1 },

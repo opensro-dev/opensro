@@ -268,6 +268,26 @@ func (s *MonsterState) CreatableRefs() []monster.MonsterRef {
 	return s.template.CreatableRefs()
 }
 
+/*
+================
+StructureRefs
+
+Every static fortress reference, including upgrade ranks with no starting
+nest. The browser must know these before a replacement roster arrives.
+This reads immutable catalog data, not live population state.
+================
+*/
+func (s *MonsterState) StructureRefs() []monster.MonsterRef {
+	var refs []monster.MonsterRef
+	for _, ref := range s.template.Refs {
+		if ref.Structure {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool { return refs[i].RefObjID < refs[j].RefObjID })
+	return refs
+}
+
 // Reference reads the immutable catalog, including rows without a nest.
 /*
 ================

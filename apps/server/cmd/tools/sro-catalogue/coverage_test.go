@@ -354,6 +354,7 @@ func TestModelledSettingsMoveTheOutput(t *testing.T) {
 		{"SRO_TRADE_TIERS", "off", nil, "items", ""},
 		{"SRO_SHOP_EXTRA_GOODS", "off", nil, "shops", ""},
 		{"SRO_JANGAN_ALCHEMY_SHOP", "off", nil, "shops", ""},
+		{"SRO_JANGAN_XL_POTIONS", "off", nil, "shops", ""},
 		{"SRO_TRADE_ROUTE_DONWHANG_PERCENT", "150", nil, "trade", ""},
 		{"SRO_TRADE_ROUTE_HOTAN_PERCENT", "160", nil, "trade", ""},
 		{"SRO_TRADE_ROUTE_SAMARKAND_PERCENT", "170", nil, "trade", ""},

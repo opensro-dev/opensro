@@ -75,8 +75,8 @@ the session commands it sends.
 function censusFixture( commands ) {
 	const pending = new Map();
 	let nextId = 0;
-	const ui = createUi(
-		{
+	const ui = createUi( {
+		assets: {
 			available: () => 8,
 			take: id => {
 				const bytes = pending.get( id );
@@ -121,23 +121,17 @@ function censusFixture( commands ) {
 			cancel: id => pending.delete( id )
 		},
 		commands,
-		() => {},
-		() => {},
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		() => {},
-		undefined,
-		undefined,
-		() => {},
-		() => {},
-		() => {},
-		() => {},
-		() => {},
-		undefined,
-		undefined,
-		{}
-	);
+		publish: () => {},
+		texture: () => {},
+		base: "https://fixture.invalid/",
+		apiBase: "https://fixture.invalid/",
+		sound: () => {},
+		saveOptions: () => {},
+		audioPreference: () => {},
+		saveSight: () => {},
+		saveBindings: () => {},
+		saveVideo: () => {}
+	} );
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {
 		session: { phase: "world", revision: 1, character: "Player" },
