@@ -35,6 +35,9 @@ const (
 	statusSampleEvery   = 10 * time.Second
 	statusWindow        = 5 * time.Minute
 	statusHistoryPoints = 48
+	// The census's public pair refreshes at most this often: its
+	// read walks the connection journal, far heavier than a sample.
+	censusRefresh = 60 * time.Second
 )
 
 /*
@@ -77,10 +80,12 @@ type statusState struct {
 	hourPeak  int
 	history   []StatusPoint
 	// The census's latest sampled public counts (opensro-web#78);
-	// censusOK is false while the census is unavailable.
+	// censusOK is false while the census is unavailable, censusAt
+	// the last read (the throttle, censusRefresh).
 	censusPeople   int
 	censusUnique7d int
 	censusOK       bool
+	censusAt       time.Time
 	stop           chan struct{}
 	done           chan struct{}
 }
@@ -99,17 +104,11 @@ func (s *Service) recordStatus(now time.Time) {
 	}
 	online, metrics := s.src.Sample()
 	sample := statusSample{at: now, online: online, metrics: metrics}
+	s.sampleCensus(now)
 	st := &s.status
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.samples = append(st.samples, sample)
-	// The census's public pair is sampled beside the status line (P7:
-	// answers come from samples, never from a request). A failed read
-	// clears the fields rather than leaving a stale people number
-	// beside live session counts (opensro-web#78).
-	if s.src.CensusPeople != nil {
-		st.censusPeople, st.censusUnique7d, st.censusOK = s.src.CensusPeople()
-	}
 	// Older samples leave the window, the newest always stays: after a gap
 	// in sampling the window is short rather than reaching back hours.
 	for len(st.samples) > 1 && st.samples[0].at.Before(now.Add(-statusWindow)) {
@@ -130,6 +129,39 @@ func (s *Service) recordStatus(now time.Time) {
 		return
 	}
 	st.hourPeak = max(st.hourPeak, online)
+}
+
+/*
+================
+sampleCensus
+
+Refreshes the census's public pair (P7: answers come from samples,
+never from a request), at most every censusRefresh. The read walks
+the connection journal, so it runs outside the status lock - a slow
+census never stalls a status read - and the attempt is stamped
+before it starts, so a failing census is not retried every sample.
+A failed read clears the pair rather than leaving a stale people
+number beside live session counts (opensro-web#78).
+================
+*/
+func (s *Service) sampleCensus(now time.Time) {
+	if s.src.CensusPeople == nil {
+		return
+	}
+	st := &s.status
+	st.mu.Lock()
+	due := st.censusAt.IsZero() || !now.Before(st.censusAt.Add(censusRefresh))
+	if due {
+		st.censusAt = now
+	}
+	st.mu.Unlock()
+	if !due {
+		return
+	}
+	peopleNow, uniquePeople7d, ok := s.src.CensusPeople()
+	st.mu.Lock()
+	st.censusPeople, st.censusUnique7d, st.censusOK = peopleNow, uniquePeople7d, ok
+	st.mu.Unlock()
 }
 
 /*
@@ -200,7 +232,8 @@ func (s *Service) serverStatus(*http.Request) (any, error) {
 	}
 	out.History = append(out.History, st.history...)
 	if st.censusOK {
-		out.People, out.UniquePlayers7d = st.censusPeople, st.censusUnique7d
+		people, unique7d := st.censusPeople, st.censusUnique7d
+		out.People, out.UniquePlayers7d = &people, &unique7d
 	}
 	return out, nil
 }

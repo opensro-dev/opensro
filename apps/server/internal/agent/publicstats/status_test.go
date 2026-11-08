@@ -220,10 +220,10 @@ TestStatusPublishesCensusPeople
 
 The census's two public counts (people online now, unique people
 over 7 days, opensro-web#78) ride the status answer once sampled:
-present at their sampled values while the census answers, and an
-unavailable census leaves them out entirely - a failed read clears
-the sampled pair, so the next uncached answer omits them instead
-of serving a stale people number beside live session counts.
+their sampled values while the census answers, null while it
+cannot - a failed read clears the sampled pair, so the next
+uncached answer goes null instead of serving a stale people
+number beside live session counts.
 ================
 */
 func TestStatusPublishesCensusPeople(t *testing.T) {
@@ -248,7 +248,7 @@ func TestStatusPublishesCensusPeople(t *testing.T) {
 	// A failed read clears the sampled pair; the route's cache may
 	// still hold the last answer, but nothing new carries people.
 	available = false
-	s.recordStatus(*now)
+	s.recordStatus(now.Add(censusRefresh + time.Second))
 	s.status.mu.Lock()
 	carried := s.status.censusOK
 	s.status.mu.Unlock()
@@ -263,10 +263,88 @@ func TestStatusPublishesCensusPeople(t *testing.T) {
 	if code := get(t, off, "/public/v1/status", &offRaw); code != http.StatusOK {
 		t.Fatalf("GET status unavailable: %d", code)
 	}
-	if _, ok := offRaw["people"]; ok {
-		t.Fatalf("census unavailable: people present: %v", offRaw)
+	if value, ok := offRaw["people"]; !ok || value != nil {
+		t.Fatalf("census unavailable: people = %v (present %v), want null", value, ok)
 	}
-	if _, ok := offRaw["uniquePlayers7d"]; ok {
-		t.Fatalf("census unavailable: uniquePlayers7d present: %v", offRaw)
+	if value, ok := offRaw["uniquePlayers7d"]; !ok || value != nil {
+		t.Fatalf("census unavailable: uniquePlayers7d = %v (present %v), want null", value, ok)
+	}
+
+	// A counted zero is a real answer, not an absence: an empty
+	// world still prints its people.
+	zero, _, _, zeroNow := statusService(t)
+	zero.src.CensusPeople = func() (int, int, bool) { return 0, 0, true }
+	zero.recordStatus(*zeroNow)
+	var zeroRaw map[string]any
+	if code := get(t, zero, "/public/v1/status", &zeroRaw); code != http.StatusOK {
+		t.Fatalf("GET status zero: %d", code)
+	}
+	if zeroRaw["people"] != float64(0) || zeroRaw["uniquePlayers7d"] != float64(0) {
+		t.Fatalf("census at zero: got people=%v uniquePlayers7d=%v, want both present at 0",
+			zeroRaw["people"], zeroRaw["uniquePlayers7d"])
+	}
+}
+
+/*
+================
+TestStatusAnswersWhileTheCensusReads
+
+The census read walks the connection journal, so it is sampled
+outside the status lock: a status answer never waits for it.
+================
+*/
+func TestStatusAnswersWhileTheCensusReads(t *testing.T) {
+	s, _, _, now := statusService(t)
+	release := make(chan struct{})
+	s.src.CensusPeople = func() (int, int, bool) {
+		<-release
+		return 1, 2, true
+	}
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		s.recordStatus(*now)
+	}()
+
+	answered := make(chan error, 1)
+	go func() {
+		_, err := s.serverStatus(nil)
+		answered <- err
+	}()
+	select {
+	case err := <-answered:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("status answer waited for the census read")
+	}
+	close(release)
+	<-sampled
+}
+
+/*
+================
+TestStatusSamplesTheCensusAtMostEveryMinute
+
+The census read is throttled (censusRefresh): samples inside the
+minute reuse the pair, the first sample past it reads again.
+================
+*/
+func TestStatusSamplesTheCensusAtMostEveryMinute(t *testing.T) {
+	s, _, _, now := statusService(t)
+	reads := 0
+	s.src.CensusPeople = func() (int, int, bool) {
+		reads++
+		return reads, reads, true
+	}
+	s.recordStatus(*now)
+	s.recordStatus(now.Add(30 * time.Second))
+	if reads != 1 {
+		t.Fatalf("reads inside the minute: got %d, want 1", reads)
+	}
+	s.recordStatus(now.Add(censusRefresh + time.Second))
+	if reads != 2 {
+		t.Fatalf("reads past the minute: got %d, want 2", reads)
 	}
 }
