@@ -34,10 +34,15 @@ never from inside a door.
 */
 func (s *Store) SnapshotTo(path string) error {
 	s.mu.RLock()
-	source, open := s.dbPath, s.db != nil
+	source, open, writer := s.dbPath, s.db != nil, s.writer
 	s.mu.RUnlock()
 	if !open {
 		return fmt.Errorf("snapshot: no database open")
+	}
+	// Queued asynchronous commits are written first (#2802), outside the
+	// store lock: the snapshot holds every door that answered before it.
+	if writer != nil {
+		writer.drain()
 	}
 	db, err := connectDB(source)
 	if err != nil {

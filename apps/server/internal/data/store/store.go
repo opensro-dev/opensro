@@ -83,6 +83,10 @@ type Options struct {
 	// InventoryPages stamps the port-only 2.5-page base on a new record
 	// (SRO_INVENTORY_PAGES, #2769); false is the native 45.
 	InventoryPages bool
+	// AsyncCommit applies commits on the asynchronous writer
+	// (commit_writer.go, SRO_STORE_ASYNC_COMMIT, #2802); false is the
+	// native-default synchronous door. Port-only, not native.
+	AsyncCommit bool
 }
 
 // InventorySeedFunc installs the starter inventory and gold on a character
@@ -95,7 +99,7 @@ type QuestSeedFunc func(raceKey string) ([]domain.ActiveQuestRecord, error)
 
 // OptionsFromEnv builds the production Options from the environment.
 func OptionsFromEnv() Options {
-	return Options{RequireStore: os.Getenv(EnvRequireStore) == "1"}
+	return Options{RequireStore: os.Getenv(EnvRequireStore) == "1", AsyncCommit: asyncCommitEnabled()}
 }
 
 // Health is the store's observable write condition: runtime
@@ -183,6 +187,12 @@ type Store struct {
 	// (wal_checkpoint.go): started by adoptDB, stopped by Close, nil
 	// whenever no database was adopted.
 	checkpoints *walCheckpointer
+	// writer is the asynchronous SQLite writer (commit_writer.go,
+	// SRO_STORE_ASYNC_COMMIT, port-only): started by adoptDB when the
+	// flag is on, stopped by Close, nil whenever commits apply in place.
+	writer *commitWriter
+	// asyncCommit is Options.AsyncCommit: whether adoptDB starts writer.
+	asyncCommit bool
 	// encodeScratch is the commit path's reusable JSON encode buffer
 	// (db_write.go). Every encode through it runs under mu, which is
 	// the scratch's ownership domain; its records are consumed by the
@@ -339,6 +349,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		defaultInventory: opts.DefaultInventory,
 		inventoryPages:   opts.InventoryPages,
 		requireStore:     opts.RequireStore,
+		asyncCommit:      opts.AsyncCommit,
 		now:              now,
 		writeFile:        writeFileAtomic,
 	}
@@ -548,4 +559,7 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	// (configureDB); the background checkpointer copies its WAL
 	// instead (#2142 slice 0).
 	s.checkpoints = startWALCheckpointer(s.dbPath)
+	if s.asyncCommit && s.writer == nil {
+		s.writer = startCommitWriter(db, s.mu.now)
+	}
 }

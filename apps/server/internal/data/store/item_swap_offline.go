@@ -129,7 +129,7 @@ func (s *Store) SwapItemsOffline(division string, names []string, swap ItemSwapF
 			characters[selected] = next
 		}
 		if _, seen := storages[selected.AccountID]; !seen && selected.AccountID != "" {
-			storage, err := readAccountStorage(s.db, selected.AccountID)
+			storage, err := readAccountStorage(s.syncDBLocked(), selected.AccountID)
 			if err != nil {
 				return nil, err
 			}

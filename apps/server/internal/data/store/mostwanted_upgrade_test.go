@@ -32,7 +32,7 @@ func TestMostWantedUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -43,7 +43,7 @@ func TestMostWantedUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -73,7 +73,7 @@ func TestMostWantedExpiryUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -83,7 +83,7 @@ func TestMostWantedExpiryUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -112,7 +112,7 @@ func TestMostWantedDecayUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -122,7 +122,7 @@ func TestMostWantedDecayUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
