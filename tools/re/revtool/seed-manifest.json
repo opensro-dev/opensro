@@ -1,0 +1,25 @@
+{
+	"format": "sro-revtool-seed-manifest",
+	"version": 1,
+	"note": "Pins for the released seed assets (GitHub release assets, never git history). Rebuild with revtool.py seed build from the maintainer overlay DBs; seed verify checks a download against these pins, the target binary's hash, and the .text run scan.",
+	"assets": [
+		{
+			"target": "client",
+			"file": "revtool-seed-client.xz",
+			"sha256": "969a4190ea0ef26b5627f611bf6abd20ed126c0a8df596e96cd4299ddca8f72a",
+			"bytes": 259848,
+			"binary_sha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
+			"functions": 95290,
+			"ledger_lines": 944
+		},
+		{
+			"target": "server",
+			"file": "revtool-seed-server.xz",
+			"sha256": "fb78d15757002c57bb60db3e81980e1d3829d2e544a943937885ca135c6dc8eb",
+			"bytes": 199160,
+			"binary_sha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
+			"functions": 77195,
+			"ledger_lines": 303
+		}
+	]
+}

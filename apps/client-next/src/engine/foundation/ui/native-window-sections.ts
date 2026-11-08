@@ -81,6 +81,8 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 			return [ "Create", "StructureInfo" ]; // 65E330.
 		case "ifcos":
 			return [ "Create" ]; // 6A13B0.
+		case "ifeventgate":
+			return [ "Create" ]; // 547750.
 		case "ifcosinventory":
 			// 6A9420 adds "TradeInfo" for a transport only; the window excludes it
 			// for every other companion.
