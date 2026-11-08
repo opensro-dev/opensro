@@ -109,6 +109,61 @@ func TestAlchemyBreakNoticeFollowsTheHandler(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAlchemyPlusFailNoticeFoldsTheBreakLine
+
+#2852 end to end: the drawn 99 fails a +9 attempt and the drawn 0
+destroys the weapon. With the failure flag on, one alias line names
+the failure and the break line folds into it; with the failure flag
+off the same break keeps its #1738 line. The outcome is identical
+either way: the weapon and the elixir are gone.
+================
+*/
+func TestAlchemyPlusFailNoticeFoldsTheBreakLine(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		failFlag bool
+		want     string
+	}{
+		{"fail on", true, "leChiffre failed +9 on ITEM_CH_SWORD_01_A_RARE: destroyed"},
+		{"fail off", false, "leChiffre broke ITEM_CH_SWORD_01_A_RARE"},
+	} {
+		rt, character := alchemyRuntime()
+		rates, err := alchemy.ParseReinforceRates("2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt.Alchemy.Rates = rates
+		rolls := []uint32{99, 0}
+		rt.AlchemyRoll = func() (uint32, error) {
+			if len(rolls) == 0 {
+				return 0, nil
+			}
+			n := rolls[0]
+			rolls = rolls[1:]
+			return n, nil
+		}
+		character.MissionInventory[0].Plus = 8
+		character.BreakNotice = true
+		character.Job.Alias = "leChiffre"
+		rt.Announce.Break = true
+		rt.Announce.PlusFail = tc.failFlag
+		rt.Announce.PlusFailMin = announcePlusFailMinDefault
+		frames := rt.HandleAlchemyReinforce(testDivision, character, []byte{2, 20, 21})
+		if len(frames) == 0 || frames[len(frames)-1].Opcode != alchemy.OpReinforceResult || frames[len(frames)-1].Payload[0] != 1 {
+			t.Fatalf("%s: the break did not commit: %+v", tc.name, frames)
+		}
+		if len(character.MissionInventory) != 0 {
+			t.Fatalf("%s: inventory %+v, want the weapon destroyed and the elixir spent", tc.name, character.MissionInventory)
+		}
+		got := drainedNotices(t, rt)
+		if len(got) != 1 || got[0] != tc.want || strings.Contains(got[0], character.Name) {
+			t.Fatalf("%s: %q, want the one folded line %q, never the character name", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestAlchemyEntropyFailureCannotMutateOrClaimSuccess(t *testing.T) {
 	rt, character := alchemyRuntime()
 	before := append([]enterworld.InventoryRow(nil), character.MissionInventory...)

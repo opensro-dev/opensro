@@ -60,7 +60,10 @@ export const ENV_KNOBS = [
 	"SRO_BUILD_HASH_CACHE",
 	// The release builds against the live layout (docs/operations/RELEASE.md); an up-to-date
 	// local tree must not skip that and keep its own layout.
-	"SRO_ASSET_PACK_BASELINE"
+	"SRO_ASSET_PACK_BASELINE",
+	// The later client's dungeon floor pages join the build from the pinned
+	// archive this names (#2956); setting or moving it must not skip.
+	"SRO_VSRO_ROOT"
 ];
 
 /*

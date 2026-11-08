@@ -499,6 +499,10 @@ func (state *divisionMonsterState) queueAIEvents(gid uint32, events []monsterAIE
 		state.aiEvents = make(map[uint32][]monsterAIEvent)
 	}
 	state.aiEvents[gid] = append(state.aiEvents[gid], events...)
+	// A queued event is a wake like the other event doors (impact,
+	// help, hostility set the due to 0): an idle actor now sleeps
+	// until a real due (#2136) and would otherwise sit on the event.
+	state.behavior.set(gid, 0)
 }
 
 // takeAIEvents consumes the tactics events queued by fear and confusion.
@@ -508,9 +512,23 @@ takeAIEvents
 ================
 */
 func (s *MonsterState) takeAIEvents(division string, gid uint32) []monsterAIEvent {
+	return s.takeAIEventsAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+takeAIEventsAt
+
+takeAIEvents with the population resolved through the monster slot
+the step carried (#2133): the events queue itself stays keyed by
+gid, only the population walk rides the verified hint, so the
+drained events are takeAIEvents' either way.
+================
+*/
+func (s *MonsterState) takeAIEventsAt(division string, gid uint32, monsterSlot uint32) []monsterAIEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	events := state.aiEvents[gid]
 	delete(state.aiEvents, gid)
 	return events
@@ -525,9 +543,21 @@ step (#2205) reads them now and consumes them at commit.
 ================
 */
 func (s *MonsterState) peekAIEvents(division string, gid uint32) []monsterAIEvent {
+	return s.peekAIEventsAt(division, gid, behaviorNoMonsterSlot)
+}
+
+/*
+================
+peekAIEventsAt
+
+peekAIEvents with the population resolved through the monster
+slot the step carried, as takeAIEventsAt (#2133).
+================
+*/
+func (s *MonsterState) peekAIEventsAt(division string, gid uint32, monsterSlot uint32) []monsterAIEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	return append([]monsterAIEvent(nil), state.aiEvents[gid]...)
 }
 

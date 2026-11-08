@@ -226,7 +226,8 @@ these through the PK2 at draw time, so the browser build publishes them
 all instead of the hand-carried starter subset in
 runtimeCifImageReferences; referenced icons whose DDJ never shipped in
 this Media.pk2 stay absent and ride the native icon_default fallback
-(CIFSlotWithHelp_SetSpritePathWithFallback), same as retail.
+(CIFSlotWithHelp_SetSpritePathWithFallback), same as retail, except the
+named stand-ins of ITEM_ICON_SUBSTITUTES (#2790).
 ================
 */
 async function collectItemDataIconDdjReferences() {
@@ -424,6 +425,24 @@ async function collectSkillGroupIconDdjReferences() {
 
 /*
 ================
+ITEM_ICON_SUBSTITUTES
+
+Itemdata icon references whose DDJ shipped in no client the port can read,
+keyed by the normalized referenced path and naming the closest art that does
+ship (owner decision 2026-11-08, #2790: a named substitute instead of the
+NO IMAGE plate). The four A-grade reinforce elixirs all reference
+archemy_reinforce_recipe_a.ddj; the v1.150 archive, the pinned later client
+and the v1.188 / iSRO-R server data each carry that same dangling reference
+and no _a art, so the family's shared B-grade recipe art stands in under the
+referenced name. A substitute names art that ships; it is never itself a key.
+================
+*/
+const ITEM_ICON_SUBSTITUTES = new Map( [
+	[ "icon/item/etc/archemy_reinforce_recipe_a.ddj", "icon/item/etc/archemy_reinforce_recipe_b.ddj" ]
+] );
+
+/*
+================
 copyItemDataIconImage
 ================
 */
@@ -439,11 +458,33 @@ async function copyItemDataIconImage( ddjPath, copiedImages ) {
 	// icon-column public-path contract expects.
 	const relativePublic = publicPath.replace( /^\/assets\/images\//, "" );
 	const collisionSource = path.join( imageSourceRoot, relativePublic.replace( /\.png$/i, ".ddj.png" ) );
-	if ( !(await exists( collisionSource )) ) {
+	if ( await exists( collisionSource ) ) {
+		await copyIntoPublicTree( collisionSource, path.join( imagePublicRoot, relativePublic ) );
+		copiedImages.add( publicPath );
 		return;
 	}
-	await copyIntoPublicTree( collisionSource, path.join( imagePublicRoot, relativePublic ) );
-	copiedImages.add( publicPath );
+	// The referenced DDJ shipped in no client: publish its named substitute
+	// (ITEM_ICON_SUBSTITUTES) under the referenced name, or stay absent and
+	// ride the native icon_default fallback, same as retail. The substitute's
+	// converted image is copied source to target, never through its own
+	// publication: the icons copy concurrently, and two writers on one public
+	// file race.
+	const substitute = ITEM_ICON_SUBSTITUTES.get( normalizeAssetPath( ddjPath ) );
+	if ( !substitute ) {
+		return;
+	}
+	const substituteRelative = imagePublicPath( substitute ).replace( /^\/assets\/images\//, "" );
+	const substituteSources = [
+		path.join( imageSourceRoot, substituteRelative ),
+		path.join( imageSourceRoot, substituteRelative.replace( /\.png$/i, ".ddj.png" ) )
+	];
+	for ( const source of substituteSources ) {
+		if ( await exists( source ) ) {
+			await copyIntoPublicTree( source, path.join( imagePublicRoot, relativePublic ) );
+			copiedImages.add( publicPath );
+			return;
+		}
+	}
 }
 
 /*
@@ -887,4 +928,4 @@ function imagePublicPath( ddjPath ) {
 }
 const applyPreprocessor = applyCifPreprocessor;
 
-export { applyPreprocessor, imagePublicPath, parseCifLayout };
+export { applyPreprocessor, copyItemDataIconImages, imagePublicPath, parseCifLayout };

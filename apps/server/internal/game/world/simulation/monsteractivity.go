@@ -181,8 +181,8 @@ func (s *MonsterState) commitActivity(division string, gid uint32, before, after
 commitActivityAt
 
 commitActivity through the slots the behaviour batch carried for
-the actor (#2133): the guard read, the death check and the write
-go through the verified hints and fall back to the gid resolve
+the actor (#2133): the population, the guard read, the death check
+and the write go through the verified hints and fall back to the gid resolve
 whenever a hint no longer names the gid, so the commit lands - or
 is refused - exactly as commitActivity's. The gate runs this once
 per due actor per tick, which is where the profile charged the
@@ -194,7 +194,7 @@ the stamp alone (#2029).
 func (s *MonsterState) commitActivityAt(division string, gid uint32, slot, monsterSlot uint32, before, after monster.MoverState, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.populationForObject(division, gid)
+	state := s.populationForObjectAt(division, gid, monsterSlot)
 	current, exists := state.movers.lookupAt(slot, gid)
 	if !exists {
 		current, exists = state.movers.lookup(gid)

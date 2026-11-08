@@ -22435,7 +22435,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 							!overlay ||
 							entity.gid !== next.hoveredEntity && !nameInRange( boardAt( entity ), local, game.pose )
 						) continue;
-						if ( overlay.fortressMark || overlay.guildText || overlay.status || overlay.stallText ) {
+						if (
+							overlay.fortressMark || overlay.caravanMark || overlay.guildText || overlay.status ||
+							overlay.stallText
+						) {
 							overlaid.add( entity.gid );
 						}
 						if ( overlay.stallText ) {
@@ -22476,6 +22479,25 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 									color: white,
 									alphaCutoff: 128 / 255
 								} );
+							}
+						}
+						if ( overlay.caravanMark ) {
+							// Port-only (#2958): the 5-star caravan's stars over
+							// its transport, the bag window's art and tint.
+							const mark = overlay.caravanMark;
+							paths.push( mark.path );
+							if ( resources.has( mark.path ) ) {
+								for ( let i = 0; i < 5; i++ ) {
+									quads.push( {
+										characterAnchor: entity.gid,
+										rect: [ -34 + i * 14, mark.y, 12, 12 ],
+										clip: full,
+										uv: [ 0, 0, 1, 1 ],
+										texture: mark.path,
+										color: mark.tint,
+										alphaCutoff: 128 / 255
+									} );
+								}
 							}
 						}
 						if ( overlay.guildText ) {

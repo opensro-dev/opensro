@@ -5,6 +5,11 @@ owning Binary Ninja. This tutorial gets you from a retail executable to readable
 instructions and a saved, reviewable finding. It does not produce an automatic
 C++ reconstruction or run the entire game inside Python.
 
+If digging through your own binary is the problem, start with Rizin instead:
+[RIZIN.md](RIZIN.md) is the recommended free tool, and it finds functions,
+cross-references and RTTI. Python here stays the zero-install fallback for
+reading a bounded instruction range and for scripted checks.
+
 The v1.150 client defines data, wire messages and UI. For server-only mechanics,
 use the later server, restricted to the v1.150 feature set. Names and version
 strings are not sufficient identity: hash each file. Never transfer addresses
@@ -275,6 +280,8 @@ an existing database; check return values and verify a reopened copy. Do not use
 [BinaryView API](https://api.binary.ninja/binaryninja.binaryview-module.html).
 If using an MCP, discover its actual database-save interface rather than guessing
 tool names. Never overwrite the retail executable with an analysis export.
+The same database duties fall to a `.rzdb` project in [RIZIN.md](RIZIN.md):
+projects live in the research tree, and both label sets must agree.
 
 ## 7. Give an AI agent a concrete starting task
 

@@ -44,7 +44,7 @@ captureAbnormalSources
 Call while owning the division, before entering a character write transaction.
 Read each active source once so every status in this tick sees the same facts.
 
-Player victims take this full capture: capturePlayerAbnormalSources
+Player victims take this capture: capturePlayerAbnormalSources
 classifies the killer copy before the write, and the fatal transition
 settles from it inside the write, so the copy cannot be taken lazily at
 the death - the write door is already held there and a read would
@@ -52,6 +52,20 @@ reenter it. The COS tick takes it too, for the same reason (its fatal
 periodic hit stamps the dealer). Owners that never read a killer (the
 monster context, the COS hit lanes that stamp from the hit itself)
 capture through captureAbnormalSourcesLife instead.
+
+The killer copy is the cast view (characterSnapshotCast, #1943), not
+the full record: every reader of killer.player is cleared for the
+dropped plain bag rows root by root. The classifier chain reads the
+slot-8 equipment row, the dressed job, guild and account identity and
+level (playerKillKind, worldPlayerEnemyRules, mostWantedStrangers);
+the death settlement reads the level byte and the copy's non-nilness
+(settleDeathCostInDoor); the COS dealer stamp reads the name and the
+slot-8 row (playerRelationEquipment); companion resolution walks the
+kept companion-carrying bag rows in the full copy's order, so
+CompanionByGID answers identically. The pay lane never touches this
+copy - it re-fetches the live killer inside its own door. The
+abnormal-cast differential test pins the capture against the full
+copy.
 ================
 */
 func (rt *Runtime) captureAbnormalSources(division string, block *abnormal.Block, records []abnormal.Record) map[uint32]abnormalSourceState {
@@ -120,7 +134,7 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 		if owner == nil {
 			return abnormalSourceState{}
 		}
-		snapshot := rt.characterSnapshot(division, owner)
+		snapshot := rt.characterSnapshotCast(division, owner)
 		if snapshot == nil {
 			return abnormalSourceState{}
 		}
@@ -138,7 +152,7 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 		return abnormalSourceState{exists: true, dead: pet.CurrentHP == 0,
 			killer: deathKiller{player: snapshot, strikerLevel: int64(level)}}
 	}
-	snapshot := rt.characterSnapshot(division, character)
+	snapshot := rt.characterSnapshotCast(division, character)
 	return abnormalSourceState{exists: true, dead: snapshot == nil || !enterworld.CharacterAlive(snapshot), killer: deathKiller{player: snapshot}}
 }
 

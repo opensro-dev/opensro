@@ -431,6 +431,9 @@ func (rt *Runtime) HandleGachaRoll(
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(divisionID, character.Name, []wire.Frame{announce})
 		}
+		// The Event-feed line naming the winner (#2852), behind its
+		// flag; the banner above goes out either way.
+		rt.announceGachaWin(divisionID, character.Name, rolledReward, rolledQuantity, rt.Now().UnixMilli())
 	}
 	return frames, ""
 }

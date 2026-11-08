@@ -221,3 +221,76 @@ func TestCommitWriterFullQueueWaits(t *testing.T) {
 		return len(w.queue) == 0 && w.applied == seq
 	})
 }
+
+/*
+================
+TestAsyncCreateCharacterAnswersOnlyOnceItsBatchIsOnDisk
+
+A durable door (durableTicket): with the writer parked inside the
+creation's commit, CreateCharacter has not answered, yet the store lock
+is already free for readers. Once the disk is free the door answers and
+the new row is on disk.
+================
+*/
+func TestAsyncCreateCharacterAnswersOnlyOnceItsBatchIsOnDisk(t *testing.T) {
+	t.Parallel()
+	s, _ := asyncStoreWithCharacter(t, t.TempDir(), "asyncfirst")
+	park := newParkedCommit(t)
+	s.mu.Lock()
+	s.beforeSQLiteCommit = park.seam
+	s.mu.Unlock()
+
+	created := make(chan error, 1)
+	go func() {
+		created <- s.CreateCharacter(testDivision, "async-account", &enterworld.Character{Name: "asyncdurable", Gold: int64Ptr(7)})
+	}()
+	<-park.inCommit
+	select {
+	case err := <-created:
+		t.Fatalf("CreateCharacter answered (%v) while its batch was parked before the disk", err)
+	case <-time.After(asyncQueueBlocked):
+	}
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		s.ReadState(func() {})
+	}()
+	select {
+	case <-read:
+	case <-time.After(asyncWriterParked):
+		t.Fatal("a reader waited on the durable door: its wait still holds the store lock")
+	}
+	park.free()
+	select {
+	case err := <-created:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(asyncWriterParked):
+		t.Fatal("CreateCharacter never answered after the disk was free")
+	}
+	if raw := readCharacterRecordRaw(t, s, testDivision, "asyncdurable"); raw == "" {
+		t.Fatal("the created character is not on disk when the door answered")
+	}
+}
+
+/*
+================
+TestDurableTicketIsEmptyWithTheFlagOff
+
+Off, the commit applied under the lock, so the ticket holds nothing and
+wait returns at once.
+================
+*/
+func TestDurableTicketIsEmptyWithTheFlagOff(t *testing.T) {
+	t.Parallel()
+	s := openTestCommit(t, t.TempDir(), newTestClock(), false)
+	var ticket durableTicket
+	s.mu.Lock()
+	ticket.captureLocked(s)
+	s.mu.Unlock()
+	if ticket.writer != nil || ticket.seq != 0 {
+		t.Fatalf("flag off, the ticket holds writer=%v seq=%d", ticket.writer != nil, ticket.seq)
+	}
+	ticket.wait()
+}

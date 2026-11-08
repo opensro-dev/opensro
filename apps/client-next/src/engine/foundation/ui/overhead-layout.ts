@@ -4,7 +4,8 @@
 overhead-layout.ts - the rows stacked over a character's name
 
 The guild or companion-owner row, the vitals (quick status), the fortress
-mark and crest, and a stall's title; speech rises above the highest row.
+mark and crest, a stall's title, and (port-only, #2958) a 5-star caravan's
+star row over its transport; speech rises above the highest row.
 withoutBoardPass is the same stack with the /id byte clear: only the stall
 title and speech board remain.
 
@@ -19,6 +20,7 @@ import { quickStatus } from "./quick-status";
 import { fortressActive, fortressStatus } from "@/engine/foundation/gameplay/fortress";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { NAME_COLOR_WHITE, nameColorRgba } from "@/engine/foundation/gameplay/name-color";
+import { TRADE_STARS_MAX, tradeStarTint } from "@/engine/foundation/gameplay/cos-trade-info";
 
 // CICCos 855CBC subtracts the double 20.0 at C46198 before drawing the owner.
 const COMPANION_OWNER_Y = -20;
@@ -27,6 +29,11 @@ const COMPANION_OWNER_Y = -20;
 const GUILD_SOLDIER_TID_WORD = 0x29c6;
 // The stall title (the +0x464 board) rides this far above the highest row.
 const STALL_TITLE_RISE = 20;
+// Port-only (#2958): a 5-star caravan's star row over its transport. The
+// art and the 5-star tint are the transport bag's own (6A7DD0,
+// cos-trade-info.ts); the row rides this far above the highest row.
+const CARAVAN_STAR_PATH = "/assets/images/Media_extracted/interface/ifcommon/com_star.png";
+const CARAVAN_STAR_RISE = 20;
 
 /*
 ================
@@ -161,6 +168,13 @@ export function overheadLayout(
 	// 751430 / 86A26D: a stall's title rides above the rest (SetOverheadStallTitle, 0xFFFEB5FF).
 	const stallText = entity.appearanceState?.[6] === STALL_TITLE_MODE && entity.titleText ? entity.titleText : "",
 		stallY = statusY - (stallText ? STALL_TITLE_RISE : 0);
+	// Port-only, not native (#2958): the fifth star shows on the
+	// transport's nameplate, five stars in the bag window's row and tint,
+	// above every other row; speech rises above it in turn.
+	const caravanMark = entity.kind === "cos" && game.caravanStars?.includes( entity.gid ) ?
+			{ path: CARAVAN_STAR_PATH, tint: tradeStarTint( TRADE_STARS_MAX ), y: stallY - CARAVAN_STAR_RISE } :
+			null,
+		speechY = caravanMark ? caravanMark.y : stallY;
 	return {
 		fortressCrest,
 		guildText,
@@ -168,8 +182,9 @@ export function overheadLayout(
 		guildY,
 		status,
 		statusY,
-		speechY: stallY,
+		speechY,
 		fortressMark,
+		caravanMark,
 		stallText,
 		stallY
 	};
@@ -200,6 +215,7 @@ export function withoutBoardPass( layout: OverheadLayout ): OverheadLayout {
 		status: null,
 		statusY: 0,
 		fortressMark: null,
+		caravanMark: null,
 		speechY: stallY,
 		stallY
 	};

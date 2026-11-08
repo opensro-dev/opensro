@@ -408,6 +408,21 @@ func halloweenBoxDayCount(account *domain.HalloweenBoxAccount, now time.Time) in
 
 /*
 ================
+halloweenGourdDayCount
+
+The account's Gourd-box count on now's day, under its own cap
+(#2950): a record still holding an older day counts as zero.
+================
+*/
+func halloweenGourdDayCount(account *domain.HalloweenBoxAccount, now time.Time) int64 {
+	if account == nil || account.Day != progression.HalloweenDayKey(now) {
+		return 0
+	}
+	return account.GourdCount
+}
+
+/*
+================
 Runtime.halloweenBoxDrop
 
 The kill's event drop: one box while the window runs and the winner's
@@ -425,7 +440,16 @@ func (rt *Runtime) halloweenBoxDrop(winner *enterworld.Character, defeated monst
 		return grounditem.Item{}, false
 	}
 	account := rt.halloweenBoxAccount(winner)
-	if account == nil || halloweenBoxDayCount(account, now) >= progression.HalloweenBoxDailyCap {
+	if account == nil {
+		return grounditem.Item{}, false
+	}
+	// A Gourd kill draws on the Gourd allowance, an ordinary kill on
+	// the ordinary one (#2950): the caps gate separately.
+	if defeated.Ref.Codename == halloweenGourdCodename {
+		if halloweenGourdDayCount(account, now) >= progression.HalloweenGourdBoxDailyCap {
+			return grounditem.Item{}, false
+		}
+	} else if halloweenBoxDayCount(account, now) >= progression.HalloweenBoxDailyCap {
 		return grounditem.Item{}, false
 	}
 	if defeated.Ref.Codename != halloweenGourdCodename {
@@ -440,23 +464,32 @@ func (rt *Runtime) halloweenBoxDrop(winner *enterworld.Character, defeated monst
 	return rt.prepareSelectedDrop(loot.DropItem{Codename: progression.HalloweenBoxCodename, Count: 1, Assigned: true}, at, owner, now)
 }
 
+// halloweenCapReach names one owner whose mint reached a daily cap
+// with this settlement, and which of the two caps it was (#2950).
+type halloweenCapReach struct {
+	owner *enterworld.Character
+	gourd bool
+}
+
 /*
 ================
 Runtime.countHalloweenBoxes
 
 Counts the boxes one committed kill settlement minted, each against
 its owner's account (#2547): a minted box carries its owner's JID, and
-owners resolves those JIDs to the settlement's characters. From every
-source (the rolled drop and the Gourd alike), under the 04:00-UTC day
-key. Runs inside the settlement's door, so the account records move
-directly and the door commits them; a GM-spawned kill is conjured, not
-hunted, and its caller never counts it. A day that has rolled over
-restarts the count before this kill's boxes land. Returns the owners
-whose account reached the cap with this settlement (an account is
-named once), for the once-a-day cap message.
+owners resolves those JIDs to the settlement's characters. A Gourd
+kill's boxes land on the Gourd allowance, an ordinary kill's on the
+ordinary one (#2950); the settlement is one kill, so gourd names the
+source of every box in drops. Under the 04:00-UTC day key. Runs
+inside the settlement's door, so the account records move directly
+and the door commits them; a GM-spawned kill is conjured, not hunted,
+and its caller never counts it. A day that has rolled over restarts
+both counts before this kill's boxes land. Returns the owners whose
+account reached the cap with this settlement (an account is named
+once per cap), for the once-a-day cap message.
 ================
 */
-func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, drops []grounditem.Item, nowMs int64) []*enterworld.Character {
+func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, drops []grounditem.Item, nowMs int64, gourd bool) []halloweenCapReach {
 	if rt == nil || len(drops) == 0 {
 		return nil
 	}
@@ -465,7 +498,11 @@ func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, 
 		return nil
 	}
 	key := progression.HalloweenDayKey(now)
-	var reached []*enterworld.Character
+	cap := int64(progression.HalloweenBoxDailyCap)
+	if gourd {
+		cap = progression.HalloweenGourdBoxDailyCap
+	}
+	var reached []halloweenCapReach
 	announced := map[*domain.HalloweenBoxAccount]bool{}
 	for _, drop := range drops {
 		if drop.Codename != progression.HalloweenBoxCodename {
@@ -477,14 +514,17 @@ func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, 
 			continue
 		}
 		if account.Day != key {
-			account.Day, account.Count = key, 0
+			account.Day, account.Count, account.GourdCount = key, 0, 0
 		}
-		before := account.Count
-		account.Count++
-		if before < progression.HalloweenBoxDailyCap &&
-			account.Count >= progression.HalloweenBoxDailyCap && !announced[account] {
+		count := &account.Count
+		if gourd {
+			count = &account.GourdCount
+		}
+		before := *count
+		*count++
+		if before < cap && *count >= cap && !announced[account] {
 			announced[account] = true
-			reached = append(reached, owner)
+			reached = append(reached, halloweenCapReach{owner: owner, gourd: gourd})
 		}
 	}
 	return reached
@@ -492,17 +532,24 @@ func (rt *Runtime) countHalloweenBoxes(owners map[uint32]*enterworld.Character, 
 
 // halloweenBoxCapBanner is the once-a-day word to a character whose
 // mint reached the account's daily cap (#2547): the cap stops being
-// silent, and the reset time is in the line.
+// silent, and the reset time is in the line. The Gourd line names its
+// own limit (#2950): a wave hunter capped on Gourd boxes is not told
+// the ordinary limit is what stopped the pay.
 const halloweenBoxCapBanner = "You have reached today's Jewel Box limit (%d). It resets at 04:00 UTC."
+const halloweenGourdBoxCapBanner = "You have reached today's Gourd Jewel Box limit (%d). It resets at 04:00 UTC."
 
 /*
 ================
 halloweenBoxCapFrame
 
-The cap message, in the event banner's own shape (halloweenBanner).
+The cap message for the cap that was reached, in the event banner's
+own shape (halloweenBanner).
 ================
 */
-func halloweenBoxCapFrame() wire.Frame {
+func halloweenBoxCapFrame(gourd bool) wire.Frame {
+	if gourd {
+		return halloweenBanner(fmt.Sprintf(halloweenGourdBoxCapBanner, progression.HalloweenGourdBoxDailyCap))
+	}
 	return halloweenBanner(fmt.Sprintf(halloweenBoxCapBanner, progression.HalloweenBoxDailyCap))
 }
 
@@ -551,7 +598,7 @@ func (rt *Runtime) halloweenGourdBoxes(winner *enterworld.Character, defeated mo
 			continue
 		}
 		account := rt.halloweenBoxAccount(a.character)
-		if account == nil || halloweenBoxDayCount(account, now)+promised[account] >= progression.HalloweenBoxDailyCap {
+		if account == nil || halloweenGourdDayCount(account, now)+promised[account] >= progression.HalloweenGourdBoxDailyCap {
 			continue
 		}
 		box, ok := rt.prepareSelectedDrop(loot.DropItem{Codename: progression.HalloweenBoxCodename, Count: 1, Assigned: true}, at, a.character.Name, now)

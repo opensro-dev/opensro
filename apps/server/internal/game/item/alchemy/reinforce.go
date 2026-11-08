@@ -41,6 +41,16 @@ type Outcome struct {
 	Target    uint8
 	Success   bool
 	Destroyed bool
+	// From is the target's plus before the attempt (#2852): on a
+	// failure the item's own plus is already reset, so an announcer
+	// that wants to name the attempted plus (+From+1) reads it here.
+	// Reinforce sets it; the stone and avatar outcomes leave it zero.
+	From uint8
+	// ImmortalSaved marks a failure whose destruction roll landed
+	// but whose Immortal option kept the item (#2852): Destroyed is
+	// false for it, exactly as for a failure that never rolled
+	// destruction, so the save needs its own mark.
+	ImmortalSaved bool
 }
 
 /*
@@ -429,7 +439,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if err != nil {
 		return zero, err
 	}
-	result := Outcome{Target: item.Slot, Success: int(n) < chance}
+	result := Outcome{Target: item.Slot, Success: int(n) < chance, From: item.Plus}
 	if result.Success {
 		item.Plus++
 	} else {
@@ -447,6 +457,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 				result.Destroyed = !ref.Cash
 				if result.Destroyed && c.charge(item, MagicTagImmortal) {
 					result.Destroyed = false
+					result.ImmortalSaved = true
 				}
 			} else if !c.charge(item, MagicTagSteady) {
 				if err = c.curse(item, roll); err != nil {

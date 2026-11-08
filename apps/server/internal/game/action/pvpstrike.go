@@ -432,6 +432,9 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		if len(hit.struck.impacts) == 0 {
 			return false
 		}
+		// Port-only, not native (#2958): a thief's landed hit on a 5-star
+		// caravan's owner marks the thief for the hunter bounty.
+		rt.noteCaravanAttack(character, target.player, now)
 		if st.release == nil {
 			rt.startSkillCast(division, character, skill, now)
 		}

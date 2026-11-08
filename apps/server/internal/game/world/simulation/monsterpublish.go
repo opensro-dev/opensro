@@ -46,7 +46,7 @@ func (ops *MonsterMoverOps) advanceAndPublish(divisionID string, actor behaviorA
 	}
 	// Private consequences follow the public result in the same operation.
 	deliverMonsterTargetFrames(divisionID, targeted, sessions, push)
-	ops.vanishInSafeZone(divisionID, instance.Gid, nowMs)
+	ops.vanishInSafeZone(divisionID, instance.Gid, actor.slot, actor.monsterSlot, nowMs)
 }
 
 /*
@@ -160,14 +160,21 @@ in the same step sees the drain, exactly as outside a plan.
 ================
 */
 func (ops *MonsterMoverOps) takeStepAIEvents(divisionID string, gid uint32) []monsterAIEvent {
+	// The step's own actor is armed: resolve the population through
+	// its carried monster slot (#2133). The doors verify the hint
+	// against the gid, so another actor still resolves by gid.
+	monsterSlot := behaviorNoMonsterSlot
+	if ops.stepGenArmed {
+		monsterSlot = ops.stepMonsterSlot
+	}
 	if ops.plan == nil {
-		return ops.Monsters.takeAIEvents(divisionID, gid)
+		return ops.Monsters.takeAIEventsAt(divisionID, gid, monsterSlot)
 	}
 	if ops.plan.aiEventsTaken {
 		return nil
 	}
 	ops.plan.aiEventsTaken = true
-	ops.plan.aiEvents = ops.Monsters.peekAIEvents(divisionID, gid)
+	ops.plan.aiEvents = ops.Monsters.peekAIEventsAt(divisionID, gid, monsterSlot)
 	return ops.plan.aiEvents
 }
 
