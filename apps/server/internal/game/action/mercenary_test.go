@@ -100,6 +100,28 @@ func TestMercenarySummonAndDismissPreserveCooldown(t *testing.T) {
 
 /*
 ================
+TestAdvanceMercenaryCooldownsAllocatesNothing
+
+The cooldown pass runs on every tick over every admitted owner,
+so its owner-key collect is runtime scratch, refilled and consumed
+in line: a steady pass allocates nothing (#2030).
+================
+*/
+func TestAdvanceMercenaryCooldownsAllocatesNothing(t *testing.T) {
+	d, _ := mercenaryFixture(t)
+	now := int64(3_000_000)
+	advance := func() {
+		now += 100
+		d.rt.advanceMercenaryCooldowns(now)
+	}
+	advance()
+	if allocs := testing.AllocsPerRun(50, advance); allocs != 0 {
+		t.Fatalf("cooldown pass allocates %.0f per call, want 0 (the owner-key collect grew a fresh slice)", allocs)
+	}
+}
+
+/*
+================
 TestMercenaryRecordOmitsPetTail
 ================
 */

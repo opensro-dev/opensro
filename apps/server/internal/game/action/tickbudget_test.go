@@ -84,10 +84,13 @@ const (
 // 39,284 B / 562 allocs; with the pet counter judge taking the
 // read guard and composing its frame only on a change instead
 // of through a door closure per pet tick (#2030), measured
-// 27,259 B / 268 allocs.
+// 27,259 B / 268 allocs; with the mercenary cooldown pass
+// collecting its owner keys into runtime scratch instead of a
+// slice grown from empty every tick (#2030), measured 25,952 B /
+// 263 allocs.
 const (
-	tickBudgetBytesPerTick  = 29900
-	tickBudgetAllocsPerTick = 294
+	tickBudgetBytesPerTick  = 28500
+	tickBudgetAllocsPerTick = 289
 )
 
 /*

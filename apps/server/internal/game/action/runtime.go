@@ -322,6 +322,11 @@ type Runtime struct {
 	// (placementguard.go).
 	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
+	// mercenaryKeys is the cooldown pass's owner-key scratch
+	// (mercenary_clock.go): refilled under petMu on every pass and
+	// consumed in line by the same pass, so a steady tick grows
+	// nothing. The tick step list is serial and nothing retains it.
+	mercenaryKeys []petOwnerKey
 	// cosOwners is the pet gid to owner index (cosownerindex.go):
 	// whose pet a gid is, without walking the division's characters.
 	cosOwners  cosOwnerIndex

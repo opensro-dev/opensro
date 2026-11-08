@@ -32,16 +32,19 @@ advanceMercenaryCooldowns
 
 The existing owner session roster supplies only admitted online characters.
 The division lock serializes the clock with summon and dismissal requests.
+The roster walk collects into the runtime's key scratch (#2030): the pass
+runs every tick, so a fresh slice here would grow from empty every time.
 ================
 */
 func (rt *Runtime) advanceMercenaryCooldowns(now int64) {
 	rt.petMu.Lock()
-	keys := make([]petOwnerKey, 0)
+	keys := rt.mercenaryKeys[:0]
 	for key, state := range rt.petSessions {
 		if key.gid == 0 && state.ready {
 			keys = append(keys, key)
 		}
 	}
+	rt.mercenaryKeys = keys
 	rt.petMu.Unlock()
 	for _, key := range keys {
 		rt.advanceMercenaryCooldownInDivision(key, now)
