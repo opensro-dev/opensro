@@ -173,3 +173,119 @@ func TestStepTimerNamesSlowSteps(t *testing.T) {
 		t.Fatal("the zero StepTimer did not run its step")
 	}
 }
+
+/*
+================
+TestStepTimerBeginEndMatchesTime
+
+The span must record exactly what Time records - the total, the slow
+names and the zone's open and close around them - for a fast step, a
+slow step and a panicking one.
+================
+*/
+func TestStepTimerBeginEndMatchesTime(t *testing.T) {
+	record := func(spans bool) []string {
+		clock := time.UnixMilli(0)
+		var events []string
+		steps := StepTimer{
+			Now: func() time.Time { return clock },
+			Total: func(name string, elapsed time.Duration) {
+				events = append(events, "total:"+name+":"+elapsed.String())
+			},
+			Slow: func(name string, elapsed time.Duration) {
+				events = append(events, "slow:"+name+":"+elapsed.String())
+			},
+			Zone: func(name string) func() {
+				events = append(events, "open:"+name)
+				return func() { events = append(events, "close:"+name) }
+			},
+		}
+		step := func(name string, body func()) {
+			if spans {
+				span := steps.Begin(name)
+				defer span.End()
+				body()
+				return
+			}
+			steps.Time(name, body)
+		}
+		step("fast", func() { clock = clock.Add(10 * time.Millisecond) })
+		step("slow", func() { clock = clock.Add(150 * time.Millisecond) })
+		func() {
+			defer func() { _ = recover() }()
+			step("panics", func() {
+				clock = clock.Add(SlowHookThreshold)
+				panic("step failed")
+			})
+		}()
+		return events
+	}
+	viaTime, viaSpans := record(false), record(true)
+	if len(viaTime) != len(viaSpans) {
+		t.Fatalf("span events %v, Time events %v", viaSpans, viaTime)
+	}
+	for i := range viaTime {
+		if viaTime[i] != viaSpans[i] {
+			t.Fatalf("event %d: span %q, Time %q (span %v, Time %v)", i, viaSpans[i], viaTime[i], viaSpans, viaTime)
+		}
+	}
+	var zero StepTimer
+	unwired := zero.Begin("unwired")
+	unwired.End()
+}
+
+/*
+================
+TestStepSpanEndRecordsOnce
+
+A span ended explicitly and again by a deferred backstop records
+once: the driver defers gate.End beside its explicit end so a
+panicking gate wait still records, and the calm path must not
+double-count the wait or close the zone twice.
+================
+*/
+func TestStepSpanEndRecordsOnce(t *testing.T) {
+	clock := time.UnixMilli(0)
+	totals, zones := 0, 0
+	steps := StepTimer{
+		Now:   func() time.Time { return clock },
+		Total: func(string, time.Duration) { totals++ },
+		Zone: func(string) func() {
+			return func() { zones++ }
+		},
+	}
+	span := steps.Begin("step")
+	clock = clock.Add(10 * time.Millisecond)
+	span.End()
+	span.End()
+	if totals != 1 || zones != 1 {
+		t.Fatalf("double End recorded totals=%d zones=%d, want 1 and 1", totals, zones)
+	}
+}
+
+// spanAllocTimer / spanAllocSink keep TestStepSpanBeginEndAllocatesNothing's
+// measured pair free of capture boxes of its own.
+var spanAllocTimer = &StepTimer{
+	Now:   func() time.Time { return time.UnixMilli(0) },
+	Total: func(string, time.Duration) {},
+}
+
+var spanAllocSink StepSpan
+
+/*
+================
+TestStepSpanBeginEndAllocatesNothing
+
+Retiring Time's per-step closure box on the tick path is the span's
+whole reason to exist (#2030); pin the pair at zero allocations.
+================
+*/
+func TestStepSpanBeginEndAllocatesNothing(t *testing.T) {
+	allocs := testing.AllocsPerRun(100, func() {
+		spanAllocSink = spanAllocTimer.Begin("step")
+		spanAllocSink.End()
+	})
+	if allocs != 0 {
+		t.Fatalf("Begin/End allocated %v per run, want 0", allocs)
+	}
+}

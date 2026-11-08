@@ -79,10 +79,12 @@ const (
 // fires a brood event (#2030), measured 48,993 B / 858 allocs;
 // with the elemental walk's armed facts recycled across ticks
 // instead of captured fresh per owner tick (#2030), measured
-// 45,541 B / 822 allocs.
+// 45,541 B / 822 allocs; with the tick driver's steps timed as
+// spans instead of per-step timing closures (#2030), measured
+// 39,284 B / 562 allocs.
 const (
-	tickBudgetBytesPerTick  = 50100
-	tickBudgetAllocsPerTick = 910
+	tickBudgetBytesPerTick  = 43300
+	tickBudgetAllocsPerTick = 620
 )
 
 /*
