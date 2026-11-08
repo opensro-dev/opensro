@@ -889,7 +889,14 @@ import {
 import { createInstancePrompt, instanceBoxLayout, instanceQuestion } from "@/engine/foundation/ui/instance-proposal";
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
-import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
+import {
+	bagTabRow,
+	GACHA_BAG_CELL_SHIFT,
+	GACHA_BAG_TABS,
+	INVENTORY_BAG_TABS,
+	inventoryLattice,
+	inventorySlots
+} from "@/engine/foundation/ui/inventory-layout";
 import { fillMarkup, groupedNumber, guideTokens, hasSml2Markup } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
@@ -15996,16 +16003,16 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 						inventoryPage
 					);
 					inventoryPage = slots.page;
-					for ( let page = 0; page < slots.pages; page++ ) {
+					for ( const tab of bagTabRow( bx, by, INVENTORY_BAG_TABS, slots.pages, inventoryPage ) ) {
 						// Port-only, not native: owner-approved deviation 2026-10-15,
 						// always on. The tabs read their page number ("1", "2", ...);
 						// the native UIIT_CTL_BELOINGING / UIIT_STT_INVENTORY_EXTENSION_TEB
 						// labels run past the 60-pixel tab.
 						nativeTab(
-							"inventory-page:" + page,
-							String( page + 1 ),
-							[ bx + 4 + 62 * page, by - 23, 60, 24 ],
-							page === inventoryPage,
+							"inventory-page:" + tab.page,
+							String( tab.page + 1 ),
+							tab.rect,
+							tab.page === inventoryPage,
 							{ family: "com_tab" }
 						);
 					}
@@ -19975,9 +19982,10 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 					if ( bagFrame ) {
 						const bx = px + bagFrame.rect[0],
 							by = py + bagFrame.rect[1],
+							// 644C20: the gacha's cells sit one pixel in from the inventory's.
 							bag = inventorySlots(
-								bx,
-								by,
+								bx + GACHA_BAG_CELL_SHIFT,
+								by + GACHA_BAG_CELL_SHIFT,
 								game.inventorySlotCount ?? 0,
 								game.equipmentSlotCount ?? 13,
 								gachaHud.bag(
@@ -19990,12 +19998,12 @@ Keep retail arrow end-caps unscaled; widen only the middle rail.
 										)
 								)
 							);
-						for ( let tab = 0; tab < bag.pages; tab++ ) {
+						for ( const tab of bagTabRow( bx, by, GACHA_BAG_TABS, bag.pages, bag.page ) ) {
 							nativeTab(
-								"gacha-bag-page:" + tab,
-								hudCopy( tab ? "UIIT_STT_INVENTORY_EXTENSION_TEB" : "UIIT_CTL_BELOINGING" ),
-								[ bx + 4 + 62 * tab, by - 23, 60, 24 ],
-								tab === bag.page,
+								"gacha-bag-page:" + tab.page,
+								hudCopy( tab.page ? "UIIT_STT_INVENTORY_EXTENSION_TEB" : "UIIT_CTL_BELOINGING" ),
+								tab.rect,
+								tab.page === bag.page,
 								{ family: "com_tab" }
 							);
 						}
