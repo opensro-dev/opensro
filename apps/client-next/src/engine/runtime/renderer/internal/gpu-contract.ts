@@ -106,10 +106,13 @@ AmbientOcclusionDraw
 The experimental occlusion stage (#2094): view is the blurred factor
 the surfaces sample (their binding 15), stable between resizes;
 encode totals this frame's stored depth into it for the next frame.
+The view is null while the live target has no measurement yet
+(creation, resize, re-enable): the surfaces then keep the white view,
+so the factor is 1 and a fresh target's zero is never sampled.
 ================
 */
 export interface AmbientOcclusionDraw {
-	readonly view: GPUTextureView;
+	readonly view: GPUTextureView | null;
 	encode( encoder: GPUCommandEncoder, depth: GPUTextureView ): void;
 }
 /*

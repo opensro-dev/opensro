@@ -15,7 +15,11 @@ diffuse keeps its direction and the unlit path is untouched.
 The one-frame lag is deliberate: the alternative is a depth prepass
 that re-draws the scene. prepare() with the stage off owns nothing -
 no pipeline, no target - and the geometry bindings name a 1x1 white
-view instead (geometry.ts), so the off frame is the native one.
+view instead (geometry.ts), so the off frame is the native one. The
+same white view serves a target with no measurement yet: a fresh
+texture starts zeroed (factor 0, black), so prepare names the blurred
+view only once the first encode has written the live target, and
+neither enabling the stage nor a resize can flash the scene black.
 
 ===========================================================================
 */
@@ -147,6 +151,10 @@ ${vertex}
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 		} );
 	};
+	// encodedEpoch is the blurred target the last completed encode
+	// wrote. prepare names the blurred view to the surfaces only while
+	// the live target is that one, so a fresh (zeroed) target is never
+	// sampled before its first measurement (factor 1 until then).
 	let raw: GPUTexture | null = null,
 		rawView: GPUTextureView | null = null,
 		blurred: GPUTexture | null = null,
@@ -154,6 +162,7 @@ ${vertex}
 		blurBinding: GPUBindGroup | null = null,
 		depthBinding: GPUBindGroup | null = null,
 		depthBound: GPUTextureView | null = null,
+		encodedEpoch: GPUTexture | null = null,
 		width = 0,
 		height = 0,
 		disposed = false;
@@ -172,6 +181,7 @@ ${vertex}
 		blurBinding = null;
 		depthBinding = null;
 		depthBound = null;
+		encodedEpoch = null;
 		width = height = 0;
 	}
 	return {
@@ -181,7 +191,10 @@ ${vertex}
 
 		The frame's occlusion draw at half the scene's resolution, with
 		the camera's projection packed for the pass; undefined (and no
-		targets) while the stage is off.
+		targets) while the stage is off. The draw names the blurred
+		view only once the live target carries a measurement - until
+		the first encode lands, the surfaces keep the white view, so
+		the factor they sample is 1, never a fresh target's zero.
 		================
 		*/
 		prepare(
@@ -239,7 +252,7 @@ ${vertex}
 			);
 			const epoch = blurred;
 			return {
-				view: blurredView!,
+				view: encodedEpoch === blurred ? blurredView! : null,
 				/*
 				================
 				encode
@@ -286,6 +299,9 @@ ${vertex}
 					blur.setBindGroup( 0, blurBinding! );
 					blur.draw( 3 );
 					blur.end();
+					// The live target now carries a measurement: from
+					// the next prepare the surfaces may sample it.
+					encodedEpoch = epoch;
 				}
 			};
 		},

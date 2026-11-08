@@ -7,7 +7,9 @@ Exercises the production owner (experimental, #2094) against the strict
 GPU fake: off owns nothing and compiles nothing, on totals the frame's
 depth at half resolution behind a stale-target guard, and only an
 enable, disable or resize replaces the blurred view the surfaces
-sample (geometry binding 15).
+sample (geometry binding 15). A target with no measurement yet - just
+enabled, resized or re-enabled - names no view, so the surfaces
+sample white (factor 1), never a fresh texture's zero.
 
 ===========================================================================
 */
@@ -68,6 +70,11 @@ test("off owns nothing; on totals depth at half size and stales superseded draws
 
 		const first = occlusion.prepare( 64, 64, true, camera );
 		assert.ok( first, "the enabled stage answers a draw" );
+		assert.equal(
+			first.view,
+			null,
+			"before the first encode the surfaces sample white, not a fresh target's zero"
+		);
 		assert.equal( pipelines.length, 2, "the totals and blur pipelines compile once" );
 		assert.equal( textures.length, 2 );
 		assert.deepEqual( textures[0].size, [ 32, 32 ], "the totals target is half resolution" );
@@ -84,16 +91,22 @@ test("off owns nothing; on totals depth at half size and stales superseded draws
 
 		const again = occlusion.prepare( 64, 64, true, camera );
 		assert.ok( again );
-		assert.equal( again.view, first.view, "the sampled view is stable across frames at one size" );
+		assert.ok( again.view, "after the first encode the surfaces sample the blurred view" );
+		const settled = occlusion.prepare( 64, 64, true, camera );
+		assert.equal( settled?.view, again.view, "the sampled view is stable across frames at one size" );
 		encode( again );
 
 		const resized = occlusion.prepare( 128, 128, true, camera );
 		assert.ok( resized );
-		assert.notEqual( resized.view, first.view );
+		assert.equal( resized.view, null, "a resized target has no measurement yet: white until its first encode" );
 		assert.equal( pipelines.length, 2, "a resize rebinds without recompiling" );
 		assert.throws( () => encode( first ), /Stale ambient occlusion target/ );
 		assert.equal( gpu.live(), 4, "depth, two new targets and the uniforms survive a resize" );
 		encode( resized );
+
+		const regrown = occlusion.prepare( 128, 128, true, camera );
+		assert.ok( regrown?.view, "after the resized target's first encode the surfaces sample it" );
+		assert.notEqual( regrown.view, again.view, "the resized view replaces the old one once it is measured" );
 
 		assert.equal( occlusion.prepare( 128, 128, false, camera ), undefined );
 		assert.throws( () => encode( resized ), /Stale ambient occlusion target/ );
@@ -101,8 +114,10 @@ test("off owns nothing; on totals depth at half size and stales superseded draws
 
 		const third = occlusion.prepare( 64, 64, true, camera );
 		assert.ok( third );
-		assert.notEqual( third.view, resized.view );
+		assert.equal( third.view, null, "re-enabled targets start unmeasured: white again" );
 		encode( third );
+		const measured = occlusion.prepare( 64, 64, true, camera );
+		assert.ok( measured?.view, "the re-enabled target is sampled once it is measured" );
 	} finally {
 		occlusion.dispose();
 		depth.destroy();
