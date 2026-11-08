@@ -27,7 +27,7 @@ const {
 	sceneRenderScale,
 	uiScaleFactor
 } = experimentalModule;
-const { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } = await import(
+const { createExperimentalHud, experimentalRows, experimentalTabs, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
@@ -203,14 +203,16 @@ test("the HD row is listed only while the published build carries the set (#2800
 		phase: "world",
 		huntingGuide: { url: "http://localhost/hunting.json", bytes: 1 }
 	});
-	const keys = tabs => tabs.flatMap( tab => tab.rows.map( row => row.key ) );
+	const keys = tabs => tabs.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	assert.ok( keys( experimentalTabs( world, true ) ).includes( "hdTextures" ), "the set is published" );
 	assert.ok( keys( experimentalTabs( null, true ) ).includes( "hdTextures" ), "also outside the world list" );
 	for ( const session of [ world, null, undefined ] ) {
 		const tabs = experimentalTabs( session, false );
 		assert.ok( !keys( tabs ).includes( "hdTextures" ), "no set, no row to toggle dead" );
-		assert.ok( tabs.every( tab => tab.rows.length > 0 ), "the emptied HD tab goes with its row" );
-		assert.ok( !tabs.some( tab => tab.title === "HD" ) );
+		assert.ok(
+			tabs.every( tab => tab.sections.length > 0 && tab.sections.every( section => section.rows.length > 0 ) ),
+			"no section or tab is left empty"
+		);
 	}
 });
 
@@ -236,7 +238,8 @@ test("experimental drafts require Confirm and Default only changes the draft", (
 	assert.deepEqual( hud.state(), {
 		saved: { ...OFF, chatTimestamps: true },
 		draft: { ...OFF, chatTimestamps: true },
-		tab: 0
+		tab: 0,
+		scroll: 0
 	} );
 });
 
@@ -321,7 +324,7 @@ test("a saved preference holding the retired relief and horizon rows loads clean
 	assert.deepEqual( options, { ...OFF, heightFog: true, renderScale: 75 } );
 	assert.equal( "terrainRelief" in options, false );
 	assert.equal( "texturedHorizon" in experimentalVideo( options ), false );
-	const ids = /** @type {string[]} */ (EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).map( row => row.key ));
+	const ids = /** @type {string[]} */ (EXPERIMENTAL_TABS.flatMap( experimentalRows ).map( row => row.key ));
 	assert.ok( !ids.includes( "terrainRelief" ) && !ids.includes( "texturedHorizon" ) );
 });
 
@@ -362,38 +365,44 @@ test("new environment preferences persist only on Confirm and Default remains a 
 Tabs
 ================
 */
-test("the window's tabs cover every preference once and Open returns to Image", () => {
-	assert.deepEqual(
-		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Notices", "Other", "Pets", "Pickup", "Effects", "HD", "Chat" ]
-	);
-	// Chat, appended last, holds the chat-log links: the notice links moved
-	// from Notices, and the port-only item links (SRO_CHAT_ITEM_LINKS).
-	assert.deepEqual( EXPERIMENTAL_TABS[10].rows.map( row => row.key ), [ "noticeLinks", "chatItemLinks" ] );
-	// Lighting keeps the direct-light stages, the moving sun among them,
-	// and holds the silk history row for room (#2269); render scale joins
-	// Image without changing the indices used to reopen the existing tabs.
-	assert.deepEqual(
-		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[
-			"sunShadow",
-			"dynamicSun",
-			"perPixelLighting",
-			"enchantSparks",
-			"sealUnderHeading",
-			"dungeonCharacterPvs",
-			"silkHistory"
-		]
-	);
-	// Effects holds the port-only image effects; HD, appended last, holds
-	// the HD texture set's row (#2061).
-	assert.deepEqual( EXPERIMENTAL_TABS[8].rows.map( row => row.key ), [ "skyDetail" ] );
-	assert.deepEqual( EXPERIMENTAL_TABS[9].rows.map( row => row.key ), [ "hdTextures" ] );
-	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 7, "At most seven rows a tab" );
-	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
+test("six tabs group every preference once, in the spec's sections", () => {
+	assert.deepEqual( EXPERIMENTAL_TABS.map( tab => tab.title ), [
+		"Graphics",
+		"Interface",
+		"Game",
+		"Map",
+		"Notices",
+		"Pets"
+	] );
+	assert.deepEqual( EXPERIMENTAL_TABS[0].sections.map( section => section.title ), [
+		"Image",
+		"Light and sky",
+		"Textures and effects"
+	] );
+	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
+		"smartPetPickup",
+		"petPickupFilter",
+		"petFilterGold",
+		"petFilterEquipment",
+		"petFilterAlchemy",
+		"petFilterPotions",
+		"petFilterOther"
+	] );
+	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	assert.deepEqual( keys, Object.keys( OFF ).sort() );
-	const ids = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.id ) );
+	assert.equal( keys.length, 59 );
+	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
+	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
+	assert.deepEqual(
+		kinds.map( row => [ row.key, row.parent ] ),
+		[ "petFilterGold", "petFilterEquipment", "petFilterAlchemy", "petFilterPotions", "petFilterOther" ].map(
+			key => [
+				key,
+				"petPickupFilter"
+			]
+		)
+	);
+	const ids = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.id ) );
 	assert.equal( new Set( ids ).size, ids.length );
 	const hud = createExperimentalHud();
 	hud.selectTab( 4 );
@@ -402,6 +411,50 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	assert.equal( hud.state().tab, 0 );
 	assert.throws( () => hud.selectTab( EXPERIMENTAL_TABS.length ) );
 	assert.throws( () => hud.selectTab( -1 ) );
+});
+
+test("a drag moves whole rows past half a row and keeps the rest", () => {
+	const hud = createExperimentalHud();
+	hud.scroll( 2, 5 );
+	// A 1-pixel jitter toward the top leaves the list where it is.
+	hud.drag( -1, 46, 5 );
+	assert.equal( hud.state().scroll, 2 );
+	hud.drag( 30, 46, 5 );
+	assert.equal( hud.state().scroll, 3 );
+	hud.drag( -30, 46, 5 );
+	assert.equal( hud.state().scroll, 2 );
+	assert.equal( hud.endDrag(), false, "it moved rows: not a click" );
+});
+
+test("a gesture under the click slop is a click and moves nothing", () => {
+	const hud = createExperimentalHud();
+	hud.drag( 3, 46, 5 );
+	hud.drag( -2, 46, 5 );
+	assert.equal( hud.endDrag(), true );
+	assert.equal( hud.state().scroll, 0 );
+	hud.drag( 20, 46, 5 );
+	assert.equal( hud.endDrag(), false, "past the slop it is a drag, even without a row step" );
+});
+
+test("gating drops the row, then an emptied section", () => {
+	// No world session: no hunting guide; no HD set.
+	const map = experimentalTabs( null, false ).find( tab => tab.title === "Map" );
+	assert.deepEqual( map?.sections[0]?.rows.map( row => row.key ), [ "expandedWorldMap" ] );
+	assert.ok( !experimentalRows( experimentalTabs( null, false )[0] ).some( row => row.key === "hdTextures" ) );
+});
+
+test("scroll clamps to its range and resets on tab change and open", () => {
+	const hud = createExperimentalHud();
+	hud.scroll( 5, 3 );
+	assert.equal( hud.state().scroll, 3 );
+	hud.scroll( -10, 3 );
+	assert.equal( hud.state().scroll, 0 );
+	hud.scroll( 1.5, 3 );
+	hud.selectTab( 2 );
+	assert.equal( hud.state().scroll, 0 );
+	hud.scroll( 2, 3 );
+	hud.open();
+	assert.equal( hud.state().scroll, 0 );
 });
 
 /*
@@ -843,7 +896,7 @@ test("V hides pets and transports only when explicitly on, and reaches the rende
 	const on = experimentalOptions( { vHidesCompanions: true } );
 	assert.equal( on.vHidesCompanions, true );
 	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "vHidesCompanions" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "vHidesCompanions" ) ) );
 });
 
 test("fit window labels is on unless explicitly false and stays out of the worker's slices", () => {
@@ -905,7 +958,9 @@ test("homing projectiles default off (native captured endpoint) and reach the wo
 	const on = experimentalOptions( { homingProjectiles: true } );
 	assert.equal( on.homingProjectiles, true );
 	assert.equal( experimentalGameplay( on ).homingProjectiles, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "homingProjectiles" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "homingProjectiles" ) )
+	);
 });
 
 test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker's slices", () => {
@@ -917,7 +972,9 @@ test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker'
 	}
 	const off = experimentalOptions( { petClickOpensWindow: false } );
 	assert.equal( off.petClickOpensWindow, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "petClickOpensWindow" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "petClickOpensWindow" ) )
+	);
 });
 
 test("smart pet pickup defaults on unless explicitly false and reaches the worker's gameplay slice", () => {
@@ -930,7 +987,7 @@ test("smart pet pickup defaults on unless explicitly false and reaches the worke
 	const off = experimentalOptions( { smartPetPickup: false } );
 	assert.equal( off.smartPetPickup, false );
 	assert.equal( experimentalGameplay( off ).smartPetPickup, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "smartPetPickup" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "smartPetPickup" ) ) );
 });
 
 test("expanded world map defaults off (native five towns and 28 x 8 overview) and stays out of the worker's slices", () => {
@@ -942,7 +999,7 @@ test("expanded world map defaults off (native five towns and 28 x 8 overview) an
 	}
 	const on = experimentalOptions( { expandedWorldMap: true } );
 	assert.equal( on.expandedWorldMap, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "expandedWorldMap" ) ) );
 });
 
 test("interpolated own movement has no option, no row, and no video slice (#1564)", () => {
@@ -951,7 +1008,11 @@ test("interpolated own movement has no option, no row, and no video slice (#1564
 		assert.equal( "interpolatedOwnWalk" in options, false );
 		assert.equal( "interpolatedOwnWalk" in experimentalVideo( options ), false );
 	}
-	assert.ok( !EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "interpolatedOwnWalk" ) ) );
+	assert.ok(
+		!EXPERIMENTAL_TABS.some( tab =>
+			experimentalRows( tab ).some( row => String( row.key ) === "interpolatedOwnWalk" )
+		)
+	);
 });
 
 test("main-thread own movement defaults on, turns off only on an explicit false, and stays out of the worker's and renderer's slices", () => {
@@ -962,7 +1023,9 @@ test("main-thread own movement defaults on, turns off only on an explicit false,
 		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
 	}
 	assert.equal( experimentalOptions( { mainThreadOwnWalk: false } ).mainThreadOwnWalk, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "mainThreadOwnWalk" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "mainThreadOwnWalk" ) )
+	);
 });
 
 test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {
@@ -974,7 +1037,9 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	}
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "questTrackerMarkers" ) )
+	);
 });
 
 test("attack-pet training has no experimental toggle or saved opt-out", () => {
@@ -985,7 +1050,9 @@ test("attack-pet training has no experimental toggle or saved opt-out", () => {
 		);
 	}
 	assert.equal(
-		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		EXPERIMENTAL_TABS.some( tab =>
+			experimentalRows( tab ).some( row => String( row.key ) === "attackPetTraining" )
+		),
 		false
 	);
 });
@@ -994,4 +1061,5 @@ test("item links in chat are on unless explicitly false", () => {
 	assert.equal( experimentalOptions( {} ).chatItemLinks, true );
 	assert.equal( experimentalOptions( { chatItemLinks: false } ).chatItemLinks, false );
 	assert.equal( experimentalOptions( { chatItemLinks: "no" } ).chatItemLinks, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "chatItemLinks" ) ) );
 });
