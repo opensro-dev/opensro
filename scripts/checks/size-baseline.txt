@@ -38,3 +38,4 @@ apps/server/internal/game/world/simulation/monstertick.go # one leg orchestrator
 scripts/build/shared/cifRuntimeImageCatalog.mjs # not yet analysed; split on its responsibility boundaries when formatted
 
 apps/client-next/src/engine/runtime/renderer/renderer.ts # GPU lifetime and ordered frame closure share one cohesive owner; splitting requires new mutable state plumbing.
+scripts/re/revtool/revtool.py # research CLI imported whole (#2830); split by command family (index/view/xref, claims and provenance, audit and notes) in a follow-up, not squeezed
