@@ -37,7 +37,7 @@ func TestNavigationMetricsCountPlansAndClipsByCaller(t *testing.T) {
 			ops.PlanRoute = func(from monster.Pose, _ NavOwner, to monster.Pose) *monster.NavigationRoute {
 				return monster.NewNavigationRoute(to, []monster.Pose{corner, to}).WithProbes(17)
 			}
-			if _, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10000); len(frames) == 0 {
+			if _, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10000); len(frames) == 0 {
 				t.Fatal("the routed leg was not emitted")
 			}
 			caller := navCallerNames[callerForMode(mode)]

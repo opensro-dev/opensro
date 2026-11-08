@@ -24,7 +24,7 @@ together. A fresh hit must invalidate abandonment even when it retains the
 same target (and therefore does not change RetaliationRevision).
 ==================
 */
-func (ops *MonsterMoverOps) advancePursuitControls(division string, instance monster.Instance, mover monster.MoverState, target playerPose, live monster.Pose, now int64) ([]Frame, bool) {
+func (ops *MonsterMoverOps) advancePursuitControls(division string, instance *monster.Instance, mover monster.MoverState, target playerPose, live monster.Pose, now int64) ([]Frame, bool) {
 	if !instance.Nest.HasControls || !instance.Nest.Controls.TraceEnabled() {
 		return nil, false
 	}
@@ -44,7 +44,7 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 	state := s.populationForObject(division, instance.Gid)
 	current, exists := state.instances.lookup(instance.Gid)
 	alive := exists && current.CurrentHP != 0 && current.Motion.StateAt(now) == 0
-	if !alive || !sameActorIdentity(current, instance) || state.movers.get(instance.Gid) != mover {
+	if !alive || !sameActorIdentity(&current, instance) || state.movers.get(instance.Gid) != mover {
 		s.mu.Unlock()
 		return nil, true
 	}
@@ -118,7 +118,7 @@ func (ops *MonsterMoverOps) advancePursuitControls(division string, instance mon
 	sameSpeeds := current.Ref.RunSpeed == instance.Ref.RunSpeed && current.Ref.WalkSpeed == instance.Ref.WalkSpeed
 	// aiTimersLocked may create the timer entry, so it stays last and runs
 	// only when everything before it still matches.
-	if !alive || !sameActorIdentity(current, instance) || !sameSpeeds ||
+	if !alive || !sameActorIdentity(&current, instance) || !sameSpeeds ||
 		state.movers.get(instance.Gid) != mover || current.Opponents != opponents ||
 		*s.aiTimersLocked(state, current, now) != timersBefore {
 		return nil, true
@@ -139,7 +139,7 @@ randomized initial spawn or HOMING's current destination. Summoned actors
 and explicitly detached actors have no live nest; that branch is strict.
 ==================
 */
-func monsterWithinHomeTrace(instance monster.Instance, live monster.Pose, distance float32) bool {
+func monsterWithinHomeTrace(instance *monster.Instance, live monster.Pose, distance float32) bool {
 	controls := instance.Nest.Controls
 	if controls.TraceBoundary == 0 || controls.TraceBoundary == 2 || controls.TraceData == 0 {
 		return true
@@ -152,7 +152,7 @@ func monsterWithinHomeTrace(instance monster.Instance, live monster.Pose, distan
 	return controls.HelpWithinTrace(distance, tacticsHomeDistance(live, home), float32(instance.Nest.Radius), hasNest)
 }
 
-func needsHoming(instance monster.Instance, pose monster.Pose) bool {
+func needsHoming(instance *monster.Instance, pose monster.Pose) bool {
 	if !instance.Nest.HasControls || instance.Ref.RunSpeed <= 0 {
 		return false
 	}
@@ -183,6 +183,6 @@ func tacticsDistance3D(a, b monster.Pose) float32 {
 
 // sameActorIdentity reports that a re-read actor is still the one the
 // decision was staged for: same nest row, attachment and summoner.
-func sameActorIdentity(current, staged monster.Instance) bool {
+func sameActorIdentity(current *monster.Instance, staged *monster.Instance) bool {
 	return current.Nest == staged.Nest && current.NestDetached == staged.NestDetached && current.SummonerGID == staged.SummonerGID
 }

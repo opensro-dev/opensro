@@ -29,12 +29,12 @@ type followLeaderFacts struct {
 	exists bool
 }
 
-func (s *MonsterState) prepareFollow(division string, expected monster.Instance, mover monster.MoverState, nowMs int64) (monsterFollowPlan, bool) {
+func (s *MonsterState) prepareFollow(division string, expected *monster.Instance, mover monster.MoverState, nowMs int64) (monsterFollowPlan, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, expected.Gid)
 	instance, exists := state.instances.lookup(expected.Gid)
-	if !exists || instance.CurrentHP == 0 || instance != expected ||
+	if !exists || instance.CurrentHP == 0 || instance != *expected ||
 		state.movers.get(expected.Gid) != mover {
 		return monsterFollowPlan{}, false
 	}

@@ -25,7 +25,7 @@ func (s *MonsterState) detachNestLocked(state *divisionMonsterState, gid uint32,
 // The retail server's detach test compares only the indoor bit, detaches, and returns before
 // activity, queued commands, and OnTick. Preserve that ordering even if the
 // planned detachment loses admission to a concurrent actor update.
-func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor monster.Instance, mover monster.MoverState, now int64) bool {
+func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor *monster.Instance, mover monster.MoverState, now int64) bool {
 	if actor.NestDetached || (actor.Nest.RegionID^mover.LivePoseAt(now, ops.GroundHeight).RegionID)&0x8000 == 0 {
 		return false
 	}
@@ -36,7 +36,7 @@ func (ops *MonsterMoverOps) detachCrossPlaneNest(division string, actor monster.
 	if _, attached := state.gidNests[actor.Gid]; !attached {
 		return false
 	}
-	if state.instances.get(actor.Gid) == actor && state.movers.get(actor.Gid) == mover {
+	if state.instances.get(actor.Gid) == *actor && state.movers.get(actor.Gid) == mover {
 		s.detachNestLocked(state, actor.Gid, now)
 	}
 	return true

@@ -48,7 +48,7 @@ func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
 	// Each return step clips to 1 unit (< 20 from sequence origin) so each
 	// admitted leg matures within 20 units and increments the stuck counter.
 	ops.PlanPath = func(from, goal monster.Pose) *monster.NavigationPath {
-		if from == anchorPose(instance) {
+		if from == anchorPose(&instance) {
 			return testShortNavPath(from, goal)
 		}
 		short := from
@@ -63,7 +63,7 @@ func TestMonsterStuckDetachAndIdleOnBlockedHoming(t *testing.T) {
 	mover.Pose = away
 	ops.Monsters.CommitMover(monsterTestDivision, instance.Gid, mover)
 	nowMs := int64(10_000)
-	ops.commitIdleEntry(monsterTestDivision, instance, mover, nil, nowMs)
+	ops.commitIdleEntry(monsterTestDivision, &instance, mover, nil, nowMs)
 
 	for step := 1; step <= testStuckFailureLimit; step++ {
 		m, ok := ops.Monsters.Mover(monsterTestDivision, instance.Gid)
@@ -401,7 +401,7 @@ func TestMonsterStuckProductionPlanRouteAndZeroDistanceClip(t *testing.T) {
 		goal.X += 40
 		nowMs := int64(10_000)
 		for step := 1; step <= testStuckFailureLimit; step++ {
-			mover, _ = ops.planDirectSegment(instance, mover, goal, 20, wire.MoveStateRun, nowMs)
+			mover, _ = ops.planDirectSegment(&instance, mover, goal, 20, wire.MoveStateRun, nowMs)
 			if step < testStuckFailureLimit && mover.Progress().Failures() != uint8(step) {
 				t.Fatalf("step %d: failures = %d, want %d", step, mover.Progress().Failures(), step)
 			}
@@ -440,7 +440,7 @@ func TestMonsterStuckPreservesMaturedSettleFrameWhenNotYetStuck(t *testing.T) {
 	}
 	goal := to
 	goal.X += 50
-	next, frames := ops.planSegment(instance, mover, goal, 20, wire.MoveStateRun, 10_500)
+	next, frames := ops.planSegment(&instance, mover, goal, 20, wire.MoveStateRun, 10_500)
 	if len(frames) != 1 || frames[0].Opcode != wire.OpObjectSourceCorrection {
 		t.Fatalf("expected 1 OpObjectSourceCorrection settle frame on blocked successor after matured leg, got %+v", frames)
 	}

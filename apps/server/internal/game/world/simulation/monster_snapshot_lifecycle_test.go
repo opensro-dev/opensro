@@ -20,7 +20,7 @@ func TestMonsterFirstSightReplaysInFlightMovementIntentOnce(t *testing.T) {
 	}
 	frames := ops.commitSegment(
 		monsterTestDivision,
-		instance,
+		&instance,
 		mover,
 		monster.Pose{RegionID: instance.Spawn.RegionID, X: 1100, Y: 20, Z: 1000},
 		instance.Ref.RunSpeed,

@@ -62,11 +62,11 @@ func TestDetachedHomeRetainsNestGeometryAndTacticsGate(t *testing.T) {
 	a.Nest.X, a.Nest.Z, a.Nest.Radius = 100, 100, 20
 	a.Spawn.X, a.Spawn.Z = 500, 500
 	p := monster.Pose{RegionID: monsterTestRegion, X: 125, Z: 100}
-	if needsHoming(a, p) {
+	if needsHoming(&a, p) {
 		t.Fatal("detached actor without HomingData was constrained by its former nest")
 	}
 	a.Nest.Controls.HomingData = 1
-	if !needsHoming(a, p) {
+	if !needsHoming(&a, p) {
 		t.Fatal("retained nest center/radius was replaced by generated spawn or HomingData")
 	}
 }

@@ -44,7 +44,7 @@ func TestRetainedAttackResolutionConsumesNoSelectionOrJitterDraw(t *testing.T) {
 		return MonsterAttackPlan{SkillID: 7, Reach: 20, CooldownMs: 1000, ActionLifecycleMs: 500}, true
 	}}
 	var mover monster.MoverState
-	plan, ok := ops.selectMonsterAttack("", monster.Instance{}, 0, monster.Pose{}, playerPose{})
+	plan, ok := ops.selectMonsterAttack("", &monster.Instance{}, 0, monster.Pose{}, playerPose{})
 	if !ok {
 		t.Fatal("initial selection refused")
 	}
@@ -54,7 +54,7 @@ func TestRetainedAttackResolutionConsumesNoSelectionOrJitterDraw(t *testing.T) {
 	}
 	interval := mover.AttackIntervalMs
 	for i := 0; i < 5; i++ {
-		plan, ok = ops.selectMonsterAttack("", monster.Instance{}, mover.AttackSkillID, monster.Pose{}, playerPose{})
+		plan, ok = ops.selectMonsterAttack("", &monster.Instance{}, mover.AttackSkillID, monster.Pose{}, playerPose{})
 		if !ok {
 			t.Fatal("retained resolution refused")
 		}
@@ -66,7 +66,7 @@ func TestRetainedAttackResolutionConsumesNoSelectionOrJitterDraw(t *testing.T) {
 	// Existing action-completion ownership retires the selection; choosing
 	// the same skill again is a new selection and must get a new interval.
 	mover.AttackSkillID = 0
-	plan, _ = ops.selectMonsterAttack("", monster.Instance{}, 0, monster.Pose{}, playerPose{})
+	plan, _ = ops.selectMonsterAttack("", &monster.Instance{}, 0, monster.Pose{}, playerPose{})
 	ops.adoptMonsterAttack(&mover, plan)
 	if draws != 4 {
 		t.Fatalf("new selection draws=%d", draws)

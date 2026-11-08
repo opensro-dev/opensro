@@ -62,7 +62,7 @@ func referenceOrdinaryPlayerAcquisition(actor monster.Instance, from monster.Pos
 		if order, exists := blocks.order(block); exists && player.Gid != 0 &&
 			!actor.JobTargetRefused(player.JobState) &&
 			monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) &&
-			ordinaryPlayerHostility(actor, player) {
+			ordinaryPlayerHostility(&actor, player) {
 			ordered = append(ordered, candidate{player: player, block: order})
 		}
 	}
@@ -75,7 +75,7 @@ func referenceOrdinaryPlayerAcquisition(actor monster.Instance, from monster.Pos
 	var best playerPose
 	var bestDistance uint32
 	for _, candidate := range ordered {
-		target, distance := nearestOwnerOrCompanion(actor, from, candidate.player, players)
+		target, distance := nearestOwnerOrCompanion(&actor, from, candidate.player, players)
 		if acquisitionRankAccepts(best.Gid, bestDistance, distance, sight) {
 			best, bestDistance = target, uint32(distance)
 		}
@@ -122,11 +122,11 @@ func referenceJobQueryAcquisition(actor monster.Instance, from monster.Pose, pla
 		job, companion := p.JobState, p.OwnerGid != 0
 		if companion {
 			owner, known := jobs[p.OwnerGid]
-			if !known || !ordinaryCompanionHostility(actor, p) {
+			if !known || !ordinaryCompanionHostility(&actor, p) {
 				continue
 			}
 			job = owner
-		} else if !ordinaryPlayerHostility(actor, p) {
+		} else if !ordinaryPlayerHostility(&actor, p) {
 			continue
 		}
 		if !query.admits(job) || actor.JobTargetRefused(job) {
@@ -243,13 +243,13 @@ func TestAcquisitionQueriesMatchTheReference(t *testing.T) {
 		actor := churnActor(rng)
 		sight := float64(rng.Intn(400))
 		want, wantOK := referenceOrdinaryPlayerAcquisition(actor, from, players, sight)
-		got, gotOK := ordinaryPlayerAcquisition(actor, from, players, sight)
+		got, gotOK := ordinaryPlayerAcquisition(&actor, from, players, sight)
 		if got != want || gotOK != wantOK {
 			t.Fatalf("trial %d ordinary: got %d/%v, reference %d/%v", trial, got.Gid, gotOK, want.Gid, wantOK)
 		}
 		for _, query := range queries {
 			want, wantOK = referenceJobQueryAcquisition(actor, from, players, sight, query)
-			got, gotOK = jobQueryAcquisition(actor, from, players, sight, query)
+			got, gotOK = jobQueryAcquisition(&actor, from, players, sight, query)
 			if got != want || gotOK != wantOK {
 				t.Fatalf("trial %d job %+v: got %d/%v, reference %d/%v", trial, query, got.Gid, gotOK, want.Gid, wantOK)
 			}
@@ -271,10 +271,10 @@ func TestAcquisitionQueriesDoNotAllocate(t *testing.T) {
 	players := churnPopulation(rng, from, acquisitionCandidateStack/2)
 	var actor monster.Instance
 	actor.Ref.TidWord, actor.Ref.TypeID4 = 0x00c6, 1
-	if allocs := testing.AllocsPerRun(100, func() { ordinaryPlayerAcquisition(actor, from, players, 300) }); allocs != 0 {
+	if allocs := testing.AllocsPerRun(100, func() { ordinaryPlayerAcquisition(&actor, from, players, 300) }); allocs != 0 {
 		t.Fatalf("ordinary acquisition allocated %.1f times per call", allocs)
 	}
-	if allocs := testing.AllocsPerRun(100, func() { jobQueryAcquisition(actor, from, players, 300, jobQuery{}) }); allocs != 0 {
+	if allocs := testing.AllocsPerRun(100, func() { jobQueryAcquisition(&actor, from, players, 300, jobQuery{}) }); allocs != 0 {
 		t.Fatalf("job acquisition allocated %.1f times per call", allocs)
 	}
 }
@@ -331,7 +331,7 @@ func BenchmarkOrdinaryPlayerAcquisitionCrowd(b *testing.B) {
 	actor.Ref.TidWord, actor.Ref.TypeID4 = 0x00c6, 1
 	b.ReportAllocs()
 	for b.Loop() {
-		ordinaryPlayerAcquisition(actor, from, players, 300)
+		ordinaryPlayerAcquisition(&actor, from, players, 300)
 	}
 }
 
@@ -348,7 +348,7 @@ func BenchmarkJobQueryAcquisitionCrowd(b *testing.B) {
 	actor.Ref.TidWord, actor.Ref.TypeID4 = 0x00c6, 1
 	b.ReportAllocs()
 	for b.Loop() {
-		jobQueryAcquisition(actor, from, players, 300, jobQuery{})
+		jobQueryAcquisition(&actor, from, players, 300, jobQuery{})
 	}
 }
 

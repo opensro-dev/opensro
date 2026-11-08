@@ -31,7 +31,7 @@ same deterministic seams as the existing package tests.
 */
 func TestPortAuditAttackUsesStrategyInterval(t *testing.T) {
 	ops, actor, target := earthGhostFixture(t)
-	target.Pose = poseToSpawn(anchorPose(actor))
+	target.Pose = poseToSpawn(anchorPose(&actor))
 	target.Pose.X += 10
 	calls := 0
 	ops.BasicAttack = func(string, monster.Instance, uint32, uint32, int64) MonsterAttackResult {
@@ -107,7 +107,7 @@ func TestPortAuditHelpUsesRetainedHomeAndAttachment(t *testing.T) {
 				t.Fatal(err)
 			}
 			actor, _ = s.Get(monsterTestDivision, actor.Gid)
-			frames, handled := ops.handleHelp(monsterTestDivision, actor, m, []playerPose{target}, 10000)
+			frames, handled := ops.handleHelp(monsterTestDivision, &actor, m, []playerPose{target}, 10000)
 			after, _ := s.Mover(monsterTestDivision, actor.Gid)
 			if !handled || (after.TargetGID() == target.Gid) != tc.want {
 				t.Fatalf("help=%v want=%v; frames=%d", after.TargetGID() == target.Gid, tc.want, len(frames))
@@ -189,7 +189,7 @@ func TestPortAuditDeadMonsterScopeSpawnIsDead(t *testing.T) {
 	ops, actor := monsterLegFixture(t, passiveTactics())
 	ops.Monsters.ApplyDamage(monsterTestDivision, actor.Gid, actor.CurrentHP)
 	actor, _ = ops.Monsters.Get(monsterTestDivision, actor.Gid)
-	row := BuildMonsterCreateRow(monsterWireDefFromInstance(actor, 10000), actor.Gid, poseToSpawn(anchorPose(actor)))
+	row := BuildMonsterCreateRow(monsterWireDefFromInstance(actor, 10000), actor.Gid, poseToSpawn(anchorPose(&actor)))
 	if row[29] != wire.LifeStateDead {
 		t.Fatalf("late-viewer spawn LIFE=%d want DEAD=%d", row[29], wire.LifeStateDead)
 	}
@@ -414,7 +414,7 @@ func TestPortAuditHelpTraceBypassesAndSummonedBoundary(t *testing.T) {
 				t.Fatal(err)
 			}
 			actor, _ = s.Get(monsterTestDivision, actor.Gid)
-			ops.handleHelp(monsterTestDivision, actor, m, []playerPose{target}, 10000)
+			ops.handleHelp(monsterTestDivision, &actor, m, []playerPose{target}, 10000)
 			after, _ := s.Mover(monsterTestDivision, actor.Gid)
 			if (after.TargetGID() == target.Gid) != tc.want {
 				t.Fatalf("accepted=%v want=%v", after.TargetGID() == target.Gid, tc.want)

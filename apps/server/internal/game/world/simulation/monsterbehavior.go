@@ -20,7 +20,7 @@ out (the CloneWorldState discipline).
 ==================
 */
 func (ops *MonsterMoverOps) advanceInstance(divisionID string, instance monster.Instance, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
-	return ops.advanceInstanceSnapshot(divisionID, instance, monster.MoverState{}, false, divisionPlayers, nowMs)
+	return ops.advanceInstanceSnapshot(divisionID, &instance, monster.MoverState{}, false, divisionPlayers, nowMs)
 }
 
 /*
@@ -36,7 +36,7 @@ beside it is read, so it is never staler than the value the step used
 to start from.
 ==================
 */
-func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	if instance.Ref.TrainingDummy {
 		return nil, nil
 	}
@@ -45,7 +45,7 @@ func (ops *MonsterMoverOps) advanceInstanceSnapshot(divisionID string, instance 
 	return frames, targeted
 }
 
-func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceInstanceStep(divisionID string, instance *monster.Instance, snapshot monster.MoverState, hasSnapshot bool, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// A fatal B245 keeps the registry row alive briefly so the client can play
 	// death, stage reward particles, and then receive the ordinary despawn
 	// dissolve. That corpse is presentation-retained, not behavior-live: it
@@ -300,7 +300,7 @@ already carries - the instance snapshot and the mover value - so a
 monster failing any guard runs the full step exactly as before.
 ================
 */
-func idleRestQuiescent(ops *MonsterMoverOps, instance monster.Instance, mover monster.MoverState, tactics monster.Tactics, nowMs int64) bool {
+func idleRestQuiescent(ops *MonsterMoverOps, instance *monster.Instance, mover monster.MoverState, tactics monster.Tactics, nowMs int64) bool {
 	// Mode branches below: pending, battle re-entry, wander expiry,
 	// returning, following, recovering, chasing and spawning.
 	if mover.Mode() != monster.MoverIdle || mover.IdleEntryPending() {
@@ -344,7 +344,7 @@ func idleRestQuiescent(ops *MonsterMoverOps, instance monster.Instance, mover mo
 	return true
 }
 
-func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
+func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, divisionPlayers []playerPose, nowMs int64) ([]Frame, []MonsterPrivateFrames) {
 	// The native idle tick checks state expiry before the acquisition
 	// callback.
 	if nowMs > mover.BehaviorDeadlineMs {
@@ -371,7 +371,7 @@ func (ops *MonsterMoverOps) advanceIdle(divisionID string, instance monster.Inst
 	return nil, nil
 }
 
-func (ops *MonsterMoverOps) decideIdle(divisionID string, instance monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
+func (ops *MonsterMoverOps) decideIdle(divisionID string, instance *monster.Instance, tactics monster.Tactics, mover monster.MoverState, nowMs int64) []Frame {
 	policy := monster.RetailBehaviorPolicy()
 	if policy.RepeatIdle(ops.rand()) {
 		mustMoverTransition(&mover, monster.MoverEventIdleRepeated, 0)
@@ -396,7 +396,7 @@ player target under confusion; other states only record the event.
 The end event needs no port action: the next scan resumes.
 ==================
 */
-func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
+func (ops *MonsterMoverOps) applyTacticsEvents(divisionID string, instance *monster.Instance, mover monster.MoverState, nowMs int64) ([]Frame, bool) {
 	events := ops.takeStepAIEvents(divisionID, instance.Gid)
 	battle := mover.Mode() == monster.MoverChasing || mover.Mode() == monster.MoverAttacking
 	for _, event := range events {
