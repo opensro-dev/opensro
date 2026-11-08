@@ -11,7 +11,9 @@ Port-only, not native: Experimental render scale (100 by default) splits the fra
 targets: below 100 the scene's colour and depth render at the scaled
 size, while the presented frame colour and the HUD's depth stay at the
 backing store's, so the UI and its text always compose and rasterize 1:1.
-At 100 the surface is exactly the native pair.
+At 100 the surface is exactly the native pair, unless separateScene asks
+for the scene in its own full-size colour (Experimental > FXAA resolves it
+into the frame): the scene then shares the frame's depth, as at 100.
 
 ===========================================================================
 */
@@ -38,7 +40,7 @@ export function createSurface(
 	let depth: DepthTarget | null = null, color: ColorTarget | null = null, offscreen = false;
 	// The render scale's scaled scene colour and the full-size HUD depth.
 	let sceneColor: ColorTarget | null = null, frameDepth: DepthTarget | null = null;
-	let width = 0, height = 0, scale = 100, disposed = false;
+	let width = 0, height = 0, scale = 100, separate = false, disposed = false;
 	/*
 	================
 	releaseScale
@@ -80,12 +82,13 @@ export function createSurface(
 		frameDepth
 
 		The full-size depth the HUD and preview passes attach while the
-		scene renders scaled.
+		scene renders scaled; at full size the scene's depth is that depth.
 		================
 		*/
 		frameDepth() {
-			if ( disposed || !frameDepth ) throw new Error( "No active frame depth" );
-			return frameDepth.view;
+			const target = frameDepth ?? depth;
+			if ( disposed || !target ) throw new Error( "No active frame depth" );
+			return target.view;
 		},
 		/*
 		================
@@ -107,19 +110,23 @@ export function createSurface(
 		acquire
 		================
 		*/
-		acquire( viewport, retain = false, renderScale = 100 ) {
+		acquire( viewport, retain = false, renderScale = 100, separateScene = false ) {
 			if ( disposed ) {
 				throw new Error( "Disposed surface" );
 			}
 			const scaled = renderScale < 100,
 				sceneWidth = Math.max( 1, Math.round( viewport.width * renderScale / 100 ) ),
 				sceneHeight = Math.max( 1, Math.round( viewport.height * renderScale / 100 ) );
-			if ( width !== viewport.width || height !== viewport.height || scale !== renderScale ) {
+			if (
+				width !== viewport.width || height !== viewport.height || scale !== renderScale ||
+				separate !== separateScene
+			) {
 				color?.dispose();
 				color = null;
 				width = viewport.width;
 				height = viewport.height;
 				scale = renderScale;
+				separate = separateScene;
 				canvas.width = width;
 				canvas.height = height;
 				commands.configure( context, format );
@@ -129,16 +136,16 @@ export function createSurface(
 				depth = replacement;
 				releaseScale();
 			}
-			// A scaled frame always presents through the offscreen: the
-			// upscale that resolves the scene is a presentation step.
-			offscreen = retain || scaled;
-			if ( scaled ) {
+			// A scaled or separate scene always presents through the
+			// offscreen: the resolve into the frame is a presentation step.
+			offscreen = retain || scaled || separateScene;
+			if ( scaled || separateScene ) {
 				if ( !color ) {
 					color = commands.createColor( width, height );
 				}
 				if ( !sceneColor ) {
 					sceneColor = commands.createColor( sceneWidth, sceneHeight );
-					frameDepth = commands.createDepth( width, height );
+					if ( scaled ) frameDepth = commands.createDepth( width, height );
 				}
 				return sceneColor.view;
 			}

@@ -11,8 +11,8 @@ same diagonal through a 4x multisampled attachment with a resolveTarget
 blends them - the mechanism the row rides on. The last pins the
 renderer's wiring through the hdr-stages fixture: with the row on, the
 frame's main pass renders into the 4x scene colour and resolves into the
-canvas texture (the attachments are traced by name), the 4x depth
-resolves into the frame's single-sampled depth, and turning the row off
+canvas texture (the attachments are traced by name), the 4x depth no
+pass reads is never resolved (#2954), and turning the row off
 again restores the byte-exact native pass order with no uncaptured GPU
 errors anywhere.
 
@@ -320,9 +320,8 @@ test(
 				[ "msaa-scene-colour", "msaa-scene-depth" ],
 				"The row owns one 4x colour and one 4x depth buffer"
 			);
-			// The main pass rendered into the 4x colour, resolved into an
-			// unnamed canvas texture, and the 4x depth resolved into the
-			// surface's single-sampled depth - the frame's own attachments.
+			// The main pass rendered into the 4x colour and resolved into an
+			// unnamed canvas texture - the frame's own attachment.
 			const msaaMain = passes.filter( line => line.startsWith( "main-pass c=msaa-scene-colour" ) );
 			assert.ok( msaaMain.length >= 5, "Every row-on frame renders through the 4x buffers" );
 			// The canvas texture's views come from getCurrentTexture, which no
@@ -331,9 +330,12 @@ test(
 				assert.ok( line.includes( "+R->?" ), "The main pass resolves into the canvas texture" );
 				assert.ok( line.includes( "d=msaa-scene-depth" ), "The main pass tests the 4x depth" );
 			}
+			// The fixture draws no labels, flares or particles: nothing reads
+			// the scene depth after the main pass, so its 4x samples are never
+			// resolved (#2954). depthResolveProbe above proves the resolve.
 			assert.ok(
-				passes.some( line => line.startsWith( "msaa-depth" ) && line.includes( "d=surface-depth" ) ),
-				"The 4x depth resolves into the frame's single-sampled depth"
+				!passes.some( line => line.startsWith( "msaa-depth" ) ),
+				"An unread 4x depth is not resolved"
 			);
 			assert.ok(
 				passes.filter( line => line === "main-pass c=? d=surface-depth" ).length >= 10,

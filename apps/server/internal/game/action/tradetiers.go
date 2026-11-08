@@ -8,8 +8,11 @@ With SRO_TRADE_TIERS on:
 
 Stars. A caravan's tier (1-5 stars) is its cargo's gold value, the sum of
 count x each good's reference price (the quotation basis at its home
-town; what was actually paid is not stored), against 5M/10M/20M/35M/50M:
-under 10M is 1 star, 10M 2, 20M 3, 35M 4, 50M and up 5. Natively the tier
+town; what was actually paid is not stored), against tradeTierGold:
+under the first mark is 1 star, and each mark crossed adds a star. The
+5-star mark is a brim-full ordinary transport (owner 2026-11-08, #2791);
+on the advisor's first ladder only a mall transport's biggest bag
+crossed the top. Natively the tier
 is cargo "units" (count x 348 over the level's gold basis),
 which barely moves with what the goods are worth. The tier drives the
 bandit count (the native caravan bandit count, still capped by
@@ -50,8 +53,13 @@ import (
 const EnvTradeTiers = "SRO_TRADE_TIERS"
 
 // tradeTierGold are the cargo gold values that reach 2..5 stars; anything
-// carried below the first is 1 star (5M, the advisor's 1-star mark).
-var tradeTierGold = [...]uint64{10_000_000, 20_000_000, 35_000_000, 50_000_000}
+// carried below the first is 1 star. The 5-star mark (#2791, owner
+// 2026-11-08) is a brim-full ordinary transport - 101 slots of 40 goods at
+// the flag's scaled price 7,308 (29,524,320) - and the marks below keep
+// the old ladder's ratios to the top (1/5, 2/5, 7/10 of 50M), so a mall
+// transport's 141/159/177 slots still read 5 stars and earn their extra
+// as profit, never a higher tier.
+var tradeTierGold = [...]uint64{5_896_080, 11_792_160, 20_761_408, 29_495_680}
 
 // tradeTown names a town's specialty trade.
 type tradeTown uint8

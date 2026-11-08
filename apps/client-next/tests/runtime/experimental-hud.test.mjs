@@ -183,6 +183,8 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	// The 4x multisampled scene sits beside the post-process anti-aliasing.
 	const image = EXPERIMENTAL_TABS[0].sections[0].rows.map( row => row.key );
 	assert.equal( image.indexOf( "msaa" ), image.indexOf( "postProcessing" ) + 1 );
+	// Scene FXAA, the cheap edge smoothing, follows MSAA.
+	assert.equal( image.indexOf( "sceneFxaa" ), image.indexOf( "msaa" ) + 1 );
 	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
 		"smartPetPickup",
 		"petPickupFilter",

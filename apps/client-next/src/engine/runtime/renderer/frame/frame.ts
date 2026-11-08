@@ -274,6 +274,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					pass.end();
 				}
 			}
+			// The passes after this one that read the scene depth: the flare
+			// probe, the deferred tail, the occlusion and labels drawn apart
+			// from the scene. With none this frame the depth is never stored,
+			// and under MSAA its 4x samples are never resolved either.
+			const sceneDepthRead = !!flares || !!deferred || !!experimental?.ao || (separateScene && !!worldUiBundle);
 			const pass = encoder.beginRenderPass( {
 				timestampWrites: timing?.pass( "main-pass" ),
 				label: "main-pass",
@@ -283,10 +288,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							view: msaa ? msaa.depth : depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							depthStoreOp: msaa || flares || deferred || experimental?.ao ||
-									(separateScene && worldUiBundle) ?
-								"store" as const :
-								"discard" as const
+							depthStoreOp: sceneDepthRead ? "store" as const : "discard" as const
 						}
 					} :
 					{}),
@@ -313,9 +315,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			pass.end();
 			// The multisampled depth cannot be resolved by the driver: write the
 			// samples' minimum into the scene's single-sampled depth now,
-			// before the deferred tail, the flare probe and the labels read it.
-			// The render-scale stage upscales this depth as it always does.
-			if ( msaa && depth ) msaa.resolveDepth( encoder, depth );
+			// before the deferred tail, the flare probe and the labels read it,
+			// and only when one of them does. The render-scale stage upscales
+			// this depth as it always does.
+			if ( msaa && depth && sceneDepthRead ) msaa.resolveDepth( encoder, depth );
 			/*
 			================
 			previewPass
@@ -457,29 +460,16 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					overlay.end();
 				}
 				// Port-only, not native: labels keep full-resolution pixels and
-				// scene occlusion after HDR or reduced-resolution scene rendering.
-				// The MSAA depth was already resolved right after the scene pass.
-				if ( resolvedScene && worldUiBundle ) {
-					sceneScale?.resolveDepth( encoder );
-					const labels = encoder.beginRenderPass( {
-						label: "hdr-world-ui",
-						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ],
-						...(uiDepth ?
-							{
-								depthStencilAttachment: {
-									view: uiDepth,
-									depthLoadOp: "load" as const,
-									depthStoreOp: "discard" as const
-								}
-							} :
-							{})
-					} );
-					labels.executeBundles( [ worldUiBundle ] );
-					labels.end();
-				}
-				// Bloom alone keeps the world labels for the HUD pass, over the
-				// scene depth it loads; a resolved scene drew them above.
-				const hudDrawsLabels = !!bloom && !resolvedScene && !!worldUiBundle;
+				// scene occlusion after HDR, reduced-resolution or MSAA scene
+				// rendering. The render-scale depth is upscaled here; the MSAA
+				// depth was already resolved right after the scene pass.
+				if ( resolvedScene && worldUiBundle ) sceneScale?.resolveDepth( encoder );
+				// Any separate scene draws its world labels first in the HUD
+				// pass, over the scene depth it loads (#2952: one pass, not a
+				// labels pass and a HUD pass). Only the labels depth-test; the
+				// background and UI pipelines compare "always" and never write
+				// depth, so loading instead of clearing changes no pixel.
+				const hudDrawsLabels = separateScene && !!worldUiBundle;
 				if ( flares || thunder || separateScene ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
