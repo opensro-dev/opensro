@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
@@ -44,13 +45,16 @@ admissionOffline
 The refusal for a shard that is not operating (disabled, or no live
 GameWorld): SHARD_OFFLINE and the message shown today, or - port-only,
 not native, behind SRO_MAINTENANCE_MESSAGE - MAINTENANCE and the
-maintenance sentence, so a release window explains itself at login
-instead of reading as a generic admission failure. The refusal itself
-(a 200 login refusal, a 503 shard refusal) is identical either way.
+maintenance sentence, but only while a maintenance window is actually
+open (the gate file exists, #2861): the switch alone made every plain
+restart, boot and crash read as a maintenance. So a release window
+explains itself at login, and a shard that is merely down never does.
+The refusal itself (a 200 login refusal, a 503 shard refusal) is
+identical either way.
 ================
 */
 func (server *Server) admissionOffline() (string, string) {
-	if server.maintenanceMessage {
+	if server.maintenanceMessage && agentapi.MaintenanceGatePresent(server.maintenanceGatePath) {
 		return "MAINTENANCE", maintenanceMessageText
 	}
 	return "SHARD_OFFLINE", "The selected server is not operating."
@@ -527,7 +531,8 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !operating {
-		if server.maintenanceMessage {
+		offlineCode, _ := server.admissionOffline()
+		if offlineCode == "MAINTENANCE" {
 			// Port-only, not native (admissionOffline): the refusal names
 			// the maintenance as a JSON code, the shape the client's
 			// admission mint reads; off keeps the plain refusal below.

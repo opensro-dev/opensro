@@ -265,7 +265,8 @@ TestNomadJobsShareOneMaintenanceMessage
 
 The Agent and the GameWorld must answer the same refusal code in one
 window (#2331), so the one shard setting fills both jobs, at its native
-default when the deployer names nothing.
+default when the deployer names nothing. Both jobs also carry the same
+maintenance gate file, the Agent's proof a window is open (#2861).
 ================
 */
 func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
@@ -281,6 +282,13 @@ func TestNomadJobsShareOneMaintenanceMessage(t *testing.T) {
 		}
 		if got := deployment.gameVariables(shardDeployment{})["maintenance_message"]; got != want {
 			t.Fatalf("SRO_MAINTENANCE_MESSAGE=%q: GameWorld maintenance_message = %#v, want %q", value, got, want)
+		}
+		// The Agent may name the maintenance only while a window is
+		// open, so both jobs carry the same gate file (#2861).
+		agentGate := deployment.agentVariables()["maintenance_gate_path"]
+		gameGate := deployment.gameVariables(shardDeployment{})["maintenance_gate_path"]
+		if agentGate == nil || agentGate != gameGate {
+			t.Fatalf("maintenance_gate_path: Agent = %#v, GameWorld = %#v, want the same path", agentGate, gameGate)
 		}
 	}
 }
