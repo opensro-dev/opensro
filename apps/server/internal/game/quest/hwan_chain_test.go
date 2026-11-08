@@ -12,12 +12,17 @@ lane uses; the rolls are injected, so no test depends on chance.
 package quest
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
 )
 
 // hwanChainCharacter is a Chinese character of the given level with the named quests done.
@@ -293,4 +298,104 @@ func itemLeads(pairs ...any) []inventory.ItemAmount {
 		out = append(out, inventory.ItemAmount{Codename: pairs[i].(string), Count: uint32(pairs[i+1].(int))})
 	}
 	return out
+}
+
+// The Niya trap's skill compiles to the quest-trap shape the item lane places: a 60 s
+// trap, radius 20, aimed at the Niya General's reference id.
+func TestNiyaTrapSkillCompilesToAQuestTrap(t *testing.T) {
+	_, _ = shippedHwanRuntime(t)
+	dir := gamedatatest.TextdataDir(t)
+	skill, ok := enterworld.NewTextdataSkills(dir).SkillByCodename(hwanNiyaSkill)
+	if !ok {
+		t.Fatalf("%s is not in the skill table", hwanNiyaSkill)
+	}
+	trap := skill.CastGate.QuestTrap
+	if !trap.Present || trap.DurationMs != 60000 || trap.Radius != 20 {
+		t.Fatalf("trap = %+v, want a present 60 s radius 20 program", trap)
+	}
+	ref, found := enterworld.NewTextdataItems(dir).ItemRefByCodename(hwanSpiritTrap)
+	monster, _ := enterworld.NewTextdataItems(dir).ItemRefByCodename(hwanNormalSpirit)
+	if !found || monster == nil || ref == nil {
+		t.Fatal("trap items missing")
+	}
+	if trap.Targets[0] != 3809 {
+		t.Fatalf("targets %v, want the Niya General's id 3809 first", trap.Targets)
+	}
+}
+
+// shippedTextSymbols collects the textquest and textuisystem keys that have English text. The
+// tables are read raw (UTF-16, tab columns, English in column 8): the server's own row reader
+// skips lines with quotes, which the client's dialog text does not.
+func shippedTextSymbols(t *testing.T) map[string]bool {
+	t.Helper()
+	dir := gamedatatest.TextdataDir(t)
+	keys := map[string]bool{}
+	for _, name := range []string{"textquest.txt", "textuisystem.txt"} {
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || len(raw) < 2 {
+			t.Fatalf("%s: %v", name, err)
+		}
+		words := make([]uint16, 0, len(raw)/2)
+		for i := 2; i+1 < len(raw); i += 2 {
+			words = append(words, uint16(raw[i])|uint16(raw[i+1])<<8)
+		}
+		for _, line := range strings.Split(string(utf16.Decode(words)), "\r\n") {
+			row := strings.Split(line, "\t")
+			if len(row) > 8 && strings.TrimSpace(row[8]) != "" {
+				keys[strings.TrimSpace(row[1])] = true
+			}
+		}
+	}
+	return keys
+}
+
+// Every line a Blue Berserk quest, supply or arena can speak has English text in the
+// shipped tables: a wrong number in a symbol would otherwise show an empty dialog.
+func TestEverySymbolTheHwanQuestsSpeakHasText(t *testing.T) {
+	_, defs := shippedHwanRuntime(t)
+	text := shippedTextSymbols(t)
+	check := func(owner, symbol string) {
+		if symbol != "" && !text[symbol] {
+			t.Errorf("%s speaks %s, which has no English text", owner, symbol)
+		}
+	}
+	for _, def := range defs.All() {
+		if !strings.Contains(def.Codename, "HWAN") && !strings.Contains(def.Codename, "SD_HW") {
+			continue
+		}
+		for _, symbol := range []string{def.OfferPromptSymbol, def.AcceptResponseSymbol, def.DenyResponseSymbol, def.NotAchievedSymbol,
+			def.CompletePromptSymbol, def.InventoryFullSymbol, def.AchievedNowSymbol, def.AcceptNoticeSymbol, def.CompleteNoticeSymbol,
+			def.OfferAcceptRowSymbol, def.TitleSymbol} {
+			check(def.Codename, symbol)
+		}
+	}
+	for _, supply := range hwanSupplies {
+		for _, symbol := range []string{supply.title, supply.prompt, supply.success, supply.full} {
+			check(supply.quest, symbol)
+		}
+	}
+	for _, arena := range hwanArenas {
+		talk := hwanTalk(arena.quest())
+		spoken := []string{"09", "10"}
+		if arena.kind == hwanTrial {
+			spoken = []string{"08", "09", "10", "11"}
+			if arena.chain == 2 {
+				spoken = []string{"11", "12", "13", "14"}
+			}
+			spoken = append(spoken, "04", "05")
+		} else {
+			spoken = append(spoken, "03", "04", "11")
+		}
+		for _, step := range spoken {
+			check(arena.quest(), talk+step)
+		}
+	}
+	for level := 1; level <= 4; level++ {
+		for _, race := range []string{"CH", "EU"} {
+			check("title", "UIO_SECOND_HWAN_"+race+"_NAME_LEVEL_"+string(rune('0'+level)))
+		}
+	}
+	check("scroll refusal", "UIIT_MSG_HWANITEM_CANNOT_USE")
+	check("tool refusal", cannotUseQuestTool)
+	check("no target", noSelectedTarget)
 }
