@@ -64,7 +64,7 @@ readGroundTable
 */
 func readGroundTable(t testing.TB, s *Store) map[string][]domain.GroundItemRecord {
 	t.Helper()
-	rows, err := s.db.Query("SELECT division, record FROM ground_items ORDER BY division, gid")
+	rows, err := s.syncDBLocked().Query("SELECT division, record FROM ground_items ORDER BY division, gid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ applyGroundDiff
 */
 func applyGroundDiff(t testing.TB, s *Store, committed, next map[string][]domain.GroundItemRecord) (int, int) {
 	t.Helper()
-	tx, err := s.db.Begin()
+	tx, err := s.syncDBLocked().Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func BenchmarkGroundCommit(b *testing.B) {
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
 				committed, next := planes[n%2], planes[(n+1)%2]
-				tx, err := s.db.Begin()
+				tx, err := s.syncDBLocked().Begin()
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -259,7 +259,7 @@ func BenchmarkGroundDiffManyChanged(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		committed, next := planes[n%2], planes[(n+1)%2]
-		tx, err := s.db.Begin()
+		tx, err := s.syncDBLocked().Begin()
 		if err != nil {
 			b.Fatal(err)
 		}

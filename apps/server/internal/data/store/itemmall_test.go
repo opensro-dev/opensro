@@ -34,7 +34,7 @@ func TestMallPurchaseAtomicity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "mall-account", 100, 20, 10); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "mall-account", 100, 20, 10); err != nil {
 		t.Fatal(err)
 	}
 	cost := domain.MallBalance{Silk: 30, GiftSilk: 2, Points: 3}
@@ -106,7 +106,7 @@ func TestMallPurchaseUntrustedAccountIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{account, "untouched"} {
-		if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", id, 100, 0, 0); err != nil {
+		if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", id, 100, 0, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -120,7 +120,7 @@ func TestMallPurchaseUntrustedAccountIdentity(t *testing.T) {
 	if err != nil || balance.Silk != 70 || granted.Load() != 1 {
 		t.Fatalf("bound identity purchase: %+v, %v, grants=%d", balance, err, granted.Load())
 	}
-	other, err := readMallBalance(s.db, "untouched")
+	other, err := readMallBalance(s.syncDBLocked(), "untouched")
 	if err != nil || other.Silk != 100 {
 		t.Fatalf("changed another account: %+v %v", other, err)
 	}
@@ -145,7 +145,7 @@ func TestMallRacePurchasesCannotDoubleSpend(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "shared", 100, 0, 0); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "shared", 100, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	start := make(chan struct{})
@@ -199,7 +199,7 @@ func TestMallBalancesRejectOutOfRangeStorage(t *testing.T) {
 			"INSERT INTO mall_accounts VALUES ('bad', 0, ?, 0)",
 			"INSERT INTO mall_accounts VALUES ('bad', 0, 0, ?)",
 		} {
-			if _, err := s.db.Exec(statement, amount); err == nil {
+			if _, err := s.syncDBLocked().Exec(statement, amount); err == nil {
 				t.Fatalf("accepted currency outside uint32: %d", amount)
 			}
 		}

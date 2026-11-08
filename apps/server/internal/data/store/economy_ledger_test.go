@@ -40,7 +40,7 @@ The table's rows, oldest first.
 */
 func ledgerRows(t *testing.T, s *Store) []storedLedgerRow {
 	t.Helper()
-	rows, err := s.db.Query("SELECT char_id, reason, door, gold, balance FROM economy_ledger ORDER BY seq")
+	rows, err := s.syncDBLocked().Query("SELECT char_id, reason, door, gold, balance FROM economy_ledger ORDER BY seq")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestLedgerUpgradeAddsTheTable(t *testing.T) {
 	s := openTest(t, dir, newTestClock())
 	c := newLedgerCharacter(t, s, "LedgerUp", 40)
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -361,7 +361,7 @@ func TestLedgerUpgradeAddsTheTable(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after || len(ledgerRows(t, reopened)) != 0 {

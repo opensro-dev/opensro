@@ -36,7 +36,7 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -56,7 +56,7 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 	}
 	s = openTest(t, dir, newTestClock())
 	var after string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -446,13 +446,13 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
+	if _, err := s.syncDBLocked().Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {
+	if _, err := s.syncDBLocked().Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -462,7 +462,7 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 	}
 	s = openTest(t, dir, newTestClock())
 	var after string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -497,7 +497,7 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -517,7 +517,7 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -551,7 +551,7 @@ func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -562,7 +562,7 @@ func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
@@ -590,7 +590,7 @@ func TestStallDecorationUpgradeKeepsSchema19Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -601,7 +601,7 @@ func TestStallDecorationUpgradeKeepsSchema19Records(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

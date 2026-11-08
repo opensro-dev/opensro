@@ -90,12 +90,12 @@ func (s *Store) SilkHistory(character *domain.Character, periodDays int, limit i
 	}
 	since := s.now().UnixMilli() - int64(periodDays)*silkHistoryDayMs
 	var total uint64
-	err := s.db.QueryRow(`SELECT COALESCE(SUM(silk + gift_silk), 0) FROM silk_history
+	err := s.syncDBLocked().QueryRow(`SELECT COALESCE(SUM(silk + gift_silk), 0) FROM silk_history
 WHERE account_id = ? AND kind = ? AND at_ms >= ?`, character.AccountID, silkHistoryUse, since).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
-	found, err := s.db.Query(`SELECT at_ms, silk, gift_silk FROM silk_history
+	found, err := s.syncDBLocked().Query(`SELECT at_ms, silk, gift_silk FROM silk_history
 WHERE account_id = ? AND kind = ? AND at_ms >= ? ORDER BY at_ms DESC, seq DESC LIMIT ?`,
 		character.AccountID, silkHistoryUse, since, limit)
 	if err != nil {

@@ -62,7 +62,32 @@ func testSkillSeeder(raceKey string, learned []uint32) ([]uint32, error) {
 
 func openTest(t testing.TB, dir string, clock *testClock) *Store {
 	t.Helper()
-	s, err := Open(dir, Options{Now: clock.Now, DefaultSkills: testSkillSeeder})
+	// The suite runs under either commit setting: SRO_STORE_ASYNC_COMMIT=1
+	// runs it on the asynchronous writer (#2802).
+	return openTestCommit(t, dir, clock, asyncCommitEnabled())
+}
+
+/*
+================
+openTestSync
+
+openTest pinned to the synchronous door, for a test of a property only
+that door has (a rolled-back commit retains nothing).
+================
+*/
+func openTestSync(t testing.TB, dir string, clock *testClock) *Store {
+	t.Helper()
+	return openTestCommit(t, dir, clock, false)
+}
+
+/*
+================
+openTestCommit
+================
+*/
+func openTestCommit(t testing.TB, dir string, clock *testClock, async bool) *Store {
+	t.Helper()
+	s, err := Open(dir, Options{Now: clock.Now, DefaultSkills: testSkillSeeder, AsyncCommit: async})
 	if err != nil {
 		t.Fatalf("Open(%s): %v", dir, err)
 	}
@@ -81,7 +106,7 @@ func readCharacterRecordRaw(t *testing.T, s *Store, divisionID, nameLower string
 		t.Fatal("store has no open database")
 	}
 	var record string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND name_lower = ?", divisionID, nameLower).Scan(&record); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND name_lower = ?", divisionID, nameLower).Scan(&record); err != nil {
 		t.Fatalf("reading record %s/%s: %v", divisionID, nameLower, err)
 	}
 	return record

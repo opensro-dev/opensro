@@ -40,6 +40,9 @@ native; commerce.AddExtraGoods). Nil extra is the v1.150 stock.
 ================
 */
 func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) error {
+	if rt.AttackPetExpansion {
+		extra = append(append([]commerce.ExtraGood(nil), extra...), petStableGoods()...)
+	}
 	c, e := commerce.LoadWithExtraGoods(dir, rt.deps.ItemReferences(), extra)
 	if e != nil {
 		return e
@@ -175,7 +178,7 @@ func (rt *Runtime) eachShopOffer(npc simulation.NpcDef, visit func(uint8, commer
 				return
 			}
 			for _, offer := range rt.Commerce.Tabs[tab.TabID] {
-				if rt.AttackPetExpansion && petGearShopOffer(offer) {
+				if rt.AttackPetExpansion && petGearShopOffer(offer) && !petStableOffer(tab.TabID, offer) {
 					continue
 				}
 				visit(uint8(index), offer)

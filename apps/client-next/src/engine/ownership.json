@@ -246,6 +246,7 @@
     "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/hdr.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ambient-occlusion.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/msaa.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/sun-shadow.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/environment-block.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/characters/resources/effect-model.ts": "src/engine/runtime/characters/resources/resources.ts",

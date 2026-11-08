@@ -43,7 +43,7 @@ func TestBetaSilkStarterAndCreditPersist(t *testing.T) {
 	}
 	s.Close()
 	reopened := openTest(t, dir, newTestClock())
-	if balance, err := readMallBalance(reopened.db, "acct"); err != nil || balance.Silk != 400 {
+	if balance, err := readMallBalance(reopened.syncDBLocked(), "acct"); err != nil || balance.Silk != 400 {
 		t.Fatalf("credits must persist: balance=%+v err=%v", balance, err)
 	}
 	if granted, _ := reopened.GrantBetaSilkStarter("acct", 300); granted {

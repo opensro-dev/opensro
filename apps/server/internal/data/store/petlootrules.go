@@ -36,7 +36,7 @@ PetGearDropFactor
 func (s *Store) PetGearDropFactor() (float64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	text, present, err := readMeta(s.db, PetGearDropFactorKey)
+	text, present, err := readMeta(s.syncDBLocked(), PetGearDropFactorKey)
 	if err != nil {
 		return 0, err
 	}
@@ -61,6 +61,6 @@ func (s *Store) SetPetGearDropFactor(factor float64) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", PetGearDropFactorKey, strconv.FormatFloat(factor, 'g', -1, 64))
+	_, err := s.syncDBLocked().Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", PetGearDropFactorKey, strconv.FormatFloat(factor, 'g', -1, 64))
 	return err
 }
