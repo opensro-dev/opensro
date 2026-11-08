@@ -520,12 +520,12 @@ func (rt *Runtime) settleMonsterInsideDoorCounted(division string, actor *enterw
 			for gid, member := range roster.actors {
 				owners[gid] = member.character
 			}
-			for _, reached := range rt.countHalloweenBoxes(owners, drops, now) {
-				frame := halloweenBoxCapFrame()
-				if reached == actor {
+			for _, reached := range rt.countHalloweenBoxes(owners, drops, now, impact.Instance.Ref.Codename == halloweenGourdCodename) {
+				frame := halloweenBoxCapFrame(reached.gourd)
+				if reached.owner == actor {
 					out.actorFrames = append(out.actorFrames, frame)
 				} else {
-					out.others = append(out.others, RecipientFrames{reached.ID, []wire.Frame{frame}})
+					out.others = append(out.others, RecipientFrames{reached.owner.ID, []wire.Frame{frame}})
 				}
 			}
 		}

@@ -76,7 +76,7 @@ func loadHalloweenBoxes(db *sql.DB) (map[string]*domain.HalloweenBoxAccount, boo
 		return nil, false, fmt.Errorf("halloween box accounts: %w", err)
 	}
 	for accountID, record := range accounts {
-		if strings.TrimSpace(accountID) != accountID || record == nil || record.Count < 0 {
+		if strings.TrimSpace(accountID) != accountID || record == nil || record.Count < 0 || record.GourdCount < 0 {
 			return nil, false, fmt.Errorf("invalid halloween box account %q", accountID)
 		}
 	}

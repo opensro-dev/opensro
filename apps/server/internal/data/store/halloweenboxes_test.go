@@ -168,3 +168,61 @@ func TestHalloweenAccountUpgradeRewritesNothing(t *testing.T) {
 		t.Fatalf("second upgrade = %v, want ErrAuthorityCurrent", err)
 	}
 }
+
+/*
+================
+TestHalloweenGourdCountSurvivesSaveLoad
+
+The Gourd allowance is the wave's memory too (#2950): it survives a
+restart mid-event, a row written before the field existed (schema 40
+and older) decodes with no Gourd boxes minted, and a negative Gourd
+count is corruption, like a negative ordinary one.
+================
+*/
+func TestHalloweenGourdCountSurvivesSaveLoad(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	clock := newTestClock()
+	s := openTest(t, dir, clock)
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "account-a", c); err != nil {
+		t.Fatal(err)
+	}
+	if !s.UpdateCharacter(c, "test halloween gourd mint", func() bool {
+		record := s.HalloweenAccount("account-a")
+		record.Day, record.Count, record.GourdCount = 20736, 17, 9
+		return true
+	}) {
+		t.Fatal("the mint door refused")
+	}
+	s.Close()
+
+	reopened := openTest(t, dir, clock)
+	defer reopened.Close()
+	loaded := reopened.HalloweenAccount("account-a")
+	if loaded.Day != 20736 || loaded.Count != 17 || loaded.GourdCount != 9 {
+		t.Fatalf("account = %+v, want day 20736 count 17 gourd 9", loaded)
+	}
+
+	// A row written before gourdCount existed decodes it as zero.
+	if _, err := reopened.db.Exec("DELETE FROM meta WHERE key = ?", metaKeyHalloweenBoxes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.db.Exec("INSERT INTO meta (key, value) VALUES (?, ?)", metaKeyHalloweenBoxes, `{"account-a":{"day":20736,"count":17}}`); err != nil {
+		t.Fatal(err)
+	}
+	accounts, _, err := loadHalloweenBoxes(reopened.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := accounts["account-a"]; got == nil || got.Count != 17 || got.GourdCount != 0 {
+		t.Fatalf("old row = %+v, want count 17 gourd 0", got)
+	}
+	if _, err := reopened.db.Exec("UPDATE meta SET value = ? WHERE key = ?", `{"account-a":{"day":20736,"count":17,"gourdCount":-1}}`, metaKeyHalloweenBoxes); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadHalloweenBoxes(reopened.db); err == nil {
+		t.Fatal("a negative gourd count loaded")
+	}
+}

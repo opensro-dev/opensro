@@ -9,6 +9,7 @@ package action
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,42 @@ func TestWaveWarnsThenLandsHuntableMonstersOnce(t *testing.T) {
 	rt.Monsters.ExpireMonsterLifetimes(clock.Add(progression.HalloweenWaveSpan()).UnixMilli())
 	if left := len(detachedActors(rt)); left != 0 {
 		t.Fatalf("%d wave monsters outlived the wave", left)
+	}
+}
+
+/*
+================
+TestWaveGourdsLandWhereTheNoticePoints
+
+#2950: the notice names the field's area, so the Gourds must land at
+that field's anchor nest — inside the Gourd radius of the nest, in
+its region, with the ring just outside them — not scattered over the
+region or dropped somewhere the notice never named.
+================
+*/
+func TestWaveGourdsLandWhereTheNoticePoints(t *testing.T) {
+	rt, clock := waveTestRuntime(t, true)
+	rt.advanceHalloweenWaves()
+	*clock = time.Date(2026, 11, 3, 6, 55, 0, 0, time.UTC)
+	rt.advanceHalloweenWaves()
+	*clock = clock.Add(5*time.Minute + time.Second)
+	rt.advanceHalloweenWaves()
+	actors := detachedActors(rt)
+	if len(actors) == 0 {
+		t.Fatal("the wave landed nothing")
+	}
+	for _, actor := range actors {
+		if actor.Spawn.RegionID != waveTestRegion {
+			t.Fatalf("a wave monster landed in region %x, want the anchor region %x", actor.Spawn.RegionID, waveTestRegion)
+		}
+		distance := math.Hypot(actor.Spawn.X-900, actor.Spawn.Z-900)
+		if actor.Ref.Codename == halloweenGourdCodename {
+			if distance > progression.HalloweenWaveGourdRadius+1 {
+				t.Fatalf("a gourd landed %v from the anchor, outside the gourd radius %v", distance, progression.HalloweenWaveGourdRadius)
+			}
+		} else if distance < progression.HalloweenWaveRingRadius-1 || distance > progression.HalloweenWaveRingRadius+progression.HalloweenWaveRingDepth+1 {
+			t.Fatalf("a ring mob landed %v from the anchor, outside the ring band", distance)
+		}
 	}
 }
 
