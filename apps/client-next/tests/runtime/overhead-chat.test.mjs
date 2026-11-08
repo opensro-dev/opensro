@@ -122,7 +122,8 @@ test("the replayed public transcript is history, never speech over a head on ent
 	// BUG-067: replayed lines keep the server's send time, not this login's.
 	assert.deepEqual( lines.map( l => l.sentAt ), [ HISTORY_SENT_AT, HISTORY_SENT_AT + 60_000 ] );
 	assert.equal( speech.step( lines, players, 100 ).size, 0 );
-	assert.throws( () => decodeChatHistory( Uint8Array.of( 1, 0 ) ), /Invalid chat history/ );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( 2 ) ), /Invalid chat history/ );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( 2, 11 ) ), /Invalid chat history/ );
 	assert.throws(
 		() => decodeChatHistory( Uint8Array.of( 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 9 ) ),
 		/Truncated chat history/
@@ -132,4 +133,36 @@ test("the replayed public transcript is history, never speech over a head on ent
 		/Truncated chat history/
 	);
 	assert.throws( () => decodeChatHistory( Uint8Array.of( ...historyFrame( [ [ "Me", "x" ] ] ), 0 ) ), /trailing/ );
+});
+
+/*
+================
+versionOneHistoryFrame
+
+The pre-2026-10-08 OpChatHistory layout {u8 1, u8 count, count x (u16
+length, 0x3667 payload)}, built from a version 2 frame by dropping sentAt.
+================
+*/
+function versionOneHistoryFrame( lines ) {
+	const two = historyFrame( lines ), v = new DataView( two.buffer ), parts = [];
+	let o = 2;
+	for ( let i = 0; i < two[1]; i++ ) {
+		const n = v.getUint16( o + 8, true );
+		parts.push( two.subarray( o + 8, o + 10 + n ) );
+		o += 10 + n;
+	}
+	return Uint8Array.of( 1, two[1], ...parts.flatMap( p => [ ...p ] ) );
+}
+
+test("a transcript of another release's layout is set aside, never the session's end (#2896)", () => {
+	const chat = createChat( () => {} );
+	chat.bootstrap( { character: { name: "Me" } } );
+	const skewed = [ versionOneHistoryFrame( [ [ "Peer", "old layout" ] ] ), Uint8Array.of( 3, 0 ) ];
+	for ( const payload of skewed ) {
+		assert.equal( chat.receive( { opcode: 16, payload }, 1 ), true );
+	}
+	assert.deepEqual( chat.state().lines, [] );
+	// The current layout still replays after a skewed frame.
+	chat.receive( { opcode: 16, payload: historyFrame( [ [ "Peer", "new layout" ] ] ) }, 2 );
+	assert.deepEqual( chat.state().lines.map( l => l.text ), [ "new layout" ] );
 });

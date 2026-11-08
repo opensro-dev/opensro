@@ -50,7 +50,7 @@ function fixture() {
 		createEncoder() {
 			return {
 				beginRenderPass( descriptor ) {
-					const pass = { label: descriptor.label, descriptor, draws: [] };
+					const pass = { label: descriptor.label, descriptor, draws: /** @type {string[]} */ ([]) };
 					events.push( pass );
 					return {
 						setBlendConstant() {},
@@ -82,7 +82,7 @@ function fixture() {
 	renderer does. armed passes the stage.
 	================
 	*/
-	function draw( world, transparentStart, armed ) {
+	function draw( world, transparentStart, armed, extra = {} ) {
 		const draws = world.map( ( [name, flags = {}] ) => ({
 			pipeline: { name },
 			binding: {},
@@ -107,11 +107,25 @@ function fixture() {
 			undefined,
 			undefined,
 			undefined,
-			/** @type {any} */ (armed ? { water: { stage, transparentStart } } : {})
+			/** @type {any} */ ({ ...(armed ? { water: { stage, transparentStart } } : {}), ...extra })
 		);
 		return events.map( event => event.label === "copies" ? event : [ event.label, event.draws ] );
 	}
-	return { draw, events, view, depth };
+	/*
+	================
+	msaa
+
+	A 4x stage fake: its views, and each depth resolve in the event list.
+	================
+	*/
+	const msaa = {
+		view: { name: "msaa-colour" },
+		depth: { name: "msaa-depth" },
+		resolveDepth( _encoder, target ) {
+			events.push( { label: "resolve-depth", target } );
+		}
+	};
+	return { draw, events, view, depth, msaa };
 }
 
 const WATER = { water: true, blended: true };
@@ -164,4 +178,35 @@ test("off, the frame is the native single pass", () => {
 		"label"
 	] ] ] );
 	assert.equal( f.events[0].descriptor.depthStencilAttachment.depthStoreOp, "discard" );
+});
+
+test("under MSAA the water draws on into the 4x buffers and resolves again", () => {
+	const f = fixture();
+	const world = [ [ "terrain" ], [ "lake", WATER ], [ "smoke", BLENDED ] ];
+	const order = f.draw( world, 2, true, { msaa: f.msaa } );
+	// The scene pass resolves, its depth resolves for the copies, the water
+	// pass draws the retained 4x bundles, and the depth resolves once more
+	// for the label passes that read it after the separate scene.
+	assert.deepEqual( order.slice( 0, 5 ).map( event => event.label ?? event[0] ), [
+		"main-pass",
+		"resolve-depth",
+		"copies",
+		"water-refraction",
+		"resolve-depth"
+	] );
+	const [main] = f.events, overlay = f.events.find( event => event.label === "water-refraction" );
+	assert.equal( main.descriptor.colorAttachments[0].storeOp, "store", "the 4x colour is kept for the water pass" );
+	assert.equal( overlay.descriptor.colorAttachments[0].view, f.msaa.view );
+	assert.equal( overlay.descriptor.colorAttachments[0].resolveTarget, f.view );
+	assert.equal( overlay.descriptor.depthStencilAttachment.view, f.msaa.depth );
+	assert.equal( f.events.filter( event => event.label === "resolve-depth" ).length, 2 );
+	assert.ok( f.events.filter( event => event.label === "resolve-depth" ).every( event => event.target === f.depth ) );
+});
+
+test("under MSAA without water the scene keeps one resolve and discards its 4x colour", () => {
+	const f = fixture();
+	f.draw( [ [ "terrain" ], [ "lake", WATER ] ], 2, false, { msaa: f.msaa } );
+	assert.equal( f.events[0].descriptor.colorAttachments[0].storeOp, "discard" );
+	assert.equal( f.events.filter( event => event.label === "resolve-depth" ).length, 1 );
+	assert.ok( !f.events.some( event => event.label === "water-refraction" ) );
 });

@@ -135,14 +135,19 @@ extension): {u8 version=2, u8 count, count x (u64 sentAt, u16 length, 0x3667
 payload)}. sentAt is the server's Unix milliseconds when the line was said,
 so a replayed line shows its real time, not this client's login (BUG-067).
 Only named public lines are admitted; anything else is a malformed frame.
+
+A frame of another layout version is release skew, not a malformed frame:
+a tab still on the previous release reconnects to an updated server and
+is replayed the new layout before the release watch offers its refresh
+(#2896: the version 1 -> 2 bump of 2026-10-08 ended 35 sessions on the old
+build). The replay is cosmetic, so that frame is set aside as no lines.
 ================
 */
 export function decodeChatHistory(
 	p: Uint8Array
 ): { channel: number; sender: string; text: string; sentAt: number; bodies?: Uint8Array[]; }[] {
-	if ( p.length < 2 || p[0] !== CHAT_HISTORY_VERSION || p[1]! > CHAT_HISTORY_LIMIT ) {
-		throw new Error( "Invalid chat history" );
-	}
+	if ( p.length >= 1 && p[0] !== CHAT_HISTORY_VERSION ) return [];
+	if ( p.length < 2 || p[1]! > CHAT_HISTORY_LIMIT ) throw new Error( "Invalid chat history" );
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), lines = [];
 	let o = 2;
 	for ( let i = 0; i < p[1]!; i++ ) {

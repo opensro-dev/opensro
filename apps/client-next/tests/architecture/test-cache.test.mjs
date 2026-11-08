@@ -9,7 +9,8 @@ checkout): a pass is reused, an edit to a module one test imports reruns
 exactly that test, a failure is never reused, and a test process cannot
 grow past the runner's heap ceiling or its resident memory ceiling, nor
 outlive its runner. A file over its per-file budget fails the run although
-its tests pass (#2929).
+its tests pass, and a suite over its whole-suite budget fails although
+every file passes (#2929).
 
 ===========================================================================
 */
@@ -127,6 +128,28 @@ test("a file over its per-file budget fails the run although its tests pass", ()
 		assert.match( run.stdout, /tests slowest: .*quick\.test\.mjs/ );
 		assert.match( run.stdout, /tests budget: .*quick\.test\.mjs ran .* over its .* per-file budget/ );
 		assert.equal( run.status, 1, "an over-budget file fails the run" );
+	} finally {
+		fs.rmSync( suite, { recursive: true, force: true } );
+	}
+});
+
+test("a suite over its whole-suite budget fails the run although every file passes", () => {
+	const suite = path.join( root, "temp", `test-suite-budget-fixture-${process.pid}` );
+	fs.mkdirSync( suite, { recursive: true } );
+	try {
+		fs.writeFileSync(
+			path.join( suite, "quick.test.mjs" ),
+			'import { test } from "node:test";\ntest( "quick", () => {} );\n'
+		);
+		// A 1 ms whole-suite budget: the file passes and sits far under
+		// its per-file budget, but the run around it - this process, the
+		// hashing, the file's own process - costs more than that, so the
+		// run must fail on the suite line alone (#2929).
+		const run = runRunner( suite, { SRO_TEST_SUITE_BUDGET_MS: "1" } );
+		assert.match( run.stdout, /tests: 1 files, 0 reused unchanged, 1 run, 0 failed/ );
+		assert.doesNotMatch( run.stdout, /tests budget: .*quick\.test\.mjs/ );
+		assert.match( run.stdout, /tests budget: the suite ran .* over its .* whole-suite budget/ );
+		assert.equal( run.status, 1, "an over-budget suite fails the run" );
 	} finally {
 		fs.rmSync( suite, { recursive: true, force: true } );
 	}

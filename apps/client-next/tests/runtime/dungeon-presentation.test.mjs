@@ -179,10 +179,8 @@ test("flare publication retains native mip resources and the shared original sun
 	assert.equal( sky.sunTexturePublicPath, sky.flareTexturePublicPaths[1].replace( /\.texture$/, ".png" ) );
 });
 
-import { tmpdir } from "node:os";
 import { extractedRoot, imageSourceRoot, normalizeAssetPath } from "../../../../scripts/build/world/paths.mjs";
-import { buildDungeonResourceManifest } from "../../../../scripts/build/world/assets/buildDungeonResources.mjs";
-import { buildDungeonWorlds } from "../../../../scripts/build/world/assets/buildDungeonWorlds.mjs";
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { collectDungeonParticleReferences } from "../../../../scripts/build/effects/buildEffectPrograms.mjs";
 import {
 	parseJmxVisualEffect,
@@ -245,28 +243,37 @@ function portalInterior( p, e, regionId ) {
 ================
 loadDungeonFixture
 
-Builds the dungeon resource manifest and every dungeon world bundle once
-for the region and effects tests below. The build takes seconds solo and
-far longer under parallel gate load, so it runs at module load, outside
-every test's clock: each test then carries only its own region's
-decode/stream/clip work against the unchanged 60 s cap, instead of the
-shared build riding the first test until it times out (the parallel-run
-flake this split removes). The temp manifest is deleted as soon as its
-bytes are in memory; nothing below reads it back.
+Reads the dungeon resource manifest and every dungeon world bundle the
+asset build published (the same bytes the client streams) once for the
+region and effects tests below. It used to rebuild both with
+buildDungeonResourceManifest/buildDungeonWorlds at module load: seconds
+of build pipeline per run for output already on disk (#2925). The reads
+still run at module load, outside every test's clock: each test then
+carries only its own region's decode/stream/clip work against the
+unchanged 60 s cap.
 ================
 */
 async function loadDungeonFixture() {
-	const tempRoot = fs.mkdtempSync( join( tmpdir(), "sro-dungeon-e2e-" ) );
-	try {
-		const manifestPath = join( tempRoot, "dungeon-resources.json" );
-		await buildDungeonResourceManifest( { extractedRoot, targetPath: manifestPath } );
-		const manifestBytes = new Uint8Array( fs.readFileSync( manifestPath ) );
-		const manifest = JSON.parse( Buffer.from( manifestBytes ).toString( "utf8" ) );
-		const { bundles } = await buildDungeonWorlds( manifest, { publishFiles: false } );
-		return { manifestBytes, manifest, bundles };
-	} finally {
-		fs.rmSync( tempRoot, { recursive: true, force: true } );
+	const manifestBytes = new Uint8Array(
+		fs.readFileSync( CLIENT_PUBLIC_ROOT + "/assets/world/dungeon/dungeon-resources.json" )
+	);
+	const manifest = JSON.parse( Buffer.from( manifestBytes ).toString( "utf8" ) );
+	const bundles = new Map();
+	for ( const entry of manifest.entries ) {
+		const region = entry.sectorId;
+		bundles.set(
+			region,
+			JSON.parse(
+				fs.readFileSync(
+					`${CLIENT_PUBLIC_ROOT}/assets/world/dungeon/regions/0x${
+						region.toString( 16 ).padStart( 4, "0" )
+					}.json`,
+					"utf8"
+				)
+			)
+		);
 	}
+	return { manifestBytes, manifest, bundles };
 }
 
 const dungeonFixture = await loadDungeonFixture();

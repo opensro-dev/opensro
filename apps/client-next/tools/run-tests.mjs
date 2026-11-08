@@ -23,7 +23,9 @@ there discards it. SRO_CHECK_FORCE=1 runs everything.
 
 Every run times the files it actually executed and prints the thirty
 slowest; a file over its per-file budget (TEST_FILE_BUDGET_MS) fails the
-run (#2907), so suite time cannot creep back one file at a time.
+run, and a run over its whole-suite budget (TEST_SUITE_BUDGET_MS, when
+one is set) fails too (#2907, #2929), so suite time cannot creep back
+one file at a time or in aggregate.
 
 ===========================================================================
 */
@@ -64,12 +66,22 @@ const TEST_HEAP_MB = Number( process.env.SRO_TEST_HEAP_MB ) || 4096;
 // watchdog's own test.
 const RSS_HEADROOM_MB = 2048;
 const TEST_RSS_MB = Number( process.env.SRO_TEST_RSS_MB ) || TEST_HEAP_MB + RSS_HEADROOM_MB;
-// One test file's share of the five-minute client budget (#2907): a file
-// that runs longer than this fails the run and names itself, so suite
-// time cannot creep back file by file (the Go server's 30 s budget is
-// the same idea). Only files that actually ran are timed; a reused pass
-// spent nothing. SRO_TEST_FILE_BUDGET_MS overrides it.
+// A file that runs longer than this fails the run and names itself, so
+// suite time cannot creep back file by file (the Go server's 30 s budget
+// is the same idea). Only files that actually ran are timed; a reused
+// pass spent nothing. The default stays 60 s: the full check's runtime
+// lane is unmeasured and still slow before the shards land (#2924-#2928),
+// so the tight budget is set where the profile was measured - the CI
+// source lane sets 20 s via SRO_TEST_FILE_BUDGET_MS (the slowest ordinary
+// file took 14.6 s there; docs/agents/client-test-profile.md).
+// SRO_TEST_FILE_BUDGET_MS overrides it everywhere.
 const TEST_FILE_BUDGET_MS = Number( process.env.SRO_TEST_FILE_BUDGET_MS ) || 60000;
+// The whole run's wall budget (#2929): the five-minute client budget
+// #2907 named, enforced on the run itself instead of only implied by
+// the per-file caps, so aggregate creep fails too. No cap by default,
+// for the same unmeasured-full-lane reason; the CI source lane sets
+// 300 s via SRO_TEST_SUITE_BUDGET_MS (it measured 79-113 s there).
+const TEST_SUITE_BUDGET_MS = Number( process.env.SRO_TEST_SUITE_BUDGET_MS ) || 0;
 // How many of the slowest files each run names: enough that the suite
 // profile (docs/agents/client-test-profile.md, #2929) can be written
 // straight from a CI log line.
@@ -409,7 +421,14 @@ async function main() {
 				`${capOf( file ) / 1000}s per-file budget (#2907)\n`
 		);
 	}
-	if ( failed.size || overBudget.length ) process.exitCode = 1;
+	const suiteOver = TEST_SUITE_BUDGET_MS > 0 && Number( seconds ) * 1000 > TEST_SUITE_BUDGET_MS;
+	if ( suiteOver ) {
+		process.stdout.write(
+			`tests budget: the suite ran ${seconds}s, over its ` +
+				`${TEST_SUITE_BUDGET_MS / 1000}s whole-suite budget (#2929)\n`
+		);
+	}
+	if ( failed.size || overBudget.length || suiteOver ) process.exitCode = 1;
 }
 
 await main();

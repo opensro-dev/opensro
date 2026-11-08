@@ -8,10 +8,15 @@ regions, per viewer, per leg (#2134). A viewer's answer is the union of at
 most nine interest blocks, and most movers stay in one block across many
 ticks, so moverBlockIndex keeps that membership between scans instead.
 
-moverStorage owns one index. set and remove only note the gid; the scan
-reconciles under the same MonsterState.mu, so a burst of commits between
-scans costs one recompute per gid. Time moves a mover only while its row
-bears a segment, so an advancing clock recomputes only those.
+moverStorage owns one index. set notes the (slot, gid) pair its write
+landed on; remove leaves the index at once and moves the swapped row's
+entry with its slot. The scan reconciles under the same
+MonsterState.mu, so a burst of commits between scans costs one
+recompute per gid. Time moves a mover only while its row bears a
+segment, so an advancing clock recomputes only those. Membership by
+block is keyed by slot (#2133): the per-leg placement reads arrays,
+not gid maps; only the viewer-facing member sets stay gid-keyed,
+because a scan enumerates gids.
 
 ===========================================================================
 */
@@ -38,7 +43,7 @@ re-enters every mover, which advances them again.
 */
 type moverBlockIndex struct {
 	built bool
-	dirty []uint32
+	dirty []blockNote
 	nowMs int64
 
 	blockGeneration   map[worldgeom.InterestBlock]uint64
@@ -47,10 +52,14 @@ type moverBlockIndex struct {
 	membership uint64
 	stampCache map[worldgeom.InterestBlock]moverBlockStamp
 
-	blockOf  map[uint32]worldgeom.InterestBlock
-	members  map[worldgeom.InterestBlock]map[uint32]struct{}
-	dungeons map[uint16]map[uint32]struct{}
-	segments map[uint32]struct{}
+	// Per-slot membership, parallel to moverStorage.slots and moved
+	// with its rows by moveSlot: blockBySlot/inBlockBySlot say where
+	// a slot's row stands, segBySlot marks the rows time can move.
+	blockBySlot   []worldgeom.InterestBlock
+	inBlockBySlot []bool
+	segBySlot     []bool
+	members       map[worldgeom.InterestBlock]map[uint32]struct{}
+	dungeons      map[uint16]map[uint32]struct{}
 
 	// rosterGeneration advances when a row is added or removed: only
 	// then can a static entry's "has no mover" answer change.
@@ -59,13 +68,27 @@ type moverBlockIndex struct {
 
 /*
 ================
-moverBlockIndex.note
+blockNote
 
-Record that gid's row changed. Called on every row write, so it only
-appends.
+One noted row write: the slot the write landed on and the gid it
+named. The slot is a hint by reconcile time (a remove may have
+swapped another row into it); placeInBlockAt verifies it.
 ================
 */
-func (x *moverBlockIndex) note(gid uint32) {
+type blockNote struct {
+	slot uint32
+	gid  uint32
+}
+
+/*
+================
+moverBlockIndex.note
+
+Record that the row at slot changed. Called on every row write, so
+it only appends.
+================
+*/
+func (x *moverBlockIndex) note(slot, gid uint32) {
 	if !x.built {
 		return
 	}
@@ -73,7 +96,55 @@ func (x *moverBlockIndex) note(gid uint32) {
 		x.built, x.dirty = false, x.dirty[:0]
 		return
 	}
-	x.dirty = append(x.dirty, gid)
+	x.dirty = append(x.dirty, blockNote{slot, gid})
+}
+
+/*
+================
+moverBlockIndex.growSlot
+
+Size the per-slot membership arrays to hold slot.
+================
+*/
+func (x *moverBlockIndex) growSlot(slot uint32) {
+	for uint32(len(x.blockBySlot)) <= slot {
+		x.blockBySlot = append(x.blockBySlot, worldgeom.InterestBlock{})
+		x.inBlockBySlot = append(x.inBlockBySlot, false)
+		x.segBySlot = append(x.segBySlot, false)
+	}
+}
+
+/*
+================
+moverBlockIndex.moveSlot
+
+Follow moverStorage.remove's swap: the last slot's row moves into
+slot, and its index entries move with it; the arrays then shrink
+with the slots. The departed row's own entry was already dropped
+by leaveSlot. A slot past the arrays was never placed, so it moves
+as empty.
+================
+*/
+func (x *moverBlockIndex) moveSlot(slot, last uint32) {
+	if !x.built {
+		return
+	}
+	if slot != last {
+		if int(last) < len(x.blockBySlot) {
+			x.blockBySlot[slot] = x.blockBySlot[last]
+			x.inBlockBySlot[slot] = x.inBlockBySlot[last]
+			x.segBySlot[slot] = x.segBySlot[last]
+		} else if int(slot) < len(x.blockBySlot) {
+			x.blockBySlot[slot] = worldgeom.InterestBlock{}
+			x.inBlockBySlot[slot] = false
+			x.segBySlot[slot] = false
+		}
+	}
+	if int(last) < len(x.blockBySlot) {
+		x.blockBySlot = x.blockBySlot[:last]
+		x.inBlockBySlot = x.inBlockBySlot[:last]
+		x.segBySlot = x.segBySlot[:last]
+	}
 }
 
 /*
@@ -160,16 +231,20 @@ func (x *moverBlockIndex) stampBlocks(block worldgeom.InterestBlock) uint64 {
 
 /*
 ================
-moverBlockIndex.leave
+moverBlockIndex.leaveSlot
+
+Drop slot's row from the index. The departed row leaves at remove
+time (its slot is gone by reconcile), a crossing leaves at place
+time; both read the block from the slot's own entry.
 ================
 */
-func (x *moverBlockIndex) leave(gid uint32) {
-	block, ok := x.blockOf[gid]
-	if !ok {
+func (x *moverBlockIndex) leaveSlot(slot, gid uint32) {
+	if !x.built || int(slot) >= len(x.blockBySlot) || !x.inBlockBySlot[slot] {
 		return
 	}
-	delete(x.blockOf, gid)
-	delete(x.segments, gid)
+	block := x.blockBySlot[slot]
+	x.inBlockBySlot[slot] = false
+	x.segBySlot[slot] = false
 	x.bumpBlock(block)
 	members := x.members[block]
 	delete(members, gid)
@@ -190,8 +265,10 @@ func (x *moverBlockIndex) leave(gid uint32) {
 moverBlockIndex.enter
 ================
 */
-func (x *moverBlockIndex) enter(gid uint32, block worldgeom.InterestBlock) {
-	x.blockOf[gid] = block
+func (x *moverBlockIndex) enter(slot, gid uint32, block worldgeom.InterestBlock) {
+	x.growSlot(slot)
+	x.blockBySlot[slot] = block
+	x.inBlockBySlot[slot] = true
 	x.bumpBlock(block)
 	members := x.members[block]
 	if members == nil {
@@ -211,32 +288,40 @@ func (x *moverBlockIndex) enter(gid uint32, block worldgeom.InterestBlock) {
 
 /*
 ================
-moverStorage.placeInBlock
+moverStorage.placeInBlockAt
 
-Put gid in the block of its live pose at nowMs. Gid 0 is the absent actor
-and the scan never yields it.
+Put the row at slot in the block of its live pose at nowMs. The
+slot is the note's hint, verified against the gid before use: a
+remove may have swapped another row into it since the note, and
+a departed row already left the index at remove time, so a stale
+hint resolves by gid and a departed one places nothing. The pose,
+the block compare and the segment mark all read the slot's own
+entries: a moving actor is placed every leg (#2133).
 ================
 */
-func (s *moverStorage) placeInBlock(gid uint32, nowMs int64) {
+func (s *moverStorage) placeInBlockAt(slot, gid uint32, nowMs int64) {
 	x := &s.blocks
-	if _, ok := s.slotOf(gid); !ok || gid == 0 {
-		x.leave(gid)
+	if gid == 0 {
 		return
 	}
-	pose, _ := s.livePoseAt(gid, nowMs, nil)
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		resolved, ok := s.slotOf(gid)
+		if !ok {
+			return
+		}
+		slot = resolved
+	}
+	rec := s.slots[slot].rec
+	pose := rec.livePoseAt(nowMs, nil)
 	block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z})
-	if old, ok := x.blockOf[gid]; !ok {
-		x.enter(gid, block)
-	} else if old != block {
-		x.leave(gid)
-		x.enter(gid, block)
+	if int(slot) >= len(x.blockBySlot) || !x.inBlockBySlot[slot] {
+		x.enter(slot, gid, block)
+	} else if x.blockBySlot[slot] != block {
+		x.leaveSlot(slot, gid)
+		x.enter(slot, gid, block)
 	}
 	// leave drops the segment mark, so it is set after the move.
-	if live := s.slots[s.byGID[gid]].rec.live; live != nil && live.ArriveMs > live.DepartMs {
-		x.segments[gid] = struct{}{}
-	} else {
-		delete(x.segments, gid)
-	}
+	x.segBySlot[slot] = rec.live != nil && rec.live.ArriveMs > rec.live.DepartMs
 }
 
 /*
@@ -259,26 +344,27 @@ func (s *moverStorage) reconcileBlocks(nowMs int64) {
 		for block := range x.members {
 			x.bumpBlock(block)
 		}
-		x.blockOf = make(map[uint32]worldgeom.InterestBlock, len(s.slots))
+		x.blockBySlot, x.inBlockBySlot, x.segBySlot = nil, nil, nil
 		x.members = make(map[worldgeom.InterestBlock]map[uint32]struct{})
 		x.dungeons = make(map[uint16]map[uint32]struct{})
-		x.segments = make(map[uint32]struct{})
 		x.built, x.nowMs = true, nowMs
 		for i := range s.slots {
-			s.placeInBlock(s.slots[i].gid, nowMs)
+			s.placeInBlockAt(uint32(i), s.slots[i].gid, nowMs)
 		}
 		return
 	}
-	for _, gid := range x.dirty {
-		s.placeInBlock(gid, nowMs)
+	for _, n := range x.dirty {
+		s.placeInBlockAt(n.slot, n.gid, nowMs)
 	}
 	x.dirty = x.dirty[:0]
 	if x.nowMs == nowMs {
 		return
 	}
 	x.nowMs = nowMs
-	for gid := range x.segments {
-		s.placeInBlock(gid, nowMs)
+	for slot := range x.segBySlot {
+		if x.segBySlot[slot] {
+			s.placeInBlockAt(uint32(slot), s.slots[slot].gid, nowMs)
+		}
 	}
 }
 

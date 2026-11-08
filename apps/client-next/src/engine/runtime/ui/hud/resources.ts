@@ -43,6 +43,19 @@ import { decodeCameraDataRows } from "@/engine/foundation/ui/camera-waypoints";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
 const TOOLTIP_ROWS_PER_STEP = 1024;
+/*
+================
+catalogueByBytes
+
+The finished catalogue for one admitted skillData buffer, kept while the
+buffer lives. The decode is a pure function of the bytes, so a second HUD
+admitting the same buffer object (the test fixture serves one buffer per
+path per process) reuses it instead of decoding 27,835 rows again. A real
+client admits each buffer once, so nothing changes there; the entry dies
+with its buffer.
+================
+*/
+const catalogueByBytes = new WeakMap<ArrayBuffer, TooltipSkillCatalog>();
 // Authored button state images: normal, focus, press, disable.
 const BUTTON_STATE_SUFFIXES = [ "", "_focus", "_press", "_disable" ] as const;
 /*
@@ -257,8 +270,10 @@ export function createHudResources(
 	let goldPrices: Readonly<Record<number, number>> = {};
 	let tradeBases: Readonly<Record<number, number>> = {};
 	let jobThresholds: JobExpThresholds = {};
-	// The skill catalogue's decode while its state is "decoding".
+	// The skill catalogue's decode while its state is "decoding", and the
+	// buffer it is decoding (the memo key once it finishes).
 	let skillDecoder: ReturnType<typeof createTooltipSkillDecoder> | null = null;
+	let skillBytes: ArrayBuffer | null = null;
 	const warm = new Set<string>();
 	// Resolved button families, valid for one admitted HUD data.
 	const families: {
@@ -284,13 +299,16 @@ export function createHudResources(
 					try {
 						const value = skillDecoder!.step( TOOLTIP_ROWS_PER_STEP );
 						if ( value ) {
+							if ( skillBytes ) catalogueByBytes.set( skillBytes, value );
 							states[i] = { kind: "ready", value };
 							skillDecoder = null;
+							skillBytes = null;
 							changed = true;
 						}
 					} catch ( e ) {
 						states[i] = { kind: "failed", message: String( e ) };
 						skillDecoder = null;
+						skillBytes = null;
 						changed = true;
 					}
 				} else if ( state.kind === "loading" ) {
@@ -357,9 +375,15 @@ export function createHudResources(
 								jobThresholds = jobExpThresholds( raw );
 							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
 							else if ( i === layouts.length + 8 ) {
-								skillDecoder = createTooltipSkillDecoder( raw );
-								states[i] = { kind: "decoding" };
-								continue;
+								const memoised = catalogueByBytes.get( r.buffer );
+								if ( memoised ) {
+									value = memoised;
+								} else {
+									skillDecoder = createTooltipSkillDecoder( raw );
+									skillBytes = r.buffer;
+									states[i] = { kind: "decoding" };
+									continue;
+								}
 							} else if ( i === layouts.length + 7 ) value = decodeActionSlots( raw );
 							else if ( i === layouts.length + 5 ) value = raw;
 							else if ( i === layouts.length + 4 ) {

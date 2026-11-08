@@ -397,7 +397,9 @@ test("retail GM prefix colors player names gold without granting permission", ()
 			fortress: { worldId: 0, worlds: [], fortresses: [], wars: [], registered: [] },
 			capeTeam: () => undefined
 		} );
-		for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, i * 100 );
+		// One step to the loop's endpoint: the fixture settles inside a
+		// step, and only the final scene is read (#2932's step cut).
+		f.ui.step( f.state, 1500 );
 		const glyphs = f.scenes.at( -1 ).quads.filter( q => q.characterAnchor === 1 && q.texture === fontAtlas.image );
 		assert.ok( glyphs.some( q => q.color.join( "," ) === [ 1, 216 / 255, 122 / 255, 1 ].join( "," ) ) );
 		f.ui.event( { kind: "key", code: "Backquote", shift: true } );
@@ -442,7 +444,9 @@ test("F10 opens the Item Mall and a world transfer closes it, as the native rese
 		const open = () => {
 			let result;
 			// A retained frame returns null; keep the last published controls.
-			for ( let i = 0; i < 20; i++ ) result = f.ui.step( f.state, 1100 + i * 50 ) ?? result;
+			// One step to the old loop's endpoint (1100 + 19 * 50): the
+			// fixture settles inside a step (#2932's step cut).
+			result = f.ui.step( f.state, 2050 ) ?? result;
 			return !!result?.controls.some( control => control.id === "item-mall-close" );
 		};
 		assert.equal( open(), false );
@@ -465,7 +469,7 @@ test("the underbar's up arrow selects the next quickslot bar, as native control 
 	try {
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
-		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		last = f.ui.step( f.state, 2050 ) ?? last;
 		const next = last?.controls.find( control => control.id === "hotbar-next" );
 		const prev = last?.controls.find( control => control.id === "hotbar-prev" );
 		assert.ok( next && prev, "both quickslot arrows publish" );
@@ -481,7 +485,7 @@ test("the underbar mall button is a clickable button and F10 toggles the mall", 
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
 		const frame = () => {
-			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			last = f.ui.step( f.state, 2050 ) ?? last;
 			return last;
 		};
 		const button = frame()?.controls.find( control => control.id === "item-mall" );
@@ -502,7 +506,7 @@ test("the underbar mall button is a clickable button and F10 toggles the mall", 
 test("the Item Mall notice text keeps its static's authored dark FontColor, as 6CC490", () => {
 	const f = uiFixture();
 	try {
-		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, 1100 + i * 50 );
+		f.ui.step( f.state, 2050 );
 		const face = fontAtlas.fonts["0"],
 			uv = ( /** @type {string} */ c ) => {
 				const g = face.glyphs[c.codePointAt( 0 ) ?? 0];
@@ -529,7 +533,7 @@ test("the Item Mall notice waits for its frame instead of drawing bare text over
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
 		const shown = () => {
-			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			last = f.ui.step( f.state, 2050 ) ?? last;
 			return !!last?.controls.some( control => control.id === "mall-notice-close" );
 		};
 		assert.equal( shown(), false, "the notice showed before its frame loaded" );
@@ -546,7 +550,7 @@ test("the Item Mall notice opens once per session at world entry, as 683B40", ()
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
 		const shown = ( /** @type {string} */ id ) => {
-			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			last = f.ui.step( f.state, 2050 ) ?? last;
 			return !!last?.controls.some( control => control.id === id );
 		};
 		assert.equal( shown( "mall-notice-close" ), true, "CIFMallNotifyWnd after the first world entry" );
@@ -565,7 +569,7 @@ test("the Item Mall notice opens once per session at world entry, as 683B40", ()
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
 		const shown = ( /** @type {string} */ id ) => {
-			for ( let i = 0; i < 20; i++ ) last = g.ui.step( g.state, 1100 + i * 50 ) ?? last;
+			last = g.ui.step( g.state, 2050 ) ?? last;
 			return !!last?.controls.some( control => control.id === id );
 		};
 		assert.equal( shown( "mall-notice-enter" ), true );
@@ -612,11 +616,11 @@ function mallNoticeSession(
 		if ( run.account ) f.ui.event( { kind: "edit", id: "account", value: run.account } );
 		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
 		let last;
-		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		last = f.ui.step( f.state, 2050 ) ?? last;
 		const shown = !!last?.controls.some( control => control.id === "mall-notice-close" );
 		if ( shown && run.close ) {
 			f.ui.event( { kind: "activate", id: "mall-notice-close" } );
-			for ( let i = 0; i < 4; i++ ) last = f.ui.step( f.state, 2200 + i * 50 ) ?? last;
+			last = f.ui.step( f.state, 2350 ) ?? last;
 			assert.equal( !!last?.controls.some( control => control.id === "mall-notice-close" ), false );
 		}
 		return shown;

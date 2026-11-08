@@ -77,6 +77,11 @@ export interface ExperimentalOptions {
 	// from the main pass. Off by default; off is the native blended
 	// reflection, byte for byte.
 	readonly waterRefraction: boolean;
+	// Port-only, not native: the scene renders through a 4x multisampled
+	// colour and depth buffer and resolves into the frame (the original
+	// presents single-sampled). Off by default; off is byte-identical to
+	// the native pass order.
+	readonly msaa: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
 	// Camera: ease the follow target's height and the collision release
@@ -481,6 +486,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		ambientOcclusion: enabled( "ambientOcclusion" ),
 		skyDetail: enabled( "skyDetail" ),
 		waterRefraction: enabled( "waterRefraction" ),
+		msaa: enabled( "msaa" ),
 		predictedRunUp: record.predictedRunUp !== false,
 		smoothCamera: record.smoothCamera !== false,
 		enchantSparks: record.enchantSparks !== false,
@@ -592,6 +598,7 @@ export interface ExperimentalVideo {
 	readonly ambientOcclusion: boolean;
 	readonly skyDetail: boolean;
 	readonly waterRefraction: boolean;
+	readonly msaa: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
@@ -619,6 +626,7 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		ambientOcclusion: options.ambientOcclusion,
 		skyDetail: options.skyDetail,
 		waterRefraction: options.waterRefraction,
+		msaa: options.msaa,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
 		sharedActorRoom: options.sharedActorRoom,

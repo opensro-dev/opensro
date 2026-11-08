@@ -164,7 +164,6 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 	if s.byGID == nil {
 		s.byGID = make(map[uint32]uint32)
 	}
-	s.blocks.note(gid)
 	slot, exists := s.slotOf(gid)
 	if !exists {
 		s.blocks.rosterGeneration++
@@ -172,6 +171,7 @@ func (s *moverStorage) set(gid uint32, row monster.MoverState) {
 		s.slots = append(s.slots, moverSlot{gid: gid})
 		s.byGID[gid] = slot
 	}
+	s.blocks.note(slot, gid)
 	s.setRow(slot, gid, row, exists)
 }
 
@@ -199,7 +199,7 @@ func (s *moverStorage) setAt(slot uint32, gid uint32, row monster.MoverState) {
 	if s.byGID == nil {
 		s.byGID = make(map[uint32]uint32)
 	}
-	s.blocks.note(gid)
+	s.blocks.note(slot, gid)
 	s.setRow(slot, gid, row, true)
 }
 
@@ -416,6 +416,37 @@ func (s *moverStorage) lookupAt(slot uint32, gid uint32) (monster.MoverState, bo
 		return monster.MoverState{}, false
 	}
 	return s.slots[slot].rec.value(), true
+}
+
+/*
+================
+stuckAt
+
+lookup(gid).Stuck() through a carried slot, without expanding the row:
+the step's stuck probe runs for every actor every leg and almost always
+answers no (#2133). A miss on the carried slot falls back to the gid
+map, so the answer is the storage's either way. found is false when gid
+has no row.
+================
+*/
+func (s *moverStorage) stuckAt(slot uint32, gid uint32) (stuck, found bool) {
+	if s == nil {
+		return false, false
+	}
+	if int(slot) >= len(s.slots) || s.slots[slot].gid != gid {
+		var ok bool
+		if slot, ok = s.slotOf(gid); !ok {
+			return false, false
+		}
+	}
+	rec := s.slots[slot].rec
+	switch {
+	case rec.live != nil:
+		return rec.live.Stuck(), true
+	case rec.pending != nil:
+		return rec.pending.shared.Value().row.Stuck, true
+	}
+	return false, true
 }
 
 /*
@@ -700,7 +731,7 @@ func (s *moverStorage) remove(gid uint32) {
 	if !exists {
 		return
 	}
-	s.blocks.note(gid)
+	s.blocks.leaveSlot(slot, gid)
 	s.blocks.rosterGeneration++
 	s.spatial.remove(gid, s.slots[slot].rec.interestBounds())
 	last := uint32(len(s.slots) - 1)
@@ -710,5 +741,6 @@ func (s *moverStorage) remove(gid uint32) {
 	}
 	s.slots[last] = moverSlot{}
 	s.slots = s.slots[:last]
+	s.blocks.moveSlot(slot, last)
 	delete(s.byGID, gid)
 }

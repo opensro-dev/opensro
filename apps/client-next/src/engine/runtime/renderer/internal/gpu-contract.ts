@@ -131,6 +131,24 @@ export interface WaterRefractionDraw {
 }
 /*
 ================
+MsaaDraw
+
+The experimental 4x multisampled scene buffers (device/msaa.ts). The
+renderer prepares them per frame; the frame owner names the colour view as
+its scene attachment and resolves into the stage chain's own scene view.
+================
+*/
+export interface MsaaDraw {
+	// The 4x colour the scene pass renders into; its resolveTarget is the
+	// stage chain's own scene view.
+	readonly view: GPUTextureView;
+	// The 4x depth of the scene pass.
+	readonly depth: GPUTextureView;
+	// The samples' minimum into the scene's single-sampled depth.
+	resolveDepth( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
+}
+/*
+================
 SunShadowOwner
 
 The experimental sun cascade (device/sun-shadow.ts). The renderer prepares
@@ -173,6 +191,7 @@ export interface ExperimentalFrame {
 		readonly stage: WaterRefractionDraw;
 		readonly transparentStart: number;
 	};
+	readonly msaa?: MsaaDraw;
 }
 /*
 ================
@@ -209,6 +228,7 @@ export interface DeviceOwner extends Disposable {
 		enabled: boolean,
 		camera: import("@/engine/contracts/scene").WorldCamera
 	): WaterRefractionDraw | undefined;
+	msaa( width: number, height: number, enabled: boolean ): MsaaDraw | undefined;
 	sunShadow(): SunShadowOwner;
 	ambientOcclusion(
 		width: number,
@@ -425,6 +445,8 @@ export interface GeometryCommands {
 	// scratch target consumed by HdrDraw.encodePreview. Portraits use the
 	// original draws because their UI consumer retains native alpha blending.
 	hdrPreview( draws: readonly GeometryDraw[] ): readonly GeometryDraw[];
+	// Port-only, not native: the MSAA stage's draws for single-sampled passes.
+	singleSampled( draws: readonly GeometryDraw[] ): readonly GeometryDraw[];
 	waterReflection(
 		input: { matrix?: Float32Array; height: number; above: boolean; seconds: number; },
 		draws: readonly GeometryDraw[]

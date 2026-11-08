@@ -54,6 +54,7 @@ test(
 					hdrToneMap: false,
 					sunShadow: false,
 					perPixelLighting: false,
+					msaa: false,
 					skyDetail: false,
 					smoothCamera: false,
 					enchantSparks: false,

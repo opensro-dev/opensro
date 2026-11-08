@@ -181,6 +181,9 @@ test("six tabs group every preference once, in the spec's sections", () => {
 		"Light and sky",
 		"Textures and effects"
 	] );
+	// The 4x multisampled scene sits beside the post-process anti-aliasing.
+	const image = EXPERIMENTAL_TABS[0].sections[0].rows.map( row => row.key );
+	assert.equal( image.indexOf( "msaa" ), image.indexOf( "postProcessing" ) + 1 );
 	assert.deepEqual( EXPERIMENTAL_TABS[5].sections[1].rows.map( row => row.key ), [
 		"smartPetPickup",
 		"petPickupFilter",
@@ -192,7 +195,7 @@ test("six tabs group every preference once, in the spec's sections", () => {
 	] );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => experimentalRows( tab ).map( row => row.key ) );
 	// Every option has a row; the own-walk presenter has none (owner 2026-10-25).
-	assert.equal( keys.length, 61 );
+	assert.equal( keys.length, 62 );
 	assert.deepEqual( [ ...keys ].sort(), Object.keys( OFF ).sort() );
 	const kinds = EXPERIMENTAL_TABS.flatMap( experimentalRows ).filter( row => row.parent );
 	assert.deepEqual(

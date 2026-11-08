@@ -192,11 +192,25 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			presentation
 		) {
 			const sceneScale = experimental?.sceneScale;
+			const msaa = experimental?.msaa;
 			const sceneView = bloom?.view ?? experimental?.hdr?.view ?? sceneScale?.view ?? view;
 			const uiDepth = sceneScale?.frameDepth ?? depth;
 			// The HDR stage resolves the world before UI. Its float target can
 			// then be reused for an independently composited character preview.
 			const hdrScene = !!experimental?.hdr;
+			// The MSAA stage renders the scene into its 4x colour and resolves
+			// into the stage chain's own scene view; every later pass, and the
+			// UI, read the resolved target single-sampled.
+			//
+			// resolvedScene: the stages whose scene must be resolved (tone
+			// mapped, upscaled or multisample-resolved) before the world labels
+			// draw, so the labels move to the full-resolution label pass.
+			// separateScene: every stage that renders the scene away from the
+			// frame target (those, plus the bloom capture), so the labels, the
+			// background and the UI wait for a later pass instead of the main
+			// pass or the deferred tail.
+			const resolvedScene = hdrScene || !!sceneScale || !!msaa;
+			const separateScene = !!bloom || resolvedScene;
 			if ( ui !== recordedUi ) {
 				/*
 				================
@@ -312,55 +326,67 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					pass.end();
 				}
 			}
-			// A later pass reads the scene depth: the flares' occlusion, the
+			// A pass after the scene reads its depth: the flares' occlusion, the
 			// deferred particles, the occlusion stage, or the labels after a
-			// post chain.
-			const depthRead = flares || deferred || !!experimental?.ao ||
-				((bloom || hdrScene || sceneScale) && !!worldUiBundle);
-			/*
-			================
-			sceneUi
-
-			The labels, background and interface draw inside the last scene
-			pass when no post chain or overlay claims them afterwards.
-			================
-			*/
-			const sceneUi = ( target: GPURenderPassEncoder ) => {
-				if ( bloom || deferred || hdrScene || sceneScale ) return;
-				if ( worldUiBundle ) target.executeBundles( [ worldUiBundle ] );
-				if ( flares || thunder ) return;
-				if ( backgroundBundle ) target.executeBundles( [ backgroundBundle ] );
-				if ( !preview.length && uiBundle ) target.executeBundles( [ uiBundle ] );
-			};
+			// separate scene.
+			const laterDepthRead = !!flares || !!deferred || !!experimental?.ao || (separateScene && !!worldUiBundle);
 			const pass = encoder.beginRenderPass( {
 				timestampWrites: timing?.pass( "main-pass" ),
 				label: "main-pass",
 				...(depth ?
 					{
 						depthStencilAttachment: {
-							view: depth,
+							view: msaa ? msaa.depth : depth,
 							depthClearValue: 1,
 							depthLoadOp: "clear" as const,
-							// The water overlay loads the depth the main pass leaves.
-							depthStoreOp: depthRead || water ? "store" as const : "discard" as const
+							// The water pass loads the depth the main pass leaves.
+							depthStoreOp: msaa || laterDepthRead || water ? "store" as const : "discard" as const
 						}
 					} :
 					{}),
 				colorAttachments: [ {
-					view: sceneView,
+					view: msaa ? msaa.view : sceneView,
+					...(msaa ? { resolveTarget: sceneView } : {}),
 					clearValue: { r: 0.035, g: 0.07, b: 0.09, a: 1 },
 					loadOp: "clear",
-					storeOp: "store"
+					// The water pass draws on into the 4x colour, so it keeps it.
+					storeOp: msaa && !water ? "discard" as const : "store" as const
 				} ]
 			} );
 			pass.setBlendConstant( blendFactor );
 			if ( bundles.length ) pass.executeBundles( bundles );
+			// Natively everything draws here; any separate scene or the
+			// deferred tail moves the labels, background and UI later.
+			// With the water armed, its pass is the last scene pass instead.
+			const sceneDrawsUi = !separateScene && !deferred;
+			/*
+			================
+			sceneUi
+
+			The labels, background and interface draw inside the last scene
+			pass when no separate scene or deferred tail claims them later.
+			================
+			*/
+			const sceneUi = ( target: GPURenderPassEncoder ) => {
+				if ( !sceneDrawsUi ) return;
+				if ( worldUiBundle ) target.executeBundles( [ worldUiBundle ] );
+				if ( flares || thunder ) return;
+				if ( backgroundBundle ) target.executeBundles( [ backgroundBundle ] );
+				if ( !preview.length && uiBundle ) target.executeBundles( [ uiBundle ] );
+			};
 			if ( !water ) sceneUi( pass );
 			pass.end();
-			// Port-only water refraction: the opaque frame is complete. The
-			// stage copies its colour and depth, then the water and the
-			// transparent tail draw over it in their native order, so a
-			// blended surface in front of the water still covers it.
+			// The multisampled depth cannot be resolved by the driver: write the
+			// samples' minimum into the scene's single-sampled depth now,
+			// before the deferred tail, the flare probe and the labels read it.
+			// The render-scale stage upscales this depth as it always does.
+			if ( msaa && depth ) msaa.resolveDepth( encoder, depth );
+			// Port-only water refraction: the opaque frame is complete and
+			// resolved. The stage copies its colour and depth, then the water
+			// and the transparent tail draw over it in their native order, so a
+			// blended surface in front of the water still covers it. Under MSAA
+			// they draw on into the 4x buffers (the retained bundles are 4x) and
+			// resolve again; their depth is resolved once more for later readers.
 			if ( water ) {
 				if ( !depth ) throw Error( "Water refraction needs the scene depth" );
 				water.stage.encode( encoder, sceneView, depth );
@@ -368,16 +394,22 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					timestampWrites: timing?.pass( "water-refraction" ),
 					label: "water-refraction",
 					depthStencilAttachment: {
-						view: depth,
+						view: msaa ? msaa.depth : depth,
 						depthLoadOp: "load",
-						depthStoreOp: depthRead ? "store" : "discard"
+						depthStoreOp: laterDepthRead ? "store" : "discard"
 					},
-					colorAttachments: [ { view: sceneView, loadOp: "load", storeOp: "store" } ]
+					colorAttachments: [ {
+						view: msaa ? msaa.view : sceneView,
+						...(msaa ? { resolveTarget: sceneView } : {}),
+						loadOp: "load",
+						storeOp: msaa ? "discard" : "store"
+					} ]
 				} );
 				overlay.setBlendConstant( blendFactor );
 				if ( waterBundles.length ) overlay.executeBundles( waterBundles );
 				sceneUi( overlay );
 				overlay.end();
+				if ( msaa && laterDepthRead ) msaa.resolveDepth( encoder, depth );
 			}
 			/*
 			================
@@ -445,8 +477,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: depth,
 									depthLoadOp: "load" as const,
-									depthStoreOp: flares || !!experimental?.ao ||
-											((bloom || hdrScene || sceneScale) && !!worldUiBundle) ?
+									depthStoreOp: flares || experimental?.ao || (separateScene && worldUiBundle) ?
 										"store" as const :
 										"discard" as const
 								}
@@ -467,11 +498,11 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							draw.baseVertex ?? 0
 						);
 					}
-					if ( !bloom && !hdrScene && !sceneScale && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {
+					if ( !separateScene && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
+					if ( !separateScene && !flares && !thunder && backgroundBundle ) {
 						tail.executeBundles( [ backgroundBundle ] );
 					}
-					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && !preview.length && uiBundle ) {
+					if ( !separateScene && !flares && !thunder && !preview.length && uiBundle ) {
 						tail.executeBundles( [ uiBundle ] );
 					}
 					tail.end();
@@ -522,7 +553,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 				}
 				// Port-only, not native: labels keep full-resolution pixels and
 				// scene occlusion after HDR or reduced-resolution scene rendering.
-				if ( (hdrScene || sceneScale) && worldUiBundle ) {
+				// The MSAA depth was already resolved right after the scene pass.
+				if ( resolvedScene && worldUiBundle ) {
 					sceneScale?.resolveDepth( encoder );
 					const labels = encoder.beginRenderPass( {
 						label: "hdr-world-ui",
@@ -540,7 +572,10 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					labels.executeBundles( [ worldUiBundle ] );
 					labels.end();
 				}
-				if ( flares || thunder || bloom || hdrScene || sceneScale ) {
+				// Bloom alone keeps the world labels for the HUD pass, over the
+				// scene depth it loads; a resolved scene drew them above.
+				const hudDrawsLabels = !!bloom && !resolvedScene && !!worldUiBundle;
+				if ( flares || thunder || separateScene ) {
 					const hud = encoder.beginRenderPass( {
 						timestampWrites: timing?.pass( "hud-after-flares" ),
 						label: "hud-after-flares",
@@ -549,16 +584,14 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 								depthStencilAttachment: {
 									view: uiDepth,
 									depthClearValue: 1,
-									depthLoadOp: bloom && !hdrScene && !sceneScale && worldUiBundle ?
-										"load" as const :
-										"clear" as const,
+									depthLoadOp: hudDrawsLabels ? "load" as const : "clear" as const,
 									depthStoreOp: "discard" as const
 								}
 							} :
 							{}),
 						colorAttachments: [ { view, loadOp: "load", storeOp: "store" } ]
 					} );
-					if ( bloom && !hdrScene && !sceneScale && worldUiBundle ) hud.executeBundles( [ worldUiBundle ] );
+					if ( hudDrawsLabels ) hud.executeBundles( [ worldUiBundle! ] );
 					if ( backgroundBundle ) hud.executeBundles( [ backgroundBundle ] );
 					if ( !preview.length && uiBundle ) hud.executeBundles( [ uiBundle ] );
 					hud.end();

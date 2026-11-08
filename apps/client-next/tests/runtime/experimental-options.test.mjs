@@ -81,6 +81,7 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
+		msaa: false,
 		ambientOcclusion: false,
 		skyDetail: false,
 		waterRefraction: false,
@@ -104,7 +105,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"sunShadow",
 			"perPixelLighting",
 			"ambientOcclusion",
-			"waterRefraction"
+			"waterRefraction",
+			"msaa"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
