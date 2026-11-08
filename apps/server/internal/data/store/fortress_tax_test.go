@@ -135,11 +135,11 @@ func (f *fortressTaxFixture) balances(t *testing.T, actorID, gold, treasury int6
 		t.Fatalf("authority treasury=%+v present=%v, want gold=%d rate=7 staff=3", row, ok, treasury)
 	}
 	var diskGold, diskTreasury int64
-	if err := f.s.db.QueryRow("SELECT json_extract(record, '$.gold') FROM characters WHERE division = ? AND id = ?",
+	if err := f.s.syncDBLocked().QueryRow("SELECT json_extract(record, '$.gold') FROM characters WHERE division = ? AND id = ?",
 		testDivision, actorID).Scan(&diskGold); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.s.db.QueryRow("SELECT COALESCE(json_extract(record, '$.taxGold'), 0) FROM fortresses WHERE division = ? AND fortress_id = 1",
+	if err := f.s.syncDBLocked().QueryRow("SELECT COALESCE(json_extract(record, '$.taxGold'), 0) FROM fortresses WHERE division = ? AND fortress_id = 1",
 		testDivision).Scan(&diskTreasury); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestFortressTaxCollectionRollbackAfterCharacterWrite(t *testing.T) {
 SELECT CASE WHEN (SELECT json_extract(record, '$.gold') FROM characters WHERE id = %d) = 35
 THEN RAISE(ABORT, '%s') ELSE RAISE(ABORT, 'treasury preceded character credit') END; END`,
 			operation, operation, f.master.ID, witness)
-		if _, err := f.s.db.Exec(statement); err != nil {
+		if _, err := f.s.syncDBLocked().Exec(statement); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -249,7 +249,7 @@ THEN RAISE(ABORT, '%s') ELSE RAISE(ABORT, 'treasury preceded character credit') 
 	}
 	f.balances(t, f.master.ID, 10, 100)
 	for _, operation := range []string{"INSERT", "UPDATE"} {
-		if _, err := f.s.db.Exec("DROP TRIGGER reject_tax_" + operation); err != nil {
+		if _, err := f.s.syncDBLocked().Exec("DROP TRIGGER reject_tax_" + operation); err != nil {
 			t.Fatal(err)
 		}
 	}

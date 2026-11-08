@@ -87,14 +87,14 @@ func TestGuildFoundedUpgradeRewritesNothing(t *testing.T) {
 	}
 	// A schema 25 guild row carries no founding time.
 	var record string
-	if err := s.db.QueryRow("SELECT record FROM guilds WHERE division = ? AND guild_id = ?", testDivision, id).Scan(&record); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM guilds WHERE division = ? AND guild_id = ?", testDivision, id).Scan(&record); err != nil {
 		t.Fatal(err)
 	}
 	before := strings.Replace(record, `,"foundedAtMs":1700000000000`, "", 1)
 	if before == record {
 		t.Fatalf("the created guild row has no founding time: %s", record)
 	}
-	if _, err := s.db.Exec("UPDATE guilds SET record = ? WHERE division = ? AND guild_id = ?", before, testDivision, id); err != nil {
+	if _, err := s.syncDBLocked().Exec("UPDATE guilds SET record = ? WHERE division = ? AND guild_id = ?", before, testDivision, id); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -104,7 +104,7 @@ func TestGuildFoundedUpgradeRewritesNothing(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM guilds WHERE division = ? AND guild_id = ?", testDivision, id).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM guilds WHERE division = ? AND guild_id = ?", testDivision, id).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

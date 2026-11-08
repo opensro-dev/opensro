@@ -37,7 +37,7 @@ silkHistoryRows
 */
 func silkHistoryRows(t *testing.T, s *Store, account string) []silkHistoryRow {
 	t.Helper()
-	found, err := s.db.Query("SELECT kind, silk, gift_silk, points, at_ms FROM silk_history WHERE account_id = ? ORDER BY seq", account)
+	found, err := s.syncDBLocked().Query("SELECT kind, silk, gift_silk, points, at_ms FROM silk_history WHERE account_id = ? ORDER BY seq", account)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestSilkHistoryRecordsPurchaseInCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "history-account", 100, 20, 10); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "history-account", 100, 20, 10); err != nil {
 		t.Fatal(err)
 	}
 	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil }
@@ -134,7 +134,7 @@ func TestSilkHistoryPeriodsLimitAndTotal(t *testing.T) {
 	if err := s.CreateCharacter(testDivision, "period-account", character); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "period-account", 1000, 0, 0); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO mall_accounts VALUES (?, ?, ?, ?)", "period-account", 1000, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil }
@@ -240,7 +240,7 @@ func TestSilkHistoryUpgradeAddsTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var before string
-	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+	if err := s.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -261,14 +261,14 @@ func TestSilkHistoryUpgradeAddsTable(t *testing.T) {
 	}
 	reopened := openTest(t, dir, newTestClock())
 	var after string
-	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {
 		t.Fatal("the upgrade rewrote the character")
 	}
 	var tables int
-	if err := reopened.db.QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = 'silk_history'").Scan(&tables); err != nil {
+	if err := reopened.syncDBLocked().QueryRow("SELECT count(*) FROM sqlite_schema WHERE name = 'silk_history'").Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
 	if tables != 1 {

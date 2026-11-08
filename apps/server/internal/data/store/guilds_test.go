@@ -121,7 +121,7 @@ func TestGuildMemberLevelIsCharacterOwnedProjection(t *testing.T) {
 	guildID, _, _ := seedTestGuild(t, s, leader, member)
 
 	var persisted string
-	if err := s.db.QueryRow(
+	if err := s.syncDBLocked().QueryRow(
 		"SELECT record FROM guild_members WHERE division = ? AND guild_id = ? AND char_id = ?",
 		testDivision,
 		guildID,
@@ -397,7 +397,7 @@ func TestLoadRefusesDeletePendingGuildMember(t *testing.T) {
 		member.DeleteReservedAt = time.Now().UTC().Format(time.RFC3339)
 	})
 
-	if _, err := loadDB(s.db, CurrentVersion, CurrentLayoutVersion); err == nil ||
+	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
 		!strings.Contains(err.Error(), "delete-pending character") {
 		t.Fatalf("loadDB malformed social graph error = %v", err)
 	}

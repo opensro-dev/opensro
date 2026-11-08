@@ -32,7 +32,7 @@ func (s *Store) MallBalance(character *domain.Character) (domain.MallBalance, er
 	if _, known := s.charDivision[character]; !known {
 		return domain.MallBalance{}, fmt.Errorf("mall: unknown character")
 	}
-	return readMallBalance(s.db, character.AccountID)
+	return readMallBalance(s.syncDBLocked(), character.AccountID)
 }
 
 /*
@@ -94,7 +94,7 @@ func (s *Store) PurchaseMall(character *domain.Character, cost domain.MallBalanc
 	if !known {
 		return domain.MallBalance{}, fmt.Errorf("mall: unknown character")
 	}
-	balance, err := readMallBalance(s.db, character.AccountID)
+	balance, err := readMallBalance(s.syncDBLocked(), character.AccountID)
 	if err != nil {
 		return balance, err
 	}

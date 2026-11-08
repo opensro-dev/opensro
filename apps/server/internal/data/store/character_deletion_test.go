@@ -113,7 +113,7 @@ func TestReapCascadesFriendEdgesAtomically(t *testing.T) {
 	s.MutateCharacter(survivor, "inject-one-sided-friend", func() {
 		enterworld.SwapFriends(survivor, []enterworld.FriendRecord{{ID: doomed.ID, Name: doomed.Name}})
 	})
-	if _, err := loadDB(s.db, CurrentVersion, CurrentLayoutVersion); err == nil ||
+	if _, err := loadDB(s.syncDBLocked(), CurrentVersion, CurrentLayoutVersion); err == nil ||
 		!strings.Contains(err.Error(), "no reciprocal edge") {
 		t.Fatalf("one-sided friend load error = %v", err)
 	}
@@ -183,7 +183,7 @@ func TestReapSurvivesArchiveSeqGap(t *testing.T) {
 	// below it (as if an operator deleted the seq-0 row). After a reload
 	// the in-memory archive count (1) equals the survivor's seq - the
 	// exact collision shape a len()-derived next seq walks into.
-	if _, err := s.db.Exec("INSERT INTO deleted_characters (division, seq, record) VALUES (?, 1, ?)", testDivision, `{"id":99,"name":"handedit","deleted":true}`); err != nil {
+	if _, err := s.syncDBLocked().Exec("INSERT INTO deleted_characters (division, seq, record) VALUES (?, 1, ?)", testDivision, `{"id":99,"name":"handedit","deleted":true}`); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
