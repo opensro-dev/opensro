@@ -27,7 +27,7 @@ const {
 	sceneRenderScale,
 	uiScaleFactor
 } = experimentalModule;
-const { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } = await import(
+const { createExperimentalHud, experimentalRows, experimentalTabs, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
 
@@ -553,7 +553,7 @@ test("V hides pets and transports only when explicitly on, and reaches the rende
 	const on = experimentalOptions( { vHidesCompanions: true } );
 	assert.equal( on.vHidesCompanions, true );
 	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "vHidesCompanions" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "vHidesCompanions" ) ) );
 });
 
 test("fit window labels is on unless explicitly false and stays out of the worker's slices", () => {
@@ -615,7 +615,9 @@ test("homing projectiles default off (native captured endpoint) and reach the wo
 	const on = experimentalOptions( { homingProjectiles: true } );
 	assert.equal( on.homingProjectiles, true );
 	assert.equal( experimentalGameplay( on ).homingProjectiles, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "homingProjectiles" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "homingProjectiles" ) )
+	);
 });
 
 test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker's slices", () => {
@@ -627,7 +629,9 @@ test("pet panel click-to-open defaults on (BUG-086) and stays out of the worker'
 	}
 	const off = experimentalOptions( { petClickOpensWindow: false } );
 	assert.equal( off.petClickOpensWindow, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "petClickOpensWindow" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "petClickOpensWindow" ) )
+	);
 });
 
 test("smart pet pickup defaults on unless explicitly false and reaches the worker's gameplay slice", () => {
@@ -640,7 +644,7 @@ test("smart pet pickup defaults on unless explicitly false and reaches the worke
 	const off = experimentalOptions( { smartPetPickup: false } );
 	assert.equal( off.smartPetPickup, false );
 	assert.equal( experimentalGameplay( off ).smartPetPickup, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "smartPetPickup" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "smartPetPickup" ) ) );
 });
 
 test("expanded world map defaults off (native five towns and 28 x 8 overview) and stays out of the worker's slices", () => {
@@ -652,7 +656,7 @@ test("expanded world map defaults off (native five towns and 28 x 8 overview) an
 	}
 	const on = experimentalOptions( { expandedWorldMap: true } );
 	assert.equal( on.expandedWorldMap, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "expandedWorldMap" ) ) );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "expandedWorldMap" ) ) );
 });
 
 test("interpolated own movement has no option, no row, and no video slice (#1564)", () => {
@@ -661,7 +665,11 @@ test("interpolated own movement has no option, no row, and no video slice (#1564
 		assert.equal( "interpolatedOwnWalk" in options, false );
 		assert.equal( "interpolatedOwnWalk" in experimentalVideo( options ), false );
 	}
-	assert.ok( !EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "interpolatedOwnWalk" ) ) );
+	assert.ok(
+		!EXPERIMENTAL_TABS.some( tab =>
+			experimentalRows( tab ).some( row => String( row.key ) === "interpolatedOwnWalk" )
+		)
+	);
 });
 
 test("main-thread own movement defaults on, turns off only on an explicit false, and stays out of the worker's and renderer's slices", () => {
@@ -672,7 +680,9 @@ test("main-thread own movement defaults on, turns off only on an explicit false,
 		assert.equal( "mainThreadOwnWalk" in experimentalVideo( options ), false );
 	}
 	assert.equal( experimentalOptions( { mainThreadOwnWalk: false } ).mainThreadOwnWalk, false );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "mainThreadOwnWalk" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "mainThreadOwnWalk" ) )
+	);
 });
 
 test("quest target markers default off (tracked quest only) and stay out of the worker's slices", () => {
@@ -684,7 +694,9 @@ test("quest target markers default off (tracked quest only) and stay out of the 
 	}
 	const on = experimentalOptions( { questTrackerMarkers: true } );
 	assert.equal( on.questTrackerMarkers, true );
-	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "questTrackerMarkers" ) ) );
+	assert.ok(
+		EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "questTrackerMarkers" ) )
+	);
 });
 
 test("attack-pet training has no experimental toggle or saved opt-out", () => {
@@ -695,7 +707,9 @@ test("attack-pet training has no experimental toggle or saved opt-out", () => {
 		);
 	}
 	assert.equal(
-		EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => String( row.key ) === "attackPetTraining" ) ),
+		EXPERIMENTAL_TABS.some( tab =>
+			experimentalRows( tab ).some( row => String( row.key ) === "attackPetTraining" )
+		),
 		false
 	);
 });
@@ -704,4 +718,5 @@ test("item links in chat are on unless explicitly false", () => {
 	assert.equal( experimentalOptions( {} ).chatItemLinks, true );
 	assert.equal( experimentalOptions( { chatItemLinks: false } ).chatItemLinks, false );
 	assert.equal( experimentalOptions( { chatItemLinks: "no" } ).chatItemLinks, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => experimentalRows( tab ).some( row => row.key === "chatItemLinks" ) ) );
 });

@@ -45,7 +45,7 @@ function open( sent ) {
 			icon: "item/etc/hp_potion_01.ddj"
 		} ]
 	});
-	for ( let time = 0; time < 1200; time += 100 ) f.ui.step( f.state, time );
+	for ( let time = 0; time < 300; time += 100 ) f.ui.step( f.state, time );
 	f.ui.event( { kind: "key", code: "KeyI" } );
 	f.ui.step( f.state, 1200 );
 	return f;
