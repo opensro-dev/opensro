@@ -97,7 +97,7 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 				allocateDepth();
 			} else if ( !matrix && color ) {
 				retire( color );
-				resolve && retire( resolve );
+				if ( resolve ) retire( resolve );
 				retire( depth! );
 				color = undefined;
 				resolve = undefined;
@@ -141,7 +141,7 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 			// A later first capture must use the current scene surface too.
 			if ( !color ) return false;
 			retire( color );
-			resolve && retire( resolve );
+			if ( resolve ) retire( resolve );
 			color = undefined;
 			resolve = undefined;
 			target = undefined;
